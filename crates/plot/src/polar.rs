@@ -100,7 +100,7 @@ pub(crate) fn angle_axis(axis: &Axis, unit: AngleUnit) -> ResolvedAxis {
             minor: Vec::new(),
             labels,
             reversed: false,
-            gap: None,
+            gaps: Vec::new(),
             minor_labels: Vec::new(),
         };
     }
@@ -111,7 +111,7 @@ pub(crate) fn angle_axis(axis: &Axis, unit: AngleUnit) -> ResolvedAxis {
         major_step: Some(30.0),
         minor_ticks: 0,
         first_tick: None,
-        axis_break: None,
+        axis_breaks: Vec::new(),
         additional_line: None,
         special_ticks: Vec::new(),
         tick_label_source: TickLabelSource::Numbers,
@@ -145,7 +145,7 @@ pub(crate) fn radar_axis(names: &[String]) -> ResolvedAxis {
         minor: Vec::new(),
         labels: names.to_vec(),
         reversed: false,
-        gap: None,
+        gaps: Vec::new(),
         minor_labels: Vec::new(),
     }
 }

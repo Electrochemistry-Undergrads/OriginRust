@@ -3,7 +3,7 @@
 
 use sheaf_core::autorange::{self, LogTicks};
 use sheaf_core::datetime::{self, DatePattern, TimePattern};
-use sheaf_core::graph::{AutoRange, Axis, ScaleKind, TickFormat};
+use sheaf_core::graph::{AutoRange, Axis, AxisBreak, ScaleKind, TickFormat};
 
 /// The multiplication sign used in scientific tick labels.
 const TIMES: char = '\u{d7}';
@@ -32,8 +32,8 @@ pub struct ResolvedAxis {
     /// `max` are still the smaller and larger value, but the axis runs from
     /// `max` to `min` (values decrease along the axis).
     pub reversed: bool,
-    /// The break of the axis, when it has one (see [`AxisBreak`]).
-    pub gap: Option<ResolvedBreak>,
+    /// The breaks of the axis that lie inside its limits, from the low end up (see [`AxisBreak`]).
+    pub gaps: Vec<ResolvedBreak>,
     /// Labels of the minor ticks, one per entry of `minor`; empty unless the axis writes them.
     pub minor_labels: Vec<String>,
 }
@@ -77,18 +77,38 @@ impl ResolvedAxis {
 
     fn to_unit_ascending(&self, v: f64) -> f64 {
         let u = self.plain_unit(v);
-        match &self.gap {
-            Some(b) if u.is_finite() => {
-                if u <= b.plain_from + 1e-12 {
-                    u * b.u_from / b.plain_from
-                } else if u >= b.plain_to - 1e-12 {
-                    b.u_to + (u - b.plain_to) * (1.0 - b.u_to) / (1.0 - b.plain_to)
-                } else {
-                    f64::NAN
-                }
-            }
-            _ => u,
+        if self.gaps.is_empty() || !u.is_finite() {
+            return u;
         }
+        // Each part between two breaks is drawn linearly (in the axis' own scale) in its share of the length.
+        let segs = self.segments();
+        for (plain, unit) in &segs {
+            if u >= plain.0 - 1e-12 && u <= plain.1 + 1e-12 {
+                return lerp(u, *plain, *unit);
+            }
+        }
+        // Below the low end or above the high end: extend the first or last part; inside a break: NaN.
+        let (first, last) = (segs[0], segs[segs.len() - 1]);
+        if u < first.0.0 {
+            lerp(u, first.0, first.1)
+        } else if u > last.0.1 {
+            lerp(u, last.0, last.1)
+        } else {
+            f64::NAN
+        }
+    }
+
+    /// The parts of the axis between its breaks: `(plain, unit)` ranges, where `plain` is the position the
+    /// values would have without breaks and `unit` the position they are drawn at.
+    fn segments(&self) -> Vec<((f64, f64), (f64, f64))> {
+        let mut out = Vec::with_capacity(self.gaps.len() + 1);
+        let (mut plain, mut unit) = (0.0, 0.0);
+        for g in &self.gaps {
+            out.push(((plain, g.plain_from), (unit, g.u_from)));
+            (plain, unit) = (g.plain_to, g.u_to);
+        }
+        out.push(((plain, 1.0), (unit, 1.0)));
+        out
     }
 
     /// Position along the axis without the break.
@@ -112,11 +132,18 @@ impl ResolvedAxis {
     /// Inverse of [`ResolvedAxis::to_unit`].
     pub fn from_unit(&self, u: f64) -> f64 {
         let u = if self.reversed { 1.0 - u } else { u };
-        let u = match &self.gap {
-            Some(b) if u <= b.u_from => u * b.plain_from / b.u_from,
-            Some(b) if u >= b.u_to => b.plain_to + (u - b.u_to) * (1.0 - b.plain_to) / (1.0 - b.u_to),
-            Some(b) => b.plain_from,
-            None => u,
+        let u = if self.gaps.is_empty() {
+            u
+        } else {
+            // A position inside a gap reads as the value where that break starts.
+            let segs = self.segments();
+            let last = segs[segs.len() - 1];
+            match segs.iter().position(|(_, unit)| u <= unit.1 + 1e-12) {
+                Some(0) => lerp(u, segs[0].1, segs[0].0),
+                Some(i) if u >= segs[i].1.0 - 1e-12 => lerp(u, segs[i].1, segs[i].0),
+                Some(i) => segs[i - 1].0.1,
+                None => lerp(u, last.1, last.0),
+            }
         };
         match self.scale {
             ScaleKind::Linear => self.min + u * (self.max - self.min),
@@ -248,7 +275,7 @@ fn add_special_ticks(axis: &Axis, r: &mut ResolvedAxis) {
     let eps = 1e-9 * (r.max - r.min).abs();
     for t in &axis.special_ticks {
         let inside = t.value.is_finite() && t.value >= r.min - eps && t.value <= r.max + eps;
-        let cut = r.gap.is_some_and(|g| t.value > g.from + eps && t.value < g.to - eps);
+        let cut = r.gaps.iter().any(|g| t.value > g.from + eps && t.value < g.to - eps);
         if !inside || cut || r.major.iter().any(|v| (v - t.value).abs() <= eps) {
             continue;
         }
@@ -308,42 +335,75 @@ fn apply_label_formula(axis: &Axis, r: &mut ResolvedAxis) {
     }
 }
 
-/// Cuts the break of `axis` out of the resolved axis: the ticks inside it go, the ticks after it can
-/// follow their own step, and positions are squeezed to leave the gap. A break that does not lie
-/// inside the limits is ignored.
+/// Cuts the breaks of `axis` out of the resolved axis: the ticks inside them go, the ticks after a break
+/// can follow their own step up to the next break, and positions are squeezed to leave the gaps.
+/// Breaks that do not lie inside the limits, are empty, or overlap the one before are ignored, as is a
+/// break whose gap would not fit after the gap before it. With Auto Position the breaks left share the
+/// axis evenly (graphing spec 3.6: break k of n at k / (n + 1), as Origin 2016 placed one to seven).
 fn apply_break(axis: &Axis, r: &mut ResolvedAxis) {
-    let Some(b) = axis.axis_break.filter(|b| b.from.is_finite() && b.to.is_finite() && b.from < b.to) else {
-        return;
-    };
-    if !(r.min < b.from && b.to < r.max) {
+    let mut wanted: Vec<AxisBreak> = axis
+        .axis_breaks
+        .iter()
+        .filter(|b| b.from.is_finite() && b.to.is_finite() && b.from < b.to && r.min < b.from && b.to < r.max)
+        .copied()
+        .collect();
+    wanted.sort_by(|a, b| a.from.total_cmp(&b.from));
+    let mut breaks: Vec<AxisBreak> = Vec::with_capacity(wanted.len());
+    for b in wanted {
+        if breaks.last().is_none_or(|p| b.from > p.to) {
+            breaks.push(b);
+        }
+    }
+    if breaks.is_empty() {
         return;
     }
-    let plain = ResolvedAxis { gap: None, ..r.clone() };
-    let (plain_from, plain_to) = (plain.plain_unit(b.from), plain.plain_unit(b.to));
-    let pos = (b.position_pct / 100.0).clamp(0.05, 0.95);
-    let gap = (b.gap_pct / 100.0).clamp(0.0, 0.3);
-    let (u_from, u_to) = (pos - gap / 2.0, pos + gap / 2.0);
-    if !(plain_from.is_finite() && plain_to.is_finite() && plain_from > 0.0 && plain_to < 1.0) {
+    let plain = ResolvedAxis { gaps: Vec::new(), ..r.clone() };
+    let n = breaks.len();
+    let mut gaps: Vec<ResolvedBreak> = Vec::with_capacity(n);
+    let mut used: Vec<AxisBreak> = Vec::with_capacity(n);
+    for (k, b) in breaks.iter().enumerate() {
+        let (plain_from, plain_to) = (plain.plain_unit(b.from), plain.plain_unit(b.to));
+        if !(plain_from.is_finite() && plain_to.is_finite() && plain_from > 0.0 && plain_to < 1.0) {
+            continue;
+        }
+        let pos = if b.auto_position { (k + 1) as f64 / (n + 1) as f64 } else { b.position_pct / 100.0 };
+        let pos = pos.clamp(0.02, 0.98);
+        let gap = (b.gap_pct / 100.0).clamp(0.0, 0.3);
+        let (u_from, u_to) = (pos - gap / 2.0, pos + gap / 2.0);
+        let floor = gaps.last().map_or(0.0, |g| g.u_to);
+        if u_from <= floor || u_to >= 1.0 {
+            continue;
+        }
+        gaps.push(ResolvedBreak { from: b.from, to: b.to, u_from, u_to, plain_from, plain_to });
+        used.push(*b);
+    }
+    if gaps.is_empty() {
         return;
     }
     let eps = 1e-9 * (r.max - r.min);
-    let inside = |v: f64| v > b.from + eps && v < b.to - eps;
-    let keep: Vec<bool> = r.major.iter().map(|v| !inside(*v)).collect();
-    let mut labels: Vec<String> = r.labels.iter().zip(&keep).filter(|(_, k)| **k).map(|(l, _)| l.clone()).collect();
-    let mut major: Vec<f64> = r.major.iter().zip(&keep).filter(|(_, k)| **k).map(|(v, _)| *v).collect();
-    if let Some(step) = b.step_after.filter(|s| s.is_finite() && *s > 0.0 && r.scale == ScaleKind::Linear) {
-        let n = major.iter().take_while(|v| **v < b.to - eps).count();
-        major.truncate(n);
-        labels.truncate(n);
-        let after = linear_major(b.to, r.max, step, false).0;
-        let after_labels = linear_labels(axis, &after, step);
-        major.extend(after);
-        labels.extend(after_labels);
+    let inside = |v: f64| gaps.iter().any(|g| v > g.from + eps && v < g.to - eps);
+    let mut ticks: Vec<(f64, String)> =
+        r.major.iter().copied().zip(r.labels.iter().cloned()).filter(|(v, _)| !inside(*v)).collect();
+    if r.scale == ScaleKind::Linear {
+        for (k, b) in used.iter().enumerate() {
+            let Some(step) = b.step_after.filter(|s| s.is_finite() && *s > 0.0) else { continue };
+            let end = used.get(k + 1).map_or(r.max, |next| next.from);
+            ticks.retain(|(v, _)| *v < b.to - eps || *v > end + eps);
+            let after = linear_major(b.to, end, step, false).0;
+            let labels = linear_labels(axis, &after, step);
+            ticks.extend(after.into_iter().zip(labels));
+        }
+        ticks.sort_by(|a, b| a.0.total_cmp(&b.0));
     }
     r.minor.retain(|v| !inside(*v));
-    r.major = major;
-    r.labels = labels;
-    r.gap = Some(ResolvedBreak { from: b.from, to: b.to, u_from, u_to, plain_from, plain_to });
+    (r.major, r.labels) = ticks.into_iter().unzip();
+    r.gaps = gaps;
+}
+
+/// `u` mapped linearly from the range `from` to the range `to`.
+fn lerp(u: f64, from: (f64, f64), to: (f64, f64)) -> f64 {
+    let w = from.1 - from.0;
+    if w.abs() < 1e-300 { to.0 } else { to.0 + (u - from.0) * (to.1 - to.0) / w }
 }
 
 /// The most ticks a category axis gets with one tick per row; beyond that its step follows the
@@ -484,7 +544,7 @@ fn resolve_linear(axis: &Axis, data: Option<(f64, f64)>, free: (bool, bool)) -> 
         minor,
         labels,
         reversed: false,
-        gap: None,
+        gaps: Vec::new(),
         minor_labels: Vec::new(),
     }
 }
@@ -580,7 +640,7 @@ fn resolve_log(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
             minor: Vec::new(),
             labels,
             reversed: false,
-            gap: None,
+            gaps: Vec::new(),
             minor_labels: Vec::new(),
         };
     }
@@ -616,7 +676,7 @@ fn resolve_log(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
         minor,
         labels,
         reversed: false,
-        gap: None,
+        gaps: Vec::new(),
         minor_labels: Vec::new(),
     }
 }
@@ -790,7 +850,7 @@ mod tests {
             hide_end_label: false,
             reverse: false,
             first_tick: None,
-            axis_break: None,
+            axis_breaks: Vec::new(),
             additional_line: None,
             special_ticks: Vec::new(),
             tick_label_formula: String::new(),
@@ -1186,21 +1246,81 @@ mod feature_tests {
     #[test]
     fn a_break_cuts_out_a_region_and_squeezes_the_rest() {
         let mut a = fixed(0.0, 100.0, 10.0);
-        a.axis_break = Some(AxisBreak { step_after: Some(20.0), ..AxisBreak::new(30.0, 70.0) });
+        a.axis_breaks = vec![AxisBreak { step_after: Some(20.0), gap_pct: 2.0, ..AxisBreak::new(30.0, 70.0) }];
         let r = resolve_axis(&a, Some((0.0, 100.0)));
         assert_eq!(r.major, vec![0.0, 10.0, 20.0, 30.0, 80.0, 100.0]);
         // Ticks inside the break are gone; after it they follow the step after the break.
         assert!(r.major.iter().all(|v| *v <= 30.0 || *v >= 70.0));
         assert!(r.major.contains(&80.0) && !r.major.contains(&90.0));
         assert_eq!(r.labels.len(), r.major.len());
-        // The gap sits at the middle of the axis (50 %, 2 % wide); the ends keep their place.
+        // The gap sits at the middle of the axis (50 %, 2 % wide here); the ends keep their place.
         assert!((r.to_unit(0.0)).abs() < 1e-12 && (r.to_unit(100.0) - 1.0).abs() < 1e-12);
         assert!((r.to_unit(30.0) - 0.49).abs() < 1e-12 && (r.to_unit(70.0) - 0.51).abs() < 1e-12);
         assert!(r.to_unit(50.0).is_nan(), "values inside the break cannot be placed");
         assert!((r.from_unit(r.to_unit(85.0)) - 85.0).abs() < 1e-9);
         // A break outside the limits is ignored.
-        a.axis_break = Some(AxisBreak::new(200.0, 300.0));
-        assert!(resolve_axis(&a, Some((0.0, 100.0))).gap.is_none());
+        a.axis_breaks = vec![AxisBreak::new(200.0, 300.0)];
+        assert!(resolve_axis(&a, Some((0.0, 100.0))).gaps.is_empty());
+    }
+
+    /// Unit positions of the break ends read off Origin 2016's PNG exports (1600 px wide, axis -25 to 125,
+    /// Auto Position, automatic Break Half Length; graphing spec 3.6) and the gap of Sheaf's default 1.75 %.
+    #[test]
+    fn several_breaks_share_the_axis_as_in_origin() {
+        let tol = 0.0015; // about 1.3 px of the 879 px Y axis
+        let at = |breaks: &[(f64, f64)]| {
+            let mut a = fixed(-25.0, 125.0, 5.0);
+            a.axis_breaks = breaks.iter().map(|&(f, t)| AxisBreak::new(f, t)).collect();
+            resolve_axis(&a, Some((1.0, 100.0)))
+        };
+        // One break, Y axis: 12.5 at 0.4912, 87.5 at 0.5088.
+        let r = at(&[(12.5, 87.5)]);
+        assert!((r.to_unit(12.5) - 0.4912).abs() < tol && (r.to_unit(87.5) - 0.5088).abs() < tol);
+        // Two breaks, Y axis (the second the middle half of what the first left).
+        let r = at(&[(12.5, 87.5), (96.875, 115.625)]);
+        for (v, u) in [(12.5, 0.3242), (87.5, 0.3424), (96.875, 0.6581), (115.625, 0.6758)] {
+            assert!((r.to_unit(v) - u).abs() < tol, "{v}: {} against Origin's {u}", r.to_unit(v));
+        }
+        // Two breaks of the X axis made at once ([5, 35] and [65, 95]), 1090 px long.
+        let r = at(&[(5.0, 35.0), (65.0, 95.0)]);
+        for (v, u) in [(5.0, 0.3248), (35.0, 0.3413), (65.0, 0.6583), (95.0, 0.6752)] {
+            assert!((r.to_unit(v) - u).abs() < tol, "{v}: {} against Origin's {u}", r.to_unit(v));
+        }
+        // Three breaks at 25, 50 and 75 %: each part keeps its own scale, the order of the list does not matter.
+        let r = at(&[(117.96875, 122.65625), (12.5, 87.5), (96.875, 115.625)]);
+        assert_eq!(r.gaps.len(), 3);
+        let mids: Vec<f64> = r.gaps.iter().map(|g| (g.u_from + g.u_to) / 2.0).collect();
+        assert!(mids.iter().zip([0.25, 0.5, 0.75]).all(|(m, e)| (m - e).abs() < 1e-12), "{mids:?}");
+        assert!(r.to_unit(100.0).is_nan() && r.to_unit(120.0).is_nan());
+        for v in [-25.0, 0.0, 12.5, 87.5, 90.0, 96.875, 115.625, 117.0, 122.65625, 125.0] {
+            assert!((r.from_unit(r.to_unit(v)) - v).abs() < 1e-9, "{v}");
+        }
+        assert!(r.major.iter().all(|v| !(12.5 < *v && *v < 87.5) && !(96.875 < *v && *v < 115.625)));
+        // A position inside a gap reads as the value where that break starts.
+        assert!((r.from_unit(0.5) - 96.875).abs() < 1e-9);
+        // Overlapping breaks keep the first; a manual position that leaves no room for the gap drops it.
+        let mut a = fixed(0.0, 100.0, 10.0);
+        a.axis_breaks = vec![AxisBreak::new(20.0, 40.0), AxisBreak::new(30.0, 50.0)];
+        assert_eq!(resolve_axis(&a, Some((0.0, 100.0))).gaps.len(), 1);
+        let manual = |pos: f64, f, t| AxisBreak { auto_position: false, position_pct: pos, ..AxisBreak::new(f, t) };
+        a.axis_breaks = vec![manual(60.0, 20.0, 30.0), manual(40.0, 60.0, 70.0)];
+        let r = resolve_axis(&a, Some((0.0, 100.0)));
+        assert_eq!(r.gaps.len(), 1, "the second break would sit below the first");
+        a.axis_breaks = vec![manual(30.0, 20.0, 30.0), manual(70.0, 60.0, 70.0)];
+        let r = resolve_axis(&a, Some((0.0, 100.0)));
+        assert!((r.gaps[0].u_from + r.gaps[0].u_to - 0.6).abs() < 1e-12);
+        assert!((r.gaps[1].u_from + r.gaps[1].u_to - 1.4).abs() < 1e-12);
+    }
+
+    #[test]
+    fn the_step_after_a_break_ends_at_the_next_break() {
+        let mut a = fixed(0.0, 100.0, 10.0);
+        a.axis_breaks =
+            vec![AxisBreak { step_after: Some(5.0), ..AxisBreak::new(15.0, 35.0) }, AxisBreak::new(55.0, 75.0)];
+        let r = resolve_axis(&a, Some((0.0, 100.0)));
+        assert_eq!(r.major, vec![0.0, 10.0, 35.0, 40.0, 45.0, 50.0, 55.0, 80.0, 90.0, 100.0]);
+        assert_eq!(r.labels.len(), r.major.len());
+        assert_eq!(r.labels[2], "35");
     }
 
     #[test]

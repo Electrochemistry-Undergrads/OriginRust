@@ -956,9 +956,16 @@ pub struct Axis {
     /// the ticks are at multiples of the step. Linear axes only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_tick: Option<f64>,
-    /// One break in the axis: a region of values that is left out, with a gap in the axis line.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub axis_break: Option<AxisBreak>,
+    /// The breaks of the axis (Origin allows 1 to 7, [`MAX_AXIS_BREAKS`]): regions of values that are left
+    /// out, each with a gap in the axis line. Files written before several breaks existed hold one break
+    /// under the name `axis_break`; it is read as a list of one.
+    #[serde(
+        default,
+        alias = "axis_break",
+        deserialize_with = "breaks_one_or_many",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub axis_breaks: Vec<AxisBreak>,
     /// Origin's Grids tab "Additional Lines": a line across the layer at this value of the OTHER axis,
     /// in this axis' line style (for the X axis a horizontal line at Y = value, labelled "Y =" in
     /// Origin's dialog; for the Y axis a vertical line at X = value). `None` means off; Origin's
@@ -997,25 +1004,70 @@ pub struct SpecialTick {
     pub label: String,
 }
 
+/// The most breaks an axis has (Origin's Number of Breaks lists None and 1 to 7).
+pub const MAX_AXIS_BREAKS: usize = 7;
+
+/// The width of the gap of a break in percent of the axis length when the user has not set one. Origin
+/// 2016's automatic Break Half Length left gaps of 1.67 % to 1.79 % of the axis length on 879 and 1090 px
+/// axes with one to three breaks (graphing spec 3.6).
+pub const BREAK_GAP_PCT: f64 = 1.75;
+
 /// A break in an axis (graphing spec 3.6): the values from `from` to `to` are cut out; the axis
 /// shows a gap there, and the part after it can have its own tick step.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AxisBreak {
     pub from: f64,
     pub to: f64,
-    /// Where the gap starts to open, in percent of the axis length from its low end.
+    /// The middle of the gap, in percent of the axis length from its low end. Used when
+    /// `auto_position` is off.
     pub position_pct: f64,
     /// Width of the gap in percent of the axis length.
     pub gap_pct: f64,
     /// Major tick step after the break; `None` keeps the step of the axis.
     pub step_after: Option<f64>,
+    /// Origin's "Auto Position" (on for a new break): the breaks of the axis share it evenly, break k of
+    /// n sitting at k / (n + 1) of its length, whatever `position_pct` says. Off in files written before
+    /// the setting existed, so that their breaks stay where they were.
+    #[serde(default)]
+    pub auto_position: bool,
 }
 
 impl AxisBreak {
-    /// A break of the values `from..to` in the middle of the axis.
+    /// A break of the values `from..to` placed automatically (in the middle when it is the only one).
     pub fn new(from: f64, to: f64) -> AxisBreak {
-        AxisBreak { from, to, position_pct: 50.0, gap_pct: 2.0, step_after: None }
+        AxisBreak { from, to, position_pct: 50.0, gap_pct: BREAK_GAP_PCT, step_after: None, auto_position: true }
     }
+
+    /// The break Origin's dialog adds after `existing` on an axis from `min` to `max`: the middle half of
+    /// what lies after the last break (or of the whole axis for the first one), as Origin 2016 filled the
+    /// rows when the Number of Breaks went up one at a time (graphing spec 3.6). It takes the gap width of
+    /// the breaks before it.
+    pub fn next_after(existing: &[AxisBreak], min: f64, max: f64) -> AxisBreak {
+        let (lo, hi) = (min.min(max), min.max(max));
+        let start = existing.iter().map(|b| b.to).filter(|t| t.is_finite() && *t > lo && *t < hi).fold(lo, f64::max);
+        let span = hi - start;
+        let mut b = AxisBreak::new(start + span * 0.25, start + span * 0.75);
+        if let Some(last) = existing.last() {
+            b.gap_pct = last.gap_pct;
+        }
+        b
+    }
+}
+
+/// Reads the breaks of an axis written either as a list or, by files from before several breaks, as a
+/// single break (or `null`).
+fn breaks_one_or_many<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<AxisBreak>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        Many(Vec<AxisBreak>),
+        One(AxisBreak),
+    }
+    Ok(match Option::<OneOrMany>::deserialize(d)? {
+        None => Vec::new(),
+        Some(OneOrMany::One(b)) => vec![b],
+        Some(OneOrMany::Many(v)) => v,
+    })
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -2245,6 +2297,51 @@ mod polar_tests {
         let l = &Template::Polar.new_graph(WindowId(1), "P").layers[0];
         assert_eq!(l.coords.polar().map(|c| c.radius), Some(RadiusColumn::Y));
         assert!(l.x_axis.major_grid.is_some() && l.y_axis.major_grid.is_some(), "rings and spokes");
+    }
+}
+
+#[cfg(test)]
+mod break_tests {
+    use super::*;
+    use crate::template::Template;
+
+    #[test]
+    fn an_old_single_break_reads_as_a_list_and_keeps_its_place() {
+        let axis = Template::Line.new_graph(WindowId(1), "G").layers[0].y_axis.clone();
+        let mut json = serde_json::to_value(&axis).unwrap();
+        json["axis_break"] =
+            serde_json::json!({"from": 30.0, "to": 70.0, "position_pct": 60.0, "gap_pct": 2.0, "step_after": null});
+        let old: Axis = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(old.axis_breaks.len(), 1);
+        let b = old.axis_breaks[0];
+        assert_eq!((b.from, b.to, b.position_pct, b.gap_pct), (30.0, 70.0, 60.0, 2.0));
+        assert!(!b.auto_position, "an old break stays where it was");
+        json["axis_break"] = serde_json::Value::Null;
+        assert!(serde_json::from_value::<Axis>(json).unwrap().axis_breaks.is_empty());
+        // Several breaks are written as a list and read back unchanged; none are not written at all.
+        let mut many = axis.clone();
+        many.axis_breaks =
+            vec![AxisBreak::new(1.0, 2.0), AxisBreak::next_after(&[AxisBreak::new(1.0, 2.0)], 0.0, 10.0)];
+        let text = serde_json::to_string(&many).unwrap();
+        assert!(text.contains("\"axis_breaks\":["));
+        assert_eq!(serde_json::from_str::<Axis>(&text).unwrap(), many);
+        assert!(!serde_json::to_string(&axis).unwrap().contains("axis_break"));
+    }
+
+    #[test]
+    fn a_new_break_takes_the_middle_half_of_what_is_left() {
+        // Origin 2016's rows on the axis -25..125, adding one break at a time (graphing spec 3.6).
+        let mut breaks = Vec::new();
+        for (from, to) in [(12.5, 87.5), (96.875, 115.625), (117.96875, 122.65625)] {
+            let b = AxisBreak::next_after(&breaks, -25.0, 125.0);
+            assert_eq!((b.from, b.to), (from, to));
+            assert!(b.auto_position && b.gap_pct == BREAK_GAP_PCT);
+            breaks.push(b);
+        }
+        // A reversed range gives the same rows; the gap of the last break is kept.
+        breaks[2].gap_pct = 3.0;
+        let b = AxisBreak::next_after(&breaks, 125.0, -25.0);
+        assert_eq!((b.from, b.gap_pct), (122.65625 + (125.0 - 122.65625) * 0.25, 3.0));
     }
 }
 

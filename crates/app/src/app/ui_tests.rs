@@ -6456,9 +6456,28 @@ fn the_axis_dialog_lists_the_edges_and_has_working_breaks_and_special_ticks_tabs
     }
     click(&mut h, "Breaks");
     assert!(h.query_by_label("Horizontal").is_some() && h.query_by_label("Bottom").is_none());
-    h.get_by_label("Show Break").click();
+    h.get_by_label("Enable").click();
     settle(&mut h);
-    assert!(graph(&h).layers[0].x_axis.axis_break.is_some());
+    let axis = &graph(&h).layers[0].x_axis;
+    assert_eq!(axis.axis_breaks.len(), 1);
+    // The first break is the middle half of the axis and is placed automatically, as in Origin.
+    let b = axis.axis_breaks[0];
+    assert!(b.auto_position && b.from < b.to);
+    // A second break takes the middle half of what the first left, a third likewise.
+    for k in [2, 3] {
+        h.get(By::new().role(egui::accesskit::Role::ComboBox).value((k - 1).to_string().as_str())).click();
+        settle(&mut h);
+        h.get(By::new().role(egui::accesskit::Role::Button).label(k.to_string().as_str())).click();
+        settle(&mut h);
+        let breaks = &graph(&h).layers[0].x_axis.axis_breaks;
+        assert_eq!(breaks.len(), k);
+        let (prev, new) = (breaks[k - 2], breaks[k - 1]);
+        assert!(new.from > prev.to && new.to > new.from, "{breaks:?}");
+    }
+    // Deleting a row removes that break.
+    h.get_all_by_label("Delete").next().expect("a Delete button per row").click();
+    settle(&mut h);
+    assert_eq!(graph(&h).layers[0].x_axis.axis_breaks.len(), 2);
     click(&mut h, "Special Ticks");
     click(&mut h, "Add Tick");
     assert_eq!(graph(&h).layers[0].x_axis.special_ticks.len(), 1);

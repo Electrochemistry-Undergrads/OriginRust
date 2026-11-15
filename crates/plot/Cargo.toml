@@ -16,6 +16,9 @@ thiserror = { workspace = true }
 resvg = { version = "0.45", default-features = false, features = ["text"] }
 usvg = { version = "0.45", default-features = false, features = ["text"] }
 svg2pdf = "0.13"
+# Multi-page PDF (graphing.md 9.6): the pdf-writer and deflate versions svg2pdf 0.13 is built on.
+pdf-writer = "0.12"
+miniz_oxide = "0.8"
 fontdb = "0.23"
 ttf-parser = "0.25"
 png = "0.18"

@@ -103,7 +103,8 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T50](T50-treemap.md) | Treemap: nested rectangles sized by value (six Origin layouts) | M | done 2026-11-15 (graphing 14.26, `treemap`, macOS); left: Origin defaults/colours/labels unmeasured, hover and drill-down, colour by value |
 | [T51](T51-sunburst.md) | Sunburst plot: hierarchy as concentric rings coloured by value | M | done 2026-11-15 (graphing 14.27, `sunburst`, macOS); left: Origin defaults unmeasured, hover and Collapse/Expand drilling |
 | [T52](T52-slope-annotation.md) | Slope annotation between two data points (per decade on log axes) | M | claimed 2026-11-15 (`slope-annotation`, macOS) |
-| [T53](T53-set-multiple-columns.md) | Set Multiple Columns Values (Ctrl+Shift+Q): one formula over the selected columns with `j` | M | claimed 2026-11-15 (`set-multiple-columns`, Claude macOS "mac-multicol") |
+| [T53](T53-set-multiple-columns.md) | Set Multiple Columns Values (Ctrl+Shift+Q): one formula over the selected columns with `j` | M | done, merged 2026-11-15 (expression-language 7); left: Origin measurements of `j` |
+| [T54](T54-save-window-as.md) | Save Window As (`.sheafbook`/`.sheafgraph` window files opened by appending) and Recent Books / Recent Graphs | M | claimed 2026-11-15 (`save-window`, Claude macOS "mac-savewin") |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

@@ -1,7 +1,8 @@
 //! The "Set Values" window (Origin's Set Column Values): fill a column from a formula over the
 //! other columns of its sheet. Layout as Origin: a text menu line, the row range, the
 //! `Col(X)=` label with column navigation, the formula box, Recalculate with OK / Cancel / Apply,
-//! and a collapsible "Before Formula Scripts" box.
+//! and a collapsible "Before Formula Scripts" box. With several columns it is Set Multiple Columns
+//! Values: one formula for all of them, where `j` is the column position (T53).
 
 use eframe::egui::{self, RichText};
 use sheaf_core::{ColumnId, Document, Project, RecalcMode};
@@ -191,6 +192,24 @@ const SAMPLES: &[(&str, &str)] = &[
     ("Random numbers", "rnd()"),
 ];
 
+/// Extra formulas of the Formula menu in the multi-column window; `j` is the column position.
+const MULTI_SAMPLES: &[(&str, &str)] =
+    &[("Scale by column position", "{}*j"), ("Double the column to the left", "wcol(j-1)*2")];
+
+/// The selected columns as the window names them: `B:D` for three or more side by side, else the
+/// short names with commas (at most six, then "...").
+fn columns_text(selected: &[(usize, String)]) -> String {
+    let side_by_side = selected.windows(2).all(|w| w[1].0 == w[0].0 + 1);
+    match (selected.first(), selected.last()) {
+        (Some(first), Some(last)) if side_by_side && selected.len() > 2 => format!("{}:{}", first.1, last.1),
+        _ => {
+            let names: Vec<&str> = selected.iter().take(6).map(|s| s.1.as_str()).collect();
+            let more = if selected.len() > 6 { ", ..." } else { "" };
+            format!("{}{more}", names.join(", "))
+        }
+    }
+}
+
 /// Uses the same catalog and insertion path as the Function menu.
 #[derive(Default)]
 struct FunctionSearch {
@@ -297,7 +316,10 @@ struct Fields {
 }
 
 pub struct SetValuesDialog {
+    /// The column shown (the first of `columns` in the sheet in the multi-column window).
     column: ColumnId,
+    /// The selected columns in sheet order; empty in the single-column window.
+    columns: Vec<ColumnId>,
     fields: Fields,
     /// The values as last applied (or as opened); Apply is enabled when `fields` differs.
     saved: Fields,
@@ -315,6 +337,7 @@ impl SetValuesDialog {
         let fields = Self::read(project, column)?;
         Some(SetValuesDialog {
             column,
+            columns: Vec::new(),
             saved: fields.clone(),
             fields,
             problem: None,
@@ -324,6 +347,35 @@ impl SetValuesDialog {
             show_scripts: true,
             scripts: String::new(),
         })
+    }
+
+    /// The Set Multiple Columns Values window. `None` unless two or more different columns of one
+    /// sheet are given. The fields start from what the columns share: the same formula, rows and
+    /// recalculation on all of them, otherwise empty and Manual.
+    pub fn new_multiple(project: &Project, columns: &[ColumnId]) -> Option<Self> {
+        let (_, sheet, _) = project.locate(*columns.first()?)?;
+        let columns_in_sheet: Vec<ColumnId> =
+            sheet.columns.iter().map(|c| c.id).filter(|id| columns.contains(id)).collect();
+        // Every given column must be on this sheet.
+        if columns_in_sheet.len() < 2 || columns.iter().any(|c| !columns_in_sheet.contains(c)) {
+            return None;
+        }
+        let columns = columns_in_sheet;
+        let reads: Vec<Fields> = columns.iter().map(|&c| Self::read(project, c)).collect::<Option<_>>()?;
+        let fields = if reads.iter().all(|r| *r == reads[0]) {
+            reads[0].clone()
+        } else {
+            Fields { formula: String::new(), from: String::new(), to: String::new(), mode: RecalcMode::Manual }
+        };
+        let mut d = Self::new(project, columns[0])?;
+        d.columns = columns;
+        d.saved = fields.clone();
+        d.fields = fields;
+        Some(d)
+    }
+
+    fn is_multiple(&self) -> bool {
+        !self.columns.is_empty()
     }
 
     fn read(project: &Project, column: ColumnId) -> Option<Fields> {
@@ -357,6 +409,12 @@ impl SetValuesDialog {
     #[cfg(test)]
     pub fn set_formula(&mut self, formula: &str) {
         self.fields.formula = formula.to_string();
+    }
+
+    /// The formula as typed (tests).
+    #[cfg(test)]
+    pub fn formula(&self) -> &str {
+        &self.fields.formula
     }
 
     /// Types a row range (tests).
@@ -410,12 +468,26 @@ impl SetValuesDialog {
             return false;
         };
         let target = column.short_name.clone();
-        let title = format!(
-            "Set Values - [{}]{}!Col(\"{}\")",
-            book.name,
-            sheet.name,
-            if column.long_name.is_empty() { &target } else { &column.long_name }
-        );
+        let multiple = self.is_multiple();
+        // Short names of the selected columns, and whether they sit side by side in the sheet.
+        let selected: Vec<(usize, String)> = sheet
+            .columns
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| self.columns.contains(&c.id))
+            .map(|(k, c)| (k, c.short_name.clone()))
+            .collect();
+        let title = if multiple {
+            // Sheaf's wording; Origin's title for this window is not measured.
+            format!("Set Multiple Columns Values - [{}]{}!Col({})", book.name, sheet.name, columns_text(&selected))
+        } else {
+            format!(
+                "Set Values - [{}]{}!Col(\"{}\")",
+                book.name,
+                sheet.name,
+                if column.long_name.is_empty() { &target } else { &column.long_name }
+            )
+        };
         let row_count = sheet.row_count();
         let position = sheet.columns.iter().position(|c| c.id == self.column).unwrap_or(0);
         let ids: Vec<ColumnId> = sheet.columns.iter().map(|c| c.id).collect();
@@ -424,7 +496,9 @@ impl SetValuesDialog {
             .iter()
             .map(|c| (c.short_name.clone(), if c.units.is_empty() { c.long_name.clone() } else { c.axis_title() }))
             .collect();
-        let sample_column = others.iter().map(|o| o.0.clone()).find(|s| *s != target).unwrap_or_else(|| target.clone());
+        let is_target = |short: &str| if multiple { selected.iter().any(|s| s.1 == short) } else { short == target };
+        let sample_column =
+            others.iter().map(|o| o.0.clone()).find(|s| !is_target(s)).unwrap_or_else(|| target.clone());
 
         let mut open = true;
         let mut close = false;
@@ -445,7 +519,8 @@ impl SetValuesDialog {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 10.0;
                     ui.menu_button("Formula", |ui| {
-                        for (label, sample) in SAMPLES {
+                        let multi: &[(&str, &str)] = if multiple { MULTI_SAMPLES } else { &[] };
+                        for (label, sample) in multi.iter().chain(SAMPLES) {
                             if ui.button(*label).clicked() {
                                 replace = Some(sample.replace("{}", &format!("col({sample_column})")));
                                 ui.close();
@@ -453,6 +528,15 @@ impl SetValuesDialog {
                         }
                     });
                     ui.menu_button("wcol(1)", |ui| {
+                        if multiple {
+                            for text in ["wcol(j-1)", "wcol(j+1)"] {
+                                if ui.button(text).clicked() {
+                                    inserted = Some(text.to_string());
+                                    ui.close();
+                                }
+                            }
+                            ui.separator();
+                        }
                         for n in 1..=ids.len() {
                             if ui.button(format!("wcol({n})")).clicked() {
                                 inserted = Some(format!("wcol({n})"));
@@ -492,9 +576,12 @@ impl SetValuesDialog {
                         }
                     });
                     ui.menu_button("Variables", |ui| {
-                        for (text, hint) in
-                            [("i", "The row number, counted from 1"), ("pi", "3.14159..."), ("e", "2.71828...")]
-                        {
+                        let mut variables = vec![("i", "The row number, counted from 1")];
+                        if multiple {
+                            variables.push(("j", "The column position in the sheet, counted from 1"));
+                        }
+                        variables.extend([("pi", "3.14159..."), ("e", "2.71828...")]);
+                        for (text, hint) in variables {
                             if ui.button(text).on_hover_text(hint).clicked() {
                                 inserted = Some(text.to_string());
                                 ui.close();
@@ -523,18 +610,25 @@ impl SetValuesDialog {
                     );
                 });
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("Col({target})=")).strong());
+                    let name = if multiple { columns_text(&selected) } else { target.clone() };
+                    ui.label(RichText::new(format!("Col({name})=")).strong());
                     ui.add_space(8.0);
                     if ui.button("Find...").on_hover_text("Search and insert a function").clicked() {
                         self.search = Some(FunctionSearch { focus: true, ..Default::default() });
                     }
-                    // First, previous, next, last column of the sheet.
-                    for (text, hint, to) in [
-                        ("|<", "First column", Some(0)),
-                        ("<", "Previous column", position.checked_sub(1)),
-                        (">", "Next column", (position + 1 < ids.len()).then_some(position + 1)),
-                        (">|", "Last column", Some(ids.len().saturating_sub(1))),
-                    ] {
+                    // First, previous, next, last column of the sheet. The window of several columns
+                    // edits them together, so it has no navigation.
+                    let navigation: &[(&str, &str, Option<usize>)] = if multiple {
+                        &[]
+                    } else {
+                        &[
+                            ("|<", "First column", Some(0)),
+                            ("<", "Previous column", position.checked_sub(1)),
+                            (">", "Next column", (position + 1 < ids.len()).then_some(position + 1)),
+                            (">|", "Last column", Some(ids.len().saturating_sub(1))),
+                        ]
+                    };
+                    for &(text, hint, to) in navigation {
                         let b = ui.add_enabled(to.is_some_and(|t| t != position), egui::Button::new(text).small());
                         if b.on_hover_text(hint).clicked() {
                             goto = to.map(|t| ids[t]);
@@ -661,12 +755,24 @@ impl SetValuesDialog {
                 }
                 Ok(rows) => {
                     let (id, formula, mode) = (self.column, self.fields.formula.clone(), self.fields.mode);
-                    match doc.edit("Set column values", move |p| p.set_column_values_with(id, &formula, rows, mode)) {
+                    let result = if multiple {
+                        doc.set_columns_values(&self.columns, &formula, rows, mode)
+                    } else {
+                        doc.edit("Set column values", move |p| p.set_column_values_with(id, &formula, rows, mode))
+                    };
+                    match result {
                         Ok(()) => {
                             self.problem = None;
                             // Reread: a formula that reads its own column runs once, as "None".
-                            if let Some(f) = Self::read(doc.project(), self.column) {
-                                self.fields.mode = f.mode;
+                            let modes: Vec<RecalcMode> =
+                                if multiple { self.columns.clone() } else { vec![self.column] }
+                                    .iter()
+                                    .filter_map(|&c| Self::read(doc.project(), c).map(|f| f.mode))
+                                    .collect();
+                            if let Some(&first) = modes.first()
+                                && modes.iter().all(|m| *m == first)
+                            {
+                                self.fields.mode = first;
                             }
                             self.saved = self.fields.clone();
                         }

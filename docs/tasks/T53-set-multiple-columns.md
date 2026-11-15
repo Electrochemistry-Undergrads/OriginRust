@@ -1,8 +1,6 @@
 # T53: Set Multiple Columns Values (Ctrl+Shift+Q)
 
-**Status:** claimed 2026-11-15 (branch `set-multiple-columns`, Claude macOS "mac-multicol"). Brief written from
-T09's open item, parity row "Set Column Values dialog extras" (Set Multiple Columns Values missing) and
-inventory MATH-MULTI-01.
+**Status:** done, merged 2026-11-15 (Claude macOS "mac-multicol"; expression-language 7): `j` and `col/wcol(j±k)` in sheaf-expr and the sheet host (a column named J still wins for a bare `col(j)`), per-column dependencies and layout-change recalculation, `Document::set_columns_values` (one undo step), the multi-column Set Values window, Ctrl+Shift+Q in both menus. Reviewed by three agents with each finding checked; seven fixed. Left: the Origin measurements in expression-language 7; MCP has no multi-column tool; Before Formula Scripts (no script runtime).
 **Size:** M. **Branch:** `set-multiple-columns`. **Model:** Sonnet. No Origin needed for the mechanism; the
 window layout and the column-index variable are measured once on Windows.
 **Spec:** `docs/spec/expression-language.md` (the `j` variable) and `docs/spec/gui-look.md` (Set Values).

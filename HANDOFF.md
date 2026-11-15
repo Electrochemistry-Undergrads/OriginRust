@@ -53,6 +53,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/ci-build-size` | Codex Windows, ci-build-size | CI runner disk exhaustion during test linking; .github/workflows/ci.yml debug-info/cache settings and validation note only | claimed 2026-11-15; no Rust source, test semantics, local/shared caches or other sessions scopes |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `codex/t02-go-to` | Codex Windows, t02-go-to | T02 Go To dialog layout/defaults, Extend Selection and view-only virtual row visibility/key bounds; go_to dialog, scoped app/grid navigation symbols and focused tests | claimed 2026-11-14; no worksheet data/formula editing, core/plot/print/history or other sessions' symbols |
 | `mac-print-panel` | Codex macOS, no Origin | T27 native macOS graph print panel via PDFKit; app print_graph/macprint, macOS dependencies and no-spool validation example | claimed 2026-11-14; no workbook printing, Windows CLI, Excel/imports or other sessions’ scope |

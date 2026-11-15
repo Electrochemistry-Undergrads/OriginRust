@@ -130,6 +130,10 @@ pub enum ProjectError {
     NoSuchPlot(usize),
     #[error("{0}")]
     Panels(#[from] PanelError),
+    #[error("a lollipop plot needs two or more Y columns (got {0}); select at least two Y columns")]
+    LollipopNeedsTwoColumns(usize),
+    #[error("a lollipop plot cannot have a right Y axis; use one Y axis or another template")]
+    LollipopNoRightAxis,
 }
 
 impl Project {
@@ -254,9 +258,13 @@ impl Project {
         book.id = id;
         book.name = self.unique_name("Book");
         for sheet in &mut book.sheets {
+            let mut renamed = std::collections::HashMap::new();
             for col in &mut sheet.columns {
-                col.id = ColumnId(self.fresh_id());
+                let new = ColumnId(self.fresh_id());
+                renamed.insert(col.id, new);
+                col.id = new;
             }
+            sheet.remap_cond_format_columns(&|c| renamed.get(&c).copied());
         }
         self.windows.push(Window::Workbook(book));
         id
@@ -305,9 +313,12 @@ impl Project {
             match window {
                 Window::Workbook(book) => {
                     book.id = w(book.id);
-                    for col in book.sheets.iter_mut().flat_map(|s| s.columns.iter_mut()) {
-                        col.id = c(col.id);
-                        col.analysis = None;
+                    for sheet in &mut book.sheets {
+                        for col in &mut sheet.columns {
+                            col.id = c(col.id);
+                            col.analysis = None;
+                        }
+                        sheet.remap_cond_format_columns(&|id| Some(c(id)));
                     }
                 }
                 Window::Graph(graph) => {
@@ -635,6 +646,9 @@ impl Project {
         for y in ys {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
         }
+        if template == Template::Lollipop && ys.len() < 2 {
+            return Err(ProjectError::LollipopNeedsTwoColumns(ys.len()));
+        }
         let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
         let graph = self.add_graph(template);
         if matches!(template, Template::FloatingColumn | Template::FloatingBar) {
@@ -681,6 +695,9 @@ impl Project {
                 }
             }
         }
+        if template == Template::Lollipop {
+            self.make_lollipop(graph, ys);
+        }
         if let Some(g) = self.graph_mut(graph) {
             // A new graph has no colors chosen by the user, so spread the palette over all plots.
             if let Some(l) = g.layers.first_mut() {
@@ -693,6 +710,32 @@ impl Project {
         Ok(graph)
     }
 
+    /// Turns the plots of a new graph into a lollipop plot: vertical drop lines to the next data
+    /// plot and, as Origin's template exchanges X and Y, each plot's X and Y columns traded (with
+    /// the two axes) when every plot has an X column. Plots against the row number cannot be
+    /// exchanged here (Sheaf's own limit, unmeasured), so those lollipops stand upright.
+    fn make_lollipop(&mut self, graph: WindowId, ys: &[ColumnId]) {
+        let labels: Vec<String> =
+            ys.iter().map(|y| self.column(*y).map(|c| c.display_name().to_string()).unwrap_or_default()).collect();
+        let Some(l) = self.graph_mut(graph).and_then(|g| g.layers.first_mut()) else { return };
+        for p in &mut l.plots {
+            p.decor.drop.vertical.on = true;
+            p.decor.drop.vertical.target = crate::graph::DropTarget::NextDataPlot;
+        }
+        if l.plots.iter().all(|p| p.x.is_some()) {
+            std::mem::swap(&mut l.x_axis, &mut l.y_axis);
+            for (p, name) in l.plots.iter_mut().zip(labels) {
+                if let Some(x) = p.x {
+                    // The plot keeps the name of its Y column in the legend.
+                    p.label = Some(name);
+                    p.x = Some(p.y);
+                    p.y = x;
+                }
+                std::mem::swap(&mut p.y_error, &mut p.x_error);
+            }
+        }
+    }
+
     /// Creates a graph of `template` with the `left` columns on its left Y axis and the `right`
     /// columns on a right Y axis (added with [`Project::add_right_y_layer`] unless the template
     /// already has one), and returns its id. The long name comes from the first column's workbook.
@@ -702,6 +745,9 @@ impl Project {
         left: &[ColumnId],
         right: &[ColumnId],
     ) -> Result<WindowId, ProjectError> {
+        if template == Template::Lollipop {
+            return Err(ProjectError::LollipopNoRightAxis);
+        }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
         }
@@ -914,6 +960,15 @@ mod tests {
         let mut part = plot;
         part.rows = Some((1, 3));
         assert_eq!(p.plot_data_name(&part), format!("[Book1]{sheet}! A(X), B(Y) [2:3]"));
+    }
+
+    #[test]
+    fn a_lollipop_is_refused_a_right_y_axis() {
+        let (mut p, _, _, y) = sample();
+        let graphs = p.graphs().count();
+        let r = p.plot_columns_double_y(crate::template::Template::Lollipop, &[y], &[y]);
+        assert!(matches!(r, Err(ProjectError::LollipopNoRightAxis)));
+        assert_eq!(p.graphs().count(), graphs, "no graph is left behind");
     }
 
     #[test]
@@ -1336,5 +1391,38 @@ mod tests {
         assert_eq!(here.root.folders.last().unwrap().name, "XRD project");
         let fresh = here.new_column_id();
         assert!(fresh.0 > y.0, "new ids come after the appended ones");
+    }
+
+    fn book_with_rule(p: &mut Project) -> (WindowId, ColumnId) {
+        let b = p.add_workbook("");
+        let c = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        let sheet = &mut p.workbook_mut(b).unwrap().sheets[0];
+        let rule = crate::condformat::CondFormat::new(
+            sheet,
+            crate::condformat::CondRange::whole_columns(vec![c]),
+            crate::condformat::Rule::min_max(),
+        );
+        sheet.cond_formats.push(rule);
+        (b, c)
+    }
+
+    fn rule_columns(p: &Project, b: WindowId) -> Vec<ColumnId> {
+        p.workbook(b).unwrap().sheets[0].cond_formats[0].range.columns.clone()
+    }
+
+    #[test]
+    fn duplicate_window_and_append_remap_the_rules() {
+        let mut p = Project::new();
+        let (b, _) = book_with_rule(&mut p);
+        let copy = p.duplicate_window(b).unwrap();
+        let col = p.workbook(copy).unwrap().sheets[0].columns[0].id;
+        assert_eq!(rule_columns(&p, copy), vec![col]);
+
+        let mut other = Project::new();
+        let (ob, oc) = book_with_rule(&mut other);
+        let (new, _) = p.append(other, "f");
+        let _ = (ob, oc);
+        let col = p.workbook(new[0]).unwrap().sheets[0].columns[0].id;
+        assert_eq!(rule_columns(&p, new[0]), vec![col]);
     }
 }

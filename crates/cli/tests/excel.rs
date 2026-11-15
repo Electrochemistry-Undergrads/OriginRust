@@ -50,26 +50,32 @@ fn an_excel_file_becomes_one_workbook_with_a_sheet_per_excel_sheet() {
     assert!(ok, "{err}");
     assert_eq!(p.workbooks().count(), 1);
     assert_eq!(sheet_names(&p), ["Old", "Second"]);
-    assert_eq!(p.workbooks().next().unwrap().long_name, "legacy");
+    assert_eq!(p.workbooks().next().unwrap().long_name, "legacy.xls");
     let (ok, err, p) = import(&dir, &fixture("basic.xlsx"), &[]);
     assert!(ok, "{err}");
     assert_eq!(p.workbooks().next().unwrap().sheets[0].columns[0].long_name, "Potential");
 }
 
 #[test]
-fn sheets_are_chosen_by_name_or_position_and_hidden_ones_on_request() {
+fn sheets_are_chosen_by_name_or_position_and_hidden_ones_read_unless_skipped() {
     let dir = scratch("choose");
     let (ok, err, p) = import(&dir, &fixture("legacy.xls"), &["--sheets", "Second,1"]);
     assert!(ok, "{err}");
     assert_eq!(sheet_names(&p), ["Second", "Old"]);
 
+    // Hidden sheets are read, as Origin's impExcel reads them.
     let (ok, err, p) = import(&dir, &fixture("hidden.xlsx"), &[]);
     assert!(ok, "{err}");
-    assert_eq!(sheet_names(&p), ["Visible"]);
-    assert!(err.contains("Hidden"), "the skipped sheet is reported: {err}");
+    assert_eq!(sheet_names(&p), ["Visible", "Hidden", "Secret"]);
     let (ok, err, p) = import(&dir, &fixture("hidden.xlsx"), &["--hidden-sheets"]);
     assert!(ok, "{err}");
     assert_eq!(sheet_names(&p), ["Visible", "Hidden", "Secret"]);
+    let (ok, err, p) = import(&dir, &fixture("hidden.xlsx"), &["--skip-hidden-sheets"]);
+    assert!(ok, "{err}");
+    assert_eq!(sheet_names(&p), ["Visible"]);
+    assert!(err.contains("Hidden"), "the skipped sheet is reported: {err}");
+    let (ok, err, _) = import(&dir, &fixture("hidden.xlsx"), &["--hidden-sheets", "--skip-hidden-sheets"]);
+    assert!(!ok, "the two switches contradict each other: {err}");
     let (ok, err, p) = import(&dir, &fixture("hidden.xlsx"), &["--sheets", "hidden"]);
     assert!(ok, "{err}");
     assert_eq!(sheet_names(&p), ["Hidden"]);

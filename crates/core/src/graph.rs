@@ -759,6 +759,7 @@ impl Layer {
                 q.symbol.filled = src.symbol.filled;
             }
             q.decor.drop = src.decor.drop.clone();
+            q.decor.symbol_line = src.decor.symbol_line;
             q.decor.labels = src.decor.labels.clone();
             q.decor.fill_under = src.decor.fill_under.map(|_| q.line.color);
             if same_color {
@@ -958,6 +959,12 @@ pub struct Axis {
     /// One break in the axis: a region of values that is left out, with a gap in the axis line.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub axis_break: Option<AxisBreak>,
+    /// Origin's Grids tab "Additional Lines": a line across the layer at this value of the OTHER axis,
+    /// in this axis' line style (for the X axis a horizontal line at Y = value, labelled "Y =" in
+    /// Origin's dialog; for the Y axis a vertical line at X = value). `None` means off; Origin's
+    /// default value is 0 (graphing.md 3.7).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub additional_line: Option<f64>,
     /// Extra ticks at chosen values, each with its own label (the Special Ticks tab of Origin).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub special_ticks: Vec<SpecialTick>,
@@ -1339,6 +1346,9 @@ pub struct Plot {
 /// What a plot draws besides its line, symbols, bars and error bars.
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct PlotDecor {
+    /// The Line tab's Symbol/Line interface and Drop Lines' skipped-point gap control.
+    #[serde(default, skip_serializing_if = "SymbolLineInterface::is_default")]
+    pub symbol_line: SymbolLineInterface,
     /// Lines from each point to the Y axis (Origin's "Horizontal") and to the X axis ("Vertical").
     #[serde(default, skip_serializing_if = "DropLines::is_default")]
     pub drop: DropLines,
@@ -1353,6 +1363,26 @@ pub struct PlotDecor {
     /// The text written next to each point.
     #[serde(default, skip_serializing_if = "DataLabels::is_default")]
     pub labels: DataLabels,
+}
+
+/// How a Line + Symbol connecting line meets its point symbols. Other plot kinds ignore these
+/// saved settings. Gaps start unchecked and the line starts behind symbols, as in Origin 2016.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct SymbolLineInterface {
+    /// The line is painted over symbols when gaps are off; the saved choice survives enabling gaps.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub draw_in_front: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub gap_to_symbol: bool,
+    /// Keep the connecting line intact at skipped markers while retaining gaps at shown markers.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub no_break_skipped: bool,
+}
+
+impl SymbolLineInterface {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 impl PlotDecor {
@@ -1371,13 +1401,75 @@ pub struct DropLine {
     /// `None` is Origin's "Auto": the colour of the plot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<Color>,
+    /// Where the line goes (Origin's "Drop To").
+    #[serde(default, skip_serializing_if = "DropTarget::is_default")]
+    pub target: DropTarget,
+    /// How the line is coloured when `color` is `None`.
+    #[serde(default, skip_serializing_if = "DropColorMode::is_default")]
+    pub color_mode: DropColorMode,
 }
 
 impl Default for DropLine {
     fn default() -> Self {
-        DropLine { on: false, dash: Dash::Solid, width_pt: 0.5, color: None }
+        DropLine {
+            on: false,
+            dash: Dash::Solid,
+            width_pt: 0.5,
+            color: None,
+            target: DropTarget::Axis,
+            color_mode: DropColorMode::Auto,
+        }
     }
 }
+
+/// Origin's "Drop To" of a drop line.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum DropTarget {
+    /// To the axis (the left or bottom edge of the frame): the behaviour before lollipop plots.
+    #[default]
+    Axis,
+    /// To the point of the next data plot of the layer at the same row; the last plot connects
+    /// back to the first (Origin's lollipop plot).
+    NextDataPlot,
+}
+
+impl DropTarget {
+    pub fn is_default(&self) -> bool {
+        *self == DropTarget::Axis
+    }
+    pub const ALL: [DropTarget; 2] = [DropTarget::Axis, DropTarget::NextDataPlot];
+    pub fn label(&self) -> &'static str {
+        match self {
+            DropTarget::Axis => "Axis",
+            DropTarget::NextDataPlot => "Next Data Plot",
+        }
+    }
+}
+
+/// The colour choice of a drop line besides a fixed colour (Origin's "Auto" and "Y Value:
+/// Plus-Minus").
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum DropColorMode {
+    /// The colour of the plot.
+    #[default]
+    Auto,
+    /// By the sign of the Y value: [`PLUS_MINUS_POSITIVE`] for values of zero and above and
+    /// [`PLUS_MINUS_NEGATIVE`] for negative values (Sheaf's own pair, not measured).
+    PlusMinus,
+}
+
+impl DropColorMode {
+    pub fn is_default(&self) -> bool {
+        *self == DropColorMode::Auto
+    }
+}
+
+/// The drop line colour of values of zero and above in the "Y Value: Plus-Minus" mode (Sheaf's own
+/// choice, not measured in Origin): a blue.
+pub const PLUS_MINUS_POSITIVE: Color = Color { r: 0, g: 114, b: 178, a: 255 };
+/// The drop line colour of negative values in the "Y Value: Plus-Minus" mode (Sheaf's own choice,
+/// not measured in Origin): a vermilion red.
+pub const PLUS_MINUS_NEGATIVE: Color = Color { r: 213, g: 94, b: 0, a: 255 };
 
 /// The two drop lines of a plot.
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
@@ -2392,5 +2484,23 @@ mod style_tests {
             let l = DataLabels { only_rows: text.into(), ..Default::default() };
             assert!((0..4).all(|r| l.labels_row(r)), "{text:?}");
         }
+    }
+
+    #[test]
+    fn drop_lines_of_older_files_load_as_axis_and_auto_and_are_written_back_the_same() {
+        let old = r#"{"horizontal":{"on":false,"dash":"solid","width_pt":0.5},"vertical":{"on":true,"width_pt":1.0}}"#;
+        let d: DropLines = serde_json::from_str(old).unwrap();
+        for l in [&d.horizontal, &d.vertical] {
+            assert_eq!((l.target, l.color_mode), (DropTarget::Axis, DropColorMode::Auto));
+        }
+        assert!(d.vertical.on);
+        let json = serde_json::to_string(&d).unwrap();
+        assert!(!json.contains("target") && !json.contains("color_mode"), "{json}");
+        // The new settings round-trip.
+        let mut d = d;
+        d.vertical.target = DropTarget::NextDataPlot;
+        d.vertical.color_mode = DropColorMode::PlusMinus;
+        let back: DropLines = serde_json::from_str(&serde_json::to_string(&d).unwrap()).unwrap();
+        assert_eq!(back, d);
     }
 }

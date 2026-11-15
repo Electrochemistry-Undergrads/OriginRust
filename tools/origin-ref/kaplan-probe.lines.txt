@@ -1,0 +1,10 @@
+newbook;
+col(1) = {3, 5, 5, 6, 8, 8, 9, 12, 12, 15, 17, 20, 22, 25};
+wks.addcol(); col(2) = {0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0};
+kaplanmeier irng:=(1,2) censor:=1 rd:=<new name:=SF1>;
+kaplanmeier irng:=(1,2) censor:=1 rt:=<new name:=RT1>;
+kaplanmeier irng:=(1,2) censor:=1 rd:=<new> rt:=<new>;
+kaplanmeier irng:=(1,2) censor:=1 quartile:=1 mean:=1;
+kaplanmeier irng:=(1,2) censor:=1 sfci:=1 hazard:=1 lsf:=1 omsf:=1;
+kaplanmeier irng:=(1,2) censor:=1 plotinone:=1;
+kaplanmeier irng:=(1,2) censor:=1 rd:=[Book1]Sheet1!<new name:=SF1> rt:=[Book1]Sheet1!<new name:=RT1>;

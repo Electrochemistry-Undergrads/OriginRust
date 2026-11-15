@@ -10,11 +10,16 @@ use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
 mod autosave;
+mod cond_format;
 mod excel;
+mod frozen_panes;
 mod label_frames;
 mod label_whiteout;
+mod lollipop;
 mod offset_multipliers;
 mod skip_points;
+mod symbol_line_gaps;
+mod symbol_line_order;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {
@@ -456,6 +461,27 @@ fn the_axis_dialog_switches_between_the_horizontal_and_the_vertical_axis() {
     menu(&mut h, "Edit", "Undo Change graph settings");
     assert_eq!(graph(&h).layers[0].y_axis.scale, ScaleKind::Linear, "both axes were one undo step");
     assert_eq!(graph(&h).layers[0].x_axis.scale, ScaleKind::Linear);
+}
+
+#[test]
+fn the_grids_tab_turns_on_the_opposite_line_and_a_line_at_zero_of_the_other_axis() {
+    let mut h = start(vec![data_file("axis-additional")]);
+    open_props(&mut h, 0, PropsTab::XAxis, None);
+    click(&mut h, "Grids");
+    // Origin labels the X axis page's line "Y =" (a horizontal line at that Y) and starts it at 0.
+    click(&mut h, "Y =");
+    click(&mut h, "Opposite");
+    assert_eq!(graph(&h).layers[0].x_axis.additional_line, Some(0.0));
+    assert!(graph(&h).layers[0].x_axis.show_opposite);
+    click(&mut h, "OK");
+    open_props(&mut h, 0, PropsTab::YAxis, None);
+    click(&mut h, "Grids");
+    click(&mut h, "X =");
+    assert_eq!(graph(&h).layers[0].y_axis.additional_line, Some(0.0));
+    click(&mut h, "OK");
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert_eq!(graph(&h).layers[0].y_axis.additional_line, None, "undo the Y axis change");
+    assert_eq!(graph(&h).layers[0].x_axis.additional_line, Some(0.0), "the X axis change was its own step");
 }
 
 #[test]
@@ -1391,6 +1417,47 @@ fn export_graphs_apply_writes_the_file_and_asks_before_replacing_it() {
 }
 
 #[test]
+fn export_graphs_multipage_pdf_writes_all_graphs_into_one_file() {
+    let mut h = start(vec![data_file("export-multipage-a"), data_file("export-multipage-b")]);
+    assert_eq!(project(&h).graphs().count(), 2);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Export Graphs..."]);
+    let label = "Export as multi-page PDF file";
+    assert!(h.query_by_label(label).is_none(), "only offered for PDF");
+    h.get_by_value("Portable Network Graphics (*.png)").click();
+    settle(&mut h);
+    // PDF is below the fold of the type list.
+    h.get_by_label("Portable Document Format (*.pdf)").scroll_to_me();
+    settle(&mut h);
+    click(&mut h, "Portable Document Format (*.pdf)");
+    // One graph (Active Page): shown but greyed.
+    assert!(h.get_by_label(label).accesskit_node().is_disabled(), "Active Page is one graph");
+    h.get_by_value("Active Page").click();
+    settle(&mut h);
+    click(&mut h, "All Graphs in Project");
+    assert!(!h.get_by_label(label).accesskit_node().is_disabled());
+    click(&mut h, label);
+    assert!(h.query_by_label("File will be saved as sample.pdf (2 pages)").is_some());
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-export-multipage-out-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    h.state_mut().export.as_mut().unwrap().set_path(&dir);
+    settle(&mut h);
+    click(&mut h, "Apply");
+    let pdfs: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "pdf"))
+        .collect();
+    assert_eq!(pdfs, vec![dir.join("sample.pdf")], "one PDF for both graphs");
+    let bytes = std::fs::read(&pdfs[0]).unwrap();
+    assert!(String::from_utf8_lossy(&bytes).contains("/Count 2"), "two pages");
+    assert!(h.state().status.contains("Wrote 2 graphs to"), "{}", h.state().status);
+    assert!(h.state().export.is_some(), "Apply keeps the window open");
+    click(&mut h, "Cancel");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn export_graphs_psd_picker_writes_rgb_grey_and_indexed_images() {
     let mut h = start(vec![data_file("export-psd")]);
     show_window(&mut h, "Graph1 - sample");
@@ -1909,6 +1976,57 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     settle(&mut h);
     let b = project(&h).workbooks().next().unwrap();
     assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 2));
+}
+
+/// The Fit Peaks goal of the Peak Analyzer offers Origin's Voigt and a function per peak; OK fits
+/// the found peaks with them.
+#[test]
+fn peak_analyzer_fits_the_found_peaks_with_voigt() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-peakvoigt-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("peaks.csv");
+    let mut text = String::from(
+        "t,i
+",
+    );
+    for k in 0..400 {
+        let x = k as f64 * 0.05;
+        let g = |c: f64, s: f64, a: f64| a * (-(x - c) * (x - c) / (2.0 * s * s)).exp();
+        text.push_str(&format!(
+            "{x},{}
+",
+            0.1 + 0.01 * x + g(6.0, 0.4, 1.0) + g(13.0, 0.5, 0.6)
+        ));
+    }
+    std::fs::write(&path, text).unwrap();
+    let mut h = start(vec![path]);
+    show_window(&mut h, "Book1 - peaks");
+    menu_path(&mut h, &["Analysis", "Peaks and Baseline", "Peak Analyzer..."]);
+    h.get_by_label("Fit Peaks").scroll_to_me();
+    settle(&mut h);
+    click(&mut h, "Fit Peaks");
+    assert!(label_containing(&h, "Goal - Fit Peaks"));
+    for _ in 0..4 {
+        click(&mut h, "Next");
+    }
+    assert!(has_label(&h, "Voigt"), "the Fit Peaks page offers Voigt");
+    click(&mut h, "Voigt");
+    // The first peak gets its own function, Gauss; the second keeps Voigt.
+    click(&mut h, "Add Peak Function");
+    h.query_all_by_role(egui::accesskit::Role::ComboBox).last().expect("the per-peak function list").click();
+    settle(&mut h);
+    h.get_all_by_label("Gauss").last().unwrap().click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = &b.sheets[1];
+    let center = sheet.column_by_name("Fit center").map(|c| c.numeric().unwrap().to_vec());
+    let names: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
+    let center = center.unwrap_or_else(|| panic!("no Fit center column in {names:?}"));
+    assert!((center[0] - 6.0).abs() < 1e-4 && (center[1] - 13.0).abs() < 1e-4, "{center:?}");
+    let logged = h.state().logs.results.iter().flat_map(|r| &r.lines).any(|l| l.contains("Gauss+Voigt fit of 2 peaks"));
+    assert!(logged, "the fit note in the Results Log names each peak's function");
 }
 
 /// A folder for the project files of one save test.
@@ -3997,6 +4115,34 @@ fn the_statistics_menu_runs_a_t_test_and_undoes_in_one_step() {
     assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
 }
 
+/// The four variance and proportion tests of Statistics > Hypothesis Testing open from the menu, run on OK and
+/// add a result sheet; the proportion windows ask for counts and have no Input node.
+#[test]
+fn the_hypothesis_testing_menu_runs_the_variance_and_proportion_tests() {
+    let cases = [
+        ("One-Sample Test for Variance...", "VarTest", "Chi-Square", true),
+        ("Two-Sample Test for Variance...", "VarTest", "F", true),
+        ("One-Sample Proportion Test...", "PropTest", "Z", false),
+        ("Two-Sample Proportion Test...", "PropTest", "Z", false),
+    ];
+    for (item, sheet, column, has_input) in cases {
+        let mut h = start(vec![data_file("vartest-menu")]);
+        show_window(&mut h, "Book1 - sample");
+        menu_path(&mut h, &["Statistics", "Hypothesis Testing", item]);
+        assert!(h.state().analysis.is_some(), "{item} opens its window");
+        assert_eq!(has_label(&h, "Input"), has_input, "{item}");
+        assert!(has_label(&h, "Alternate Hypothesis"), "{item}");
+        click(&mut h, "OK");
+        assert!(h.state().analysis.is_none(), "OK closes the window of {item}");
+        let b = project(&h).workbooks().next().unwrap();
+        assert_eq!(b.sheets.len(), 2, "{item}");
+        let ws = &b.sheets[1];
+        assert!(ws.name.starts_with(sheet), "{}", ws.name);
+        let col = ws.columns.iter().find(|c| c.long_name == column).unwrap_or_else(|| panic!("{item}: no {column}"));
+        assert!(col.numeric().unwrap().iter().all(|v| v.is_finite()), "{item}");
+    }
+}
+
 /// Statistics > Histogram... adds the counts sheet and a graph with a column plot.
 #[test]
 fn the_statistics_menu_makes_a_histogram_graph() {
@@ -4684,6 +4830,63 @@ fn the_descriptive_menu_fits_distributions() {
     assert_eq!(aic.len(), 10, "five families for each of the two columns (t is not chosen)");
     assert!(aic.iter().all(|v| v.is_finite()), "{aic:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Distribution fit"));
+}
+
+/// Statistics > Multivariate Analysis > Principal Component Analysis...: eigenvalues and loadings in a result
+/// sheet, a scree plot as a graph; one undo removes both.
+#[test]
+fn the_multivariate_menu_runs_a_principal_component_analysis() {
+    let mut h = start(vec![data_file("pca")]);
+    show_window(&mut h, "Book1 - sample");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Multivariate Analysis", "Principal Component Analysis..."]);
+    assert!(h.state().analysis.is_some(), "the PCA window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, eigen) = result_column(&h, "Eigenvalue");
+    assert!(sheet.starts_with("PCA"), "{sheet}");
+    // Two columns that are perfectly anti-correlated: eigenvalues 2 and 0, loadings of equal size.
+    assert_eq!(eigen.len(), 2);
+    assert!((eigen[0] - 2.0).abs() < 1e-9 && eigen[1].abs() < 1e-9, "{eigen:?}");
+    let (_, l1) = result_column(&h, "Loading PC1");
+    assert!((l1[0].abs() - 0.5f64.sqrt()).abs() < 1e-9 && (l1[0].abs() - l1[1].abs()).abs() < 1e-9, "{l1:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Principal component analysis"));
+}
+
+/// Statistics > ROC Curve...: the test variable and the state column (last) give the area, the curve and a graph;
+/// one undo removes both.
+#[test]
+fn the_statistics_menu_draws_a_roc_curve() {
+    // Positives 3, 4, 5 against negatives 1, 2, 4: the area is 5/6.
+    let data = csv_file(
+        "roc",
+        "marker",
+        "id,score,state
+1,3,1
+2,4,1
+3,5,1
+4,1,0
+5,2,0
+6,4,0
+",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - marker");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "ROC Curve..."]);
+    assert!(h.state().analysis.is_some(), "the ROC window is open");
+    assert!(has_label(&h, "Positive state value"), "the positive state box is missing");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, area) = result_column(&h, "Area");
+    assert!(sheet.starts_with("ROC"), "{sheet}");
+    assert!((area[0] - 5.0 / 6.0).abs() < 1e-9, "{area:?}");
+    let (_, sens) = result_column(&h, "Sensitivity");
+    assert_eq!(sens.first().copied(), Some(0.0));
+    assert!(sens.contains(&1.0), "the curve ends at (1, 1)");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("ROC curve"));
 }
 
 /// Statistics > Descriptive Statistics > Probability Plot... and Q-Q Plot...: a result sheet and a graph with
@@ -5898,6 +6101,8 @@ mod clipboard_origin;
 #[path = "ui_tests/clipboard_formats.rs"]
 mod clipboard_formats;
 
+mod go_to;
+mod go_to_picker;
 mod label_panels;
 #[path = "ui_tests/stack_panels.rs"]
 mod stack_panels;
@@ -6225,7 +6430,13 @@ fn go_to_window_moves_the_cursor_to_the_typed_cell() {
     show_window(&mut h, "Book1 - sample");
     menu_path(&mut h, &["Edit", "Go to..."]);
     assert!(h.state().go_to.is_some());
+    h.get_by_label("Go to Row").focus();
+    settle(&mut h);
     h.event(egui::Event::Text("3".to_string()));
+    settle(&mut h);
+    h.get_by_label("Go to Column").focus();
+    settle(&mut h);
+    h.event(egui::Event::Text("1".to_string()));
     settle(&mut h);
     h.key_press(egui::Key::Enter);
     settle(&mut h);
@@ -6620,6 +6831,59 @@ fn worksheet_filter_dialog_updates_the_graph_and_disable_undo_redo_restore_it() 
     assert_eq!(svg(&h), original);
     h.state_mut().apply(Action::Redo, &ctx);
     assert_eq!(svg(&h), filtered);
+}
+
+#[test]
+fn filtered_worksheet_keys_and_edit_commits_visit_only_visible_cells() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "filtered-navigation");
+        let book = project(&h).workbooks().next().unwrap().id;
+        h.state_mut().doc.apply("Filter fixture", |p| {
+            let ws = p.workbook_mut(book).unwrap().sheet_mut();
+            ws.columns[0].data = ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0]);
+            ws.columns[1].data = ColumnData::numeric(vec![10.125, 20.125, 30.125, 40.125]);
+            p.set_row_filter(book, 0, "mod(col(A), 2) == 1").unwrap();
+        });
+        settle(&mut h);
+        click_text(&mut h, "10.125");
+        h.key_press(egui::Key::ArrowDown);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)), "Down skips the hidden second row");
+        h.key_press(egui::Key::ArrowDown);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 4)), "spare rows remain reachable");
+        h.key_press(egui::Key::ArrowUp);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)));
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Home);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((0, 0)));
+        h.key_press(egui::Key::ArrowRight);
+        settle(&mut h);
+        h.event(egui::Event::Text("11".into()));
+        settle(&mut h);
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)), "committing the edit skips hidden rows");
+        h.event(egui::Event::Text("33".into()));
+        settle(&mut h);
+        h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Enter);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 0)));
+        assert_eq!(column(&h, "B"), [11.0, 20.125, 33.0, 40.125], "hidden values were not edited");
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::ArrowDown);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)), "jumping to data end stops on visible data");
+        h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::ArrowUp);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 2), end: (1, 0) });
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 0)), "Enter wraps through the visible block cells");
+        h.key_press(egui::Key::Tab);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)), "Tab also skips filtered cells within a block");
+    }
 }
 
 #[test]
@@ -7974,4 +8238,72 @@ fn the_size_tab_edits_the_layer_area_and_a_linked_layer_shows_fractions_of_its_p
 
 fn has_label_containing(h: &Harness<'static, SheafApp>, text: &str) -> bool {
     h.query_all_by_label_contains(text).next().is_some()
+}
+
+/// Statistics > Survival Analysis > Kaplan-Meier Estimator...: time, censor and group columns give the survival
+/// table and a graph with the curves; one undo removes both.
+#[test]
+fn the_survival_menu_runs_the_kaplan_meier_estimator() {
+    // Two, 3+, 4, 4, 6+ in group 1: S(4) = 4/15 (hand worked in `calc::survival`).
+    let data = csv_file(
+        "km",
+        "survival",
+        "id,time,censor,group
+1,2,0,1
+2,3,1,1
+3,4,0,1
+4,4,0,1
+5,6,1,1
+6,1,0,2
+7,5,0,2
+8,7,1,2
+9,8,0,2
+10,9,0,2
+",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - survival");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Survival Analysis", "Kaplan-Meier Estimator..."]);
+    assert!(h.state().analysis.is_some(), "the Kaplan-Meier window is open");
+    assert!(has_label(&h, "Censoring value"), "the censoring value box is missing");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, events) = result_column(&h, "Events");
+    assert!(sheet.starts_with("KaplanMeier"), "{sheet}");
+    assert_eq!(events.first().copied(), Some(3.0), "{events:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Kaplan-Meier estimator"));
+}
+
+/// Statistics > Multivariate Analysis > K-Means Cluster Analysis...: the cluster table and the cluster of every row
+/// in a result sheet and a scatter graph; one undo removes both.
+#[test]
+fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
+    // Two clear groups of three rows.
+    let data = csv_file(
+        "kmeans",
+        "clusters",
+        "id,a,b
+1,1,1
+2,1.5,2
+3,2,1.5
+4,9,9
+5,9.5,8.5
+6,10,9.5
+",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - clusters");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Multivariate Analysis", "K-Means Cluster Analysis..."]);
+    assert!(h.state().analysis.is_some(), "the k-means window is open");
+    assert!(has_label(&h, "Number of clusters"), "the cluster count box is missing");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "the window closed after OK");
+    let (sheet, n) = result_column(&h, "Cluster N");
+    assert!(sheet.starts_with("KMeans"), "{sheet}");
+    assert_eq!(n.iter().sum::<f64>() as usize, 6, "{n:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("K-means cluster analysis"));
 }

@@ -5,7 +5,7 @@
 //! sheaf-app lab.sheaf            open a project (Save writes .opj by default)
 //! sheaf-app old.opj              import the workbooks of an Origin project
 //! sheaf-app run1.txt run2.txt    import data files with default settings and plot them
-//! sheaf-app results.xlsx         import every visible sheet of an Excel workbook (also .xls, .xlsm)
+//! sheaf-app results.xlsx         import every sheet of an Excel workbook (also .xls, .xlsm)
 //! ```
 //!
 //! The project is autosaved to a recovery folder of Sheaf's own while it has unsaved changes, and the

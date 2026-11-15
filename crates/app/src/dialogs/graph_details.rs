@@ -391,6 +391,15 @@ fn plot_tab_body(
                 }
                 ui.end_row();
             });
+            if plot.kind == PlotKind::LineSymbol {
+                group_box(ui, "Symbol/Line interface", |ui| {
+                    ui.checkbox(&mut plot.decor.symbol_line.gap_to_symbol, "Gap to Symbol");
+                    ui.add_enabled_ui(!plot.decor.symbol_line.gap_to_symbol, |ui| {
+                        ui.radio_value(&mut plot.decor.symbol_line.draw_in_front, true, "Draw Line in Front");
+                        ui.radio_value(&mut plot.decor.symbol_line.draw_in_front, false, "Draw Line Behind");
+                    });
+                });
+            }
             if !plot.kind.is_area() {
                 let mut fill = plot.decor.fill_under.is_some();
                 if ui.checkbox(&mut fill, "Fill Area Under Curve").changed() {
@@ -457,9 +466,41 @@ fn plot_tab_body(
                     ui.add_enabled(d.on, DragValue::new(&mut d.width_pt).range(0.1..=20.0).speed(0.05).suffix(" pt"));
                 }
                 ui.end_row();
+                ui.label("Drop To");
+                for (id, d) in [("drop_h_target", &mut drop.horizontal), ("drop_v_target", &mut drop.vertical)] {
+                    ui.add_enabled_ui(d.on, |ui| {
+                        egui::ComboBox::from_id_salt(id).selected_text(d.target.label()).show_ui(ui, |ui| {
+                            for t in DropTarget::ALL {
+                                ui.selectable_value(&mut d.target, t, t.label());
+                            }
+                        });
+                    });
+                }
+                ui.end_row();
                 ui.label("Color");
-                for d in [&mut drop.horizontal, &mut drop.vertical] {
-                    ui.add_enabled_ui(d.on, |ui| auto_color_ui(ui, &mut d.color));
+                for (id, d) in [("drop_h_mode", &mut drop.horizontal), ("drop_v_mode", &mut drop.vertical)] {
+                    ui.add_enabled_ui(d.on, |ui| {
+                        auto_color_ui(ui, &mut d.color);
+                        // "Y Value: Plus-Minus" is only for lollipop plots: offered when the drop
+                        // line goes to the next data plot.
+                        if d.color.is_none()
+                            && (d.target == DropTarget::NextDataPlot || d.color_mode == DropColorMode::PlusMinus)
+                        {
+                            egui::ComboBox::from_id_salt(id)
+                                .selected_text(match d.color_mode {
+                                    DropColorMode::Auto => "Auto",
+                                    DropColorMode::PlusMinus => "Y Value: Plus-Minus",
+                                })
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut d.color_mode, DropColorMode::Auto, "Auto");
+                                    ui.selectable_value(
+                                        &mut d.color_mode,
+                                        DropColorMode::PlusMinus,
+                                        "Y Value: Plus-Minus",
+                                    );
+                                });
+                        }
+                    });
                 }
                 ui.end_row();
             });
@@ -480,6 +521,15 @@ fn plot_tab_body(
                         plot.symbol.every = frequency;
                     }
                 });
+                if plot.kind == PlotKind::LineSymbol {
+                    ui.add_enabled(
+                        plot.decor.symbol_line.gap_to_symbol && plot.symbol.every > 1,
+                        egui::Checkbox::new(
+                            &mut plot.decor.symbol_line.no_break_skipped,
+                            "No Line Break for Skipped Point(s)",
+                        ),
+                    );
+                }
             });
         }
         DetailTab::Label => {

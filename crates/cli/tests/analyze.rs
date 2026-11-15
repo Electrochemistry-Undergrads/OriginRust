@@ -730,6 +730,30 @@ fn peaks_chain_integrates_and_fits_every_peak() {
     let exported = std::fs::read_to_string(&export).unwrap();
     assert!(exported.lines().next().unwrap().contains("Area"), "{exported}");
 
+    // Origin's Voigt as the peak shape.
+    let (ok, stdout, stderr) =
+        sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--min-height", "0.3", "--fit", "voigt"]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Voigt fit of 2 peaks") && stdout.contains("Fit FWHM"), "{stdout}");
+
+    // A function per peak: the first Lorentz, the rest the --fit function.
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "peaks",
+        data.to_str().unwrap(),
+        "--min-height",
+        "0.3",
+        "--fit",
+        "gauss",
+        "--fit-shapes",
+        "lorentz",
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Lorentz+Gauss fit of 2 peaks"), "{stdout}");
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--min-height", "0.3", "--fit-shapes", "voigt"]);
+    assert!(!ok && stderr.contains("--fit"), "the per-peak list needs --fit: {stderr}");
+
     // Without any chain option the plain peak finder runs, as before.
     let (ok, stdout, _) = sheaf(&["analyze", "peaks", data.to_str().unwrap()]);
     assert!(ok && stdout.contains("Peaks1") && !stdout.contains("Area"), "{stdout}");
@@ -747,6 +771,37 @@ fn groups_file(dir: &Path) -> PathBuf {
     )
     .unwrap();
     path
+}
+
+#[test]
+fn variance_and_proportion_tests_run_from_the_command_line() {
+    let dir = scratch("vartest");
+    let data = groups_file(&dir);
+    let file = data.to_str().unwrap();
+    let (ok, out, err) =
+        sheaf(&["analyze", "vartest", file, "--y", "untreated", "--variance", "0.1", "--levels", "95"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("One-sample test for variance") && out.contains("NOT significantly different"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "vartest", file, "--y", "untreated,treated", "--tail", "upper"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("Two-sample test for variance") && out.contains("Alternative Hypothesis: Variance1/Variance2 > 1"),
+        "{out}"
+    );
+    let (ok, _, err) = sheaf(&["analyze", "vartest", file, "--y", "untreated", "--ratio", "1"]);
+    assert!(!ok && err.contains("exactly two columns"), "{err}");
+
+    let (ok, out, err) = sheaf(&["analyze", "proptest", file, "--successes", "7", "--size", "10", "--exact"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("One-sample proportion test") && out.contains("Null Hypothesis: Proportion = 0.5"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "proptest", file, "--successes", "15,9", "--size", "40,35", "--levels", "90,95"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Two-sample proportion test") && out.contains("Proportion1 - Proportion2"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "proptest", file, "--successes", "11", "--size", "10"]);
+    assert!(!ok && err.contains("no more successes"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "proptest", file, "--successes", "1,2,3", "--size", "10,10,10"]);
+    assert!(!ok && err.contains("one --successes"), "{err}");
 }
 
 #[test]
@@ -1212,4 +1267,102 @@ fn discfreq_counts_the_distinct_values() {
     assert!(out.contains("DiscretFreq1") && out.contains("5 cells, 3 distinct values"), "{out}");
     let (ok, _, err) = sheaf(&["analyze", "discfreq", file, "--y", "kind", "--no-count"]);
     assert!(!ok && err.contains("at least one"), "{err}");
+}
+
+/// Principal component analysis (spec `statistics.md` section 17). The numbers are checked against Origin in
+/// `crates/calc/tests/origin_pca.rs`; here the wiring.
+#[test]
+fn principal_component_analysis_runs_from_the_command_line() {
+    let dir = scratch("pca");
+    let path = dir.join("table.csv");
+    std::fs::write(&path, "a,b,c\n1,2.3,3\n2,3.9,1\n3,6.4,4\n4,7.8,1\n5,10.4,5\n6,11.9,9\n7,14.2,2\n8,15.8,6\n")
+        .unwrap();
+    let file = path.to_str().unwrap();
+    let project = dir.join("pca.sheaf");
+    let (ok, out, err) = sheaf(&["analyze", "pca", file, "--y", "a,b,c", "--save", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    for name in ["Eigenvalue", "Percent of variance", "PC1", "PC3", "PCA1", "Loadings of PC1"] {
+        assert!(out.contains(name), "{name}: {out}");
+    }
+    assert!(!out.contains("Chi-square"), "{out}");
+    let (ok, info, err) = sheaf(&["info", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(info.contains("Score PC1") && info.contains("Loading PC2"), "{info}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "pca", file, "--y", "a,b,c", "--covariance", "--components", "3", "--no-graph"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Chi-square") && out.contains("covariance"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "pca", file, "--y", "a"]);
+    assert!(!ok && err.contains("at least two columns"), "{err}");
+}
+
+/// ROC curve (spec `statistics.md` section 19): the --y columns are the test variables, the state column last.
+#[test]
+fn roc_curve_runs_from_the_command_line() {
+    let dir = scratch("roc");
+    let path = dir.join("marker.csv");
+    std::fs::write(&path, "score,state\n3,yes\n4,yes\n5,yes\n1,no\n2,no\n4,no\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "roc", file, "--y", "score,state", "--positive", "yes"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Area") && out.contains("0.8333") && out.contains("ROC1") && out.contains("DeLong"), "{out}");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "roc",
+        file,
+        "--y",
+        "score,state",
+        "--positive",
+        "yes",
+        "--lower-is-positive",
+        "--no-graph",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("lower test values") && out.contains("0.1667"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "roc", file, "--y", "score,state", "--positive", "maybe"]);
+    assert!(!ok && err.contains("one state"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "roc", file, "--y", "score"]);
+    assert!(!ok && err.contains("at least two columns"), "{err}");
+}
+
+/// Kaplan-Meier estimator (spec `statistics.md` section 20): time, censor and group columns.
+#[test]
+fn kaplan_meier_runs_from_the_command_line() {
+    let dir = scratch("kaplan");
+    let path = dir.join("surv.csv");
+    // Origin's measured example, `tools/origin-ref/kaplan-suite1.lines.txt`: 14 cases, 4 censored (1), two groups.
+    std::fs::write(
+        &path,
+        "time,censor,group\n3,0,1\n5,0,2\n5,1,1\n6,0,2\n8,0,1\n8,0,2\n9,1,2\n12,0,1\n12,0,2\n15,1,1\n17,0,2\n20,0,1\n22,1,2\n25,0,1\n",
+    )
+    .unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "kaplan-meier", file, "--y", "time,censor"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("KaplanMeier1") && out.contains("14.10"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "kaplan-meier", file, "--y", "time,censor,group", "--log-rank", "--breslow", "--no-graph"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Log-rank test: chi-square 0.2542") && out.contains("Breslow test"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "kaplan-meier", file, "--y", "time"]);
+    assert!(!ok && err.contains("two or three columns"), "{err}");
+}
+
+/// K-means cluster analysis (spec `statistics.md` section 18): Origin's measured 12-case example in two variables.
+#[test]
+fn kmeans_runs_from_the_command_line() {
+    let dir = scratch("kmeans");
+    let path = dir.join("points.csv");
+    std::fs::write(&path, "a,b\n1,1\n1.5,2\n3,4\n5,7\n3.5,5\n4.5,5\n3.5,4.5\n6,8\n7.5,7\n8,9\n7,6.5\n9,8.5\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "kmeans", file, "--y", "a,b", "--clusters", "2"]);
+    assert!(ok, "{err}");
+    // Origin: two clusters of six, sums of squares 23.0417 and 15.0417.
+    assert!(out.contains("KMeans1") && out.contains("23.04") && out.contains("15.04"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "kmeans", file, "--y", "a,b", "--clusters", "3", "--no-graph", "--no-anova"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Cluster 3: 4 cases"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "kmeans", file, "--y", "a,b", "--clusters", "20"]);
+    assert!(!ok && err.contains("cannot be made"), "{err}");
 }

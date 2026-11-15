@@ -12,6 +12,7 @@ when introducing an asset; do not assume the project license covers material fro
 | `docs/brand/sheaf.png` | Project owner; original logo, ownership confirmed by the owner | MIT OR Apache-2.0 |
 | `crates/app/assets/icon/*` | Sheaf contributors; app icon generated from `docs/brand/sheaf.png` by `tools/make-icon.py` | MIT OR Apache-2.0 |
 | `docs/images/macos-desktop.png` | Sheaf contributors; screenshot of Sheaf displaying synthetic data | MIT OR Apache-2.0 for the original screenshot; embedded third-party typefaces retain their own licenses |
+| `crates/plot/assets/sRGB-v4.icc` | Compact sRGB v4 ICC profile, the same file svg2pdf 0.13 bundles as `src/icc/sRGB-v4.icc`; copied from that crate package | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (svg2pdf's NOTICE: the ICC profiles in `src/icc/*`) |
 | `crates/plot/tests/golden/*.svg` | Sheaf contributors; figures generated from synthetic test data | MIT OR Apache-2.0 |
 | `crates/io/tests/fixtures/sheaf-written.opj` | Sheaf contributors; project written by Sheaf, not an Origin-supplied sample | MIT OR Apache-2.0 |
 

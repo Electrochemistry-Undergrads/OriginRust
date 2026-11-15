@@ -113,10 +113,13 @@ pub fn defs() -> Vec<Def> {
             (
                 "sheets",
                 strs(
-                    "Excel files: sheets to read, as names or 1-based positions (a number is a sheet's name if one has it, otherwise a position; default: every visible sheet). The header and row settings of ascii apply to Excel too.",
+                    "Excel files: sheets to read, as names or 1-based positions (a number is a sheet's name if one has it, otherwise a position; default: every worksheet, hidden ones too, as Origin). The header and row settings of ascii apply to Excel too.",
                 ),
             ),
-            ("include_hidden", b("Excel files: also read hidden sheets when sheets is not given.")),
+            (
+                "include_hidden",
+                b("Excel files: read hidden sheets when sheets is not given (they are read by default)."),
+            ),
         ],
         &[],
     );
@@ -272,7 +275,7 @@ pub fn defs() -> Vec<Def> {
                     (
                         "template",
                         s(
-                            "line, scatter, line+symbol, column, ... (the names of sheaf plot --template). Default: what the data suggests.",
+                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), ... (the names of sheaf plot --template). Default: what the data suggests.",
                         ),
                     ),
                     ("book", s(BOOK)),
@@ -309,11 +312,18 @@ pub fn defs() -> Vec<Def> {
         },
         Def {
             name: "export_graph",
-            description: "Render a graph to a file (png, svg, pdf, eps, tiff, emf, jpg, bmp) and/or return it as a PNG image to look at.",
+            description: "Render a graph to a file (png, svg, pdf, eps, tiff, emf, jpg, bmp) and/or return it as a PNG image to look at. With graphs or all_graphs, several graphs go into one multi-page PDF, one page per graph (at most 500).",
             read_only: false,
             schema: obj(
                 vec![
                     ("graph", s("Graph name. Default: the only graph.")),
+                    (
+                        "graphs",
+                        strs(
+                            "Several graph names, one PDF page each in this order (not with graph). Needs a .pdf path; return_image must not be true. At most 500 pages per call.",
+                        ),
+                    ),
+                    ("all_graphs", b("Every graph of the project, in project order, as with graphs (not with graph).")),
                     ("path", s("File to write; the extension picks the format.")),
                     (
                         "format",

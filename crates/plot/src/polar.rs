@@ -112,6 +112,7 @@ pub(crate) fn angle_axis(axis: &Axis, unit: AngleUnit) -> ResolvedAxis {
         minor_ticks: 0,
         first_tick: None,
         axis_break: None,
+        additional_line: None,
         special_ticks: Vec::new(),
         tick_label_source: TickLabelSource::Numbers,
         tick_label_divisor: 1.0,

@@ -378,9 +378,16 @@ impl Writer {
             }
             if !p.decor.is_default() {
                 notes.push(
-                    "drop lines, fills under curves (with their pattern, transparency and gradient) and data labels were not written (the companion file keeps them)"
+                    "drop lines, symbol/line gaps and draw order, fills under curves (with their pattern, transparency and gradient) and data labels were not written (the companion file keeps them)"
                         .into(),
                 );
+            }
+            let drops = &p.decor.drop;
+            if [&drops.horizontal, &drops.vertical].iter().any(|d| {
+                d.on && (d.target != sheaf_core::graph::DropTarget::Axis
+                    || d.color_mode != sheaf_core::graph::DropColorMode::Auto)
+            }) {
+                notes.push("drop lines to the next data plot and the Y Value: Plus-Minus colour (lollipop plots) were not written; the companion file keeps them".into());
             }
             let place = places[plot_index];
             plots.push(Resolved { plot: p, y, x, err, place });
@@ -1080,6 +1087,9 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         }
         if axis.axis_break.is_some() {
             notes.push("an axis break was not written".into());
+        }
+        if axis.additional_line.is_some() {
+            notes.push("an additional line at a value of the other axis (Grids tab) was not written".into());
         }
         if !axis.special_ticks.is_empty() || !axis.tick_label_formula.is_empty() || axis.minor_tick_labels {
             notes.push("special ticks, tick label formulas and minor tick labels were not written".into());

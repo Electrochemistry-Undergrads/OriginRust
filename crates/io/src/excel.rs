@@ -110,7 +110,8 @@ pub struct ExcelOptions {
     /// The sheets to read, in this order. Empty: every sheet, in the file's order (hidden ones
     /// only when `include_hidden` is set). A sheet named here is read even when it is hidden.
     pub sheets: Vec<SheetRef>,
-    /// Read hidden sheets too when `sheets` is empty. Default false.
+    /// Read hidden sheets too when `sheets` is empty. Default true, as Origin's `impExcel` imports
+    /// hidden sheets (import-excel.md 2).
     pub include_hidden: bool,
     /// Number of rows before the first data row. `None` detects it, as for text files.
     pub header_lines: Option<usize>,
@@ -124,7 +125,7 @@ pub struct ExcelOptions {
     pub rename_columns: bool,
     /// 1-based row whose cells become the short names; 0 keeps `A`, `B`, ...
     pub short_name_line: usize,
-    /// Give the book the file name as its long name. Default true.
+    /// Give the book the file name, with its extension, as its long name (as Origin). Default true.
     pub rename_book: bool,
     /// Rows (1-based) whose cells become named parameter rows, see
     /// [`ascii::AsciiOptions::param_lines`].
@@ -139,7 +140,7 @@ pub struct ExcelOptions {
     pub max_rows: Option<usize>,
     /// Data rows to import after the skip and maximum above; positions are 1-based.
     pub rows: ImportSelection,
-    /// Columns to import, counted from the first used column of the sheet; positions are 1-based.
+    /// Columns to import, counted from column A of the sheet; positions are 1-based.
     pub columns: ImportSelection,
     /// Whether Excel dates and times become date and time columns (`Detect`) or text.
     pub dates: DateImport,
@@ -150,7 +151,7 @@ impl Default for ExcelOptions {
         let a = AsciiOptions::default();
         ExcelOptions {
             sheets: Vec::new(),
-            include_hidden: false,
+            include_hidden: true,
             header_lines: a.header_lines,
             long_name_line: a.long_name_line,
             units_line: a.units_line,
@@ -252,8 +253,8 @@ pub struct SheetReport {
 #[derive(Clone, Debug)]
 pub struct ExcelImport {
     /// One workbook with placeholder identifiers (see `Project::adopt_workbook`), one sheet per
-    /// imported Excel sheet, named as in Excel. The book's long name is the file name without its
-    /// extension (unless `rename_book` is off).
+    /// imported Excel sheet, named as in Excel. The book's long name is the file name with its
+    /// extension, as Origin names it (unless `rename_book` is off).
     pub workbook: Workbook,
     /// One entry per sheet that was looked at, in the order read.
     pub sheets: Vec<SheetReport>,
@@ -519,7 +520,7 @@ fn read_workbook_unguarded(path: &Path, opts: &ExcelOptions) -> Result<ExcelImpo
         (v, true)
     };
     let ao = opts.ascii();
-    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let file_name = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let mut sheets = Vec::new();
     let mut reports = Vec::new();
     let mut warnings = Vec::new();
@@ -573,7 +574,7 @@ fn read_workbook_unguarded(path: &Path, opts: &ExcelOptions) -> Result<ExcelImpo
     }
     let mut workbook = Workbook::new(WindowId(0), "Book1");
     if opts.rename_book {
-        workbook.long_name = stem;
+        workbook.long_name = file_name;
     }
     workbook.sheets = sheets;
     workbook.source = Some(ImportSource { path: path.display().to_string(), importer: "excel".to_string() });
@@ -620,7 +621,7 @@ fn preview_sheet_unguarded(
     check_size(&range).map_err(|reason| IoError::ExcelRead { path: path.to_path_buf(), reason })?;
     let layout = read_sheet(&range, None, None, &name, &opts.ascii()).ok().map(|d| d.layout);
     let view = View::new(&range);
-    let Some(used) = view.used() else {
+    let Some(used) = view.grid() else {
         return Ok(SheetPreview { name, first_row: 1, first_column: 1, rows: Vec::new(), layout });
     };
     let end = (used.row0 + max_rows).min(used.row0 + used.rows);
@@ -696,6 +697,12 @@ impl<'a> View<'a> {
             rows: last_row - first_row + 1,
             cols: last_col - first_col + 1,
         })
+    }
+
+    /// The grid as Origin imports it: leading empty columns are kept, so it starts at column A
+    /// (import-excel.md 2, probe `p4` `a2`). Rows above the first used row are still left out.
+    fn grid(&self) -> Option<Used> {
+        self.used().map(|u| Used { row0: u.row0, col0: 0, rows: u.rows, cols: u.col0 + u.cols })
     }
 
     fn render_row(&self, used: &Used, row: usize) -> Vec<String> {
@@ -802,11 +809,12 @@ fn parse_iso(s: &str) -> Option<Converted> {
     Some(Converted::from_text(p.value, kind))
 }
 
-/// A row that holds one cell, in the first column of a sheet with several columns.
-fn is_title(fields: &[String], columns: usize) -> bool {
-    columns > 1
-        && fields.first().is_some_and(|f| !f.is_empty() && f != EMPTY_LABEL)
-        && fields[1..].iter().all(String::is_empty)
+/// A row that holds one cell, in the first used column (`lead`) of a sheet with several used
+/// columns.
+fn is_title(fields: &[String], lead: usize, columns: usize) -> bool {
+    columns > lead + 1
+        && fields.get(lead).is_some_and(|f| !f.is_empty() && f != EMPTY_LABEL)
+        && fields.iter().enumerate().all(|(i, f)| i == lead || f.is_empty())
 }
 
 /// "C5" for 0-based row 4 and column 2.
@@ -829,7 +837,17 @@ fn read_sheet(
     ao: &AsciiOptions,
 ) -> Result<SheetRead, String> {
     let view = View::new(range);
-    let used = view.used().ok_or("it holds no data")?;
+    let lead = view.used().ok_or("it holds no data")?.col0;
+    let used = view.grid().ok_or("it holds no data")?;
+    // The grid starts at column A, so a sheet whose cells lie far to the right is counted from there.
+    if (used.rows as u64) * (used.cols as u64) > MAX_SHEET_CELLS {
+        return Err(format!(
+            "counted from column A its cells span {} rows by {} columns, more than the {} million cells that can be read",
+            used.rows,
+            used.cols,
+            MAX_SHEET_CELLS / 1_000_000
+        ));
+    }
     let ns = NumStyle::new(false, Thousands::Off);
 
     // The rows that header detection looks at: the first non-empty rows, padded to the width of
@@ -852,9 +870,9 @@ fn read_sheet(
     // row reads this way). It keeps one field, so it is never taken for a row of labels; the data
     // start found above does not change, only the label lines are looked for again.
     let (records, layout) = match records.first() {
-        Some((r, f)) if is_title(f, used.cols) && layout.start.is_some() && *r < layout.header_lines => {
+        Some((r, f)) if is_title(f, lead, used.cols) && layout.start.is_some() && *r < layout.header_lines => {
             let mut titled = records.clone();
-            titled[0].1.truncate(1);
+            titled[0].1.truncate(lead + 1);
             let ao = AsciiOptions { header_lines: Some(layout.header_lines), ..ao.clone() };
             let again = ascii::find_layout(&titled, ns, &ao);
             (titled, again)
@@ -996,8 +1014,9 @@ fn date_column(cells: &[Cx], code: Option<&str>) -> Option<ascii::BuiltColumn> {
 }
 
 /// Turns the cells of one column into data: a date or time column when every cell is a date (or
-/// every cell a time), otherwise numbers with text cells kept as Text & Numeric, or a text column
-/// when there is no number.
+/// every cell a time), a Text & Numeric column with the date display when the other cells are text
+/// (as Origin), otherwise numbers with text cells kept as Text & Numeric, or a text column when
+/// there is no number.
 fn build_column(
     cells: &[Cx],
     short: &str,
@@ -1008,13 +1027,25 @@ fn build_column(
     let filled = cells.iter().filter(|c| !matches!(c, Cx::Empty | Cx::Error)).count();
     let date_count = cells.iter().filter(|c| matches!(c, Cx::Date(_))).count();
     if date_count > 0 && dates == DateImport::Detect {
-        if date_count == filled
-            && let Some(built) = date_column(cells, code)
-        {
-            return built;
+        let plain_numbers = cells.iter().any(|c| matches!(c, Cx::Num(_)));
+        if !plain_numbers && let Some(built) = date_column(cells, code) {
+            if date_count == filled {
+                return built;
+            }
+            // Dates among text: as Origin (import-excel.md 2, probe p11), the dates keep their
+            // numbers and the column its date display, and the text cells stay text.
+            let ColumnData::Numeric(numbers) = built.data else { unreachable!("date_column gives numbers") };
+            let texts = cells
+                .iter()
+                .enumerate()
+                .filter_map(|(i, c)| if let Cx::Text(s) = c { Some((i, (*s).to_string())) } else { None })
+                .collect();
+            let numbers = std::sync::Arc::unwrap_or_clone(numbers);
+            return ascii::BuiltColumn { data: ColumnData::mixed(numbers, texts), format: built.format, text: false };
         }
+        let others = if plain_numbers { "numbers" } else { "other values" };
         warnings.push(format!(
-            "column {short} mixes dates or times with other values; the dates and times were imported as text"
+            "column {short} mixes dates or times with {others}; the dates and times were imported as text"
         ));
     }
     let mut numbers = vec![f64::NAN; cells.len()];

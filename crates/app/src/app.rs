@@ -7,6 +7,7 @@ use crate::autosave::{Autosave, Due};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
 use crate::dialogs::column_props::ColumnPropsDialog;
+use crate::dialogs::cond_format::CondFormatDialog;
 use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::export_excel::ExcelExportDialog;
@@ -131,6 +132,7 @@ pub struct SheafApp {
     fit_more: Option<FitMoreDialog>,
     filter: Option<FilterDialog>,
     row_filter: Option<RowFilterDialog>,
+    cond_format: Option<CondFormatDialog>,
     reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
@@ -212,6 +214,7 @@ impl SheafApp {
             fit_more: None,
             filter: None,
             row_filter: None,
+            cond_format: None,
             reshape: None,
             export: None,
             export_sheet: None,
@@ -549,6 +552,7 @@ impl SheafApp {
         self.go_to = None;
         self.find = None;
         self.row_filter = None;
+        self.cond_format = None;
         self.reshape = None;
         self.sort = None;
         self.sheet_name = None;
@@ -693,8 +697,10 @@ impl SheafApp {
                     if plot {
                         let sheet = placed.sheet;
                         let ys = p.default_plot_columns(book, sheet, t);
-                        if !ys.is_empty() {
-                            let _ = p.plot_columns(t, &ys);
+                        if !ys.is_empty()
+                            && let Err(e) = p.plot_columns(t, &ys)
+                        {
+                            placement_notes.push(format!("No graph was made: {e}"));
                         }
                     }
                 }
@@ -987,7 +993,7 @@ impl SheafApp {
                 self.start_import(path.map(|p| vec![p]), pick);
             }
             Action::ImportPick(pick) => self.start_import(None, pick),
-            Action::GoToCell(book) => self.go_to = Some(GoToDialog::new(book)),
+            Action::GoToCell(book) => self.open_go_to(book),
             Action::Power(kind) => self.power = Some(PowerDialog::new(kind)),
             Action::FindInSheets(book) => self.find = Some(FindDialog::new(book)),
             Action::ReplaceInSheets(book) => self.find = Some(FindDialog::replace(book)),
@@ -1257,6 +1263,52 @@ impl SheafApp {
                 } else {
                     self.warn("This sheet has no filter: use Add or Remove Filter first");
                 }
+            }
+            Action::CondFormatDialog { book, kind } => {
+                let range = self.cond_range(book);
+                match range {
+                    Ok(range) => self.cond_format = CondFormatDialog::new(&self.doc, book, kind, range),
+                    Err(why) => self.warn(why),
+                }
+            }
+            Action::RemoveCondFormat(book) => match self.cond_range(book) {
+                Ok(range) => {
+                    let has = self
+                        .doc
+                        .project()
+                        .workbook(book)
+                        .is_some_and(|b| b.sheet().cond_formats.iter().any(|r| r.range.intersects(&range)));
+                    if has {
+                        self.doc.apply("Remove conditional format", |p| {
+                            if let Some(b) = p.workbook_mut(book) {
+                                b.sheet_mut().cond_formats.retain(|r| !r.range.intersects(&range));
+                            }
+                        });
+                    } else {
+                        self.warn("No conditional format touches the selection");
+                    }
+                }
+                Err(why) => self.warn(why),
+            },
+            Action::FreezePanes(book) => {
+                let Some(sheet) = self.doc.project().workbook(book).map(|b| b.sheet()) else { return };
+                let (next, label) = if sheet.frozen.is_none() {
+                    match self.books.get(&book).map(|s| grid::freeze_counts(s, sheet)) {
+                        Some(Ok(frozen)) => (frozen, "Freeze panes"),
+                        Some(Err(why)) => {
+                            self.warn(why);
+                            return;
+                        }
+                        None => return,
+                    }
+                } else {
+                    (sheaf_core::Frozen::default(), "Unfreeze panes")
+                };
+                self.doc.apply(label, |p| {
+                    if let Some(b) = p.workbook_mut(book) {
+                        b.sheet_mut().frozen = next;
+                    }
+                });
             }
             Action::ReapplyRowFilter(book) => {
                 let sheet = self.doc.project().workbook(book).map(|b| b.active_sheet).unwrap_or(0);
@@ -1815,9 +1867,13 @@ impl SheafApp {
                 let mut copy = b.sheets[active].clone();
                 copy.name = free_name(&b.sheets, &format!("{}_", copy.name));
                 self.doc.apply("Duplicate sheet", |p| {
+                    let mut renamed = std::collections::HashMap::new();
                     for c in &mut copy.columns {
-                        c.id = p.new_column_id();
+                        let new = p.new_column_id();
+                        renamed.insert(c.id, new);
+                        c.id = new;
                     }
+                    copy.remap_cond_format_columns(&|c| renamed.get(&c).copied());
                     if let Some(b) = p.workbook_mut(book) {
                         b.sheets.insert(active + 1, copy);
                         b.active_sheet = active + 1;
@@ -1831,6 +1887,18 @@ impl SheafApp {
                 let name = b.sheets[active].name.clone();
                 self.sheet_name = Some(SheetNameDialog { book, sheet: active, name });
             }
+        }
+    }
+
+    fn open_go_to(&mut self, book: WindowId) {
+        let can_extend = self
+            .books
+            .get(&book)
+            .is_some_and(|b| matches!(b.sel, Sel::Cells { .. } | Sel::Columns | Sel::Rows { .. } | Sel::All));
+        if let Some(sheet) = self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet)) {
+            let state = self.books.entry(book).or_default();
+            let current = state.target(sheet).map(|t| t.top_left);
+            self.go_to = Some(GoToDialog::new(book, can_extend, state.row_capacity(sheet), current));
         }
     }
 
@@ -2009,7 +2077,14 @@ impl SheafApp {
     /// plot of the active sheet would show; columns that hold text are left out.
     fn open_analysis(&mut self, book: WindowId, columns: Vec<ColumnId>, kind: AnalysisKind) {
         let project = self.doc.project();
-        let columns: Vec<ColumnId> = if columns.is_empty() {
+        // The proportion tests read no data: one column of the sheet only says where the results go.
+        let host_only = matches!(kind, AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo);
+        let columns: Vec<ColumnId> = if host_only {
+            let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
+            let all = project.workbook(book).and_then(|b| b.sheets.get(sheet)).map(|s| &s.columns);
+            let first = columns.first().copied().or_else(|| all.and_then(|c| c.first()).map(|c| c.id));
+            first.into_iter().collect()
+        } else if columns.is_empty() {
             let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
             if kind == AnalysisKind::Crosstab {
                 // Categorical columns are not Y columns: start with the first two of the sheet.
@@ -2052,6 +2127,13 @@ impl SheafApp {
     }
 
     /// Shows a sheet of a workbook (a result sheet that a tool just added).
+    /// The range of the selection of a workbook's grid, for conditional formatting.
+    fn cond_range(&self, book: WindowId) -> Result<sheaf_core::condformat::CondRange, &'static str> {
+        let sheet = self.doc.project().workbook(book).map(|b| b.sheet()).ok_or("This workbook no longer exists")?;
+        let state = self.books.get(&book).ok_or("Select cells, rows or columns of the data first")?;
+        grid::cond_range(state, sheet)
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -2259,6 +2341,7 @@ impl SheafApp {
             || self.fit.is_some()
             || self.filter.is_some()
             || self.row_filter.is_some()
+            || self.cond_format.is_some()
             || self.reshape.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
@@ -2633,6 +2716,11 @@ impl SheafApp {
                 }
             }
         }
+        if let Some(d) = &mut self.cond_format
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.cond_format = None;
+        }
         if let Some(d) = &mut self.row_filter
             && !d.show(ctx, &mut self.doc)
         {
@@ -2752,12 +2840,12 @@ impl SheafApp {
             match outcome {
                 GoToOutcome::Open => {}
                 GoToOutcome::Closed => self.go_to = None,
-                GoToOutcome::Go { column, row } => {
+                GoToOutcome::Go { column, row, extend } => {
                     if let (Some(sheet), Some(state)) = (
                         self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet)),
                         self.books.get_mut(&book),
                     ) {
-                        state.go_to(sheet, column, row);
+                        state.go_to_selection(sheet, column, row, extend);
                     }
                     self.go_to = None;
                 }
@@ -3135,6 +3223,13 @@ impl SheafApp {
                         self.focus(id);
                     }
                 }
+                "go-to" => {
+                    let book = project.workbooks().next().map(|b| b.id);
+                    if let Some(book) = book {
+                        self.open_go_to(book);
+                        self.focus(book);
+                    }
+                }
                 "stack-panels" => {
                     let book = project.workbooks().next().map(|b| b.id);
                     if let Some(book) = book {
@@ -3348,6 +3443,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
             Window::Workbook(b) => {
                 for s in &mut b.sheets {
                     s.columns.retain(|c| !columns.contains(&c.id));
+                    s.remap_cond_format_columns(&|c| (!columns.contains(&c)).then_some(c));
                 }
             }
             Window::Graph(g) => {

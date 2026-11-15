@@ -1,6 +1,6 @@
 # T21: Graph defaults as Origin (colours, fonts, line widths, ticks, symbols, dashes)
 
-**Status:** done, merged (`b015f97`). Follow-ups on 2026-11-15: stock Line/Scatter/Line+Symbol/Column legend anchor and opaque white background copied (graphing 2.4); the writer stores the major tick length (opj-format 10.3; the reader reads it, minor = half). Column and Waterfall/Stacked/DoubleY retain the earlier font/colour defaults. Left: the 0.5 pt dash lengths are not linear in width; other template legend placements and dimensions; a chosen minor tick length is still not stored. **Size:** M.
+**Status:** done, merged (`b015f97`). Follow-ups on 2026-11-15: stock Line/Scatter/Line+Symbol/Column legend anchor and opaque white background copied (graphing 2.4); the writer stores the major tick length (opj-format 10.3; the reader reads it, minor = half). Column and Waterfall/Stacked/DoubleY retain the earlier font/colour defaults. Thin-width dash samples are copied with documented interpolation (graphing 2.1). Left: round dash caps and backend width rounding, other template legend placements and dimensions; a chosen minor tick length is still not stored. **Size:** M.
 **Branch:** `graph-defaults2`. **Model:** Sonnet.
 **Detail:** audit C "Different, checked in Origin" and "Different, not verified"; open question U1 (colour
 order). **Spec:** `docs/spec/graphing.md` sections 1.5 (colour list), 2.1 (dash patterns), 3 (axis).
@@ -21,7 +21,21 @@ Validation: formatting, strict workspace all-target Clippy and all 2,964 workspa
 (eight existing ignored), including seven reviewed SVG goldens. Separate Windows Recent Files
 test-helper normalization preserves exact path/Unicode assertions and changes no product code.
 
-## Today
+## Thin-width dash follow-up (2026-11-15)
+
+Verified synthetic exports cover seven dash styles and five widths, with resolution
+and vector controls (graphing 2.1). The stroke conversion now uses visible 0.5/1 pt
+samples and interpolates to the unchanged normal-width pattern at 1.5 pt. Scaling
+below 0.5 pt and interpolation are explicit Sheaf decisions; Origin's rounded caps
+and backend width quantization remain separate. Four regressions cover rendered
+runs, data/legend consistency, normal-width/continuity controls and SVG/EPS/EMF units.
+
+Validation: formatting, strict workspace all-target Clippy and 2,968 tests pass
+(eight existing ignored). The only changed SVG goldens, `shapes.svg` and
+`ternary.svg`, were reviewed before/after; their differences are dash arrays only.
+The separate one-tag import-theme fixture repair changes no product behavior.
+
+## Original starting state (before the merged changes)
 
 - Default plot colours: Sheaf's own 9-colour cycle in `crates/core/src/template.rs`. graphing.md 1.5 has
   a 23-entry list from the owner's theme; opj-format.md says a group colours "black, red, green, ...".

@@ -125,6 +125,51 @@ The byte layout is [INF], cross-checked on "Q03 Rainbow7", which decodes to red,
 - Axis line color Auto = darker shade of plot fill; if no fill, of border; else follows line color [W:axesref-lineticks].
 - Anti-aliasing covers plots, axes/grid and line objects; purely horizontal/vertical lines are never anti-aliased [W:options-dialog-graph-tab].
 
+#### Thin-width dash follow-up (2026-11-15, Origin 2016)
+
+A verified two-row vector (`newbook; wks.nCols=2; col(A)=data(1,2,1);
+col(B)=col(A)*0+1; plotxy iy:=(1,2) plot:=200;`) avoids the empty-line result
+from assigning a scalar Y value. Set X to 1..2, Y to 0..2, hide axes/labels,
+remove the legend and set blue (`set %C -c 4`). For each of the seven dashed
+styles, set `-d` and `-w` separately and read them back. The 35 PNG cases at
+3200 px cover 0.5, 1, 1.5, 2 and 3 pt. A further 24 PNG cases at 1600/6400 px,
+14 thin-line cases at 6400 px, six EPS/PDF pairs and 35 EMFs succeeded. The first
+35 blank-line exports and six unsupported SVG exports are excluded. All data
+and outputs are synthetic; only numerical drawing behavior is used.
+
+At 6400 px, the visible on/off runs in points are approximately:
+
+| Style | 0.5 pt pen: on, off, ... | 1 pt pen: on, off, ... |
+|---|---|---|
+| Dash | 3.24, 2.40 | 5.88, 4.32 |
+| Dot | 1.32, 2.16 | 2.28, 3.84 |
+| Dash Dot | 3.84, 0.96, 1.32, 1.08 | 6.84, 1.80, 2.28, 1.92 |
+| Dash Dot Dot | 3.00, 0.96, 1.32, 0.96, 1.32, 1.08 | 5.40, 1.80, 2.28, 1.80, 2.28, 1.92 |
+| Short Dash | 1.80, 0.84 | 3.24, 1.44 |
+| Short Dot | 0.96, 0.36 | 1.80, 0.48 |
+| Short Dash Dot | 2.64, 0.48, 0.96, 0.60 | 4.68, 0.84, 1.80, 0.96 |
+
+These are visible lengths, not a recovered pen formula. Raster on/off lengths
+shift by about a pixel when resolution changes, even when their sum stays the
+same: 0.5 pt Dash at 1600 px is about 2.64/3.00 pt, versus 3.24/2.40 at 6400 px.
+PDF/EMF use separate round-ended segments and quantized pen widths; for example,
+PDF's requested 0.5/1/1.5 pt widths become about 0.72/1.20/1.68 pt. The complete
+width rule is therefore not inferred from a single bitmap, and a global minimum
+pattern length would not describe the observations.
+
+**Sheaf decision:** the shared line-stroke conversion uses the visible 0.5/1 pt
+samples above, interpolates between them, and interpolates from 1 to the existing
+`Dash::pattern` times 1.5 at 1.5 pt. Below 0.5 pt it scales the half-point sample
+proportionally. These intermediate/below-range rules are deliberate approximations,
+not measured Origin rules. At 1.5 pt and above, the previous ratios stay unchanged.
+Every existing caller of that stroke conversion (including legend samples) gets
+the same absolute-point array; fill-border strokes that use `Dash::pattern`
+directly retain their earlier ratios. Sheaf keeps its existing butt-ended dashed
+strokes and requested pen width; Origin's round caps and backend-specific width
+rounding remain fidelity differences. No file/model fields or plot geometry change.
+The raster regressions compare all seven thin styles at two resolutions, with
+SVG/EPS/EMF unit-conversion and normal-width/continuity controls.
+
 ### 2.2 Font, width, size defaults (U3 measured 2026-11-13)
 Measured on a fresh `plotxy` with `?layer.x.label.pt`, `?layer.x.thickness`, `get %C -z` (symbol size), `get %C -w` (line width x 500), `get %C -k` (shape), and from PNG exports at 3200 px (4.145 px per pt): page 6432 x 4923 units of 1/600 in (10.72 x 8.205 in); layer frame left 17.91 %, top 11.58 %, width 68.16 %, height 71.83 % (`layer.left/top/width/height`); tick labels 18 pt, axis titles about 22 pt (cap height 66 px), legend text about 22 pt, all Arial; axis line 1.5 pt; major tick 9 pt and minor 4.5 pt long (pixels), direction out, bottom and left only, one minor tick; data line 0.5 pt (`get -w` = 250); symbol square, 9 pt, solid; legend has a black frame. Sheaf's generic templates copy all of these (page 10.72 x 8.205 in); the four measured stock legend positions follow section 2.4; other template positions remain separate. Earlier recommendation, kept for the record:
 No public page and no installed text file gives them. [REC] Arial; axis titles, tick labels and legend 22 pt on the stock page; data line 1.5 pt; axis line 1.5 pt; major tick 9 pt, minor 4.5 pt; symbol 9 pt. Weak support: themes "Black on paper" and "Physical Review Letters" contain the numbers 1.5 and 8 [F:Themes\Graph]. 

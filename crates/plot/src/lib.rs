@@ -11,6 +11,7 @@
 //! [`render_raster`] together with [`layout_geometry`].
 
 mod break_cut;
+mod dash;
 mod data;
 mod emf;
 mod eps;
@@ -43,6 +44,8 @@ pub(crate) mod trend;
 mod vector;
 mod violin;
 
+#[cfg(test)]
+mod dash_tests;
 #[cfg(test)]
 mod detail_tests;
 #[cfg(test)]

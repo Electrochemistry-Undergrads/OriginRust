@@ -1,17 +1,26 @@
 # Task briefs
 
+Read [HANDOFF](../../HANDOFF.md), then [PLAN](PLAN.md) for the current order: **T58/T59
+formatting**, **T60–T62 stacked figures/layers**, then later waves. [Greyed items](greyed-items.md)
+assigns every listed disabled entry to a package; `python3 tools/greyed-count.py --check` detects
+stale count tables. Writing a brief does not complete its feature.
+
 Each `Txx-*.md` file is one self-contained piece of work: read HANDOFF.md, this file and **one**
 brief, then start. Do not read `docs/audit/origin-differences-2026-11-12.md` or whole specs up front;
 a brief names the exact spec section and audit letter to open only when you need detail.
 
 ## How to work a task (applies to every brief)
 
-1. **Claim it.** Check the "In flight" table in HANDOFF.md and `git branch -a`; if the task's branch
-   exists, someone has it. Otherwise add a line to `re-workspace/scratch/peer-notes.md` (local
-   only): session name, branch, files you will touch.
+1. **Claim it publicly before work.** Fetch remote `main`, inspect its "In flight" table and
+   `git branch -a`, and read the last 40 peer-note lines if present. Existing branches are leads:
+   check their brief, recent edits and claims rather than assuming every old branch is active.
+   Follow HANDOFF's 48-hour inactivity rule for takeovers. Publish task/group, branch, worktree,
+   session/date and owned files in HANDOFF on `main` (docs-only commit, push after syncing), and
+   in `re-workspace/scratch/peer-notes.md` (local only), before implementation docs/specs or code.
 2. **Branch and worktree.** `git worktree add .claude/worktrees/<branch> -b <branch> main`. Build
    with your own folder: `CARGO_TARGET_DIR=target/wt-<branch> CARGO_PROFILE_DEV_DEBUG=0`. Check
-   `df -h /c` first (the disk has filled twice; LESSONS "Parallel build folders fill the disk").
+   `df -h .` (macOS/Linux) or `df -h /c` (Windows Git Bash) first (LESSONS "Parallel build
+   folders fill the disk").
 3. **Find code by name, not line number.** Line numbers in the briefs and the audit drift. Use
    Grep for the function, enum or menu label given.
 4. **Origin is the reference.** When unsure how something looks or behaves, measure Origin
@@ -28,21 +37,39 @@ a brief names the exact spec section and audit letter to open only when you need
    cargo fmt --all -- --check
    cargo clippy --workspace --all-targets -- -D warnings
    cargo test --workspace
+   python3 tools/greyed-count.py --check
    ```
 7. **Merge** one branch at a time: `git fetch`, merge `main` into the branch, re-run the checks, then
-   merge into `main` and push. Delete the build folder with `tools/clean-target.sh wt-<branch>`.
+   merge into `main` and push. Clean only your task's build folder: Windows Git Bash
+   `tools/clean-target.sh wt-<branch>`; macOS/Linux `cargo clean --target-dir target/wt-<branch>`.
    Tick `docs/ROADMAP.md` and the rows of `docs/spec/feature-parity.md` you closed (recount with
-   `python tools/parity-count.py`). Update the brief's **Status** line and the HANDOFF tables.
+   `python3 tools/parity-count.py`). Remove/retag inventory entries, run
+   `python3 tools/greyed-count.py --write`, update the brief/index **Status** and plan, and release
+   only your own HANDOFF claim. Preserve other sessions' claims and results.
 8. **Commits:** Conventional Commits subjects. **Never** add a `Co-Authored-By: Claude` or
    "Generated with Claude Code" line (owner rule); repeat this rule in every subagent prompt.
-9. **Subagents:** Sonnet for building, research and review; Haiku for running tests and checking
-   outputs. Give each its own worktree, build folder and named files.
+9. **Subagents:** follow HANDOFF's session-specific rules (Claude: Sonnet/Haiku; Codex:
+   Terra/Luna). Give each its own worktree, build folder and named files; repeat the no-co-author
+   rule. Coordinate hot files as PLAN describes.
 
 ## Brief format
 
 Every brief has: **Status**, **Size** (S < 2 h, M half a day, L several days), **Goal**, **Origin
 facts** (what is already measured, with the source), **Where** (files and symbols), **Steps**,
 **Done when**, and **Don't** (traps). Keep it that way when you add a brief.
+
+## Current priority briefs
+
+All six are **open**. The older index below retains implementation history and partial leftovers.
+
+| Brief | Wave | Size | Scope and dependency |
+|---|---|---|---|
+| [T58](T58-graph-text-formatting.md) | 1, P0 | L | Graph text, escapes, editor and shared Format toolbar dispatch |
+| [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell format model/dialog; toolbar adapter after T58 slice 3 |
+| [T60](T60-merge-graphs-layer-management.md) | 2, P0 | L | Merge finished graphs, arrange/link layers and fit page/layer |
+| [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Add/delete layers, inset and 3/4-Y templates; coordinate with T60 |
+| [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Remaining offset menu, Cumulative, stacked histograms, waterfall colours |
+| [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring; claim letters A–K independently |
 
 ## Index
 
@@ -110,5 +137,6 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T56](T56-user-graph-templates.md) | Save Template As and Plot > User Templates (a graph's look without data, applied to new columns; CLI `--template`) | M | open; stopped 2026-11-15: unverified core/io start on remote branch `user-templates` (`449ef7b`), free to continue or restart |
 | [T58](T58-significance-plot.md) | Multiple comparisons plot with significance brackets | M | claimed 2026-11-15 (`significance-plot`, macOS) |
 
-In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
-2026-11-12 are merged or turned into briefs (T20, T21).
+For every active claim (including matrices/contour/heatmaps), read the current
+[HANDOFF table](../../HANDOFF.md). This index is not a second claims ledger. Older branches and
+completion rows do not override that table or HANDOFF's inactivity/takeover policy.

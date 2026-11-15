@@ -1306,6 +1306,7 @@ fn file_print_preview_opens_for_the_active_graph_and_ctrl_p_does_not_reach_a_pri
     // Ctrl+P runs the print command; under test it stops before the system dialog.
     ctrl(&mut h, egui::Key::P);
     assert!(h.state().message.is_none(), "no error box");
+    assert!(h.state().status.contains("Printing is skipped"), "{}", h.state().status);
 }
 
 #[test]

@@ -2036,9 +2036,10 @@ line graph active. Everything not listed here is unmeasured.
   list has, after Save Project without Data and Duplicate Project without Data, a separator and then
   three items in this order: **Print...** (Ctrl+P), **Print Preview**, **Page Setup...**, a
   separator, then Import. Sheaf's menu has the same three in the same place.
-- The Standard toolbar has a Print button (tooltip "Print the active window") and, next to it, a
-  Print Preview button. Clicking the Print button by script only showed the tooltip, so the system
-  dialog behind it was not captured.
+- The Standard toolbar has a Print button (tooltip "Print the active window"). The icon next to
+  it opened Slide Show of Graphs, not a preview; no Print Preview toolbar button was measured
+  (unmeasured). Clicking the Print button by script only showed the tooltip, so the system dialog
+  behind it was not captured.
 
 ### 19.2 Page Setup (measured, window captured)
 
@@ -2048,15 +2049,16 @@ A small modal window titled "Page Setup", about 360 x 415 px:
 - group **Paper**: **Size** (a drop-down, "Letter" on the measuring machine) and **Source** (a
   drop-down, "Printer auto select");
 - group **Orientation**: radio buttons **Portrait** and **Landscape**; Landscape was selected for the
-  graph (a page wider than tall: the orientation follows the page);
+  graph (a page wider than tall; only this one landscape graph was captured, so whether the orientation
+  follows the page is unmeasured);
 - group **Margins (inches)**: Left, Right, Top, Bottom fields, shown as 1, 1, 1, 1 and greyed out
   while the graph was active (so Origin does not let the user change them there; whether Origin
   applies 1 inch is unmeasured);
 - buttons **Help**, **OK**, **Cancel**.
 
 Sheaf follows this: Paper Size (Letter, Legal, Tabloid, A3, A4, A5), Orientation with a third choice
-**Automatic** that is the default and behaves as Origin showed (landscape for a page wider than
-tall), Margins in inches (editable, default 1 inch: Origin's displayed value), OK and Cancel. There is
+**Automatic** that is the default (landscape for a page wider than tall: Sheaf's own rule,
+inferred from the single landscape sample, not measured), Margins in inches (editable, default 1 inch: Origin's displayed value), OK and Cancel. There is
 no Source (the tray belongs to the printer's own dialog) and no Help button. Defaults: Letter,
 Automatic, 1 inch. The setting belongs to the project (`Project::page_setup`), saved in `.sheaf` and,
 because an `.opj` has no place for it, in the `.opj.sheaf` companion (the save warns when it is not

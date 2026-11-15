@@ -431,10 +431,10 @@ fn into_project_renumbers_the_stack_offsets_with_the_columns() {
     }
     layer.stack = Stack::Individual;
     layer.plot_offsets = vec![
-        PlotOffset { column: ColumnId(2), x: 0.0, y: 0.0, follows: None },
-        PlotOffset { column: ColumnId(3), x: 0.0, y: 250.0, follows: None },
+        PlotOffset::new(ColumnId(2)),
+        PlotOffset { y: 250.0, ..PlotOffset::new(ColumnId(3)) },
         // An entry whose column is not in the file is dropped.
-        PlotOffset { column: ColumnId(99), x: 0.0, y: 7.0, follows: None },
+        PlotOffset { y: 7.0, ..PlotOffset::new(ColumnId(99)) },
     ];
     let import = OpjImport {
         workbooks: vec![book],

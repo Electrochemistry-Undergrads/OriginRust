@@ -31,3 +31,7 @@ workspace = true
 [dev-dependencies]
 egui_kittest = { version = "0.33", features = ["eframe"] }
 sheaf-expr.workspace = true
+
+[build-dependencies]
+# Released 2026-10-06; compile/link the existing icon only for the Windows app binary.
+embed-resource = "=3.0.12"

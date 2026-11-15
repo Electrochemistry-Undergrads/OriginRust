@@ -412,31 +412,36 @@ fn plot_tab_body(
             let individual = layer.stack == Stack::Individual;
             let column = layer.plots[p].y;
             // Read without adding an entry, so that looking at the tab changes nothing.
-            let (mut x, mut y) = layer.plot_offset(column).map_or((0.0, 0.0), |o| (o.x, o.y));
-            let before = (x, y);
+            let o = layer.plot_offset(column).copied().unwrap_or_else(|| PlotOffset::new(column));
+            let (mut x, mut y, mut mx, mut my) = (o.x, o.y, o.x_multiplier, o.y_multiplier);
+            let before = (x, y, mx, my);
             ui.add_enabled_ui(individual, |ui| {
                 grid(ui, "plot_offset", |ui| {
                     ui.label("");
+                    ui.strong("Multiplier");
                     ui.strong("Offset");
                     ui.end_row();
-                    ui.label("X");
+                    let label = ui.label("X");
+                    ui.add(DragValue::new(&mut mx).speed(0.01)).labelled_by(label.id);
                     ui.add(DragValue::new(&mut x).speed(0.01));
                     ui.end_row();
-                    ui.label("Y");
+                    let label = ui.label("Y");
+                    ui.add(DragValue::new(&mut my).speed(0.01)).labelled_by(label.id);
                     ui.add(DragValue::new(&mut y).speed(0.01));
                     ui.end_row();
                 });
             });
-            if (x, y) != before {
+            if (x, y, mx, my) != before {
                 let o = layer.plot_offset_mut(column);
-                (o.x, o.y) = (x, y);
+                (o.x, o.y, o.x_multiplier, o.y_multiplier) = (x, y, mx, my);
             }
             if !individual {
                 ui.weak("Offsets of single plots are used when the layer's Stack tab is set to Individual.");
             }
         }
         DetailTab::DropLines => {
-            let drop = &mut graph.layers[l].plots[p].decor.drop;
+            let plot = &mut graph.layers[l].plots[p];
+            let drop = &mut plot.decor.drop;
             grid(ui, "plot_drop", |ui| {
                 ui.label("");
                 ui.checkbox(&mut drop.horizontal.on, "Horizontal");
@@ -458,6 +463,24 @@ fn plot_tab_body(
                 }
                 ui.end_row();
             });
+            ui.group(|ui| {
+                ui.label("Data Points Display Control");
+                ui.horizontal(|ui| {
+                    let mut skipping = plot.symbol.every > 1;
+                    if ui.checkbox(&mut skipping, "Skip Points").changed() {
+                        plot.symbol.every = if skipping { 2 } else { 1 };
+                    }
+                    let label = ui.label("Frequency");
+                    let mut frequency = plot.symbol.every.max(2);
+                    if ui
+                        .add_enabled(skipping, DragValue::new(&mut frequency).range(2..=u32::MAX))
+                        .labelled_by(label.id)
+                        .changed()
+                    {
+                        plot.symbol.every = frequency;
+                    }
+                });
+            });
         }
         DetailTab::Label => {
             let labels = &mut graph.layers[l].plots[p].decor.labels;
@@ -469,6 +492,9 @@ fn plot_tab_body(
                     ui.end_row();
                     ui.label("Size, style, color");
                     font_ui(ui, &mut labels.font);
+                    ui.end_row();
+                    ui.label("Background");
+                    ui.checkbox(&mut labels.white_out, "White Out");
                     ui.end_row();
                     ui.label("Rotate (deg)");
                     ui.add(DragValue::new(&mut labels.rotate_deg).range(-360.0..=360.0).speed(1.0));
@@ -524,9 +550,6 @@ fn plot_tab_body(
                     plot.line.color = plot.symbol.color;
                     plot.auto_color = false;
                 }
-                ui.end_row();
-                ui.label("Show every");
-                ui.add(DragValue::new(&mut plot.symbol.every).range(1..=100000).suffix(" th point"));
                 ui.end_row();
             });
         }
@@ -891,7 +914,7 @@ fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sou
             });
             section(ui, "Data Drawing Options");
             ui.checkbox(&mut layer.display.clip_data, "Clip Data to Frame");
-            ui.add_enabled(false, egui::Checkbox::new(&mut false, "Data on Top of Axes"));
+            ui.checkbox(&mut layer.display.data_on_top, "Data on Top of Axes");
             ui.checkbox(&mut layer.display.grid_on_top, "Grid on Top of Data");
         }
         DetailTab::Background => {
@@ -1148,7 +1171,7 @@ fn stack_tab(ui: &mut egui::Ui, layer: &mut Layer) {
                             layer.plot_offsets[k].x = x;
                             layer.plot_offsets[k].y = y;
                         }
-                        None => layer.plot_offsets.push(PlotOffset { column, x, y, follows: None }),
+                        None => layer.plot_offsets.push(PlotOffset { x, y, ..PlotOffset::new(column) }),
                     }
                 }
             }

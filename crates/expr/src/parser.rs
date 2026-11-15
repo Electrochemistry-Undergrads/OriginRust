@@ -23,6 +23,7 @@ use crate::lexer::{Tok, Token, lex};
 const MAX_NESTING: u32 = 64;
 
 struct Parser {
+    source: String,
     toks: Vec<Token>,
     at: usize,
     nesting: u32,
@@ -33,7 +34,7 @@ pub(crate) fn parse_root(src: &str) -> Result<Node, ExprError> {
     if toks.len() == 1 {
         return Err(ExprError::at(0, "the expression is empty"));
     }
-    let mut p = Parser { toks, at: 0, nesting: 0 };
+    let mut p = Parser { source: src.to_string(), toks, at: 0, nesting: 0 };
     let node = p.ternary()?;
     let t = p.peek();
     if t.tok != Tok::End {
@@ -222,6 +223,23 @@ impl Parser {
             let text = self.eat(&Tok::Dollar);
             let Kind::Col { r, .. } = node.kind else { unreachable!("checked above") };
             return Node::new(Kind::Label { r, label, text }, pos);
+        }
+        // Origin permits bare parameter names containing spaces, e.g. [Bath Temp]$.
+        // A single identifier remains an index until the host resolves label/variable precedence.
+        let start = self.at;
+        let mut end = start;
+        while self.toks.get(end).is_some_and(|t| matches!(t.tok, Tok::Ident(_) | Tok::Num(_))) {
+            end += 1;
+        }
+        if matches!(self.peek_tok(), Tok::Ident(_))
+            && end > start + 1
+            && self.toks.get(end).is_some_and(|t| t.tok == Tok::RBracket)
+        {
+            let name = self.source[self.toks[start].pos..self.toks[end].pos].trim_end().to_string();
+            self.at = end + 1;
+            let text = self.eat(&Tok::Dollar);
+            let Kind::Col { r, .. } = node.kind else { unreachable!("checked above") };
+            return Node::new(Kind::Parameter { r, name, text }, pos);
         }
         let first = self.ternary()?;
         if self.eat(&Tok::Colon) {

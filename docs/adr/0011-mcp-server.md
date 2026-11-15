@@ -31,7 +31,8 @@ Three facts from the code decide how:
 4. **Shared code path: a new library crate `crates/ops` (package `sheaf-ops`).** It holds the work
    the CLI does today and returns data instead of printing. `sheaf-cli` and `sheaf-mcp` both call
    it. `sheaf-ops` depends on `sheaf-core`, `sheaf-io`, `sheaf-plot`, `sheaf-fit`, `sheaf-calc`,
-   `serde`, `serde_json`, `thiserror`/`anyhow`; never on clap, egui or `sheaf-app`.
+   `serde`, `serde_json`, `thiserror`/`anyhow`, and `clap` (only for the option definitions the CLI
+   and the server share, see the amendment below); never on egui or `sheaf-app`.
    - Reports are structs (`serde::Serialize`) with `warnings: Vec<String>` and notes in them.
      The CLI prints them with its present wording, so its output does not change.
    - The global `FOREIGN_INPUTS` becomes a parameter: `load` returns `foreign`, and `save` takes
@@ -83,7 +84,20 @@ Three facts from the code decide how:
 
 - The CLI is changed (a refactor with no visible change); its tests and sample outputs must stay
   identical and are the check that the move was faithful.
-- `analyze` and `fit` over MCP cover the tools present in the registry. Tools not yet moved are
-  reachable through the CLI only, and are listed as such in `docs/spec/mcp.md`.
+- `analyze` over MCP reaches every tool of `sheaf analyze`: 21 are mapped by hand in the registry,
+  the rest come from the CLI's own clap definitions (see the amendment). `fit` covers what its
+  tool lists; fit options are still mapped by hand.
 - Phase 2 (driving the open desktop app) forwards the same `sheaf-ops` requests to the app, which
   runs them inside `Document::edit`. That needs its own ADR.
+
+## Amendment (2026-11-14): the CLI's option definitions are shared
+
+The hand-written registry reached 21 of the 55 analysis tools of `sheaf analyze`. Instead of
+moving the other 34 into it one by one, the clap definitions (`args.rs`) and the translation of
+parsed options into a job (`job_from` and its helpers) moved from `sheaf-cli` into `sheaf-ops`
+(`sheaf_ops::args`, `sheaf_ops::cli_analyze`); `sheaf-ops` now depends on `clap`. Nothing that prints
+moved. `sheaf-mcp` (`crates/mcp/src/bridge.rs`) turns a JSON object into an argv, parses it with the
+CLI's clap types and calls `job_from`, and builds the JSON Schema of a tool's options from the same
+definitions, so the CLI and the server cannot drift for those tools. The hand-mapped tools keep
+their behaviour. Alternative rejected: a second registry for the 34 tools (the drift this ADR set
+out to avoid).

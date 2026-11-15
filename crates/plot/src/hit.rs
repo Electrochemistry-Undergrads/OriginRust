@@ -246,16 +246,34 @@ pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
             objects.map(move |o| (l, o))
         })
     };
-    let rank = |k: ObjectKind| match k {
+    let rank = |layer: &LayerScene, k: ObjectKind| match k {
         ObjectKind::Label(_) | ObjectKind::Shape(_) => 0,
         ObjectKind::Legend => 1,
-        ObjectKind::XTitle | ObjectKind::YTitle => 2,
-        ObjectKind::XAxis | ObjectKind::YAxis => 3,
-        ObjectKind::Plot(_) => 4,
+        ObjectKind::XTitle | ObjectKind::YTitle => {
+            if layer.underlay_len > 0 {
+                3
+            } else {
+                2
+            }
+        }
+        ObjectKind::XAxis | ObjectKind::YAxis => {
+            if layer.underlay_len > 0 {
+                4
+            } else {
+                3
+            }
+        }
+        ObjectKind::Plot(_) => {
+            if layer.underlay_len > 0 {
+                2
+            } else {
+                4
+            }
+        }
     };
     for wanted in 0..=4 {
         for (layer, o) in all(wanted == 0) {
-            if rank(o.kind) != wanted || !contains(o.bounds, p, tol) {
+            if rank(layer, o.kind) != wanted || !contains(o.bounds, p, tol) {
                 continue;
             }
             let hit = match o.kind {

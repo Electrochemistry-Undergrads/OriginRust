@@ -6,7 +6,13 @@ Further completed: `substitute(s,new,find[,n])$`, optional `$` on text functions
 headers `G/L/U/C/O` with separate metadata dependencies, `char`/`code`, explicit `format`
 compatibility, formatting columns, and direct-column Text defaults that follow format edits.
 Reference sources, unmeasured edge choices and regressions are in expression-language.md section 3.
-**Left:** cross-sheet/book references (group 6), parameter label rows, `%()` substitution,
+Parameter label rows added on branch `codex/formula-parameter-labels` (2026-11-14): named text
+reads, explicit `value(...$)` conversion, `Dn` aliases in Sheaf's displayed row order, Auto/Manual
+recalculation, undo and project save/reopen. Scalar reads and conversions measured in Origin;
+the existing alphabetical row order and remaining name-syntax limits are documented in the spec.
+Validation on Windows, Rust 1.99.1, after merging `0b9bd4e`: formatting, strict all-target
+workspace Clippy and the full workspace suite pass (1,929 passed, two ignored; 13 new regressions).
+**Left:** cross-sheet/book references (group 6), `%()` substitution,
 and Origin global/`@SD` formatting defaults. **Size:** M. **Branch:** `expr-funcs2`. **Model:** Sonnet.
 **Detail:** audit E "Missing" (formula functions). **Spec:** `docs/spec/expression-language.md`.
 

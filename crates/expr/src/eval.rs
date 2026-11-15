@@ -79,6 +79,13 @@ pub trait Host {
         None
     }
 
+    /// A user parameter row's text. `Some("")` means the row exists but this cell is empty;
+    /// `None` means no such row. Known parameter names take precedence over index variables.
+    /// A host may also resolve `D1`, `D2`, ... to its displayed user parameter row order.
+    fn column_parameter(&self, _col: &ColumnRef, _name: &str) -> Option<String> {
+        None
+    }
+
     /// The numeric cell written in its column's display format, for `text(col(A))` without
     /// an explicit format. Return `None` to use the general number formatter. This does not
     /// expose text cells: numeric conversion still treats them as missing.
@@ -296,6 +303,16 @@ impl Compiled<'_> {
 }
 
 impl Expr {
+    fn bound_parameters(&self, host: &dyn Host) -> std::borrow::Cow<'_, Self> {
+        // Fits evaluate once per point and iteration. Expressions without subscripts cannot
+        // read labels, so keep their existing path without cloning a tree for each point.
+        if self.source.contains('[') {
+            std::borrow::Cow::Owned(self.resolve_parameters(host))
+        } else {
+            std::borrow::Cow::Borrowed(self)
+        }
+    }
+
     /// Resolves variables and columns against `host` and returns a form that is fast to
     /// evaluate repeatedly. Fails if a variable or column is unknown.
     pub fn compile<'h>(&self, host: &'h dyn Host) -> Result<Compiled<'h>, ExprError> {
@@ -306,7 +323,8 @@ impl Expr {
     /// fixed, so that the same seed gives the same numbers.
     pub fn compile_seeded<'h>(&self, host: &'h dyn Host, seed: u64) -> Result<Compiled<'h>, ExprError> {
         let seeds = Cell::new(seed);
-        Ok(Compiled { host, root: build(host, &seeds, &self.root)? })
+        let resolved = self.bound_parameters(host);
+        Ok(Compiled { host, root: build(host, &seeds, &resolved.root)? })
     }
 
     /// Evaluates the expression once, at the host's [`row`](Host::row).
@@ -316,7 +334,8 @@ impl Expr {
     pub fn eval(&self, host: &dyn Host) -> Result<f64, ExprError> {
         if is_dynamic(host, &self.root) {
             let seeds = Cell::new(funcs::system_seed());
-            let v = build_v(host, &seeds, &self.root, true)?;
+            let resolved = self.bound_parameters(host);
+            let v = build_v(host, &seeds, &resolved.root, true)?;
             return Ok(ev_v(host, &v, host.row()).number());
         }
         Ok(self.compile(host)?.eval_row(host.row()))
@@ -352,7 +371,8 @@ impl Expr {
     /// [`eval_values`](Expr::eval_values) with a fixed seed for `rnd()` and `grnd()`.
     pub fn eval_values_seeded(&self, host: &dyn Host, n: usize, seed: u64) -> Result<Vec<Value>, ExprError> {
         let seeds = Cell::new(seed);
-        let v = build_v(host, &seeds, &self.root, true)?;
+        let resolved = self.bound_parameters(host);
+        let v = build_v(host, &seeds, &resolved.root, true)?;
         Ok((0..n).map(|r| ev_v(host, &v, r)).collect())
     }
 
@@ -393,7 +413,7 @@ fn build_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<
     let b = |n: &Node| build(host, seeds, n).map(Box::new);
     let c = match &n.kind {
         Kind::Num(v) => C::Num(*v),
-        Kind::Str(_) | Kind::Text(_) | Kind::Label { text: true, .. } => {
+        Kind::Str(_) | Kind::Text(_) | Kind::Label { text: true, .. } | Kind::Parameter { text: true, .. } => {
             return Err(ExprError::at(
                 n.pos(),
                 "text values are not available here (only as the result of a column formula)",
@@ -407,7 +427,12 @@ fn build_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<
         Kind::Col { .. } => C::Col(build_col(host, n)?),
         Kind::Label { r, label, text: false } => {
             let s = read_label(host, r, *label, n.pos())?;
-            C::Num(text::apply(StrFn::Value, vec![Value::Text(s)]).number())
+            C::Num(if s.is_empty() { NA } else { text::apply(StrFn::Value, vec![Value::Text(s)]).number() })
+        }
+        Kind::Parameter { r, name, text: false } => {
+            // Origin stores user labels as text; direct numeric reads do not convert them.
+            read_parameter(host, r, name, n.pos())?;
+            C::Num(NA)
         }
         Kind::Index { base, idx } => C::Index(build_col(host, base)?, b(idx)?),
         Kind::Range { pos, .. } => {
@@ -618,7 +643,11 @@ fn explicit_text(n: &Node) -> bool {
     n.walk(&mut |m| {
         found |= matches!(
             m.kind,
-            Kind::Str(_) | Kind::Text(_) | Kind::Label { text: true, .. } | Kind::Call { func: Func::Str(_), .. }
+            Kind::Str(_)
+                | Kind::Text(_)
+                | Kind::Label { text: true, .. }
+                | Kind::Parameter { text: true, .. }
+                | Kind::Call { func: Func::Str(_), .. }
         );
     });
     found
@@ -628,7 +657,7 @@ fn explicit_text(n: &Node) -> bool {
 /// that returns text, a join with `+`).
 fn is_str(n: &Node) -> bool {
     match &n.kind {
-        Kind::Str(_) | Kind::Text(_) | Kind::Label { text: true, .. } => true,
+        Kind::Str(_) | Kind::Text(_) | Kind::Label { text: true, .. } | Kind::Parameter { text: true, .. } => true,
         Kind::Call { func: Func::Str(f), .. } => f.returns_text(),
         Kind::Binary(BinOp::Add, a, b) => is_str(a) || is_str(b),
         Kind::Cond(_, a, b) => is_str(a) || is_str(b),
@@ -687,6 +716,13 @@ fn read_label(host: &dyn Host, r: &ColumnRef, label: ColumnLabel, pos: usize) ->
     Ok(host.column_label(r, label).unwrap_or_default())
 }
 
+fn read_parameter(host: &dyn Host, r: &ColumnRef, name: &str, pos: usize) -> Result<String, ExprError> {
+    if !host.has_column(r) {
+        return Err(ExprError::at(pos, format!("unknown column {r}")));
+    }
+    Ok(host.column_parameter(r, name).unwrap_or_default())
+}
+
 fn cell_ref(host: &dyn Host, n: &Node) -> Result<(ColumnRef, Option<Node>), ExprError> {
     let (col, idx) = match &n.kind {
         Kind::Index { base, idx } => (&**base, Some((**idx).clone())),
@@ -714,6 +750,7 @@ fn build_v_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node, free: bool
     Ok(match &n.kind {
         Kind::Str(s) => V::Str(s.clone()),
         Kind::Label { r, label, text: true } => V::Str(read_label(host, r, *label, n.pos())?),
+        Kind::Parameter { r, name, text: true } => V::Str(read_parameter(host, r, name, n.pos())?),
         Kind::Text(inner) => {
             let (r, idx) = cell_ref(host, inner)?;
             V::TextOf(r, idx.map(|i| b(&i, false)).transpose()?)
@@ -750,9 +787,11 @@ fn build_v_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node, free: bool
             Func::IfElse => V::Cond(b(&args[0], false)?, b(&args[1], free)?, b(&args[2], free)?),
             _ => return Err(ExprError::at(n.pos(), "text cannot be used in this function")),
         },
-        Kind::Num(_) | Kind::Var { .. } | Kind::Range { .. } | Kind::Label { text: false, .. } => {
-            build(host, seeds, n).map(V::Num)?
-        }
+        Kind::Num(_)
+        | Kind::Var { .. }
+        | Kind::Range { .. }
+        | Kind::Label { text: false, .. }
+        | Kind::Parameter { text: false, .. } => build(host, seeds, n).map(V::Num)?,
     })
 }
 

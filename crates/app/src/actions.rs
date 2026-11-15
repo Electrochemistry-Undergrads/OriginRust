@@ -288,6 +288,8 @@ pub enum Action {
     MaskColor,
     /// Column > Mask > Disable Masking / Enable Masking, for the whole project.
     ToggleMasking,
+    /// Column > Mask > Hide/Show Masked Points for the whole project.
+    ToggleHideMasked,
     /// Column > Mask Cells by Condition...: the window for these columns.
     MaskByConditionDialog {
         book: WindowId,

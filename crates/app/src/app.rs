@@ -1302,6 +1302,9 @@ impl SheafApp {
                     p.set_masking_disabled(!now);
                 });
             }
+            Action::ToggleHideMasked => {
+                self.doc.apply("Hide or show masked points", |p| p.hide_masked = !p.hide_masked);
+            }
             Action::MaskByConditionDialog { book, columns } => {
                 self.mask_condition = MaskConditionDialog::new(&self.doc, book, columns);
             }
@@ -2421,6 +2424,7 @@ impl SheafApp {
     fn menu_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         let menu_ctx = self.menu_context();
         menus::set_masking_disabled(ui.ctx(), self.doc.project().masking_disabled());
+        menus::set_masked_hidden(ui.ctx(), self.doc.project().hide_masked);
         menus::show_bar(ui, &menu_ctx, actions);
     }
 

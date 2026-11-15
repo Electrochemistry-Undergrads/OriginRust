@@ -21,6 +21,7 @@ use crate::dialogs::import::{ImportDialog, ImportOutcome, ImportRequest};
 use crate::dialogs::import_excel::{ExcelImportDialog, split_excel};
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::label_panels::{LabelPanelsDialog, Outcome as LabelPanelsOutcome};
+use crate::dialogs::mask_condition::MaskConditionDialog;
 use crate::dialogs::power::{PowerDialog, PowerOutcome};
 use crate::dialogs::printing::{PageSetupDialog, PageSetupOutcome, PreviewOutcome, PrintPreview};
 use crate::dialogs::recovery::{RecoveryChoice, RecoveryOffer};
@@ -132,6 +133,7 @@ pub struct SheafApp {
     fit_more: Option<FitMoreDialog>,
     filter: Option<FilterDialog>,
     row_filter: Option<RowFilterDialog>,
+    mask_condition: Option<MaskConditionDialog>,
     cond_format: Option<CondFormatDialog>,
     reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
@@ -214,6 +216,7 @@ impl SheafApp {
             fit_more: None,
             filter: None,
             row_filter: None,
+            mask_condition: None,
             cond_format: None,
             reshape: None,
             export: None,
@@ -301,7 +304,7 @@ impl SheafApp {
         };
         let original = newest.sidecar.as_ref().and_then(|s| s.original_path());
         self.doc.replace(project);
-        self.doc.dirty = true;
+        self.doc.mark_unsaved();
         self.reset_views();
         self.path = None;
         // A project that came from an Origin file keeps its `.bak` copy when it is saved over it.
@@ -350,6 +353,9 @@ impl SheafApp {
         if !self.doc.dirty {
             if let Err(e) = self.autosave.clear() {
                 self.autosave_failed(&e);
+                ctx.request_repaint_after(std::time::Duration::from_secs(1));
+            } else if self.autosave.write_pending() {
+                ctx.request_repaint_after(std::time::Duration::from_millis(100));
             }
             return;
         }
@@ -552,6 +558,7 @@ impl SheafApp {
         self.go_to = None;
         self.find = None;
         self.row_filter = None;
+        self.mask_condition = None;
         self.cond_format = None;
         self.reshape = None;
         self.sort = None;
@@ -628,7 +635,7 @@ impl SheafApp {
             Ok(outcome) => {
                 // The project is safe on disk either way: in the .opj, or in the companion when
                 // the .opj was refused.
-                self.doc.dirty = false;
+                self.doc.mark_saved();
                 let mut said = outcome.status();
                 if let Some(b) = &backup {
                     said.push_str(&format!("; the original Origin file is kept as {}", b.display()));
@@ -1257,6 +1264,16 @@ impl SheafApp {
             Action::Refresh(active) => self.refresh(active),
             Action::RowFilterDialog { book, column } => {
                 self.row_filter = RowFilterDialog::new(&self.doc, book, column);
+            }
+            Action::MaskColor => self.doc.apply("Change mask color", |p| p.cycle_mask_color()),
+            Action::ToggleMasking => {
+                self.doc.apply("Disable or enable masking", |p| {
+                    let now = p.masking_disabled();
+                    p.set_masking_disabled(!now);
+                });
+            }
+            Action::MaskByConditionDialog { book, columns } => {
+                self.mask_condition = MaskConditionDialog::new(&self.doc, book, columns);
             }
             Action::ToggleRowFilter(book) => {
                 let sheet = self.doc.project().workbook(book).map(|b| b.active_sheet);
@@ -2350,6 +2367,7 @@ impl SheafApp {
             || self.fit.is_some()
             || self.filter.is_some()
             || self.row_filter.is_some()
+            || self.mask_condition.is_some()
             || self.cond_format.is_some()
             || self.reshape.is_some()
             || self.export.is_some()
@@ -2372,6 +2390,7 @@ impl SheafApp {
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         let menu_ctx = self.menu_context();
+        menus::set_masking_disabled(ui.ctx(), self.doc.project().masking_disabled());
         menus::show_bar(ui, &menu_ctx, actions);
     }
 
@@ -2734,6 +2753,11 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.row_filter = None;
+        }
+        if let Some(d) = &mut self.mask_condition
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.mask_condition = None;
         }
         if let Some(d) = &mut self.filter {
             match d.show(ctx, &mut self.doc) {

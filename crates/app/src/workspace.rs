@@ -62,6 +62,9 @@ pub struct Workspace {
     wins: HashMap<WindowId, State>,
     /// Bottom to top.
     z: Vec<WindowId>,
+    /// Most recently activated first (the Window Switcher's order). A window that was never
+    /// activated is not listed.
+    mru: Vec<WindowId>,
     active: Option<WindowId>,
     cascaded: usize,
     /// Size of the area the windows were drawn in last time; the arranging commands use it.
@@ -95,9 +98,27 @@ impl Workspace {
     pub fn retain(&mut self, keep: impl Fn(WindowId) -> bool) {
         self.wins.retain(|id, _| keep(*id));
         self.z.retain(|id| self.wins.contains_key(id));
+        self.mru.retain(|id| self.wins.contains_key(id));
         if self.active.is_some_and(|a| !self.wins.contains_key(&a)) {
             self.active = self.top_visible();
+            self.touch_active();
         }
+    }
+
+    /// Puts the active window (after another one closed or was minimised) first in the recent list.
+    fn touch_active(&mut self) {
+        if let Some(a) = self.active {
+            self.mru.retain(|m| *m != a);
+            self.mru.insert(0, a);
+        }
+    }
+
+    /// The windows in the order they were last activated, most recent first; windows that were
+    /// never activated follow in their creation order.
+    pub fn recent_order(&self, ids: &[WindowId]) -> Vec<WindowId> {
+        let mut out: Vec<WindowId> = self.mru.iter().copied().filter(|m| ids.contains(m)).collect();
+        out.extend(ids.iter().copied().filter(|i| !self.mru.contains(i)));
+        out
     }
 
     pub fn contains(&self, id: WindowId) -> bool {
@@ -114,7 +135,6 @@ impl Workspace {
     }
 
     /// True when the window is on screen or minimised (not closed).
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn is_shown(&self, id: WindowId) -> bool {
         self.wins.get(&id).is_some_and(|s| s.visible)
     }
@@ -145,6 +165,7 @@ impl Workspace {
         self.z.retain(|z| *z != id);
         self.z.push(id);
         self.active = Some(id);
+        self.touch_active();
     }
 
     /// Closes the window: it disappears from the workspace, its data stays.
@@ -152,8 +173,11 @@ impl Workspace {
         if let Some(s) = self.wins.get_mut(&id) {
             s.visible = false;
         }
+        self.mru.retain(|m| *m != id);
+        self.mru.push(id);
         if self.active == Some(id) {
             self.active = self.top_visible();
+            self.touch_active();
         }
     }
 
@@ -163,6 +187,7 @@ impl Workspace {
         }
         if self.active == Some(id) {
             self.active = self.top_visible();
+            self.touch_active();
         }
     }
 

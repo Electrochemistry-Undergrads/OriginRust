@@ -453,6 +453,8 @@ pub enum Action {
     PageSetup,
     /// Bring a window's tab to the front, reopening it if it was closed.
     Focus(WindowId),
+    /// Window > Window Switcher: the switcher stays open until a window is chosen.
+    OpenSwitcher,
     /// Close a window: it leaves the workspace, its data stays (Hide in the project explorer).
     HideWindow(WindowId),
     /// Window > Duplicate: copy this workbook or graph into a new window.

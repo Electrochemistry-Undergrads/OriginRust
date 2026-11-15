@@ -39,6 +39,7 @@ mod macprint;
 mod menus;
 mod panels;
 mod reader;
+mod switcher;
 mod theme;
 mod toolbar;
 mod winclip;

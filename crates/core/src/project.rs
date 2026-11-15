@@ -174,6 +174,12 @@ pub enum ProjectError {
     ParallelIndexNeedsGroup,
     #[error("a parallel plot cannot have a right Y axis; use one Y axis or another template")]
     ParallelNoRightAxis,
+    #[error("a treemap needs a category column (a column of text) and a numeric value column; select both")]
+    TreemapNeedsCategory,
+    #[error("a treemap needs a numeric value column; select one")]
+    TreemapNeedsValue,
+    #[error("a treemap cannot have a right Y axis; use one Y axis or another template")]
+    TreemapNoRightAxis,
 }
 
 impl Project {
@@ -406,30 +412,7 @@ impl Project {
                 }
                 Window::Graph(graph) => {
                     graph.id = w(graph.id);
-                    for layer in &mut graph.layers {
-                        for p in &mut layer.plots {
-                            p.y = c(p.y);
-                            for id in [
-                                &mut p.x,
-                                &mut p.y_error,
-                                &mut p.x_error,
-                                &mut p.y_base,
-                                &mut p.size_from,
-                                &mut p.color_from,
-                            ] {
-                                *id = id.map(c);
-                            }
-                        }
-                        for o in &mut layer.plot_offsets {
-                            o.column = c(o.column);
-                            o.follows = o.follows.map(c);
-                        }
-                        for axis in [&mut layer.x_axis, &mut layer.y_axis] {
-                            if let crate::graph::TickLabelSource::Column { column } = &mut axis.tick_label_source {
-                                *column = c(*column);
-                            }
-                        }
-                    }
+                    graph.remap_columns(&c);
                 }
             }
         }
@@ -618,6 +601,7 @@ impl Project {
             ridge: Default::default(),
             hexbin: Default::default(),
             parallel: Default::default(),
+            treemap: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -751,6 +735,17 @@ impl Project {
             };
             return self.plot_parallel(template, &axes, color);
         }
+        if template == Template::Treemap {
+            // The category columns are the columns of text, in selection order (else those of the value column's
+            // sheet); the value is the last numeric column.
+            let value =
+                ys.iter().rev().copied().find(|y| self.numeric(*y).is_some()).ok_or(ProjectError::TreemapNeedsValue)?;
+            let mut categories: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_none()).collect();
+            if categories.is_empty() {
+                categories = self.treemap_default_categories(value);
+            }
+            return self.plot_treemap(&categories, value);
+        }
         // One hexbin plot per layer: the colour scale and the hexagons of a second plot would cover the first's.
         let ys = if template == Template::Hexbin { &ys[..ys.len().min(1)] } else { ys };
         let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
@@ -806,6 +801,48 @@ impl Project {
             // A new graph has no colors chosen by the user, so spread the palette over all plots.
             if let Some(l) = g.layers.first_mut() {
                 l.apply_palette();
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
+    /// The category columns of a treemap of `value` when none are named: every column of text of its sheet, in
+    /// sheet order.
+    pub fn treemap_default_categories(&self, value: ColumnId) -> Vec<ColumnId> {
+        let Some((_, sheet, _)) = self.locate(value) else { return Vec::new() };
+        sheet.columns.iter().filter(|c| !c.data.is_numeric() && c.id != value).map(|c| c.id).collect()
+    }
+
+    /// Creates a treemap of `value` (a numeric column; the areas) nested by the `categories` columns (the first
+    /// the top level) and returns its id. One plot, the value column's; the categories live in its style.
+    pub fn plot_treemap(&mut self, categories: &[ColumnId], value: ColumnId) -> Result<WindowId, ProjectError> {
+        for c in categories.iter().chain([&value]) {
+            self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
+        }
+        if self.numeric(value).is_none() {
+            return Err(ProjectError::TreemapNeedsValue);
+        }
+        let mut cats: Vec<ColumnId> = Vec::new();
+        for c in categories {
+            if *c != value && !cats.contains(c) {
+                cats.push(*c);
+            }
+        }
+        if cats.is_empty() {
+            return Err(ProjectError::TreemapNeedsCategory);
+        }
+        let long_name = self.locate(value).map(|(b, _, _)| b.long_name.clone());
+        let graph = self.add_graph(Template::Treemap);
+        self.add_plot(graph, 0, value)?;
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                l.apply_palette();
+                for p in &mut l.plots {
+                    p.treemap.categories = cats.clone();
+                }
             }
             if let Some(name) = long_name {
                 g.long_name = name;
@@ -913,6 +950,9 @@ impl Project {
         }
         if template.is_parallel() {
             return Err(ProjectError::ParallelNoRightAxis);
+        }
+        if template == Template::Treemap {
+            return Err(ProjectError::TreemapNoRightAxis);
         }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
@@ -1620,5 +1660,49 @@ mod tests {
         let (new, _) = p.append(other, "f");
         let col = p.workbook(new[0]).unwrap().sheets[0].columns[0].id;
         assert_eq!(p.workbook(new[0]).unwrap().sheets[0].note(col, 0), Some("o"));
+    }
+
+    #[test]
+    fn append_remaps_the_column_ids_inside_plot_styles() {
+        use crate::graph::PlotKind;
+        let mut here = Project::new();
+        let hb = here.add_workbook("");
+        for i in 0..5 {
+            here.add_column(hb, 0, Designation::Y, ColumnData::numeric(vec![100.0 + i as f64])).unwrap();
+        }
+
+        let mut other = Project::new();
+        let ob = other.add_workbook("");
+        let mut cols = Vec::new();
+        for i in 0..4 {
+            let d = ColumnData::numeric(vec![i as f64, i as f64 + 0.5, i as f64 + 1.0]);
+            cols.push(other.add_column(ob, 0, Designation::Y, d).unwrap());
+        }
+        let g = other.plot_columns(Template::Line, &[cols[0]]).unwrap();
+        {
+            let plot = &mut other.graph_mut(g).unwrap().layers[0].plots[0];
+            plot.kind = PlotKind::Treemap;
+            plot.treemap.categories = vec![cols[1], cols[2]];
+            plot.treemap.order_column = Some(cols[3]);
+            plot.parallel.color = Some(cols[3]);
+        }
+        {
+            let l = &mut other.graph_mut(g).unwrap().layers[0];
+            l.x_axis.rug.plot = Some(cols[0]);
+            l.y_axis.rug_opposite.plot = Some(cols[0]);
+        }
+        let (new, _) = here.append(other, "f");
+        let graph = here.graph(new[1]).unwrap();
+        let l = &graph.layers[0];
+        let plot = &l.plots[0];
+        let data = |id: ColumnId| here.numeric(id).unwrap().to_vec();
+        let want = |i: usize| vec![i as f64, i as f64 + 0.5, i as f64 + 1.0];
+        assert_eq!(data(plot.y), want(0));
+        assert_eq!(plot.treemap.categories.iter().map(|&c| data(c)).collect::<Vec<_>>(), vec![want(1), want(2)]);
+        assert_eq!(data(plot.treemap.order_column.unwrap()), want(3));
+        assert_eq!(data(plot.parallel.color.unwrap()), want(3));
+        assert_eq!(data(l.x_axis.rug.plot.unwrap()), want(0));
+        assert_eq!(data(l.y_axis.rug_opposite.plot.unwrap()), want(0));
+        assert_eq!(l.x_axis.rug_opposite.plot, None, "an unset rug choice stays unset");
     }
 }

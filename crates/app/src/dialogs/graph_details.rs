@@ -44,6 +44,8 @@ pub enum DetailTab {
     HexBins,
     /// A Parallel Plot or Parallel Index's Parallel tab (graphing spec 14.25).
     Parallel,
+    /// A treemap's Layout tab (graphing spec 14.26).
+    TreemapLayout,
     Display,
     PageDisplay,
     LegendsTitles,
@@ -103,6 +105,9 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             if plot.kind.is_parallel() {
                 tabs.push((DetailTab::Parallel, "Parallel", true));
             }
+            if plot.kind == PlotKind::Treemap {
+                tabs.push((DetailTab::TreemapLayout, "Layout", true));
+            }
             let curve = plot.kind.has_line() || plot.kind.has_symbols();
             if curve && !plot.kind.is_bar() && !plot.kind.is_area() {
                 tabs.push((DetailTab::DropLines, "Drop Lines", true));
@@ -134,6 +139,7 @@ fn first_tab(tabs: &[(DetailTab, &str, bool)]) -> DetailTab {
         DetailTab::RidgeDisplay,
         DetailTab::HexBins,
         DetailTab::Parallel,
+        DetailTab::TreemapLayout,
         DetailTab::Line,
         DetailTab::Pattern,
         DetailTab::Symbol,
@@ -169,6 +175,7 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::Hexbin => "Hexbin",
         PlotKind::Parallel => "Parallel Plot",
         PlotKind::ParallelIndex => "Parallel Index",
+        PlotKind::Treemap => "Treemap",
         PlotKind::Pie => "Pie",
         PlotKind::Pie3D => "3D Color Pie",
         PlotKind::PieBw => "2D B&W Pie",
@@ -260,6 +267,7 @@ pub fn dialog_body(
                                 PlotKind::Hexbin,
                                 PlotKind::Parallel,
                                 PlotKind::ParallelIndex,
+                                PlotKind::Treemap,
                                 PlotKind::Pie,
                                 PlotKind::Pie3D,
                                 PlotKind::PieBw,
@@ -768,6 +776,7 @@ fn plot_tab_body(
             let kind = graph.layers[l].plots[p].kind;
             parallel_tab(ui, &mut graph.layers[l].plots[p].parallel, kind, columns, numeric)
         }
+        DetailTab::TreemapLayout => treemap_tab(ui, &mut graph.layers[l].plots[p].treemap, columns),
         DetailTab::Spacing => {
             let bars = &mut graph.layers[l].bars;
             grid(ui, "plot_spacing", |ui| {
@@ -1238,6 +1247,7 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 ridge,
                 hexbin: layer.inherited_hexbin(),
                 parallel: layer.inherited_parallel(),
+                treemap: layer.inherited_treemap(),
                 size_from: None,
                 color_from: None,
                 decor: Default::default(),
@@ -1779,6 +1789,111 @@ fn hexbin_tab(ui: &mut egui::Ui, h: &mut HexbinStyle) {
     hexbin_axis(ui, "X", &mut h.x, !y_from_x);
     hexbin_axis(ui, "Y", &mut h.y, y_from_x);
     ui.weak("The other axis' spacing makes the hexagons regular on the page; its Min and Max Center still apply (only its spacing is disabled).");
+}
+
+fn order_name(o: TreemapOrder) -> &'static str {
+    match o {
+        TreemapOrder::Categorical => "Categorical Order",
+        TreemapOrder::Alphabetical => "Alphabetical",
+        TreemapOrder::BySize => "By Size",
+        TreemapOrder::ByColumn => "By Column",
+    }
+}
+
+/// One Layout and one Order list: the Order is greyed out for the Squarified layouts, which sort by size themselves.
+fn layout_order_row(ui: &mut egui::Ui, salt: &str, layout: &mut TreemapLayout, order: &mut TreemapOrder) {
+    egui::ComboBox::from_id_salt(format!("{salt}_layout")).selected_text(layout.label()).width(150.0).show_ui(
+        ui,
+        |ui| {
+            for l in TreemapLayout::ALL {
+                ui.selectable_value(layout, l, l.label());
+            }
+        },
+    );
+    ui.add_enabled_ui(!layout.sorts_by_size(), |ui| {
+        egui::ComboBox::from_id_salt(format!("{salt}_order")).selected_text(order_name(*order)).width(150.0).show_ui(
+            ui,
+            |ui| {
+                for o in [
+                    TreemapOrder::Categorical,
+                    TreemapOrder::Alphabetical,
+                    TreemapOrder::BySize,
+                    TreemapOrder::ByColumn,
+                ] {
+                    ui.selectable_value(order, o, order_name(o));
+                }
+            },
+        );
+    });
+}
+
+/// Origin's Plot Details Layout tab of a treemap (Layout, Order, Depth, Gap, a layout and order per level; graphing
+/// spec 14.26). The Order column and the gap unit are Sheaf's.
+fn treemap_tab(ui: &mut egui::Ui, s: &mut TreemapStyle, columns: &[(ColumnId, String)]) {
+    let levels = s.categories.len().max(1);
+    grid(ui, "treemap_tab", |ui| {
+        ui.label("Layout");
+        ui.label("Order");
+        ui.end_row();
+        let (mut layout, mut order) = (s.layout, s.order);
+        layout_order_row(ui, "treemap", &mut layout, &mut order);
+        (s.layout, s.order) = (layout, order);
+        ui.end_row();
+        ui.label("Depth");
+        let depth_name = |d: Option<u32>| d.map_or("Infinite".to_string(), |d| d.to_string());
+        egui::ComboBox::from_id_salt("treemap_depth").selected_text(depth_name(s.depth)).width(150.0).show_ui(
+            ui,
+            |ui| {
+                ui.selectable_value(&mut s.depth, None, "Infinite");
+                for d in 1..=levels as u32 {
+                    ui.selectable_value(&mut s.depth, Some(d), d.to_string());
+                }
+            },
+        );
+        ui.end_row();
+        ui.label("Gap");
+        ui.add(DragValue::new(&mut s.gap_pt).range(0.0..=20.0).speed(0.05).suffix(" pt"));
+        ui.end_row();
+    });
+    let uses_column = s.order == TreemapOrder::ByColumn
+        || (s.per_level_on && s.per_level.iter().any(|l| l.order == TreemapOrder::ByColumn));
+    if uses_column {
+        let name = |id: Option<ColumnId>| {
+            id.and_then(|c| columns.iter().find(|(x, _)| *x == c))
+                .map(|(_, n)| n.clone())
+                .unwrap_or_else(|| "None (categorical order)".into())
+        };
+        ui.horizontal(|ui| {
+            ui.label("Order Column");
+            egui::ComboBox::from_id_salt("treemap_order_column")
+                .selected_text(name(s.order_column))
+                .width(260.0)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut s.order_column, None, "None (categorical order)");
+                    for (c, n) in columns {
+                        ui.selectable_value(&mut s.order_column, Some(*c), n);
+                    }
+                });
+        });
+    }
+    ui.checkbox(&mut s.per_level_on, "Different Layout and Order for Each Level Below the First");
+    if s.per_level_on {
+        while s.per_level.len() < levels.saturating_sub(1) {
+            let general = TreemapLevel { layout: s.layout, order: s.order };
+            s.per_level.push(general);
+        }
+        if levels < 2 {
+            ui.weak("A treemap of one category column has no level below the first.");
+        }
+        grid(ui, "treemap_levels", |ui| {
+            for (i, l) in s.per_level.iter_mut().enumerate().take(levels.saturating_sub(1)) {
+                ui.label(format!("Level {}", i + 2));
+                layout_order_row(ui, &format!("treemap_level{i}"), &mut l.layout, &mut l.order);
+                ui.end_row();
+            }
+        });
+    }
+    ui.weak("Squarified layouts sort the rectangles by size and ignore the Order.");
 }
 
 /// The columns the Parallel tab offers: any column to group a Parallel Index by, only numeric ones to colour a

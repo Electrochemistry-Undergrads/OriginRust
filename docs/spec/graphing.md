@@ -1954,6 +1954,91 @@ Origin's documented facts (Origin 2019 help, not measured; no Origin was at hand
 - Not done: Parallel Sets, a curvature setting, a custom colour map or By Points tab, log axes, dragging a column onto the
   plot, reordering or flipping axes, hover read-out of rows, hit-testing of the axes, a toolbar button, Origin's real defaults.
 
+### 14.26 Treemap (T50)
+
+Origin's documented facts (Origin 2025b help, not measured; no Origin was at hand; [W:originlab.com/2025b],
+[W:origin-help/treemap], [W:origin-help/pd-layout-tab-treemap]):
+
+- New graph type "Treemap plot", menu "Plot > Categorical: Treemap", template `treemap.otpu`; data: several columns of
+  categories and one column of values.
+- Plot Details Layout tab: Layout (Split, Squarified, Squarified+, Pivot by Size, Pivot by Middle, Pivot by Split Size),
+  Order (Categorical Order, Alphabetical, by Size, by a column), Depth (1 to the number of levels, or Infinite), Gap
+  between rectangles, and an optional separate Layout and Order for each level but the first. Squarified sorts the
+  rectangles by size, the largest at the top left, and ignores Order; Squarified+ keeps for each row the direction with the
+  better aspect ratio; Pivot by Size takes the largest item as pivot, Pivot by Middle the middle item, Pivot by Split Size
+  the item that splits the list into roughly equal areas.
+- Not documented (Sheaf's choices, unmeasured, listed below): the default layout, order, depth and gap, the colours, the
+  labels, the borders, missing and non-positive values, the algorithms themselves.
+
+**What Sheaf does** (everything else is Sheaf's choice, unmeasured):
+
+- Algorithms (`sheaf_calc::treemap`, pure functions `layout(kind, weights, rect) -> rects`, one rectangle per weight in the
+  order of the weights, tiling the rectangle, the area of each `weight / total * area`; a weight that is not finite and
+  positive gets a zero-size rectangle):
+  - Squarified: Bruls, Huizing and van Wijk (2000): sorted by size, descending; rows along the shorter side of the rest, an
+    item joins the row while its worst aspect ratio does not grow; the first row is a column on the left (wide rest) or a
+    band along the top (tall rest), so the largest item is at the top left.
+  - Squarified+: as Squarified, but for every row both the shorter and the longer side of the rest are tried and the row with
+    the smaller worst aspect ratio is kept (a tie: the shorter side). This is Sheaf's reading of Origin's one-line description.
+  - Split: the ordered list is cut in two, in order, at the first position whose two total weights differ least; the rectangle
+    is cut across its longer side in the ratio of the two weights (left or top gets the first part), each part again.
+  - Pivot by Size / Middle / Split Size: the ordered treemaps of Shneiderman and Wattenberg (2001) and Bederson et al.
+    (2002): pivot `P`, `L1` the items before it, then the items after it cut into `L2` and `L3`. In a rectangle at least as
+    wide as high: `L1` a full-height column on the left, `P` at the top left of the rest with `L2` on its right, `L3` the
+    band along the bottom; in a taller rectangle the axes are exchanged. The `L2`/`L3` cut is the one that brings `P`'s aspect
+    ratio nearest to 1 (the first on a tie; found with prefix sums, so one step is linear and 30000 sorted weights lay out in well under a second); the lists are laid out again the same way. Pivot choice: the largest item (first
+    on a tie); the item at index `n / 2`; the item with the least difference between the total before and after it.
+- Hierarchy (`sheaf_calc::treemap_tree`): one level per category column, the first the top level. Rows with a missing, non-finite
+  or non-positive value are skipped (not an error); rows with the same category path are one leaf with the summed value; an
+  empty category cell is named "(blank)"; a node's value is the sum of its children. Order: Categorical (first appearance,
+  the default), Alphabetical (case-insensitive), By Size (largest first), By Column (ascending by the smallest key of the
+  node's rows: numbers first, then text alphabetically, missing last; the column is `order_column`). The Squarified layouts
+  sort by size themselves, so their Order is ignored (the Order list is greyed out for them).
+- Nesting: the children of a node are laid out in the node's rectangle inset by half the gap (below a header band for a
+  top-level node) and every laid-out cell is shrunk by half the gap on each side, so a child lies at least one gap inside
+  its parent and siblings are one gap apart; the whole treemap lies half a gap inside the layer frame. A rectangle too small for the inset
+  becomes empty and is not drawn. Depth N shows N levels; the nodes of the last level shown are leaves with the value of
+  everything below. Per level: with the check box on, level 2, 3, ... take their own layout and order from the list (a level
+  without an entry takes the general ones).
+- Settings: `PlotKind::Treemap`, `Template::Treemap` (`treemap`, "Treemap"; axes hidden, legend hidden), `Plot::treemap`
+  (`TreemapStyle`, skipped when default): `categories` (columns, first = top level), `layout` (Squarified), `order`
+  (Categorical), `order_column`, `depth` (`None` = Infinite), `gap_pt` (1.5), `per_level_on` and `per_level`. One plot per
+  graph: the plot's own Y column is the value column (the last numeric selected column); the category columns are the
+  columns of text among the selected columns, in selection order, else every column of text of the value column's sheet
+  (core `plot_columns`, `plot_treemap`). Refusals: no category column, no numeric value column, a value column that is
+  text, a right Y axis (`--y2`), panels, an overlay. A refused plot leaves no graph behind.
+- Drawing (`crates/plot/src/treemap.rs`): the rectangles fill the layer frame; no axes, no frame line, no legend. One colour
+  of the layer's palette per top-level category (by first appearance, whatever the order); a node `L` levels deep is that
+  colour blended `1 - 0.7^L` of the way to white; every rectangle has a 0.5 pt white border. A node with its
+  children shown has a header band 1.55 text heights high (and a padding) holding its name, in the colour of the band; the
+  band and its text of level `L` are `0.85^L` of the top level's (Sheaf's choice), and a level-1+ node less than twice the
+  band high or wide has none and its name is not drawn (level 0: the height test only). A leaf (the
+  last level shown) shows its name and below it its value (up to four significant digits, no exponent) at the top left, in
+  the layer's X axis tick font at 0.45 of its size (9.9 pt for the 22 pt default), black or white as reads better on the fill.
+  A label is drawn whole or not at all: the name is left out when it is wider than the rectangle (less a 0.3 text size padding
+  each side) or the rectangle is not as high as one line, the value when it does not fit under the name; a header name too wide
+  for its band is left out. There is no clipping.
+- Plot Details "Layout" tab (a new tab, shown for a treemap plot): Layout and Order lists (the Order greyed out for the
+  Squarified layouts), Depth (Infinite, 1 to the number of category columns), Gap (pt), the Order column list (shown when an order
+  by column is chosen), and the check box "Different Layout and Order for Each Level Below the First" with one Layout and Order
+  row per level below the first. Undo works as for other settings. Menu: Plot > Categorical > Treemap (also in Column > Plot).
+- CLI `-t treemap` with `--y` (the value; the last numeric one counts), `--group A,B` (category columns, first = top; default the
+  text columns among `--y`, else every text column of the sheet), `--treemap-layout`, `--treemap-order`
+  (`categorical|alphabetical|size|column:NAME`), `--treemap-depth`, `--treemap-gap`; the same in MCP (`group`, `treemap_*`) with the
+  template text. `.opj`: written as column plots of the value column; the save warns ("treemaps were written as column
+  plots of their value column; their categories and nested rectangles were not written").
+- Tests: `crates/calc/src/treemap.rs` (all six layouts on random weights with fixed seeds: tiling without overlap, areas in
+  proportion within 1e-9 relative, hand cases for Bruls' example, Split order, the pivot lists, tall rectangles, degenerate
+  input), `treemap_tree.rs` (aggregation, skipped values, duplicates, orders, depth, gap nesting, per-level),
+  `crates/plot/src/treemap_tests.rs` (nesting inside parents by the gap, colours per top level and tints, labels hidden when they do
+  not fit, depth, every layout with every order, other kinds unchanged), core template/refusal/serde test, `.opj` warning test,
+  `crates/cli/tests/treemap.rs` (SVG, defaults, every layout and option, refusals), UI menu and Layout tab tests with undo.
+- File > Append renumbers the appended graphs' columns through `Graph::remap_columns` (core `graph.rs`): the plots' X, Y, error,
+  base, size and colour columns, label columns, treemap `categories` and `order_column`, the parallel `color` column, plot
+  offsets, tick-label columns and the rug `plot` choice of each axis. A new field holding a column id goes there.
+- Not done: Origin's real defaults, colours and labels, hover read-out and picking of rectangles, drilling down, a colour-by-value
+  option, a toolbar button, a label font setting, reading Origin's treemap from .opj, a size cap on very many rectangles.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.

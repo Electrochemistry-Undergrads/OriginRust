@@ -42,6 +42,7 @@ mod ternary;
 mod text;
 pub mod ticks;
 mod ticks_scales;
+mod treemap;
 pub(crate) mod trend;
 mod vector;
 mod violin;
@@ -88,6 +89,8 @@ mod symbol_gap_tests;
 mod symbol_line_order_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod treemap_tests;
 #[cfg(test)]
 mod trend_tests;
 #[cfg(test)]

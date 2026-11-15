@@ -729,6 +729,12 @@ impl Writer {
                     .into(),
             );
         }
+        if has(&|k| k == PlotKind::Treemap) {
+            notes.push(
+                "treemaps were written as column plots of their value column; their categories and nested rectangles were not written"
+                    .into(),
+            );
+        }
         if has(&|k| k.is_ridgeline()) {
             notes.push("ridgeline charts were written as plain columns of their data".into());
         }
@@ -779,6 +785,7 @@ impl Writer {
                 | PlotKind::ViolinStick
                 | PlotKind::HalfViolin
                 | PlotKind::Ridgeline
+                | PlotKind::Treemap
                 | PlotKind::Pie
                 | PlotKind::Pie3D
                 | PlotKind::PieBw => CurveKind::Column,

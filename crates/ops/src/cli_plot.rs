@@ -40,6 +40,10 @@ pub fn style_spec(s: &StyleArgs) -> Style {
         bar_gap: s.bar_gap,
         bar_overlap: s.bar_overlap,
         hex_bins: s.hex_bins,
+        treemap_layout: s.treemap_layout.clone(),
+        treemap_order: s.treemap_order.clone(),
+        treemap_depth: s.treemap_depth,
+        treemap_gap: s.treemap_gap,
         label: s.label.clone(),
         draw: s.draw.clone(),
     }

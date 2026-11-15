@@ -734,6 +734,19 @@ fn parallel_plots_are_written_as_line_plots_with_a_save_warning() {
 }
 
 #[test]
+fn treemaps_are_written_as_column_plots_with_a_save_warning() {
+    let mut p = source();
+    line_graph(&mut p, |l| l.plots[0].kind = sheaf_core::graph::PlotKind::Treemap);
+    let (_, out) = round_trip(&p);
+    assert!(
+        out.warnings.iter().any(|w| w.contains("treemaps were written as column plots of their value column")),
+        "{:?}",
+        out.warnings
+    );
+    assert!(!out.warnings.iter().any(|w| w.contains("hexbin") || w.contains("parallel")), "{:?}", out.warnings);
+}
+
+#[test]
 fn violin_plots_are_written_as_plain_columns_with_a_save_warning() {
     for kind in [sheaf_core::graph::PlotKind::Violin, sheaf_core::graph::PlotKind::HalfViolin] {
         let mut p = source();

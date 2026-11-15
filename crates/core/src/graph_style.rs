@@ -618,3 +618,81 @@ impl ParallelStyle {
         *self == ParallelStyle::default()
     }
 }
+
+/// How the siblings of a treemap level are ordered (Plot Details Layout tab, Order; graphing spec 14.26).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TreemapOrder {
+    /// The order the categories first appear in the worksheet (Sheaf's default).
+    #[default]
+    Categorical,
+    Alphabetical,
+    /// Largest first.
+    BySize,
+    /// By the cells of a column, smallest first (the column is [`TreemapStyle::order_column`]).
+    ByColumn,
+}
+
+/// The layout and order of one treemap level below the first.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TreemapLevel {
+    pub layout: TreemapLayout,
+    pub order: TreemapOrder,
+}
+
+pub use sheaf_calc::treemap::Layout as TreemapLayout;
+
+/// The settings of a treemap plot (Origin 2025b Treemap plot, graphing spec 14.26). The plot's own Y column is
+/// the value column; the category columns are named here, the first the root level. Every field is skipped when
+/// written while it has its default, so older files load unchanged.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TreemapStyle {
+    /// The category columns, first = top level.
+    pub categories: Vec<ColumnId>,
+    pub layout: TreemapLayout,
+    pub order: TreemapOrder,
+    /// The column Order by column sorts by (a treemap without one falls back to the categorical order).
+    pub order_column: Option<ColumnId>,
+    /// The levels shown; `None` is Origin's Infinite (every level).
+    pub depth: Option<u32>,
+    /// The gap between rectangles, in pt (Sheaf's default 1.5).
+    pub gap_pt: f64,
+    /// Use `per_level` for the levels below the first (Origin's per-level check box).
+    pub per_level_on: bool,
+    /// Layout and order of level 2, 3, ...; a level without an entry takes the general layout and order.
+    pub per_level: Vec<TreemapLevel>,
+}
+
+impl Default for TreemapStyle {
+    fn default() -> TreemapStyle {
+        TreemapStyle {
+            categories: Vec::new(),
+            layout: TreemapLayout::Squarified,
+            order: TreemapOrder::Categorical,
+            order_column: None,
+            depth: None,
+            gap_pt: 1.5,
+            per_level_on: false,
+            per_level: Vec::new(),
+        }
+    }
+}
+
+impl TreemapStyle {
+    pub fn is_default(&self) -> bool {
+        *self == TreemapStyle::default()
+    }
+
+    /// The layout and order of level `level` (0 = top).
+    pub fn level_setting(&self, level: usize) -> TreemapLevel {
+        if level > 0
+            && self.per_level_on
+            && let Some(l) = self.per_level.get(level - 1)
+        {
+            return *l;
+        }
+        TreemapLevel { layout: self.layout, order: self.order }
+    }
+}

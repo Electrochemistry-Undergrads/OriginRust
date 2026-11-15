@@ -51,3 +51,11 @@ settings, default precedence/reset, another instance's named themes, malformed/o
 Cancel/Escape, deletion, real Apply output, failed/pending exports and IO warnings.
 Graph Theme, Compare/Generate Script, graph-specific settings, Recent Exports and `.ois`
 interchange remain open; PNG/24-bit remains Sheaf's deliberate system default.
+
+Final validation with comparison plots, worksheet formatting, T48 measurements and browser Exclude
+integrated: formatting, strict workspace all-target Clippy and 3,443 default-parallel workspace
+tests pass (eight existing ignored). All three focused UI workflows pass, including normalized-name
+collisions, modified-theme marking and Save. The real desktop screenshot was inspected. The greyed
+inventory check passes at 459; Graph Theme remains disabled. The published upstream Windows path
+assertion repair `81765e8` is retained, with no additional MCP changes. Earlier baseline hello timing
+failure evidence remains in peer notes; the final full run passed unchanged.

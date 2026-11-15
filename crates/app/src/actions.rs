@@ -305,6 +305,11 @@ pub enum Action {
         rows: usize,
         cols: usize,
     },
+    /// Plot > Multi-Panel > Stack: choose grouping and layout before making the graph.
+    StackPanels {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     /// Graph > Add Error Bars: choose an existing Y-error column for one plot of the layer.
     AddErrorBars {
         graph: WindowId,

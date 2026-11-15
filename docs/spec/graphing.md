@@ -1629,6 +1629,40 @@ sheaf plot xrd.csv --panels 2x2 -o grid.svg
 - Graph > Arrange Layers... calls `Graph::arrange` with `PanelLayout::arrange` as the starting values.
 - A layer selector in the graph settings; a change to the scale of a linked axis is written to its root. A double-click picks the panel under the pointer (`layout_geometry` gives each panel's frame).
 
+### 15.7a Stack dialog (2026-11-14)
+
+Origin 2016's `plotstack -d;` opens **Stack: plotstack**. Its measured defaults are Line,
+Portrait, Vertical, Bottom to Top, Legend for Each Layer, Link Layers checked and X Axis Link
+Straight (1 to 1). Plot Type offers Line, Scatter, Line+Symbol, Column, Use Template and Custom;
+this installed version has no Histogram entry. Plot Assignment contains an automatic Number of
+Layers and Number of Plots in Each Layer. Spacing contains Vertical Gap and four margins. The
+control dumps are in `re-workspace/scratch/t01-stack-panels/dialog/`; the captured screen pictures
+were obscured by another window and are not visual evidence.
+
+Headless Origin measurements on five Y columns sharing one X (`assignment4.lines.txt` and
+`assignment4.out.txt` in the same scratch folder) used `plotstack`'s `number` argument and counted
+plots with `layer -c;`. The final requested count repeats and the final layer clips to the remaining
+columns: `1` gives `1,1,1,1,1`, `2` gives `2,2,1`, and `1 2` gives `1,2,2`. Earlier diagnostic logs
+used unsupported count properties; only the `assignment4` counts are fixtures.
+
+The desktop **Plot > Multi-Panel > Stack...** dialog now calls the existing `plot_panels` builder.
+It starts from the measured defaults and section 15.2's stack geometry (margins 15/10/10/10,
+zero gap). Users can choose the four built-in plot types, layer order, portrait/landscape page,
+per-layer/no legend, automatic layer assignment, page-percent vertical gap and margins. Every
+layer starts its own palette. Link Layers with Straight shares X scales; with None it links only
+positions; unchecked produces independent layers. Selected worksheet row bounds are retained.
+Units display the existing model's linked-layer/page convention; spacing always uses page percent.
+Layer legends are framed at the top left and ticks point inward. Existing template typography,
+page size and section 15.9's deliberate layout differences remain.
+
+OK creates one graph in one undo step; opening, Cancel and Escape do not edit the project.
+Positive whole assignment counts, the 64-layer bound, current numeric source columns and usable
+geometry are validated before OK. Horizontal stacks, external/custom templates, a whole-page
+legend, manual layer count, other units and live preview remain disabled. Multiple Panels by Label
+is still disabled. UI regressions cover defaults, source order, grouping, Scatter, legends, layer
+order, independent axes, row bounds, orientation, spacing, invalid values, Cancel/Escape and undo/redo;
+parser regressions use the three measured assignment cases.
+
 ### 15.8 Origin project files
 
 The `.opj` reader reads the layers of a panel graph as independent layers with the limits stored in the file, so the owner's panel graphs already draw at Origin's ranges without links (only the second layer of a double-Y graph is linked, by the rule of section 12.7). Where Origin stores `layer.link`, `x.link` and `y.link` was not found in the layer header (section 12.7 lists bytes that differ for the linked layer of a double-Y graph); reading panel links, and writing panel graphs, needs that first.

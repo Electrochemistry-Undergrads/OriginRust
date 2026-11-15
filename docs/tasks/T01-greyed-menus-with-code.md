@@ -1,6 +1,6 @@
 # T01: Enable greyed menu items whose feature already exists
 
-**Status:** done, merged to main (`a2fb77b`); selected-row sorting and Sort Columns/column-context Custom are also enabled; Graph > Add Error Bars now selects a plot and an existing numeric Y-error column (Sheaf's chooser, graphing 14.13a); see "Left" for what remains. **Size:** M. **Branch:** `menus-live`. **Model:** Sonnet.
+**Status:** done, merged to main (`a2fb77b`); selected-row sorting and Sort Columns/column-context Custom are also enabled; Graph > Add Error Bars now selects a plot and an existing numeric Y-error column (Sheaf's chooser, graphing 14.13a); Multi-Panel > Stack now exposes vertical stacks with assignment, spacing, orientation, legends and links (15.7a); see "Left" for what remains. **Size:** M. **Branch:** `menus-live`. **Model:** Sonnet.
 
 ## Goal
 
@@ -59,11 +59,17 @@ legend's right-click menu (`GraphOp::UpdateLegend`), Window > Refresh F5 (`Cmd::
 Range and Sort Columns, Ascending/Descending and explicit Each Column modes (row-aware core helpers);
 Sort Range, Sort Columns, Sort Worksheet and column-header Custom use the existing nested sort
 with captured selected-row bounds. The primary reference and regression scope are in workbook-model.md 13.1.
+Multi-Panel > Stack... uses `Project::plot_panels` with Line, Scatter, Line+Symbol or Column,
+automatic layer counts, repeated plot counts, layer order, page orientation, per-layer/no legends,
+optional X or position-only links, page-percent gap/margins and captured selected-row bounds.
+Creation is deferred to OK and is one undo step; invalid inputs and Cancel/Escape make no edits.
+Origin 2016 defaults and assignment cases were measured (graphing.md 15.7a).
 
 Left greyed, and why:
 
-- Multi-Panel > Stack... and Multiple Panels by Label...: Stack is a dialog with the options of graphing.md
-  15.6; the label variant needs a column-label grouping. Both are new UI.
+- Multi-Panel > Multiple Panels by Label... needs column-label grouping.
+- Stack's horizontal direction, external/custom templates, whole-page legend, manual layer count,
+  unit conversion and live preview remain disabled; their supporting behavior does not yet exist.
 
 Measured Add Error Bars follow-up (2026-11-14):
 

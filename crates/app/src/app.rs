@@ -21,6 +21,7 @@ use crate::dialogs::row_filter::RowFilterDialog;
 use crate::dialogs::set_values::SetValuesDialog;
 use crate::dialogs::shape_object::ShapeDialog;
 use crate::dialogs::sort::{SortDialog, SortOutcome};
+use crate::dialogs::stack_panels::{Outcome as StackPanelsOutcome, StackPanelsDialog};
 use crate::dialogs::text_object::TextDialog;
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi, Sel};
@@ -103,6 +104,7 @@ pub struct SheafApp {
     layer_contents: Option<crate::dialogs::layer_contents::LayerContentsDialog>,
     plot_setup: Option<crate::dialogs::plot_setup::PlotSetupDialog>,
     error_bars: Option<ErrorBarsDialog>,
+    stack_panels: Option<StackPanelsDialog>,
     column_props: Option<ColumnPropsDialog>,
     text_dialog: Option<TextDialog>,
     shape_dialog: Option<ShapeDialog>,
@@ -171,6 +173,7 @@ impl SheafApp {
             layer_contents: None,
             plot_setup: None,
             error_bars: None,
+            stack_panels: None,
             column_props: None,
             text_dialog: None,
             shape_dialog: None,
@@ -329,6 +332,7 @@ impl SheafApp {
         self.graphs.clear();
         self.graph_props = None;
         self.error_bars = None;
+        self.stack_panels = None;
         self.column_props = None;
         self.set_values = None;
         self.export = None;
@@ -915,6 +919,14 @@ impl SheafApp {
             Action::PlotColumns { book, columns, template } => self.plot_columns(book, columns, template),
             Action::PlotYError { book, columns, x } => self.plot_y_error(book, columns, x),
             Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
+            Action::StackPanels { book, columns } => {
+                let columns = self.plot_y_columns(book, columns, Template::Line);
+                let rows = self.selected_sort_rows(book).map(|r| (r.start, r.end));
+                self.stack_panels = StackPanelsDialog::new(self.doc.project(), book, columns, rows);
+                if self.stack_panels.is_none() {
+                    self.warn("Select at least one numeric Y column to stack.");
+                }
+            }
             Action::Analyze { book, columns, kind } => self.open_analysis(book, columns, kind),
             Action::InterpolateFromColumn { book, columns } => {
                 self.open_analysis(book, columns, AnalysisKind::Interpolate);
@@ -1964,6 +1976,7 @@ impl SheafApp {
             || self.layer_contents.is_some()
             || self.plot_setup.is_some()
             || self.error_bars.is_some()
+            || self.stack_panels.is_some()
             || self.column_props.is_some()
             || self.text_dialog.is_some()
             || self.shape_dialog.is_some()
@@ -2166,6 +2179,17 @@ impl SheafApp {
                 ErrorBarsOutcome::Added => {
                     self.error_bars = None;
                     self.say("Updated Y error bars for the selected plot");
+                }
+            }
+        }
+        if let Some(d) = &mut self.stack_panels {
+            match d.show(ctx, &mut self.doc) {
+                StackPanelsOutcome::Open => {}
+                StackPanelsOutcome::Closed => self.stack_panels = None,
+                StackPanelsOutcome::Created(graph) => {
+                    self.stack_panels = None;
+                    self.focus(graph);
+                    self.say("Created stacked panels");
                 }
             }
         }
@@ -2712,6 +2736,14 @@ impl SheafApp {
                         self.layer_contents =
                             Some(crate::dialogs::layer_contents::LayerContentsDialog::new(id, 0, 1_000_000));
                         self.focus(id);
+                    }
+                }
+                "stack-panels" => {
+                    let book = project.workbooks().next().map(|b| b.id);
+                    if let Some(book) = book {
+                        let columns = self.plot_y_columns(book, Vec::new(), Template::Line);
+                        self.stack_panels = StackPanelsDialog::new(self.doc.project(), book, columns, None);
+                        self.focus(book);
                     }
                 }
                 "error-bars" => {

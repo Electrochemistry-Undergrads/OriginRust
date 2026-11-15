@@ -97,6 +97,8 @@ mod symbol_line_order_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod text_decoration_tests;
+#[cfg(test)]
 mod treemap_tests;
 #[cfg(test)]
 mod trend_tests;
@@ -104,7 +106,7 @@ mod trend_tests;
 mod violin_tests;
 
 pub use eps::EpsOutput;
-pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextMeasurer};
+pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextLineMetrics, TextMeasurer};
 pub use margin::{DEFAULT_BORDER_PT, ExportLayout, Margin, drawn_bounds};
 pub use raster::{ColorDepth, RasterOptions, TiffCompression};
 pub use sheet::{SheetPages, render_sheet_emf_pages, render_sheet_pdf, render_sheet_raster, sheet_pages};

@@ -1,7 +1,7 @@
 //! Text markup of labels (spec section 5): `\b(..)` bold, `\i(..)` italic,
 //! `\+(..)` superscript, `\-(..)` subscript, `\g(..)` Greek, `\pN(..)` size in percent,
 //! `\f:Name(..)` font switch, `\x(hhhh)` a character by its code, `\v(..)` literal text; the
-//! text of `\u(..)`, `\s(..)` and `\cN(..)` is kept without underline, strikethrough or color.
+//! `\u(..)` underline and `\s(..)` strikethrough. The text of `\cN(..)` is kept without color.
 //! Escapes nest. A backslash that does not start one of these escapes is literal.
 
 /// Scale of superscript and subscript text relative to its surroundings.
@@ -20,6 +20,10 @@ pub struct Run {
     pub bold: bool,
     /// Italic on top of the label's own font.
     pub italic: bool,
+    /// Draw a line below this run.
+    pub underline: bool,
+    /// Draw a line through this run.
+    pub strikeout: bool,
     /// Size relative to the label's font size (1 for normal text).
     pub scale: f64,
     /// Baseline shift in units of the label's font size; positive is up.
@@ -30,6 +34,8 @@ pub struct Run {
 struct Style {
     bold: bool,
     italic: bool,
+    underline: bool,
+    strikeout: bool,
     greek: bool,
     scale: f64,
     rise: f64,
@@ -44,7 +50,8 @@ pub fn parse(text: &str) -> Vec<Run> {
     let chars: Vec<char> = text.chars().collect();
     let mut pos = 0;
     let mut out = Vec::new();
-    let base = Style { bold: false, italic: false, greek: false, scale: 1.0, rise: 0.0 };
+    let base =
+        Style { bold: false, italic: false, underline: false, strikeout: false, greek: false, scale: 1.0, rise: 0.0 };
     parse_seq(&chars, &mut pos, base, false, 0, &mut out);
     out
 }
@@ -59,13 +66,23 @@ fn push(out: &mut Vec<Run>, c: char, st: Style) {
     if let Some(last) = out.last_mut()
         && last.bold == st.bold
         && last.italic == st.italic
+        && last.underline == st.underline
+        && last.strikeout == st.strikeout
         && last.scale == st.scale
         && last.rise == st.rise
     {
         last.text.push(c);
         return;
     }
-    out.push(Run { text: c.to_string(), bold: st.bold, italic: st.italic, scale: st.scale, rise: st.rise });
+    out.push(Run {
+        text: c.to_string(),
+        bold: st.bold,
+        italic: st.italic,
+        underline: st.underline,
+        strikeout: st.strikeout,
+        scale: st.scale,
+        rise: st.rise,
+    });
 }
 
 /// What a recognised escape does with the text in its parentheses.
@@ -115,8 +132,14 @@ fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
                 inner.scale = st.scale * SCRIPT_SCALE;
                 Escape::Styled(inner)
             }
-            // Underline and strikethrough are not drawn; their text is kept.
-            'u' | 's' => Escape::Styled(inner),
+            'u' => {
+                inner.underline = true;
+                Escape::Styled(inner)
+            }
+            's' => {
+                inner.strikeout = true;
+                Escape::Styled(inner)
+            }
             'v' => Escape::Literal,
             'x' => Escape::Unicode,
             _ => return None,

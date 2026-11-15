@@ -71,6 +71,14 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+T58 graph text, first renderer slice: inline underline and strikethrough use shared scene
+paths and resolved-font metrics, including nested scripts and rotation. Nine focused tests,
+SVG and font-independent stroke PNG goldens cover glyph anchors, title/legend/label/tick
+placement and EPS/EMF/PDF/raster output. Origin scalar/PNG observations and layout limits are
+recorded in graphing 7.1. Per-run colour/font switches, combined scripts and editor/toolbar
+formatting remain open; the 15 UI inventory locations remain disabled. The separately claimed
+T64 significance plot is unaffected.
+
 T08 static worksheet-cell substitution (`34c1ba3`) adds fixed qualified cell references,
 measured 15-digit defaults, column-display `W` and preserved text. Expression/core/I/O tests
 cover recalculation, cycles, Undo and native/companion reopen; expression-language section 3
@@ -88,7 +96,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/text-decorations` | Codex Windows, text-decorations | T58 GRAPH TEXT FORMATTING (`T58-graph-text-formatting.md`), first rendering slice: inline underline/strikethrough, markup/layout/rendering and isolated export tests | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; no toolbar/editor/model fields, significance-plot/brackets (separate T58 brief), shapes/data-tools/browser/export-dialog/import/stats/MCP/printing or other owners |
 | `codex/t02-browser-exclude` | Codex Windows, t02-browser-exclude | T02 Column Browser Exclude control: native behavior, upper-list filtering and own UI tests/docs | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog`, `target/wt-t01-error-bars-dialog`; only go_to/browser, own go_to_browser tests, T02/gui-look/HANDOFF; no saved preferences, navigation, app/MRU/grid/core/history/MCP/plot/masks/stats/formulas or other owners; no priority/index/roadmap/parity edits |
 | `codex/t05-export-dialog-themes` | Codex Windows | T05 Dialog Theme row: Origin theme-list/save/reuse behavior, named export-settings themes and isolated persistence/UI regressions | claimed 2026-11-15; own `.claude/worktrees/codex-t13-skip-points`, `target/wt-t13-skip-points`; no Graph Theme, preview, renderers/formats, import behavior, recovery, priority docs or other scopes |
 | `t19-fntrim` | Claude Windows, session fe4b37eb | T19 file-name trimming on ASCII import (Origin's FNameToSht/Bk From/To rules) and the book long name keeping the file extension (owner's decision 2026-11-15); crates/io ascii naming, app import window, cli flags, import-ascii.md, title tests | claimed 2026-11-15 |

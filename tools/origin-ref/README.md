@@ -107,3 +107,15 @@ Week numbers (`colfmt-weekday-month`), Engineering digits and letters (`colfmt-e
 `import-replace-plots.lines.txt` replaces the data of a sheet by `impasc` while two graphs plot it (one of all rows, one
 with a row range) and prints each plot's begin and end row before and after (`get %C -b`, `get %C -e`); run it with
 `import-inputs` as the work folder. See `docs/spec/import-ascii.md`, section 10.
+
+## PCA graphs, report layouts and survival-curve limits (T29 leftovers)
+
+`pca-plots3.lines.txt` runs `pca` seven times with all four plots on, then lists the graph windows, their axis limits per
+layer and their datasets and exports each graph as a PNG (the folder is written into the `expGraph` lines: edit it).
+`kaplan-plots2.lines.txt` and `kaplan-plots3.lines.txt` run `kaplanmeier` with `sfci:=1` (needs `plotinone:=0`) and dump the
+survival-function sheet with its column labels and the graph windows. `kmeans-members.lines.txt` prints the labels of the
+membership sheet. `t29-report-setup.labtalk.txt` makes one report of each of the three X-Functions, and
+`origin-screenshot.ps1 -Setup t29-report-setup.labtalk.txt -StepsFile t29-report-steps.txt -OutDir DIR` takes the pictures
+of the report sheet windows (maximized with `win -z`, sections opened by clicking their boxes) from which the table
+layouts in `docs/spec/statistics.md`, sections 17 to 20, were read. Within a line script `$(x)` turns a number into text and
+`%(s$)` a string; a `for` loop with a nested `doc -e` did not run, so the scripts are unrolled.

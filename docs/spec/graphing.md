@@ -2425,7 +2425,73 @@ mismatched paper. Opening and cancelling the actual panel was not manually verif
 session. Physical-printer output remains unverified. Changing paper in the system panel does not regenerate the graph layout; use Sheaf's
 Page Setup to change that layout.
 
-### 19.8 Not done
+### 19.8 Printing a workbook (T27, measured dialog, Sheaf's own layout)
 
-Print and Print Preview of a workbook (a sheet as a table), View > Print View,
-Origin's Source (tray), native CLI printer submission on Windows.
+**Measured in OriginPro 2016** (File > Print with a worksheet active, picture in the local scratch
+folder `re-workspace/scratch/t27/wb/dlg1.png`, not committed): the Print window is the system's
+common print dialog with Origin's extra controls for a worksheet. Group **Printer**: Name (a
+drop-down of the installed printers), a **Properties...** button, the status lines (Status, Type,
+Where, Comment), a **Print to file** check box. Group **Print**: **Columns From / To** and **Rows
+From / To** (two boxes each, empty by default), a **Selection** check box and an **Options...**
+button. Group **Copies**: **Number of copies** (1) and **Collate** (greyed at 1 copy). Buttons OK and
+Cancel. So Origin prints a worksheet by column and row range or by selection, and has a worksheet
+printing options window behind Options... that was not opened (the click on it by script did not
+show a window; **unmeasured**).
+
+**Unmeasured**: the printed layout of an Origin worksheet. Printing through the Origin automation
+interface (`doc -p;`) printed nothing while the machine had no default printer; with one, only the
+dialog above could be reached, and the run that was to answer the driver's Save dialog produced no
+file. Therefore the following are not Origin facts: whether the label rows, row numbers, grid lines
+and column heads print, the font, the row height, the page numbers, the page order, and what
+Options... offers. Do not read Sheaf's layout below as Origin's.
+
+**Sheaf's rule** (`sheaf_core::sheet_print`, drawn by `sheaf_plot::sheet`):
+
+- File > Print... and File > Print Preview act on the active window: a graph as in 19.4, a workbook
+  prints its **active sheet** as a table. The Page Setup of the project applies (paper, orientation,
+  margins); Automatic orientation is portrait for a sheet. Tables are not scaled: the printed area is
+  the paper inside the margins and every page is exactly that area, so a table page is placed 1:1
+  (the printer path plays the page's metafile into the margin rectangle, as for a graph; the
+  printer's unprintable edge can only shrink it when the margin is smaller than the edge).
+- Content: a grey row of column names as the sheet's head shows them (`A(X1)`, `B(Y1)`), then the
+  label rows that have text in a printed column (Long Name, Units, Comments, F(x)=, user parameters;
+  a row without any text in the printed columns is left out), then the data rows. Columns hidden in
+  the sheet and rows hidden by the sheet's filter are not printed; the row numbers are the sheet's
+  own, so a filtered sheet shows its gaps in the numbering. Cell texts are the column's display
+  format as the grid shows it (`Column::shown_text`: General shows up to 5 decimals, date/time and
+  other formats as set); numbers are right-aligned, text left-aligned. Text longer than its cell is
+  cut (not wrapped). Grid lines, a grey head and row-number column, the label rows pale yellow as on
+  screen.
+- Measures (points): font 8, row 12, column width = characters x 50/8 (the sheet's own column width
+  in characters, 8 by default), row-number column 30, footer line 16. On screen rows are 16 px and 8
+  characters 67 px; the print values are Sheaf's choice, not measured.
+- Page breaking (`paginate`, pure and tested): rows go down first, each page takes
+  `floor((area height - footer - head) / row height)` rows (at least one); then the next band of
+  columns starts at the first row again, the row-number column repeated on every page. A band takes
+  columns while they fit the area width (at least one, so a column wider than the page gets a page
+  of its own and its text is cut). Page order is down, then across. An empty sheet is one page.
+- Page numbers: "Page n of m" at the bottom left under each page's table (Sheaf's choice; Origin's
+  behaviour is unmeasured).
+- Output: Windows plays one enhanced metafile per page (`render_sheet_emf_pages`) with
+  `StartPage`/`EndPage` per page inside one document; the Print dialog offers a page range (from/to)
+  when there are several pages. Origin's column/row ranges and selection are not offered. Elsewhere
+  `render_sheet_pdf` writes one paper-sized vector page per table page (the multi-page writer of
+  9.7), text kept as text, and `lp` prints it.
+- Print Preview of a workbook is the same window as for a graph with **< Prev**, "Page n of m" and
+  **Next >** between the Page Setup and Close buttons; the page picture is the table page drawn
+  inside the margin rectangle of the paper.
+
+**Check** (Sheaf's side, headless, no dialog, no physical printer): the ignored test
+`winprint::tests::prints_a_three_page_sheet_to_a_named_printer_without_a_dialog` builds a synthetic
+130-row, 3-column sheet, prints it to "Microsoft Print to PDF" with `DOCINFOW.lpszOutput` set (no
+dialog, about 7 s including the build) and writes Sheaf's own PDF of the same sheet beside it
+(`re-workspace/scratch/t27/wb/sheaf-print3.pdf` and `sheaf-print3.sheaf.pdf`, local). Both files
+have 3 pages with a 612 x 792 pt media box (Letter portrait). Not checked: a physical printer,
+copies, collation, page ranges through the driver, other paper sizes.
+
+### 19.9 Not done
+
+View > Print View, Origin's Source (tray), native CLI printer submission on Windows, Origin's workbook
+Options... window, the printed layout of an Origin worksheet (19.8), printing a selection or a row/column
+range of a sheet, CLI workbook printing, the PDFKit panel for a sheet on macOS (a sheet goes to `lp`).
+

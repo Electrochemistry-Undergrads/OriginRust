@@ -38,6 +38,7 @@ use std::sync::OnceLock;
 pub const NOT_YET: &str = "Not available in Sheaf yet";
 const NEED_BOOK: &str = "Activate a workbook window first";
 const NEED_GRAPH: &str = "Activate a graph window first";
+const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
 const NEED_CELLS: &str = "Select cells, columns or rows first";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
@@ -246,6 +247,8 @@ pub enum Cmd {
     Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
+    /// Tools > AI Assistants (MCP): a tick item for the endpoint of `sheaf-mcp --attach`.
+    ToggleAiLink,
     /// File > Close: close (hide) the active window, as its title bar's close button does.
     CloseWindow,
     /// Window > Duplicate: a copy of the active workbook or graph.
@@ -319,6 +322,8 @@ pub struct MenuContext<'a> {
     pub open: Option<&'a str>,
     /// Which side panels are shown, in the order of `PanelId::ALL` (the ticks of the View menu).
     pub panels: [bool; 4],
+    /// The AI link is on (the tick of Tools > AI Assistants (MCP)).
+    pub ai_link: bool,
     /// The active layer of the active graph (0 when there is none).
     pub layer: usize,
     /// The active graph's tool (the Tools toolbar shows it pressed).
@@ -1288,6 +1293,7 @@ fn tools_menu() -> Vec<Entry> {
     vec![
         grey_keyed("&Options...", ctrl(Key::U)),
         item("&Autosave...", Cmd::Autosave),
+        item("AI Assistants (&MCP)", Cmd::ToggleAiLink),
         grey("System Variables..."),
         grey("3D OpenGL Settings..."),
         grey_sub("Protection", &["Protect Project...", "Audit Log"]),
@@ -1975,8 +1981,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::ExportExcel => Action::ExportExcel(book?),
-        Cmd::Print => Action::Print(c.graph.ok_or(NEED_GRAPH)?),
-        Cmd::PrintPreview => Action::PrintPreview(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::Print => Action::Print(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
+        Cmd::PrintPreview => Action::PrintPreview(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
         Cmd::PageSetup => Action::PageSetup,
         Cmd::Exit => Action::Quit,
         Cmd::Undo => {
@@ -2187,6 +2193,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Toolbars => Action::Toolbars,
         Cmd::Autosave => Action::Autosave,
         Cmd::ToggleStatusBar => Action::ToggleStatusBar,
+        Cmd::ToggleAiLink => Action::ToggleAiLink,
         Cmd::CloseWindow => Action::HideWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::DuplicateWindow => Action::DuplicateWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::AppendProject => Action::AppendProject(None),
@@ -2338,6 +2345,9 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                 if let Some(Cmd::Panel(p)) = &it.cmd
                     && c.panels[p.index()]
                 {
+                    tick(ui, &response);
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleAiLink)) && c.ai_link {
                     tick(ui, &response);
                 }
                 if response.contains_pointer() {
@@ -2563,6 +2573,7 @@ mod tests {
             windows: Vec::new(),
             open: None,
             panels: [true; 4],
+            ai_link: false,
             layer: 0,
             tool: Default::default(),
             curve: None,

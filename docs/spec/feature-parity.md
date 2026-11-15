@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 145 | 46 | 240 |
+| All rows | 49 | 146 | 46 | 241 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 76 | 46 | 139 |
+| P1 and P2 together | 17 | 77 | 46 | 140 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
@@ -276,6 +276,7 @@ Cross-cutting findings:
 | Spline and step connect | Line > Connect | Catmull-Rom spline, steps | ◐ | no B-spline, Bezier, segments; spline skipped above 2000 points | P1 |
 | Multi-panel and stack | 4 Panel, 9 Panel | CLI `plot --panels stack` or RxC; desktop 2/4/9 Panel, vertical Stack dialog (assignment, spacing, orientation, legends, links; 15.7a), and Multiple Panels by Label (existing headers, grid/spacing and four plot types; 15.7b) | ◐ | Stack horizontal/custom templates, whole-page legend, manual layer count, unit conversion and live preview remain open; label panels retain built-in styling; panel links are not written to .opj | P1 |
 | Area and fill | Plot > Area | Plot > Area > Area, Stacked Area, 100% Stacked Area, Fill Area (between a pair of columns); CLI `plot -t area`, `stacked-area`, `stacked-area-100`, `fill-area`; Change Plot to Area: the line is filled down to Y = 0 (or to the lower edge) with the symbol colour; Plot Details > Pattern gives an area transparency, a hatch and a gradient (graphing 18.6) | ◐ | no fill to the next plot, Origin's pattern list is not copied; stacked and fill areas written to .opj as plain areas (the companion keeps them) | P1 |
+| Plot-only X sorting | LabTalk `line.sortx` (Origin 2023) | Plot Details > Line check box "Sort X for line connection", `plot --sort-x`, MCP `style.sort_x`: the line joins points by increasing X while the worksheet and per-point items stay in row order (graphing 18.9) | ◐ | Origin has no dialog control; effect on fills, gaps, missing values and ties unmeasured; `.opj` save warns (companion keeps it) | P2 |
 | Drop lines, bubble, colour mapped, lollipop | Plot > Symbol | Plot > Symbol > Bubble, Color Mapped, Bubble + Color Mapped (Z column after the Y column), Lollipop Plot (Drop To Next Data Plot, Y Value: Plus-Minus; graphing 18.8); horizontal and vertical drop lines on Plot Details > Drop Lines (Origin's defaults, graphing 18) | ◐ | no size legend or colour scale, colour map is a stand-in, not written to .opj | P1 |
 | Histogram, box chart, statistics plots | Plot > Statistics | Plot > Statistics > Histogram and Box Chart, CLI `plot -t histogram`, `box`, `violin`: binned like Frequency Counts, touching bars; boxes with median, mean, whiskers, outliers | ◐ | violin plot variants (Violin, with Box, Point, Quartile, Stick, Half Violin; Origin 2019 documented, defaults unmeasured, graphing.md 14.22) but no Split Violin or violin settings; no distribution curve on box charts, no hatch fill, no grouped box charts (need T10's group columns), other statistics plots missing; written to .opj as plain columns | P1 |
 | Pie | Plot > Pie | Plot > Column/Bar/Pie > 2D Color Pie, CLI `plot -t pie`: flat colour pie, shares to two decimals, legend | ◐ | no 3D slant, no B&W hatch pie, no exploded slices; written to .opj as plain columns | P2 |

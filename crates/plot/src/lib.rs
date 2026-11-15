@@ -11,17 +11,20 @@
 //! [`render_raster`] together with [`layout_geometry`].
 
 mod break_cut;
+mod dash;
 mod data;
 mod emf;
 mod eps;
 mod fill;
 mod fonts;
+mod hexbin;
 pub mod hit;
 mod layout;
 mod legend;
 mod margin;
 pub mod markup;
 mod multipage;
+mod parallel;
 mod pie;
 mod plots;
 mod polar;
@@ -33,16 +36,20 @@ pub mod scene;
 mod shapes;
 mod sheet;
 mod stack;
+mod sunburst;
 mod svg;
 mod symbol_gaps;
 mod ternary;
 mod text;
 pub mod ticks;
 mod ticks_scales;
+mod treemap;
 pub(crate) mod trend;
 mod vector;
 mod violin;
 
+#[cfg(test)]
+mod dash_tests;
 #[cfg(test)]
 mod detail_tests;
 #[cfg(test)]
@@ -51,6 +58,8 @@ mod export_tests;
 mod fill_inclusive_tests;
 #[cfg(test)]
 mod fill_sideline_tests;
+#[cfg(test)]
+mod hexbin_tests;
 #[cfg(test)]
 mod label_frame_tests;
 #[cfg(test)]
@@ -66,6 +75,8 @@ mod multipage_tests;
 #[cfg(test)]
 mod offset_multiplier_tests;
 #[cfg(test)]
+mod parallel_tests;
+#[cfg(test)]
 mod ridgeline_tests;
 #[cfg(test)]
 mod rug_tests;
@@ -74,11 +85,15 @@ mod skip_tests;
 #[cfg(test)]
 mod sort_x_tests;
 #[cfg(test)]
+mod sunburst_tests;
+#[cfg(test)]
 mod symbol_gap_tests;
 #[cfg(test)]
 mod symbol_line_order_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod treemap_tests;
 #[cfg(test)]
 mod trend_tests;
 #[cfg(test)]
@@ -363,7 +378,7 @@ pub struct Raster {
 /// linked, its parent's X axis.
 pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGeometry>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    let pds: Vec<data::LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
+    let pds = data::collect_graph(project, g);
     Ok(layout::graph_geometry(project, g, &pds, SystemFonts::shared()))
 }
 

@@ -3346,6 +3346,7 @@ dependencies = [
  "sheaf-io",
  "sheaf-ops",
  "sheaf-plot",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

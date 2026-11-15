@@ -916,7 +916,65 @@ the Go To dialog open. The earlier all-black choose/reset images are excluded as
 the clear `verified-menu/` captures and post-OK coordinates supersede them.
 Select Columns opens a separate Column Browser, defaulting to Current Sheet and offering project,
 folder, recursive folder and book scopes, a column table and Add/Remove controls. That general
-browser remains unimplemented in Sheaf; its menu entry stays disabled.
+browser is now available from Sheaf's Go To flyout (follow-up below).
+
+The Column Browser follow-up (`re-workspace/scratch/t02-column-browser/verified/` and
+`followup/`) uses eight isolated Origin 2016 instances, each with explicit input-field resets.
+The initial exploratory batch targeted the hint fields rather than Column/Row; its destination
+coordinates are excluded. The browser's upper table lists sheet, book long/short names, index,
+column short/long names, comments, format, size and first value. Add puts a qualified column
+reference into the lower Range/Rows table, initially `[1:end]`; Remove deletes the selected
+lower range. OK transfers the reference to the parent field without navigating. The parent OK
+performs the navigation. Browser Cancel preserves the parent's typed column and row.
+
+| Browser probe, original columns A/B/C/D ending at rows 4/2/6/3 | Observed Go To result |
+|---|---|
+| Add D with duplicate long name, parent Row 0 | qualified D reference; D3 on parent OK |
+| Add B, parent Row 0 | B2 |
+| Add A then C, parent Row 10 | parenthesized qualified list; D10, the original sheet's last column |
+| Add A then C, remove A, parent Row 0 | qualified C reference; C6 |
+| Add another book's B (five populated rows), parent Row 0 | original book's B2, not the other book's row 5 |
+| Type B/10, add D, cancel browser, then parent OK | B10 |
+
+Thus Go To uses the chosen column's position in its original worksheet; choosing a column from
+another book does not activate that book. Several added columns behave as the last column in
+this Origin version. Sheaf copies both observed rules, including the qualified display string.
+Editing the column field, picking a normal flyout item or Reset discards the browser choice;
+Reset still preserves Row. The five scope labels are Current Project, Current Folder, Current
+Folder (recursive), Current Book and Current Sheet. Scope can persist in Origin across temporary
+instances: the final restore explicitly selects Current Sheet, with its control dump retained.
+Cancelled Go To commands return false even though the browser was successfully captured.
+
+Sheaf lists the current project's column metadata and filters these scopes without changing
+workbook data, folder contents or activation. Folder scopes use the original workbook's folder;
+unlisted windows belong to root. Added ranges survive scope changes. The browser starts at
+Current Sheet each time; preferences are not saved. The parent remains open on browser Cancel
+or Escape. Five UI regressions cover return/apply, cross-book position mapping, Cancel/Escape,
+multiple ranges/Remove and edited/reset references. A fixture covers sheet/book/folder/recursive
+scopes, including unlisted root books. Exclude and editing the lower row ranges remain
+unimplemented; Exclude stays disabled.
+
+The top-table selection follow-up (`re-workspace/scratch/t02-browser-selection/origin/` and
+`verified/`) has nine valid isolated Origin cases, including a final Current Sheet restore.
+Shift+Down extends B through D; ordinary Add appends B, C and D as three lower rows.
+Add as One Block instead appends one `[Book1]Sheet1!B"Shared current":D"Shared current"`
+range. Ctrl-selected adjacent B/C can form a block; noncontiguous A/C and a range crossing
+workbooks disable block add. Ctrl+A selects all four columns and can add one A:D block.
+Remove deletes the entire selected lower block; an empty list disables OK. A B:C block plus
+a separately added D remains two lower rows and transfers a parenthesized `(B:C,D)` reference;
+parent OK with Row 0 still selects original D3, including for B:C alone. Quoted long names
+remain on each endpoint. The initial noncontiguous case's programmatic click bypassed the
+disabled block button, so its activation/result are excluded; later probes check native
+enablement and skip disabled buttons. One composite capture failed to open the browser and
+is excluded; its fresh-instance retry supplies the valid block-plus-singleton observation.
+
+Sheaf now supports plain, Ctrl/Command and Shift row clicks, Shift+Up/Down and select-all
+while the top table has focus. Add preserves selected columns in table order; block add
+requires consecutive columns in one worksheet. Blocks remain single lower rows for Remove
+and reference transfer. Scope changes clear the top selection and preserve added ranges.
+Five additional UI regressions cover contiguous and noncontiguous selection, adjacent Ctrl
+selection, disabled block controls, select-all/group removal, mixed-workbook ranges, scope
+changes and block/list transfer. Navigation still waits for the parent, preserving data/history.
 
 Sheaf's Go To now follows the measured input order/focus, right-aligned OK/Cancel and optional-coordinate, zero/end,
 extension and clamping behavior. Its capacity remains data length plus 30 spare view rows;

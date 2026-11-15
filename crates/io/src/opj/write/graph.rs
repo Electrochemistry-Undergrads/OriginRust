@@ -604,6 +604,13 @@ impl Writer {
             let h = LINE_HEIGHT * size * lines.len().max(1) as f64;
             let margin = 0.4 * size;
             let (cx, cy) = match layer.legend.position {
+                LegendPosition::Automatic => {
+                    // The rectangle is positioned for Origin; the companion retains the dynamic
+                    // anchor for later Sheaf text/column changes rather than importing a centre.
+                    notes.push("the automatic legend anchor was written as a fixed position".into());
+                    let (x, y) = Legend::AUTOMATIC_ANCHOR;
+                    (frame_pt.left + x * frame_pt.width + w / 2.0, frame_pt.top + y * frame_pt.height + h / 2.0)
+                }
                 LegendPosition::TopRight => {
                     (frame_pt.left + frame_pt.width - w / 2.0 - margin, frame_pt.top + h / 2.0 + margin)
                 }
@@ -713,6 +720,27 @@ impl Writer {
         if has(&|k| k.is_violin()) {
             notes.push("violin plots were written as plain columns of their data".into());
         }
+        if has(&|k| k.is_hexbin()) {
+            notes.push("hexbin plots were written as scatter plots of their data".into());
+        }
+        if has(&|k| k.is_parallel()) {
+            notes.push(
+                "parallel plots and parallel indexes were written as line plots of their columns; their axes, colours and groups were not written"
+                    .into(),
+            );
+        }
+        if has(&|k| k == PlotKind::Treemap) {
+            notes.push(
+                "treemaps were written as column plots of their value column; their categories and nested rectangles were not written"
+                    .into(),
+            );
+        }
+        if has(&|k| k == PlotKind::Sunburst) {
+            notes.push(
+                "sunburst plots were written as column plots of their value column; their categories and rings were not written"
+                    .into(),
+            );
+        }
         if has(&|k| k.is_ridgeline()) {
             notes.push("ridgeline charts were written as plain columns of their data".into());
         }
@@ -743,8 +771,8 @@ impl Writer {
         for (r, place) in plots.iter().zip(places.iter().copied()) {
             let p = r.plot;
             let kind = match p.kind {
-                PlotKind::Line => CurveKind::Line,
-                PlotKind::Scatter => CurveKind::Scatter,
+                PlotKind::Line | PlotKind::Parallel | PlotKind::ParallelIndex => CurveKind::Line,
+                PlotKind::Scatter | PlotKind::Hexbin => CurveKind::Scatter,
                 PlotKind::LineSymbol => CurveKind::LineSymbol,
                 PlotKind::Column
                 | PlotKind::StackedColumn
@@ -763,6 +791,8 @@ impl Writer {
                 | PlotKind::ViolinStick
                 | PlotKind::HalfViolin
                 | PlotKind::Ridgeline
+                | PlotKind::Treemap
+                | PlotKind::Sunburst
                 | PlotKind::Pie
                 | PlotKind::Pie3D
                 | PlotKind::PieBw => CurveKind::Column,

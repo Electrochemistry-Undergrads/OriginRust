@@ -110,6 +110,10 @@ const MAX_TABS_AT_ONCE: usize = 8;
 struct RenameDialog {
     window: WindowId,
     long_name: String,
+    /// The window's short name (Origin's Window Properties have both); cleaned by Origin's rule on OK.
+    short_name: String,
+    /// Why the last OK was refused (a short name another window has).
+    error: Option<String>,
     /// Set when a folder is renamed instead of a window: its path.
     folder: Option<Vec<usize>>,
 }
@@ -1803,8 +1807,13 @@ impl SheafApp {
             }
             Action::RenameFolder(path) => {
                 if let Some(f) = explorer::folder_at(&self.doc.project().root, &path).filter(|_| !path.is_empty()) {
-                    self.rename =
-                        Some(RenameDialog { window: WindowId(0), long_name: f.name.clone(), folder: Some(path) });
+                    self.rename = Some(RenameDialog {
+                        window: WindowId(0),
+                        long_name: f.name.clone(),
+                        short_name: String::new(),
+                        error: None,
+                        folder: Some(path),
+                    });
                 }
             }
             Action::DeleteFolder(path) => {
@@ -1869,7 +1878,8 @@ impl SheafApp {
                         Window::Workbook(b) => b.long_name.clone(),
                         Window::Graph(g) => g.long_name.clone(),
                     };
-                    self.rename = Some(RenameDialog { window: id, long_name, folder: None });
+                    let short_name = w.name().to_string();
+                    self.rename = Some(RenameDialog { window: id, long_name, short_name, error: None, folder: None });
                 }
             }
             Action::Cascade => self.workspace.cascade(),
@@ -2268,12 +2278,38 @@ impl SheafApp {
     }
 
     fn plot_columns(&mut self, book: WindowId, columns: Vec<ColumnId>, template: Template) {
+        // A Parallel Index is grouped by the selected column of text (else the first text column of the sheet).
+        let group = if template == Template::ParallelIndex {
+            columns.iter().copied().find(|id| self.doc.project().column(*id).is_some_and(|c| !c.data.is_numeric()))
+        } else {
+            None
+        };
+        // A Treemap (or Sunburst plot) nests by the selected columns of text (in selection order; else every text column of the
+        // sheet) and sizes by the last numeric one.
+        let categories: Vec<ColumnId> = if matches!(template, Template::Treemap | Template::Sunburst) {
+            let project = self.doc.project();
+            columns.iter().copied().filter(|id| project.column(*id).is_some_and(|c| !c.data.is_numeric())).collect()
+        } else {
+            Vec::new()
+        };
         let ys = self.plot_y_columns(book, columns, template);
         if ys.is_empty() {
-            self.warn("Nothing to plot: select one or more numeric Y columns".to_string());
+            let what = if matches!(template, Template::Treemap | Template::Sunburst) {
+                "Nothing to plot: select one or more text category columns and a numeric value column"
+            } else {
+                "Nothing to plot: select one or more numeric Y columns"
+            };
+            self.warn(what.to_string());
             return;
         }
-        match self.doc.edit("Plot columns", |p| p.plot_columns(template, &ys)) {
+        let made = self.doc.edit("Plot columns", |p| match group {
+            Some(g) => p.plot_parallel(template, &ys, Some(g)),
+            None if matches!(template, Template::Treemap | Template::Sunburst) => {
+                p.plot_columns(template, &[categories.as_slice(), &ys].concat())
+            }
+            None => p.plot_columns(template, &ys),
+        });
+        match made {
             Ok(_) => self.say(format!("Plotted {} column(s)", ys.len())),
             Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
         }
@@ -3260,11 +3296,7 @@ impl SheafApp {
         }
         if let Some(d) = &mut self.go_to {
             let book = d.book;
-            let sheet = self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet));
-            let outcome = match sheet {
-                Some(sheet) => d.show(ctx, sheet),
-                None => GoToOutcome::Closed,
-            };
+            let outcome = d.show(ctx, self.doc.project());
             match outcome {
                 GoToOutcome::Open => {}
                 GoToOutcome::Closed => self.go_to = None,
@@ -3380,9 +3412,20 @@ impl SheafApp {
                     ui.label(label);
                     ui.add(egui::TextEdit::singleline(&mut d.long_name).desired_width(260.0));
                 });
+                if d.folder.is_none() {
+                    ui.horizontal(|ui| {
+                        ui.label("Short Name");
+                        ui.add(egui::TextEdit::singleline(&mut d.short_name).desired_width(200.0));
+                    });
+                    ui.weak("Letters and digits, at most 13 characters (as in Origin).");
+                    if let Some(e) = &d.error {
+                        ui.colored_label(ui.visuals().error_fg_color, e);
+                    }
+                }
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {
                         let (id, name) = (d.window, d.long_name.clone());
+                        let short = d.short_name.clone();
                         if let Some(path) = d.folder.clone() {
                             let name = name.trim().to_string();
                             if !name.is_empty() {
@@ -3392,16 +3435,26 @@ impl SheafApp {
                                     }
                                 });
                             }
+                            done = true;
                         } else {
-                            self.doc.apply("Rename window", move |p| {
+                            // The short name first: a name another window has keeps the window open.
+                            let result = self.doc.edit("Rename window", move |p| {
+                                let current = p.window(id).map(|w| w.name().to_string()).unwrap_or_default();
+                                if short.trim() != current {
+                                    p.rename_window(id, &short)?;
+                                }
                                 if let Some(b) = p.workbook_mut(id) {
                                     b.long_name = name;
                                 } else if let Some(g) = p.graph_mut(id) {
                                     g.long_name = name;
                                 }
+                                Ok::<(), String>(())
                             });
+                            match result {
+                                Ok(()) => done = true,
+                                Err(e) => d.error = Some(e),
+                            }
                         }
-                        done = true;
                     }
                     if ui.button("Cancel").clicked() {
                         done = true;

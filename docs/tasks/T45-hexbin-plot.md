@@ -1,6 +1,6 @@
 # T45: Hexbin plot
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `hexbin`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `hexbin`. Spec: graphing.md 14.24. Not done: XYZ/matrix input, Binned Scatter.
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Graphing: Hexbin, binned scatter and UpSet plots,
 Origin 2027; the hexbin part only).
 

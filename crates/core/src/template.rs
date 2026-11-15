@@ -105,10 +105,25 @@ pub enum Template {
     /// Ridgeline chart (Origin's "Ridgeline Chart", 2022): every Y column a density curve on a
     /// baseline at its column index, with the colours of the box chart template.
     Ridgeline,
+    /// Hexbin plot (Origin's "Hexbin", 2027): the X and Y columns binned into hexagons coloured by their
+    /// count. The legend is hidden: the colour scale beside the layer names the colours.
+    Hexbin,
+    /// Parallel Plot (Origin's "Parallel Plot", 2019): one vertical axis per Y column, one line per row, coloured by
+    /// a numeric column. No legend: the colour scale beside the layer names the colours.
+    Parallel,
+    /// Parallel Index (Origin's "Parallel Index"): like [`Template::Parallel`], with the lines coloured by the
+    /// group of their row and a legend of the groups.
+    ParallelIndex,
+    /// Treemap (Origin's "Treemap", 2025b): nested rectangles, one level per category column, the areas
+    /// proportional to a value column. No axes and no legend.
+    Treemap,
+    /// Sunburst plot (Origin's "Sunburst Plot", 2022): the hierarchy of the category columns as concentric rings,
+    /// the angles proportional to a value column. No axes and no legend; a colour scale beside the layer.
+    Sunburst,
 }
 
 impl Template {
-    pub const ALL: [Template; 40] = [
+    pub const ALL: [Template; 45] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -133,6 +148,11 @@ impl Template {
         Template::ViolinStick,
         Template::HalfViolin,
         Template::Ridgeline,
+        Template::Hexbin,
+        Template::Parallel,
+        Template::ParallelIndex,
+        Template::Treemap,
+        Template::Sunburst,
         Template::Bubble,
         Template::ColorMapped,
         Template::BubbleColorMapped,
@@ -194,6 +214,11 @@ impl Template {
             Template::ViolinStick => "violin-stick",
             Template::HalfViolin => "half-violin",
             Template::Ridgeline => "ridgeline",
+            Template::Hexbin => "hexbin",
+            Template::Parallel => "parallel",
+            Template::ParallelIndex => "parallel-index",
+            Template::Treemap => "treemap",
+            Template::Sunburst => "sunburst",
         }
     }
 
@@ -239,7 +264,17 @@ impl Template {
             Template::ViolinStick => "Violin with Stick",
             Template::HalfViolin => "Half Violin",
             Template::Ridgeline => "Ridgeline Chart",
+            Template::Hexbin => "Hexbin",
+            Template::Parallel => "Parallel Plot",
+            Template::ParallelIndex => "Parallel Index",
+            Template::Treemap => "Treemap",
+            Template::Sunburst => "Sunburst Plot",
         }
+    }
+
+    /// True for [`Template::Parallel`] and [`Template::ParallelIndex`].
+    pub fn is_parallel(&self) -> bool {
+        matches!(self, Template::Parallel | Template::ParallelIndex)
     }
 
     /// True for the six violin templates.
@@ -262,7 +297,7 @@ impl Template {
     /// Builds an empty graph (no plots) in this template's style: one layer, or two for
     /// [`Template::DoubleY`].
     pub fn new_graph(&self, id: WindowId, name: &str) -> Graph {
-        match self {
+        let mut graph = match self {
             Template::Line => general(id, name, PlotKind::Line),
             Template::Scatter => general(id, name, PlotKind::Scatter),
             Template::LineSymbol => general(id, name, PlotKind::LineSymbol),
@@ -303,7 +338,57 @@ impl Template {
             Template::ViolinStick => from_red(general(id, name, PlotKind::ViolinStick)),
             Template::HalfViolin => from_red(general(id, name, PlotKind::HalfViolin)),
             Template::Ridgeline => from_red(general(id, name, PlotKind::Ridgeline)),
+            Template::Hexbin => {
+                let mut g = from_red(general(id, name, PlotKind::Hexbin));
+                for l in &mut g.layers {
+                    l.legend.visible = false;
+                }
+                g
+            }
+            Template::Parallel => {
+                let mut g = from_red(general(id, name, PlotKind::Parallel));
+                for l in &mut g.layers {
+                    l.legend.visible = false;
+                }
+                g
+            }
+            Template::Treemap => {
+                // The rectangles fill the layer's frame: no axes, no legend (the names are inside).
+                let mut g = general(id, name, PlotKind::Treemap);
+                for l in &mut g.layers {
+                    l.x_axis.side = AxisSide::Hidden;
+                    l.y_axis.side = AxisSide::Hidden;
+                    l.legend.visible = false;
+                }
+                g
+            }
+            Template::Sunburst => {
+                // The rings fill the layer's frame: no axes, no legend (the names are in the rings).
+                let mut g = general(id, name, PlotKind::Sunburst);
+                for l in &mut g.layers {
+                    l.x_axis.side = AxisSide::Hidden;
+                    l.y_axis.side = AxisSide::Hidden;
+                    l.legend.visible = false;
+                }
+                g
+            }
+            Template::ParallelIndex => {
+                // The legend of the groups goes right of the frame (`Automatic`, see graphing spec 14.25).
+                let mut g = from_red(general(id, name, PlotKind::ParallelIndex));
+                for l in &mut g.layers {
+                    l.legend.position = LegendPosition::Automatic;
+                }
+                g
+            }
+        };
+        // These four stock templates share the measured anchor. Other templates keep their
+        // own placement (including CV, polar/radar and the separately measured Double-Y).
+        if matches!(self, Template::Line | Template::Scatter | Template::LineSymbol | Template::Column) {
+            graph.layers[0].legend.position = LegendPosition::Automatic;
+            // The stock white legend hides the frame/curves under it (Origin exports, spec 2.4).
+            graph.layers[0].legend.background = Some(Color::WHITE);
         }
+        graph
     }
 }
 
@@ -834,7 +919,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 40);
+        assert_eq!(Template::ALL.len(), 45);
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
         assert_eq!(Template::from_name("violin"), Some(Template::Violin));
         assert_eq!(Template::from_name("violin-box"), Some(Template::ViolinBox));
@@ -886,8 +971,11 @@ mod tests {
         assert_eq!((l.y_axis.major_tick, l.y_axis.minor_tick), (TickDirection::None, TickDirection::None));
         assert!(l.x_axis.show_opposite && l.y_axis.show_opposite, "closed box");
         assert!(!l.x_axis.opposite_ticks && !l.y_axis.opposite_ticks);
-        // The X axis and the legend are those of the line template.
-        let line = Template::Line.new_graph(WindowId(1), "Graph1");
+        // The X axis and legend styling follow Line; this unmeasured template keeps its
+        // existing corner placement rather than adopting the four stock templates' anchor.
+        let mut line = Template::Line.new_graph(WindowId(1), "Graph1");
+        line.layers[0].legend.position = LegendPosition::TopRight;
+        line.layers[0].legend.background = None;
         assert_eq!(l.x_axis.major_tick, line.layers[0].x_axis.major_tick);
         assert!(l.x_axis.show_tick_labels);
         assert_eq!(l.legend, line.layers[0].legend);
@@ -900,6 +988,9 @@ mod tests {
         let mut line = Template::Line.new_graph(WindowId(1), "Graph1");
         assert_eq!(g.layers[0].stack, Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 });
         line.layers[0].stack = g.layers[0].stack;
+        // Waterfall's separate placement has not been measured.
+        line.layers[0].legend.position = LegendPosition::TopRight;
+        line.layers[0].legend.background = None;
         assert_eq!(g, line);
         // Every other template has no offsets.
         for t in
@@ -1136,6 +1227,207 @@ mod tests {
         assert_eq!(partial.height, 1.5);
         let all: RidgelineStyle = serde_json::from_str("{}").unwrap();
         assert!(all.is_default());
+    }
+
+    #[test]
+    fn the_hexbin_template_has_its_own_kind_and_a_hidden_legend() {
+        use crate::graph::{HexbinBy, HexbinStyle};
+        assert_eq!(Template::from_name("hexbin"), Some(Template::Hexbin));
+        assert_eq!(Template::Hexbin.label(), "Hexbin");
+        let g = Template::Hexbin.new_graph(WindowId(1), "G");
+        assert_eq!(g.layers[0].default_kind, PlotKind::Hexbin);
+        assert!(!g.layers[0].legend.visible);
+        assert!(PlotKind::Hexbin.is_hexbin() && !PlotKind::Hexbin.is_distribution() && !PlotKind::Hexbin.is_bar());
+        assert_eq!(serde_json::to_string(&PlotKind::Hexbin).unwrap(), "\"hexbin\"");
+        let back: crate::graph::Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!(back, g);
+        // Defaults: 20 bins along each axis, data range, regular hexagons, Y derived from X.
+        let d = HexbinStyle::default();
+        assert_eq!((d.x.by, d.y.by), (HexbinBy::Bins(20), HexbinBy::Bins(20)));
+        assert_eq!((d.x.min_center, d.x.max_center, d.prefer_regular, d.derive_y_from_x), (None, None, true, true));
+        // A partial style (older file, or one that sets a single field) fills in the rest.
+        let partial: HexbinStyle =
+            serde_json::from_str(r#"{"x":{"by":{"spacing":2.5},"min_center":0.0},"derive_y_from_x":false}"#).unwrap();
+        assert_eq!(partial.x.by, HexbinBy::Spacing(2.5));
+        assert_eq!((partial.x.min_center, partial.x.max_center), (Some(0.0), None));
+        assert!(!partial.derive_y_from_x && partial.prefer_regular);
+        assert_eq!(partial.y, d.y);
+        assert!(serde_json::from_str::<HexbinStyle>("{}").unwrap().is_default());
+    }
+
+    #[test]
+    fn the_parallel_templates_have_their_own_kinds_and_refuse_too_few_columns() {
+        use crate::graph::{LegendPosition, ParallelStyle};
+        use crate::{ColumnData, Designation, Project};
+        assert_eq!(Template::from_name("parallel"), Some(Template::Parallel));
+        assert_eq!(Template::from_name("parallel-index"), Some(Template::ParallelIndex));
+        assert_eq!((Template::Parallel.label(), Template::ParallelIndex.label()), ("Parallel Plot", "Parallel Index"));
+        assert!(
+            Template::Parallel.is_parallel()
+                && Template::ParallelIndex.is_parallel()
+                && !Template::Hexbin.is_parallel()
+        );
+        assert!(
+            PlotKind::Parallel.is_parallel() && PlotKind::ParallelIndex.is_parallel() && !PlotKind::Line.is_parallel()
+        );
+        assert_eq!(serde_json::to_string(&PlotKind::ParallelIndex).unwrap(), "\"parallel_index\"");
+        let plain = Template::Parallel.new_graph(WindowId(1), "G");
+        assert_eq!(plain.layers[0].default_kind, PlotKind::Parallel);
+        assert!(!plain.layers[0].legend.visible, "the colour scale names the colours");
+        let grouped = Template::ParallelIndex.new_graph(WindowId(1), "G");
+        assert!(grouped.layers[0].legend.visible && grouped.layers[0].legend.position == LegendPosition::Automatic);
+        for g in [plain, grouped] {
+            let back: Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+            assert_eq!(back, g);
+        }
+        // The defaults: rescale each axis, 0.5 pt, opaque, no colour column; a partial style fills in the rest.
+        let d = ParallelStyle::default();
+        assert_eq!((d.rescale_each_axis, d.width_pt, d.transparency_pct, d.color), (true, 0.5, 0.0, None));
+        let partial: ParallelStyle = serde_json::from_str(r#"{"rescale_each_axis":false}"#).unwrap();
+        assert!(!partial.rescale_each_axis && partial.width_pt == 0.5);
+        assert!(serde_json::from_str::<ParallelStyle>("{}").unwrap().is_default());
+
+        let mut p = Project::new();
+        let b = p.add_workbook("d");
+        let ys: Vec<_> = (0..4)
+            .map(|i| p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![i as f64, 2.0])).unwrap())
+            .collect();
+        let species = p.add_column(b, 0, Designation::Y, ColumnData::text(vec!["a".into(), "b".into()])).unwrap();
+        let err = p.plot_columns(Template::Parallel, &ys[..1]).unwrap_err();
+        assert!(err.to_string().contains("two or more numeric columns"), "{err}");
+        let err = p.plot_columns(Template::ParallelIndex, &[ys[0], ys[1], species]).unwrap_err();
+        assert!(err.to_string().contains("three or more numeric columns"), "{err}");
+        let err = p.plot_parallel(Template::ParallelIndex, &ys[..3], None).unwrap_err();
+        assert!(err.to_string().contains("group column"), "{err}");
+        assert_eq!(p.graphs().count(), 0, "a refused plot leaves no graph behind");
+        let err = p.plot_columns_double_y(Template::Parallel, &ys[..2], &ys[2..]).unwrap_err();
+        assert!(err.to_string().contains("right Y axis"), "{err}");
+        // The text column among the columns is the group; one axis per numeric column.
+        let g = p.plot_columns(Template::ParallelIndex, &[ys[0], ys[1], ys[2], species]).unwrap();
+        let l = &p.graph(g).unwrap().layers[0];
+        assert_eq!(l.plots.len(), 3);
+        assert!(l.plots.iter().all(|pl| pl.kind == PlotKind::ParallelIndex && pl.parallel.color == Some(species)));
+        // Without a named group the first text column of the sheet groups the rows.
+        assert_eq!(p.parallel_group_default(&ys), Some(species));
+        let g2 = p.plot_columns(Template::ParallelIndex, &ys[..3]).unwrap();
+        assert_eq!(p.graph(g2).unwrap().layers[0].plots[0].parallel.color, Some(species));
+        // A parallel plot colours by its last column by default.
+        let g3 = p.plot_columns(Template::Parallel, &ys).unwrap();
+        assert_eq!(p.graph(g3).unwrap().layers[0].plots[2].parallel.color, Some(ys[3]));
+    }
+
+    #[test]
+    fn the_treemap_template_has_its_own_kind_settings_and_refusals() {
+        use crate::graph::{TreemapLayout, TreemapLevel, TreemapOrder, TreemapStyle};
+        use crate::{ColumnData, Designation, Project};
+        assert_eq!(Template::from_name("treemap"), Some(Template::Treemap));
+        assert_eq!(Template::Treemap.label(), "Treemap");
+        assert_eq!(serde_json::to_string(&PlotKind::Treemap).unwrap(), "\"treemap\"");
+        let g = Template::Treemap.new_graph(WindowId(1), "G");
+        assert_eq!(g.layers[0].default_kind, PlotKind::Treemap);
+        assert!(!g.layers[0].legend.visible);
+        assert_eq!(g.layers[0].x_axis.side, crate::graph::AxisSide::Hidden);
+        let back: Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!(back, g);
+        // Defaults and partial styles.
+        let d = TreemapStyle::default();
+        assert_eq!(
+            (d.layout, d.order, d.depth, d.gap_pt, d.per_level_on),
+            (TreemapLayout::Squarified, TreemapOrder::Categorical, None, 1.5, false)
+        );
+        assert!(serde_json::from_str::<TreemapStyle>("{}").unwrap().is_default());
+        let partial: TreemapStyle = serde_json::from_str(r#"{"layout":"pivot_split_size","depth":2}"#).unwrap();
+        assert_eq!((partial.layout, partial.depth, partial.gap_pt), (TreemapLayout::PivotSplitSize, Some(2), 1.5));
+        // Per-level settings apply to the levels below the first, only while the box is checked.
+        let mut s = TreemapStyle {
+            per_level: vec![TreemapLevel { layout: TreemapLayout::Split, order: TreemapOrder::BySize }],
+            ..d
+        };
+        assert_eq!(s.level_setting(1).layout, TreemapLayout::Squarified);
+        s.per_level_on = true;
+        assert_eq!(s.level_setting(0).layout, TreemapLayout::Squarified);
+        assert_eq!((s.level_setting(1).layout, s.level_setting(1).order), (TreemapLayout::Split, TreemapOrder::BySize));
+        assert_eq!(s.level_setting(2).layout, TreemapLayout::Squarified, "no entry: the general setting");
+
+        let mut p = Project::new();
+        let b = p.add_workbook("d");
+        let region =
+            p.add_column(b, 0, Designation::Y, ColumnData::text(vec!["a".into(), "a".into(), "b".into()])).unwrap();
+        let name =
+            p.add_column(b, 0, Designation::Y, ColumnData::text(vec!["x".into(), "y".into(), "z".into()])).unwrap();
+        let v = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        let w = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![4.0, 5.0, 6.0])).unwrap();
+        let err = p.plot_columns(Template::Treemap, &[region, name]).unwrap_err();
+        assert!(err.to_string().contains("numeric value column"), "{err}");
+        let err = p.plot_treemap(&[], v).unwrap_err();
+        assert!(err.to_string().contains("category column"), "{err}");
+        let err = p.plot_treemap(&[v], region).unwrap_err();
+        assert!(err.to_string().contains("numeric value column"), "{err}");
+        let err = p.plot_columns_double_y(Template::Treemap, &[v], &[w]).unwrap_err();
+        assert!(err.to_string().contains("right Y axis"), "{err}");
+        assert_eq!(p.graphs().count(), 0, "a refused plot leaves no graph behind");
+        // Text columns among the selection are the categories in selection order; the last numeric is the value.
+        let g = p.plot_columns(Template::Treemap, &[name, region, v, w]).unwrap();
+        let l = p.graph(g).unwrap().layers[0].clone();
+        assert_eq!(l.plots.len(), 1);
+        assert_eq!((l.plots[0].y, l.plots[0].kind), (w, PlotKind::Treemap));
+        assert_eq!(l.plots[0].treemap.categories, vec![name, region]);
+        // Without text among the columns, every text column of the sheet, in sheet order.
+        let g2 = p.plot_columns(Template::Treemap, &[v]).unwrap();
+        assert_eq!(p.graph(g2).unwrap().layers[0].plots[0].treemap.categories, vec![region, name]);
+        assert_eq!(l.inherited_treemap().categories, vec![name, region]);
+    }
+
+    #[test]
+    fn the_sunburst_template_has_its_own_kind_settings_and_refusals() {
+        use crate::graph::{SunburstOrder, SunburstStyle};
+        use crate::{ColumnData, Designation, Project};
+        assert_eq!(Template::from_name("sunburst"), Some(Template::Sunburst));
+        assert_eq!(Template::Sunburst.label(), "Sunburst Plot");
+        assert_eq!(serde_json::to_string(&PlotKind::Sunburst).unwrap(), "\"sunburst\"");
+        let g = Template::Sunburst.new_graph(WindowId(1), "G");
+        assert_eq!(g.layers[0].default_kind, PlotKind::Sunburst);
+        assert!(!g.layers[0].legend.visible);
+        assert_eq!(g.layers[0].x_axis.side, crate::graph::AxisSide::Hidden);
+        let back: Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!(back, g);
+        let d = SunburstStyle::default();
+        assert_eq!(
+            (d.start_angle_deg, d.hole, d.ring_gap_pt, d.border_pt, d.show_names, d.show_values, d.order),
+            (90.0, 0.3, 0.0, 0.5, true, false, SunburstOrder::Worksheet)
+        );
+        assert!(serde_json::from_str::<SunburstStyle>("{}").unwrap().is_default());
+        let partial: SunburstStyle = serde_json::from_str(r#"{"hole":0.5,"show_values":true}"#).unwrap();
+        assert_eq!(
+            (partial.hole, partial.start_angle_deg, partial.show_names, partial.show_values),
+            (0.5, 90.0, true, true)
+        );
+
+        let mut p = Project::new();
+        let b = p.add_workbook("d");
+        let region =
+            p.add_column(b, 0, Designation::Y, ColumnData::text(vec!["a".into(), "a".into(), "b".into()])).unwrap();
+        let name =
+            p.add_column(b, 0, Designation::Y, ColumnData::text(vec!["x".into(), "y".into(), "z".into()])).unwrap();
+        let v = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        let w = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![4.0, 5.0, 6.0])).unwrap();
+        let err = p.plot_columns(Template::Sunburst, &[region, name]).unwrap_err();
+        assert!(err.to_string().contains("numeric value column"), "{err}");
+        let err = p.plot_sunburst(&[], v).unwrap_err();
+        assert!(err.to_string().contains("category column"), "{err}");
+        let err = p.plot_sunburst(&[v], region).unwrap_err();
+        assert!(err.to_string().contains("numeric value column"), "{err}");
+        let err = p.plot_columns_double_y(Template::Sunburst, &[v], &[w]).unwrap_err();
+        assert!(err.to_string().contains("right Y axis"), "{err}");
+        assert_eq!(p.graphs().count(), 0, "a refused plot leaves no graph behind");
+        let g = p.plot_columns(Template::Sunburst, &[name, region, v, w]).unwrap();
+        let l = p.graph(g).unwrap().layers[0].clone();
+        assert_eq!(l.plots.len(), 1);
+        assert_eq!((l.plots[0].y, l.plots[0].kind), (w, PlotKind::Sunburst));
+        assert_eq!(l.plots[0].sunburst.categories, vec![name, region]);
+        let g2 = p.plot_columns(Template::Sunburst, &[v]).unwrap();
+        assert_eq!(p.graph(g2).unwrap().layers[0].plots[0].sunburst.categories, vec![region, name]);
+        assert_eq!(l.inherited_sunburst().categories, vec![name, region]);
     }
 
     #[test]

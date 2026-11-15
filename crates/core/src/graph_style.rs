@@ -9,6 +9,7 @@
 
 use crate::color::Color;
 use crate::graph::Dash;
+use crate::ids::ColumnId;
 use serde::{Deserialize, Serialize};
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
@@ -509,5 +510,261 @@ impl Default for RidgelineStyle {
 impl RidgelineStyle {
     pub fn is_default(&self) -> bool {
         *self == RidgelineStyle::default()
+    }
+}
+
+/// How the centres of one axis of a hexbin plot are spaced (Origin's Bin Spacing or Number of Bins).
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HexbinBy {
+    /// This many centres from Min Center to Max Center.
+    Bins(u32),
+    /// The distance between neighbouring centres, in axis units.
+    Spacing(f64),
+}
+
+/// The bin settings of one axis of a hexbin plot (Origin's Min Center, Max Center, and Bin Spacing or
+/// Number of Bins); `None` is the minimum or maximum of the data.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HexbinAxis {
+    pub min_center: Option<f64>,
+    pub max_center: Option<f64>,
+    pub by: HexbinBy,
+}
+
+impl Default for HexbinAxis {
+    fn default() -> HexbinAxis {
+        HexbinAxis { min_center: None, max_center: None, by: HexbinBy::Bins(sheaf_calc::hexbin::DEFAULT_BINS as u32) }
+    }
+}
+
+impl HexbinAxis {
+    fn to_calc(self) -> sheaf_calc::hexbin::HexAxisSetup {
+        use sheaf_calc::hexbin::{HexAxisSetup, HexStep};
+        HexAxisSetup {
+            min_center: self.min_center,
+            max_center: self.max_center,
+            step: match self.by {
+                HexbinBy::Bins(n) => HexStep::Bins(n as usize),
+                HexbinBy::Spacing(s) => HexStep::Spacing(s),
+            },
+        }
+    }
+}
+
+/// The settings of a hexbin plot (graphing spec 14.24). Every field is skipped when written while it
+/// has its default, so older files load unchanged.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HexbinStyle {
+    pub x: HexbinAxis,
+    pub y: HexbinAxis,
+    /// Origin's "Prefer Regular Hexagons" (checked by default).
+    pub prefer_regular: bool,
+    /// Origin's "Derive Y from X" (the default); false is "Derive X from Y".
+    pub derive_y_from_x: bool,
+}
+
+impl Default for HexbinStyle {
+    fn default() -> HexbinStyle {
+        HexbinStyle { x: HexbinAxis::default(), y: HexbinAxis::default(), prefer_regular: true, derive_y_from_x: true }
+    }
+}
+
+impl HexbinStyle {
+    pub fn is_default(&self) -> bool {
+        *self == HexbinStyle::default()
+    }
+
+    /// The setting the binning takes, for a frame of `frame_aspect` (width / height on the page).
+    pub fn to_calc(&self, frame_aspect: f64) -> sheaf_calc::hexbin::HexSetup {
+        sheaf_calc::hexbin::HexSetup {
+            x: self.x.to_calc(),
+            y: self.y.to_calc(),
+            derive_y_from_x: self.derive_y_from_x,
+            prefer_regular: self.prefer_regular,
+            frame_aspect,
+        }
+    }
+}
+
+/// The settings shared by the plots (one per axis) of a Parallel Plot or Parallel Index (graphing spec
+/// 14.25). Every field is skipped when written while it has its default, so older files load unchanged.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ParallelStyle {
+    /// Origin's "Rescale Each Axis Independently": each axis has its own range (the default, Sheaf's choice);
+    /// cleared, every axis takes one range, the union of the ranges of all the columns.
+    pub rescale_each_axis: bool,
+    /// Width of the lines, in pt (Origin's Plot Details Parallel tab, Width; the default is Sheaf's choice).
+    pub width_pt: f64,
+    /// Transparency of the lines, 0 (opaque) to 100 percent (Origin's Transparency).
+    pub transparency_pct: f64,
+    /// A Parallel Plot: the numeric column that colours the lines through the colour ramp, with a colour
+    /// scale (`None` draws every line in the plot colour). A Parallel Index: the column whose text groups
+    /// the rows, one colour and one legend entry per group.
+    pub color: Option<ColumnId>,
+}
+
+impl Default for ParallelStyle {
+    fn default() -> ParallelStyle {
+        ParallelStyle { rescale_each_axis: true, width_pt: 0.5, transparency_pct: 0.0, color: None }
+    }
+}
+
+impl ParallelStyle {
+    pub fn is_default(&self) -> bool {
+        *self == ParallelStyle::default()
+    }
+}
+
+/// How the siblings of a treemap level are ordered (Plot Details Layout tab, Order; graphing spec 14.26).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TreemapOrder {
+    /// The order the categories first appear in the worksheet (Sheaf's default).
+    #[default]
+    Categorical,
+    Alphabetical,
+    /// Largest first.
+    BySize,
+    /// By the cells of a column, smallest first (the column is [`TreemapStyle::order_column`]).
+    ByColumn,
+}
+
+/// The layout and order of one treemap level below the first.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TreemapLevel {
+    pub layout: TreemapLayout,
+    pub order: TreemapOrder,
+}
+
+pub use sheaf_calc::treemap::Layout as TreemapLayout;
+
+/// The settings of a treemap plot (Origin 2025b Treemap plot, graphing spec 14.26). The plot's own Y column is
+/// the value column; the category columns are named here, the first the root level. Every field is skipped when
+/// written while it has its default, so older files load unchanged.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TreemapStyle {
+    /// The category columns, first = top level.
+    pub categories: Vec<ColumnId>,
+    pub layout: TreemapLayout,
+    pub order: TreemapOrder,
+    /// The column Order by column sorts by (a treemap without one falls back to the categorical order).
+    pub order_column: Option<ColumnId>,
+    /// The levels shown; `None` is Origin's Infinite (every level).
+    pub depth: Option<u32>,
+    /// The gap between rectangles, in pt (Sheaf's default 1.5).
+    pub gap_pt: f64,
+    /// Use `per_level` for the levels below the first (Origin's per-level check box).
+    pub per_level_on: bool,
+    /// Layout and order of level 2, 3, ...; a level without an entry takes the general layout and order.
+    pub per_level: Vec<TreemapLevel>,
+}
+
+impl Default for TreemapStyle {
+    fn default() -> TreemapStyle {
+        TreemapStyle {
+            categories: Vec::new(),
+            layout: TreemapLayout::Squarified,
+            order: TreemapOrder::Categorical,
+            order_column: None,
+            depth: None,
+            gap_pt: 1.5,
+            per_level_on: false,
+            per_level: Vec::new(),
+        }
+    }
+}
+
+impl TreemapStyle {
+    pub fn is_default(&self) -> bool {
+        *self == TreemapStyle::default()
+    }
+
+    /// The layout and order of level `level` (0 = top).
+    pub fn level_setting(&self, level: usize) -> TreemapLevel {
+        if level > 0
+            && self.per_level_on
+            && let Some(l) = self.per_level.get(level - 1)
+        {
+            return *l;
+        }
+        TreemapLevel { layout: self.layout, order: self.order }
+    }
+}
+
+/// How the wedges of a sunburst ring are ordered (Plot Details Order; graphing spec 14.27).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SunburstOrder {
+    /// The order the categories first appear in the worksheet (Sheaf's default).
+    #[default]
+    Worksheet,
+    /// Largest first.
+    BySize,
+}
+
+fn start_90() -> f64 {
+    90.0
+}
+
+fn hole_30() -> f64 {
+    0.3
+}
+
+fn border_half() -> f64 {
+    0.5
+}
+
+/// The settings of a sunburst plot (Origin 2022 Sunburst plot, graphing spec 14.27). The plot's own Y column is the
+/// value column; the category columns are named here, the first the innermost ring. Every field is skipped when
+/// written while it has its default, so older files load unchanged.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SunburstStyle {
+    /// The category columns, first = innermost ring.
+    pub categories: Vec<ColumnId>,
+    /// Where the first wedge starts, in degrees counter-clockwise from 3 o'clock like Origin's pie rotation (default
+    /// 90: 12 o'clock); the wedges follow clockwise.
+    #[serde(default = "start_90")]
+    pub start_angle_deg: f64,
+    /// The hole in the middle as a fraction of the outer radius (0 to 0.9; default 0.3).
+    #[serde(default = "hole_30")]
+    pub hole: f64,
+    /// The gap between rings, in pt (default 0).
+    pub ring_gap_pt: f64,
+    /// The width of the border round each wedge, in pt (white; default 0.5).
+    #[serde(default = "border_half")]
+    pub border_pt: f64,
+    /// Write the category names in the wedges that have room (default on).
+    #[serde(default = "yes")]
+    pub show_names: bool,
+    /// Write the values in the wedges that have room (default off).
+    pub show_values: bool,
+    pub order: SunburstOrder,
+}
+
+impl Default for SunburstStyle {
+    fn default() -> SunburstStyle {
+        SunburstStyle {
+            categories: Vec::new(),
+            start_angle_deg: 90.0,
+            hole: 0.3,
+            ring_gap_pt: 0.0,
+            border_pt: 0.5,
+            show_names: true,
+            show_values: false,
+            order: SunburstOrder::Worksheet,
+        }
+    }
+}
+
+impl SunburstStyle {
+    pub fn is_default(&self) -> bool {
+        *self == SunburstStyle::default()
     }
 }

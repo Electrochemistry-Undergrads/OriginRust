@@ -1,6 +1,6 @@
 # ADR 0013: MCP attach mode, a live link from `sheaf-mcp` to the open desktop app
 
-Status: accepted (2026-11-15, macOS; built and merged). The Windows acceptance check named below (a second user account cannot read `mcp.json`, no firewall prompt for the loopback listener) is still to be run on the Windows machine. Task T25, phase 2.
+Status: accepted (2026-11-15, macOS and Windows). Windows live-app checks and effective-access evaluations for two non-owner accounts exposed inherited token-file access; the runtime permissions repair and validation are recorded in the Windows amendment below. Task T25, phase 2.
 Builds on ADR 0011.
 
 ## Context
@@ -236,8 +236,8 @@ A `sheaf-mcp` entry is added to the root `[workspace.dependencies]`.
 
 - **Other users on the computer.** On Unix the 0700 folder and the 0600 socket keep them out. On Windows
   the endpoint is a loopback port that any local user can reach; the 256-bit token, compared in constant
-  time, is the only barrier, and it sits in `mcp.json` under the user's profile folder (the folder's
-  access rights are inherited; they are not checked by Sheaf).
+  time, is the connection barrier. The Windows amendment below restricts its runtime folder/file
+  permissions to the process user, SYSTEM and administrators before publishing it.
 - **A web page.** A browser can send HTTP to a loopback port. The first line of a connection must be the
   hello with the token, so an HTTP request line closes the connection, and a page cannot know the token.
 - **A stale or planted socket.** The lock decides who listens; the folder checks refuse a folder that is
@@ -310,9 +310,9 @@ parts of the other two. The design critique then changed the transport.
 - An omitted sheet follows the owner's sheet tab. The result names the sheet used.
 - The app's undo limit is 100 steps and files written to disk are not undone.
 - Only one app instance per user can listen.
-- On Windows the folder's access rights are inherited from the profile and not checked, and the token
-  file is as safe as the profile. It must be verified on Windows (a second user account cannot read
-  `mcp.json`; a loopback bind raises no firewall prompt) before this ADR is accepted.
+- Windows acceptance found that profile inheritance can grant another local group token-file read
+  access. The Windows amendment below replaces that assumption with owned runtime objects and
+  protected DACLs, verified by native app/proxy and effective-access checks.
 - Follow-ups, not in phase 2: a snapshot worker for reads, `--attach=ID` for several instances, and
   `peer_cred` when it is stable. App context and Undo AI Changes are described in amendments below.
 
@@ -352,4 +352,36 @@ The command changes only the in-memory document through ordinary undo. Files wri
 stay on disk. It does not cancel queued calls, disconnect assistants or expose a new MCP tool;
 the existing AI Assistants toggle is how the owner stops further calls. Real-proxy/UI tests cover
 a whole AI batch, a manual-history boundary, editor/dialog guards, saved-state restoration and redo.
-The Windows endpoint acceptance checks and snapshot-worker follow-up remain separate.
+Windows endpoint acceptance is recorded in the Windows amendment below; the snapshot-worker follow-up remains separate.
+
+
+## Amendment: Windows runtime permissions and acceptance (2026-11-15)
+
+The baseline native app/proxy worked on Windows without a firewall prompt, but its discovery
+file inherited a read grant for another local group. Windows Authz evaluations for two actual
+non-owner local accounts, with their resolved groups, both granted file-data read access.
+Relying on the profile's inherited ACL therefore did not satisfy the acceptance condition.
+
+The app now verifies the runtime object's owner against its process token user and refuses
+reparse points. It protects only the selected runtime folder, lock and discovery file with
+allow entries for that user, SYSTEM and administrators. Missing parents may be created, but
+existing parent/profile/account permissions are not rewritten. The temporary token file is
+created with its protected descriptor atomically using CREATE_NEW, then rechecked before writing. A client verifies private
+folder/file permissions and refuses a broad or foreign-owned descriptor without repairing it.
+A filesystem that cannot establish these permissions cannot host this endpoint. The protocol,
+random token, proxy, queues and UI/history behavior are unchanged.
+
+The small Windows-only adapter uses the already-locked windows-sys 0.61 APIs. Native allocations
+and handles have RAII ownership; unsafe calls document buffer/pointer lifetimes. The permission
+operations follow [SetNamedSecurityInfoW](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-setnamedsecurityinfow),
+[CreateFileW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)
+and [SDDL descriptor conversion](https://learn.microsoft.com/en-us/windows/win32/api/sddl/nf-sddl-convertstringsecuritydescriptortosecuritydescriptorw).
+This supersedes the earlier no-unsafe/inherited-rights implementation decision for Windows.
+
+On the fixed native run, the same two accounts were denied FILE_READ_DATA and the owner was
+allowed. This used Windows Authz effective-access evaluation, without another interactive login
+or any account changes. The proxy listed tools and read app context, wrong-token/HTTP clients
+were refused, the listener was loopback-only, and no firewall prompt appeared. Both native
+processes exited cleanly and removed discovery; the captured app window was inspected.
+Five Windows regressions plus the existing discovery/transport/UI tests cover the contract.
+Administrators retain their normal machine-wide authority, as root does on Unix.

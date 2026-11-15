@@ -81,6 +81,26 @@ pub struct Style {
     pub x_label_angle: Option<f64>,
     pub bar_gap: Option<f64>,
     pub bar_overlap: Option<f64>,
+    /// Hexbin plots: the number of bins along X (and, for Derive X from Y, along Y).
+    pub hex_bins: Option<usize>,
+    /// Treemaps: the layout (squarified, squarified-plus, split, pivot-size, pivot-middle, pivot-split-size).
+    pub treemap_layout: Option<String>,
+    /// Treemaps: the order of the rectangles (categorical, alphabetical, size, or column:NAME).
+    pub treemap_order: Option<String>,
+    /// Treemaps: the levels shown (default: all).
+    pub treemap_depth: Option<usize>,
+    /// Treemaps: the gap between rectangles in pt (default 1.5).
+    pub treemap_gap: Option<f64>,
+    /// Sunburst plots: the start angle in degrees counter-clockwise from 3 o'clock (default 90).
+    pub sunburst_start: Option<f64>,
+    /// Sunburst plots: the hole as a percentage of the radius, 0 to 90 (default 30).
+    pub sunburst_hole: Option<f64>,
+    /// Sunburst plots: the gap between rings in pt, 0 to 20 (default 0).
+    pub sunburst_gap: Option<f64>,
+    /// Sunburst plots: names, values, both or none.
+    pub sunburst_labels: Option<String>,
+    /// Sunburst plots: worksheet or size.
+    pub sunburst_order: Option<String>,
     /// Text labels, each "TEXT@X,Y".
     pub label: Vec<String>,
     /// Shapes, each "KIND@X1,Y1,X2,Y2".
@@ -118,6 +138,9 @@ pub struct PlotSpec {
     pub overlay: bool,
     /// With `overlay`: draw only these workbooks (by name). Empty: every workbook of the project.
     pub overlay_books: Vec<String>,
+    /// Parallel plots: a parallel index's group column (default: the first text column of the sheet) or a parallel
+    /// plot's numeric colour column (default: the last Y column); `none` colours every line in the plot colour.
+    pub group: Option<String>,
     pub style: Style,
 }
 
@@ -145,6 +168,62 @@ impl PlotSpec {
         if !self.y2.is_empty() && self.template.as_deref().and_then(Template::from_name) == Some(Template::Ridgeline) {
             bail!("a ridgeline chart cannot have a right Y axis; leave out --y2 or choose another template");
         }
+        if self.template.as_deref().and_then(Template::from_name) == Some(Template::Hexbin) {
+            if !self.y2.is_empty() {
+                bail!("a hexbin plot cannot have a right Y axis; leave out --y2 or choose another template");
+            }
+            if self.panels.is_some() {
+                bail!("a hexbin plot cannot be made in panels; leave out --panels or choose another template");
+            }
+        }
+        if self.template.as_deref().and_then(Template::from_name).is_some_and(|t| t.is_parallel()) {
+            if !self.y2.is_empty() {
+                bail!("a parallel plot cannot have a right Y axis; leave out --y2 or choose another template");
+            }
+            if self.panels.is_some() {
+                bail!("a parallel plot cannot be made in panels; leave out --panels or choose another template");
+            }
+        }
+        let st = &self.style;
+        let treemap_option = st.treemap_layout.is_some()
+            || st.treemap_order.is_some()
+            || st.treemap_depth.is_some()
+            || st.treemap_gap.is_some();
+        let is_treemap = self.template.as_deref().and_then(Template::from_name) == Some(Template::Treemap);
+        if is_treemap {
+            if !self.y2.is_empty() {
+                bail!("a treemap cannot have a right Y axis; leave out --y2 or choose another template");
+            }
+            if self.panels.is_some() || self.graph.is_some() || self.overlay {
+                bail!(
+                    "a treemap cannot be made in panels, as an overlay or by styling a graph; leave those options out"
+                );
+            }
+        } else if treemap_option {
+            bail!("--treemap-layout, --treemap-order, --treemap-depth and --treemap-gap need -t treemap");
+        }
+        let sunburst_option = st.sunburst_start.is_some()
+            || st.sunburst_hole.is_some()
+            || st.sunburst_gap.is_some()
+            || st.sunburst_labels.is_some()
+            || st.sunburst_order.is_some();
+        if self.template.as_deref().and_then(Template::from_name) == Some(Template::Sunburst) {
+            if !self.y2.is_empty() {
+                bail!("a sunburst plot cannot have a right Y axis; leave out --y2 or choose another template");
+            }
+            if self.panels.is_some() || self.graph.is_some() || self.overlay {
+                bail!(
+                    "a sunburst plot cannot be made in panels, as an overlay or by styling a graph; leave those options out"
+                );
+            }
+        } else if sunburst_option {
+            bail!(
+                "--sunburst-start, --sunburst-hole, --sunburst-gap, --sunburst-labels and --sunburst-order need -t sunburst"
+            );
+        }
+        if self.group.is_some() && (self.graph.is_some() || self.panels.is_some()) {
+            bail!("--group cannot be combined with --graph or --panels");
+        }
         if !self.y2.is_empty() && self.template.as_deref().and_then(Template::from_name) == Some(Template::Waterfall) {
             bail!("a waterfall cannot have a right Y axis; leave out --y2 or choose another template");
         }
@@ -171,7 +250,15 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         if ys.is_empty() {
             bail!("there are no numeric Y columns to plot");
         }
-        if a.y2.is_empty() && template != Template::DoubleY {
+        if template.is_parallel() {
+            parallel_graph(project, book, sheet, template, &ys, a.group.as_deref())?
+        } else if template == Template::Treemap {
+            treemap_graph(project, book, sheet, &ys, a.group.as_deref(), &a.style)?
+        } else if template == Template::Sunburst {
+            sunburst_graph(project, book, sheet, &ys, a.group.as_deref(), &a.style)?
+        } else if a.group.is_some() {
+            bail!("--group needs -t parallel, -t parallel-index, -t treemap or -t sunburst");
+        } else if a.y2.is_empty() && template != Template::DoubleY {
             project.plot_columns(template, &ys)?
         } else {
             require_two_axes(&left, &right)?;
@@ -179,6 +266,180 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         }
     };
     apply_style(project, graph, &a.style, a.panels.is_some())?;
+    Ok(graph)
+}
+
+/// A Parallel Plot or Parallel Index of the numeric columns among `ys`; `group` names the group column of a parallel
+/// index or the colour column of a parallel plot (`none`: the plot colour), see [`PlotSpec::group`].
+fn parallel_graph(
+    project: &mut Project,
+    book: WindowId,
+    sheet: usize,
+    template: Template,
+    ys: &[ColumnId],
+    group: Option<&str>,
+) -> Result<WindowId> {
+    let Some(name) = group else {
+        return Ok(project.plot_columns(template, ys)?);
+    };
+    let axes: Vec<ColumnId> = ys.iter().copied().filter(|y| project.numeric(*y).is_some()).collect();
+    let color = if name.trim().eq_ignore_ascii_case("none") {
+        None
+    } else {
+        let id = named_columns(project, book, sheet, &[name.to_string()])?[0];
+        if template == Template::Parallel && project.numeric(id).is_none() {
+            bail!(
+                "--group {name}: the colour column of a parallel plot must be numeric (it colours the lines through a \
+                 colour ramp); to group by a text column use -t parallel-index"
+            );
+        }
+        Some(id)
+    };
+    Ok(project.plot_parallel(template, &axes, color)?)
+}
+
+/// A treemap: the last numeric column among `ys` is the value, the category columns (first = top level) are those
+/// named by `group` (comma-separated), else the text columns among `ys`, else every text column of the sheet.
+fn treemap_graph(
+    project: &mut Project,
+    book: WindowId,
+    sheet: usize,
+    ys: &[ColumnId],
+    group: Option<&str>,
+    style: &Style,
+) -> Result<WindowId> {
+    use sheaf_core::graph::{TreemapLayout, TreemapOrder};
+    let value = ys.iter().rev().copied().find(|y| project.numeric(*y).is_some()).ok_or_else(|| {
+        anyhow!("a treemap needs a numeric value column (the last numeric --y column; default: the last Y column)")
+    })?;
+    let mut categories: Vec<ColumnId> = match group {
+        Some(g) => {
+            let names: Vec<String> = g.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect();
+            if names.is_empty() {
+                bail!("--group needs one or more category column names, comma-separated");
+            }
+            named_columns(project, book, sheet, &names)?
+        }
+        None => ys.iter().copied().filter(|y| project.numeric(*y).is_none()).collect(),
+    };
+    if categories.is_empty() {
+        categories = project.treemap_default_categories(value);
+    }
+    if categories.contains(&value) {
+        bail!("the value column of a treemap cannot also be a category column");
+    }
+    let layout = match &style.treemap_layout {
+        Some(name) => Some(TreemapLayout::from_name(name).ok_or_else(|| {
+            let all: Vec<&str> = TreemapLayout::ALL.iter().map(|l| l.name()).collect();
+            anyhow!("--treemap-layout {name}: not a layout (choose one of {})", all.join(", "))
+        })?),
+        None => None,
+    };
+    let (order, order_column) = match style.treemap_order.as_deref().map(str::trim) {
+        None => (None, None),
+        Some(o) if o.eq_ignore_ascii_case("categorical") => (Some(TreemapOrder::Categorical), None),
+        Some(o) if o.eq_ignore_ascii_case("alphabetical") => (Some(TreemapOrder::Alphabetical), None),
+        Some(o) if o.eq_ignore_ascii_case("size") => (Some(TreemapOrder::BySize), None),
+        Some(o) => match o.strip_prefix("column:") {
+            Some(name) => {
+                (Some(TreemapOrder::ByColumn), Some(named_columns(project, book, sheet, &[name.to_string()])?[0]))
+            }
+            None => bail!("--treemap-order {o}: choose categorical, alphabetical, size or column:NAME"),
+        },
+    };
+    if let Some(d) = style.treemap_depth
+        && d == 0
+    {
+        bail!("--treemap-depth must be 1 or more (leave it out to show every level)");
+    }
+    if let Some(g) = style.treemap_gap
+        && !(g.is_finite() && (0.0..=20.0).contains(&g))
+    {
+        bail!("--treemap-gap must be between 0 and 20 pt (got {g})");
+    }
+    let graph = project.plot_treemap(&categories, value)?;
+    if let Some(p) = project.graph_mut(graph).and_then(|g| g.layers.first_mut()).and_then(|l| l.plots.first_mut()) {
+        let t = &mut p.treemap;
+        t.layout = layout.unwrap_or(t.layout);
+        t.order = order.unwrap_or(t.order);
+        t.order_column = order_column.or(t.order_column);
+        t.depth = style.treemap_depth.map(|d| d as u32).or(t.depth);
+        t.gap_pt = style.treemap_gap.unwrap_or(t.gap_pt);
+    }
+    Ok(graph)
+}
+
+/// A sunburst plot: the last numeric column among `ys` is the value, the category columns (first = innermost ring)
+/// are those named by `group` (comma-separated), else the text columns among `ys`, else every text column of the sheet.
+fn sunburst_graph(
+    project: &mut Project,
+    book: WindowId,
+    sheet: usize,
+    ys: &[ColumnId],
+    group: Option<&str>,
+    style: &Style,
+) -> Result<WindowId> {
+    use sheaf_core::graph::SunburstOrder;
+    let value = ys.iter().rev().copied().find(|y| project.numeric(*y).is_some()).ok_or_else(|| {
+        anyhow!(
+            "a sunburst plot needs a numeric value column (the last numeric --y column; default: the last Y column)"
+        )
+    })?;
+    let mut categories: Vec<ColumnId> = match group {
+        Some(g) => {
+            let names: Vec<String> = g.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect();
+            if names.is_empty() {
+                bail!("--group needs one or more category column names, comma-separated");
+            }
+            named_columns(project, book, sheet, &names)?
+        }
+        None => ys.iter().copied().filter(|y| project.numeric(*y).is_none()).collect(),
+    };
+    if categories.is_empty() {
+        categories = project.treemap_default_categories(value);
+    }
+    if categories.contains(&value) {
+        bail!("the value column of a sunburst plot cannot also be a category column");
+    }
+    if let Some(s) = style.sunburst_start
+        && !s.is_finite()
+    {
+        bail!("--sunburst-start must be a number of degrees");
+    }
+    if let Some(h) = style.sunburst_hole
+        && !(h.is_finite() && (0.0..=90.0).contains(&h))
+    {
+        bail!("--sunburst-hole must be between 0 and 90 percent (got {h})");
+    }
+    if let Some(g) = style.sunburst_gap
+        && !(g.is_finite() && (0.0..=20.0).contains(&g))
+    {
+        bail!("--sunburst-gap must be between 0 and 20 pt (got {g})");
+    }
+    let (names, values) = match style.sunburst_labels.as_deref().map(str::trim) {
+        None => (None, None),
+        Some(l) if l.eq_ignore_ascii_case("names") => (Some(true), Some(false)),
+        Some(l) if l.eq_ignore_ascii_case("values") => (Some(false), Some(true)),
+        Some(l) if l.eq_ignore_ascii_case("both") => (Some(true), Some(true)),
+        Some(l) if l.eq_ignore_ascii_case("none") => (Some(false), Some(false)),
+        Some(l) => bail!("--sunburst-labels {l}: choose names, values, both or none"),
+    };
+    let order = match style.sunburst_order.as_deref().map(str::trim) {
+        None => None,
+        Some(o) if o.eq_ignore_ascii_case("worksheet") => Some(SunburstOrder::Worksheet),
+        Some(o) if o.eq_ignore_ascii_case("size") => Some(SunburstOrder::BySize),
+        Some(o) => bail!("--sunburst-order {o}: choose worksheet or size"),
+    };
+    let graph = project.plot_sunburst(&categories, value)?;
+    if let Some(p) = project.graph_mut(graph).and_then(|g| g.layers.first_mut()).and_then(|l| l.plots.first_mut()) {
+        let s = &mut p.sunburst;
+        s.start_angle_deg = style.sunburst_start.unwrap_or(s.start_angle_deg);
+        s.hole = style.sunburst_hole.map_or(s.hole, |h| h / 100.0);
+        s.ring_gap_pt = style.sunburst_gap.unwrap_or(s.ring_gap_pt);
+        s.show_names = names.unwrap_or(s.show_names);
+        s.show_values = values.unwrap_or(s.show_values);
+        s.order = order.unwrap_or(s.order);
+    }
     Ok(graph)
 }
 
@@ -247,6 +508,11 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
     require_range("--x-label-angle", s.x_label_angle, -90.0, 90.0)?;
     require_range("--bar-gap", s.bar_gap, 0.0, 100.0)?;
     require_range("--bar-overlap", s.bar_overlap, -100.0, 100.0)?;
+    if let Some(n) = s.hex_bins
+        && !(2..=1000).contains(&n)
+    {
+        bail!("--hex-bins must be between 2 and 1000 (got {n})");
+    }
     let labels: Vec<(String, f64, f64)> = s.label.iter().map(|v| parse_label(v)).collect::<Result<_>>()?;
     let shapes: Vec<sheaf_core::shape::Shape> = s.draw.iter().map(|v| parse_draw(v)).collect::<Result<_>>()?;
     let x_labels = s.x_labels.as_deref().map(|text| x_label_source(project, graph, text)).transpose()?;
@@ -290,6 +556,14 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
         let bars = &mut g.layers[i].bars;
         bars.gap_pct = s.bar_gap.unwrap_or(bars.gap_pct);
         bars.overlap_pct = s.bar_overlap.unwrap_or(bars.overlap_pct);
+    }
+    if let Some(n) = s.hex_bins {
+        for &i in &styled {
+            for p in g.layers[i].plots.iter_mut().filter(|p| p.kind.is_hexbin()) {
+                p.hexbin.x.by = sheaf_core::graph::HexbinBy::Bins(n as u32);
+                p.hexbin.y.by = sheaf_core::graph::HexbinBy::Bins(n as u32);
+            }
+        }
     }
     style_plots(g, &styled, s, &colors, &trends);
     for &i in &mains {

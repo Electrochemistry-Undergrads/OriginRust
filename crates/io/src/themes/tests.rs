@@ -429,7 +429,7 @@ fn a_file_whose_themes_are_not_a_list_is_kept_aside_before_it_is_written_again()
 
 #[test]
 fn a_file_that_cannot_be_read_is_an_error_and_is_left_alone() {
-    let dir = scratch("unreadable");
+    let dir = scratch("unreadable-file");
     // A folder in the place of the file: reading it fails with something other than "not found".
     let file = Kind::Ascii.file(&dir);
     std::fs::create_dir_all(&file).unwrap();

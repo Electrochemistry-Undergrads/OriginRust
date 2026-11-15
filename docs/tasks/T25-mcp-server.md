@@ -1,6 +1,6 @@
 # T25: MCP server so Claude and other AI tools can use Sheaf
 
-**Status:** phase 2 done, merged 2026-11-15 (macOS session "mac-attach"; ADR 0013, `docs/spec/mcp.md` section 11): Tools > AI Assistants (MCP) or `sheaf-app --mcp` opens a per-user local endpoint (Unix socket in a 0700 folder; loopback TCP with a 256-bit token on Windows), `sheaf-mcp --attach` forwards tool calls to the open app, each change is one undo step "AI: <tool> <target>", a status-bar chip shows connected assistants, attached exports never overwrite files. Left for phase 2: the Windows acceptance check (ADR 0013). The owner can undo consecutive completed AI calls with Edit > Undo AI Changes (mcp.md 11.19). The read-only `sheaf://app` current-window/selection resource is available (mcp.md 11.18). Before that: phase 1 done and merged (2026-11-14, Windows); extended the same day: `sheaf-mcp` over stdio, the CLI's work in `sheaf-ops`, ADR 0011 (with its amendment), `docs/spec/mcp.md`, 16 tools, resources, prompts (`plot_cv_files`, `integrate_peak`, `fit_curve`), root confinement, paged reads, PNG image blocks. `analyze` reaches all 55 tools of `sheaf analyze`: 21 hand-mapped, 34 through the CLI's clap definitions (now in `sheaf_ops::args`, translated by `sheaf_ops::cli_analyze::job_from`; `crates/mcp/src/bridge.rs`), with a test that enumerates the subcommands and parity tests against the CLI code. Fixed: a `create` over another column's long name, replies to notifications, shared long names resolving to the first, the `.bak` of an Origin `.opj` written through a link. Extended again on macOS without Origin (`mcp-plot-fit`): `plot` and `fit` accept CLI-derived `options`, use shared CLI-to-library conversions, preserve the structured arguments and reject overlaps. Extended again (`mcp-new-sheet`): `analyze` accepts `output: new_sheet` through the shared core output path for both hand-mapped and bridged tools; sort/filter reject that setting, while intrinsic table tools keep their layouts. (CHI binary import through MCP, the 8 MB line cap and Windows junctions are tested: `T25-protocol-validation.md`.) Owner's request, 2026-11-14. **Size:** L. **Model:** Sonnet.
+**Status:** phase 2 done, merged 2026-11-15 (macOS session "mac-attach"; ADR 0013, `docs/spec/mcp.md` section 11): Tools > AI Assistants (MCP) or `sheaf-app --mcp` opens a per-user local endpoint (Unix socket in a 0700 folder; loopback TCP with a 256-bit token on Windows), `sheaf-mcp --attach` forwards tool calls to the open app, each change is one undo step "AI: <tool> <target>", a status-bar chip shows connected assistants, attached exports never overwrite files. Windows acceptance (2026-11-15) exposed inherited token-file read access; protected runtime DACLs and the fixed native/effective-access checks are recorded below (ADR 0013). The owner can undo consecutive completed AI calls with Edit > Undo AI Changes (mcp.md 11.19). The read-only `sheaf://app` current-window/selection resource is available (mcp.md 11.18). Before that: phase 1 done and merged (2026-11-14, Windows); extended the same day: `sheaf-mcp` over stdio, the CLI's work in `sheaf-ops`, ADR 0011 (with its amendment), `docs/spec/mcp.md`, 16 tools, resources, prompts (`plot_cv_files`, `integrate_peak`, `fit_curve`), root confinement, paged reads, PNG image blocks. `analyze` reaches all 55 tools of `sheaf analyze`: 21 hand-mapped, 34 through the CLI's clap definitions (now in `sheaf_ops::args`, translated by `sheaf_ops::cli_analyze::job_from`; `crates/mcp/src/bridge.rs`), with a test that enumerates the subcommands and parity tests against the CLI code. Fixed: a `create` over another column's long name, replies to notifications, shared long names resolving to the first, the `.bak` of an Origin `.opj` written through a link. Extended again on macOS without Origin (`mcp-plot-fit`): `plot` and `fit` accept CLI-derived `options`, use shared CLI-to-library conversions, preserve the structured arguments and reject overlaps. Extended again (`mcp-new-sheet`): `analyze` accepts `output: new_sheet` through the shared core output path for both hand-mapped and bridged tools; sort/filter reject that setting, while intrinsic table tools keep their layouts. (CHI binary import through MCP, the 8 MB line cap and Windows junctions are tested: `T25-protocol-validation.md`.) Owner's request, 2026-11-14. **Size:** L. **Model:** Sonnet.
 
 ## Windows portability follow-up (2026-11-15)
 
@@ -8,8 +8,7 @@ Strict Clippy accepts the directory argument used only by Unix sockets. The UI t
 exported filename and proxy-root fixtures compare displayed paths using the existing drive-prefix
 normalization, retaining their exact path checks. Formatting, strict workspace all-target Clippy
 and all 2,609 workspace tests pass on Windows (five existing ignored), including the attach
-UI, executor and real loopback-link tests. The separate desktop acceptance walkthrough in
-ADR 0013 remains open.
+UI, executor and real loopback-link tests. The Windows acceptance follow-up below supersedes the earlier inherited-permissions assumption.
 
 ## App context resource follow-up (2026-11-15)
 
@@ -136,3 +135,22 @@ as usual.)
 - Don't print anything but protocol messages to stdout; it corrupts the stdio stream.
 - Don't return whole large columns in one reply; page them.
 - Don't use the owner's real data files in committed tests (they are git-ignored inputs).
+
+
+## Windows endpoint acceptance and permissions repair (2026-11-15)
+
+The actual native app and stdio attach proxy were tested with isolated configuration and
+synthetic runtime files. The initial descriptor inherited another local group's read access.
+Windows Authz effective-access checks for two existing non-owner accounts granted data read;
+with protected runtime DACLs, both are denied and the owner is allowed. The app restricts only
+its owned runtime folder, lock and token file, and the client refuses broad permissions without
+changing them. No account or parent/profile permission is changed. The native run used loopback
+only, refused wrong-token/HTTP requests, exposed tools/app context, raised no firewall prompt,
+and exited with discovery removed. A window capture was inspected. No second interactive login
+was performed; the other-account checks use their SIDs and Windows-resolved group memberships.
+Five Windows-only regressions and the existing discovery controls cover this behavior.
+
+Validation on combined Go To/hexbin main `8c4fa2a`: formatting, strict workspace
+all-target Clippy and 3,006 tests pass (eight existing ignored). All eleven focused
+discovery tests pass, including the five new Windows regressions; final native app/proxy
+and effective-access checks passed with atomic private file creation.

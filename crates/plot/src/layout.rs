@@ -34,7 +34,7 @@ use sheaf_core::{Project, WindowId};
 /// Builds the scene of a graph.
 pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasurer) -> Result<Scene, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    let pds: Vec<LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
+    let pds: Vec<LayerData> = data::collect_graph(project, g);
     let geoms = graph_geometry(project, g, &pds, m);
     let x_titles = title_places(project, g, &geoms, &pds, Dim::X, m);
     let y_titles = title_places(project, g, &geoms, &pds, Dim::Y, m);
@@ -102,6 +102,27 @@ pub(crate) fn graph_geometry(
     pds: &[LayerData],
     m: &dyn TextMeasurer,
 ) -> Vec<LayerGeometry> {
+    let mut geoms = graph_geometry_once(project, g, pds, m);
+    // Hexbin: the axis range comes from the binning for the nominal frame, the drawing bins for the real
+    // one (narrowed by the colour scale). Widen the range to the hexagons as drawn until they fit.
+    for _ in 0..6 {
+        let mut grew = false;
+        for (d, geom) in pds.iter().zip(&geoms) {
+            for pd in &d.plots {
+                if let Some(h) = &pd.hex {
+                    grew |= h.grow_to_drawn(&pd.plot.hexbin, geom);
+                }
+            }
+        }
+        if !grew {
+            break;
+        }
+        geoms = graph_geometry_once(project, g, pds, m);
+    }
+    geoms
+}
+
+fn graph_geometry_once(project: &Project, g: &Graph, pds: &[LayerData], m: &dyn TextMeasurer) -> Vec<LayerGeometry> {
     let mut out: Vec<Option<LayerGeometry>> = vec![None; g.layers.len()];
     for root in 0..g.layers.len() {
         if g.root_of(root) == root {
@@ -349,6 +370,11 @@ fn group_geometry(
             edges.bottom = edges.bottom.max(b);
             continue;
         }
+        if pds[i].plots.iter().any(|pd| pd.plot.kind.is_parallel()) {
+            // The axes of a parallel plot are its own: its labels, titles and colour scale or legend.
+            crate::parallel::label_edges(&mut edges, &g.layers[i], &pds[i].plots, f, m);
+            continue;
+        }
         label_edges(&mut edges, &g.layers[i], f, x, y, m, stack::waterfall(g, i).is_some());
     }
     // A linked X:Y ratio is not given up to keep the labels on the page.
@@ -394,11 +420,11 @@ fn group_geometry(
 
 /// The outermost extent of the tick labels and titles of a group, in page points.
 #[derive(Copy, Clone, Debug)]
-struct LabelEdges {
-    left: f64,
-    right: f64,
-    top: f64,
-    bottom: f64,
+pub(crate) struct LabelEdges {
+    pub left: f64,
+    pub right: f64,
+    pub top: f64,
+    pub bottom: f64,
 }
 
 impl LabelEdges {
@@ -461,6 +487,14 @@ fn label_edges(
             AxisSide::Normal => e.top = e.top.min(f.y - across),
             _ => e.bottom = e.bottom.max(f.y + f.h + across),
         }
+    }
+    // The colour scale of a hexbin plot beside the frame.
+    if layer.display.show_data && layer.plots.iter().any(|p| p.visible && p.kind.is_hexbin()) {
+        e.right = e.right.max(f.x + f.w + crate::hexbin::scale_reserve(ya.tick_font.size_pt));
+    }
+    // The colour scale of a sunburst plot beside the frame.
+    if layer.display.show_data && layer.plots.iter().any(|p| p.visible && p.kind == PlotKind::Sunburst) {
+        e.right = e.right.max(f.x + f.w + crate::hexbin::scale_reserve(ya.tick_font.size_pt));
     }
     let y_size = ya.title_font.size_pt;
     match ya.side {
@@ -644,7 +678,9 @@ fn layer_scene(
         y_axis = Axis { show_opposite: false, opposite_ticks: false, ..layer.y_axis.clone() };
         (&x_axis, &y_axis)
     } else {
-        if geom.polar.is_some() {
+        if pds.iter().any(|pd| pd.plot.kind.is_parallel()) {
+            // The vertical axes are drawn with the plots; the layer's own grid has no axes to follow.
+        } else if geom.polar.is_some() {
             polar::draw_grid(&mut scene.grid, layer, geom);
         } else if geom.ternary.is_some() {
             ternary::draw_grid(&mut scene.grid, layer, geom);
@@ -655,6 +691,7 @@ fn layer_scene(
     };
     // Display tab: Show Elements Data off draws no plot.
     let drawn: &[PlotData] = if layer.display.show_data { pds } else { &[] };
+    crate::hexbin::share_max(drawn, geom);
     match waterfall {
         None => {
             // Ridgelines are drawn back to front: the highest baseline first, so that nearer ridges
@@ -732,6 +769,26 @@ fn layer_scene(
     let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
         hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)
     };
+    if pds.iter().any(|pd| pd.plot.kind.is_parallel()) {
+        // Parallel Plot and Parallel Index: the layer's X and Y axes are not drawn; one vertical axis per column.
+        let start = out.len();
+        if layer.display.show_data && layer.display.show_y_axes {
+            crate::parallel::draw_axes(out, layer, pds, geom, m);
+        }
+        rec(objects, out, start, ObjectKind::YAxis, &[]);
+        if layer.display.show_data {
+            // The colour scale and the legend of the groups are the layer's legend: pickable and movable as one.
+            let start = out.len();
+            crate::parallel::draw_scale(out, layer, pds, geom, m);
+            crate::parallel::draw_legend(out, layer, pds, f, m);
+            rec(objects, out, start, ObjectKind::Legend, &[]);
+        }
+        if layer.display.data_on_top {
+            scene.underlay_len = out.len();
+        }
+        draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
+        return scene;
+    }
     if geom.ternary.is_some() {
         let start = out.len();
         ternary::draw_axes(out, project, layer, pds, geom, m);
@@ -803,6 +860,10 @@ fn layer_scene(
     rec(objects, out, start, ObjectKind::YTitle, &[]);
     if layer.display.data_on_top {
         scene.underlay_len = out.len();
+    }
+    if layer.display.show_data {
+        crate::hexbin::draw_scale(out, layer, pds, geom, m);
+        crate::sunburst::draw_scale(out, layer, pds, geom, m);
     }
     draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
     scene
@@ -1042,7 +1103,7 @@ fn draw_additional_lines(out: &mut Vec<Item>, xa: &Axis, ya: &Axis, geom: &Layer
 
 /// The part of a tick on one side of the axis line: `(from, to)` offsets in
 /// the direction pointing into the frame (negative is outwards).
-fn tick_span(dir: TickDirection, len: f64) -> Option<(f64, f64)> {
+pub(crate) fn tick_span(dir: TickDirection, len: f64) -> Option<(f64, f64)> {
     match dir {
         TickDirection::In => Some((0.0, len)),
         TickDirection::Out => Some((0.0, -len)),
@@ -1113,7 +1174,7 @@ fn draw_ticks(out: &mut Vec<Item>, axis: &Axis, resolved: &ResolvedAxis, f: Rect
 
 // ----- tick labels and titles ----------------------------------------------------------------
 
-fn label_gap(axis: &Axis) -> f64 {
+pub(crate) fn label_gap(axis: &Axis) -> f64 {
     0.35 * axis.tick_font.size_pt
 }
 
@@ -1383,7 +1444,8 @@ fn draw_legend(
     ticks: &EdgeTicks,
     m: &dyn TextMeasurer,
 ) {
-    if !lg.visible || entries.is_empty() {
+    // A parallel plot's legend lists its groups, not its axes (`parallel::draw_legend`).
+    if !lg.visible || entries.is_empty() || entries.iter().any(|pd| pd.plot.kind.is_parallel()) {
         return;
     }
     let fs = lg.font.size_pt;
@@ -1471,6 +1533,10 @@ fn draw_legend(
     let m_right = 0.8 * fs + ticks.right.unwrap_or(0.0);
     let m_top = 0.8 * fs + ticks.top.unwrap_or(0.0);
     let (x0, y0) = match lg.position {
+        LegendPosition::Automatic => {
+            let (x, y) = Legend::AUTOMATIC_ANCHOR;
+            (f.x + x * f.w, f.y + y * f.h)
+        }
         LegendPosition::TopLeft => (f.x + m_left, f.y + m_top),
         LegendPosition::TopRight => (f.x + f.w - m_right - w, f.y + m_top),
         LegendPosition::BottomLeft => (f.x + m_left, f.y + f.h - m_bottom - h),

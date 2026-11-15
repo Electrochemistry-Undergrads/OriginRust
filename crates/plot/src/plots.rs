@@ -33,7 +33,7 @@ const SMOOTH_MAX_SUB: usize = 128;
 
 /// The stroke of a data line.
 pub(crate) fn line_stroke(line: &LineStyle) -> Stroke {
-    let dash: Vec<f64> = line.dash.pattern().iter().map(|m| m * line.width_pt).collect();
+    let dash = crate::dash::lengths(line.dash, line.width_pt);
     let cap = if dash.is_empty() { Cap::Round } else { Cap::Butt };
     Stroke { color: line.color, width: line.width_pt, dash, cap, join: Join::Round }
 }
@@ -51,6 +51,18 @@ pub(crate) fn draw_plot(
     m: &dyn TextMeasurer,
 ) {
     let plot = pd.plot;
+    if plot.kind.is_parallel() {
+        crate::parallel::draw_parallel(out, pd, geom);
+        return;
+    }
+    if plot.kind == PlotKind::Treemap {
+        crate::treemap::draw_treemap(out, pd, geom, m);
+        return;
+    }
+    if plot.kind == PlotKind::Sunburst {
+        crate::sunburst::draw_sunburst(out, pd, geom, m);
+        return;
+    }
     if plot.kind == PlotKind::Pie {
         draw_pie(out, pd, geom);
         return;
@@ -91,6 +103,8 @@ pub(crate) fn draw_plot(
         crate::violin::draw_violin(out, pd, geom);
     } else if plot.kind.is_ridgeline() {
         crate::ridgeline::draw_ridge(out, pd, geom);
+    } else if plot.kind.is_hexbin() {
+        crate::hexbin::draw_hexbin(out, pd, geom);
     } else if plot.kind.is_bar() {
         draw_columns(out, pd, geom);
     }
@@ -1150,7 +1164,7 @@ const BUBBLE_MAX_PT: f64 = 20.0;
 
 /// The colour of a colour mapped symbol at `t` in 0..1: blue, cyan, green, yellow, red (a stand-in:
 /// Origin's default colour map was not measured).
-fn map_color(t: f64) -> sheaf_core::Color {
+pub(crate) fn map_color(t: f64) -> sheaf_core::Color {
     const STOPS: [(f64, f64, f64); 5] =
         [(0.0, 0.0, 255.0), (0.0, 255.0, 255.0), (0.0, 255.0, 0.0), (255.0, 255.0, 0.0), (255.0, 0.0, 0.0)];
     let x = t.clamp(0.0, 1.0) * (STOPS.len() - 1) as f64;

@@ -39,6 +39,16 @@ pub fn style_spec(s: &StyleArgs) -> Style {
         x_label_angle: s.x_label_angle,
         bar_gap: s.bar_gap,
         bar_overlap: s.bar_overlap,
+        hex_bins: s.hex_bins,
+        treemap_layout: s.treemap_layout.clone(),
+        treemap_order: s.treemap_order.clone(),
+        treemap_depth: s.treemap_depth,
+        treemap_gap: s.treemap_gap,
+        sunburst_start: s.sunburst_start,
+        sunburst_hole: s.sunburst_hole,
+        sunburst_gap: s.sunburst_gap,
+        sunburst_labels: s.sunburst_labels.clone(),
+        sunburst_order: s.sunburst_order.clone(),
         label: s.label.clone(),
         draw: s.draw.clone(),
     }
@@ -71,6 +81,7 @@ pub fn plot_spec(a: &PlotArgs) -> PlotSpec {
         }),
         overlay: a.inputs.len() > 1,
         overlay_books: Vec::new(),
+        group: a.group.clone(),
         style: style_spec(&a.style),
     }
 }

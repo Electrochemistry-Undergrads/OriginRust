@@ -55,6 +55,46 @@ impl Graph {
         out
     }
 
+    /// Renumbers every column id stored anywhere in this graph through `f`: the plots' X, Y, error,
+    /// base, size and colour columns, label columns, treemap and sunburst categories, the treemap order column, the
+    /// parallel colour/group column, the plot offsets and their follows, the tick-label columns of
+    /// the axes and the plot choice of the rugs. Every path that renumbers columns (File > Append,
+    /// ...) goes through this; a new field that holds a [`ColumnId`] is added here.
+    pub fn remap_columns(&mut self, f: &dyn Fn(ColumnId) -> ColumnId) {
+        for layer in &mut self.layers {
+            for p in &mut layer.plots {
+                p.y = f(p.y);
+                for id in [&mut p.x, &mut p.y_error, &mut p.x_error, &mut p.y_base, &mut p.size_from, &mut p.color_from]
+                {
+                    *id = id.map(f);
+                }
+                if let LabelForm::Column { column } = &mut p.decor.labels.form {
+                    *column = f(*column);
+                }
+                p.parallel.color = p.parallel.color.map(f);
+                for c in &mut p.treemap.categories {
+                    *c = f(*c);
+                }
+                p.treemap.order_column = p.treemap.order_column.map(f);
+                for c in &mut p.sunburst.categories {
+                    *c = f(*c);
+                }
+            }
+            for o in &mut layer.plot_offsets {
+                o.column = f(o.column);
+                o.follows = o.follows.map(f);
+            }
+            for axis in [&mut layer.x_axis, &mut layer.y_axis] {
+                if let TickLabelSource::Column { column } = &mut axis.tick_label_source {
+                    *column = f(*column);
+                }
+                for rug in [&mut axis.rug, &mut axis.rug_opposite] {
+                    rug.plot = rug.plot.map(f);
+                }
+            }
+        }
+    }
+
     /// The parent of layer `index` when the layer has a valid link: the parent comes earlier in
     /// the list and is not linked itself. A layer with an invalid link (to itself, to a later or
     /// missing layer, or to a linked layer) is drawn as an independent layer.
@@ -730,6 +770,28 @@ impl Layer {
         self.plots.iter().find(|p| p.kind == PlotKind::Ridgeline).map(|p| p.ridge.clone()).unwrap_or_default()
     }
 
+    /// The hexbin settings a plot added to this layer starts with: those of its first hexbin plot, else the
+    /// defaults.
+    pub fn inherited_hexbin(&self) -> HexbinStyle {
+        self.plots.iter().find(|p| p.kind == PlotKind::Hexbin).map(|p| p.hexbin).unwrap_or_default()
+    }
+
+    /// The parallel settings a plot added to this layer starts with: those of its first parallel plot, else the
+    /// defaults.
+    pub fn inherited_parallel(&self) -> ParallelStyle {
+        self.plots.iter().find(|p| p.kind.is_parallel()).map(|p| p.parallel).unwrap_or_default()
+    }
+
+    /// The sunburst settings a plot added to this layer starts with: those of its first sunburst plot, else the defaults.
+    pub fn inherited_sunburst(&self) -> SunburstStyle {
+        self.plots.iter().find(|p| p.kind == PlotKind::Sunburst).map(|p| p.sunburst.clone()).unwrap_or_default()
+    }
+
+    /// The treemap settings a plot added to this layer starts with: those of its first treemap plot, else the defaults.
+    pub fn inherited_treemap(&self) -> TreemapStyle {
+        self.plots.iter().find(|p| p.kind == PlotKind::Treemap).map(|p| p.treemap.clone()).unwrap_or_default()
+    }
+
     /// Recolors the plots whose color still comes from the palette, in plot order, and leaves
     /// colors chosen by hand alone. Used when plots are added or removed: with a palette that
     /// spreads its colors over the number of plots, every automatic color moves along.
@@ -1379,6 +1441,21 @@ pub enum PlotKind {
     /// Origin's ridgeline chart (2022, ridgeline.OTPU): the plot's Y column as a density curve on
     /// a baseline at its column index (graphing spec 14.23).
     Ridgeline,
+    /// Origin's hexbin plot (2027, Hexbin.OTPU): the plot's X and Y columns binned into hexagons coloured by
+    /// the number of points in each (graphing spec 14.24).
+    Hexbin,
+    /// Origin's Parallel Plot (2019, Parallel.otpu): the plot's Y column is one vertical axis; every row is a
+    /// line through the axes of all the layer's parallel plots, coloured by a numeric column (graphing spec 14.25).
+    Parallel,
+    /// Origin's Parallel Index: like [`PlotKind::Parallel`], with the lines coloured by the group (the text of a
+    /// column) of their row, and a legend of the groups.
+    ParallelIndex,
+    /// Origin's Treemap plot (2025b, treemap.otpu): the plot's Y column is the value, the category columns of its
+    /// [`TreemapStyle`] the nested levels (graphing spec 14.26).
+    Treemap,
+    /// Origin's Sunburst plot (2022, Sunburst.OTP): the plot's Y column is the value, the category columns of its
+    /// [`SunburstStyle`] the rings, the first innermost (graphing spec 14.27).
+    Sunburst,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,
@@ -1413,6 +1490,16 @@ impl PlotKind {
     /// True for the kinds drawn as a distribution per plot at 1, 2, 3, ...: box chart and violins.
     pub fn is_distribution(&self) -> bool {
         *self == PlotKind::Box || self.is_violin() || self.is_ridgeline()
+    }
+
+    /// True for [`PlotKind::Parallel`] and [`PlotKind::ParallelIndex`].
+    pub fn is_parallel(&self) -> bool {
+        matches!(self, PlotKind::Parallel | PlotKind::ParallelIndex)
+    }
+
+    /// True for [`PlotKind::Hexbin`].
+    pub fn is_hexbin(&self) -> bool {
+        *self == PlotKind::Hexbin
     }
 
     /// True for [`PlotKind::Ridgeline`].
@@ -1571,6 +1658,18 @@ pub struct Plot {
     /// The settings of a ridgeline plot (graphing spec 14.23).
     #[serde(default, skip_serializing_if = "RidgelineStyle::is_default")]
     pub ridge: RidgelineStyle,
+    /// The bin settings of a hexbin plot (graphing spec 14.24).
+    #[serde(default, skip_serializing_if = "HexbinStyle::is_default")]
+    pub hexbin: HexbinStyle,
+    /// The settings of a Parallel Plot or Parallel Index (graphing spec 14.25).
+    #[serde(default, skip_serializing_if = "ParallelStyle::is_default")]
+    pub parallel: ParallelStyle,
+    /// The settings of a treemap plot (graphing spec 14.26).
+    #[serde(default, skip_serializing_if = "TreemapStyle::is_default")]
+    pub treemap: TreemapStyle,
+    /// The settings of a sunburst plot (graphing spec 14.27).
+    #[serde(default, skip_serializing_if = "SunburstStyle::is_default")]
+    pub sunburst: SunburstStyle,
     /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's
     /// Z column of a Bubble plot).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2004,6 +2103,8 @@ fn yes() -> bool {
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum LegendPosition {
+    /// Stock Line/Scatter/Line+Symbol/Column upper-left anchor (graphing spec 2.4).
+    Automatic,
     TopRight,
     TopLeft,
     BottomRight,
@@ -2047,6 +2148,10 @@ fn is_one_column(c: &u32) -> bool {
 }
 
 impl Legend {
+    /// Upper-left fractions of the layer frame, measured in Origin 2016. The rectangle grows
+    /// right/down as its text, rows or columns change; it is not a centre or right-edge anchor.
+    pub const AUTOMATIC_ANCHOR: (f64, f64) = (0.8223, -0.1044);
+
     /// The automatic legend text for plots with these ids (see [`Legend::text`]): a symbol and a
     /// name per line.
     pub fn automatic_text<S: AsRef<str>>(ids: &[S]) -> String {
@@ -2422,6 +2527,10 @@ mod tests {
             error: ErrorStyle::default(),
             hist: Default::default(),
             ridge: Default::default(),
+            hexbin: Default::default(),
+            parallel: Default::default(),
+            treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2463,6 +2572,10 @@ mod tests {
             error: ErrorStyle::default(),
             hist: Default::default(),
             ridge: Default::default(),
+            hexbin: Default::default(),
+            parallel: Default::default(),
+            treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2581,6 +2694,10 @@ mod tests {
             error: ErrorStyle::default(),
             hist: Default::default(),
             ridge: Default::default(),
+            hexbin: Default::default(),
+            parallel: Default::default(),
+            treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2772,6 +2889,10 @@ mod style_tests {
             error: ErrorStyle::default(),
             hist: Default::default(),
             ridge: Default::default(),
+            hexbin: Default::default(),
+            parallel: Default::default(),
+            treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),

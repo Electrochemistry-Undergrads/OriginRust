@@ -5,6 +5,8 @@ fn scratch(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("sl-d-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
+    #[cfg(windows)]
+    check_dir(&dir, true).unwrap();
     dir
 }
 

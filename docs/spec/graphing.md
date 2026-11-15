@@ -125,8 +125,53 @@ The byte layout is [INF], cross-checked on "Q03 Rainbow7", which decodes to red,
 - Axis line color Auto = darker shade of plot fill; if no fill, of border; else follows line color [W:axesref-lineticks].
 - Anti-aliasing covers plots, axes/grid and line objects; purely horizontal/vertical lines are never anti-aliased [W:options-dialog-graph-tab].
 
+#### Thin-width dash follow-up (2026-11-15, Origin 2016)
+
+A verified two-row vector (`newbook; wks.nCols=2; col(A)=data(1,2,1);
+col(B)=col(A)*0+1; plotxy iy:=(1,2) plot:=200;`) avoids the empty-line result
+from assigning a scalar Y value. Set X to 1..2, Y to 0..2, hide axes/labels,
+remove the legend and set blue (`set %C -c 4`). For each of the seven dashed
+styles, set `-d` and `-w` separately and read them back. The 35 PNG cases at
+3200 px cover 0.5, 1, 1.5, 2 and 3 pt. A further 24 PNG cases at 1600/6400 px,
+14 thin-line cases at 6400 px, six EPS/PDF pairs and 35 EMFs succeeded. The first
+35 blank-line exports and six unsupported SVG exports are excluded. All data
+and outputs are synthetic; only numerical drawing behavior is used.
+
+At 6400 px, the visible on/off runs in points are approximately:
+
+| Style | 0.5 pt pen: on, off, ... | 1 pt pen: on, off, ... |
+|---|---|---|
+| Dash | 3.24, 2.40 | 5.88, 4.32 |
+| Dot | 1.32, 2.16 | 2.28, 3.84 |
+| Dash Dot | 3.84, 0.96, 1.32, 1.08 | 6.84, 1.80, 2.28, 1.92 |
+| Dash Dot Dot | 3.00, 0.96, 1.32, 0.96, 1.32, 1.08 | 5.40, 1.80, 2.28, 1.80, 2.28, 1.92 |
+| Short Dash | 1.80, 0.84 | 3.24, 1.44 |
+| Short Dot | 0.96, 0.36 | 1.80, 0.48 |
+| Short Dash Dot | 2.64, 0.48, 0.96, 0.60 | 4.68, 0.84, 1.80, 0.96 |
+
+These are visible lengths, not a recovered pen formula. Raster on/off lengths
+shift by about a pixel when resolution changes, even when their sum stays the
+same: 0.5 pt Dash at 1600 px is about 2.64/3.00 pt, versus 3.24/2.40 at 6400 px.
+PDF/EMF use separate round-ended segments and quantized pen widths; for example,
+PDF's requested 0.5/1/1.5 pt widths become about 0.72/1.20/1.68 pt. The complete
+width rule is therefore not inferred from a single bitmap, and a global minimum
+pattern length would not describe the observations.
+
+**Sheaf decision:** the shared line-stroke conversion uses the visible 0.5/1 pt
+samples above, interpolates between them, and interpolates from 1 to the existing
+`Dash::pattern` times 1.5 at 1.5 pt. Below 0.5 pt it scales the half-point sample
+proportionally. These intermediate/below-range rules are deliberate approximations,
+not measured Origin rules. At 1.5 pt and above, the previous ratios stay unchanged.
+Every existing caller of that stroke conversion (including legend samples) gets
+the same absolute-point array; fill-border strokes that use `Dash::pattern`
+directly retain their earlier ratios. Sheaf keeps its existing butt-ended dashed
+strokes and requested pen width; Origin's round caps and backend-specific width
+rounding remain fidelity differences. No file/model fields or plot geometry change.
+The raster regressions compare all seven thin styles at two resolutions, with
+SVG/EPS/EMF unit-conversion and normal-width/continuity controls.
+
 ### 2.2 Font, width, size defaults (U3 measured 2026-11-13)
-Measured on a fresh `plotxy` with `?layer.x.label.pt`, `?layer.x.thickness`, `get %C -z` (symbol size), `get %C -w` (line width x 500), `get %C -k` (shape), and from PNG exports at 3200 px (4.145 px per pt): page 6432 x 4923 units of 1/600 in (10.72 x 8.205 in); layer frame left 17.91 %, top 11.58 %, width 68.16 %, height 71.83 % (`layer.left/top/width/height`); tick labels 18 pt, axis titles about 22 pt (cap height 66 px), legend text about 22 pt, all Arial; axis line 1.5 pt; major tick 9 pt and minor 4.5 pt long (pixels), direction out, bottom and left only, one minor tick; data line 0.5 pt (`get -w` = 250); symbol square, 9 pt, solid; legend has a black frame. Sheaf's generic templates copy all of these (page 10.72 x 8.205 in); the legend position is Sheaf's own (inside the frame). Earlier recommendation, kept for the record:
+Measured on a fresh `plotxy` with `?layer.x.label.pt`, `?layer.x.thickness`, `get %C -z` (symbol size), `get %C -w` (line width x 500), `get %C -k` (shape), and from PNG exports at 3200 px (4.145 px per pt): page 6432 x 4923 units of 1/600 in (10.72 x 8.205 in); layer frame left 17.91 %, top 11.58 %, width 68.16 %, height 71.83 % (`layer.left/top/width/height`); tick labels 18 pt, axis titles about 22 pt (cap height 66 px), legend text about 22 pt, all Arial; axis line 1.5 pt; major tick 9 pt and minor 4.5 pt long (pixels), direction out, bottom and left only, one minor tick; data line 0.5 pt (`get -w` = 250); symbol square, 9 pt, solid; legend has a black frame. Sheaf's generic templates copy all of these (page 10.72 x 8.205 in); the four measured stock legend positions follow section 2.4; other template positions remain separate. Earlier recommendation, kept for the record:
 No public page and no installed text file gives them. [REC] Arial; axis titles, tick labels and legend 22 pt on the stock page; data line 1.5 pt; axis line 1.5 pt; major tick 9 pt, minor 4.5 pt; symbol 9 pt. Weak support: themes "Black on paper" and "Physical Review Letters" contain the numbers 1.5 and 8 [F:Themes\Graph]. 
 
 ### 2.3 Scale elements
@@ -152,19 +197,30 @@ anchor, in fractions of the frame from its upper-left, is approximately **(0.822
 It is calculated from `legend.x1/y1` and the axis ranges: `x=(x1-xfrom)/(xto-xfrom)` and
 `y=1-(y1-yfrom)/(yto-yfrom)`. In the ordinary 0..6 by 1..11 Line case, x1=4.933850365,
 y1=12.043552036. Scatter/Line+Symbol and Column give the same fractions with different ranges.
+The stock legend is opaque white: in the four-curve export the blue curve stops precisely
+at its frame; a further Column export with both axis sides enabled also hides the upper
+frame line behind it. Both visual checks use the same default legend. The four measured
+template defaults therefore use a white background, preventing a frame line crossing the text.
+
 The anchor remains fixed when rows or text widen the legend: it grows right/down, can extend
 past the page with a long label, and four entries cross the upper frame edge. A single entry
 is above the frame in Origin. The resized-layer/page PNGs follow the same relative anchor;
 raw `legend.left/top` retain cached page coordinates, so they are not used to infer resizing.
 
-Implementation decision: new graphs from those four templates will use an **Automatic**
+New graphs from those four templates use an **Automatic**
 legend position with that upper-left anchor. Existing corner/manual positions and the CV,
-Double-Y and other template placements stay as saved. The existing position chooser will
-show/reset Automatic. Native/companion files retain it, and the `.opj` writer places its
-legend rectangle at the same anchor. Text measurement, padding, row spacing, sample size,
-fonts, frame styles and manual dragging remain the current renderer's behavior; this copies
+Double-Y and other template placements stay as saved. The existing position chooser shows and resets Automatic. Native files retain it. The `.opj` writer places its rectangle at the same anchor and reports
+that raw import uses a fixed centre; a companion retains Automatic for later Sheaf text/column
+changes. Text measurement, padding, row spacing, sample size,
+fonts, other frame styles and manual dragging remain the current renderer's behavior; this copies
 placement, and does not claim identical legend dimensions. Double-Y's smaller page-attached
 legend is a separate measured difference, outside this change.
+
+A generated `.opj` reopened in Origin 2016 with the same anchor (0.822308, -0.104355).
+Both its original and a longer edited legend exported successfully and were inspected; the
+longer label retained its upper-left point. Five regressions cover the measured templates,
+content/columns/font and layer/page changes, the position chooser with Cancel/Undo/Redo,
+native/companion saves and raw `.opj` rectangle placement.
 
 The probe uses the documented [graphical object coordinates](https://docs.originlab.com/labtalk/guide/creating-and-accessing-graphical-objs/)
 and [expGraph](https://docs.originlab.com/x-function/ref/expgraph/); measurements above come
@@ -1746,6 +1802,308 @@ Origin's documented facts (from its help, not measured; no Origin was at hand; [
   UI menu and Plot Details tests, `.opj` warning test.
 - Not done: grouped and indexed-data ridgelines, ordering by something other than column index, jitter, quantile line
   style and per-line colours, other curve types than Kernel Smooth, a ridgeline toolbar button, Origin's real defaults.
+
+### 14.24 Hexbin plot (T45)
+
+Origin's documented facts (Origin 2027 help, not measured; no Origin was at hand; [W:Origin 2027 page],
+[W:origin-help/hexbin-plot]):
+
+- New graph type "Hexbin Plot" in 2027 (with "Binned Scatter Plot"). Menu "Plot > Contour, Heatmap: Hexbin", template
+  `Hexbin.OTPU`; input XY or XYZ columns, a virtual matrix or a matrix. "The color represents the number of data points
+  within each bin."
+- Bin controls per axis: Min Center, Max Center, Bin Spacing, Number of Bins. "Prefer Regular Hexagons" is checked by
+  default and only works for a square (1:1) layer frame. "Derive Y from X" (default) or "Derive X from Y" picks the axis
+  computed from the other.
+- Not documented (Sheaf's choices, unmeasured): default number of bins, colour map, empty bins, orientation, the exact
+  tie rule, colour scale look and placement, what happens to points outside Min and Max Center.
+
+**What Sheaf does** (everything else is Sheaf's choice, unmeasured):
+
+- `PlotKind::Hexbin`, `Template::Hexbin` (`hexbin`, "Hexbin", legend hidden: the colour scale names the colours),
+  per-plot `Plot::hexbin` (`HexbinStyle`, skipped when default): per axis `min_center`, `max_center` (None = data
+  min or max) and `by` (`Bins(n)` or `Spacing(s)`), `prefer_regular` (true), `derive_y_from_x` (true). Defaults:
+  20 bins along X, centres from the data minimum to the maximum. XY input only (the first Y column against X, one
+  hexbin plot per layer); XYZ, matrix input and Binned Scatter are not done.
+- Binning (`sheaf_calc::hexbin`): pointy-top lattice, row r at `y0 + r dy`, even rows at `x0 + c sx`, odd rows half a
+  spacing further. Number of Bins n puts n centres from Min to Max Center (`sx = range / (n - 1)`). Rows run from Min
+  Center to the first centre on or beyond Max Center. Each finite point goes to the nearest centre, the distance measured
+  on the page (in the space where the lattice is regular); an exact tie goes to the lower row, then the lower column; a
+  point outside the closed hexagon of its centre (beyond a narrow Min/Max Center) is not counted. An axis with no width
+  (all values equal, one point) gets width 1 around the value. NaN and infinite values are skipped.
+- Regular hexagons: the derived axis' spacing is `dy = sx * a * (yrange / xrange) * sqrt(3) / 2` (centre ranges),
+  with `a` the frame aspect (width / height) when "Prefer Regular Hexagons" is on and 1 otherwise. The drawing redoes the
+  binning with the real frame and the resolved axis spans, taking `a (yrange / xrange) = (W / H)(Y span / X span)`, so
+  the hexagons are regular on the page for any frame shape, not only a square one (an extension of Origin's 1:1
+  rule); a first pass with the nominal frame sets the axis range. "Derive X from Y" solves the same equation for X.
+  The colour scale narrows the real frame, so the drawn hexagons can reach past the first pass' range: when they do,
+  `layout::graph_geometry` widens the range to the extent of the hexagons as drawn and resolves the axes again (at
+  most six passes, the extent only grows), so every hexagon corner lies inside the layer's clip (fixed Min/Max of an
+  axis still clip, as for any plot).
+- Non-linear axes (log10, ln, log2, reciprocal, probability, ...): the points are mapped through the axis scale's
+  `forward`, the lattice is built and the points assigned in those coordinates, and the corners are mapped back through
+  `inverse`; the hexagons are regular on the page (the aspect uses the axes' scale spans), no corner leaves the domain
+  and no bin is dropped. A point the scale cannot place (<= 0 on a log axis) is skipped and counted in
+  `HexData::excluded`, not in a bin. Min/Max Center are data values (mapped through the scale); a Bin Spacing is in scale
+  units (decades on log10); Number of Bins is unchanged.
+- Drawing (`crates/plot/src/hexbin.rs`): each non-empty bin is a filled hexagon in data coordinates through the layer
+  transform, clipped to the layer; no outline, only a 0.25 pt stroke in the fill colour to hide seams. Colour =
+  `ramp(count / max count)`, linear from 0, with the colour mapped scatter's ramp (`plots::map_color`: blue, cyan, green,
+  yellow, red, unchanged); empty bins are not drawn. The axis range covers the hexagons.
+- Several hexbin plots in one layer (added through Layer Contents, Plot Setup or Plot Details) overlap: that is the
+  user's choice, they are not placed side by side. All of them are coloured against one shared maximum (the largest
+  count of any bin of any hexbin plot of the layer), and the colour scale shows that maximum.
+- Colour scale: a 14 pt wide bar 14 pt right of the frame (gradient of 64 strips, red at the top), title "Count" above
+  it in the Y title font, ticks at 0 and nice counts (1, 2 or 5 x 10^k steps, about four intervals) up to the maximum,
+  labelled in the Y tick font. The frame leaves room for it at the right (`scale_reserve`).
+- Plot Details "Bins" tab: Prefer Regular Hexagons, Derive Y from X / Derive X from Y, per axis Min Center, Max Center
+  (Auto or a value) and Number of Bins or Bin Spacing; of the derived axis only the Binning and Number of Bins / Bin
+  Spacing controls are greyed (its Min and Max Center still apply and stay editable). Undo works as for other
+  settings. Menu: Plot > Contour/Heat Map > Hexbin (the other items of that submenu stay greyed).
+- CLI `-t hexbin`, `--hex-bins N` (2 to 1000; both axes); MCP template text and `hex_bins`. No right Y axis and no panels
+  (CLI, MCP, `plot_columns_double_y` refuse). `.opj`: written as a scatter plot of the data, the save warns ("hexbin plots
+  were written as scatter plots of their data").
+- Tests: `crates/calc/tests/mpl_hexbin.rs` (counts cell by cell against matplotlib `Axes.hexbin`, fixture made by
+  `tools/hexbin-ref.py`, which also checks a numpy brute force; matplotlib 3.11.2, numpy 2.5.4; these are not Origin
+  numbers) and hand cases in `hexbin.rs`; `hexbin_tests.rs` (regular hexagons on a square and a wide frame, colours,
+  colour scale, autoscale, corners inside the clip over seeds and bin counts, log axis, shared colour scale); core template/serde test; CLI test; UI menu, Plot Details and derived-axis tests; `.opj` warning test.
+- Not done: XYZ and matrix input, Binned Scatter, UpSet, a hexbin toolbar button, colour map choice, a tick count
+  setting, Origin's real defaults, outlines, hover read-out of bin counts.
+
+### 14.25 Parallel Plot and Parallel Index (T49)
+
+Origin's documented facts (Origin 2019 help, not measured; no Origin was at hand; [W:origin-help/parallel-plot],
+[W:origin-help/parallel-index], [W:origin-help/axes_dialog_parallel_coordinates], [W:origin-help/pd-dialog-parallel-tab]):
+
+- Parallel Plot: menu "Plot > Categorical: Parallel Plot" (also "Plot > 2D: Parallel Plot"), template `Parallel.otpu`;
+  at least two columns, all treated as Y; a colour scale legend; the colour is usually mapped from a column (By Points
+  tab). Parallel Index: "Plot > Categorical: Parallel Index"; at least three columns plus a grouping column of
+  categorical data that creates the legend and assigns the plot colour.
+- Axes dialog: "Rescale Each Axis Independently": checked, each axis has its own From and To; cleared, all axes share one
+  range, that of the variable with the greatest range. The axis title defaults to `%(?Y)` (Long Name or Short Name plus
+  Unit). Dragging a column onto the plot adds a last axis.
+- Plot Details Parallel tab: Style, Width, Transparency 0 to 100 (0 opaque); Curvature 0 to 100 (used by the alluvial and
+  sets plots, not by these two).
+- Not documented (Sheaf's choices, unmeasured, listed below): the default of Rescale, line width and transparency, straight
+  lines, the colour map, the tick layout, the default colour column, missing values, where the legend goes. Parallel Sets
+  are not done.
+
+**What Sheaf does** (everything else is Sheaf's choice, unmeasured):
+
+- `PlotKind::Parallel` and `PlotKind::ParallelIndex`, `Template::Parallel` (`parallel`, "Parallel Plot", legend hidden:
+  the colour scale names the colours) and `Template::ParallelIndex` (`parallel-index`, "Parallel Index", legend position
+  Automatic). One plot per axis (its Y column); the settings are per plot, shared by the layer's parallel plots:
+  `Plot::parallel` (`ParallelStyle`, skipped when default) with `rescale_each_axis` (true), `width_pt` (0.5),
+  `transparency_pct` (0) and `color` (`Option<ColumnId>`). Hidden plots leave their axis out.
+- Colour source. Parallel Plot: an optional numeric column; Sheaf's default is the last selected column (a new graph sets
+  `color` to the last axis column, so the colour scale shows at once; "None" draws every line in the plot colour, the
+  first plot's). Parallel Index: a required group column, by default the first text column of the sheet that is set as
+  Group, else the first text column (never one of the axes), or the text column among the selected columns in the app, or
+  `--group COLUMN` on the command line (any column; the cells are grouped by their shown text, so a numeric code works).
+- Refusals (core `ProjectError`, so the app, CLI and MCP all show them): a Parallel Plot needs two or more numeric
+  columns, a Parallel Index three or more plus a group column; a right Y axis is refused (`plot_columns_double_y`, `--y2`)
+  and so are panels (`--panels`). A refused plot leaves no graph behind. The numeric columns among the selection are the
+  axes; a text column among them is the group.
+- Layout (`crates/plot/src/parallel.rs`): the layer's own X and Y axes, grid and ticks are not drawn. Axis `i` of `n`
+  stands at `frame.x + frame.w (i + 0.5) / n` and runs from the bottom to the top of the frame: its line, major ticks
+  (the layer's Y axis settings: length, direction, colour, width, tick font, number format; a linear scale and automatic
+  range, a fixed Y limit of the layer is ignored) with labels left of it. The title is above the frame, centred on the axis,
+  in the Y title font, shrunk (never below 5 pt) so that the widest title fits the spacing of the axes; it is the plot's
+  label if set, else the column's long name and unit (`Long Name (unit)`, Origin's `%(?Y)`). The frame is fitted on the
+  page with room for the titles, the first axis' labels and the colour scale or legend.
+- Scaling: rescale on, each axis has the nice range of its own column (the same rule as any automatic Y axis, with the
+  layer's range margin); off, every axis has the nice range of the union of all the columns' values (the documented
+  "variable with the greatest range", widened so that the smaller columns also fit) and shows the same ticks. A row's
+  point on an axis is `(value - min) / (max - min)` of that axis' range.
+- Lines: one straight polyline per row through the axes, one scene path per row in worksheet order (later rows on top),
+  Round caps and joins, width and transparency (the colour's alpha is scaled by `1 - transparency / 100`) from the Parallel
+  tab. A row with a missing cell (NaN, an empty cell, a masked point) breaks there: each run of two or more consecutive
+  axes with values is drawn as its own piece of the path; a lone value draws nothing, and a row with no such run draws no
+  line. Rows hidden by a worksheet filter are not drawn; the rows come from the first axis' plot.
+- Colour: a Parallel Plot with a numeric colour column colours each line with `plots::map_color` (the colour mapped
+  scatter's ramp, unchanged) at `(v - min) / (max - min)` of that column's smallest and largest value (0.5 when they are
+  equal); a row whose colour cell is missing takes the plot colour. The colour scale is the hexbin plot's bar
+  (`hexbin::draw_color_bar`, now shared; the hexbin output is unchanged): a 14 pt bar 14 pt right of the frame with the
+  column's name as title and nice ticks inside the data range. A Parallel Index gives each distinct text of the group
+  column, in order of first appearance, one colour of the layer's palette (`Palette::color(i, groups)`) and one legend
+  entry. Origin's colour map was not measured.
+- Group legend (`parallel::draw_legend`): the layer's legend font, frame and background, one row per group with a line
+  sample in the group's colour and the group's text ("(blank)" for an empty one). Automatic (the template's) places it
+  right of the frame, 14 pt away and top aligned, and the frame leaves room for it; the corner and manual positions place
+  it inside the frame as the ordinary legend does. A custom legend text and columns are not used. `draw_legend` of the
+  ordinary legend returns at once for parallel plots (it would list the axes). The group legend and the Parallel Plot's
+  colour scale are recorded together as one `ObjectKind::Legend` (their drawn rect), so in the app they are picked,
+  selected, dragged and double-clicked to the Legend tab like any legend. The layer legend's position places both: the
+  drag sets `LegendPosition::Manual` (centre at fractions of the frame); the colour scale (title, bar and labels, as high
+  as the frame) is moved by the same rule (`parallel::scale_shift`; Automatic leaves it right of the frame, a corner puts
+  it at the frame's left or right inside edge, Manual centres it on the point). There is no separate offset.
+- Plot Details "Parallel" tab: Rescale Each Axis Independently, Width, Transparency (%), and Color Column (Parallel Plot) or
+  Group Column (Parallel Index), a list of every column of the project (any, for the group) or only the numeric columns
+  (for the colour of a Parallel Plot, a text column would be ignored) with "None". The settings are shared by the layer's
+  parallel plots. Undo works as for other settings. Menu: Plot > Categorical > Parallel Plot and Parallel Index (a new
+  submenu), also in Column > Plot.
+- CLI `-t parallel`, `-t parallel-index`, `--group COLUMN` (`none` for the plot colour; with `-t parallel` a numeric
+  colour column: a text one is refused with a message that suggests `-t parallel-index`); MCP `template` text and `group`. `.opj`: written as line plots of the columns, the save warns
+  ("parallel plots and parallel indexes were written as line plots of their columns; their axes, colours and groups were
+  not written").
+- Tests: `crates/plot/src/parallel_tests.rs` (axis places, scaling on and off, breaks at missing and masked cells, colour by
+  column and by group, titles, colour scale, legend, width and transparency; the legend and scale are hit-test objects
+  that a Manual or corner position moves); core template/refusal/serde test; `.opj`
+  warning test; `crates/cli/tests/parallel.rs` (both kinds as SVG, `--group`, refusals, a text colour column);
+  `graph_details.rs` colour-column choices test; UI menu, group-from-text-column and
+  Plot Details tests. The existing hexbin and golden tests pin that other kinds are unchanged.
+- Not done: Parallel Sets, a curvature setting, a custom colour map or By Points tab, log axes, dragging a column onto the
+  plot, reordering or flipping axes, hover read-out of rows, hit-testing of the axes, a toolbar button, Origin's real defaults.
+
+### 14.26 Treemap (T50)
+
+Origin's documented facts (Origin 2025b help, not measured; no Origin was at hand; [W:originlab.com/2025b],
+[W:origin-help/treemap], [W:origin-help/pd-layout-tab-treemap]):
+
+- New graph type "Treemap plot", menu "Plot > Categorical: Treemap", template `treemap.otpu`; data: several columns of
+  categories and one column of values.
+- Plot Details Layout tab: Layout (Split, Squarified, Squarified+, Pivot by Size, Pivot by Middle, Pivot by Split Size),
+  Order (Categorical Order, Alphabetical, by Size, by a column), Depth (1 to the number of levels, or Infinite), Gap
+  between rectangles, and an optional separate Layout and Order for each level but the first. Squarified sorts the
+  rectangles by size, the largest at the top left, and ignores Order; Squarified+ keeps for each row the direction with the
+  better aspect ratio; Pivot by Size takes the largest item as pivot, Pivot by Middle the middle item, Pivot by Split Size
+  the item that splits the list into roughly equal areas.
+- Not documented (Sheaf's choices, unmeasured, listed below): the default layout, order, depth and gap, the colours, the
+  labels, the borders, missing and non-positive values, the algorithms themselves.
+
+**What Sheaf does** (everything else is Sheaf's choice, unmeasured):
+
+- Algorithms (`sheaf_calc::treemap`, pure functions `layout(kind, weights, rect) -> rects`, one rectangle per weight in the
+  order of the weights, tiling the rectangle, the area of each `weight / total * area`; a weight that is not finite and
+  positive gets a zero-size rectangle):
+  - Squarified: Bruls, Huizing and van Wijk (2000): sorted by size, descending; rows along the shorter side of the rest, an
+    item joins the row while its worst aspect ratio does not grow; the first row is a column on the left (wide rest) or a
+    band along the top (tall rest), so the largest item is at the top left.
+  - Squarified+: as Squarified, but for every row both the shorter and the longer side of the rest are tried and the row with
+    the smaller worst aspect ratio is kept (a tie: the shorter side). This is Sheaf's reading of Origin's one-line description.
+  - Split: the ordered list is cut in two, in order, at the first position whose two total weights differ least; the rectangle
+    is cut across its longer side in the ratio of the two weights (left or top gets the first part), each part again.
+  - Pivot by Size / Middle / Split Size: the ordered treemaps of Shneiderman and Wattenberg (2001) and Bederson et al.
+    (2002): pivot `P`, `L1` the items before it, then the items after it cut into `L2` and `L3`. In a rectangle at least as
+    wide as high: `L1` a full-height column on the left, `P` at the top left of the rest with `L2` on its right, `L3` the
+    band along the bottom; in a taller rectangle the axes are exchanged. The `L2`/`L3` cut is the one that brings `P`'s aspect
+    ratio nearest to 1 (the first on a tie; found with prefix sums, so one step is linear and 30000 sorted weights lay out in well under a second); the lists are laid out again the same way. Pivot choice: the largest item (first
+    on a tie); the item at index `n / 2`; the item with the least difference between the total before and after it.
+- Hierarchy (`sheaf_calc::treemap_tree`): one level per category column, the first the top level. Rows with a missing, non-finite
+  or non-positive value are skipped (not an error); rows with the same category path are one leaf with the summed value; an
+  empty category cell is named "(blank)"; a node's value is the sum of its children. Order: Categorical (first appearance,
+  the default), Alphabetical (case-insensitive), By Size (largest first), By Column (ascending by the smallest key of the
+  node's rows: numbers first, then text alphabetically, missing last; the column is `order_column`). The Squarified layouts
+  sort by size themselves, so their Order is ignored (the Order list is greyed out for them).
+- Nesting: the children of a node are laid out in the node's rectangle inset by half the gap (below a header band for a
+  top-level node) and every laid-out cell is shrunk by half the gap on each side, so a child lies at least one gap inside
+  its parent and siblings are one gap apart; the whole treemap lies half a gap inside the layer frame. A rectangle too small for the inset
+  becomes empty and is not drawn. Depth N shows N levels; the nodes of the last level shown are leaves with the value of
+  everything below. Per level: with the check box on, level 2, 3, ... take their own layout and order from the list (a level
+  without an entry takes the general ones).
+- Settings: `PlotKind::Treemap`, `Template::Treemap` (`treemap`, "Treemap"; axes hidden, legend hidden), `Plot::treemap`
+  (`TreemapStyle`, skipped when default): `categories` (columns, first = top level), `layout` (Squarified), `order`
+  (Categorical), `order_column`, `depth` (`None` = Infinite), `gap_pt` (1.5), `per_level_on` and `per_level`. One plot per
+  graph: the plot's own Y column is the value column (the last numeric selected column); the category columns are the
+  columns of text among the selected columns, in selection order, else every column of text of the value column's sheet
+  (core `plot_columns`, `plot_treemap`). Refusals: no category column, no numeric value column, a value column that is
+  text, a right Y axis (`--y2`), panels, an overlay. A refused plot leaves no graph behind.
+- Drawing (`crates/plot/src/treemap.rs`): the rectangles fill the layer frame; no axes, no frame line, no legend. One colour
+  of the layer's palette per top-level category (by first appearance, whatever the order); a node `L` levels deep is that
+  colour blended `1 - 0.7^L` of the way to white; every rectangle has a 0.5 pt white border. A node with its
+  children shown has a header band 1.55 text heights high (and a padding) holding its name, in the colour of the band; the
+  band and its text of level `L` are `0.85^L` of the top level's (Sheaf's choice), and a level-1+ node less than twice the
+  band high or wide has none and its name is not drawn (level 0: the height test only). A leaf (the
+  last level shown) shows its name and below it its value (up to four significant digits, no exponent) at the top left, in
+  the layer's X axis tick font at 0.45 of its size (9.9 pt for the 22 pt default), black or white as reads better on the fill.
+  A label is drawn whole or not at all: the name is left out when it is wider than the rectangle (less a 0.3 text size padding
+  each side) or the rectangle is not as high as one line, the value when it does not fit under the name; a header name too wide
+  for its band is left out. There is no clipping.
+- Plot Details "Layout" tab (a new tab, shown for a treemap plot): Layout and Order lists (the Order greyed out for the
+  Squarified layouts), Depth (Infinite, 1 to the number of category columns), Gap (pt), the Order column list (shown when an order
+  by column is chosen), and the check box "Different Layout and Order for Each Level Below the First" with one Layout and Order
+  row per level below the first. Undo works as for other settings. Menu: Plot > Categorical > Treemap (also in Column > Plot).
+- CLI `-t treemap` with `--y` (the value; the last numeric one counts), `--group A,B` (category columns, first = top; default the
+  text columns among `--y`, else every text column of the sheet), `--treemap-layout`, `--treemap-order`
+  (`categorical|alphabetical|size|column:NAME`), `--treemap-depth`, `--treemap-gap`; the same in MCP (`group`, `treemap_*`) with the
+  template text. `.opj`: written as column plots of the value column; the save warns ("treemaps were written as column
+  plots of their value column; their categories and nested rectangles were not written").
+- Tests: `crates/calc/src/treemap.rs` (all six layouts on random weights with fixed seeds: tiling without overlap, areas in
+  proportion within 1e-9 relative, hand cases for Bruls' example, Split order, the pivot lists, tall rectangles, degenerate
+  input), `treemap_tree.rs` (aggregation, skipped values, duplicates, orders, depth, gap nesting, per-level),
+  `crates/plot/src/treemap_tests.rs` (nesting inside parents by the gap, colours per top level and tints, labels hidden when they do
+  not fit, depth, every layout with every order, other kinds unchanged), core template/refusal/serde test, `.opj` warning test,
+  `crates/cli/tests/treemap.rs` (SVG, defaults, every layout and option, refusals), UI menu and Layout tab tests with undo.
+- File > Append renumbers the appended graphs' columns through `Graph::remap_columns` (core `graph.rs`): the plots' X, Y, error,
+  base, size and colour columns, label columns, treemap and sunburst `categories`, the treemap `order_column`, the parallel `color` column, plot
+  offsets, tick-label columns and the rug `plot` choice of each axis. A new field holding a column id goes there.
+- Not done: Origin's real defaults, colours and labels, hover read-out and picking of rectangles, drilling down, a colour-by-value
+  option, a toolbar button, a label font setting, reading Origin's treemap from .opj, a size cap on very many rectangles.
+
+### 14.27 Sunburst plot (T51)
+
+Origin's documented facts (Origin 2022 help, not measured; no Origin was at hand; [W:originlab.com/2022],
+[W:ReleaseNotes ORG-23725], [W:origin-help/sunburst-plot]):
+
+- New graph type "Sunburst Plot", menu "Plot > Categorical: Sunburst Plot", template `Sunburst.OTP`; data: at least two
+  text columns and one numeric column; the last numeric column holds the values and every other column is a category or
+  sub-category; each level is a ring.
+- A wedge's colour follows its value; a category's colour follows the mean value of its children; a missing text category
+  appears unfilled.
+- Plot Details: Pie Geometry tab (Rotation, Radius/Center, Doughnut) and Labels tab; the sunburst is a variant of the Doughnut
+  plot. The Mini Toolbar button "Collapse Expand Mode" drills into a clicked wedge.
+- Not documented (Sheaf's choices, **unmeasured**, listed below): which level is innermost, the start angle and direction, the
+  hole, ring widths, borders, the colour map, the label rules, the order, how "mean" and "missing" are read.
+
+**What Sheaf does** (everything else is Sheaf's choice, unmeasured):
+
+- Hierarchy: the one of the treemap (`sheaf_calc::treemap_tree`, 14.26: skipped missing or non-positive values, duplicate paths
+  summed, a node's value the sum of its children), generalised only by a flag `Node::blank` that marks a node whose category cell
+  was empty (named "(blank)"); the treemap output is unchanged. The angular layout is `sheaf_calc::sunburst::layout`: wedges
+  parents before children; a node's angle is its value's share of its parent's angle, the top level sharing the full turn, so
+  the angles of the children add up to the parent's. Order: Worksheet (first appearance, the default) or By Size (largest first).
+- Colour value: a leaf's own value; a category's is the unweighted mean of the values of the leaves below it (Sheaf's reading of
+  "the mean value of its children"). The colour is `plots::map_color` (the shared blue-cyan-green-yellow-red ramp) at
+  `(value - lo) / (hi - lo)` over the range `lo..hi` of the leaf values (0.5 when the range is empty). A wedge whose category cell
+  was empty is outline only (no fill; a dark outline of the tick font colour, at least 0.5 pt).
+- Geometry: the circle is centred in the layer frame with a diameter equal to the shorter side of the frame, so it stays round on
+  a non-square frame; no axes, no frame line, no legend (template: axes and legend hidden). The first category column is the
+  innermost ring; every level has the same width from the hole radius to the outer radius; a ring gap (pt) takes half from each
+  side of a ring where it has a neighbour (not at the hole or the rim). The first wedge starts at the start angle in degrees
+  counter-clockwise from 3 o'clock (default 90, 12 o'clock, as Origin's pie rotation is counted) and the wedges follow clockwise.
+  Arcs are polylines of steps of at most 2 degrees; a wedge round the whole turn is two circles (outer and the hole).
+  Every wedge has a white border (0.5 pt by default).
+- Labels: the name (and, when asked, the value, with up to four significant digits) at the wedge's centre (middle radius, middle
+  angle), along the radial direction and turned half a turn when it would read upside down, in the layer's X axis tick font at 0.45
+  of its size, black or white as reads better on the fill. A line is drawn whole or not at all: it is left out when its text (plus
+  0.3 text sizes each side) is wider than the ring, and the lines together (their height plus 0.3 text sizes each side) must fit
+  the chord of the wedge at the inner end of the widest line (middle radius minus half its width: a radial label is widest
+  across the wedge where the wedge is narrowest), else the second line (the value) goes first; a name that does not fit hides the whole label, so a value is never drawn without its name
+  (unless names are off). Names default on, values off.
+- Colour scale: a vertical bar right of the frame (the hexbin and Parallel Plot bar, `hexbin::draw_color_bar`, with its reserve in
+  the layer's edges), titled with the value column's name and ticked at nice values over the leaf range.
+- Settings: `PlotKind::Sunburst`, `Template::Sunburst` (`sunburst`, "Sunburst Plot"), `Plot::sunburst` (`SunburstStyle`, skipped when
+  default): `categories` (columns, first = innermost), `start_angle_deg` (90), `hole` (fraction of the radius, 0.3, 0 to 0.9),
+  `ring_gap_pt` (0), `border_pt` (0.5), `show_names` (true), `show_values` (false), `order` (`worksheet`|`by_size`). One plot per graph:
+  the plot's Y is the value column (the last numeric selected column); the categories are the columns of text among the selected
+  columns in selection order, else every text column of the value column's sheet (`plot_columns`, `plot_sunburst`). Refusals: no
+  category column, no numeric value column, a text value column, a right Y axis, panels (CLI also: overlay, styling a graph). A
+  refused plot leaves no graph behind.
+- Plot Details "Pie Geometry" tab (shown for a sunburst plot; Origin's tab name, with the Labels tab's two check boxes folded in):
+  Start Angle, Hole (%), Ring Gap, Border Width, Order, and Labels Names and Values. Undo works as for other settings. Menu: Plot >
+  Categorical > Sunburst Plot (also in Column > Plot).
+- CLI `-t sunburst` with `--y`, `--group A,B,C` as for the treemap, `--sunburst-start`, `--sunburst-hole` (percent), `--sunburst-gap`,
+  `--sunburst-labels names|values|both|none`, `--sunburst-order worksheet|size`; the same in MCP (`group`, `sunburst_*`) with the
+  template text. `.opj`: written as column plots of the value column; the save warns ("sunburst plots were written as column plots
+  of their value column; their categories and rings were not written").
+- File > Append renumbers the sunburst `categories` through `Graph::remap_columns` (test in `project.rs`).
+- Tests: `crates/calc/src/sunburst.rs` (angles as shares of the parent, colour values and means, order),
+  `crates/plot/src/sunburst_tests.rs` (angles drawn, start angle and direction, hole and ring radii with the gap, arcs of at most
+  2 degrees inside a round circle on a wide frame, leaf and category colours, unfilled missing category, labels hidden when too
+  small and upright, scale title and ticks, full-turn ring, other kinds unchanged), core template/refusal/serde and append tests,
+  `.opj` warning test, `crates/cli/tests/sunburst.rs` (SVG, defaults, options, refusals), UI menu and Pie Geometry tab tests with undo.
+- Not done: Origin's real defaults, colours and labels, hover read-out and picking, Collapse/Expand drilling, a depth setting,
+  the Radius/Center settings, tangential labels for thin rings, a colour-by-category-palette option, a label font setting, reading
+  Origin's sunburst from .opj.
 
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 

@@ -601,6 +601,15 @@ fn a_written_workbook_reads_back_with_the_same_values_labels_and_types() {
     assert_eq!(out.sheet_names, ["Run 1", "Run 2"]);
     assert!(out.warnings.is_empty());
 
+    // Cell formats are not exported: the export says so instead of dropping them silently.
+    let mut formatted = a.clone();
+    formatted.apply_cell_format(
+        sheaf_core::cellformat::FormatTarget::whole_columns(vec![formatted.columns[0].id]),
+        sheaf_core::cellformat::CellFormat { bold: Some(true), ..Default::default() },
+    );
+    let said = write_xlsx(&[&formatted], &dir.join("fmt.xlsx"), &ExcelExportOptions::default()).unwrap();
+    assert!(said.warnings.iter().any(|w| w.contains("cell formatting")), "{:?}", said.warnings);
+
     let r = read_workbook(&out.path, &ExcelOptions::default()).unwrap();
     assert_eq!(r.workbook.sheets.len(), 2);
     let back = &r.workbook.sheets[0];

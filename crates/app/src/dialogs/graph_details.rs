@@ -496,6 +496,37 @@ fn plot_tab_body(
                     ui.label("Background");
                     ui.checkbox(&mut labels.white_out, "White Out");
                     ui.end_row();
+                    let label = ui.label("Frame");
+                    ui.horizontal(|ui| {
+                        egui::ComboBox::from_id_salt("data_label_frame")
+                            .selected_text(match labels.frame {
+                                LabelFrame::None => "None",
+                                LabelFrame::Box => "Box",
+                                LabelFrame::Shadow => "Shadow",
+                            })
+                            .show_ui(ui, |ui| {
+                                for (frame, name) in [
+                                    (LabelFrame::None, "None"),
+                                    (LabelFrame::Box, "Box"),
+                                    (LabelFrame::Shadow, "Shadow"),
+                                ] {
+                                    ui.selectable_value(&mut labels.frame, frame, name);
+                                }
+                            })
+                            .response
+                            .labelled_by(label.id);
+                        ui.add_enabled_ui(!labels.frame.is_none(), |ui| {
+                            ui.label("Border");
+                            color_button(ui, &mut labels.frame_border);
+                            ui.label("Fill");
+                            color_button(ui, &mut labels.frame_fill);
+                        });
+                    });
+                    ui.end_row();
+                    let label = ui.label("Margin (% Font Height)");
+                    ui.add(DragValue::new(&mut labels.margin_percent).range(0.0..=500.0).speed(0.5))
+                        .labelled_by(label.id);
+                    ui.end_row();
                     ui.label("Rotate (deg)");
                     ui.add(DragValue::new(&mut labels.rotate_deg).range(-360.0..=360.0).speed(1.0));
                     ui.end_row();

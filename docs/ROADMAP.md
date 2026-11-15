@@ -154,7 +154,7 @@ the default project format.
         columns or a graph sharing its data); interpolation menu presets (2026-11-13)
   - [ ] Peak Analyzer wizard (T04), Import Wizard pages 2-6 measured against Origin (T19 item 2),
         remaining Plot Details/axis controls and separate Layer Contents/Plot Setup dialogs
-        (T13; Individual X/Y multipliers, Skip Points and White Out now available)
+        (T13; Individual X/Y multipliers, Skip Points, White Out and label Frame/Margin now available)
   - [ ] Owner's click-through; remaining dialog options listed in each brief
 - [x] Write `.opj`: workbooks (names, long names, units, comments, designations, text and numbers),
       verified by opening the files in Origin and comparing every cell (`sheaf export ... -o

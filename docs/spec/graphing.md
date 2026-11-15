@@ -1925,13 +1925,38 @@ unchecked (`t13/open3/label.controls.txt`). Published controls:
 [Label tab](https://docs.originlab.com/origin-help/pd-dialog-label-tab/),
 [LabTalk label switches](https://docs.originlab.com/labtalk/ref/options_for_data_plot_labels/).
 Sheaf approximates the font box using the measured text advance plus 0.05 em on each side and a
-baseline band from -0.92 to +0.23 em. Exact padding for other fonts is unmeasured; label frames,
-editable margins and leader lines remain open.
+baseline band from -0.92 to +0.23 em. Exact padding for other fonts is unmeasured.
+
+**Label Frame and Margin (Origin 2016, 2026-11-14):** the Label tab offers None (default),
+Box and Shadow, with border/fill color controls enabled for Box/Shadow and a shared margin
+in percent of font height ([documented controls](https://docs.originlab.com/origin-help/pd-dialog-label2-tab/)).
+Synthetic Arial 30 labels "12345", Center, on a gray layer/red line were exported at 900 pixels:
+Box with margin 0 is a black rectangle about 98 x 40 pixels; the initial border and fill are
+both black. At margin 20 it grows to 117 x 59 pixels. White Out is painted **after** the frame,
+clearing only the smaller white text box, so the black margin remains around it. None/margin 20
+and Box/margin 0 with White Out produce byte-identical PNGs. Shadow adds a lower-right black
+rectangle, displaced about 6-7 pixels at both Arial 15 and 30. At 45 degrees the frame is an
+axis-aligned rectangle enclosing the rotated, padded text; the shadow stays to the page's
+lower right, while White Out and text rotate together. Raw GUI steps, control dumps and PNGs:
+`re-workspace/scratch/t13-label-frame-margin/` (`box0`, `box20`, `shadow0`, `shadow20white`,
+`box0white`, `none20white`, `shadow20rot45`, `smallshadow0`).
+
+Sheaf stores `DataLabels::frame`, `margin_percent`, `frame_border` and `frame_fill` with
+backward-compatible defaults None, 0, black and black, omitted when default. The Label tab
+supports these controls, group-dependent editing and the existing Apply/Cancel/history behavior.
+Frame colors use the existing alpha-capable picker. The shared scene draws shadow, frame,
+White Out, then text; clipping, empty text, row selection and Skip Points apply to the whole label.
+The existing approximate font box is retained: margin uses 4/3 of the font size as the font height,
+calibrated to the measured Arial case; shadow is approximated by a fixed 6 pt page offset and
+the border by 0.5 pt. Exact metrics for other fonts remain unmeasured. Negative/nonfinite margin
+uses zero for drawing; margin is limited to 500%. Native and companion saves preserve all frame
+settings, including disabled labels; `.opj` alone retains its existing data-label omission warning.
+Leader lines and automatic overlap avoidance remain open.
 
 The layer Background colour fills the frame behind the grid. Sheaf's own additions
 beyond what was measured (hatch and gradient fills, bar width, label column, rows, decimals and offsets,
 background gradient and border, X/Y axes switches, page border, layer icons, comments, subgroups) are in
-section 18.6. Not done: the other fill modes, label frames, custom forms and display formats
+section 18.6. Not done: the other fill modes, custom forms and display formats
 beyond decimals, leader lines, the No Line Break / Gap to Symbol interaction. The `.opj` writer
 does not store these settings; the save names them and the companion file keeps them.
 
@@ -2123,7 +2148,7 @@ project file only when they differ from the default (a file written before loads
 
 ### 18.7 Not done
 
-Speed mode and X:Y ratio of Size/Speed, No Line Break for Skipped Point(s) / Gap to Symbol, frame, margin, attach-to,
+Speed mode and X:Y ratio of Size/Speed, No Line Break for Skipped Point(s) / Gap to Symbol, attach-to,
 automatic overlap avoidance and leader lines of Label, the other fill modes and
 Origin's list of fill patterns, subgrouping By Column Label, Binned increments, several groups in one layer,
 writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).

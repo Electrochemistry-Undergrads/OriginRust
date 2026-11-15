@@ -7,8 +7,8 @@ use crate::fill::{fill_polygon, fill_rect};
 use crate::fonts::TextMeasurer;
 use crate::scene::{Anchor, Cap, Item, Join, Stroke, TextItem, line_to, move_to, push_num};
 use sheaf_core::graph::{
-    Connect, DropLine, ErrorDirection, LabelForm, LabelPosition, LineStyle, PlotKind, ScaleKind, SymbolShape,
-    SymbolStyle,
+    Connect, DataLabels, DropLine, ErrorDirection, LabelForm, LabelFrame, LabelPosition, LineStyle, PlotKind,
+    ScaleKind, SymbolShape, SymbolStyle,
 };
 
 /// Points closer than this (in pt) to the last kept point are dropped.
@@ -218,8 +218,12 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m:
             anchor,
             rotate_ccw: labels.rotate_deg,
         };
-        if labels.white_out {
-            draw_label_background(out, &item, m.width(&item.text, &labels.font, size));
+        if labels.white_out || !labels.frame.is_none() {
+            let width = m.width(&item.text, &labels.font, size);
+            draw_label_frame(out, &item, width, labels);
+            if labels.white_out {
+                draw_label_background(out, &item, width);
+            }
         }
         out.push(Item::Text(item));
     }
@@ -228,20 +232,72 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m:
 /// White Out follows the text's anchor and rotation. The font box approximates Origin 2016's
 /// Arial background (30 pt "12345": 100 x 40 pixels in a 900-pixel-wide page export).
 fn draw_label_background(out: &mut Vec<Item>, text: &TextItem, width: f64) {
-    if !(width.is_finite() && width > 0.0 && text.size.is_finite() && text.size > 0.0 && text.rotate_ccw.is_finite()) {
+    if let Some(d) = label_box_path(text, width, 0.05 * text.size, 0.0) {
+        out.push(Item::Path { d, fill: Some(sheaf_core::Color::WHITE), stroke: None });
+    }
+}
+
+/// Origin draws the frame and its shadow before White Out, which clears only the text box.
+fn draw_label_frame(out: &mut Vec<Item>, text: &TextItem, width: f64, labels: &DataLabels) {
+    if labels.frame.is_none() {
         return;
+    }
+    let percent = if labels.margin_percent.is_finite() { labels.margin_percent.clamp(0.0, 500.0) } else { 0.0 };
+    // Origin 2016's Arial 30 case expands by 19 pixels across both sides at 20% margin,
+    // against a 40-pixel text box. Other fonts retain the existing approximate font box.
+    let margin = text.size * (4.0 / 3.0) * percent / 100.0;
+    let Some(corners) = label_box_corners(text, width, margin, margin) else { return };
+    let (mut x0, mut x1, mut y0, mut y1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for (x, y) in corners {
+        (x0, x1, y0, y1) = (x0.min(x), x1.max(x), y0.min(y), y1.max(y));
+    }
+    // Origin keeps the frame parallel to the page around the rotated, padded text box.
+    // Its shadow stays to the page's lower right, rather than rotating with the text.
+    if labels.frame == LabelFrame::Shadow {
+        // The same page offset was measured at Arial 15 and 30 pt.
+        let shift = 6.0;
+        out.push(Item::Rect {
+            rect: Rect { x: x0 + shift, y: y0 + shift, w: x1 - x0, h: y1 - y0 },
+            fill: Some(sheaf_core::Color::BLACK),
+            stroke: None,
+        });
+    }
+    // Inset the path by half the stroke so the outer edge stays on the frame box.
+    out.push(Item::Rect {
+        rect: Rect { x: x0 + 0.25, y: y0 + 0.25, w: (x1 - x0 - 0.5).max(0.0), h: (y1 - y0 - 0.5).max(0.0) },
+        fill: Some(labels.frame_fill),
+        stroke: Some(Stroke::solid(labels.frame_border, 0.5)),
+    });
+}
+
+fn label_box_corners(text: &TextItem, width: f64, pad_x: f64, pad_y: f64) -> Option<[(f64, f64); 4]> {
+    if !(width.is_finite()
+        && width > 0.0
+        && text.size.is_finite()
+        && text.size > 0.0
+        && text.rotate_ccw.is_finite()
+        && text.x.is_finite()
+        && text.y.is_finite())
+    {
+        return None;
     }
     let left = match text.anchor {
         Anchor::Start => 0.0,
         Anchor::Middle => -width / 2.0,
         Anchor::End => -width,
     };
-    let pad = 0.05 * text.size;
-    let (x0, x1, y0, y1) = (left - pad, left + width + pad, -0.92 * text.size, 0.23 * text.size);
+    let (x0, x1, y0, y1) = (left - pad_x, left + width + pad_x, -0.92 * text.size - pad_y, 0.23 * text.size + pad_y);
     let (sin, cos) = text.rotate_ccw.to_radians().sin_cos();
+    Some(
+        [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+            .map(|(dx, dy)| (text.x + dx * cos + dy * sin, text.y - dx * sin + dy * cos)),
+    )
+}
+
+fn label_box_path(text: &TextItem, width: f64, pad_x: f64, pad_y: f64) -> Option<String> {
+    let corners = label_box_corners(text, width, pad_x, pad_y)?;
     let mut d = String::new();
-    for (i, (dx, dy)) in [(x0, y0), (x1, y0), (x1, y1), (x0, y1)].into_iter().enumerate() {
-        let (x, y) = (text.x + dx * cos + dy * sin, text.y - dx * sin + dy * cos);
+    for (i, (x, y)) in corners.into_iter().enumerate() {
         if i == 0 {
             move_to(&mut d, x, y);
         } else {
@@ -249,7 +305,7 @@ fn draw_label_background(out: &mut Vec<Item>, text: &TextItem, width: f64) {
         }
     }
     d.push('Z');
-    out.push(Item::Path { d, fill: Some(sheaf_core::Color::WHITE), stroke: None });
+    Some(d)
 }
 
 /// Origin draws a masked point red: its symbol, and the two line segments that meet at it

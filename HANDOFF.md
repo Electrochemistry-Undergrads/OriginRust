@@ -118,6 +118,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `toolbar-print` | Codex macOS | T27 Standard toolbar Print button via existing menu command; toolbar.rs and focused UI availability/dispatch regression | claimed 2026-11-15; no workbook renderer, native backend changes, cell notes or other sessions’ scope |
 | `codex/t02-find-replace` | Codex Windows, t02-find-replace | T02 existing Find in Sheets/Replace layout, defaults and options measured against Origin; find dialog and focused UI tests | claimed 2026-11-15; no Find in Project, grid/Go To, core/expr/history, plot, statistics, printing or other sessions' scopes |
 | `axis-breaks` | Claude Windows, "axis-breaks" | T11 more than one axis break (Origin's 1-7 breaks, per-break position), measured Origin break layout; core Axis break list, plot axis/tick drawing, graph_axis.rs Breaks tab, persistence and focused tests | claimed 2026-11-15; Axis fields only, no PLOT/plots.rs draw_plot, graph_details, navigation, stats or other sessions' scopes |
 | `codex/t13-fill-sidelines` | Codex Windows, t13-fill-sidelines | T13 Fill Area Sidelines only / Sidelines and Base; plot fill-mode/group copy, draw_fill_under/draw_line boundaries, draw_legend sample, graph_details selector and focused tests | claimed 2026-11-15; no Axis/layout geometry/PDF, mask policy/color, navigation, labels, stats or other sessions scopes |

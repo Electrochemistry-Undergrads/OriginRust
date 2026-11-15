@@ -18,6 +18,20 @@ SAMPLE = """# Inventory
 """
 
 
+def sample_files():
+    inventory = SAMPLE.replace("# Inventory\n", "# Inventory\n**5 greyed items: 2 in the menu bar, 1 on the toolbars, 2 in context menus.**\n" + COUNT.START + "\n" + COUNT.END + "\nBriefs (`T`) hold 3 items, backlog packages (`B`) 2, not planned (`N`) 0.\n")
+    plan = """# Plan for the 5 greyed items
+| ✓ | Package | What | Size | Greyed items |
+|---|---|---|---|---|
+| [ ] | [T58](T58-text.md) | Text | L | 2 |
+| [ ] | [T59](T59-cells.md) | Cells | L | 1 |
+| [ ] | B1 | View | M | 2 |
+## Not planned (`N`, 0 items)
+"""
+    handoff = "**5 listed item locations** at the planning\n  baseline (2 menu bar, 1 toolbar, 2 context menu)\n"
+    return {"docs/tasks/greyed-items.md": inventory, "docs/tasks/PLAN.md": plan, "HANDOFF.md": handoff}
+
+
 class InventoryTests(unittest.TestCase):
     def test_counts_locations_without_multiplying_window_qualifiers(self):
         packages, surfaces = COUNT.count_items(SAMPLE)
@@ -41,9 +55,24 @@ class InventoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "all three"):
             COUNT.count_items(SAMPLE.split("## Context menus")[0])
 
+    def test_surface_can_be_empty_after_its_last_item_is_enabled(self):
+        packages, sections = COUNT.count_items(SAMPLE.replace("- `T59` Font: Bold\n", ""))
+        self.assertEqual(packages["T59"], 0)
+        self.assertEqual(sections["Toolbars"], 0)
+
+    def test_backlog_can_be_reassigned_to_a_new_brief(self):
+        paths = ("docs/tasks/greyed-items.md", "docs/tasks/PLAN.md", "HANDOFF.md")
+        source = sample_files()
+        source[paths[0]] = source[paths[0]].replace("- `B1` ", "- `T64` ")
+        source[paths[1]] = source[paths[1]].replace("| B1 |", "| [T64](T64-graph-view.md) |")
+        updated, packages, _ = COUNT.refreshed(source)
+        self.assertEqual(packages["T64"], 2)
+        self.assertNotIn("B1", packages)
+        self.assertEqual(updated, COUNT.refreshed(updated)[0])
+
     def test_refresh_detects_stale_counts_and_is_idempotent(self):
         paths = ("docs/tasks/greyed-items.md", "docs/tasks/PLAN.md", "HANDOFF.md")
-        source = {p: (COUNT.ROOT / p).read_text(encoding="utf-8") for p in paths}
+        source = sample_files()
         source[paths[0]] = re.sub(r"\d+ greyed items", "1 greyed items", source[paths[0]], count=1)
         updated, _, _ = COUNT.refreshed(source)
         self.assertNotEqual(source[paths[0]], updated[paths[0]])

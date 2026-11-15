@@ -18,8 +18,8 @@ START = "<!-- greyed-count:packages:start -->"
 END = "<!-- greyed-count:packages:end -->"
 
 
-def count_items(source: str) -> tuple[Counter, Counter]:
-    packages: Counter = Counter()
+def count_items(source: str, allowed_packages=PACKAGES) -> tuple[Counter, Counter]:
+    packages: Counter = Counter({p: 0 for p in allowed_packages})
     sections: Counter = Counter()
     section = None
     seen = set()
@@ -31,35 +31,47 @@ def count_items(source: str) -> tuple[Counter, Counter]:
         if section not in SECTIONS or not line.startswith("- "):
             continue
         match = re.fullmatch(r"- `([^`]+)` (.+)", line)
-        if not match or match[1] not in PACKAGES:
+        if not match or match[1] not in allowed_packages:
             raise ValueError(f"line {number}: missing or unknown package tag")
         labels = match[2].split(" · ")
         if any(not label.strip() for label in labels):
             raise ValueError(f"line {number}: empty item between separators")
         packages[match[1]] += len(labels)
         sections[section] += len(labels)
-    if seen != set(SECTIONS) or not packages:
-        raise ValueError("inventory must contain all three nonempty surface sections")
-    if any(not sections[s] for s in SECTIONS):
-        raise ValueError("inventory must contain all three nonempty surface sections")
+    if seen != set(SECTIONS):
+        raise ValueError("inventory must contain all three surface sections")
     return packages, sections
 
 
 def refreshed(files: dict[str, str]) -> tuple[dict[str, str], Counter, Counter]:
     inventory = files["docs/tasks/greyed-items.md"]
-    packages, sections = count_items(inventory)
+    plan = files["docs/tasks/PLAN.md"]
+    plan_packages = []
+    for line in plan.splitlines():
+        if re.match(r"\| \[[ x]\] \|", line):
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            match = re.fullmatch(r"(?:\[(T[1-9]\d*)\]\([^)]*\)|(B[1-9]\d*))", cells[1])
+            if not match:
+                raise ValueError(f"unrecognized plan package row: {line}")
+            package = match[1] or match[2]
+            if package in plan_packages:
+                raise ValueError(f"unknown/duplicate plan package {package}")
+            plan_packages.append(package)
+    if not plan_packages:
+        raise ValueError("plan has no package rows")
+    package_order = sorted(plan_packages, key=lambda p: (p[0] != "T", int(p[1:]))) + ["N"]
+    packages, sections = count_items(inventory, package_order)
     total = sum(packages.values())
     surface = f"{sections['Menu bar']} in the menu bar, {sections['Toolbars']} on the toolbars, {sections['Context menus']} in context menus"
     inventory, n = re.subn(r"\*\*\d+ greyed items:.*?\*\*", f"**{total} greyed items: {surface}.**", inventory, count=1, flags=re.S)
     if n != 1 or inventory.count(START) != 1 or inventory.count(END) != 1:
         raise ValueError("inventory count header or generated table markers missing/duplicated")
-    table = "| Package | Items |\n|---|---|\n" + "\n".join(f"| `{p}` | {packages[p]} |" for p in PACKAGES)
+    table = "| Package | Items |\n|---|---|\n" + "\n".join(f"| `{p}` | {packages[p]} |" for p in package_order)
     inventory = re.sub(re.escape(START) + r".*?" + re.escape(END), START + "\n" + table + "\n" + END, inventory, flags=re.S)
     inventory, n = re.subn(r"Briefs \(`T`\) hold \d+ items, backlog packages \(`B`\) \d+, not planned \(`N`\) \d+\.",
-        f"Briefs (`T`) hold {sum(packages[p] for p in PACKAGES if p.startswith('T'))} items, backlog packages (`B`) {sum(packages[p] for p in PACKAGES if p.startswith('B'))}, not planned (`N`) {packages['N']}.", inventory)
+        f"Briefs (`T`) hold {sum(packages[p] for p in package_order if p.startswith('T'))} items, backlog packages (`B`) {sum(packages[p] for p in package_order if p.startswith('B'))}, not planned (`N`) {packages['N']}.", inventory)
     if n != 1:
         raise ValueError("inventory package summary missing/duplicated")
-    plan = files["docs/tasks/PLAN.md"]
     plan = re.sub(r"the \d+ greyed items", f"the {total} greyed items", plan)
     plan = re.sub(r"## Not planned \(`N`, \d+ items\)", f"## Not planned (`N`, {packages['N']} items)", plan)
     rows = []
@@ -71,7 +83,7 @@ def refreshed(files: dict[str, str]) -> tuple[dict[str, str], Counter, Counter]:
             if not match:
                 raise ValueError(f"unrecognized plan package row: {line}")
             package = match[1] or match[2]
-            if package not in PACKAGES or package in found:
+            if package not in package_order or package in found:
                 raise ValueError(f"unknown/duplicate plan package {package}")
             found.add(package)
             if len(cells) not in (5, 7):
@@ -79,7 +91,7 @@ def refreshed(files: dict[str, str]) -> tuple[dict[str, str], Counter, Counter]:
             cells[5 if len(cells) == 7 else 4] = str(packages[package])
             line = "| " + " | ".join(cells) + " |"
         rows.append(line)
-    if found != set(PACKAGES) - {"N"}:
+    if found != set(package_order) - {"N"}:
         raise ValueError("plan must contain each T/B package exactly once")
     handoff, n = re.subn(r"\*\*\d+ listed item locations\*\* at the planning\n  baseline \(\d+ menu bar, \d+ toolbar, \d+ context menu\)",
         f"**{total} listed item locations** at the planning\n  baseline ({sections['Menu bar']} menu bar, {sections['Toolbars']} toolbar, {sections['Context menus']} context menu)", files["HANDOFF.md"])
@@ -102,7 +114,7 @@ def main() -> int:
         parser.exit(2, f"greyed-count: {error}\n")
     stale = [p for p in paths if updated[p] != original[p]]
     print(f"Total: {sum(packages.values())}; " + "; ".join(f"{s}: {sections[s]}" for s in SECTIONS))
-    print("; ".join(f"{p}: {packages[p]}" for p in PACKAGES))
+    print("; ".join(f"{p}: {packages[p]}" for p in packages))
     if args.write:
         for p in stale:
             (ROOT / p).write_text(updated[p], encoding="utf-8")

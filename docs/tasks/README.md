@@ -40,7 +40,8 @@ a brief names the exact spec section and audit letter to open only when you need
    python3 tools/greyed-count.py --check
    ```
 7. **Merge** one branch at a time: `git fetch`, merge `main` into the branch, re-run the checks, then
-   merge into `main` and push. Delete the build folder with `tools/clean-target.sh wt-<branch>`.
+   merge into `main` and push. Clean only your task's build folder: Windows Git Bash
+   `tools/clean-target.sh wt-<branch>`; macOS/Linux `cargo clean --target-dir target/wt-<branch>`.
    Tick `docs/ROADMAP.md` and the rows of `docs/spec/feature-parity.md` you closed (recount with
    `python3 tools/parity-count.py`). Remove/retag inventory entries, run
    `python3 tools/greyed-count.py --write`, update the brief/index **Status** and plan, and release

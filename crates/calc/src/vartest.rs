@@ -2,24 +2,27 @@
 //! Variance (`vartest1`), Two-Sample Test for Variance (`vartest2`), One-Sample Test for Proportion and
 //! Two-Sample Test for Proportions.
 //!
-//! Measured against OriginPro 2016 (docs/spec/statistics.md, section 17; fixtures in
+//! Measured against OriginPro 2016 (docs/spec/statistics.md, section 17 (Variance and proportion tests); fixtures in
 //! `tests/origin_vartest.rs`). What Origin does, as far as these functions copy it:
 //!
 //! - one sample, variance: `chi2 = (n - 1) s^2 / sigma0^2` with `n - 1` degrees of freedom; the interval is
 //!   that of the variance, `[(n - 1) s^2 / chi2(1 - a/2), (n - 1) s^2 / chi2(a/2)]`;
-//! - two samples, variance: `F = (s1^2 / s2^2) / ratio0` ... the interval is that of the ratio of the
+//! - two samples, variance: `F = (s1^2 / s2^2) / ratio0`; the interval is that of the ratio of the
 //!   variances, `[r / F(1 - a/2), r / F(a/2)]`;
 //! - the two-sided p-value of these asymmetric statistics is `2 min(P(X <= x), P(X >= x))`;
-//! - a one-sided variance test reports the interval of level `1 - 2 alpha` (both limits), as `ttest1`;
+//! - the `vartest1`/`vartest2` X-functions report, for a one-sided test, the two-sided interval of level
+//!   `1 - 2 alpha` ([`VarTest::lcl`]); the dialogs' report gives, per confidence level, one finite limit
+//!   ([`variance_interval`], [`ratio_interval`]);
 //! - one proportion: see [`proportion_one`] (normal approximation with the quirk that z is 0 below `n p0`,
-//!   exact binomial test, Wald and Clopper-Pearson intervals);
-//! - two proportions: see [`proportion_two`].
+//!   exact binomial test whose two-sided p sums every count no more likely than the observed one, Wald and
+//!   Clopper-Pearson intervals);
+//! - two proportions: see [`proportion_two`] (only the pooled z, the unpooled Wald interval of the
+//!   difference and the layout were measured; see the spec for what was not).
 
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal};
 use statrs::function::beta::beta_reg;
 use statrs::function::gamma::ln_gamma;
 
-use crate::crosstab::Crosstab;
 use crate::hypothesis::{SampleStats, Tail};
 
 /// What a test of one variance or of the ratio of two variances reports.
@@ -329,13 +332,106 @@ pub fn exact_interval(successes: u64, trials: u64, tail: Tail, level: f64) -> (f
     match tail {
         Tail::Two => {
             let a = (1.0 - level) / 2.0;
-            (
-                if x == 0 { f64::NAN } else { cp_lower(x, n, a) },
-                if x == n { f64::NAN } else { cp_upper(x, n, a) },
-            )
+            (if x == 0 { f64::NAN } else { cp_lower(x, n, a) }, if x == n { f64::NAN } else { cp_upper(x, n, a) })
         }
         Tail::Upper => (cp_lower(x, n, 1.0 - level), 1.0),
         Tail::Lower => (0.0, cp_upper(x, n, 1.0 - level)),
+    }
+}
+
+/// What the test of two proportions reports.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TwoProportions {
+    /// `(successes, trials)` of each sample.
+    pub first: (u64, u64),
+    pub second: (u64, u64),
+    /// The estimate `p1 - p2`.
+    pub estimate: f64,
+    pub hypothesized: f64,
+    /// Normal approximation `(p1 - p2 - d0) / se`; `se` is the pooled one (`sqrt(p (1 - p) (1/n1 + 1/n2))`,
+    /// `p = (x1 + x2) / (n1 + n2)`) when `pooled` and the hypothesized difference is 0, else the unpooled
+    /// `sqrt(p1 (1 - p1) / n1 + p2 (1 - p2) / n2)`. 0 when that is 0 (equal all-or-nothing samples).
+    pub z: f64,
+    pub p_normal: f64,
+    /// Fisher's exact p-value (hypergeometric); two-sided: every table no more likely than the observed one.
+    /// Only given for the hypothesized difference 0, `None` otherwise.
+    pub p_fisher: Option<f64>,
+    pub tail: Tail,
+}
+
+/// Test of the difference of two proportions, `(successes, trials)` each, against `difference` (first minus
+/// second). Needs both sample sizes above 0, no more successes than trials and `|difference| < 1`.
+/// Measured against Origin: the pooled z and the two-sided p, the unpooled Wald interval of the difference
+/// ([`wald_difference_interval`]). Not measured: the unpooled z, a hypothesized difference other than 0, a
+/// negative z (the one-sample test clips it to 0; here it is kept), the one-sided p-values and Fisher's test.
+pub fn proportion_two(
+    first: (u64, u64),
+    second: (u64, u64),
+    difference: f64,
+    pooled: bool,
+    tail: Tail,
+) -> Option<TwoProportions> {
+    let ((x1, n1), (x2, n2)) = (first, second);
+    if n1 == 0 || n2 == 0 || x1 > n1 || x2 > n2 || !(difference.abs() < 1.0) {
+        return None;
+    }
+    let (f1, f2, g1, g2) = (x1 as f64, x2 as f64, n1 as f64, n2 as f64);
+    let (p1, p2) = (f1 / g1, f2 / g2);
+    let se = if pooled && difference == 0.0 {
+        let p = (f1 + f2) / (g1 + g2);
+        (p * (1.0 - p) * (1.0 / g1 + 1.0 / g2)).sqrt()
+    } else {
+        (p1 * (1.0 - p1) / g1 + p2 * (1.0 - p2) / g2).sqrt()
+    };
+    let diff = p1 - p2;
+    let z = if se > 0.0 { (diff - difference) / se } else { 0.0 };
+    Some(TwoProportions {
+        first,
+        second,
+        estimate: diff,
+        hypothesized: difference,
+        z,
+        p_normal: z_p(z, tail),
+        p_fisher: (difference == 0.0).then(|| fisher_p(first, second, tail)),
+        tail,
+    })
+}
+
+/// Fisher's exact p-value of the 2 x 2 table with `x1` of `n1` and `x2` of `n2` successes: the number of
+/// successes of the first sample is hypergeometric given the margins; upper tail = the first sample has more.
+fn fisher_p(first: (u64, u64), second: (u64, u64), tail: Tail) -> f64 {
+    let ((x1, n1), (x2, n2)) = (first, second);
+    let (k, total) = (x1 + x2, n1 + n2);
+    let (lo, hi) = (k.saturating_sub(n2), k.min(n1));
+    let ln_total = ln_choose(total, k);
+    let pmf: Vec<f64> = (lo..=hi).map(|i| (ln_choose(n1, i) + ln_choose(n2, k - i) - ln_total).exp()).collect();
+    let at = (x1 - lo) as usize;
+    let below: f64 = pmf[..=at].iter().sum::<f64>().min(1.0);
+    let above: f64 = pmf[at..].iter().sum::<f64>().min(1.0);
+    match tail {
+        Tail::Upper => above,
+        Tail::Lower => below,
+        Tail::Two => {
+            let observed = pmf[at];
+            pmf.iter().filter(|p| **p <= observed * (1.0 + 1e-7)).sum::<f64>().min(1.0)
+        }
+    }
+}
+
+/// The Wald interval of the difference `p1 - p2`, `diff +- z sqrt(p1 (1 - p1) / n1 + p2 (1 - p2) / n2)`,
+/// level `level` (0 to 1), one-sided as [`wald_interval`] (`[lower, 1]` for the upper-tailed test, `[-1, upper]`
+/// for the lower-tailed one; the one-sided limits are not measured), cut to `[-1, 1]`.
+pub fn wald_difference_interval(first: (u64, u64), second: (u64, u64), tail: Tail, level: f64) -> (f64, f64) {
+    let ((x1, n1), (x2, n2)) = (first, second);
+    let (p1, p2) = (x1 as f64 / n1 as f64, x2 as f64 / n2 as f64);
+    let half_tail = if tail == Tail::Two { (1.0 - level) / 2.0 } else { 1.0 - level };
+    let se = (p1 * (1.0 - p1) / n1 as f64 + p2 * (1.0 - p2) / n2 as f64).sqrt();
+    let width = std_normal().inverse_cdf(1.0 - half_tail) * se;
+    let d = p1 - p2;
+    match tail {
+        Tail::Two => ((d - width).max(-1.0), (d + width).min(1.0)),
+        Tail::Upper => ((d - width).max(-1.0), 1.0),
+        Tail::Lower => (-1.0, (d + width).min(1.0)),
     }
 }
 
@@ -388,35 +484,50 @@ mod tests {
     fn variance_tests_refuse_bad_input_without_panicking() {
         assert!(vartest_one(&[1.0], 1.0, Tail::Two, 0.05).is_none());
         assert!(vartest_one(&[1.0, 2.0], 0.0, Tail::Two, 0.05).is_none());
-        assert!(vartest_one(&[1.0, 2.0], 1.0, Tail::Two, 0.7).is_none());
-        assert!(vartest_two(&[1.0, 2.0], &[3.0, 3.0], 1.0, Tail::Two, 0.05).is_none());
+        assert!(vartest_one(&[1.0, 2.0], 1.0, Tail::Two, 1.0).is_none());
+        assert!(vartest_two(&[3.0, 3.0], &[3.0, 3.0], 1.0, Tail::Two, 0.05).is_none());
+        let flat_second = vartest_two(&[1.0, 2.0], &[3.0, 3.0], 1.0, Tail::Two, 0.05).unwrap();
+        assert!(flat_second.statistic.is_nan() && flat_second.lcl == f64::INFINITY);
         let flat = vartest_one(&[2.0, 2.0, f64::NAN, 2.0], 1.0, Tail::Lower, 0.05).unwrap();
         assert_eq!((flat.samples[0].n, flat.statistic), (3, 0.0));
     }
 
     #[test]
+    fn one_sided_intervals_have_one_finite_limit() {
+        let up = variance_interval(3, 1.0, Tail::Upper, 0.9);
+        assert!(up.1.is_nan() && close(up.0, 2.0 / (-2.0 * 0.1_f64.ln()), 1e-6), "{up:?}");
+        let low = variance_interval(3, 1.0, Tail::Lower, 0.9);
+        assert!(low.0 == 0.0 && close(low.1, 2.0 / (-2.0 * 0.9_f64.ln()), 1e-6), "{low:?}");
+        let two = variance_interval(3, 1.0, Tail::Two, 0.8);
+        assert!(close(two.0, up.0, 1e-9) && close(two.1, low.1, 1e-9));
+    }
+
+    #[test]
     fn one_proportion_closed_forms() {
         // 10 of 10 against 1/2: exact upper p = 2^-10, two-sided twice that.
-        let r = proportion_one(10, 10, 0.5, Tail::Upper, 0.05).unwrap();
-        assert!(close(r.p_exact.unwrap(), 1.0 / 1024.0, 1e-9), "{:?}", r.p_exact);
-        let two = proportion_one(10, 10, 0.5, Tail::Two, 0.05).unwrap();
-        assert!(close(two.p_exact.unwrap(), 2.0 / 1024.0, 1e-9));
-        // Clopper-Pearson at the ends: (0.025)^(1/n) and 1 - that.
-        let cp = two.exact_interval.unwrap();
-        assert!(close(cp.0, 0.025_f64.powf(0.1), 1e-9) && cp.1 == 1.0, "{cp:?}");
-        let zero = proportion_one(0, 10, 0.5, Tail::Two, 0.05).unwrap().exact_interval.unwrap();
-        assert!(zero.0 == 0.0 && close(zero.1, 1.0 - 0.025_f64.powf(0.1), 1e-9), "{zero:?}");
-        // 60 of 100 against 1/2: z = 2.
-        let z = proportion_one(60, 100, 0.5, Tail::Two, 0.05).unwrap();
+        let up = proportion_one(10, 10, 0.5, Tail::Upper).unwrap();
+        assert!(close(up.p_exact, 1.0 / 1024.0, 1e-9), "{}", up.p_exact);
+        let two = proportion_one(10, 10, 0.5, Tail::Two).unwrap();
+        assert!(close(two.p_exact, 2.0 / 1024.0, 1e-9));
+        // Clopper-Pearson at the ends: 0.025^(1/n) and 1 - that.
+        let cp = exact_interval(10, 10, Tail::Two, 0.95);
+        assert!(close(cp.0, 0.025_f64.powf(0.1), 1e-9) && cp.1.is_nan(), "{cp:?}");
+        let zero = exact_interval(0, 10, Tail::Two, 0.95);
+        assert!(zero.0.is_nan() && close(zero.1, 1.0 - 0.025_f64.powf(0.1), 1e-9), "{zero:?}");
+        // 60 of 100 against 1/2: z = 2; below n p0 the z is 0.
+        let z = proportion_one(60, 100, 0.5, Tail::Two).unwrap();
         assert!(close(z.z, 2.0, 1e-12) && close(z.p_normal, 0.045_500_263_896_358_4, 1e-8), "{}", z.p_normal);
         let w = 1.959_963_984_540_054 * (0.24_f64 / 100.0).sqrt();
-        assert!(close(z.wald.0, 0.6 - w, 1e-9) && close(z.wald.1, 0.6 + w, 1e-9));
+        let wald = wald_interval(60, 100, Tail::Two, 0.95);
+        assert!(close(wald.0, 0.6 - w, 1e-9) && close(wald.1, 0.6 + w, 1e-9));
+        let below = proportion_one(40, 100, 0.5, Tail::Upper).unwrap();
+        assert_eq!((below.z, below.p_normal), (0.0, 0.5));
     }
 
     #[test]
     fn clopper_pearson_brackets_the_estimate_and_matches_the_tails() {
         let (x, n) = (7_u64, 23_u64);
-        let (lo, hi) = clopper_pearson(x, n, 0.95);
+        let (lo, hi) = exact_interval(x, n, Tail::Two, 0.95);
         assert!(lo < 7.0 / 23.0 && 7.0 / 23.0 < hi);
         assert!(close(binomial_p(x, n, lo, Tail::Upper), 0.025, 1e-6));
         assert!(close(binomial_p(x, n, hi, Tail::Lower), 0.025, 1e-6));
@@ -424,16 +535,26 @@ mod tests {
 
     #[test]
     fn two_proportions_pooled_and_separate() {
-        let pooled = proportion_two((30, 50), (20, 50), 0.0, true, Tail::Two, 0.05).unwrap();
+        let pooled = proportion_two((30, 50), (20, 50), 0.0, true, Tail::Two).unwrap();
         assert!(close(pooled.z, 2.0, 1e-12) && close(pooled.p_normal, 0.045_500_263_896_358_4, 1e-8));
-        let separate = proportion_two((30, 50), (20, 50), 0.0, false, Tail::Two, 0.05).unwrap();
+        let separate = proportion_two((30, 50), (20, 50), 0.0, false, Tail::Two).unwrap();
         assert!(close(separate.z, 0.2 / 0.0096_f64.sqrt(), 1e-12));
-        let fisher = pooled.p_exact.unwrap();
+        let fisher = pooled.p_fisher.unwrap();
         assert!(fisher > 0.0 && fisher < 1.0);
-        let up = proportion_two((30, 50), (20, 50), 0.0, true, Tail::Upper, 0.05).unwrap().p_exact.unwrap();
+        let up = proportion_two((30, 50), (20, 50), 0.0, true, Tail::Upper).unwrap().p_fisher.unwrap();
         assert!(up < fisher);
-        assert!(proportion_two((30, 50), (20, 50), 0.1, true, Tail::Two, 0.05).unwrap().p_exact.is_none());
-        assert!(proportion_two((0, 10), (0, 10), 0.0, true, Tail::Two, 0.05).is_none());
-        assert!(proportion_two((11, 10), (0, 10), 0.0, true, Tail::Two, 0.05).is_none());
+        assert!(proportion_two((30, 50), (20, 50), 0.1, true, Tail::Two).unwrap().p_fisher.is_none());
+        assert!(proportion_two((0, 0), (0, 10), 0.0, true, Tail::Two).is_none());
+        assert!(proportion_two((11, 10), (0, 10), 0.0, true, Tail::Two).is_none());
+    }
+
+    /// Fisher on the table [[3, 1], [1, 3]]: the counts of the first sample are hypergeometric
+    /// (1, 16, 36, 16, 1) / 70.
+    #[test]
+    fn fisher_exact_p_of_a_small_table() {
+        let t = proportion_two((3, 4), (1, 4), 0.0, true, Tail::Two).unwrap();
+        assert!(close(t.p_fisher.unwrap(), 34.0 / 70.0, 1e-9), "{:?}", t.p_fisher);
+        let up = proportion_two((3, 4), (1, 4), 0.0, true, Tail::Upper).unwrap();
+        assert!(close(up.p_fisher.unwrap(), 17.0 / 70.0, 1e-9));
     }
 }

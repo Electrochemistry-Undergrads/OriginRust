@@ -488,3 +488,29 @@ fn analysis_links_are_named_in_the_warnings() {
     let out = write(&p).unwrap();
     assert!(out.warnings.iter().any(|w| w.contains("1 analysis result")), "{:?}", out.warnings);
 }
+
+/// The IIR and FIR filters (T55) recalculate like Smooth, so a file written with one names it too.
+#[test]
+fn filter_links_are_named_in_the_warnings() {
+    use sheaf_core::Designation;
+    use sheaf_core::analysis::{FirSpec, IirSpec, OutputTarget, Request, RowRange, Tool};
+    use sheaf_core::column::RecalcMode;
+    let mut p = Project::new();
+    let book = p.add_workbook("Book1");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric((0..20).map(f64::from).collect())).unwrap();
+    let y = p
+        .add_column(book, 0, Designation::Y, ColumnData::numeric((0..20).map(|i| f64::from(i % 4)).collect()))
+        .unwrap();
+    let iir = IirSpec { order: Some(2), cutoff: Some(0.2), ..IirSpec::default() };
+    let fir = FirSpec { order: Some(4), cutoff: Some(0.2), ..FirSpec::default() };
+    for tool in [Tool::IirFilter(iir), Tool::FirFilter(fir)] {
+        p.analyze_linked(
+            &Request { columns: vec![y], rows: RowRange::All, tool },
+            &OutputTarget::NextToInput,
+            RecalcMode::Manual,
+        )
+        .unwrap();
+    }
+    let out = write(&p).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("2 analysis result")), "{:?}", out.warnings);
+}

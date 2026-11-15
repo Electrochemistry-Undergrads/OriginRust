@@ -284,14 +284,27 @@ pub(crate) fn format_general(x: f64) -> String {
 }
 
 /// A number written by one of Origin's format codes: `*` (general), `*n` (n significant digits),
-/// `.n` (n decimals), `E*n` (engineering notation with a unit prefix). Other codes fall back to
-/// the general form.
+/// `.n` (n decimals), `E*n` (engineering notation with a unit prefix), or empty (the default
+/// @SD precision of 14 significant digits). Other codes fall back to the general form.
 pub(crate) fn format_number(x: f64, fmt: &str) -> String {
     if x.is_nan() {
         return "--".into();
     }
     if x.is_infinite() {
         return format_general(x);
+    }
+    if fmt.is_empty() {
+        // Empty is distinct from an omitted format or "*". Sheaf has no mutable global
+        // @SD setting; use Origin's documented default, dropping fractional trailing zeros.
+        // Choose scientific notation from the original magnitude, even if rounding carries
+        // a value just below 0.001 up to 0.001 (Origin writes that boundary as 1E-3).
+        let formatted =
+            if x != 0.0 && x.abs() < 0.001 { sci_text(x < 0.0, x.abs(), 13, true) } else { format_number(x, "*14") };
+        let (mantissa, exponent) = formatted.split_once('E').map_or((formatted.as_str(), None), |(m, e)| (m, Some(e)));
+        let mantissa =
+            if mantissa.contains('.') { mantissa.trim_end_matches('0').trim_end_matches('.') } else { mantissa };
+        return exponent
+            .map_or_else(|| mantissa.to_string(), |e| format!("{mantissa}E{}", e.parse::<i32>().unwrap_or(0)));
     }
     let fmt = fmt.trim();
     let (neg, a) = (x < 0.0, x.abs());

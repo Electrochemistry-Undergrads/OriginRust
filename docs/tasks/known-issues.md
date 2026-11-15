@@ -6,6 +6,16 @@ Update the relevant brief/spec when resolving one; the historical snapshot is in
 
 ## Integration after the archived snapshot
 
+- T02 Column Browser row ranges (2026-11-15, Windows, feature `d9b4af7`): the lower Rows
+  control opens Range with Entire Column(s), From and To. Each added range keeps its own
+  bounds, including after removal of a preceding range. Native integer-prefix conversion,
+  reversed/single-row intervals, empty columns and block endpoint references are preserved;
+  Go To still uses the original sheet's column end. Eighteen valid Origin cases and ten new
+  UI regressions cover transfer, validation, reset, Cancel/Escape and keyboard focus. All 39
+  Go To tests pass; formatting, strict workspace all-target Clippy and 3,316 workspace tests
+  pass (eight existing ignored), with MCP teardown/ROC/filters/formula formatting integrated.
+  Exclude and saved preferences remain (gui-look section 5).
+
 - T25 proxy disconnect cleanup (2026-11-15, Windows, feature `ef98bf7`): disposing of the
   active link signals its reader and polls cancellation every 250 ms, releasing its socket
   clone even when shutdown does not wake the receive. Live partial frames survive polls;

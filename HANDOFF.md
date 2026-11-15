@@ -71,8 +71,9 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
-T25 proxy disconnect cleanup landed during planning (`ef98bf7`); its claim is released.
-The result and recorded checks are preserved in [known issues/recent results](docs/tasks/known-issues.md).
+T25 proxy disconnect cleanup (`ef98bf7`) and T02 browser row ranges (`d9b4af7`) landed during
+planning; both claims are released. Results and recorded checks are preserved in
+[known issues/recent results](docs/tasks/known-issues.md).
 
 ## In flight (check for recent edits before claiming)
 
@@ -82,7 +83,6 @@ The result and recorded checks are preserved in [known issues/recent results](do
 | `codex/formula-worksheet-substitution` | Codex Windows, formula-worksheet-substitution | T08 static worksheet-cell %([Book]Sheet,column,row[,format]) substitution; expr lowering/evaluation, isolated core/IO formula regressions | claimed 2026-11-15; no graph/legend/session/generated-expression substitution, global Options/model fields, UI, MCP, imports, statistics or other owner scopes |
 | `t19-fntrim` | Claude Windows, session fe4b37eb | T19 file-name trimming on ASCII import (Origin's FNameToSht/Bk From/To rules) and the book long name keeping the file extension (owner's decision 2026-11-15); crates/io ascii naming, app import window, cli flags, import-ascii.md, title tests | claimed 2026-11-15 |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
-| `codex/t02-browser-rows` | Codex Windows, t02-browser-rows | T02 Column Browser lower row-range editor: native defaults/validation/Cancel/reference transfer and focused UI tests/docs | claimed 2026-11-15; only go_to/browser and own go_to_browser tests/docs; no Exclude/preferences, original-sheet navigation changes without published refinement, app/MRU/grid/core/history/MCP/plots/stats/fit/formula/labels or other owner work |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `cell-notes` | Claude macOS, "mac-multipdf" | T36 worksheet cell notes (Origin 2022): core per-sheet notes kept through row/column ops and sort, grid corner tab + hover popup, cell menu Add/Edit/Delete Note, note editor | claimed 2026-11-15; core worksheet + sheetops note upkeep, grid.rs body_cell, menus/app/dialogs; no cond-format/frozen/filter/Go To, plot, stats or other sessions' scopes |
 | `slope-annotation` | Claude macOS, "mac-multipdf" | T52 slope annotation (Origin 2026b): layer SlopeAnnotation linked to two data rows, segment + rise/run legs + slope label (per decade on log axes), toolbar Slope tool with point picking, delete/undo, CLI/MCP | claimed 2026-11-15; core graph.rs layer field, new plot module, app toolbar/graph_view tool mode, small dialog; no drawn-shape ordering, Data Reader changes or other sessions' scopes |

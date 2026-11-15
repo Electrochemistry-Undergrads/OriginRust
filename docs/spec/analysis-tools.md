@@ -530,6 +530,7 @@ other than the request's range.
 Command line: `sheaf analyze peaks FILE [--method local-max|window|first-derivative|second-derivative]
 [--smooth N] [--min-width W] [--baseline none|end-points|minima|anchors] [--baseline-points N]
 [--anchors X1:Y1,X2:Y2] [--limits baseline|half-height] [--integrate] [--fit gauss|lorentz|voigt]
+[--fit-shapes F1,F2,...]
 [--fit-baseline constant|linear]`, together with the existing `--points`, `--min-height`, `--count`,
 `--direction`. Without any chain option the plain peak finder of section 7 runs. Window: Analysis >
 Analyze Peaks... (command line `--show analysis:peak-chain`).
@@ -621,8 +622,16 @@ Measured in Origin 2016 (`re-workspace/scratch/t04v/v1` and `v2`, `tools/origin-
   and A are 3.4e-4 and 5.3e-3 relative apart (Origin's derivatives of its approximate function would
   explain it; not measured further). Test: `crates/fit/tests/multipeak_voigt.rs`.
 
-Not done: a different function per peak, constraints between peaks, and Origin's own Peak Analyzer
-Fit Peaks (Pro) page, which was not opened (11.1).
+**A function per peak** (Sheaf's own layout; Origin's Fit Control window, where the Pro version sets a
+function per peak, was not opened): the Fit Peaks page's "Function per peak" list (Add Peak Function,
+one entry per peak in the order found, "Same as above" or Gauss, Lorentz, Voigt) and
+`sheaf analyze peaks --fit F --fit-shapes F1,F2,...` give peak *k* its own function; peaks beyond the
+list take the Function (`--fit`). Each peak keeps its own parameters (`xc1 w1 A1 xc2 A2 wG2 wL2` for a
+Gauss and a Voigt), the note names them in order ("Gauss+Voigt fit of 2 peaks") and the fitted
+column's comment says the same. `--fit-shapes` needs `--fit`.
+
+Not done: constraints between peaks, and Origin's own Peak Analyzer Fit Peaks (Pro) page, which was
+not opened (11.1).
 
 ## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1)
 

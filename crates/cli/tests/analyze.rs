@@ -736,6 +736,24 @@ fn peaks_chain_integrates_and_fits_every_peak() {
     assert!(ok, "stderr: {stderr}");
     assert!(stdout.contains("Voigt fit of 2 peaks") && stdout.contains("Fit FWHM"), "{stdout}");
 
+    // A function per peak: the first Lorentz, the rest the --fit function.
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "peaks",
+        data.to_str().unwrap(),
+        "--min-height",
+        "0.3",
+        "--fit",
+        "gauss",
+        "--fit-shapes",
+        "lorentz",
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Lorentz+Gauss fit of 2 peaks"), "{stdout}");
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--min-height", "0.3", "--fit-shapes", "voigt"]);
+    assert!(!ok && stderr.contains("--fit"), "the per-peak list needs --fit: {stderr}");
+
     // Without any chain option the plain peak finder runs, as before.
     let (ok, stdout, _) = sheaf(&["analyze", "peaks", data.to_str().unwrap()]);
     assert!(ok && stdout.contains("Peaks1") && !stdout.contains("Area"), "{stdout}");

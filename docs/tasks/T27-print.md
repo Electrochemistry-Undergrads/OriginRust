@@ -1,7 +1,14 @@
 # T27: Print, Print Preview, Page Setup
 
-**Status:** Windows half built on branch `print` (2026-11-14): Page Setup model and window, Print, Print Preview, headless print check, graphing 19. Left: workbook printing, macOS panel, `sheaf print`, Origin's Print/Print Preview windows (unmeasured). (Brief written 2026-11-14 from T18's "Print" row and parity row "Print, Print Preview,
+**Status:** Windows graph printing merged (2026-11-14): Page Setup model and window, Print, Print Preview, headless print check, graphing 19. Left: workbook printing, macOS panel, Origin's Print/Print Preview windows (unmeasured). (Brief written 2026-11-14 from T18's "Print" row and parity row "Print, Print Preview,
 Page Setup", P1).
+CLI graph printing added on macOS without Origin (`cli-print`, 2026-11-14):
+`sheaf print PROJECT [--graph NAME] --output FILE.pdf` writes a vector PDF on the saved paper size,
+with the graph scaled and centred by `PageSetup::place`; without `--output`, macOS/Linux submit
+that PDF through `lp` to the default or `--printer NAME` destination. Windows supports PDF output
+only. No physical printer was used in the automated checks; the native macOS panel and workbook
+printing remain open.
+
 **Size:** M. **Branch:** `print`. **Model:** Sonnet. Needs a Windows session for the Windows path and a
 macOS session for the macOS path; each half can merge on its own.
 **Detail:** audit A (File menu: Print, Print Preview, Page Setup greyed; Standard bar Print; View >
@@ -43,8 +50,8 @@ workbook prints its active sheet as a table. Both work without any file export s
   `grey("Print Pre&view")`, `grey("Page Setup...")`) and the View menu's `Print View`.
 - Workbooks: render the visible sheet as a table into the same EMF/PDF path (later step; may split into
   its own brief if large).
-- CLI: `sheaf print FILE --graph NAME [--printer NAME]` is optional; `sheaf plot ... -o x.pdf` already
-  covers printing from scripts.
+- CLI: `sheaf print PROJECT [--graph NAME] [--printer NAME | --output FILE.pdf]` uses saved Page Setup
+  (graphing.md 19.6). `sheaf plot ... -o x.pdf` exports at graph-page size instead.
 
 ## Steps
 

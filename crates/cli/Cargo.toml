@@ -19,8 +19,11 @@ sheaf-ops.workspace = true
 anyhow.workspace = true
 clap = { version = "4.6", features = ["derive"] }
 
+tempfile = "3.27"
+
 [dev-dependencies]
 serde_json.workspace = true
+flate2 = "1"
 
 [lints]
 workspace = true

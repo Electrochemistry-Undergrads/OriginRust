@@ -193,12 +193,20 @@ are checked as the CLI checks them: width and height 0.1 to 100 inches, finite a
 differ, colors parsed by `Color::parse`.
 
 **`export_graph`**
-`{graph?, path?, format?: "png|svg|pdf|eps|tiff|emf|jpg|bmp", dpi?, width?, height?, margin?, return_image?}`.
+`{graph?, graphs?: [string], all_graphs?, path?, format?: "png|svg|pdf|eps|tiff|emf|jpg|bmp", dpi?, width?, height?, margin?, return_image?}`.
 `format` defaults to the extension of `path`, else `png`. `dpi` defaults to 300, range 36 to 1200;
 the pixel count is capped at 40 million. `width` and `height` are lengths (`3.5in`, `9cm`, `800px`),
 as the CLI's `--image-width`. `return_image` (default true when `path` is absent, false otherwise)
 adds the PNG as an image content block, scaled to at most 1600 pixels on the long side; the file
 keeps its full size. Result `{graph, path?, format, width_px, height_px, bytes}`.
+`graphs` (names, in page order) or `all_graphs` (every graph, in project order) put several graphs
+into one PDF, one page per graph, as Origin 2018b's multi-page PDF export (expGraph `multipage`).
+Each page is the one-graph PDF export of that graph with the same size and margin settings, and
+each passes the pixel cap. Neither goes with `graph`; names resolve as `graph` does. Sheaf's own
+rules, not measured in Origin: with more than one graph a `path` is required, the format must be
+pdf (by `format` or the extension), and `return_image: true` is refused (no image is returned).
+Result `{graph, graphs, pages, path, format, width_px: null, height_px: null, bytes}`, `graph`
+being the first page's graph. A list that resolves to one graph is the one-graph export.
 
 **`export_data`** `{book?, sheet?, path, format?: "csv|tsv|xlsx", all_sheets?}` writes the sheet as
 delimited text (tabs for `.tsv` and `.txt`), or as an Excel workbook for a path ending in `.xlsx` or

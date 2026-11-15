@@ -262,7 +262,7 @@ impl Template {
     /// Builds an empty graph (no plots) in this template's style: one layer, or two for
     /// [`Template::DoubleY`].
     pub fn new_graph(&self, id: WindowId, name: &str) -> Graph {
-        match self {
+        let mut graph = match self {
             Template::Line => general(id, name, PlotKind::Line),
             Template::Scatter => general(id, name, PlotKind::Scatter),
             Template::LineSymbol => general(id, name, PlotKind::LineSymbol),
@@ -303,7 +303,15 @@ impl Template {
             Template::ViolinStick => from_red(general(id, name, PlotKind::ViolinStick)),
             Template::HalfViolin => from_red(general(id, name, PlotKind::HalfViolin)),
             Template::Ridgeline => from_red(general(id, name, PlotKind::Ridgeline)),
+        };
+        // These four stock templates share the measured anchor. Other templates keep their
+        // own placement (including CV, polar/radar and the separately measured Double-Y).
+        if matches!(self, Template::Line | Template::Scatter | Template::LineSymbol | Template::Column) {
+            graph.layers[0].legend.position = LegendPosition::Automatic;
+            // The stock white legend hides the frame/curves under it (Origin exports, spec 2.4).
+            graph.layers[0].legend.background = Some(Color::WHITE);
         }
+        graph
     }
 }
 
@@ -886,8 +894,11 @@ mod tests {
         assert_eq!((l.y_axis.major_tick, l.y_axis.minor_tick), (TickDirection::None, TickDirection::None));
         assert!(l.x_axis.show_opposite && l.y_axis.show_opposite, "closed box");
         assert!(!l.x_axis.opposite_ticks && !l.y_axis.opposite_ticks);
-        // The X axis and the legend are those of the line template.
-        let line = Template::Line.new_graph(WindowId(1), "Graph1");
+        // The X axis and legend styling follow Line; this unmeasured template keeps its
+        // existing corner placement rather than adopting the four stock templates' anchor.
+        let mut line = Template::Line.new_graph(WindowId(1), "Graph1");
+        line.layers[0].legend.position = LegendPosition::TopRight;
+        line.layers[0].legend.background = None;
         assert_eq!(l.x_axis.major_tick, line.layers[0].x_axis.major_tick);
         assert!(l.x_axis.show_tick_labels);
         assert_eq!(l.legend, line.layers[0].legend);
@@ -900,6 +911,9 @@ mod tests {
         let mut line = Template::Line.new_graph(WindowId(1), "Graph1");
         assert_eq!(g.layers[0].stack, Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 });
         line.layers[0].stack = g.layers[0].stack;
+        // Waterfall's separate placement has not been measured.
+        line.layers[0].legend.position = LegendPosition::TopRight;
+        line.layers[0].legend.background = None;
         assert_eq!(g, line);
         // Every other template has no offsets.
         for t in

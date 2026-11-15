@@ -50,6 +50,10 @@ fn ids(p: &Project) -> Vec<ColumnId> {
 fn graph_with(p: &mut Project, template: Template, plots: &[(usize, usize)], f: impl FnOnce(&mut Graph)) {
     let c = ids(p);
     let id = p.add_graph(template);
+    if p.graph(id).unwrap().layers[0].legend.position == LegendPosition::Automatic {
+        p.graph_mut(id).unwrap().layers[0].legend.position = LegendPosition::TopRight;
+        p.graph_mut(id).unwrap().layers[0].legend.background = None;
+    }
     for (x, y) in plots {
         p.add_plot_xy(id, 0, Some(c[*x]), c[*y], None).unwrap();
     }
@@ -310,6 +314,8 @@ fn error_bars_text_x_and_two_layers() {
     let mut p = source();
     let c = ids(&p);
     let id = p.add_graph(Template::Line);
+    p.graph_mut(id).unwrap().layers[0].legend.position = LegendPosition::TopRight;
+    p.graph_mut(id).unwrap().layers[0].legend.background = None;
     p.add_plot_xy(id, 0, Some(c[5]), c[1], Some(c[4])).unwrap();
     p.graph_mut(id).unwrap().layers[0].plots[0].kind = PlotKind::Column;
     let mut second = p.graph(id).unwrap().layers[0].clone();
@@ -423,6 +429,8 @@ fn a_graph_before_its_workbook_still_finds_the_columns() {
     let mut p = source();
     let c = ids(&p);
     let id = p.add_graph(Template::Line);
+    p.graph_mut(id).unwrap().layers[0].legend.position = LegendPosition::TopRight;
+    p.graph_mut(id).unwrap().layers[0].legend.background = None;
     p.add_plot_xy(id, 0, Some(c[0]), c[2], None).unwrap();
     // move the graph in front of the workbook
     let g = p.windows.pop().unwrap();

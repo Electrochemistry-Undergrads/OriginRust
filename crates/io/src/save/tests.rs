@@ -365,3 +365,26 @@ fn page_setup_survives_a_sheaf_project_and_the_opj_companion() {
     let out = save_project(&project_with_graph(), &dir.join("c.opj")).unwrap();
     assert!(out.companion.is_none(), "{:?}", out.warnings);
 }
+
+#[test]
+fn automatic_legend_position_survives_native_and_companion_saves() {
+    use sheaf_core::graph::LegendPosition;
+    let dir = scratch("automatic-legend");
+    let mut p = workbook_project();
+    let column = p.workbooks().next().unwrap().sheet().columns[1].id;
+    let graph = p.plot_columns(Template::Line, &[column]).unwrap();
+    for position in [LegendPosition::Automatic, LegendPosition::TopRight, LegendPosition::Manual { x: 0.7, y: -0.1 }] {
+        p.graph_mut(graph).unwrap().layers[0].legend.position = position;
+        let native = dir.join("legend.sheaf");
+        save_project(&p, &native).unwrap();
+        assert_eq!(open_project(&native).unwrap().project, p);
+    }
+    p.graph_mut(graph).unwrap().layers[0].legend.position = LegendPosition::Automatic;
+    let opj = dir.join("legend.opj");
+    let out = save_project(&p, &opj).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("automatic legend anchor")), "{:?}", out.warnings);
+    assert!(out.companion.is_some());
+    let reopened = open_project(&opj).unwrap();
+    assert!(reopened.companion_used);
+    assert_eq!(reopened.project, p);
+}

@@ -126,7 +126,7 @@ The byte layout is [INF], cross-checked on "Q03 Rainbow7", which decodes to red,
 - Anti-aliasing covers plots, axes/grid and line objects; purely horizontal/vertical lines are never anti-aliased [W:options-dialog-graph-tab].
 
 ### 2.2 Font, width, size defaults (U3 measured 2026-11-13)
-Measured on a fresh `plotxy` with `?layer.x.label.pt`, `?layer.x.thickness`, `get %C -z` (symbol size), `get %C -w` (line width x 500), `get %C -k` (shape), and from PNG exports at 3200 px (4.145 px per pt): page 6432 x 4923 units of 1/600 in (10.72 x 8.205 in); layer frame left 17.91 %, top 11.58 %, width 68.16 %, height 71.83 % (`layer.left/top/width/height`); tick labels 18 pt, axis titles about 22 pt (cap height 66 px), legend text about 22 pt, all Arial; axis line 1.5 pt; major tick 9 pt and minor 4.5 pt long (pixels), direction out, bottom and left only, one minor tick; data line 0.5 pt (`get -w` = 250); symbol square, 9 pt, solid; legend has a black frame. Sheaf's generic templates copy all of these (page 10.72 x 8.205 in); the legend position is Sheaf's own (inside the frame). Earlier recommendation, kept for the record:
+Measured on a fresh `plotxy` with `?layer.x.label.pt`, `?layer.x.thickness`, `get %C -z` (symbol size), `get %C -w` (line width x 500), `get %C -k` (shape), and from PNG exports at 3200 px (4.145 px per pt): page 6432 x 4923 units of 1/600 in (10.72 x 8.205 in); layer frame left 17.91 %, top 11.58 %, width 68.16 %, height 71.83 % (`layer.left/top/width/height`); tick labels 18 pt, axis titles about 22 pt (cap height 66 px), legend text about 22 pt, all Arial; axis line 1.5 pt; major tick 9 pt and minor 4.5 pt long (pixels), direction out, bottom and left only, one minor tick; data line 0.5 pt (`get -w` = 250); symbol square, 9 pt, solid; legend has a black frame. Sheaf's generic templates copy all of these (page 10.72 x 8.205 in); the four measured stock legend positions follow section 2.4; other template positions remain separate. Earlier recommendation, kept for the record:
 No public page and no installed text file gives them. [REC] Arial; axis titles, tick labels and legend 22 pt on the stock page; data line 1.5 pt; axis line 1.5 pt; major tick 9 pt, minor 4.5 pt; symbol 9 pt. Weak support: themes "Black on paper" and "Physical Review Letters" contain the numbers 1.5 and 8 [F:Themes\Graph]. 
 
 ### 2.3 Scale elements
@@ -152,19 +152,30 @@ anchor, in fractions of the frame from its upper-left, is approximately **(0.822
 It is calculated from `legend.x1/y1` and the axis ranges: `x=(x1-xfrom)/(xto-xfrom)` and
 `y=1-(y1-yfrom)/(yto-yfrom)`. In the ordinary 0..6 by 1..11 Line case, x1=4.933850365,
 y1=12.043552036. Scatter/Line+Symbol and Column give the same fractions with different ranges.
+The stock legend is opaque white: in the four-curve export the blue curve stops precisely
+at its frame; a further Column export with both axis sides enabled also hides the upper
+frame line behind it. Both visual checks use the same default legend. The four measured
+template defaults therefore use a white background, preventing a frame line crossing the text.
+
 The anchor remains fixed when rows or text widen the legend: it grows right/down, can extend
 past the page with a long label, and four entries cross the upper frame edge. A single entry
 is above the frame in Origin. The resized-layer/page PNGs follow the same relative anchor;
 raw `legend.left/top` retain cached page coordinates, so they are not used to infer resizing.
 
-Implementation decision: new graphs from those four templates will use an **Automatic**
+New graphs from those four templates use an **Automatic**
 legend position with that upper-left anchor. Existing corner/manual positions and the CV,
-Double-Y and other template placements stay as saved. The existing position chooser will
-show/reset Automatic. Native/companion files retain it, and the `.opj` writer places its
-legend rectangle at the same anchor. Text measurement, padding, row spacing, sample size,
-fonts, frame styles and manual dragging remain the current renderer's behavior; this copies
+Double-Y and other template placements stay as saved. The existing position chooser shows and resets Automatic. Native files retain it. The `.opj` writer places its rectangle at the same anchor and reports
+that raw import uses a fixed centre; a companion retains Automatic for later Sheaf text/column
+changes. Text measurement, padding, row spacing, sample size,
+fonts, other frame styles and manual dragging remain the current renderer's behavior; this copies
 placement, and does not claim identical legend dimensions. Double-Y's smaller page-attached
 legend is a separate measured difference, outside this change.
+
+A generated `.opj` reopened in Origin 2016 with the same anchor (0.822308, -0.104355).
+Both its original and a longer edited legend exported successfully and were inspected; the
+longer label retained its upper-left point. Five regressions cover the measured templates,
+content/columns/font and layer/page changes, the position chooser with Cancel/Undo/Redo,
+native/companion saves and raw `.opj` rectangle placement.
 
 The probe uses the documented [graphical object coordinates](https://docs.originlab.com/labtalk/guide/creating-and-accessing-graphical-objs/)
 and [expGraph](https://docs.originlab.com/x-function/ref/expgraph/); measurements above come

@@ -1,9 +1,21 @@
 # T21: Graph defaults as Origin (colours, fonts, line widths, ticks, symbols, dashes)
 
-**Status:** done, merged (`b015f97`). Left: the 0.5 pt dash lengths are not linear in the width; legend default position (Origin overlaps the top frame edge) not copied; Column and Waterfall/Stacked/DoubleY follow the new defaults; writer stores the major tick length since 2026-11-15 (opj-format 10.3; the reader reads it, minor = half), a chosen minor length is still not stored. **Size:** M.
+**Status:** done, merged (`b015f97`). Follow-ups on 2026-11-15: stock Line/Scatter/Line+Symbol/Column legend anchor and opaque white background copied (graphing 2.4); the writer stores the major tick length (opj-format 10.3; the reader reads it, minor = half). Column and Waterfall/Stacked/DoubleY retain the earlier font/colour defaults. Left: the 0.5 pt dash lengths are not linear in width; other template legend placements and dimensions; a chosen minor tick length is still not stored. **Size:** M.
 **Branch:** `graph-defaults2`. **Model:** Sonnet.
 **Detail:** audit C "Different, checked in Origin" and "Different, not verified"; open question U1 (colour
 order). **Spec:** `docs/spec/graphing.md` sections 1.5 (colour list), 2.1 (dash patterns), 3 (axis).
+
+## Stock legend placement follow-up (2026-11-15)
+
+Nine corrected stock-template/resize exports and two generated-OPJ acceptance exports were
+inspected in Origin 2016. Line, Scatter, Line + Symbol and Column use an upper-left anchor
+at about (0.8223, -0.1044) of the layer frame, growing right/down with their content.
+These four templates use Automatic and the measured opaque white default background. Other templates and saved corner/manual positions retain
+their placement; Double-Y was measured and has a different page-attached legend. The existing
+position chooser can restore Automatic. Native/companion files retain it; raw OPJ writes the
+same rectangle anchor and reports its fixed-centre import so a companion preserves the mode.
+The renderer's existing font metrics, padding and row spacing remain separate from placement.
+Five regressions cover render geometry, position history/Cancel, and native/OPJ persistence.
 
 ## Today
 

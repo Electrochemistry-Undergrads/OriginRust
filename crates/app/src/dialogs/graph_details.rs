@@ -1379,6 +1379,7 @@ fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend, ids: &[String]) {
         ui.label("Position");
         ui.horizontal(|ui| {
             let name = |p: &LegendPosition| match p {
+                LegendPosition::Automatic => "Automatic",
                 LegendPosition::TopRight => "Top right",
                 LegendPosition::TopLeft => "Top left",
                 LegendPosition::BottomRight => "Bottom right",
@@ -1387,6 +1388,7 @@ fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend, ids: &[String]) {
             };
             egui::ComboBox::from_id_salt("legend_pos").selected_text(name(&legend.position)).show_ui(ui, |ui| {
                 for p in [
+                    LegendPosition::Automatic,
                     LegendPosition::TopRight,
                     LegendPosition::TopLeft,
                     LegendPosition::BottomRight,

@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 451 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 449 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -86,7 +86,7 @@ Double-Y on linked layers (ADR 0009), stacked columns, bars and areas (graphing 
 
 | ✓ | Package | What | Size | Origin needed | Greyed items | Main files |
 |---|---|---|---|---|---|---|
-| [ ] | [T63](T63-greyed-items-with-code-2.md) | Second round of T01: toolbar plot buttons, step lines, Probability and Q-Q plots in the Plot menu, Open Excel, export from any window, Duplicate, Fill Column With, axis tick label items, Add Plot to Layer | M | no | 31 | `app/menus.rs`, `app/toolbar.rs` |
+| [ ] | [T63](T63-greyed-items-with-code-2.md) | Second round of T01: toolbar plot buttons, step lines, Probability and Q-Q plots in the Plot menu, Open Excel, export from any window, Duplicate, Fill Column With, axis tick label items, Add Plot to Layer | M | no | 27 | `app/menus.rs`, `app/toolbar.rs` |
 
 ## Wave 4: everyday graph editing
 
@@ -142,7 +142,7 @@ Backlog packages: write the brief first (step 3 above).
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
 | [ ] | [T57](T57-deconvolution-stft.md) | Deconvolution and STFT (claimed 2026-11-15) | M | 2 |
-| [ ] | B8 | Analysis and statistics: wavelets, Multiple Peak Fit, batch peak analysis, implicit fit, Simulate Surface, Compare Datasets, XYZ Surface Area, partial correlation, three-way and repeated-measures ANOVA | L | 14 |
+| [ ] | B8 | Analysis and statistics: wavelets, Multiple Peak Fit, batch peak analysis, implicit fit, Simulate Surface, Compare Datasets, XYZ Surface Area, partial correlation, three-way and repeated-measures ANOVA | L | 16 |
 | [ ] | B9 | Gadgets on the graph (Statistics, Quick Fit, Quick Peaks, Differentiate, Interpolate, Intersect, FFT, Rise Time, Cluster, Vertical Cursor, ...) | L | 13 |
 | [ ] | B10 | Most Recently Used lists in the Plot, Worksheet, Analysis and Statistics menus; Recent Exports | S | 6 |
 

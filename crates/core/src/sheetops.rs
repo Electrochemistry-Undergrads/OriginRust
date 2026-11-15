@@ -197,18 +197,21 @@ impl Worksheet {
     /// such columns were skipped.
     pub fn insert_rows(&mut self, columns: &[usize], at: usize, count: usize) -> usize {
         let mut locked = 0;
+        let mut done = Vec::new();
         for &i in columns {
             let Some(c) = self.columns.get_mut(i) else { continue };
             if c.is_locked() {
                 locked += 1;
                 continue;
             }
+            done.push(c.id);
             if at < c.len() {
                 c.mask = c.mask.iter().map(|r| if *r >= at { r + count } else { *r }).collect();
             }
             c.data.insert_blank_rows(at, count);
         }
         self.cond_formats_insert_rows(columns, at, count);
+        self.notes_insert_rows(&done, at, count);
         locked
     }
 
@@ -216,12 +219,14 @@ impl Worksheet {
     /// Returns how many formula columns were skipped.
     pub fn delete_rows(&mut self, columns: &[usize], rows: Range<usize>) -> usize {
         let mut locked = 0;
+        let mut done = Vec::new();
         for &i in columns {
             let Some(c) = self.columns.get_mut(i) else { continue };
             if c.is_locked() {
                 locked += 1;
                 continue;
             }
+            done.push(c.id);
             c.mask = c
                 .mask
                 .iter()
@@ -231,7 +236,8 @@ impl Worksheet {
             c.data.remove_rows(rows.clone());
             c.trim_missing_tail();
         }
-        self.cond_formats_delete_rows(columns, rows);
+        self.cond_formats_delete_rows(columns, rows.clone());
+        self.notes_delete_rows(&done, rows);
         locked
     }
 
@@ -357,6 +363,7 @@ impl Project {
                 c.reorder_rows(&order, n);
             }
         }
+        ws.notes_reorder_rows(&|c| columns.is_empty() || columns.contains(&c), &order, n);
         // The rows moved, so a filter is applied again to the new order.
         let _ = self.reapply_row_filter(book, sheet);
         Ok(())
@@ -380,6 +387,7 @@ impl Project {
     /// Order). Columns kept up to date by a formula are left alone; returns how many.
     pub fn reverse_columns(&mut self, ids: &[ColumnId]) -> usize {
         let mut locked = 0;
+        let mut reversed = Vec::new();
         for id in ids {
             let Some(c) = self.column_mut(*id) else { continue };
             if c.is_locked() {
@@ -389,6 +397,16 @@ impl Project {
             let n = c.len();
             let order: Vec<usize> = (0..n).rev().collect();
             c.reorder_rows(&order, n);
+            reversed.push((*id, order, n));
+        }
+        for (id, order, n) in reversed {
+            for w in &mut self.windows {
+                if let crate::project::Window::Workbook(b) = w {
+                    for sheet in &mut b.sheets {
+                        sheet.notes_reorder_rows(&|c| c == id, &order, n);
+                    }
+                }
+            }
         }
         locked
     }
@@ -525,6 +543,34 @@ mod tests {
         let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
         assert_eq!(ws.mask_cells(&[0], 0..3, MaskOp::Remove), 2);
         assert!(ws.columns[0].mask.is_empty());
+    }
+
+    #[test]
+    fn notes_follow_their_rows_through_sorts_and_reverse() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let k = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![3.0, 1.0, 2.0])).unwrap();
+        let o = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![30.0, 10.0, 20.0])).unwrap();
+        {
+            let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
+            ws.set_note(k, 0, "three");
+            ws.set_note(o, 1, "ten");
+        }
+        p.sort_sheet(book, 0, k, false).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!((ws.note(k, 2), ws.note(o, 0)), (Some("three"), Some("ten")));
+        // Sorting one column alone moves only that column's notes.
+        p.sort_columns(book, 0, &[k], true).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!((ws.note(k, 0), ws.note(o, 0)), (Some("three"), Some("ten")));
+        assert_eq!(ws.notes.len(), 2);
+        // Sort Range on one column and the key keeps the other columns' notes in place.
+        p.sort_range(book, 0, k, &[k], false).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!((ws.note(k, 2), ws.note(o, 0)), (Some("three"), Some("ten")));
+        p.reverse_columns(&[o]);
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!((ws.note(k, 2), ws.note(o, 2)), (Some("three"), Some("ten")));
     }
 
     #[test]

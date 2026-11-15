@@ -146,8 +146,14 @@ pub fn place_workbook_with(
                 for (old, col) in dest.sheets[t.sheet].columns.iter().zip(columns.iter_mut()) {
                     col.id = old.id;
                 }
-                dest.sheets[t.sheet] =
-                    Worksheet { name, columns, filter: None, frozen: Default::default(), cond_formats: Vec::new() };
+                dest.sheets[t.sheet] = Worksheet {
+                    name,
+                    columns,
+                    filter: None,
+                    frozen: Default::default(),
+                    cond_formats: Vec::new(),
+                    notes: Vec::new(),
+                };
             }
             // Further sheets of the file (several data blocks) follow as new sheets.
             for mut sheet in it {
@@ -633,6 +639,7 @@ mod tests {
             filter: None,
             frozen: Default::default(),
             cond_formats: Vec::new(),
+            notes: Vec::new(),
         }];
         b
     }

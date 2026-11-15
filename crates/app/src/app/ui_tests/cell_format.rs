@@ -6,7 +6,7 @@ use sheaf_core::condformat;
 
 fn start_book(tag: &str) -> Harness<'static, SheafApp> {
     let mut h = start(vec![data_file(tag)]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     h
 }
 
@@ -291,7 +291,7 @@ fn wide_file(tag: &str) -> PathBuf {
 #[test]
 fn a_frozen_overlay_cell_and_a_label_cell_are_drawn_styled() {
     let mut h = start(vec![wide_file("cfmt-frozen")]);
-    show_window(&mut h, "Book1 - wide");
+    show_window(&mut h, "Book1 - wide.csv");
     let a = col_id(&h, "A");
     h.state_mut().doc.apply("seed", |p| {
         let book = p.workbooks().next().unwrap().id;

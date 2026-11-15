@@ -163,10 +163,35 @@ pub fn backup_original(path: &Path) -> Result<Option<PathBuf>, IoError> {
     let mut name = path.file_name().map(|n| n.to_os_string()).unwrap_or_default();
     name.push(".bak");
     let backup = path.with_file_name(name);
-    if backup.exists() {
-        return Ok(None);
+    // Copying through a symlink (even a dangling one) would write wherever it points.
+    match backup.symlink_metadata() {
+        Ok(m) if m.file_type().is_symlink() => {
+            let e = std::io::Error::other("the backup path is a symbolic link; remove it first");
+            return Err(IoError::io(&backup, e));
+        }
+        Ok(_) => return Ok(None),
+        Err(_) => {}
     }
-    std::fs::copy(path, &backup).map_err(|e| IoError::io(&backup, e))?;
+    let copy = std::fs::read(path).map_err(|e| IoError::io(path, e)).and_then(|bytes| {
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&backup)
+            .map_err(|e| IoError::io(&backup, e))?;
+        f.write_all(&bytes).map_err(|e| IoError::io(&backup, e))?;
+        // fs::copy kept the permissions of the original; so does the backup.
+        if let Ok(m) = std::fs::metadata(path) {
+            let _ = std::fs::set_permissions(&backup, m.permissions());
+        }
+        Ok(())
+    });
+    if let Err(e) = copy {
+        if matches!(&e, IoError::Io { source, .. } if source.kind() == std::io::ErrorKind::AlreadyExists) {
+            return Ok(None);
+        }
+        return Err(e);
+    }
     Ok(Some(backup))
 }
 

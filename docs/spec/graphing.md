@@ -1869,6 +1869,83 @@ Origin's documented facts (Origin 2027 help, not measured; no Origin was at hand
 - Not done: XYZ and matrix input, Binned Scatter, UpSet, a hexbin toolbar button, colour map choice, a tick count
   setting, Origin's real defaults, outlines, hover read-out of bin counts.
 
+### 14.25 Parallel Plot and Parallel Index (T49)
+
+Origin's documented facts (Origin 2019 help, not measured; no Origin was at hand; [W:origin-help/parallel-plot],
+[W:origin-help/parallel-index], [W:origin-help/axes_dialog_parallel_coordinates], [W:origin-help/pd-dialog-parallel-tab]):
+
+- Parallel Plot: menu "Plot > Categorical: Parallel Plot" (also "Plot > 2D: Parallel Plot"), template `Parallel.otpu`;
+  at least two columns, all treated as Y; a colour scale legend; the colour is usually mapped from a column (By Points
+  tab). Parallel Index: "Plot > Categorical: Parallel Index"; at least three columns plus a grouping column of
+  categorical data that creates the legend and assigns the plot colour.
+- Axes dialog: "Rescale Each Axis Independently": checked, each axis has its own From and To; cleared, all axes share one
+  range, that of the variable with the greatest range. The axis title defaults to `%(?Y)` (Long Name or Short Name plus
+  Unit). Dragging a column onto the plot adds a last axis.
+- Plot Details Parallel tab: Style, Width, Transparency 0 to 100 (0 opaque); Curvature 0 to 100 (used by the alluvial and
+  sets plots, not by these two).
+- Not documented (Sheaf's choices, unmeasured, listed below): the default of Rescale, line width and transparency, straight
+  lines, the colour map, the tick layout, the default colour column, missing values, where the legend goes. Parallel Sets
+  are not done.
+
+**What Sheaf does** (everything else is Sheaf's choice, unmeasured):
+
+- `PlotKind::Parallel` and `PlotKind::ParallelIndex`, `Template::Parallel` (`parallel`, "Parallel Plot", legend hidden:
+  the colour scale names the colours) and `Template::ParallelIndex` (`parallel-index`, "Parallel Index", legend position
+  Automatic). One plot per axis (its Y column); the settings are per plot, shared by the layer's parallel plots:
+  `Plot::parallel` (`ParallelStyle`, skipped when default) with `rescale_each_axis` (true), `width_pt` (0.5),
+  `transparency_pct` (0) and `color` (`Option<ColumnId>`). Hidden plots leave their axis out.
+- Colour source. Parallel Plot: an optional numeric column; Sheaf's default is the last selected column (a new graph sets
+  `color` to the last axis column, so the colour scale shows at once; "None" draws every line in the plot colour, the
+  first plot's). Parallel Index: a required group column, by default the first text column of the sheet that is set as
+  Group, else the first text column (never one of the axes), or the text column among the selected columns in the app, or
+  `--group COLUMN` on the command line (any column; the cells are grouped by their shown text, so a numeric code works).
+- Refusals (core `ProjectError`, so the app, CLI and MCP all show them): a Parallel Plot needs two or more numeric
+  columns, a Parallel Index three or more plus a group column; a right Y axis is refused (`plot_columns_double_y`, `--y2`)
+  and so are panels (`--panels`). A refused plot leaves no graph behind. The numeric columns among the selection are the
+  axes; a text column among them is the group.
+- Layout (`crates/plot/src/parallel.rs`): the layer's own X and Y axes, grid and ticks are not drawn. Axis `i` of `n`
+  stands at `frame.x + frame.w (i + 0.5) / n` and runs from the bottom to the top of the frame: its line, major ticks
+  (the layer's Y axis settings: length, direction, colour, width, tick font, number format; a linear scale and automatic
+  range, a fixed Y limit of the layer is ignored) with labels left of it. The title is above the frame, centred on the axis,
+  in the Y title font, shrunk (never below 5 pt) so that the widest title fits the spacing of the axes; it is the plot's
+  label if set, else the column's long name and unit (`Long Name (unit)`, Origin's `%(?Y)`). The frame is fitted on the
+  page with room for the titles, the first axis' labels and the colour scale or legend.
+- Scaling: rescale on, each axis has the nice range of its own column (the same rule as any automatic Y axis, with the
+  layer's range margin); off, every axis has the nice range of the union of all the columns' values (the documented
+  "variable with the greatest range", widened so that the smaller columns also fit) and shows the same ticks. A row's
+  point on an axis is `(value - min) / (max - min)` of that axis' range.
+- Lines: one straight polyline per row through the axes, one scene path per row in worksheet order (later rows on top),
+  Round caps and joins, width and transparency (the colour's alpha is scaled by `1 - transparency / 100`) from the Parallel
+  tab. A row with a missing cell (NaN, an empty cell, a masked point) breaks there: each run of two or more consecutive
+  axes with values is drawn as its own piece of the path; a lone value draws nothing, and a row with no such run draws no
+  line. Rows hidden by a worksheet filter are not drawn; the rows come from the first axis' plot.
+- Colour: a Parallel Plot with a numeric colour column colours each line with `plots::map_color` (the colour mapped
+  scatter's ramp, unchanged) at `(v - min) / (max - min)` of that column's smallest and largest value (0.5 when they are
+  equal); a row whose colour cell is missing takes the plot colour. The colour scale is the hexbin plot's bar
+  (`hexbin::draw_color_bar`, now shared; the hexbin output is unchanged): a 14 pt bar 14 pt right of the frame with the
+  column's name as title and nice ticks inside the data range. A Parallel Index gives each distinct text of the group
+  column, in order of first appearance, one colour of the layer's palette (`Palette::color(i, groups)`) and one legend
+  entry. Origin's colour map was not measured.
+- Group legend (`parallel::draw_legend`): the layer's legend font, frame and background, one row per group with a line
+  sample in the group's colour and the group's text ("(blank)" for an empty one). Automatic (the template's) places it
+  right of the frame, 14 pt away and top aligned, and the frame leaves room for it; the corner and manual positions place
+  it inside the frame as the ordinary legend does. A custom legend text and columns are not used. `draw_legend` of the
+  ordinary legend returns at once for parallel plots (it would list the axes).
+- Plot Details "Parallel" tab: Rescale Each Axis Independently, Width, Transparency (%), and Color Column (Parallel Plot) or
+  Group Column (Parallel Index), a list of every column of the project with "None". The settings are shared by the layer's
+  parallel plots. Undo works as for other settings. Menu: Plot > Categorical > Parallel Plot and Parallel Index (a new
+  submenu), also in Column > Plot.
+- CLI `-t parallel`, `-t parallel-index`, `--group COLUMN` (`none` for the plot colour; with `-t parallel` a numeric
+  colour column); MCP `template` text and `group`. `.opj`: written as line plots of the columns, the save warns
+  ("parallel plots and parallel indexes were written as line plots of their columns; their axes, colours and groups were
+  not written").
+- Tests: `crates/plot/src/parallel_tests.rs` (axis places, scaling on and off, breaks at missing and masked cells, colour by
+  column and by group, titles, colour scale, legend, width and transparency); core template/refusal/serde test; `.opj`
+  warning test; `crates/cli/tests/parallel.rs` (both kinds as SVG, `--group`, refusals); UI menu, group-from-text-column and
+  Plot Details tests. The existing hexbin and golden tests pin that other kinds are unchanged.
+- Not done: Parallel Sets, a curvature setting, a custom colour map or By Points tab, log axes, dragging a column onto the
+  plot, reordering or flipping axes, hover read-out of rows, hit-testing of the axes, a toolbar button, Origin's real defaults.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.

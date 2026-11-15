@@ -199,6 +199,11 @@ open. History of what was merged when is in `git log` (not repeated here).
 - T42 Window Switcher (2026-11-15, macOS, no Origin): Ctrl+Tab / Ctrl+Shift+Tab (physical Control on macOS)
   over the windows of the Project Explorer folder, hidden included, most recent first; graph thumbnails rendered
   on open, workbook miniatures; release Ctrl activates, Esc cancels; Window > Window Switcher (gui-look.md).
+- T49 Parallel Plot and Parallel Index (2026-11-15, macOS, no Origin): Plot > Categorical > Parallel Plot / Parallel Index
+  (`-t parallel`, `-t parallel-index`, `--group`, MCP), one vertical axis per column with its own ticks and a
+  long-name-and-unit title, per-axis or shared range, one line per row breaking at missing cells, coloured by a numeric
+  column (hexbin's colour scale, now shared) or by group (legend), Plot Details Parallel tab (graphing.md 14.25). Parallel
+  Sets, curvature and axis reordering not done.
 - T45 hexbin plot (2026-11-15, macOS, no Origin): Plot > Contour/Heat Map > Hexbin (`-t hexbin`, `--hex-bins`, MCP), XY data
   binned into pointy-top hexagons (`sheaf_calc::hexbin`, checked against matplotlib hexbin), coloured by count with the
   colour mapped scatter ramp and a "Count" colour scale, Plot Details Bins tab (graphing.md 14.24). XYZ/matrix input and
@@ -279,7 +284,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `cell-notes` | Claude macOS, "mac-multipdf" | T36 worksheet cell notes (Origin 2022): core per-sheet notes kept through row/column ops and sort, grid corner tab + hover popup, cell menu Add/Edit/Delete Note, note editor | claimed 2026-11-15; core worksheet + sheetops note upkeep, grid.rs body_cell, menus/app/dialogs; no cond-format/frozen/filter/Go To, plot, stats or other sessions' scopes |
 | `violin-plot` | Claude macOS, "violin" | T37 violin plot: core PlotKind/Template, plot data/plots/layout (new violin drawing beside the box chart), calc kernel density, Plot > Statistics menu, CLI/MCP template lists, graphing.md 14.22 | claimed 2026-11-15; no fill-under/sidelines, axis breaks, cell notes, worksheet grid or other sessions' scopes |
 | `graph-data-tools` | Claude macOS, "mac-datatools" | T48 graph Data menu: Mask Data Points, Remove Bad Data Points, Move Data Points; core cell edits, graph_view modes/hit-testing, menus data_menu, UI tests, graphing.md section | claimed 2026-11-15; no display range/markers, no Data Reader changes beyond sharing hit-testing, no other sessions' scope |
-| `parallel-plot` | Claude macOS, "mac-multipdf" | T49 Parallel Plot and Parallel Index (Origin 2019): templates/plot kind, per-column vertical axes, polylines coloured by column or group, Plot > Categorical items, Plot Details Parallel tab, CLI/MCP | claimed 2026-11-15; core template/kind, new plot module, menus, graph_details Parallel tab only, ops args; no hexbin/colour-mapped colours, legend placement or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

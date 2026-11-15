@@ -1,6 +1,6 @@
 # T49: Parallel Plot and Parallel Index
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `parallel-plot`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `parallel-plot`. Spec: graphing.md 14.25. Not done: Parallel Sets, curvature, colour map choice, axis reordering, Origin's real defaults.
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Graphing: Violin and parallel-coordinate plots,
 Origin 2019; the parallel half; violin is T37).
 

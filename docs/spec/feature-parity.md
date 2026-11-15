@@ -20,11 +20,11 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 152 | 42 | 243 |
+| All rows | 49 | 153 | 42 | 244 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 83 | 42 | 142 |
+| P1 and P2 together | 17 | 84 | 42 | 143 |
 
-By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
+By priority alone: 101 rows are P0, 87 are P1 and 56 are P2.
 
 Reading the counts: the P0 rows are mostly present but often only partly (69 of 101 are partial). No P0 row is missing altogether any more: the analysis dialogs now share one frame with Preview and Auto Preview, and the Analysis menu works on a graph's data plot. Since 2026-11-11 the former holes of .opj saving, the Origin look, Double-Y graphs, offset and waterfall plots and graph gadgets have become partial rows: they work for the owner's cases but lack Origin's breadth (three or more Y axes, colour-mapped waterfalls, more gadgets, saving the newer graph features into .opj without the companion file).
 
@@ -287,6 +287,7 @@ Cross-cutting findings:
 | Stock | Plot > Stock | none | ✗ | | P2 |
 | Vector | Plot > Vector | none | ✗ | | P2 |
 | 3D plots | Plot > 3D | none | ✗ | no 3D renderer | P2 |
+| Parallel plots | Plot > Categorical | Plot > Categorical > Parallel Plot and Parallel Index (T49, graphing.md 14.25; `-t parallel`, `parallel-index`, `--group`) | ◐ | one vertical axis per column, per-axis or shared range, lines coloured by a numeric column (colour scale) or by group (legend), Plot Details Parallel tab; Origin's defaults and colour map unmeasured, no Parallel Sets, curvature or axis reordering; written to .opj as line plots | P2 |
 | Contour, heat map | Plot > Contour | Plot > Contour/Heat Map > Hexbin only (T45, graphing.md 14.24; `-t hexbin`) | ◐ | Hexbin of XY data with Origin's bin controls and a count colour scale; contour and heat map need matrices | P2 |
 | Inset, pictures in graphs | Zoom, Insert picture | none | ✗ | | P2 |
 | Other plot-type IDs when reading .opj | area, box, bar, histogram, pie | only types 200 to 203 mapped | ✗ | | P2 |

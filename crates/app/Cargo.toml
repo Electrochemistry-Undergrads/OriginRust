@@ -15,6 +15,7 @@ path = "src/main.rs"
 sheaf-calc.workspace = true
 sheaf-core.workspace = true
 sheaf-io.workspace = true
+sheaf-mcp.workspace = true
 sheaf-plot.workspace = true
 eframe = { version = "0.33", default-features = false, features = ["glow", "default_fonts", "accesskit"] }
 egui_extras = "0.33"
@@ -48,6 +49,7 @@ workspace = true
 [dev-dependencies]
 egui_kittest = { version = "0.33", features = ["eframe"] }
 sheaf-expr.workspace = true
+serde_json.workspace = true
 
 [build-dependencies]
 # Released 2026-10-06; compile/link the existing icon only for the Windows app binary.

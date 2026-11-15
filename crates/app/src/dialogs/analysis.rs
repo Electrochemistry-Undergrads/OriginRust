@@ -1698,7 +1698,7 @@ impl AnalysisDialog {
                         actual: st.power_actual,
                         hypothetical: st.power_hypothetical,
                         alpha: st.power_alpha,
-                        sizes: parse_sizes(&st.power_sizes_text)?,
+                        sizes: if st.power_hypothetical { parse_sizes(&st.power_sizes_text)? } else { Vec::new() },
                     },
                 })
             }

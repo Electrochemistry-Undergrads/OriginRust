@@ -1023,7 +1023,7 @@ Controls (read with `origin-dialog.ps1`; our dialogs copy the layout, not Origin
 - Report: Notes; "Normal Approximation" with Test Statistics (Success, N, Sample P, Z, P, `95% LCL`, `95% UCL`;
   the percentage is `1 - alpha`: 0.1 gave `90% LCL`), the lines `Null Hypothesis: Proportion = 0.5`,
   `Alternative Hypothesis: Proportion <> 0.5`, a warning line when the approximation is poor (seen for 20 of 20;
-  the two-sample runs of 21.4 show the rule: fewer than 10 successes or fewer than 10 failures) and Confidence Intervals (Conf. Levels in
+  the two-sample runs of 21.4 show the rule: measured only for fewer than 10 failures) and Confidence Intervals (Conf. Levels in
   %, Lower Limits, Upper Limits); then "Binomial Test" with Test Statistics (Success, N, Sample P, Exact P, LCL,
   UCL), the hypothesis lines and its Confidence Intervals. Whether the LCL and UCL columns exist with the intervals
   off was not measured (every run had them ticked); Sheaf shows them only with the intervals on.
@@ -1095,10 +1095,12 @@ against 20 of 50. Each run gave one report sheet.
   order gave 0.98634419171744): tolerance 5e-10 absolute.
 - Warning line under the normal approximation's hypotheses (Origin's text says that with fewer than 10 successes
   and a sample size below successes + 10 the approximation might be unsatisfactory; ours is worded differently): it
-  appears when some sample has fewer than 10 successes or fewer than 10 failures: 3/10 and 1/8, 10/10 and 5/10,
+  appears when some sample has fewer than 10 failures (Sheaf also warns for fewer than 10 successes, unmeasured): 3/10 and 1/8, 10/10 and 5/10,
   10/10 and 8/8, 20/25 and 20/25 (5 failures), 3/10 and 30/50, 30/50 and 3/10 all show it; 30/50 and 20/50, 12/30
-  and 30/50, and 15/40 and 25/35 (the second sample has exactly 10 failures) do not. A sample of exactly 10
-  successes with 10 or more failures was not run. The one-sample report's warning follows the same rule.
+  and 30/50, and 15/40 and 25/35 (the second sample has exactly 10 failures) do not. Every sample that showed it has fewer than 10 failures, and
+  every one without it has 10 or more. No run had fewer than 10 successes with 10 or more failures (nor exactly 10
+  successes), so Sheaf's "fewer than 10 successes" half of the rule is an unmeasured guess; Origin's own text only
+  describes the failures side. The one-sample report's warning follows the same rule.
 - Power analysis (Actual Power, Hypothetical Power; significance level of its own, default 0.05): table Alpha, Sample
   Size, Power. "Actual Power" gives one row per distinct sample size, each taken as the size of both samples (30
   of 50 against 20 of 50: one row, 50; 15 of 40 against 25 of 35: rows 40 and 35), then the hypothetical sizes (50 100

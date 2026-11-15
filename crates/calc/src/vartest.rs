@@ -226,8 +226,8 @@ pub struct OneProportion {
     pub tail: Tail,
 }
 
-/// Origin shows a warning under the normal approximation when fewer than 10 successes or fewer than 10 failures
-/// were seen.
+/// Origin shows a warning under the normal approximation when fewer than 10 failures were seen (measured); the
+/// extra "fewer than 10 successes" condition is an unmeasured guess.
 pub fn normal_approximation_doubtful(successes: u64, trials: u64) -> bool {
     successes < 10 || trials.saturating_sub(successes) < 10
 }
@@ -235,7 +235,9 @@ pub fn normal_approximation_doubtful(successes: u64, trials: u64) -> bool {
 /// Origin's warning under the normal approximation of the two-sample test: shown when some sample has fewer
 /// than 10 successes or fewer than 10 failures (3/10 against 1/8, 20/25 against 20/25, 3/10 against 30/50 and
 /// 30/50 against 3/10 gave it; 30/50 against 20/50, 12/30 against 30/50 and 15/40 against 25/35, whose second
-/// sample has exactly 10 failures, did not). The limit of exactly 10 successes was not isolated.
+/// sample has exactly 10 failures, did not). Every measured case that warned has fewer than 10 failures and every
+/// one that did not has at least 10; no run had fewer than 10 successes with 10 or more failures, so that half of
+/// the rule (and the limit of exactly 10 successes) is unmeasured and kept as a conservative guess.
 pub fn two_sample_normal_doubtful(first: (u64, u64), second: (u64, u64)) -> bool {
     [first, second].into_iter().any(|(x, n)| normal_approximation_doubtful(x, n))
 }

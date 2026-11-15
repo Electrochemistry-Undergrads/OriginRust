@@ -98,7 +98,7 @@ fn a_workbook_given_on_the_command_line_imports_as_one_book_with_a_sheet_per_she
     assert_eq!(project(&h).workbooks().count(), 1);
     assert_eq!(sheet_names(&h, 0), ["Scan 1", "Scan 2", "Notes"]);
     let book = project(&h).workbooks().next().unwrap();
-    assert_eq!(book.long_name, "scans");
+    assert_eq!(book.long_name, "scans.xlsx");
     let first = &book.sheets[0];
     assert_eq!(first.columns[0].long_name, "Potential");
     assert_eq!(first.columns[0].units, "V");
@@ -148,14 +148,15 @@ fn ticking_sheets_limits_what_is_imported() {
 }
 
 #[test]
-fn hidden_sheets_are_marked_and_off_until_ticked() {
+fn hidden_sheets_are_marked_and_ticked_as_origin_imports_them() {
     let mut h = start(Vec::new());
     h.state_mut().start_import(Some(vec![hidden_fixture()]), ImportPick::Excel);
     settle(&mut h);
     assert!(has_label(&h, "Visible"));
     assert!(has_label(&h, "Hidden (hidden)"));
-    assert_eq!(h.state_mut().import_excel.as_mut().unwrap().selected_sheets(0), ["Visible"]);
-    click(&mut h, "Hidden (hidden)");
+    assert_eq!(h.state_mut().import_excel.as_mut().unwrap().selected_sheets(0), ["Visible", "Hidden", "Secret"]);
+    click(&mut h, "Secret (hidden)");
+    assert_eq!(h.state_mut().import_excel.as_mut().unwrap().selected_sheets(0), ["Visible", "Hidden"]);
     click(&mut h, "OK");
     assert_eq!(sheet_names(&h, 0), ["Visible", "Hidden"]);
     assert_eq!(project(&h).workbooks().next().unwrap().sheets[1].columns[0].numeric().unwrap(), [10.0, 20.0, 30.0]);
@@ -228,9 +229,10 @@ fn a_workbook_chosen_with_an_ascii_item_still_goes_to_the_excel_window() {
 
 #[test]
 fn warnings_of_the_reader_reach_the_messages_log() {
-    let h = start(vec![hidden_fixture()]);
-    assert_eq!(sheet_names(&h, 0), ["Visible"]);
-    let logged = h.state().logs.messages.iter().any(|m| m.text.contains("sheet 'Hidden' is hidden"));
+    let charts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../io/tests/fixtures/excel/charts.xlsx");
+    let h = start(vec![charts]);
+    assert_eq!(sheet_names(&h, 0), ["Data"]);
+    let logged = h.state().logs.messages.iter().any(|m| m.text.contains("sheet 'ChartSheet' is a chart"));
     assert!(logged, "the skipped sheet is in the log");
     assert!(h.state().message.is_some());
 }

@@ -255,7 +255,7 @@ pub struct ReadOptions {
     /// Delimited text and Excel: rows to skip per repeating read/skip pattern.
     #[arg(long, default_value_t = 0)]
     pub skip_rows: usize,
-    /// Delimited text and Excel: first source column to import (Excel: counted from the first used column).
+    /// Delimited text and Excel: first source column to import (Excel: counted from column A).
     #[arg(long, default_value_t = 1)]
     pub first_column: usize,
     /// Delimited text and Excel: last source column to import, inclusive (0: through the end).
@@ -311,12 +311,16 @@ pub struct ReadOptions {
     /// Excel (.xls, .xlsx, .xlsm): the sheets to read, as names or 1-based positions counted over
     /// all sheets, comma-separated (for example "Results,3"). A number is the sheet of that name if there
     /// is one, otherwise the sheet at that position.
-    /// A sheet named here is read even when hidden. Default: every visible worksheet.
+    /// A sheet named here is read even when hidden. Default: every worksheet, hidden ones too (as
+    /// Origin).
     #[arg(long, value_name = "LIST", value_delimiter = ',')]
     pub sheets: Vec<String>,
-    /// Excel: also read hidden sheets when --sheets is not given.
-    #[arg(long)]
+    /// Excel: read hidden sheets when --sheets is not given (the default; kept for older scripts).
+    #[arg(long, conflicts_with = "skip_hidden_sheets")]
     pub hidden_sheets: bool,
+    /// Excel: leave hidden sheets out when --sheets is not given.
+    #[arg(long)]
+    pub skip_hidden_sheets: bool,
 }
 
 #[derive(Args, Debug)]

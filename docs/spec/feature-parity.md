@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 48 | 140 | 50 | 238 |
+| All rows | 49 | 139 | 50 | 238 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 16 | 71 | 50 | 137 |
+| P1 and P2 together | 17 | 70 | 50 | 137 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
@@ -89,7 +89,7 @@ Cross-cutting findings:
 | Encoding | none in Origin | BOMs, UTF-8, Windows-1252 | ✓ | no manual choice | P1 |
 | Import filters and saved settings | .oif, Import Filters Manager | none | ✗ | | P1 |
 | Import wizard, re-import | Ctrl+3, Ctrl+4 | the Import Wizard (File > Import > Import Wizard, Ctrl+3) with the pages Source, Header Lines, Column Names, File Name Options, Data Columns and Save Filters (grey) and Cancel, Back, Next, Finish; the options of the import window as a tree of option groups with a preview; source path recorded; the wizard lists the files (preview one, remove, add) and shows the header entries on the Header Lines page | ◐ | Binary, User Defined and Clipboard sources are grey; no saved import filters (page greyed); the File Name Options page has two ticks only; no re-import command (Ctrl+4), no remembered settings | P1 |
-| Excel import | File > Import > Excel | File > Import > Excel (XLS, XLSX, XLSM)... (sheet choice, hidden sheets, header rows, import modes, partial import, preview), drag-and-drop and command-line files, `sheaf import`/`info` with `--sheets`/`--hidden-sheets`, MCP `import_files`; `calamine` (ADR 0012); cached formula values, Excel dates (1900/1904), one book per file and one sheet per Excel sheet (import-excel.md) | ◐ | Origin's Excel import unmeasured (header defaults, merged cells, empty leading rows); `.xlsb`/`.ods` read but untested; no live Open Excel window | P1 |
+| Excel import | File > Import > Excel | File > Import > Excel (XLS, XLSX, XLSM)... (sheet choice, hidden sheets, header rows, import modes, partial import, preview), drag-and-drop and command-line files, `sheaf import`/`info` with `--sheets`/`--skip-hidden-sheets`, MCP `import_files`; `calamine` (ADR 0012); cached formula values, Excel dates (1900/1904), one book per file and one sheet per Excel sheet; measured against Origin 2016's `impExcel` and copied: hidden sheets read, book long name with extension, leading empty columns kept, merged cells, booleans, error cells, dates and dates among text (import-excel.md 2) | ✓ | header rows detected (Origin reads none unless told); dates before 1900-03-01 as Excel shows them (Origin's are a day early); Origin's import window unseen; `.xlsb`/`.ods` read but untested; no live Open Excel window | P1 |
 | Drag and drop | drop on window | projects open, data goes to dialog | ✓ | | P1 |
 | Other importers, image, database | HDF5, NetCDF, JCAMP-DX, SPC, WAV, ODBC and more | none | ✗ | | P2 |
 | Sparklines, auto width, write protection on import | ASCII options | none | ✗ | | P2 |

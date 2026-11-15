@@ -79,8 +79,8 @@ impl FileEntry {
         FileEntry { path, sheets: None, shown: 0 }
     }
 
-    /// Lists the sheets once. Worksheets that are visible are chosen, hidden ones and chart
-    /// sheets are not.
+    /// Lists the sheets once. Every worksheet is chosen, hidden ones too (Origin's `impExcel`
+    /// imports hidden sheets, import-excel.md 2); chart sheets are not.
     fn load(&mut self) -> &mut Result<Vec<Choice>, String> {
         let path = &self.path;
         let shown = &mut self.shown;
@@ -89,7 +89,7 @@ impl FileEntry {
             let choices: Vec<Choice> = list
                 .into_iter()
                 .map(|info| {
-                    let selected = info.kind == SheetKind::Worksheet && !info.hidden;
+                    let selected = info.kind == SheetKind::Worksheet;
                     Choice { info, selected }
                 })
                 .collect();

@@ -79,7 +79,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T27](T27-print.md) | Print, Print Preview, Page Setup (vector EMF/PDF path) | M | Windows half done, merged 2026-11-14 (graphing 19); CLI graph printing and paper-sized PDF added; left: workbook printing, macOS panel, Windows CLI submission, Origin's Print/Preview windows unmeasured |
 | [T28](T28-autosave-recovery.md) | Autosave to a recovery folder and crash recovery at start-up | M | done, merged 2026-11-14 (`docs/spec/autosave.md`); left: Origin's defaults unmeasured, backup-before-save switch, Tools > Options home |
 | [T29](T29-multivariate-roc-survival.md) | PCA, k-means, ROC curve, Kaplan-Meier | L | open; Origin measurements on Windows |
-| [T30](T30-excel-import-export.md) | Excel import (xls, xlsx, xlsm) and xlsx export | L | done, merged 2026-11-14 (ADR 0012, `docs/spec/import-excel.md`); left: Origin measurements on Windows, the owner's workbooks check, `.xlsb`/`.ods` tests |
+| [T30](T30-excel-import-export.md) | Excel import (xls, xlsx, xlsm) and xlsx export | L | done, merged 2026-11-14 (ADR 0012, `docs/spec/import-excel.md`); Origin's import measured and copied 2026-11-15 (import-excel.md 2); owner's workbooks checked; left: Origin's import window and export, `.xlsb`/`.ods` tests |
 | [T31](T31-windows-executable-icon.md) | Embed the existing app icon in Windows executable resources | S | done; all seven built-PE icon frames match the source and Windows extracts both sizes |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of

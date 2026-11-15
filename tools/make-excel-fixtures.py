@@ -221,9 +221,29 @@ def leading():
     save(wb, "leading.xlsx")
 
 
+def origin_kinds():
+    """Origin's probe b1 (import-excel.md 2, p9/p10): booleans, error cells, dates, times of day,
+    date-times and durations, each column under a name row."""
+    wb = new_book()
+    ws = wb.active
+    ws.title = "Kinds"
+    ws.append(["B", "E", "D", "T", "DT", "Dur"])
+    rows = [
+        [True, "#N/A", dt.date(2026, 1, 1), dt.time(6, 0, 0), dt.datetime(2026, 3, 1, 12, 30, 15), 1.5],
+        [False, "#DIV/0!", dt.date(1900, 1, 1), dt.time(18, 30, 0), dt.datetime(1999, 12, 31, 23, 59, 59), 0.25],
+        [True, 7, dt.date(2026, 2, 28), dt.time(0, 0, 1), dt.datetime(2026, 3, 1, 0, 0, 0), 2.0],
+    ]
+    for r in rows:
+        ws.append(r)
+    for c in ws["B"][1:3]:
+        c.data_type = "e"
+    for c in ws["F"][1:]:
+        c.number_format = "[h]:mm:ss"
+    save(wb, "origin-kinds.xlsx")
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    for fn in (basic, legacy, date1904, leap1900, merged, hidden, charts, mixed, leading):
+    for fn in (basic, legacy, date1904, leap1900, merged, hidden, charts, mixed, leading, origin_kinds):
         fn()
     for p in sorted(OUT.iterdir()):
         size = p.stat().st_size

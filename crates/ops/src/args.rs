@@ -1611,11 +1611,11 @@ pub enum AnalyzeTool {
         #[arg(long, allow_hyphen_values = true, group = "shift", requires = "at")]
         to: Option<f64>,
     },
-    /// Running median of each curve (an odd window).
+    /// Running median of each curve (Origin's percentile filter at 50 %).
     MedianFilter {
         #[command(flatten)]
         target: TargetArgs,
-        /// Points of the window, odd.
+        /// Points of the window; an even number acts like the next odd one, as in Origin.
         #[arg(long, default_value_t = 5)]
         points: usize,
         /// shrink (default): the window shrinks symmetrically at the ends; repeat or reflect fill it.

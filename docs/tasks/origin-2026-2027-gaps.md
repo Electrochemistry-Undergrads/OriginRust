@@ -25,7 +25,7 @@ outputs or UI behavior.
 | Project Browser | 2025b | Search a project-wide list of sheets, columns, graphs and folders, preview matches and apply metadata edits to multiple selections. | [2025b][o25b] |
 | Window Switcher | 2025b | Cycle through open child windows with keyboard shortcuts and previews. | [2025b][o25b] |
 | Interactive formula references | 2025b | Insert a cell, column or range into the formula being edited by clicking or dragging in the sheet. | [2025b][o25b] |
-| Conditional highlight of extrema | 2025b | Mark the minimum or maximum within each row or each column as its values change. | [2025b][o25b] |
+| Conditional highlight of extrema | 2025b | Done (T35). Mark the minimum or maximum within each row or each column as its values change. | [2025b][o25b] |
 | Flash Fill and Smart Formula | 2026 | Infer a text extraction or combination rule from an example. Preview it and either fill static values or keep a calculation that updates. | [2026][o26] |
 | Find in Project Files | 2026 / 2026b | Search a collection of saved projects for text in metadata, graph labels, notes and data cells, then open the matching project. | [2026][o26] · [2026b][o26b] |
 | Repeat Last Action and Duplicate Operation | 2026 | Repeat the last plotting action on another selection, reopen the last tool dialog and apply a configured analysis to other sheets. | [2026][o26] |

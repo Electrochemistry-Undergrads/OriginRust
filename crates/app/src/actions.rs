@@ -284,9 +284,29 @@ pub enum Action {
     },
     /// Column > Filter > Enable/Disable Filter.
     ToggleRowFilter(WindowId),
+    /// Column > Mask > Change Color: the next colour of the project's mask colour.
+    MaskColor,
+    /// Column > Mask > Disable Masking / Enable Masking, for the whole project.
+    ToggleMasking,
+    /// Column > Mask > Hide/Show Masked Points for the whole project.
+    ToggleHideMasked,
+    /// Column > Mask Cells by Condition...: the window for these columns.
+    MaskByConditionDialog {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     /// View > Freeze/Unfreeze Panes (a toggle): freezes the rows above and the columns left of the
     /// selection, or unfreezes what is frozen.
     FreezePanes(WindowId),
+    /// Worksheet > Conditional Formatting > Highlight Min Max / Highlight Top Bottom: the window
+    /// for a rule on the selected cells.
+    CondFormatDialog {
+        book: WindowId,
+        kind: crate::dialogs::cond_format::CondKind,
+    },
+    /// Worksheet > Conditional Formatting > Remove Conditional Format: removes the rules that
+    /// touch the selection.
+    RemoveCondFormat(WindowId),
     /// Column > Filter > Reapply Filter.
     ReapplyRowFilter(WindowId),
     /// Open the window that keeps only the rows matching a condition.

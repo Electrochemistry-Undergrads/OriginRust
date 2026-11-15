@@ -38,6 +38,7 @@ use std::sync::OnceLock;
 pub const NOT_YET: &str = "Not available in Sheaf yet";
 const NEED_BOOK: &str = "Activate a workbook window first";
 const NEED_GRAPH: &str = "Activate a graph window first";
+const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
 const NEED_CELLS: &str = "Select cells, columns or rows first";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
@@ -101,6 +102,14 @@ pub enum Cmd {
     UnhideColumns,
     /// Column > Mask > Apply, Remove, Swap.
     Mask(MaskOp),
+    /// Column > Mask > Change Color.
+    MaskColor,
+    /// Column > Mask > Disable Masking (Enable Masking while it is disabled).
+    ToggleMasking,
+    /// Column > Mask > Hide/Show Masked Points.
+    ToggleHideMasked,
+    /// Column > Mask Cells by Condition...
+    MaskByCondition,
     /// Column > Set as Categorical.
     SetCategorical,
     /// Worksheet > Transpose, Stack, Unstack, Split Columns, Reduce Rows.
@@ -111,6 +120,10 @@ pub enum Cmd {
     ReapplyRowFilter,
     /// View > Freeze/Unfreeze Panes.
     FreezePanes,
+    /// Worksheet > Conditional Formatting > Highlight Min Max / Highlight Top Bottom.
+    CondFormat(crate::dialogs::cond_format::CondKind),
+    /// Worksheet > Conditional Formatting > Remove Conditional Format.
+    RemoveCondFormat,
     /// Insert rows or columns at the selection (Edit > Insert and the cell menus).
     InsertCells,
     /// Delete the selected rows or columns (Edit > Delete and the cell menus).
@@ -881,19 +894,43 @@ fn column_menu() -> Vec<Entry> {
         hide_menu(),
         sep(),
         filter_menu(),
-        mask_menu(&["Change Color", "Disable Masking", "Mask Cells by Condition..."]),
+        mask_menu(),
+        item("Mask Cells by Condition...", Cmd::MaskByCondition),
     ]
 }
 
 /// The Mask submenu: Apply, Remove and Swap work on the selected cells; the rest is greyed.
-fn mask_menu(grey_items: &[&str]) -> Entry {
-    let mut entries = vec![
+fn mask_menu() -> Entry {
+    let entries = vec![
         item("Apply", Cmd::Mask(MaskOp::Apply)),
         item("Remove", Cmd::Mask(MaskOp::Remove)),
         item("Swap", Cmd::Mask(MaskOp::Swap)),
+        item("Change Color", Cmd::MaskColor),
+        item("Disable Masking", Cmd::ToggleMasking),
+        // Origin has this switch on its Mask toolbar (`@MP`); Sheaf puts it here.
+        item("Hide Masked Points", Cmd::ToggleHideMasked),
     ];
-    entries.extend(greys(grey_items));
     sub("Mask", entries)
+}
+
+/// Worksheet > Conditional Formatting (also in the right-click menu of selected cells). The other
+/// items of Origin's submenu are greyed.
+fn cond_format_menu() -> Entry {
+    use crate::dialogs::cond_format::CondKind;
+    let mut entries = vec![
+        item("Highlight Min Max...", Cmd::CondFormat(CondKind::MinMax)),
+        item("Highlight Top Bottom...", Cmd::CondFormat(CondKind::TopBottom)),
+    ];
+    entries.extend(greys(&[
+        "Conditional Highlight...",
+        "Conditional Heatmap...",
+        "Conditional Pareto...",
+        "Conditional Outliers...",
+        "-",
+    ]));
+    entries.push(item("Remove Conditional Format", Cmd::RemoveCondFormat));
+    entries.push(grey("Conditional Format Manager..."));
+    sub("Conditional Formatting", entries)
 }
 
 fn filter_menu() -> Entry {
@@ -941,6 +978,7 @@ fn worksheet_menu() -> Vec<Entry> {
         ),
         item("Sort Columns by Label...", Cmd::SortByLabel),
         sep(),
+        cond_format_menu(),
         item("Clear Worksheet...", Cmd::ClearWorksheet),
         item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
         grey("Pivot Table..."),
@@ -1427,8 +1465,8 @@ pub fn column_header_menu() -> Vec<Entry> {
     ));
     v.extend(greys(&["Set Sampling Interval...", "Show X Column...", "-"]));
     v.push(filter_menu());
-    v.push(mask_menu(&["Change Color", "Disable Masking"]));
-    v.push(grey("Mask Cells by Condition..."));
+    v.push(mask_menu());
+    v.push(item("Mask Cells by Condition...", Cmd::MaskByCondition));
     v.push(sep());
     v.push(sub(
         "Sort Column",
@@ -1501,7 +1539,8 @@ pub fn cell_menu() -> Vec<Entry> {
         "-",
         "Format Cells...",
     ]));
-    v.push(mask_menu(&[]));
+    v.push(mask_menu());
+    v.push(cond_format_menu());
     v.push(grey_sub("Set Data Style", &["Default"]));
     v
 }
@@ -1851,6 +1890,25 @@ fn assign_mnemonics(entries: &mut [Entry]) {
     }
 }
 
+/// Tells the menus whether the project has masking disabled (the Mask submenu then offers Enable
+/// Masking); the program sets it every frame before it draws a menu.
+pub fn set_masking_disabled(ctx: &egui::Context, disabled: bool) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("masking_disabled"), disabled));
+}
+
+/// Tells the menus whether masked points are hidden (for the Hide/Show Masked Points label).
+pub fn set_masked_hidden(ctx: &egui::Context, hidden: bool) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("masked_hidden"), hidden));
+}
+
+fn masked_hidden(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp(egui::Id::new("masked_hidden"))).unwrap_or(false)
+}
+
+fn masking_disabled(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp(egui::Id::new("masking_disabled"))).unwrap_or(false)
+}
+
 /// The Alt letter of a label, lower case.
 pub fn mnemonic(label: &str) -> Option<char> {
     parse(label).1.map(|c| c.to_ascii_lowercase())
@@ -1918,8 +1976,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::ExportExcel => Action::ExportExcel(book?),
-        Cmd::Print => Action::Print(c.graph.ok_or(NEED_GRAPH)?),
-        Cmd::PrintPreview => Action::PrintPreview(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::Print => Action::Print(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
+        Cmd::PrintPreview => Action::PrintPreview(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
         Cmd::PageSetup => Action::PageSetup,
         Cmd::Exit => Action::Quit,
         Cmd::Undo => {
@@ -1960,6 +2018,13 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
                 _ => CellOp::Clear,
             };
             Action::Cells { book, op }
+        }
+        Cmd::MaskColor => Action::MaskColor,
+        Cmd::ToggleMasking => Action::ToggleMasking,
+        Cmd::ToggleHideMasked => Action::ToggleHideMasked,
+        Cmd::MaskByCondition => {
+            let book = book?;
+            Action::MaskByConditionDialog { book, columns: some()? }
         }
         Cmd::Sheet(op) => Action::Sheet { book: book?, op: op.clone() },
         Cmd::Plot(template) => Action::PlotColumns { book: book?, columns: c.selected.to_vec(), template: *template },
@@ -2025,6 +2090,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ToggleRowFilter => Action::ToggleRowFilter(book?),
         Cmd::ReapplyRowFilter => Action::ReapplyRowFilter(book?),
         Cmd::FreezePanes => Action::FreezePanes(book?),
+        Cmd::CondFormat(kind) => {
+            c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            Action::CondFormatDialog { book: book?, kind: *kind }
+        }
+        Cmd::RemoveCondFormat => {
+            c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            Action::RemoveCondFormat(book?)
+        }
         // On a graph the tools take the active data plot, as Origin's Analysis menu does; the
         // results go to its workbook (ADR 0005), and a fit draws its curve on the graph (ADR 0006).
         Cmd::Analyze(kind) => match (c.book, c.curve) {
@@ -2249,6 +2322,12 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                         label = format!("{label} {what}");
                     }
                     _ => {}
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleMasking)) && masking_disabled(ui.ctx()) {
+                    label = "Enable Masking".to_string();
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleHideMasked)) && masked_hidden(ui.ctx()) {
+                    label = "Show Masked Points".to_string();
                 }
                 let resolved = it.cmd.as_ref().map(|cmd| resolve(cmd, c));
                 let enabled = matches!(resolved, Some(Ok(_)));

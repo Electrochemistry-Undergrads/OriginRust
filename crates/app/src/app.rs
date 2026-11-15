@@ -7,6 +7,7 @@ use crate::autosave::{Autosave, Due};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
 use crate::dialogs::column_props::ColumnPropsDialog;
+use crate::dialogs::cond_format::CondFormatDialog;
 use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::export_excel::ExcelExportDialog;
@@ -20,6 +21,7 @@ use crate::dialogs::import::{ImportDialog, ImportOutcome, ImportRequest};
 use crate::dialogs::import_excel::{ExcelImportDialog, split_excel};
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::label_panels::{LabelPanelsDialog, Outcome as LabelPanelsOutcome};
+use crate::dialogs::mask_condition::MaskConditionDialog;
 use crate::dialogs::power::{PowerDialog, PowerOutcome};
 use crate::dialogs::printing::{PageSetupDialog, PageSetupOutcome, PreviewOutcome, PrintPreview};
 use crate::dialogs::recovery::{RecoveryChoice, RecoveryOffer};
@@ -131,6 +133,8 @@ pub struct SheafApp {
     fit_more: Option<FitMoreDialog>,
     filter: Option<FilterDialog>,
     row_filter: Option<RowFilterDialog>,
+    mask_condition: Option<MaskConditionDialog>,
+    cond_format: Option<CondFormatDialog>,
     reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
@@ -212,6 +216,8 @@ impl SheafApp {
             fit_more: None,
             filter: None,
             row_filter: None,
+            mask_condition: None,
+            cond_format: None,
             reshape: None,
             export: None,
             export_sheet: None,
@@ -298,7 +304,7 @@ impl SheafApp {
         };
         let original = newest.sidecar.as_ref().and_then(|s| s.original_path());
         self.doc.replace(project);
-        self.doc.dirty = true;
+        self.doc.mark_unsaved();
         self.reset_views();
         self.path = None;
         // A project that came from an Origin file keeps its `.bak` copy when it is saved over it.
@@ -347,6 +353,9 @@ impl SheafApp {
         if !self.doc.dirty {
             if let Err(e) = self.autosave.clear() {
                 self.autosave_failed(&e);
+                ctx.request_repaint_after(std::time::Duration::from_secs(1));
+            } else if self.autosave.write_pending() {
+                ctx.request_repaint_after(std::time::Duration::from_millis(100));
             }
             return;
         }
@@ -549,6 +558,8 @@ impl SheafApp {
         self.go_to = None;
         self.find = None;
         self.row_filter = None;
+        self.mask_condition = None;
+        self.cond_format = None;
         self.reshape = None;
         self.sort = None;
         self.sheet_name = None;
@@ -624,7 +635,7 @@ impl SheafApp {
             Ok(outcome) => {
                 // The project is safe on disk either way: in the .opj, or in the companion when
                 // the .opj was refused.
-                self.doc.dirty = false;
+                self.doc.mark_saved();
                 let mut said = outcome.status();
                 if let Some(b) = &backup {
                     said.push_str(&format!("; the original Origin file is kept as {}", b.display()));
@@ -780,37 +791,76 @@ impl SheafApp {
         }
     }
 
-    /// File > Print... (Ctrl+P): the graph page, as a vector drawing, through the system's print
-    /// dialog, scaled into the paper of Page Setup as File > Print Preview shows. Windows plays the
-    /// page's metafile into the printer; elsewhere the page's PDF goes to `lp`.
-    fn print_graph(&mut self, graph: WindowId) {
+    /// File > Print... (Ctrl+P): the active window printed as a vector drawing through the
+    /// system's print dialog. A graph page is scaled into the paper of Page Setup as File > Print
+    /// Preview shows; a workbook's active sheet prints as a table, split over as many pages as it
+    /// needs (graphing.md 19.8). Windows plays the metafiles into the printer; macOS shows PDFKit's panel for a graph; elsewhere,
+    /// and for a sheet on macOS, the PDF goes to `lp`.
+    fn print_graph(&mut self, window: WindowId) {
         let project = self.doc.project();
-        let Some((page, title)) = project.graph(graph).map(|g| ((g.page.width_pt, g.page.height_pt), g.name.clone()))
-        else {
+        let mut setup = project.page_setup;
+        // (title, page size in points, the pages as metafiles, the same as one PDF)
+        let (title, page, what) = if let Some(g) = project.graph(window) {
+            (g.name.clone(), (g.page.width_pt, g.page.height_pt), "graph")
+        } else if let Some(b) = project.workbook(window) {
+            // A sheet's orientation follows the paper (Automatic means portrait, as in Print
+            // Preview), never the printed area, which can be wider than tall.
+            setup.orientation = setup.orientation_for(0.0, 1.0);
+            let area = sheaf_plot::sheet_pages(b.sheet(), &setup).map(|p| p.area).unwrap_or((0.0, 0.0));
+            (b.name.clone(), area, "sheet")
+        } else {
             return;
         };
-        let setup = project.page_setup;
         if cfg!(test) {
             // Tests never reach a printer.
             self.say("Printing is skipped under test");
             return;
         }
+        let is_graph = what == "graph";
         #[cfg(windows)]
-        match sheaf_plot::render_emf(project, graph) {
-            Ok(emf) => match crate::winprint::print_with_dialog(&emf, page, &setup, &title) {
-                Ok(crate::winprint::Outcome::Printed) => self.say(format!("Printed {title}")),
-                Ok(crate::winprint::Outcome::Cancelled) => {}
-                Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
-            },
-            Err(e) => self.warn(format!("Could not print the graph: {e}")),
+        {
+            let pages = if is_graph {
+                sheaf_plot::render_emf(project, window).map(|e| vec![e])
+            } else {
+                project
+                    .workbook(window)
+                    .map_or(Ok(Vec::new()), |b| sheaf_plot::render_sheet_emf_pages(b.sheet(), &setup))
+            };
+            match pages {
+                Ok(pages) => match crate::winprint::print_with_dialog(&pages, page, &setup, &title) {
+                    Ok(crate::winprint::Outcome::Printed) => self.say(format!("Printed {title}")),
+                    Ok(crate::winprint::Outcome::Cancelled) => {}
+                    Err(e) => self.message = Some((format!("Could not print the {what}"), e)),
+                },
+                Err(e) => self.warn(format!("Could not print the {what}: {e}")),
+            }
+        }
+        #[cfg(target_os = "macos")]
+        if is_graph {
+            match sheaf_plot::render_print_pdf(project, window) {
+                Ok(pdf) => match crate::macprint::print_with_dialog(&pdf, &setup, page, &title) {
+                    Ok(crate::macprint::Outcome::Printed) => self.say(format!("Printed {title}")),
+                    Ok(crate::macprint::Outcome::CancelledOrFailed) => {}
+                    Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
+                },
+                Err(e) => self.warn(format!("Could not print the graph: {e}")),
+            }
+            return;
         }
         #[cfg(not(windows))]
-        match sheaf_plot::render_pdf(project, graph) {
-            Ok(pdf) => match crate::winprint::print_pdf(&pdf, &setup, page, &title) {
-                Ok(()) => self.say(format!("Sent {title} to the default printer")),
-                Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
-            },
-            Err(e) => self.warn(format!("Could not print the graph: {e}")),
+        {
+            let pdf = if is_graph {
+                sheaf_plot::render_pdf(project, window)
+            } else {
+                project.workbook(window).map_or(Ok(Vec::new()), |b| sheaf_plot::render_sheet_pdf(b.sheet(), &setup))
+            };
+            match pdf {
+                Ok(pdf) => match crate::winprint::print_pdf(&pdf, &setup, page, &title) {
+                    Ok(()) => self.say(format!("Sent {title} to the default printer")),
+                    Err(e) => self.message = Some((format!("Could not print the {what}"), e)),
+                },
+                Err(e) => self.warn(format!("Could not print the {what}: {e}")),
+            }
         }
     }
 
@@ -1245,6 +1295,19 @@ impl SheafApp {
             Action::RowFilterDialog { book, column } => {
                 self.row_filter = RowFilterDialog::new(&self.doc, book, column);
             }
+            Action::MaskColor => self.doc.apply("Change mask color", |p| p.cycle_mask_color()),
+            Action::ToggleMasking => {
+                self.doc.apply("Disable or enable masking", |p| {
+                    let now = p.masking_disabled();
+                    p.set_masking_disabled(!now);
+                });
+            }
+            Action::ToggleHideMasked => {
+                self.doc.apply("Hide or show masked points", |p| p.hide_masked = !p.hide_masked);
+            }
+            Action::MaskByConditionDialog { book, columns } => {
+                self.mask_condition = MaskConditionDialog::new(&self.doc, book, columns);
+            }
             Action::ToggleRowFilter(book) => {
                 let sheet = self.doc.project().workbook(book).map(|b| b.active_sheet);
                 let has = sheet.is_some_and(|s| {
@@ -1260,6 +1323,32 @@ impl SheafApp {
                     self.warn("This sheet has no filter: use Add or Remove Filter first");
                 }
             }
+            Action::CondFormatDialog { book, kind } => {
+                let range = self.cond_range(book);
+                match range {
+                    Ok(range) => self.cond_format = CondFormatDialog::new(&self.doc, book, kind, range),
+                    Err(why) => self.warn(why),
+                }
+            }
+            Action::RemoveCondFormat(book) => match self.cond_range(book) {
+                Ok(range) => {
+                    let has = self
+                        .doc
+                        .project()
+                        .workbook(book)
+                        .is_some_and(|b| b.sheet().cond_formats.iter().any(|r| r.range.intersects(&range)));
+                    if has {
+                        self.doc.apply("Remove conditional format", |p| {
+                            if let Some(b) = p.workbook_mut(book) {
+                                b.sheet_mut().cond_formats.retain(|r| !r.range.intersects(&range));
+                            }
+                        });
+                    } else {
+                        self.warn("No conditional format touches the selection");
+                    }
+                }
+                Err(why) => self.warn(why),
+            },
             Action::FreezePanes(book) => {
                 let Some(sheet) = self.doc.project().workbook(book).map(|b| b.sheet()) else { return };
                 let (next, label) = if sheet.frozen.is_none() {
@@ -1837,9 +1926,13 @@ impl SheafApp {
                 let mut copy = b.sheets[active].clone();
                 copy.name = free_name(&b.sheets, &format!("{}_", copy.name));
                 self.doc.apply("Duplicate sheet", |p| {
+                    let mut renamed = std::collections::HashMap::new();
                     for c in &mut copy.columns {
-                        c.id = p.new_column_id();
+                        let new = p.new_column_id();
+                        renamed.insert(c.id, new);
+                        c.id = new;
                     }
+                    copy.remap_cond_format_columns(&|c| renamed.get(&c).copied());
                     if let Some(b) = p.workbook_mut(book) {
                         b.sheets.insert(active + 1, copy);
                         b.active_sheet = active + 1;
@@ -2093,6 +2186,13 @@ impl SheafApp {
     }
 
     /// Shows a sheet of a workbook (a result sheet that a tool just added).
+    /// The range of the selection of a workbook's grid, for conditional formatting.
+    fn cond_range(&self, book: WindowId) -> Result<sheaf_core::condformat::CondRange, &'static str> {
+        let sheet = self.doc.project().workbook(book).map(|b| b.sheet()).ok_or("This workbook no longer exists")?;
+        let state = self.books.get(&book).ok_or("Select cells, rows or columns of the data first")?;
+        grid::cond_range(state, sheet)
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -2300,6 +2400,8 @@ impl SheafApp {
             || self.fit.is_some()
             || self.filter.is_some()
             || self.row_filter.is_some()
+            || self.mask_condition.is_some()
+            || self.cond_format.is_some()
             || self.reshape.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
@@ -2321,6 +2423,8 @@ impl SheafApp {
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         let menu_ctx = self.menu_context();
+        menus::set_masking_disabled(ui.ctx(), self.doc.project().masking_disabled());
+        menus::set_masked_hidden(ui.ctx(), self.doc.project().hide_masked);
         menus::show_bar(ui, &menu_ctx, actions);
     }
 
@@ -2674,10 +2778,20 @@ impl SheafApp {
                 }
             }
         }
+        if let Some(d) = &mut self.cond_format
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.cond_format = None;
+        }
         if let Some(d) = &mut self.row_filter
             && !d.show(ctx, &mut self.doc)
         {
             self.row_filter = None;
+        }
+        if let Some(d) = &mut self.mask_condition
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.mask_condition = None;
         }
         if let Some(d) = &mut self.filter {
             match d.show(ctx, &mut self.doc) {
@@ -3396,6 +3510,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
             Window::Workbook(b) => {
                 for s in &mut b.sheets {
                     s.columns.retain(|c| !columns.contains(&c.id));
+                    s.remap_cond_format_columns(&|c| (!columns.contains(&c)).then_some(c));
                 }
             }
             Window::Graph(g) => {

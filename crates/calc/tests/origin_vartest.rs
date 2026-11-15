@@ -442,11 +442,80 @@ fn one_sample_variance_dialog_significant_cases() {
     eq("lower p", r.p, 0.00123117416379124);
     assert!(r.rejected());
     // Two-sided intervals at 90 95 99.
-    let want =
-        [(0.906913265616178, 5.88630183733099), (0.796719176361771, 7.54950463751445), (0.629146861198078, 12.8962370807767)];
+    let want = [
+        (0.906913265616178, 5.88630183733099),
+        (0.796719176361771, 7.54950463751445),
+        (0.629146861198078, 12.8962370807767),
+    ];
     for (level, (wl, wu)) in [0.9, 0.95, 0.99].into_iter().zip(want) {
         let (l, u) = variance_interval(a.len(), r.estimate, Two, level);
         eq("lower", l, wl);
         eq("upper", u, wu);
     }
+}
+
+/// The "Power Analysis" group of the Two-Sample Proportion Test dialog (Actual Power and Hypothetical Power).
+#[test]
+fn two_proportion_power_matches_the_dialog() {
+    use Tail::{Lower, Two, Upper};
+    // Two-sided, 30 of 50 against 20 of 50: significance 0.05 and 0.01 (the test difference does not matter).
+    eq("power 0.05", power_two_proportions(0.6, 0.4, 50.0, 0.05, Two), 0.516323421027342);
+    eq("power 0.01", power_two_proportions(0.6, 0.4, 50.0, 0.01, Two), 0.278367227355963);
+    // 15 of 40 against 25 of 35: the actual sizes 40 and 35 (each taken for both samples), then 50 100 200.
+    let (p1, p2) = (15.0 / 40.0, 25.0 / 35.0);
+    let want = [
+        (40.0, 0.87616102837545),
+        (35.0, 0.828106373863776),
+        (50.0, 0.938038580207161),
+        (100.0, 0.998814261304273),
+        (200.0, 0.999999877623331),
+    ];
+    for (n, w) in want {
+        eq(&format!("power n {n}"), power_two_proportions(p1, p2, n, 0.05, Two), w);
+    }
+    // One-sided: Origin returns only one of the two terms, the one that looks like the wrong direction.
+    eq("upper", power_two_proportions(0.6, 0.4, 50.0, 0.05, Upper), 9.96062005463871e-5);
+    eq("lower 40", power_two_proportions(p1, p2, 40.0, 0.05, Lower), 3.01679803625835e-7);
+    eq("lower 35", power_two_proportions(p1, p2, 35.0, 0.05, Lower), 8.72825092768114e-7);
+    // Nothing to compute without spread.
+    assert!(power_two_proportions(1.0, 1.0, 10.0, 0.05, Two).is_nan());
+}
+
+/// Warning under the normal approximation of the two-sample test: some sample with fewer than 10 successes or
+/// fewer than 10 failures.
+#[test]
+fn two_sample_normal_approximation_warning() {
+    for (a, b) in [
+        ((3, 10), (1, 8)),
+        ((10, 10), (5, 10)),
+        ((10, 10), (8, 8)),
+        ((20, 25), (20, 25)),
+        ((3, 10), (30, 50)),
+        ((30, 50), (3, 10)),
+    ] {
+        assert!(two_sample_normal_doubtful(a, b), "{a:?} {b:?}");
+    }
+    for (a, b) in [((30, 50), (20, 50)), ((15, 40), (25, 35)), ((12, 30), (30, 50))] {
+        assert!(!two_sample_normal_doubtful(a, b), "{a:?} {b:?}");
+    }
+}
+
+/// The "Power Analysis" group of the One-Sample Proportion Test dialog: 60 of 100 against 0.5 and 30 of 100
+/// against 0.4 (Actual Power at 100, Hypothetical Power at 50 100 200, significance 0.05).
+#[test]
+fn one_proportion_power_matches_the_dialog() {
+    use Tail::{Lower, Two, Upper};
+    // (observed p, hypothesized p, powers at n = 100, 50, 200)
+    let rows = [
+        (0.6, 0.5, [0.516323421027342, 0.28904912956061, 0.812291820591136]),
+        (0.3, 0.4, [0.534629686422704, 0.290523649212481, 0.839102957979036]),
+    ];
+    for (p1, p0, want) in rows {
+        for (n, w) in [100.0, 50.0, 200.0].into_iter().zip(want) {
+            eq(&format!("power {p1} n {n}"), power_one_proportion(p1, p0, n, 0.05, Two), w);
+        }
+    }
+    // One-sided, as for two samples only one term of the two-sided power is returned.
+    eq("upper", power_one_proportion(0.6, 0.5, 100.0, 0.05, Upper), 9.96062005464234e-5);
+    eq("lower", power_one_proportion(0.6, 0.5, 100.0, 0.05, Lower), 0.641499487271636);
 }

@@ -553,6 +553,9 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             exact_only,
             pooled,
             levels,
+            power,
+            power_sizes,
+            power_alpha,
         } => {
             if successes.len() != size.len() || !(1..=2).contains(&successes.len()) {
                 bail!(
@@ -577,6 +580,12 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 normal: !exact_only,
                 exact,
                 pooled,
+                power: analysis::PropPowerSpec {
+                    actual: power,
+                    hypothetical: !power_sizes.is_empty(),
+                    alpha: power_alpha,
+                    sizes: if power_sizes.is_empty() { analysis::PropPowerSpec::default().sizes } else { power_sizes },
+                },
             };
             (target, Job::Tool(Tool::PropTest(spec)))
         }

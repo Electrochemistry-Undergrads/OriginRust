@@ -421,6 +421,26 @@ pub struct PropTestSpec {
     /// Two samples: the standard error of the z statistic from the pooled proportion (when the hypothesized
     /// difference is 0).
     pub pooled: bool,
+    /// The "Power Analysis" group of Origin's dialogs.
+    pub power: PropPowerSpec,
+}
+
+/// The "Power Analysis" group of the proportion dialogs: the power of the test at the observed sample sizes
+/// ("Actual Power") and at typed sample sizes ("Hypothetical Power"), each at its own significance level.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropPowerSpec {
+    pub actual: bool,
+    pub hypothetical: bool,
+    /// The significance level of the power analysis (Origin keeps it apart from the test's own level).
+    pub alpha: f64,
+    /// Hypothetical sample sizes (per sample for two samples).
+    pub sizes: Vec<u64>,
+}
+
+impl Default for PropPowerSpec {
+    fn default() -> Self {
+        PropPowerSpec { actual: false, hypothetical: false, alpha: 0.05, sizes: vec![50, 100, 200] }
+    }
 }
 
 impl Default for PropTestSpec {
@@ -434,6 +454,7 @@ impl Default for PropTestSpec {
             normal: true,
             exact: false,
             pooled: true,
+            power: PropPowerSpec::default(),
         }
     }
 }

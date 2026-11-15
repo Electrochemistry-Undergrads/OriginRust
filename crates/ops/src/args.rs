@@ -1774,6 +1774,16 @@ pub enum AnalyzeTool {
         /// Confidence levels in percent, for example 90,95,99; none means no intervals.
         #[arg(long, value_delimiter = ',')]
         levels: Vec<f64>,
+        /// Power analysis: the power at the observed sample sizes (Origin's "Actual Power").
+        #[arg(long)]
+        power: bool,
+        /// Power analysis: also the power at these sample sizes, for example 50,100,200 (Origin's "Hypothetical
+        /// Power"; per sample for the two-sample test).
+        #[arg(long, value_delimiter = ',')]
+        power_sizes: Vec<u64>,
+        /// Significance level of the power analysis (separate from --alpha, as in Origin).
+        #[arg(long, default_value_t = 0.05)]
+        power_alpha: f64,
     },
     /// One-way ANOVA: every chosen column is a group. The result (group statistics, ANOVA table,
     /// means comparison of all pairs) goes to a new sheet.

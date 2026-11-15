@@ -13,7 +13,7 @@ use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
     AnovaSpec, BinSize, CorrelationSpec, CrosstabSpec, DiscSort, DiscreteFreqSpec, FreqOptions, FriedmanSpec,
     HistogramSpec, KruskalWallisSpec, KsTwoSampleSpec, MannWhitneySpec, MeansComparison, MedianTestSpec, NormalitySpec,
-    OutlierSpec, PropTestKind, PropTestSpec, RowStatsSpec, SignTestSpec, SignedRankKind, SignedRankSpec,
+    OutlierSpec, PropPowerSpec, PropTestKind, PropTestSpec, RowStatsSpec, SignTestSpec, SignedRankKind, SignedRankSpec,
     StatisticsSpec, TTestKind, TTestSpec, Tail, TwoWayAnovaSpec, TwoWayLayout, VarTestKind, VarTestSpec,
 };
 use sheaf_core::analysis::{
@@ -425,6 +425,14 @@ fn parse_levels(text: &str) -> Result<Vec<f64>, String> {
         .collect()
 }
 
+/// The Hypothetical Sample Size(s) box: whole numbers separated by spaces or commas.
+fn parse_sizes(text: &str) -> Result<Vec<u64>, String> {
+    text.split(|c: char| c.is_whitespace() || c == ',')
+        .filter(|w| !w.is_empty())
+        .map(|w| w.parse::<u64>().map_err(|_| format!("\"{w}\" is not a sample size")))
+        .collect()
+}
+
 /// The Alternate Hypothesis radios of the variance and proportion tests: `Variance <> 1`, `> 1`, `< 1`.
 fn alternative_radios(ui: &mut egui::Ui, tail: &mut Tail, what: &str, value: &str) {
     ui.horizontal(|ui| {
@@ -469,6 +477,12 @@ struct StatsOptions {
     binomial_method: bool,
     /// Two-sample proportion test: "Use pooled p for test" (Origin: off).
     pooled_p: bool,
+    /// Proportion tests, Power Analysis: Actual Power, Hypothetical Power, their significance level and the
+    /// hypothetical sample sizes as typed (Origin's defaults: off, 0.05, "50 100 200").
+    power_actual: bool,
+    power_hypothetical: bool,
+    power_alpha: f64,
+    power_sizes_text: String,
     /// Confidence intervals of the variance and proportion tests, and their levels in percent as typed.
     intervals: bool,
     levels_text: String,
@@ -528,6 +542,10 @@ impl Default for StatsOptions {
             normal_method: true,
             binomial_method: false,
             pooled_p: false,
+            power_actual: false,
+            power_hypothetical: false,
+            power_alpha: 0.05,
+            power_sizes_text: "50 100 200".to_string(),
             intervals: false,
             levels_text: "90 95 99".to_string(),
             tail: Tail::Two,
@@ -1676,6 +1694,12 @@ impl AnalysisDialog {
                     normal: st.normal_method,
                     exact: st.binomial_method,
                     pooled: st.pooled_p,
+                    power: PropPowerSpec {
+                        actual: st.power_actual,
+                        hypothetical: st.power_hypothetical,
+                        alpha: st.power_alpha,
+                        sizes: parse_sizes(&st.power_sizes_text)?,
+                    },
                 })
             }
             AnalysisKind::Anova => Tool::Anova(AnovaSpec {
@@ -2331,6 +2355,21 @@ impl AnalysisDialog {
                     ui.checkbox(&mut st.pooled_p, "Use pooled p for test");
                 }
                 ui.checkbox(&mut st.binomial_method, if one { "Binomial Test" } else { "Fisher's Exact Test" });
+                ui.label("Power Analysis");
+                ui.checkbox(&mut st.power_actual, "Actual Power");
+                ui.add_enabled_ui(st.power_actual || st.power_hypothetical, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Significance Level");
+                        ui.add(DragValue::new(&mut st.power_alpha).speed(0.001).range(0.0001..=0.4999));
+                    });
+                });
+                ui.checkbox(&mut st.power_hypothetical, "Hypothetical Power");
+                ui.add_enabled_ui(st.power_hypothetical, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Hypothetical Sample Size(s)");
+                        ui.add(egui::TextEdit::singleline(&mut st.power_sizes_text).desired_width(120.0));
+                    });
+                });
             }
             AnalysisKind::Anova => {
                 let st = &mut self.stats;

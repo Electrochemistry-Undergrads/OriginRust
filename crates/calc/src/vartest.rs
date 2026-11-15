@@ -231,6 +231,14 @@ pub fn normal_approximation_doubtful(successes: u64, trials: u64) -> bool {
     successes < 10 || trials.saturating_sub(successes) < 10
 }
 
+/// Origin's warning under the normal approximation of the two-sample test: shown when some sample has fewer
+/// than 10 successes or fewer than 10 failures (3/10 against 1/8, 20/25 against 20/25, 3/10 against 30/50 and
+/// 30/50 against 3/10 gave it; 30/50 against 20/50, 12/30 against 30/50 and 15/40 against 25/35, whose second
+/// sample has exactly 10 failures, did not). The limit of exactly 10 successes was not isolated.
+pub fn two_sample_normal_doubtful(first: (u64, u64), second: (u64, u64)) -> bool {
+    [first, second].into_iter().any(|(x, n)| normal_approximation_doubtful(x, n))
+}
+
 fn std_normal() -> Normal {
     Normal::new(0.0, 1.0).expect("standard normal")
 }
@@ -458,6 +466,50 @@ pub fn wald_difference_interval(first: (u64, u64), second: (u64, u64), tail: Tai
         Tail::Two => ((d - width).max(-1.0), (d + width).min(1.0)),
         Tail::Upper => ((d - width).max(-1.0), 1.0),
         Tail::Lower => (-1.0, (d + width).min(1.0)),
+    }
+}
+
+/// The power of the two-proportion test as Origin's "Power Analysis" group computes it, for `n` in each sample
+/// and the observed proportions `p1`, `p2` taken as the true ones (`alpha` is the group's own level; the
+/// hypothesized difference does not enter). With `d = p1 - p2`, the null standard error of the difference
+/// `se0 = sqrt(2 pbar (1 - pbar) / n)` (`pbar = (p1 + p2) / 2`) and the alternative one
+/// `se1 = sqrt((p1 (1 - p1) + p2 (1 - p2)) / n)`:
+///
+/// * two-sided: `Phi((d - z se0) / se1) + Phi((-d - z se0) / se1)`, `z` the `1 - alpha/2` quantile;
+/// * upper tail: only `Phi((-d - z se0) / se1)`, lower tail only `Phi((d - z se0) / se1)`, `z` the `1 - alpha`
+///   quantile. That is Origin's number even though the sign looks reversed (30 of 50 against 20 of 50, upper
+///   tail, gave 9.96e-5; the lower tail of 15 of 40 against 25 of 35 gave 3.0e-7), so it is copied as measured.
+///
+/// NaN when `n` is 0 or both proportions are 0 or 1 (no spread under the alternative).
+pub fn power_two_proportions(p1: f64, p2: f64, n: f64, alpha: f64, tail: Tail) -> f64 {
+    let d = p1 - p2;
+    let pbar = (p1 + p2) / 2.0;
+    let se0 = (2.0 * pbar * (1.0 - pbar) / n).sqrt();
+    let se1 = ((p1 * (1.0 - p1) + p2 * (1.0 - p2)) / n).sqrt();
+    power_terms(d, se0, se1, alpha, tail)
+}
+
+/// The power of the one-proportion test (Origin's "Power Analysis" group) for `n` observations, the observed
+/// proportion `p1` taken as the true one and the hypothesized `p0`: as [`power_two_proportions`] with
+/// `d = p1 - p0` scaled by `sqrt(n)`, `se0 = sqrt(p0 (1 - p0))` and `se1 = sqrt(p1 (1 - p1))`.
+pub fn power_one_proportion(p1: f64, p0: f64, n: f64, alpha: f64, tail: Tail) -> f64 {
+    let root = n.sqrt();
+    power_terms((p1 - p0) * root, (p0 * (1.0 - p0)).sqrt(), (p1 * (1.0 - p1)).sqrt(), alpha, tail)
+}
+
+fn power_terms(d: f64, se0: f64, se1: f64, alpha: f64, tail: Tail) -> f64 {
+    if !(se1 > 0.0) || !se0.is_finite() {
+        return f64::NAN;
+    }
+    let norm = std_normal();
+    let term = |shift: f64, z: f64| norm.cdf((shift - z * se0) / se1);
+    match tail {
+        Tail::Two => {
+            let z = norm.inverse_cdf(1.0 - alpha / 2.0);
+            term(d, z) + term(-d, z)
+        }
+        Tail::Upper => term(-d, norm.inverse_cdf(1.0 - alpha)),
+        Tail::Lower => term(d, norm.inverse_cdf(1.0 - alpha)),
     }
 }
 

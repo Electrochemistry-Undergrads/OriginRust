@@ -422,7 +422,8 @@ fn var_test(spec: &VarTestSpec, inputs: &[Input<'_>]) -> Result<Output, Analysis
             on_sheet.push(number_column("F", "", vec![r.statistic]));
             on_sheet.push(number_column("Numer. DF", "", vec![r.df.0]));
             on_sheet.push(number_column("Denom. DF", "", vec![r.df.1]));
-            on_sheet.push(number_column(if spec.tail == Tail::Lower { "Prob < F" } else { "Prob > F" }, "", vec![r.p]));
+            // Origin keeps the heading "Prob > F" for the lower tail too (the one-sample test switches to "Prob<Chi-Square").
+            on_sheet.push(number_column("Prob > F", "", vec![r.p]));
             if !levels.is_empty() {
                 let rows = levels
                     .iter()
@@ -438,22 +439,60 @@ fn var_test(spec: &VarTestSpec, inputs: &[Input<'_>]) -> Result<Output, Analysis
             notes.push(alt);
             let rel = match spec.tail {
                 Tail::Two => "different",
-                Tail::Upper => "greater than the test ratio",
-                Tail::Lower => "less than the test ratio",
+                Tail::Upper => "greater than",
+                Tail::Lower => "less than",
+            };
+            // Origin's wording (measured): "the two population variances are [NOT] significantly different" and
+            // "the ratio of two population variances is [NOT] significantly greater than 1".
+            let (subject, test_value) = if spec.tail == Tail::Two {
+                ("two population variances are", String::new())
+            } else {
+                ("ratio of two population variances is", format!(" {}", num(ratio)))
             };
             notes.push(format!(
-                "At the {} level, the {} {}significantly {rel}.",
+                "At the {} level, the {subject} {}significantly {rel}{test_value}.",
                 num(spec.alpha),
-                if spec.tail == Tail::Two {
-                    "two population variances are"
-                } else {
-                    "ratio of the population variances is"
-                },
                 if r.rejected() { "" } else { "NOT " },
             ));
         }
     }
     Ok(Output { table: None, on_sheet, notes, plots: Vec::new() })
+}
+
+/// The warning line under the normal approximation (our wording).
+const NORMAL_DOUBTFUL: &str =
+    "The normal approximation may be unreliable with fewer than 10 successes or fewer than 10 failures in a sample.";
+
+/// Origin's "Powers" table: one row per sample size, first the actual ones (when "Actual Power" is ticked),
+/// then the typed hypothetical ones, each with the power analysis' own significance level.
+fn power_table(
+    on_sheet: &mut Vec<SheetColumn>,
+    power: &PropPowerSpec,
+    actual: Vec<f64>,
+    f: impl Fn(f64, f64) -> f64,
+) -> Result<(), AnalysisError> {
+    if !(power.actual || power.hypothetical) {
+        return Ok(());
+    }
+    if !(power.alpha > 0.0 && power.alpha < 1.0) {
+        return Err(AnalysisError::BadOption(
+            "the significance level of the power analysis must be between 0 and 1".into(),
+        ));
+    }
+    let mut sizes = Vec::new();
+    if power.actual {
+        sizes.extend(actual);
+    }
+    if power.hypothetical {
+        if power.sizes.is_empty() || power.sizes.contains(&0) {
+            return Err(AnalysisError::BadOption("the hypothetical sample sizes must be whole numbers above 0".into()));
+        }
+        sizes.extend(power.sizes.iter().map(|n| *n as f64));
+    }
+    on_sheet.push(number_column("Alpha", "", vec![power.alpha; sizes.len()]));
+    on_sheet.push(number_column("Sample Size", "", sizes.clone()));
+    on_sheet.push(number_column("Power", "", sizes.iter().map(|n| f(*n, power.alpha)).collect()));
+    Ok(())
 }
 
 pub(super) fn prop_test(spec: &PropTestSpec) -> Result<Output, AnalysisError> {
@@ -532,6 +571,10 @@ pub(super) fn prop_test(spec: &PropTestSpec) -> Result<Output, AnalysisError> {
                 limits(&mut on_sheet, &exact);
                 level_table(&mut on_sheet, &exact);
             }
+            let p1 = r.estimate;
+            power_table(&mut on_sheet, &spec.power, vec![size as f64], |n, a| {
+                calc::power_one_proportion(p1, proportion, n, a, tail)
+            })?;
         }
         PropTestKind::TwoSample { first, second, difference } => {
             if spec.exact && difference == 0.0 && first.1.saturating_add(second.1) > calc::vartest::MAX_EXACT_SIZE {
@@ -541,7 +584,8 @@ pub(super) fn prop_test(spec: &PropTestSpec) -> Result<Output, AnalysisError> {
             let [null, alt] = hypotheses("Proportion1 - Proportion2", difference, tail);
             notes.push(null);
             notes.push(alt);
-            if spec.normal {
+            // Each section (normal approximation, Fisher) repeats the sample summary and the difference.
+            let summary = |on_sheet: &mut Vec<SheetColumn>| {
                 on_sheet.push(label_column("Sample", vec!["Sample1".into(), "Sample2".into()]));
                 on_sheet.push(number_column("Success", "", vec![first.0 as f64, second.0 as f64]));
                 on_sheet.push(number_column("N", "", vec![first.1 as f64, second.1 as f64]));
@@ -552,18 +596,36 @@ pub(super) fn prop_test(spec: &PropTestSpec) -> Result<Output, AnalysisError> {
                 ));
                 on_sheet.push(label_column("Difference", vec!["Sample1 - Sample2".into()]));
                 on_sheet.push(number_column("Estimate for difference", "", vec![r.estimate]));
+            };
+            let wald = |level: f64| calc::wald_difference_interval(first, second, tail, level);
+            if spec.normal {
+                summary(&mut on_sheet);
                 on_sheet.push(number_column("Z", "", vec![r.z]));
                 on_sheet.push(number_column("P", "", vec![r.p_normal]));
-                let wald = |level: f64| calc::wald_difference_interval(first, second, tail, level);
                 limits(&mut on_sheet, &wald);
                 level_table(&mut on_sheet, &wald);
+                if calc::vartest::two_sample_normal_doubtful(first, second) {
+                    notes.push(NORMAL_DOUBTFUL.into());
+                }
             }
             if let (true, Some(p)) = (spec.exact, r.p_fisher) {
-                on_sheet.push(label_column("Difference", vec!["Sample1 - Sample2".into()]));
+                // Fisher's section shows the same Wald interval of the difference as the normal one.
+                summary(&mut on_sheet);
                 on_sheet.push(number_column("Exact P", "", vec![p]));
+                limits(&mut on_sheet, &wald);
+                level_table(&mut on_sheet, &wald);
             } else if spec.exact {
+                // Origin leaves the Fisher section out for a test difference other than 0, without a word.
                 notes.push("Fisher's exact test is only given for a hypothesized difference of 0.".into());
             }
+            let rate = |(x, n): (u64, u64)| x as f64 / n as f64;
+            let (p1, p2) = (rate(first), rate(second));
+            // The "Actual Power" rows take each sample size as the size of both samples (once when equal).
+            let mut actual = vec![first.1 as f64];
+            if second.1 != first.1 {
+                actual.push(second.1 as f64);
+            }
+            power_table(&mut on_sheet, &spec.power, actual, |n, a| calc::power_two_proportions(p1, p2, n, a, tail))?;
         }
     }
     Ok(Output { table: None, on_sheet, notes, plots: Vec::new() })
@@ -1848,6 +1910,32 @@ mod tests {
         close(cell(&p, &r, "Prob > F"), &[0.309_348_277_840_741_8]);
         close(cell(&p, &r, "Numer. DF"), &[7.0]);
         close(cell(&p, &r, "Denom. DF"), &[9.0]);
+        let said = |notes: &[String], text: &str| notes.iter().any(|n| n == text);
+        assert!(
+            said(&r.notes, "At the 0.05 level, the two population variances are NOT significantly different."),
+            "{:?}",
+            r.notes
+        );
+        // Origin's one-sided wording names the test ratio and keeps "Prob > F" for the lower tail.
+        let up = run(&mut p, &ids[..2], Tool::VarTest(VarTestSpec { tail: Tail::Upper, ..two.clone() }));
+        assert!(
+            said(
+                &up.notes,
+                "At the 0.05 level, the ratio of two population variances is NOT significantly greater than 1."
+            ),
+            "{:?}",
+            up.notes
+        );
+        let lo = run(&mut p, &ids[..2], Tool::VarTest(VarTestSpec { tail: Tail::Lower, ..two.clone() }));
+        assert!(
+            said(
+                &lo.notes,
+                "At the 0.05 level, the ratio of two population variances is NOT significantly less than 1."
+            ),
+            "{:?}",
+            lo.notes
+        );
+        close(cell(&p, &lo, "Prob > F"), &[0.154_674_138_920_370_9]);
         assert!(p.analyze(&request(&ids, Tool::VarTest(two))).is_err());
         let bad = VarTestSpec { levels: vec![150.0], intervals: true, ..Default::default() };
         assert!(p.analyze(&request(&ids[..1], Tool::VarTest(bad))).is_err());
@@ -1881,6 +1969,70 @@ mod tests {
         assert!(p.analyze(&request(&ids[..1], Tool::PropTest(none))).is_err());
         let over = PropTestSpec { kind: PropTestKind::OneSample { successes: 11, size: 10, proportion: 0.5 }, ..spec };
         assert!(p.analyze(&request(&ids[..1], Tool::PropTest(over))).is_err());
+    }
+
+    #[test]
+    fn one_sample_proportion_report_has_a_powers_table() {
+        let (mut p, _, ids) = project();
+        let spec = PropTestSpec {
+            kind: PropTestKind::OneSample { successes: 60, size: 100, proportion: 0.5 },
+            power: PropPowerSpec { actual: true, hypothetical: true, ..Default::default() },
+            ..Default::default()
+        };
+        let r = run(&mut p, &ids[..1], Tool::PropTest(spec));
+        // Origin: the actual size first, then the typed ones (100 appears twice).
+        assert_eq!(cell(&p, &r, "Sample Size"), [100.0, 50.0, 100.0, 200.0]);
+        let want = [0.516323421027342, 0.28904912956061, 0.516323421027342, 0.812291820591136];
+        for (g, w) in cell(&p, &r, "Power").iter().zip(want) {
+            assert!((g - w).abs() < 1e-9, "{g} {w}");
+        }
+    }
+
+    #[test]
+    fn two_sample_proportion_report_has_fisher_and_power_sections() {
+        let (mut p, _, ids) = project();
+        let spec = PropTestSpec {
+            kind: PropTestKind::TwoSample { first: (15, 40), second: (25, 35), difference: 0.0 },
+            exact: true,
+            intervals: true,
+            pooled: false,
+            power: PropPowerSpec { actual: true, hypothetical: true, alpha: 0.05, sizes: vec![50, 100, 200] },
+            ..Default::default()
+        };
+        let r = run(&mut p, &ids[..1], Tool::PropTest(spec));
+        // Numbers of the Origin run (docs/spec/statistics.md 21.4): z, Fisher's exact p and the power rows.
+        assert!((cell(&p, &r, "Z")[0] + 3.1380014488579).abs() < 1e-9);
+        assert!((cell(&p, &r, "Exact P")[0] - 0.0051489221075077).abs() < 1e-9);
+        assert_eq!(cell(&p, &r, "Sample Size"), [40.0, 35.0, 50.0, 100.0, 200.0]);
+        let power = cell(&p, &r, "Power");
+        assert!((power[0] - 0.87616102837545).abs() < 1e-9 && (power[4] - 0.999999877623331).abs() < 1e-9);
+        assert_eq!(cell(&p, &r, "Alpha"), [0.05; 5]);
+        let ws = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        // The Fisher section repeats the sample summary and the interval tables.
+        assert_eq!(ws.columns.iter().filter(|c| c.long_name == "Sample P").count(), 2);
+        assert_eq!(ws.columns.iter().filter(|c| c.long_name == "Lower Limits").count(), 2);
+        // Equal sizes give one actual-power row; with only the hypothetical ones ticked there are three rows.
+        let equal = PropTestSpec {
+            kind: PropTestKind::TwoSample { first: (30, 50), second: (20, 50), difference: 0.0 },
+            power: PropPowerSpec { actual: true, ..Default::default() },
+            ..Default::default()
+        };
+        let r = run(&mut p, &ids[..1], Tool::PropTest(equal.clone()));
+        assert!((cell(&p, &r, "Power")[0] - 0.516323421027342).abs() < 1e-9);
+        assert_eq!(cell(&p, &r, "Power").len(), 1);
+        let hyp = PropTestSpec { power: PropPowerSpec { hypothetical: true, ..Default::default() }, ..equal.clone() };
+        let r = run(&mut p, &ids[..1], Tool::PropTest(hyp));
+        assert_eq!(cell(&p, &r, "Sample Size"), [50.0, 100.0, 200.0]);
+        // Both samples all successes: no z and no p (Origin prints --).
+        let flat = PropTestSpec {
+            kind: PropTestKind::TwoSample { first: (10, 10), second: (8, 8), difference: 0.0 },
+            ..Default::default()
+        };
+        let r = run(&mut p, &ids[..1], Tool::PropTest(flat));
+        assert!(cell(&p, &r, "Z")[0].is_nan() && cell(&p, &r, "P")[0].is_nan());
+        let bad_power =
+            PropTestSpec { power: PropPowerSpec { actual: true, alpha: 1.5, ..Default::default() }, ..equal };
+        assert!(p.analyze(&request(&ids[..1], Tool::PropTest(bad_power))).is_err());
     }
 
     #[test]

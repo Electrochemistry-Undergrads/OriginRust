@@ -87,6 +87,8 @@ pub(crate) struct PlotData<'a> {
     pub hist_raw: Option<Vec<f64>>,
     /// The points a hexbin plot bins and their first binning; `None` for other kinds.
     pub hex: Option<crate::hexbin::HexData>,
+    /// The lines and axes of a layer's parallel plots, held by the first of them; `None` for other plots.
+    pub parallel: Option<Box<crate::parallel::ParallelData>>,
 }
 
 /// The numbers of one box of a box chart (Origin's defaults: the box runs from the 25th to the
@@ -377,6 +379,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             closing: None,
             hist_raw: None,
             hex: None,
+            parallel: None,
             label_texts: match plot.decor.labels.form {
                 LabelForm::Column { column } if plot.decor.labels.enable => project.column(column).map(cell_texts),
                 _ => None,
@@ -497,6 +500,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
     if layer.coords.polar().is_some_and(|p| p.radar) {
         radar_columns(project, &mut plots);
     }
+    crate::parallel::attach(project, layer, &mut plots);
     crate::ridgeline::set_scales(&mut plots);
     stack_bars(&mut plots);
     place_bars(&mut plots, &layer.bars);

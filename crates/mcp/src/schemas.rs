@@ -311,7 +311,7 @@ pub fn defs() -> Vec<Def> {
                     (
                         "template",
                         s(
-                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), scatter-rug (scatter with rug marks beside the bottom and left axes), violin (also violin-box, violin-point, violin-quartile, violin-stick, half-violin), ridgeline (one density curve per y column, stacked up the page), hexbin (x against the first y column, binned into hexagons coloured by count, with a colour scale; no right axis), ... (the names of sheaf plot --template). Default: what the data suggests.",
+                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), scatter-rug (scatter with rug marks beside the bottom and left axes), violin (also violin-box, violin-point, violin-quartile, violin-stick, half-violin), ridgeline (one density curve per y column, stacked up the page), hexbin (x against the first y column, binned into hexagons coloured by count, with a colour scale; no right axis), parallel (one vertical axis per y column, one line per row coloured by the last column or by group, with a colour scale; two or more y columns, no right axis), parallel-index (like parallel, lines coloured by a text group column with a legend; three or more y columns plus group), ... (the names of sheaf plot --template). Default: what the data suggests.",
                         ),
                     ),
                     ("book", s(BOOK)),
@@ -319,6 +319,12 @@ pub fn defs() -> Vec<Def> {
                     ("y", strs("Y columns. Default: the sheet's Y columns.")),
                     ("y2", strs("Columns on the right Y axis (double-Y).")),
                     ("graph", s("Style this existing graph instead of making one.")),
+                    (
+                        "group",
+                        s(
+                            "Parallel plots: the group column of parallel-index (default: the first text column), or the numeric colour column of parallel (default: the last y column; none = one colour).",
+                        ),
+                    ),
                     ("panels", panels),
                     (
                         "overlay_files",

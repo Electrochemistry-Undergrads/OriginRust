@@ -273,6 +273,22 @@ pub(crate) fn draw_scale(
     if max_count == 0 {
         return;
     }
+    let ticks: Vec<(f64, String)> =
+        scale_ticks(max_count).into_iter().map(|v| (v as f64 / max_count as f64, v.to_string())).collect();
+    draw_color_bar(out, layer, geom, m, SCALE_TITLE, &ticks);
+}
+
+/// Draws a colour scale beside the frame: the title above a vertical bar of the colour ramp (0 at the bottom, 1 at
+/// the top), with a tick and a label at each `(position 0..1 along the bar, label)` of `ticks`. Shared by the hexbin
+/// plot and the Parallel Plot.
+pub(crate) fn draw_color_bar(
+    out: &mut Vec<Item>,
+    layer: &Layer,
+    geom: &LayerGeometry,
+    m: &dyn TextMeasurer,
+    title: &str,
+    ticks: &[(f64, String)],
+) {
     let f = geom.frame;
     let ya = &layer.y_axis;
     let size = ya.tick_font.size_pt;
@@ -280,8 +296,8 @@ pub(crate) fn draw_scale(
     let x0 = f.x + f.w + BAR_GAP_PT;
     let top = f.y + (ASCENT + DESCENT) * title_size + 0.4 * title_size;
     let bar = Rect { x: x0, y: top, w: BAR_W_PT, h: (f.y + f.h - top).max(1.0) };
-    text::place(out, m, SCALE_TITLE, &ya.title_font, title_size, (x0, f.y + ASCENT * title_size), Anchor::Start, 0.0);
-    // The gradient: strips from the top (the largest count) down to 0.
+    text::place(out, m, title, &ya.title_font, title_size, (x0, f.y + ASCENT * title_size), Anchor::Start, 0.0);
+    // The gradient: strips from the top (the largest value) down to the bottom.
     let strip = bar.h / BAR_STRIPS as f64;
     for i in 0..BAR_STRIPS {
         let t = 1.0 - (i as f64 + 0.5) / BAR_STRIPS as f64;
@@ -292,15 +308,14 @@ pub(crate) fn draw_scale(
     let line = ya.tick_font.color;
     out.push(Item::Rect { rect: bar, fill: None, stroke: Some(Stroke::solid(line, 0.5)) });
     let mut d = String::new();
-    for v in scale_ticks(max_count) {
-        let y = bar.y + (1.0 - v as f64 / max_count as f64) * bar.h;
+    for (frac, label) in ticks {
+        let y = bar.y + (1.0 - frac) * bar.h;
         move_to(&mut d, bar.x + bar.w, y);
         line_to(&mut d, bar.x + bar.w + 3.0, y);
-        let label = v.to_string();
         text::place(
             out,
             m,
-            &label,
+            label,
             &ya.tick_font,
             size,
             (bar.x + bar.w + LABEL_GAP_PT, y + (ASCENT - DESCENT) / 2.0 * size),

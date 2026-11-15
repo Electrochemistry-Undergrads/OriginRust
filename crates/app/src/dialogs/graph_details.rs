@@ -42,6 +42,8 @@ pub enum DetailTab {
     RidgeDistribution,
     /// A hexbin plot's Bins tab (graphing spec 14.24).
     HexBins,
+    /// A Parallel Plot or Parallel Index's Parallel tab (graphing spec 14.25).
+    Parallel,
     Display,
     PageDisplay,
     LegendsTitles,
@@ -98,6 +100,9 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             if plot.kind.is_hexbin() {
                 tabs.push((DetailTab::HexBins, "Bins", true));
             }
+            if plot.kind.is_parallel() {
+                tabs.push((DetailTab::Parallel, "Parallel", true));
+            }
             let curve = plot.kind.has_line() || plot.kind.has_symbols();
             if curve && !plot.kind.is_bar() && !plot.kind.is_area() {
                 tabs.push((DetailTab::DropLines, "Drop Lines", true));
@@ -125,8 +130,14 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
 
 /// The tab to show when the one that was shown does not exist for the new node.
 fn first_tab(tabs: &[(DetailTab, &str, bool)]) -> DetailTab {
-    let preferred =
-        [DetailTab::RidgeDisplay, DetailTab::HexBins, DetailTab::Line, DetailTab::Pattern, DetailTab::Symbol];
+    let preferred = [
+        DetailTab::RidgeDisplay,
+        DetailTab::HexBins,
+        DetailTab::Parallel,
+        DetailTab::Line,
+        DetailTab::Pattern,
+        DetailTab::Symbol,
+    ];
     preferred.into_iter().find(|t| tabs.iter().any(|(x, _, on)| x == t && *on)).unwrap_or(tabs[0].0)
 }
 
@@ -156,6 +167,8 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::HalfViolin => "Half Violin",
         PlotKind::Ridgeline => "Ridgeline Chart",
         PlotKind::Hexbin => "Hexbin",
+        PlotKind::Parallel => "Parallel Plot",
+        PlotKind::ParallelIndex => "Parallel Index",
         PlotKind::Pie => "Pie",
         PlotKind::Pie3D => "3D Color Pie",
         PlotKind::PieBw => "2D B&W Pie",
@@ -244,6 +257,8 @@ pub fn dialog_body(
                                 PlotKind::HalfViolin,
                                 PlotKind::Ridgeline,
                                 PlotKind::Hexbin,
+                                PlotKind::Parallel,
+                                PlotKind::ParallelIndex,
                                 PlotKind::Pie,
                                 PlotKind::Pie3D,
                                 PlotKind::PieBw,
@@ -370,6 +385,15 @@ fn plot_tab(
         for q in graph.layers[l].plots.iter_mut().filter(|q| q.kind.is_ridgeline()) {
             q.ridge = now.0.clone();
             q.line.width_pt = now.1;
+        }
+    }
+    // The parallel settings belong to the layer's one chart: every parallel plot shares them.
+    if tab == DetailTab::Parallel
+        && let Some(now) = graph.layers[l].plots.get(p).map(|pl| pl.parallel)
+        && now != before.parallel
+    {
+        for q in graph.layers[l].plots.iter_mut().filter(|q| q.kind.is_parallel()) {
+            q.parallel = now;
         }
     }
     let follows = matches!(tab, DetailTab::Line | DetailTab::Symbol | DetailTab::DropLines | DetailTab::Label);
@@ -737,6 +761,10 @@ fn plot_tab_body(
         DetailTab::RidgeDisplay => ridge_display_tab(ui, &mut graph.layers[l].plots[p]),
         DetailTab::RidgeDistribution => ridge_distribution_tab(ui, &mut graph.layers[l].plots[p].ridge),
         DetailTab::HexBins => hexbin_tab(ui, &mut graph.layers[l].plots[p].hexbin),
+        DetailTab::Parallel => {
+            let kind = graph.layers[l].plots[p].kind;
+            parallel_tab(ui, &mut graph.layers[l].plots[p].parallel, kind, columns)
+        }
         DetailTab::Spacing => {
             let bars = &mut graph.layers[l].bars;
             grid(ui, "plot_spacing", |ui| {
@@ -1206,6 +1234,7 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 hist: Default::default(),
                 ridge,
                 hexbin: layer.inherited_hexbin(),
+                parallel: layer.inherited_parallel(),
                 size_from: None,
                 color_from: None,
                 decor: Default::default(),
@@ -1747,4 +1776,42 @@ fn hexbin_tab(ui: &mut egui::Ui, h: &mut HexbinStyle) {
     hexbin_axis(ui, "X", &mut h.x, !y_from_x);
     hexbin_axis(ui, "Y", &mut h.y, y_from_x);
     ui.weak("The other axis' spacing makes the hexagons regular on the page; its Min and Max Center still apply (only its spacing is disabled).");
+}
+
+/// Origin's Plot Details Parallel tab (Width, Transparency) with the Axes dialog's "Rescale Each Axis Independently"
+/// and Sheaf's choice of the column that colours the lines (graphing spec 14.25). The parallel plots of the layer
+/// share these settings.
+fn parallel_tab(ui: &mut egui::Ui, s: &mut ParallelStyle, kind: PlotKind, columns: &[(ColumnId, String)]) {
+    ui.checkbox(&mut s.rescale_each_axis, "Rescale Each Axis Independently");
+    grid(ui, "parallel_tab", |ui| {
+        ui.label("Width");
+        ui.add(DragValue::new(&mut s.width_pt).range(0.0..=20.0).speed(0.05).suffix(" pt"));
+        ui.end_row();
+        ui.label("Transparency (%)");
+        ui.add(DragValue::new(&mut s.transparency_pct).range(0.0..=100.0).speed(0.5));
+        ui.end_row();
+        let (label, none) = if kind == PlotKind::ParallelIndex {
+            ("Group Column", "None (one colour)")
+        } else {
+            ("Color Column", "None (plot colour)")
+        };
+        ui.label(label);
+        let name = |id: Option<ColumnId>| {
+            id.and_then(|c| columns.iter().find(|(x, _)| *x == c))
+                .map(|(_, n)| n.clone())
+                .unwrap_or_else(|| none.into())
+        };
+        egui::ComboBox::from_id_salt("parallel_color").selected_text(name(s.color)).width(260.0).show_ui(ui, |ui| {
+            ui.selectable_value(&mut s.color, None, none);
+            for (c, n) in columns {
+                ui.selectable_value(&mut s.color, Some(*c), n);
+            }
+        });
+        ui.end_row();
+    });
+    if kind == PlotKind::ParallelIndex {
+        ui.weak("Rows with the same text in the group column share a colour and a legend entry.");
+    } else {
+        ui.weak("A numeric column colours the lines through the colour ramp, with a colour scale beside the graph.");
+    }
 }

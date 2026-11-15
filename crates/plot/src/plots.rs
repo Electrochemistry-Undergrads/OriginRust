@@ -51,6 +51,10 @@ pub(crate) fn draw_plot(
     m: &dyn TextMeasurer,
 ) {
     let plot = pd.plot;
+    if plot.kind.is_parallel() {
+        crate::parallel::draw_parallel(out, pd, geom);
+        return;
+    }
     if plot.kind == PlotKind::Pie {
         draw_pie(out, pd, geom);
         return;

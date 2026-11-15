@@ -873,6 +873,13 @@ fn plot_menu() -> Vec<Entry> {
             .concat(),
         ),
         sub(
+            "Cate&gorical",
+            vec![
+                item("Parallel Plot", Cmd::Plot(Template::Parallel)),
+                item("Parallel Index", Cmd::Plot(Template::ParallelIndex)),
+            ],
+        ),
+        sub(
             "&Area",
             vec![
                 item("&Area", Cmd::Plot(Template::Area)),

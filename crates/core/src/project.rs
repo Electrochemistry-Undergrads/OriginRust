@@ -162,6 +162,18 @@ pub enum ProjectError {
     RidgelineNoRightAxis,
     #[error("a hexbin plot cannot have a right Y axis; use one Y axis or another template")]
     HexbinNoRightAxis,
+    #[error("a parallel plot needs two or more numeric columns (got {0}); select at least two Y columns")]
+    ParallelNeedsTwoColumns(usize),
+    #[error(
+        "a parallel index needs three or more numeric columns (got {0}) and a group column; select at least three Y columns"
+    )]
+    ParallelIndexNeedsThreeColumns(usize),
+    #[error(
+        "a parallel index needs a group column (a column of text, such as a species name); select one or name it with --group"
+    )]
+    ParallelIndexNeedsGroup,
+    #[error("a parallel plot cannot have a right Y axis; use one Y axis or another template")]
+    ParallelNoRightAxis,
 }
 
 impl Project {
@@ -605,6 +617,7 @@ impl Project {
             hist: Default::default(),
             ridge: Default::default(),
             hexbin: Default::default(),
+            parallel: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -722,6 +735,22 @@ impl Project {
         if template == Template::Lollipop && ys.len() < 2 {
             return Err(ProjectError::LollipopNeedsTwoColumns(ys.len()));
         }
+        if template.is_parallel() {
+            // The numeric columns are the axes; for a parallel index a column of text among them is the group
+            // (else the first text column of the sheet), for a parallel plot the last axis colours the lines.
+            let axes: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_some()).collect();
+            let group = ys.iter().copied().find(|y| self.numeric(*y).is_none());
+            let color = if template == Template::ParallelIndex {
+                Some(
+                    group
+                        .or_else(|| self.parallel_group_default(&axes))
+                        .ok_or(ProjectError::ParallelIndexNeedsGroup)?,
+                )
+            } else {
+                axes.last().copied()
+            };
+            return self.plot_parallel(template, &axes, color);
+        }
         // One hexbin plot per layer: the colour scale and the hexagons of a second plot would cover the first's.
         let ys = if template == Template::Hexbin { &ys[..ys.len().min(1)] } else { ys };
         let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
@@ -785,6 +814,56 @@ impl Project {
         Ok(graph)
     }
 
+    /// The column that groups the rows of a parallel index when none is named: the first column of the axes' sheet
+    /// that is set as Group and holds text, else the first one that holds text (never one of the axes).
+    pub fn parallel_group_default(&self, axes: &[ColumnId]) -> Option<ColumnId> {
+        let (_, sheet, _) = self.locate(*axes.first()?)?;
+        let texty = |c: &&Column| !c.data.is_numeric() && !axes.contains(&c.id);
+        let by_designation = sheet.columns.iter().filter(texty).find(|c| c.designation == Designation::Group);
+        by_designation.or_else(|| sheet.columns.iter().find(texty)).map(|c| c.id)
+    }
+
+    /// Creates a Parallel Plot or Parallel Index (`template`) with one vertical axis per column of `axes`, and
+    /// returns its id. `color` is a Parallel Plot's numeric colour column or a Parallel Index's group column (a
+    /// parallel index without one is refused; a parallel plot without one draws every line in the plot colour).
+    /// A parallel plot needs two axes, a parallel index three.
+    pub fn plot_parallel(
+        &mut self,
+        template: Template,
+        axes: &[ColumnId],
+        color: Option<ColumnId>,
+    ) -> Result<WindowId, ProjectError> {
+        for y in axes.iter().chain(&color) {
+            self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
+        }
+        match template {
+            Template::Parallel if axes.len() < 2 => return Err(ProjectError::ParallelNeedsTwoColumns(axes.len())),
+            Template::ParallelIndex if axes.len() < 3 => {
+                return Err(ProjectError::ParallelIndexNeedsThreeColumns(axes.len()));
+            }
+            Template::ParallelIndex if color.is_none() => return Err(ProjectError::ParallelIndexNeedsGroup),
+            Template::Parallel | Template::ParallelIndex => {}
+            _ => return self.plot_columns(template, axes),
+        }
+        let long_name = axes.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
+        let graph = self.add_graph(template);
+        for y in axes {
+            self.add_plot(graph, 0, *y)?;
+        }
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                l.apply_palette();
+                for p in &mut l.plots {
+                    p.parallel.color = color;
+                }
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
     /// Turns the plots of a new graph into a lollipop plot: vertical drop lines to the next data
     /// plot and, as Origin's template exchanges X and Y, each plot's X and Y columns traded (with
     /// the two axes) when every plot has an X column. Plots against the row number cannot be
@@ -831,6 +910,9 @@ impl Project {
         }
         if template == Template::Hexbin {
             return Err(ProjectError::HexbinNoRightAxis);
+        }
+        if template.is_parallel() {
+            return Err(ProjectError::ParallelNoRightAxis);
         }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;

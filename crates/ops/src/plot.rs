@@ -120,6 +120,9 @@ pub struct PlotSpec {
     pub overlay: bool,
     /// With `overlay`: draw only these workbooks (by name). Empty: every workbook of the project.
     pub overlay_books: Vec<String>,
+    /// Parallel plots: a parallel index's group column (default: the first text column of the sheet) or a parallel
+    /// plot's numeric colour column (default: the last Y column); `none` colours every line in the plot colour.
+    pub group: Option<String>,
     pub style: Style,
 }
 
@@ -155,6 +158,17 @@ impl PlotSpec {
                 bail!("a hexbin plot cannot be made in panels; leave out --panels or choose another template");
             }
         }
+        if self.template.as_deref().and_then(Template::from_name).is_some_and(|t| t.is_parallel()) {
+            if !self.y2.is_empty() {
+                bail!("a parallel plot cannot have a right Y axis; leave out --y2 or choose another template");
+            }
+            if self.panels.is_some() {
+                bail!("a parallel plot cannot be made in panels; leave out --panels or choose another template");
+            }
+        }
+        if self.group.is_some() && (self.graph.is_some() || self.panels.is_some()) {
+            bail!("--group cannot be combined with --graph or --panels");
+        }
         if !self.y2.is_empty() && self.template.as_deref().and_then(Template::from_name) == Some(Template::Waterfall) {
             bail!("a waterfall cannot have a right Y axis; leave out --y2 or choose another template");
         }
@@ -181,7 +195,11 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         if ys.is_empty() {
             bail!("there are no numeric Y columns to plot");
         }
-        if a.y2.is_empty() && template != Template::DoubleY {
+        if template.is_parallel() {
+            parallel_graph(project, book, sheet, template, &ys, a.group.as_deref())?
+        } else if a.group.is_some() {
+            bail!("--group needs -t parallel or -t parallel-index");
+        } else if a.y2.is_empty() && template != Template::DoubleY {
             project.plot_columns(template, &ys)?
         } else {
             require_two_axes(&left, &right)?;
@@ -190,6 +208,28 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
     };
     apply_style(project, graph, &a.style, a.panels.is_some())?;
     Ok(graph)
+}
+
+/// A Parallel Plot or Parallel Index of the numeric columns among `ys`; `group` names the group column of a parallel
+/// index or the colour column of a parallel plot (`none`: the plot colour), see [`PlotSpec::group`].
+fn parallel_graph(
+    project: &mut Project,
+    book: WindowId,
+    sheet: usize,
+    template: Template,
+    ys: &[ColumnId],
+    group: Option<&str>,
+) -> Result<WindowId> {
+    let Some(name) = group else {
+        return Ok(project.plot_columns(template, ys)?);
+    };
+    let axes: Vec<ColumnId> = ys.iter().copied().filter(|y| project.numeric(*y).is_some()).collect();
+    let color = if name.trim().eq_ignore_ascii_case("none") {
+        None
+    } else {
+        Some(named_columns(project, book, sheet, &[name.to_string()])?[0])
+    };
+    Ok(project.plot_parallel(template, &axes, color)?)
 }
 
 /// Smallest and largest page side the program accepts, in inches (0.1 in is 7.2 pt).

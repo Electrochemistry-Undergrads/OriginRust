@@ -370,6 +370,11 @@ fn group_geometry(
             edges.bottom = edges.bottom.max(b);
             continue;
         }
+        if pds[i].plots.iter().any(|pd| pd.plot.kind.is_parallel()) {
+            // The axes of a parallel plot are its own: its labels, titles and colour scale or legend.
+            crate::parallel::label_edges(&mut edges, &g.layers[i], &pds[i].plots, f, m);
+            continue;
+        }
         label_edges(&mut edges, &g.layers[i], f, x, y, m, stack::waterfall(g, i).is_some());
     }
     // A linked X:Y ratio is not given up to keep the labels on the page.
@@ -415,11 +420,11 @@ fn group_geometry(
 
 /// The outermost extent of the tick labels and titles of a group, in page points.
 #[derive(Copy, Clone, Debug)]
-struct LabelEdges {
-    left: f64,
-    right: f64,
-    top: f64,
-    bottom: f64,
+pub(crate) struct LabelEdges {
+    pub left: f64,
+    pub right: f64,
+    pub top: f64,
+    pub bottom: f64,
 }
 
 impl LabelEdges {
@@ -669,7 +674,9 @@ fn layer_scene(
         y_axis = Axis { show_opposite: false, opposite_ticks: false, ..layer.y_axis.clone() };
         (&x_axis, &y_axis)
     } else {
-        if geom.polar.is_some() {
+        if pds.iter().any(|pd| pd.plot.kind.is_parallel()) {
+            // The vertical axes are drawn with the plots; the layer's own grid has no axes to follow.
+        } else if geom.polar.is_some() {
             polar::draw_grid(&mut scene.grid, layer, geom);
         } else if geom.ternary.is_some() {
             ternary::draw_grid(&mut scene.grid, layer, geom);
@@ -758,6 +765,23 @@ fn layer_scene(
     let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
         hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)
     };
+    if pds.iter().any(|pd| pd.plot.kind.is_parallel()) {
+        // Parallel Plot and Parallel Index: the layer's X and Y axes are not drawn; one vertical axis per column.
+        let start = out.len();
+        if layer.display.show_data && layer.display.show_y_axes {
+            crate::parallel::draw_axes(out, layer, pds, geom, m);
+        }
+        rec(objects, out, start, ObjectKind::YAxis, &[]);
+        if layer.display.show_data {
+            crate::parallel::draw_scale(out, layer, pds, geom, m);
+            crate::parallel::draw_legend(out, layer, pds, f, m);
+        }
+        if layer.display.data_on_top {
+            scene.underlay_len = out.len();
+        }
+        draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
+        return scene;
+    }
     if geom.ternary.is_some() {
         let start = out.len();
         ternary::draw_axes(out, project, layer, pds, geom, m);
@@ -1071,7 +1095,7 @@ fn draw_additional_lines(out: &mut Vec<Item>, xa: &Axis, ya: &Axis, geom: &Layer
 
 /// The part of a tick on one side of the axis line: `(from, to)` offsets in
 /// the direction pointing into the frame (negative is outwards).
-fn tick_span(dir: TickDirection, len: f64) -> Option<(f64, f64)> {
+pub(crate) fn tick_span(dir: TickDirection, len: f64) -> Option<(f64, f64)> {
     match dir {
         TickDirection::In => Some((0.0, len)),
         TickDirection::Out => Some((0.0, -len)),
@@ -1142,7 +1166,7 @@ fn draw_ticks(out: &mut Vec<Item>, axis: &Axis, resolved: &ResolvedAxis, f: Rect
 
 // ----- tick labels and titles ----------------------------------------------------------------
 
-fn label_gap(axis: &Axis) -> f64 {
+pub(crate) fn label_gap(axis: &Axis) -> f64 {
     0.35 * axis.tick_font.size_pt
 }
 
@@ -1412,7 +1436,8 @@ fn draw_legend(
     ticks: &EdgeTicks,
     m: &dyn TextMeasurer,
 ) {
-    if !lg.visible || entries.is_empty() {
+    // A parallel plot's legend lists its groups, not its axes (`parallel::draw_legend`).
+    if !lg.visible || entries.is_empty() || entries.iter().any(|pd| pd.plot.kind.is_parallel()) {
         return;
     }
     let fs = lg.font.size_pt;

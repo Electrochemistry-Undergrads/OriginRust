@@ -736,6 +736,12 @@ impl Layer {
         self.plots.iter().find(|p| p.kind == PlotKind::Hexbin).map(|p| p.hexbin).unwrap_or_default()
     }
 
+    /// The parallel settings a plot added to this layer starts with: those of its first parallel plot, else the
+    /// defaults.
+    pub fn inherited_parallel(&self) -> ParallelStyle {
+        self.plots.iter().find(|p| p.kind.is_parallel()).map(|p| p.parallel).unwrap_or_default()
+    }
+
     /// Recolors the plots whose color still comes from the palette, in plot order, and leaves
     /// colors chosen by hand alone. Used when plots are added or removed: with a palette that
     /// spreads its colors over the number of plots, every automatic color moves along.
@@ -1388,6 +1394,12 @@ pub enum PlotKind {
     /// Origin's hexbin plot (2027, Hexbin.OTPU): the plot's X and Y columns binned into hexagons coloured by
     /// the number of points in each (graphing spec 14.24).
     Hexbin,
+    /// Origin's Parallel Plot (2019, Parallel.otpu): the plot's Y column is one vertical axis; every row is a
+    /// line through the axes of all the layer's parallel plots, coloured by a numeric column (graphing spec 14.25).
+    Parallel,
+    /// Origin's Parallel Index: like [`PlotKind::Parallel`], with the lines coloured by the group (the text of a
+    /// column) of their row, and a legend of the groups.
+    ParallelIndex,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,
@@ -1422,6 +1434,11 @@ impl PlotKind {
     /// True for the kinds drawn as a distribution per plot at 1, 2, 3, ...: box chart and violins.
     pub fn is_distribution(&self) -> bool {
         *self == PlotKind::Box || self.is_violin() || self.is_ridgeline()
+    }
+
+    /// True for [`PlotKind::Parallel`] and [`PlotKind::ParallelIndex`].
+    pub fn is_parallel(&self) -> bool {
+        matches!(self, PlotKind::Parallel | PlotKind::ParallelIndex)
     }
 
     /// True for [`PlotKind::Hexbin`].
@@ -1588,6 +1605,9 @@ pub struct Plot {
     /// The bin settings of a hexbin plot (graphing spec 14.24).
     #[serde(default, skip_serializing_if = "HexbinStyle::is_default")]
     pub hexbin: HexbinStyle,
+    /// The settings of a Parallel Plot or Parallel Index (graphing spec 14.25).
+    #[serde(default, skip_serializing_if = "ParallelStyle::is_default")]
+    pub parallel: ParallelStyle,
     /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's
     /// Z column of a Bubble plot).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2446,6 +2466,7 @@ mod tests {
             hist: Default::default(),
             ridge: Default::default(),
             hexbin: Default::default(),
+            parallel: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2488,6 +2509,7 @@ mod tests {
             hist: Default::default(),
             ridge: Default::default(),
             hexbin: Default::default(),
+            parallel: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2607,6 +2629,7 @@ mod tests {
             hist: Default::default(),
             ridge: Default::default(),
             hexbin: Default::default(),
+            parallel: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2799,6 +2822,7 @@ mod style_tests {
             hist: Default::default(),
             ridge: Default::default(),
             hexbin: Default::default(),
+            parallel: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),

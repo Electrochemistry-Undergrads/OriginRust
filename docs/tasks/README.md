@@ -73,7 +73,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | [T23](T23-data-manipulation-tools.md) | Subtract Straight Line, Reduce to Evenly Spaced X, Curve Translate X/Y, Median Filter | M | done, merged (`f66dbea`); Origin details unmeasured (spec section 12) |
 | [T24](T24-drawn-graph-objects.md) | Drawn objects on graphs: line, arrow, rectangle, ellipse | M | done, merged (`542fef7`) |
 | [T25](T25-mcp-server.md) | MCP server (`sheaf-mcp`) so Claude and other AI tools can drive Sheaf | L | phase 1 done, merged 2026-11-14 (stdio server, shared `sheaf-ops`, ADR 0011, `docs/spec/mcp.md`); left: phase 2 (`--attach` to the open app), `output: new_sheet`, the CLI-option bridge for `plot` and `fit`, CHI import test through MCP; done since: `analyze` reaches all 55 CLI analysis tools (CLI options shared through `sheaf_ops::args`) and prompts |
-| [T27](T27-print.md) | Print, Print Preview, Page Setup (vector EMF/PDF path) | M | open; Windows and macOS halves |
+| [T27](T27-print.md) | Print, Print Preview, Page Setup (vector EMF/PDF path) | M | Windows half done, merged 2026-11-14 (graphing 19); left: workbook printing, macOS panel, `sheaf print`, Origin's Print/Preview windows unmeasured |
 | [T28](T28-autosave-recovery.md) | Autosave to a recovery folder and crash recovery at start-up | M | open |
 | [T29](T29-multivariate-roc-survival.md) | PCA, k-means, ROC curve, Kaplan-Meier | L | open; Origin measurements on Windows |
 | [T30](T30-excel-import-export.md) | Excel import (xls, xlsx, xlsm) and xlsx export | L | open; an ADR for the reader/writer crates first |

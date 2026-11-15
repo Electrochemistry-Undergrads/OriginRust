@@ -28,6 +28,13 @@ open. History of what was merged when is in `git log` (not repeated here).
   and in `re-workspace/scratch/peer-notes.md` (local only, read its last 40 lines on start), so other
   computers can see the split. Merge to `main` one branch at a time, after `git fetch`.
   See LESSONS "Two sessions on one repository need a written split".
+- **Claim before you start, and put the claim on `main`:** before touching any code, docs or
+  spec for a task, add a claim line (task, branch, worktree, session, date) to this file and to
+  `re-workspace/scratch/peer-notes.md`, **commit the claim and push it to `main` first** (a docs-only
+  commit; `git fetch` and rebase right before the push), and only then begin. Other agents and other
+  computers only see work that is on `main`; a claim that exists only in your worktree or in the
+  local peer notes does not count. If someone else's claim already covers the task, pick another.
+  When the work is finished and merged to `main`, release or update the claim in the same push.
 - **Inactive task claims:** If a task has had no edits for at least 48 consecutive hours,
   another agent may take ownership. Check the task brief, its branch and worktree when
   available, and the latest peer notes for evidence of newer work. Record the takeover in

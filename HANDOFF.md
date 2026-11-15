@@ -43,6 +43,13 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T24 drawn-shape ordering (2026-11-15, Codex): Bring to the front / Push to the back reorder
+  shapes within their layer, preserving geometry and style. Selection follows the moved shape;
+  changed shape stacks invalidate stale selections, menus and drags across Undo/Redo and Undo AI.
+  Properties dialogs close on stack changes; no-op/invalid moves add no undo step. Ordering
+  across layers/object kinds remains open; this within-layer scope is Sheaf's choice, unmeasured.
+  Formatting, strict all-target Clippy and 3,199 parallel workspace tests pass (five ignored).
+
 - T02 Column Browser selection/block add (2026-11-15, Windows, feature `3208db0`):
   Ctrl/Command and Shift selection, Shift+Up/Down and select-all feed individual Add or
   one contiguous same-sheet block. Noncontiguous/mixed-book selections disable block add;
@@ -311,8 +318,8 @@ open. History of what was merged when is in `git log` (not repeated here).
 | Branch | Owner session | What | State |
 |---|---|---|---|
 | `codex/mcp-disconnect-flake` | Codex Windows | T25 reported Windows load-dependent link disconnect timeout: reproduce unchanged source, narrow link integration fixture/event-lifecycle repair and regressions | claimed 2026-11-15; tests first, product host only after demonstrated race/refinement; no proxy/discovery/ACL/auth/history/UI/model or other owner scopes |
+| `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `codex/t02-browser-rows` | Codex Windows, t02-browser-rows | T02 Column Browser lower row-range editor: native defaults/validation/Cancel/reference transfer and focused UI tests/docs | claimed 2026-11-15; only go_to/browser and own go_to_browser tests/docs; no Exclude/preferences, original-sheet navigation changes without published refinement, app/MRU/grid/core/history/MCP/plots/stats/fit/formula/labels or other owner work |
-| `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `cell-notes` | Claude macOS, "mac-multipdf" | T36 worksheet cell notes (Origin 2022): core per-sheet notes kept through row/column ops and sort, grid corner tab + hover popup, cell menu Add/Edit/Delete Note, note editor | claimed 2026-11-15; core worksheet + sheetops note upkeep, grid.rs body_cell, menus/app/dialogs; no cond-format/frozen/filter/Go To, plot, stats or other sessions' scopes |

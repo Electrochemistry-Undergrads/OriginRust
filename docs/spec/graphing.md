@@ -2444,7 +2444,8 @@ Unmeasured, so chosen by Sheaf: the default line width and colour, the arrow hea
 - A click selects an object, dragging it moves it (it moves when the button is let go), Delete removes it, a double click or right-click Properties... opens the window with the line colour, width and style, the fill of a rectangle or ellipse, and the head length and a second head of an arrow. OK and Apply are one undo step each.
 - The window closes when Delete, Undo or Redo changes the objects of its layer, or when its object is gone or another kind of object has its place, so it never edits another object.
 - Add, Move, Edit and Delete of a drawn object are one undo step each ("Add drawn object", "Move drawn object", "Edit drawn object", "Delete drawn object").
-- The right-click menu of an object has Delete and Properties...; Cut, Copy, "Bring to the front" and "Push to the back" are shown greyed.
+- The right-click menu of a drawn shape has Delete, Properties..., "Bring to the front" and "Push to the back". The ordering commands move that shape to the end or beginning of its layer's shape list, retaining all geometry and style. Cut and Copy remain greyed. This within-layer shape ordering is Sheaf's choice and has not been measured in Origin.
+- Ordering changes the renderer and topmost hit together. The moved shape's selection follows its new index; undo/redo clears a selected shape when its layer's shape list changed, so later Delete or Properties cannot silently target another object. An open shape-properties window closes when the layer's shapes change, as for other shape edits. An edge move or stale index does nothing and adds no undo step. Labels, legends and other layers retain their existing stacking behavior.
 - `sheaf-app --show shape:N` opens the window of the N-th object of the first graph (for pictures).
 
 **Command line** (`sheaf plot`, `sheaf export`, style option):
@@ -2456,7 +2457,7 @@ An `.opj` file written here does not hold drawn objects. The writer says so in a
 
 ### 17.5 Not done
 
-Colour of the head apart from the line, head width, dash of the head, rounded rectangles, pattern fills, page and scale attachment, resizing by handles, Cut, Copy and Paste, ordering, grouping, snapping to a grid, polylines, curves, pictures and the inset graph.
+Colour of the head apart from the line, head width, dash of the head, rounded rectangles, pattern fills, page and scale attachment, resizing by handles, Cut, Copy and Paste, ordering across object kinds/layers, grouping, snapping to a grid, polylines, curves, pictures and the inset graph.
 
 
 Measured with LabTalk's `draw` command (2026-11-13, `re-workspace/scratch/draw17/draw1.out.txt`), which

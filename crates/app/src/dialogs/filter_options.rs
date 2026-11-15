@@ -189,12 +189,9 @@ pub fn fir_options(ui: &mut egui::Ui, spec: &mut FirSpec) {
         spec.order = Some(20);
     }
     order_row(ui, &mut spec.order, spec.method == FirMethod::Window, sheaf_core::analysis::FIR_MAX_ORDER);
-    if matches!(spec.response, FilterResponse::HighPass | FilterResponse::BandStop) {
-        if let Some(n) = spec.order {
-            if n % 2 == 1 {
-                ui.colored_label(ui.visuals().warn_fg_color, "High pass and band stop filters need an even order.");
-            }
-        }
+    let even_needed = matches!(spec.response, FilterResponse::HighPass | FilterResponse::BandStop);
+    if even_needed && spec.order.is_some_and(|n| !n.is_multiple_of(2)) {
+        ui.colored_label(ui.visuals().warn_fg_color, "High pass and band stop filters need an even order.");
     }
     if spec.method == FirMethod::Window {
         ui.horizontal(|ui| {

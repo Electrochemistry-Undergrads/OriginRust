@@ -744,6 +744,15 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 scree: !no_graph,
             })),
         ),
+        AnalyzeTool::Roc { target, positive, lower_is_positive, confidence, no_graph } => (
+            target,
+            Job::Tool(Tool::Roc(analysis::RocSpec {
+                positive,
+                higher_is_positive: !lower_is_positive,
+                confidence,
+                curve: !no_graph,
+            })),
+        ),
         AnalyzeTool::Sort { target, by, descending } => {
             whole_sheet_only(&target, "sort")?;
             (target, Job::Sort { by, descending })

@@ -3,12 +3,13 @@
 
 use super::analysis::AnalysisKind;
 use eframe::egui;
-use sheaf_core::analysis::{PcaSpec, Tool};
+use sheaf_core::analysis::{PcaSpec, RocSpec, Tool};
 
 /// What the windows keep between frames.
 #[derive(Default)]
 pub struct MultiOptions {
     pca: PcaSpec,
+    roc: RocSpec,
 }
 
 impl MultiOptions {
@@ -20,6 +21,12 @@ impl MultiOptions {
                     return Err("the number of components must be at least 1".to_string());
                 }
                 Ok(Tool::Pca(self.pca))
+            }
+            AnalysisKind::Roc => {
+                if self.roc.positive.trim().is_empty() {
+                    return Err("give the value of the state column that is the positive state".to_string());
+                }
+                Ok(Tool::Roc(self.roc.clone()))
             }
             _ => unreachable!("only the multivariate tools come here"),
         }
@@ -50,6 +57,27 @@ impl MultiOptions {
                 ui.weak(
                     "The sign of each eigenvector is chosen so that its components add up to a positive number, as \
                      Origin does. A covariance analysis also gives the test that the remaining eigenvalues are equal.",
+                );
+            }
+            AnalysisKind::Roc => {
+                let s = &mut self.roc;
+                ui.label("The chosen columns are the test variables; the last one is the state column.");
+                ui.horizontal(|ui| {
+                    ui.label("Positive state value");
+                    ui.add(egui::TextEdit::singleline(&mut s.positive).desired_width(80.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Test direction");
+                    ui.radio_value(&mut s.higher_is_positive, true, "Positive v.s. High");
+                    ui.radio_value(&mut s.higher_is_positive, false, "Positive v.s. Low");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Confidence level (%)");
+                    ui.add(egui::DragValue::new(&mut s.confidence).speed(0.1).range(1.0..=99.99));
+                });
+                ui.checkbox(&mut s.curve, "ROC curve (new graph, with the diagonal)");
+                ui.weak(
+                    "The area under the curve with its standard error (DeLong's method) and confidence interval, the                      curve points with their cut-offs, and the cut-off with the largest sensitivity + specificity - 1.",
                 );
             }
             _ => unreachable!("only the multivariate tools come here"),

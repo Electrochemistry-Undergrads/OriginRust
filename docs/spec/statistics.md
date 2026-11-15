@@ -737,6 +737,69 @@ variance to 0.005 (two decimals printed). Hand-worked tests in `pca.rs` (two col
   rule, the "Quantities to Compute" ticks), the behaviour of Origin on a column without spread or with fewer
   rows than columns, and a sign rule for a component whose sum is exactly zero.
 
+## 19 ROC curve (scipy-checked, not Origin)
+
+**Source of the numbers: scipy, not Origin.** Statistics > ROC Curve is an Origin X-Function (`ROCCurve`) that is
+only for the menu: `ROCCurve;` from LabTalk returns false, and its definition file lists no usable LabTalk context.
+Its dialog was opened through the menu with `tools/origin-ref/origin-dialog.ps1 -MenuClicks "300,300;K:^a;K:%s;K:R"`
+(Alt+S, then R, on a selected worksheet; one run, 2026-11-14, picture in `re-workspace/scratch/t29/rocdlg`, local).
+Later attempts to drive it (typing the ranges, picking the positive value, OK) did not get the dialog up again while
+other sessions held the Origin lock, so **no Origin number was measured**. The numbers are from scipy 1.17 through
+`tools/roc-ref.py` into `crates/calc/tests/scipy_roc.rs`; the rules are the textbook ones.
+
+The numerics are `crates/calc/src/roc.rs` (the rules are in its header), the tool
+`crates/core/src/analysis/roc.rs`, the command line `sheaf analyze roc`, the window Statistics > ROC Curve...
+(`dialogs/multivariate_options.rs`).
+
+### 19.1 What Origin's dialog shows (measured: the control list of that one run)
+
+Window "ROCCurve" with the usual Recalculate row, then **Input Data** (Range 1: **Data**, the test variable column(s),
+and **State**, the state column; with the selection A:C the dialog proposed Data A:C and State C, so the state is the last
+selected column), **Computation Control** (**Positive State Value**, an editable list of the values found in the state
+column; **Threshold Method**: "Interpolation of data points" (default) or "Speed Mode"; **Test Direction**: "Positive
+v.s. High" (default) or "Positive v.s. Low"; a ticked **ROC Curve** group, which holds a hidden "With Diagonal Reference
+Line" setting; a ticked **Standard Error and Confidence Interval** group with a hidden "Confidence Levels in %"), and
+**Output** (Graph, an "Arrange Plots of Same Type in One Graph" setting, dataset identifier). The OK button stays off with
+the message "Please choose at least one value for the STATE Values" until a positive value is chosen.
+
+### 19.2 What Sheaf does
+
+The chosen columns are the test variables, then the state column last (numbers or text). The positive state is the
+value in "Positive state value" (default 1; a text cell "1" equals a numeric 1); rows with a missing state or test value
+are left out; "Positive v.s. High" (default) or "Positive v.s. Low" sets which end of the test variable is positive.
+
+- Curve: one point per distinct test value (a case is called positive at or above the cut-off, at or below it for
+  "Low"), from (0, 0) at an infinite cut-off to (1, 1). Sensitivity is the fraction of positives called positive,
+  specificity that of negatives called negative. Origin's "Interpolation of data points" is taken as one point per data
+  value; "Speed Mode" is not built.
+- Area: the trapezoid area, which equals the Mann-Whitney statistic U / (m n) with ties counting one half.
+- Standard error: DeLong's (DeLong, DeLong and Clarke-Pearce 1988), variance `S10 / m + S01 / n` from the placements of
+  the positives and of the negatives. Interval: area -/+ z SE (z from the confidence level, default 95 %), kept within
+  0 and 1; Z = (area - 0.5) / SE and its two-sided p-value (0 when SE = 0 and the area is not 0.5).
+- Best cut-off: the largest sensitivity + specificity - 1 (Youden), the highest cut-off among equal ones.
+
+Result sheet `ROC1`: Data, Positive, Negative, Area, Standard error, Lower limit, Upper limit, Z, Prob>|Z|, Best
+cut-off, Best sensitivity, Best specificity (one row per test variable), then per test variable Cut-off, 1 -
+Specificity and Sensitivity (the curve), then the two points of the diagonal. A new graph (a line plot per curve and
+the diagonal) unless "ROC curve" is off; one undo removes sheet and graph. All cases in one state, an unknown positive
+value, one column or a confidence level outside 0 to 100 are refused.
+
+### 19.3 Checked against scipy, tolerances
+
+Area, standard error, lower limit, curve points: 1e-12 relative; p-value 1e-8 (the normal tail of `statrs` differs from
+scipy's in the 11th digit); best cut-off exact. Three data sets (ties inside and across the states, a perfect
+separation, an overlap). Hand-worked tests in `roc.rs`.
+
+### 19.4 Not measured (Origin)
+
+- Everything numeric: whether Origin's standard error is DeLong's or Hanley-McNeil's, whether its interval is
+  asymptotic normal and clipped, its p-value (and its null hypothesis), its curve points (interpolated thresholds), and
+  its choice of the best cut-off. To measure: run the dialog on the data of `scipy_roc.rs` (the dialog is the only way)
+  and read the report sheet.
+- The positive state when the state column holds text, the report sheet and graph layout, the sheet and graph names,
+  and the default confidence level.
+- Not built: Speed Mode, several state ranges, comparing curves, partial area.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

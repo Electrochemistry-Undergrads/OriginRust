@@ -1117,7 +1117,7 @@ fn statistics_menu() -> Vec<Entry> {
             ],
         ),
         sep(),
-        grey("&ROC Curve..."),
+        item("&ROC Curve...", Cmd::Analyze(AnalysisKind::Roc)),
         sep(),
         grey("Most Recently Used Items"),
     ]

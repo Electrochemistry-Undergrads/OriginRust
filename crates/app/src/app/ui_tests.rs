@@ -4659,6 +4659,41 @@ fn the_multivariate_menu_runs_a_principal_component_analysis() {
     assert_eq!(h.state().doc.undo_label(), Some("Principal component analysis"));
 }
 
+/// Statistics > ROC Curve...: the test variable and the state column (last) give the area, the curve and a graph;
+/// one undo removes both.
+#[test]
+fn the_statistics_menu_draws_a_roc_curve() {
+    // Positives 3, 4, 5 against negatives 1, 2, 4: the area is 5/6.
+    let data = csv_file(
+        "roc",
+        "marker",
+        "id,score,state
+1,3,1
+2,4,1
+3,5,1
+4,1,0
+5,2,0
+6,4,0
+",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - marker");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "ROC Curve..."]);
+    assert!(h.state().analysis.is_some(), "the ROC window is open");
+    assert!(has_label(&h, "Positive state value"), "the positive state box is missing");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, area) = result_column(&h, "Area");
+    assert!(sheet.starts_with("ROC"), "{sheet}");
+    assert!((area[0] - 5.0 / 6.0).abs() < 1e-9, "{area:?}");
+    let (_, sens) = result_column(&h, "Sensitivity");
+    assert_eq!(sens.first().copied(), Some(0.0));
+    assert!(sens.contains(&1.0), "the curve ends at (1, 1)");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("ROC curve"));
+}
+
 /// Statistics > Descriptive Statistics > Probability Plot... and Q-Q Plot...: a result sheet and a graph with
 /// points and a reference line; one undo removes both.
 #[test]

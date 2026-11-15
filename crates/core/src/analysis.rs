@@ -48,6 +48,7 @@ pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 pub use curves::{AverageSpec, IntersectSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use multivariate::PcaSpec;
+pub use roc::RocSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
 
@@ -753,6 +754,8 @@ pub enum Tool {
     ProbPlot(ProbPlotSpec),
     /// Statistics > Multivariate Analysis > Principal Component Analysis (T29, `docs/spec/statistics.md` section 17).
     Pca(PcaSpec),
+    /// Statistics > ROC Curve (T29, `docs/spec/statistics.md` section 19): test variables, then the state column.
+    Roc(RocSpec),
     AverageCurves(AverageSpec),
     Intersect(IntersectSpec),
     PolygonArea,
@@ -828,6 +831,7 @@ impl Tool {
                 ProbPlotKind::QQ => "Q-Q plot",
             },
             Tool::Pca(_) => "Principal component analysis",
+            Tool::Roc(_) => "ROC curve",
             Tool::AverageCurves(_) => "Average multiple curves",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "Polygon area",
@@ -880,6 +884,7 @@ impl Tool {
                 ProbPlotKind::QQ => "QQPlot",
             },
             Tool::Pca(_) => "PCA",
+            Tool::Roc(_) => "ROC",
             Tool::AverageCurves(_) => "AverageResult",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "PolygonArea",
@@ -1441,6 +1446,7 @@ mod dist;
 mod manip;
 mod multivariate;
 mod power;
+mod roc;
 mod statistics;
 pub use manip::{
     MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
@@ -1532,7 +1538,10 @@ impl Project {
 
         let mut inputs = Vec::with_capacity(request.columns.len());
         // The two-way ANOVA reads its columns itself: the factor columns may hold text.
-        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_) | Tool::Crosstab(_) | Tool::DiscreteFrequency(_));
+        let own_columns = matches!(
+            request.tool,
+            Tool::TwoWayAnova(_) | Tool::Crosstab(_) | Tool::DiscreteFrequency(_) | Tool::Roc(_)
+        );
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
                 if self.column(*id).is_some() {
@@ -1618,6 +1627,13 @@ impl Project {
             }
             Tool::DistFit(_) | Tool::ProbPlot(_) => {
                 let out = dist::run(&request.tool, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::Roc(spec) => {
+                let out = roc::run(spec, sheet, &request.columns, request.rows)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

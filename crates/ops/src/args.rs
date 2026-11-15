@@ -2025,6 +2025,24 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// ROC curve: the --y columns are the test variables followed, last, by the state column. Area under the
+    /// curve with standard error (DeLong) and confidence interval, the curve and the best cut-off; makes a graph.
+    Roc {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The value of the state column that is the positive state (a number or a text).
+        #[arg(long, default_value = "1")]
+        positive: String,
+        /// Lower test values point to the positive state (default: higher values do).
+        #[arg(long)]
+        lower_is_positive: bool,
+        /// Confidence level of the interval of the area, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Sort the rows of the sheet by one column.
     Sort {
         #[command(flatten)]

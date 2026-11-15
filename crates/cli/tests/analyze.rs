@@ -1240,3 +1240,32 @@ fn principal_component_analysis_runs_from_the_command_line() {
     let (ok, _, err) = sheaf(&["analyze", "pca", file, "--y", "a"]);
     assert!(!ok && err.contains("at least two columns"), "{err}");
 }
+
+/// ROC curve (spec `statistics.md` section 19): the --y columns are the test variables, the state column last.
+#[test]
+fn roc_curve_runs_from_the_command_line() {
+    let dir = scratch("roc");
+    let path = dir.join("marker.csv");
+    std::fs::write(&path, "score,state\n3,yes\n4,yes\n5,yes\n1,no\n2,no\n4,no\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "roc", file, "--y", "score,state", "--positive", "yes"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Area") && out.contains("0.8333") && out.contains("ROC1") && out.contains("DeLong"), "{out}");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "roc",
+        file,
+        "--y",
+        "score,state",
+        "--positive",
+        "yes",
+        "--lower-is-positive",
+        "--no-graph",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("lower test values") && out.contains("0.1667"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "roc", file, "--y", "score,state", "--positive", "maybe"]);
+    assert!(!ok && err.contains("one state"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "roc", file, "--y", "score"]);
+    assert!(!ok && err.contains("at least two columns"), "{err}");
+}

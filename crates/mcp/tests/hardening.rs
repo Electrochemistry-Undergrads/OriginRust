@@ -10,6 +10,7 @@ use std::path::PathBuf;
 struct Dirs {
     base: PathBuf,
     root: PathBuf,
+    #[cfg(unix)]
     outside: PathBuf,
 }
 
@@ -21,10 +22,20 @@ impl Dirs {
             std::fs::create_dir_all(&base).unwrap();
             base.canonicalize().unwrap()
         };
-        let (root, outside) = (base.join("root"), base.join("outside"));
+        let root = base.join("root");
         std::fs::create_dir_all(&root).unwrap();
-        std::fs::create_dir_all(&outside).unwrap();
-        Dirs { base, root, outside }
+        #[cfg(unix)]
+        let outside = {
+            let path = base.join("outside");
+            std::fs::create_dir_all(&path).unwrap();
+            path
+        };
+        Dirs {
+            base,
+            root,
+            #[cfg(unix)]
+            outside,
+        }
     }
 
     fn server(&self) -> Server {

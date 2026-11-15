@@ -25,9 +25,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 164 | 39 | 252 |
+| All rows | 49 | 165 | 39 | 253 |
 | P0 | 32 | 71 | 0 | 103 |
-| P1 and P2 together | 17 | 93 | 39 | 149 |
+| P1 and P2 together | 17 | 94 | 39 | 150 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
 
@@ -357,6 +357,7 @@ Cross-cutting findings:
 | Other image types | EMF, WMF, TIF, JPG, EPS, BMP, GIF, AI and more | TIFF (24-bit, grayscale or indexed 256 colors; none, PackBits or LZW), JPEG, BMP, GIF, TGA, PCX and flattened PSD (24-bit, grey or 256 colours where the format allows; PSD records DPI), EPS (level 2, vector, standard PostScript fonts re-encoded to Latin-1, Greek from Symbol) and EMF (vector, text as text, written from the public format description) in the app (export window), the CLI (`-o fig.eps`, `-o fig.psd` and so on) and `export_file`; sizes scale as for SVG and PDF | ◐ | transparency is blended onto the page background in EPS and EMF and onto white in PSD; PSD has no editable layers; characters outside Latin-1, Greek and a few signs are replaced and reported (EPS); EMF was checked by loading it with GDI+, EPS only by structure (no PostScript interpreter was available); TGA and PCX were read back by an independent decoder (Pillow); WMF and AI are missing | P1 |
 | Batch export and naming | Export all, overwrite rules | one graph at a time | ◐ | no folder export, name templates | P1 |
 | Export preview | Preview button | Export Graphs preview pane with Auto Preview (T05) | ◐ | no Graph tab in the preview | P1 |
+| Export dialog themes | Dialog Theme flyout | named export settings, custom default/reset, last successful export, Save/Save As/Delete with isolated persistence (T05; graphing 9.8) | ◐ | no Compare/Generate Script, Recent Exports, graph-specific settings or `.ois` interchange | P1 |
 | Send to PowerPoint or Word | Graph menu | none | ✗ | | P2 |
 
 ## 14 Dialog details

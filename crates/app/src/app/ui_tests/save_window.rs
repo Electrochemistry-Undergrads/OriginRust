@@ -106,7 +106,7 @@ fn save_window_as_is_enabled_in_a_workbook_and_a_graph_and_save_template_as_stay
     assert!(entry_enabled(&h, "Save Window As..."), "enabled in a graph");
     assert!(!entry_enabled(&h, "Save Template As..."), "Save Template As stays grey");
     close_menus(&mut h);
-    click(&mut h, "Title Book1 - g");
+    click(&mut h, "Title Book1 - g.csv");
     menu_entry(&h, "File").click();
     settle(&mut h);
     assert!(entry_enabled(&h, "Save Window As..."), "enabled in a workbook");

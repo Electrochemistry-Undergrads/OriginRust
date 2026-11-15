@@ -71,6 +71,12 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+T05 export Dialog Themes (`21480e7`) now save/reload named settings, custom defaults/reset and
+last successful exports, with modified-name marking and confirmed deletion. Seven regressions,
+five isolated Origin sessions and an inspected desktop screenshot cover this scope. Formatting,
+strict workspace all-target Clippy and 3,443 tests pass (eight ignored); inventory 459 passes.
+Graph Theme, graph-specific settings and comparison/script tools remain (graphing 9.8).
+
 T02 Column Browser Exclude (`e606eef`) now temporarily hides selected upper-list columns,
 selects the first removed list position (or the final remaining row), and preserves original
 column ordinals and already-added ranges. Scope changes and reopening restore excluded columns;
@@ -101,9 +107,9 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t58-format-toolbar` | Codex Windows | T58 slice 3: shared Format toolbar dispatch and existing whole-object graph font controls; selected-target/undo/persistence tests and Origin measurement | claimed 2026-11-15; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points`; Format bar only, local actions/app dispatch + new helper/tests; no renderer/fonts/markup (text-decorations), editor slice 2, worksheet adapter/model, Graph/Standard/Explorer bars, layers/stack, graph_view or new model fields without refinement |
+| `codex/t63-duplicate-buttons` | Codex Windows, t63-duplicate-buttons | T63 groups C/F: record C as deferred to T14 (published plot_prob score/confidence/orientation needs exceed wiring); wire F Standard/Project Explorer Duplicate buttons to existing duplicate commands with focused UI target/state tests | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` reused sequentially; toolbar Standard/Explorer buttons ONLY and local command-target hunks, own tests, T63/HANDOFF and own inventory/parity rows; stats-origin retains probability/Q-Q engines/dialogs/measurements/fixtures; no T58 Format bar, T61 Graph bar, T59 cells, T60/T61 layers, T62 stack, step lines, MCP/import/export, pending root files or index/roadmap |
 | `codex/text-decorations` | Codex Windows, text-decorations | T58 GRAPH TEXT FORMATTING (`T58-graph-text-formatting.md`), first rendering slice: inline underline/strikethrough, markup/layout/rendering and isolated export tests | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; no toolbar/editor/model fields, significance-plot/brackets (separate T58 brief), shapes/data-tools/browser/export-dialog/import/stats/MCP/printing or other owners |
-| `codex/t05-export-dialog-themes` | Codex Windows | T05 Dialog Theme row: Origin theme-list/save/reuse behavior, named export-settings themes and isolated persistence/UI regressions | claimed 2026-11-15; own `.claude/worktrees/codex-t13-skip-points`, `target/wt-t13-skip-points`; no Graph Theme, preview, renderers/formats, import behavior, recovery, priority docs or other scopes |
-| `t19-fntrim` | Claude Windows, session fe4b37eb | T19 file-name trimming on ASCII import (Origin's FNameToSht/Bk From/To rules) and the book long name keeping the file extension (owner's decision 2026-11-15); crates/io ascii naming, app import window, cli flags, import-ascii.md, title tests | claimed 2026-11-15 |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |

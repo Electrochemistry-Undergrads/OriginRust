@@ -893,7 +893,7 @@ impl Project {
         }
         // One hexbin plot per layer: the colour scale and the hexagons of a second plot would cover the first's.
         let ys = if template == Template::Hexbin { &ys[..ys.len().min(1)] } else { ys };
-        let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
+        let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(template);
         if matches!(template, Template::FloatingColumn | Template::FloatingBar) {
             // Origin chains the columns: each plot is a bar from the column before it to its own
@@ -979,7 +979,7 @@ impl Project {
         if cats.is_empty() {
             return Err(ProjectError::TreemapNeedsCategory);
         }
-        let long_name = self.locate(value).map(|(b, _, _)| b.long_name.clone());
+        let long_name = self.locate(value).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(Template::Treemap);
         self.add_plot(graph, 0, value)?;
         if let Some(g) = self.graph_mut(graph) {
@@ -1014,7 +1014,7 @@ impl Project {
         if cats.is_empty() {
             return Err(ProjectError::SunburstNeedsCategory);
         }
-        let long_name = self.locate(value).map(|(b, _, _)| b.long_name.clone());
+        let long_name = self.locate(value).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(Template::Sunburst);
         self.add_plot(graph, 0, value)?;
         if let Some(g) = self.graph_mut(graph) {
@@ -1062,7 +1062,7 @@ impl Project {
             Template::Parallel | Template::ParallelIndex => {}
             _ => return self.plot_columns(template, axes),
         }
-        let long_name = axes.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
+        let long_name = axes.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(template);
         for y in axes {
             self.add_plot(graph, 0, *y)?;
@@ -1144,7 +1144,7 @@ impl Project {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
         }
         let first = left.first().or(right.first());
-        let long_name = first.and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
+        let long_name = first.and_then(|y| self.locate(*y)).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(template);
         let right_layer = self.add_right_y_layer(graph, 0)?;
         for y in left {
@@ -1205,7 +1205,7 @@ impl Project {
         let base = g.layers[0].clone();
         let count = groups.len().min(cells);
         let first = groups.iter().flatten().next();
-        let long_name = first.and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
+        let long_name = first.and_then(|y| self.locate(*y)).map(|(b, _, _)| b.title_for_graph());
         let (w, h) = (g.page.width_pt, g.page.height_pt);
         match layout.page {
             PanelPage::Keep => {}

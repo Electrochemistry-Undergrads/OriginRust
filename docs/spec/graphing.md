@@ -679,6 +679,60 @@ Sheaf (`sheaf_plot::render_multipage_pdf`, `crates/plot/src/multipage.rs`):
 
 ---
 
+
+### 9.8 Export Dialog Themes (T05)
+
+**Origin 2016, measured on Windows 2026-11-15.** Five isolated synthetic-graph sessions
+under the reference lock established the row above Image Type, its theme field and flyout.
+The installed profile opened with `<Last used>` selected. The flyout offers Save as
+`<default>`, Save, Save As..., System Default, Delete..., Compare..., Generate Script and
+the available built-in/named themes. Save and Delete are disabled for a built-in selection.
+Save As opens **Theme Save as...**, with Theme Name and OK/Cancel; Cancel returns to the
+export window without exporting. Changing settings adds `*` to the selected named theme.
+System Default cleared the field on this installation; its current image type was affected
+by the installation's preferences, so this is not a fresh factory-format measurement.
+
+A uniquely named PNG theme was saved, the type changed to TIFF and the named theme loaded
+again: combo selections and WM_GETTEXT changed PNG -> TIFF -> PNG with the saved name restored.
+The last bitmap was stale and is excluded as evidence of the restored type. The one generated
+`.ois` was removed after Origin exited. Raw captures and the cleanup manifest remain local in
+`scratch/t05-export-dialog-themes/`; no Origin theme file is included in Sheaf.
+
+The [Dialog Themes guide](https://docs.originlab.com/origin-help/dialog-theme/) describes
+custom default settings, last-confirmed settings and named reusable sets. The
+[export guide](https://docs.originlab.com/user-guide/publishing-and-export/) documents saving
+export settings as dialog themes. Newer versions' graph-specific settings (since 2021) are a
+separate feature; they were not measured in Origin 2016 here.
+
+**Sheaf.** The export window's Dialog Theme flyout saves and loads named settings, overwrites
+a selected named theme with Save, marks modified named settings with `*`, saves a custom
+`<default>`, restores System Default and
+resets the custom default with Reset. Delete... asks for confirmation. Save As and Delete
+prompts disable the export window until answered; Cancel/Escape leave settings files alone.
+Named/default settings can be saved without exporting. Loading a theme changes the dialog,
+not the graph or its undo history, and clears an obsolete overwrite confirmation and preview.
+
+Themes keep the supported format, graph scope, filename/substitution, output folder, overwrite
+rule, multi-page choice, DPI/depth/compression/quality, width/unit and margin/border settings.
+They exclude graph/window ids, preview textures and pending operations. `<Last used>` is
+written only after a successful export, including Apply, not Cancel, an unanswered replacement,
+a failed export or a skip that writes nothing. A settings-write error is reported as a warning;
+an image already exported remains a successful export.
+
+The startup order is a saved custom default, otherwise last used, otherwise Sheaf's existing
+system settings (PNG/24-bit, deliberately retained as described in T05). The injected dialog-theme
+folder holds `graph-export.json` for named/last-used settings and `graph-export-default.json`
+for the custom default. These use the existing locked, atomic theme-store API, separate from
+importer files. A missing settings folder disables persistence. Unknown settings are ignored;
+missing fields use the system settings, and invalid known fields reject the load before any
+control changes. Name whitespace normalization, case-insensitive replacement and the 60-character
+limit are Sheaf's choices, shared with import themes.
+
+Compare, Generate Script, Recent Exports, graph-specific theme attachment and Origin `.ois`
+interchange remain open. Graph Theme application and the preview's Graph tab are still separate
+T05 leftovers; no exporter or renderer behavior changes here.
+
+
 ## 10. Themes and templates
 
 - **Graph theme `.OTH`** (XML, plain): a tree of numeric node ids with values; lists are base64 int32 arrays. A theme only changes the properties it contains; several can be applied, the topmost wins [W:themeref-themeorganizer]. Built-in: `Origin\Themes\Graph` (50 files, e.g. Black on paper, Color Publication, B&W Publication, FDA portrait/landscape, Physical Review Letters, Times New Roman Font, Ticks All In/Out, Line Style and Symbol variants, Fill Pattern variants, Layer No Element Scaling, Speed Mode ON/OFF, Night Sky, Opposite Lines). User themes live in the user Themes folder. Observed ids: page node 4 (6 colour, 10 with 11/12/13 incl. width and height); axes 1073741862 with X 536936487 and Y 537002023; ticks 1073741878 (57 minor, 58 major); grids 1073741887 (66 colour, 67 style, 68 width); list nodes 521 colour list, 522 line style list, 523 symbol shape list, 524 symbol interior list; 262 font for all text (opaque id; Times New Roman = 1852392883) [F:Themes\Graph\*].

@@ -167,7 +167,8 @@ the default project format.
   - [x] NLFit tabs and lower panel, iteration controls and Fit/Done/Cancel (`nlfit-origin`);
         Set Column Values layout and controls (T09); Column Properties formats and ASCII import
         options in Origin's layout (T19 items 1 and 3)
-  - [x] Export Graphs layout, preview, filename substitution, Apply and image settings (T05);
+  - [x] Export Graphs layout, preview, filename substitution, Apply, image settings and saved
+        Dialog Themes/defaults (T05);
         worksheet export dialog (T07); several graphs in one multi-page PDF (T32)
   - [x] Window/worksheet commands and shortcuts (T01/T02): multi-panel and Y-error plotting,
         Add Error Bars, legend update, Refresh/recalculation, Go to and Explorer rename/delete

@@ -51,6 +51,8 @@ pub(crate) enum StrFn {
     Text,
     Format,
     Value,
+    /// Internal lowering of %([Book]Sheet,column,row[,format]); evaluated against the host.
+    WorksheetCell,
 }
 
 impl StrFn {
@@ -63,6 +65,7 @@ impl StrFn {
             StrFn::Replace => (4, 4),
             StrFn::Substitute => (3, 4),
             StrFn::Text | StrFn::Format => (1, 2),
+            StrFn::WorksheetCell => (2, 3),
         }
     }
 }
@@ -213,7 +216,9 @@ pub(crate) fn apply(f: StrFn, args: Vec<Value>) -> Value {
                     Value::Num(f64::from(if case { s == other } else { s.to_lowercase() == other.to_lowercase() }))
                 }
                 StrFn::Exact => Value::Num(f64::from(s == text_arg(0))),
-                StrFn::Text | StrFn::Format | StrFn::Value | StrFn::Char => unreachable!("handled above"),
+                StrFn::Text | StrFn::Format | StrFn::Value | StrFn::Char | StrFn::WorksheetCell => {
+                    unreachable!("handled above or by the worksheet evaluator")
+                }
             }
         }
     }
@@ -294,17 +299,7 @@ pub(crate) fn format_number(x: f64, fmt: &str) -> String {
         return format_general(x);
     }
     if fmt.is_empty() {
-        // Empty is distinct from an omitted format or "*". Sheaf has no mutable global
-        // @SD setting; use Origin's documented default, dropping fractional trailing zeros.
-        // Choose scientific notation from the original magnitude, even if rounding carries
-        // a value just below 0.001 up to 0.001 (Origin writes that boundary as 1E-3).
-        let formatted =
-            if x != 0.0 && x.abs() < 0.001 { sci_text(x < 0.0, x.abs(), 13, true) } else { format_number(x, "*14") };
-        let (mantissa, exponent) = formatted.split_once('E').map_or((formatted.as_str(), None), |(m, e)| (m, Some(e)));
-        let mantissa =
-            if mantissa.contains('.') { mantissa.trim_end_matches('0').trim_end_matches('.') } else { mantissa };
-        return exponent
-            .map_or_else(|| mantissa.to_string(), |e| format!("{mantissa}E{}", e.parse::<i32>().unwrap_or(0)));
+        return format_precision(x, 14);
     }
     let fmt = fmt.trim();
     let (neg, a) = (x < 0.0, x.abs());
@@ -334,6 +329,22 @@ pub(crate) fn format_number(x: f64, fmt: &str) -> String {
         return if is_fixed(a, e, 6) { format!("{sign}{:.*}", n, round_to(a, n)) } else { sci_text(neg, a, n, false) };
     }
     format_general(x)
+}
+
+/// Default precision without fractional trailing zeros: Text/Format use 14, worksheet
+/// substitution uses 15. Both choose small scientific notation before rounding to 0.001.
+pub(crate) fn format_precision(x: f64, digits: usize) -> String {
+    if !x.is_finite() {
+        return format_general(x);
+    }
+    let formatted = if x != 0.0 && x.abs() < 0.001 {
+        sci_text(x < 0.0, x.abs(), digits - 1, true)
+    } else {
+        format_number(x, &format!("*{digits}"))
+    };
+    let (mantissa, exponent) = formatted.split_once('E').map_or((formatted.as_str(), None), |(m, e)| (m, Some(e)));
+    let mantissa = if mantissa.contains('.') { mantissa.trim_end_matches('0').trim_end_matches('.') } else { mantissa };
+    exponent.map_or_else(|| mantissa.to_string(), |e| format!("{mantissa}E{}", e.parse::<i32>().unwrap_or(0)))
 }
 
 fn engineering(neg: bool, a: f64, n: usize) -> String {

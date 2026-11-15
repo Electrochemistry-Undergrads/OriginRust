@@ -699,6 +699,7 @@ enum V<'h> {
     TextOf(ColumnRef, Option<Box<V<'h>>>),
     /// A numeric cell formatted according to its column (`text(col(A))`).
     Displayed(ColumnRef, Option<Box<V<'h>>>),
+    WorksheetCell(ColumnRef, Box<V<'h>>, Option<String>),
     Unary(UnOp, Box<V<'h>>),
     Bin(BinOp, Box<V<'h>>, Box<V<'h>>),
     Cond(Box<V<'h>>, Box<V<'h>>, Box<V<'h>>),
@@ -767,7 +768,16 @@ fn build_v_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node, free: bool
         Kind::Cond(c, x, y) => V::Cond(b(c, false)?, b(x, free)?, b(y, free)?),
         Kind::Call { func, args } => match *func {
             Func::Str(f) => {
-                if f == StrFn::Text && args.len() == 1 && matches!(args[0].kind, Kind::Col { .. } | Kind::Index { .. })
+                if f == StrFn::WorksheetCell {
+                    let (r, _) = cell_ref(host, &args[0])?;
+                    let format = args.get(2).map(|n| match &n.kind {
+                        Kind::Str(s) => s.clone(),
+                        _ => unreachable!("worksheet formats are static strings"),
+                    });
+                    V::WorksheetCell(r, b(&args[1], false)?, format)
+                } else if f == StrFn::Text
+                    && args.len() == 1
+                    && matches!(args[0].kind, Kind::Col { .. } | Kind::Index { .. })
                 {
                     let (r, idx) = cell_ref(host, &args[0])?;
                     V::Displayed(r, idx.map(|i| b(&i, false)).transpose()?)
@@ -837,6 +847,25 @@ fn ev_v_inner(host: &dyn Host, v: &V<'_>, row: usize) -> Value {
                 host.formatted_numeric_cell(r, k)
                     .unwrap_or_else(|| text::format_general(host.cell(r, k).unwrap_or(NA))),
             )
+        }
+        V::WorksheetCell(r, index, format) => {
+            let index = num(index);
+            if !(1.0..=4.0e15).contains(&index) {
+                return Value::Text("###".into());
+            }
+            let k = index.round() as usize - 1;
+            if let Some(text) = host.text_cell(r, k) {
+                return Value::Text(text);
+            }
+            let Some(x) = host.cell(r, k) else { return Value::Text(String::new()) };
+            let format = format.as_deref().unwrap_or("").trim();
+            Value::Text(if format.is_empty() {
+                text::format_precision(x, 15)
+            } else if format.eq_ignore_ascii_case("W") {
+                host.formatted_numeric_cell(r, k).unwrap_or_else(|| text::format_general(x))
+            } else {
+                text::format_number(x, format)
+            })
         }
         V::Unary(op, a) => {
             let x = num(a);

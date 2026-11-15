@@ -134,9 +134,57 @@ the existing expression depth limits.
 Cell/metadata text is copied as data and never reparsed. In Origin the substituted string
 `2+3` can become executable expression text and produce 5; Sheaf's standalone conversion
 returns missing for that text. Dynamic reference-name construction, session string variables,
-range-variable names, `%([Book]Sheet,column,row[,format])`, graph/legend `@` forms, script macros
+range-variable names, graph/legend `@` forms, script macros
 and general LabTalk statement substitution remain unsupported. Regressions in the expression,
 core and I/O `string_substitution` tests cover the supported subset and this data boundary.
+
+### Worksheet cell substitution
+
+T08 (2026-11-15, `codex/formula-worksheet-substitution`) adds the static
+`%([Book]Sheet,column,row[,format])` cell form, based on the same
+[Origin reference](https://docs.originlab.com/labtalk/guide/string-substitution/) and fresh
+Origin 2016 scalar probes in `scratch/formula-worksheet-substitution/` (`probe`, `control`,
+`ties-names` and `row-boundaries`). For example,
+`"full:%([Src]Sheet1,A,i); shown:%([Src]Sheet1,A,i,W)"` reads a remote cell in each formula row.
+Outside quotes, the substituted text goes through the existing numeric-only conversion.
+
+Book, sheet and column selectors are fixed in the formula. They use the qualified-column
+lookup rules below: book short name or unambiguous long name, sheet name or one-based index,
+column short name (then long-name fallback), quoted long name, or one-based index. Quoted
+names follow ordinary expression quoting. Origin's short/long collision control returns
+10 for bare `A` and 99 for `"A"` when another column's long name is A. The numeric row can be
+an expression, including `i` or another column; it remains a data read even when a user
+parameter has the same name. Rows below 1 give `###` before rounding; valid fractional rows
+round half up (`1.499999` selects row 1, `1.5` selects row 2, `2.5` selects row 3).
+
+Measured numeric output (A1 = pi, column set to two decimal places):
+
+| Format | Substituted text |
+|---|---|
+| omitted or quoted empty | `3.14159265358979` |
+| `W` | `3.14` |
+| `.2` or `".2"` | `3.14` |
+| `*4` | `3.142` |
+| `E*3` | `3.14` |
+
+Omitted/empty cell formats use 15 significant digits, independently of Text/Format's empty
+format (`@SD=14`). Fractional trailing zeros are dropped. Further measured controls give
+`12.3456789012346`, `1.23456789012346E-10`, `1000000000000000` for 1e15, and `1E-3` for
+0.0009999999999999999. `W` uses the numeric column display format; other explicit codes
+use the existing formatter. Text cells are copied unchanged, including Unicode and `2+3`,
+even with `W` or `.2`. A stored numeric missing value gives `--`; a cell past the data gives
+empty text. Infinite/out-of-range row expressions also give `###` in Sheaf.
+
+Unknown columns/books/sheets retain Sheaf's normal diagnostic instead of Origin's `###` or
+unresolved literal. Names containing commas use Sheaf's ordinary quoted-name parser; Origin's
+corresponding script controls either failed execution or returned `###`, so that is an
+expression-language extension. No double-leading-quote syntax is added. Book-only active-sheet
+notation, dataset/range substitution, `@WL`, generated selectors/expressions, session variables
+and dynamic format expressions remain unsupported. Cell text is never executed: Origin can
+turn `2+3` into 5, whereas standalone Sheaf substitution returns missing. Formula evaluation,
+row-by-row filling, dependency/cycle rules, Auto/Manual/None, Undo/Redo and native/companion
+save behavior use Sheaf's existing machinery; scalar probes do not establish Origin parity
+for that machinery. The `worksheet_substitution` expression/core/I/O tests cover these rules.
 
 ### Format compatibility name
 
@@ -296,7 +344,7 @@ has no project scope and continues to reject qualified references.
 
 ## 6. Differences from Origin's LabTalk
 
-- Only a single expression; no `before formula` scripts, assignments, session string variables, legacy multi-argument `%()` substitution, generated expression text or user-defined functions. The supported string-expression substitution subset is described above.
+- Only a single expression; no `before formula` scripts, assignments, session string variables, graph/dataset `%()` substitution, generated expression text or user-defined functions. The supported string-expression and static worksheet-cell substitution subsets are described above.
 - No spreadsheet cell notation (`A1`, bare cross-sheet `Sheet!A`), range-variable declarations, or `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). Explicit cross-sheet `col()` references are described above. The `[a:b]` range is accepted only inside statistics. Parameter-row ordering and the supported parameter-name syntax are described above.
 - A single `=` is not a comparison here; use `==`.
 - `e` is the constant 2.718...; a parameter literally named `e` in a fit function cannot be used (rename it).

@@ -43,6 +43,13 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T08 static worksheet-cell substitution (2026-11-15, Windows):
+  `%([Book]Sheet,column,row[,format])` reads fixed qualified cells with measured 15-digit
+  defaults, column-display `W`, explicit formats and preserved text. Numeric row expressions
+  retain data dependencies; existing recalculation, cycle, Undo and native/companion rules apply.
+  Expression/core/I/O fixtures cover Origin scalar controls and the no-generated-code boundary.
+  Active-sheet/book-only, dataset/graph/session and generated-reference forms remain open.
+
 - T25 proxy disconnect cleanup (2026-11-15, Windows, feature `ef98bf7`): disposing of the
   active link signals its reader and polls cancellation every 250 ms, releasing its socket
   clone even when shutdown does not wake the receive. Live partial frames survive polls;
@@ -333,7 +340,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 |---|---|---|---|
 | `codex/t05-export-dialog-themes` | Codex Windows | T05 Dialog Theme row: Origin theme-list/save/reuse behavior, named export-settings themes and isolated persistence/UI regressions | claimed 2026-11-15; own `.claude/worktrees/codex-t13-skip-points`, `target/wt-t13-skip-points`; no Graph Theme, preview, renderers/formats, import behavior, recovery, priority docs or other scopes |
 | `codex/sheaf-priority-plan` | Codex macOS, cloud-session recovery | Finish paused Claude prioritization docs: archive handoff, PLAN, greyed inventory/counts, T58–T63 briefs, task index, roadmap/parity priorities; no feature implementation | claimed 2026-11-15; worktree `work/OriginRust` in Codex chat; preserves all other claims |
-| `codex/formula-worksheet-substitution` | Codex Windows, formula-worksheet-substitution | T08 static worksheet-cell %([Book]Sheet,column,row[,format]) substitution; expr lowering/evaluation, isolated core/IO formula regressions | claimed 2026-11-15; no graph/legend/session/generated-expression substitution, global Options/model fields, UI, MCP, imports, statistics or other owner scopes |
 | `t19-fntrim` | Claude Windows, session fe4b37eb | T19 file-name trimming on ASCII import (Origin's FNameToSht/Bk From/To rules) and the book long name keeping the file extension (owner's decision 2026-11-15); crates/io ascii naming, app import window, cli flags, import-ascii.md, title tests | claimed 2026-11-15 |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `codex/t02-browser-rows` | Codex Windows, t02-browser-rows | T02 Column Browser lower row-range editor: native defaults/validation/Cancel/reference transfer and focused UI tests/docs | claimed 2026-11-15; only go_to/browser and own go_to_browser tests/docs; no Exclude/preferences, original-sheet navigation changes without published refinement, app/MRU/grid/core/history/MCP/plots/stats/fit/formula/labels or other owner work |

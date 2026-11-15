@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 146 | 46 | 241 |
+| All rows | 49 | 147 | 46 | 242 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 77 | 46 | 140 |
+| P1 and P2 together | 17 | 78 | 46 | 141 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
@@ -259,6 +259,7 @@ Cross-cutting findings:
 | Normality, outlier tests, distribution fit | Shapiro-Wilk, Grubbs | Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling, D'Agostino-Pearson | ◐ | Grubbs and Dixon's Q tests are built and checked against `grubbs`, `qtest` (Statistics menu, `analyze grubbs`, `dixon`); distribution fit (normal, lognormal, exponential, gamma, Weibull) and probability and Q-Q plots built (Statistics menu, `analyze distfit`, `probplot`, `qqplot`), scipy-checked, not measured against Origin (spec section 16) | P2 |
 | Multivariate analysis | PCA, clustering | Principal component analysis (Statistics > Multivariate Analysis, `analyze pca`): correlation or covariance, listwise or pairwise, scores, scree plot, checked against Origin (spec section 17), with Origin's scree plot, loading plot, score plot and biplot (top and right axes scaled as Origin does, 14 of 14 axes measured) and Origin's report tables in the result sheet; K-means cluster analysis (`analyze kmeans`): Origin's initial-centre rule, centres, sizes, distances, analysis of variance and membership, scatter graph, checked against Origin (spec section 18), result sheet in Origin's table order and labels | ◐ | no observation labels in the PCA plots, no component choice by rule; Origin's own cluster graph (`plot`) not read; the tables Notes and Input Data are not written | P2 |
 | Survival, power, ROC | Statistics menu | power and sample size of the one-, two-sample and paired t tests and the one-way ANOVA (Statistics > Power and Sample Size, `analyze power`), checked against Origin's library (spec section 12); ROC curve (Statistics > ROC Curve, `analyze roc`): area with DeLong standard error and interval, curve, best cut-off, graph, scipy-checked, not Origin (spec section 19); Kaplan-Meier estimator (Statistics > Survival Analysis, `analyze kaplan-meier`): product-limit table, Greenwood errors, quartiles and mean with limits, log-rank, Breslow and Tarone-Ware tests, survival graph with censor marks and, on request, Origin's confidence limits of the curve (linear, not cut off, dotted, axis -0.02 to 1.02), checked against Origin (spec section 20), result sheet in Origin's table order and labels | ◐ | no Cox regression; no other limit formulas (none seen in Origin); no power tools for proportions or variances; Notes and Input Data tables not written | P2 |
+| Graphical Summary | Statistics > Descriptive Statistics (Origin 2026) | Statistics > Descriptive Statistics > Graphical Summary (`analyze graphsummary`, MCP `graphsummary`): per variable and group a report sheet with Description Statistics, confidence intervals (t for the mean, exact order-statistic for the median, chi-square for the SD) and the Anderson-Darling test, and a three-panel graph (histogram with normal curve, interval plot, probability plot); scipy-checked, not Origin (spec section 22) | ◐ | Separate Graphs only (Per Variable, Per Group, All in One missing); layout and table order are Sheaf's | P2 |
 
 ## 11 Graph types
 

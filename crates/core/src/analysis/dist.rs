@@ -264,7 +264,7 @@ fn percent_scale(family: Family) -> ScaleKind {
     }
 }
 
-fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
+pub(super) fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
     let family = spec.family;
     let kind = spec.kind;
     let mut table = match kind {

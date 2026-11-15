@@ -8478,6 +8478,47 @@ fn the_survival_menu_runs_the_kaplan_meier_estimator() {
     assert_eq!(h.state().doc.undo_label(), Some("Kaplan-Meier estimator"));
 }
 
+/// Statistics > Descriptive Statistics > Graphical Summary...: the options window offers Groups, the confidence level
+/// and the graph arrangement; OK writes the three tables and one three-layer graph; one undo removes both.
+#[test]
+fn the_descriptive_menu_runs_a_graphical_summary() {
+    let mut text = String::from("n,value\n");
+    for i in 0..20 {
+        text.push_str(&format!("{i},{}\n", 5.0 + (f64::from(i) * 1.9).sin() * 2.0 + f64::from(i) * 0.2));
+    }
+    let data = csv_file("gsum", "summary", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - summary");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Graphical Summary..."]);
+    assert!(h.state().analysis.is_some(), "the Graphical Summary window is open");
+    for label in ["Groups", "Confidence Level (%)", "Graph Arrangement"] {
+        assert!(has_label(&h, label), "{label} is missing");
+    }
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    let (sheet, _) = result_column(&h, "Value");
+    assert!(sheet.starts_with("GraphSummary"), "{sheet}");
+    let (_, tables) = {
+        let p = project(&h);
+        let ws = p.workbooks().next().unwrap().sheets.last().unwrap();
+        let col = ws.columns.iter().find(|c| c.long_name == "Table").unwrap();
+        (sheet.clone(), col.text().unwrap().to_vec())
+    };
+    for t in ["Description Statistics", "95% Confidence Intervals", "Normality Test"] {
+        assert!(tables.iter().any(|x| x == t), "{t} missing");
+    }
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    let g = project(&h).graphs().last().unwrap();
+    assert_eq!(g.layers.len(), 3);
+    assert_eq!(h.state().doc.undo_label(), Some("Graphical summary"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).graphs().count(), graphs_before);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+}
+
 /// Statistics > Multivariate Analysis > K-Means Cluster Analysis...: the cluster table and the cluster of every row
 /// in a result sheet and a scatter graph; one undo removes both.
 #[test]

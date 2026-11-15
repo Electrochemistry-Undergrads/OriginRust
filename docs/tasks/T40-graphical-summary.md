@@ -1,6 +1,6 @@
 # T40: Graphical Summary (descriptive report with normality test and charts)
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `graph-summary`.
+**Status:** Separate Graphs done on branch `graph-summary` (2026-11-15, macOS, no Origin; spec `statistics.md` section 22). Per Variable, Per Group and All in One remain.
 **Size:** L. **Source:** `origin-2026-2027-gaps.md` (Analysis: Graphical Summary, Origin 2026).
 
 ## Goal

@@ -861,6 +861,13 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 band,
             })),
         ),
+        AnalyzeTool::GraphSummary { target, groups, level, arrangement } => {
+            no_x_range(&target, "the graphical summary")?;
+            let Some(arrangement) = analysis::GraphArrangement::from_word(&arrangement) else {
+                bail!("--arrangement is separate, per-variable, per-group or all-in-one; got \"{arrangement}\"");
+            };
+            (target, Job::GraphSummary { groups, level, arrangement })
+        }
         AnalyzeTool::Sort { target, by, descending } => {
             whole_sheet_only(&target, "sort")?;
             (target, Job::Sort { by, descending })

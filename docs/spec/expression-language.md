@@ -285,14 +285,14 @@ has no project scope and continues to reject qualified references.
 
 ## 7. Set Multiple Columns Values (T53)
 
-Origin's Set Multiple Columns Values (Column menu, Ctrl+Shift+Q) opens the Set Values window for the selected columns at once: one formula, `i` the row and `j` the column. Nothing here is measured yet (no Origin on the macOS machine); everything marked **[choice]** is Sheaf's guess from Origin's public documentation and must be checked on Windows.
+Origin's Set Multiple Columns Values (Column menu, Ctrl+Shift+Q) opens the Set Values window for the selected columns at once: one formula, `i` the row and `j` the column. Measured on Windows on 2026-11-15 (7.1); what is still marked **[choice]** is Sheaf's and not Origin's, or not measured. Originally everything marked **[choice]** was Sheaf's guess from Origin's public documentation and must be checked on Windows.
 
 Core API (`sheaf-core`, `crates/core/src/formula.rs`):
 
 - `Project::set_columns_values_with(&[ColumnId], formula, rows, mode)` sets the same formula on each column as `set_column_values_with` would, from left to right in sheet order whatever the order of the slice; `Document::set_columns_values(...)` does it as one undo step ("Set multiple columns values"). The columns must be on one sheet. Any failure (unknown column, cycle, text outside the rows) undoes the whole call and names the column when the error comes from the formula.
-- Each column keeps the formula text exactly as typed, `j` included, and recalculates with its own `j`. **[choice: the stored text is literal; Origin may store the text with `j` replaced]**
+- Each column keeps the formula text exactly as typed, `j` included, and recalculates with its own `j`. **[choice]** Origin keeps the literal text too, but only on the first column of the range (7.1).
 - Recalculate (None, Manual, Auto) and the row range apply to every column. For Auto and Manual the dependencies are resolved per column, so `wcol(j-1)` over B to E is a chain B reads A, C reads B, and so on, calculated in dependency order, and a change in A reaches all of them. A loop (`wcol(j+1)+wcol(j-1)` over B and C) is refused with the chain named; a column that reads itself runs once. A reorder or insertion of columns changes `j`, so recalculating columns re-resolve their reads (the same trigger as a renamed column).
-- `j` is the position in the sheet, so selecting only column D gives `j = 4`. **[choice]**
+- `j` is the position in the sheet, so selecting only column D gives `j = 4`, as in Origin (7.1).
 
 To measure on Windows with `tools/origin-ref`:
 
@@ -303,3 +303,33 @@ To measure on Windows with `tools/origin-ref`:
 5. Whether a selection that includes a locked, text or non-numeric column is refused or silently skipped.
 6. `col(j)`, `wcol(j)` and `col(J)` on a sheet with a column named J and on one without, and whether `wcol(j+k)` outside the sheet is an error or missing values.
 7. Whether one undo step reverts every column (Sheaf: yes).
+
+### 7.1 Measured in Origin 2016 (2026-11-15)
+
+Run with `tools/origin-ref` (`re-workspace/scratch/t53`, local only): `csetvalue` from LabTalk for one
+column at a time, and the window itself opened with Ctrl+Shift+Q after dragging across the column heads
+(the watcher's `G:` drag), a formula typed and OK pressed. A selection made from a script
+(`wks.colSel`, `worksheet -s`) is not taken by the window: Origin answers "The current selection will be
+ignored. The column will be added to the end of the worksheet."
+
+- **Window**: titled "Set Values - Multiple Columns"; menus Formula, wcol(1), Col(A), Function,
+  Variables, Options; `Row ( i ): From <auto> To <auto>`; a second row `Col ( j ): From 3 To 5` (the
+  selected columns C to E as **sheet positions**, editable); the formula label `wcol(j) = `; the four
+  column buttons shown but greyed; Recalculate Manual by default; OK, Cancel, Apply (greyed) and the
+  Before Formula Scripts box. Sheaf copies the title, the `Col (j)` row (editing it sets the columns at
+  those positions; left as opened it sets exactly the selected columns), the label and the greyed
+  buttons.
+- **`j` is the sheet position**, also for a single column: `csetvalue` of `j` on column E gives 5, of
+  `j*100+i` on D gives 402 in row 2. As Sheaf.
+- **Order**: `wcol(j-1)*2+j` over C to E (B = 10 to 50) gives C = 23, D = 50, E = 105 in row 1: the
+  columns are computed left to right, each reading the new values of the one before. As Sheaf.
+- **Stored formula**: Origin keeps the formula **once, on the first column** of the range (C reads back
+  `wcol(j-1)*2+j`, D and E read back empty), and the F(x)= cell is drawn across C to E; C gets the
+  recalculation lock of the formula and D and E another one. **Not copied** [choice]: Sheaf keeps the
+  literal text on every column, so each column shows and recalculates its own copy (same values; a
+  column moved out of the range keeps its formula).
+- **Outside the sheet**: `wcol(j+1)+1` over E and F (no column G) writes no values in either column and
+  puts two messages in the Messages Log; the formula is kept on E. Sheaf refuses the call and changes
+  nothing.
+- Not measured: a selection that is not side by side (only a drag selection could be made), locked or
+  text columns in the range, a column named J, undo.

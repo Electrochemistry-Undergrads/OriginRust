@@ -88,6 +88,12 @@ open. History of what was merged when is in `git log` (not repeated here).
   Bottom (Top/Bottom N items or N %), Remove Conditional Format; rules per sheet (`Worksheet.cond_formats`,
   core `condformat.rs`), evaluated once per document revision, kept through duplicate/append/insert/delete.
   T34 frozen panes (same day): View > Freeze/Unfreeze Panes (Ctrl+Shift+F). Both unmeasured (gui-look.md).
+- T37 violin plot (2026-11-15, macOS, no Origin): Plot > Statistics > Violin Plot / with Box / with Point /
+  with Quartile / with Stick / Half Violin and `sheaf plot -t violin` (also `violin-box`, `violin-point`,
+  `violin-quartile`, `violin-stick`, `half-violin`; MCP the same): one mirrored Gaussian kernel density
+  silhouette per Y column (Scott bandwidth from Origin's documented formulas, `sheaf_calc::kde`, checked
+  against scipy), marks inside per variant, masked rows left out, `.opj` save warns. Origin's defaults
+  are unmeasured; Split Violin, violin settings and the "Violin with Box" toolbar button are left (graphing.md 14.22).
 - T33 lollipop plot (2026-11-15, macOS, no Origin): Plot > Symbol > Lollipop Plot and `sheaf plot -t
   lollipop` (two or more Y columns, X/Y exchanged, drop lines from each plot to the next at the same
   row, the last back to the first); Plot Details Drop Lines "Drop To" (Axis / Next Data Plot) and "Y
@@ -132,7 +138,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `vartest2` | Claude Windows, "continue all tasks" | T26 leftovers: Origin measurements of the two-sample proportion test (unpooled, tails, differences, Fisher, small samples), two-sample variance dialog with intervals, power analysis outputs; calc vartest.rs, core var/prop runners, their dialogs, statistics.md 21 | claimed 2026-11-15 |
 | `cell-notes` | Claude macOS, "mac-multipdf" | T36 worksheet cell notes (Origin 2022): core per-sheet notes kept through row/column ops and sort, grid corner tab + hover popup, cell menu Add/Edit/Delete Note, note editor | claimed 2026-11-15; core worksheet + sheetops note upkeep, grid.rs body_cell, menus/app/dialogs; no cond-format/frozen/filter/Go To, plot, stats or other sessions' scopes |
-| `violin-plot` | Claude macOS, "violin" | T37 violin plot: core PlotKind/Template, plot data/plots/layout (new violin drawing beside the box chart), calc kernel density, Plot > Statistics menu, CLI/MCP template lists, graphing.md 14.22 | claimed 2026-11-15; no fill-under/sidelines, axis breaks, cell notes, worksheet grid or other sessions' scopes |
 | `recent-files` | Claude macOS, "mac-recent" | T38 Recent Projects and Recent Imports: new sheaf-io recent module, File menu submenus, app open/save/import hooks, Startup recent_path, UI tests, spec | claimed 2026-11-15; no Recent Books/Graphs/Exports, no window saving, no other sessions' scope |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 

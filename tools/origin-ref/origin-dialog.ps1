@@ -81,6 +81,32 @@ public static class DlgOpen {
       } else { "#NOARRAY $sh" }
       continue
     }
+    if ($l.StartsWith('@CLICK:')) {
+      # "@CLICK:x,y" clicks a screen position (for example the maximize button of the report window); "@WHEEL:x,y,n" scrolls n notches (positive = down); "@WAIT:ms" waits.
+      Add-Type -AssemblyName System.Windows.Forms
+      $xy = $l.Substring(7) -split ','
+      Add-Type -Name AfterMouse -Namespace Sheaf -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y); [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);' -ErrorAction SilentlyContinue
+      [void][Sheaf.AfterMouse]::SetCursorPos([int]$xy[0], [int]$xy[1]); Start-Sleep -Milliseconds 300
+      [Sheaf.AfterMouse]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); [Sheaf.AfterMouse]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 800
+      continue
+    }
+    if ($l.StartsWith('@WHEEL:')) {
+      $xy = $l.Substring(7) -split ','
+      Add-Type -Name AfterMouse -Namespace Sheaf -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y); [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);' -ErrorAction SilentlyContinue
+      [void][Sheaf.AfterMouse]::SetCursorPos([int]$xy[0], [int]$xy[1]); Start-Sleep -Milliseconds 300
+      for ($k = 0; $k -lt [Math]::Abs([int]$xy[2]); $k++) { [Sheaf.AfterMouse]::mouse_event(0x800, 0, 0, [BitConverter]::ToUInt32([BitConverter]::GetBytes([int](-120 * [Math]::Sign([int]$xy[2]))), 0), [UIntPtr]::Zero); Start-Sleep -Milliseconds 150 }
+      Start-Sleep -Milliseconds 600; continue
+    }
+    if ($l.StartsWith('@WAIT:')) { Start-Sleep -Milliseconds ([int]$l.Substring(6)); continue }
+    if ($l.StartsWith('@SHOT:')) {
+      # "@SHOT:path.png" saves a picture of the whole primary screen (the report sheet that is on top).
+      Add-Type -AssemblyName System.Drawing; Add-Type -AssemblyName System.Windows.Forms
+      $sb = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+      $bmp = New-Object System.Drawing.Bitmap($sb.Width, $sb.Height)
+      $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($sb.Location, [System.Drawing.Point]::Empty, $sb.Size); $g.Dispose()
+      $bmp.Save($l.Substring(6), [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose(); "saved $($l.Substring(6))"
+      continue
+    }
     if ($l.StartsWith('?')) { $v = $l.Substring(1); "$v = " + $origin.LTVar($v) }
     elseif ($l.StartsWith('$')) { $v = $l.Substring(1); "$v = " + $origin.LTStr($v) }
     else { "[" + $origin.Execute($l) + "] $l" }

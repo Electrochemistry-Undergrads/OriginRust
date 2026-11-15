@@ -400,6 +400,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             integrate,
             fit,
             fit_baseline,
+            fit_shapes,
         } => {
             let direction = match direction {
                 PeakKind::Both => analysis::PeakDirection::Both,
@@ -472,15 +473,18 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     PeakLimitKind::Baseline => analysis::LimitMode::Baseline,
                     PeakLimitKind::HalfHeight => analysis::LimitMode::HalfHeight,
                 };
+                let peak_shape = |k: &PeakFitKind| match k {
+                    PeakFitKind::Gauss => analysis::PeakShape::Gauss,
+                    PeakFitKind::Lorentz => analysis::PeakShape::Lorentz,
+                    PeakFitKind::Voigt => analysis::PeakShape::Voigt,
+                };
                 let fit = fit.map(|shape| analysis::PeakFitSpec {
-                    shape: match shape {
-                        PeakFitKind::Gauss => analysis::PeakShape::Gauss,
-                        PeakFitKind::Lorentz => analysis::PeakShape::Lorentz,
-                    },
+                    shape: peak_shape(&shape),
                     baseline: match fit_baseline {
                         PeakFitBaselineKind::Constant => analysis::FitBaseline::Constant,
                         PeakFitBaselineKind::Linear => analysis::FitBaseline::Linear,
                     },
+                    shapes: fit_shapes.iter().map(peak_shape).collect(),
                 });
                 let find = analysis::FindOptions {
                     method,
@@ -525,6 +529,56 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 TTestKindArg::Paired => analysis::TTestKind::Paired { difference },
             };
             (target, Job::Tool(Tool::TTest(analysis::TTestSpec { kind, tail: tail_of(tail), alpha })))
+        }
+        AnalyzeTool::Vartest { target, variance, ratio, tail, alpha, levels } => {
+            let two = ratio.is_some() || (variance.is_none() && target.y.len() == 2);
+            let kind = if two {
+                analysis::VarTestKind::TwoSample { ratio: ratio.unwrap_or(1.0) }
+            } else {
+                analysis::VarTestKind::OneSample { variance: variance.unwrap_or(1.0) }
+            };
+            let spec =
+                analysis::VarTestSpec { kind, tail: tail_of(tail), alpha, intervals: !levels.is_empty(), levels };
+            (target, Job::Tool(Tool::VarTest(spec)))
+        }
+        AnalyzeTool::Proptest {
+            target,
+            successes,
+            size,
+            proportion,
+            difference,
+            tail,
+            alpha,
+            exact,
+            exact_only,
+            pooled,
+            levels,
+        } => {
+            if successes.len() != size.len() || !(1..=2).contains(&successes.len()) {
+                bail!(
+                    "give one --successes and one --size for the one-sample test, two of each for the two-sample test"
+                );
+            }
+            let kind = if successes.len() == 1 {
+                analysis::PropTestKind::OneSample { successes: successes[0], size: size[0], proportion }
+            } else {
+                analysis::PropTestKind::TwoSample {
+                    first: (successes[0], size[0]),
+                    second: (successes[1], size[1]),
+                    difference,
+                }
+            };
+            let spec = analysis::PropTestSpec {
+                kind,
+                tail: tail_of(tail),
+                alpha,
+                intervals: !levels.is_empty(),
+                levels,
+                normal: !exact_only,
+                exact,
+                pooled,
+            };
+            (target, Job::Tool(Tool::PropTest(spec)))
         }
         AnalyzeTool::Anova { target, comparison, control, alpha } => {
             if control == 0 {
@@ -731,6 +785,62 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 kind: analysis::ProbPlotKind::QQ,
                 family: family_of(family),
                 graph: !no_graph,
+            })),
+        ),
+        AnalyzeTool::Pca { target, covariance, pairwise, components, standardize_scores, no_scores, no_graph } => (
+            target,
+            Job::Tool(Tool::Pca(analysis::PcaSpec {
+                correlation: !covariance,
+                pairwise,
+                components,
+                standardize_scores,
+                scores: !no_scores,
+                scree: !no_graph,
+            })),
+        ),
+        AnalyzeTool::Roc { target, positive, lower_is_positive, confidence, no_graph } => (
+            target,
+            Job::Tool(Tool::Roc(analysis::RocSpec {
+                positive,
+                higher_is_positive: !lower_is_positive,
+                confidence,
+                curve: !no_graph,
+            })),
+        ),
+        AnalyzeTool::Kmeans { target, clusters, max_passes, no_anova, no_membership, no_graph } => (
+            target,
+            Job::Tool(Tool::Kmeans(analysis::KmeansSpec {
+                clusters,
+                max_passes,
+                anova: !no_anova,
+                membership: !no_membership,
+                member_distance: !no_membership,
+                graph: !no_graph,
+            })),
+        ),
+        AnalyzeTool::KaplanMeier {
+            target,
+            censor,
+            confidence,
+            no_quartiles,
+            no_mean,
+            log_rank,
+            breslow,
+            tarone_ware,
+            band,
+            no_graph,
+        } => (
+            target,
+            Job::Tool(Tool::KaplanMeier(analysis::KaplanMeierSpec {
+                censor,
+                confidence,
+                quartiles: !no_quartiles,
+                mean: !no_mean,
+                log_rank,
+                breslow,
+                tarone_ware,
+                curve: !no_graph,
+                band,
             })),
         ),
         AnalyzeTool::Sort { target, by, descending } => {

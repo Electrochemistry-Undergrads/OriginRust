@@ -7,7 +7,8 @@
 //! by side in one sheet, all rows stacked in one sheet). [`expand_inputs`] turns a folder or a
 //! wildcard pattern into the list of files.
 
-use crate::{ImportKind, ascii, chi, import_file};
+use crate::excel::{self, ExcelOptions};
+use crate::{ImportKind, ascii, chi, import_file_with_excel};
 use sheaf_core::{Column, ColumnData, Project, WindowId, Workbook, Worksheet};
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
@@ -145,7 +146,8 @@ pub fn place_workbook_with(
                 for (old, col) in dest.sheets[t.sheet].columns.iter().zip(columns.iter_mut()) {
                     col.id = old.id;
                 }
-                dest.sheets[t.sheet] = Worksheet { name, columns, filter: None };
+                dest.sheets[t.sheet] =
+                    Worksheet { name, columns, filter: None, frozen: Default::default(), cond_formats: Vec::new() };
             }
             // Further sheets of the file (several data blocks) follow as new sheets.
             for mut sheet in it {
@@ -406,6 +408,19 @@ pub struct BatchResult {
 /// Reads the files in order and puts them into the project with the chosen layout. A file that
 /// cannot be read is reported in `errors` and skipped.
 pub fn import_batch(project: &mut Project, files: &[PathBuf], opts: &BatchOptions) -> BatchResult {
+    import_batch_with_excel(project, files, opts, &ExcelOptions::default())
+}
+
+/// [`import_batch`] with the options for Excel workbooks among the files (`.xls`, `.xlsx`,
+/// `.xlsm`). An Excel file gives one book with a sheet per Excel sheet; the layouts and modes put
+/// that book where they put any other imported book (a layout that adds columns or rows to one
+/// sheet uses the first sheet of the Excel file and says so).
+pub fn import_batch_with_excel(
+    project: &mut Project,
+    files: &[PathBuf],
+    opts: &BatchOptions,
+    excel_opts: &ExcelOptions,
+) -> BatchResult {
     let mut result = BatchResult::default();
     let mut shared: Option<WindowId> = None;
     for (index, path) in files.iter().enumerate() {
@@ -414,7 +429,12 @@ pub fn import_batch(project: &mut Project, files: &[PathBuf], opts: &BatchOption
         } else {
             opts.ascii.clone()
         };
-        let imported = match import_file(path, opts.kind, &opts.chi, &ascii) {
+        let excel_here = if index == 0 && opts.partial_except_first {
+            excel_opts.without_partial_import()
+        } else {
+            excel_opts.clone()
+        };
+        let imported = match import_file_with_excel(path, opts.kind, &opts.chi, &ascii, &excel_here) {
             Ok(i) => i,
             Err(e) => {
                 result.errors.push(e.to_string());
@@ -486,10 +506,11 @@ fn shared_book_name(opts: &BatchOptions, first: &Path) -> String {
 }
 
 /// Extensions that a folder import reads.
-const FOLDER_EXTENSIONS: [&str; 8] = ["txt", "csv", "tsv", "dat", "asc", "prn", "tab", "bin"];
+const FOLDER_EXTENSIONS: [&str; 11] = ["txt", "csv", "tsv", "dat", "asc", "prn", "tab", "bin", "xls", "xlsx", "xlsm"];
 
 /// Turns one command-line or dialog argument into files: a folder gives its data files
-/// (`.txt .csv .tsv .dat .asc .prn .tab .bin`), a name with `*` or `?` in its last part gives
+/// (`.txt .csv .tsv .dat .asc .prn .tab .bin` and the Excel files `.xls .xlsx .xlsm`, but not the
+/// `~$` lock files that Excel leaves beside an open workbook), a name with `*` or `?` in its last part gives
 /// the matching files of that folder, anything else is the file itself. The result is in natural
 /// order (`run2` before `run10`). A pattern or folder that finds nothing is an error.
 pub fn expand_inputs(arg: &Path) -> Result<Vec<PathBuf>, String> {
@@ -497,14 +518,15 @@ pub fn expand_inputs(arg: &Path) -> Result<Vec<PathBuf>, String> {
     let mut found: Vec<PathBuf> = Vec::new();
     if arg.is_dir() {
         found = list_folder(arg, |n| {
-            Path::new(n)
-                .extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|e| FOLDER_EXTENSIONS.iter().any(|x| x.eq_ignore_ascii_case(e)))
+            !(n.starts_with("~$") && excel::is_excel_file(Path::new(n)))
+                && Path::new(n)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| FOLDER_EXTENSIONS.iter().any(|x| x.eq_ignore_ascii_case(e)))
         })?;
         if found.is_empty() {
             return Err(format!(
-                "the folder '{}' holds no data files (.txt, .csv, .tsv, .dat, .asc, .prn, .tab, .bin)",
+                "the folder '{}' holds no data files (.txt, .csv, .tsv, .dat, .asc, .prn, .tab, .bin, .xls, .xlsx, .xlsm)",
                 arg.display()
             ));
         }
@@ -605,7 +627,13 @@ mod tests {
     fn book(name: &str, cols: Vec<Column>) -> Workbook {
         let mut b = Workbook::new(WindowId(0), "Book1");
         b.long_name = name.to_string();
-        b.sheets = vec![Worksheet { name: name.to_string(), columns: cols, filter: None }];
+        b.sheets = vec![Worksheet {
+            name: name.to_string(),
+            columns: cols,
+            filter: None,
+            frozen: Default::default(),
+            cond_formats: Vec::new(),
+        }];
         b
     }
 

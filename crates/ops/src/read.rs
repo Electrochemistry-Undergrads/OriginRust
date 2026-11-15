@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use sheaf_io::ascii::{AsciiOptions, Delimiter, Thousands};
 use sheaf_io::chi::ChiOptions;
+use sheaf_io::excel::{ExcelOptions, SheetRef};
 use sheaf_io::{ImportKind, Imported};
 use std::path::Path;
 
@@ -77,6 +78,13 @@ pub struct ReadSettings {
     pub no_rename_sheet: bool,
     pub no_rename_book: bool,
     pub blocks_as_sheets: bool,
+    /// Excel: the sheets to read, as names or 1-based positions (empty: every sheet).
+    pub sheets: Vec<String>,
+    /// Excel: read hidden sheets when `sheets` is empty (also the default, unless
+    /// `skip_hidden_sheets` is set).
+    pub hidden_sheets: bool,
+    /// Excel: leave hidden sheets out when `sheets` is empty and `hidden_sheets` is off.
+    pub skip_hidden_sheets: bool,
 }
 
 impl Default for ReadSettings {
@@ -115,6 +123,9 @@ impl Default for ReadSettings {
             no_rename_sheet: false,
             no_rename_book: false,
             blocks_as_sheets: false,
+            sheets: Vec::new(),
+            hidden_sheets: false,
+            skip_hidden_sheets: false,
         }
     }
 }
@@ -199,10 +210,45 @@ impl ReadSettings {
         }
         Ok(o)
     }
+
+    /// The options for Excel files. The header, row and column settings are those of text files;
+    /// the separator, number and block settings do not apply to a cell grid and are left out.
+    pub fn excel_options(&self) -> ExcelOptions {
+        let r = self;
+        let mut o = ExcelOptions {
+            sheets: r.sheets.iter().map(|s| SheetRef::parse(s)).collect(),
+            include_hidden: r.hidden_sheets || !r.skip_hidden_sheets,
+            ..ExcelOptions::default()
+        };
+        o.header_lines = r.header_lines;
+        o.long_name_line = r.long_name_line;
+        o.units_line = r.units_line;
+        o.comments_line = r.comments_line;
+        o.rename_columns = !r.no_rename_columns;
+        o.short_name_line = r.short_name_line.unwrap_or(0);
+        o.rename_book = !r.no_rename_book;
+        o.param_lines = r.param_lines.clone();
+        o.rows = sheaf_io::ascii::ImportSelection {
+            first: r.first_row,
+            last: r.last_row,
+            read: r.read_rows,
+            skip: r.skip_rows,
+        };
+        o.columns = sheaf_io::ascii::ImportSelection {
+            first: r.first_column,
+            last: r.last_column,
+            read: r.read_columns,
+            skip: r.skip_columns,
+        };
+        if r.dates_as_text {
+            o.dates = sheaf_io::ascii::DateImport::AsText;
+        }
+        o
+    }
 }
 
 /// Reads one data file. The import warnings are in the result.
 pub fn read_data_file(path: &Path, r: &ReadSettings) -> Result<Imported> {
-    sheaf_io::import_file(path, r.format.kind(), &r.chi_options(), &r.ascii_options()?)
+    sheaf_io::import_file_with_excel(path, r.format.kind(), &r.chi_options(), &r.ascii_options()?, &r.excel_options())
         .with_context(|| format!("could not import '{}'", path.display()))
 }

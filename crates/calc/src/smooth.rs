@@ -92,6 +92,25 @@ fn map_index(idx: isize, n: usize, b: Boundary) -> Option<usize> {
     }
 }
 
+/// Index of the mirrored point for Origin's percentile filter with `boundary:=reflect`: before the
+/// start it mirrors without repeating the first point (`y[-1] = y[1]`), past the end with the last
+/// point repeated (`y[n] = y[n-1]`). Measured with `percent:=50` (analysis-tools.md 12.3); the
+/// averaging and Savitzky-Golay filters mirror with the end point repeated at both ends.
+pub(crate) fn percentile_reflect_index(mut idx: isize, n: usize) -> usize {
+    let n = n as isize;
+    // A window longer than the data mirrors more than once; each step lands nearer the range.
+    for _ in 0..64 {
+        if idx < 0 {
+            idx = -idx;
+        } else if idx >= n {
+            idx = 2 * n - 1 - idx;
+        } else {
+            return idx as usize;
+        }
+    }
+    idx.clamp(0, n - 1) as usize
+}
+
 /// Value of the padded series at (possibly out of range) index `idx`.
 fn padded(y: &[f64], idx: isize, b: Boundary) -> f64 {
     let n = y.len();
@@ -135,8 +154,15 @@ fn smooth_valid(y: &[f64], opts: &SmoothOptions) -> Vec<f64> {
             }
             SmoothMethod::Percentile { percent } => {
                 let k = if opts.boundary == Boundary::None { h.min(i).min(n - 1 - i) } else { h };
-                let mut w: Vec<f64> =
-                    (-(k as isize)..=(k as isize)).map(|j| padded(y, i as isize + j, opts.boundary)).collect();
+                let at = |j: isize| {
+                    let idx = i as isize + j;
+                    if opts.boundary == Boundary::Reflect {
+                        y[percentile_reflect_index(idx, n)]
+                    } else {
+                        padded(y, idx, opts.boundary)
+                    }
+                };
+                let mut w: Vec<f64> = (-(k as isize)..=(k as isize)).map(at).collect();
                 w.sort_by(|a, b| a.total_cmp(b));
                 let m = w.len();
                 let pos = ((m as f64 * percent / 100.0).ceil() as isize - 1).clamp(0, m as isize - 1);

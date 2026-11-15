@@ -5,6 +5,23 @@ use crate::column::{Column, Designation, default_short_name};
 use crate::ids::{ColumnId, WindowId};
 use serde::{Deserialize, Serialize};
 
+/// The most rows or columns that can be frozen (Origin: "an index between 1 and 10").
+pub const MAX_FROZEN: u8 = 10;
+
+/// View > Freeze Panes: how many displayed rows and visible columns stay in place while the rest
+/// of the sheet scrolls. A view setting of the sheet, saved with it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Frozen {
+    pub rows: u8,
+    pub columns: u8,
+}
+
+impl Frozen {
+    pub fn is_none(&self) -> bool {
+        self.rows == 0 && self.columns == 0
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Worksheet {
     pub name: String,
@@ -12,11 +29,23 @@ pub struct Worksheet {
     /// Column > Filter: hides the rows that fail a condition (see [`crate::rowfilter`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter: Option<crate::rowfilter::RowFilter>,
+    /// View > Freeze Panes (see [`Frozen`]).
+    #[serde(default, skip_serializing_if = "Frozen::is_none")]
+    pub frozen: Frozen,
+    /// Worksheet > Conditional Formatting (see [`crate::condformat`]); the earlier rule wins.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cond_formats: Vec<crate::condformat::CondFormat>,
 }
 
 impl Worksheet {
     pub fn new(name: impl Into<String>) -> Self {
-        Worksheet { name: name.into(), columns: Vec::new(), filter: None }
+        Worksheet {
+            name: name.into(),
+            columns: Vec::new(),
+            filter: None,
+            frozen: Frozen::default(),
+            cond_formats: Vec::new(),
+        }
     }
 
     /// Number of rows: the length of the longest column.
@@ -177,5 +206,18 @@ mod tests {
         assert_eq!(ws.x_for(0).unwrap().short_name, "B");
         ws.columns[1].designation = Designation::Y;
         assert!(ws.x_for(0).is_none());
+    }
+
+    #[test]
+    fn frozen_panes_round_trip_and_old_files_load_unfrozen() {
+        let mut ws = Worksheet::new("Sheet1");
+        let plain = serde_json::to_string(&ws).unwrap();
+        assert!(!plain.contains("frozen"), "an unfrozen sheet writes nothing: {plain}");
+        let back: Worksheet = serde_json::from_str(&plain).unwrap();
+        assert_eq!(back.frozen, Frozen::default());
+        ws.frozen = Frozen { rows: 3, columns: 2 };
+        let text = serde_json::to_string(&ws).unwrap();
+        let back: Worksheet = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.frozen, Frozen { rows: 3, columns: 2 });
     }
 }

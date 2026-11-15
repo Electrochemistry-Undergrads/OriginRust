@@ -495,8 +495,21 @@ fn grids_tab(ui: &mut egui::Ui, axis: &mut Axis, id: &str) {
         0.3,
         Dash::Dash,
     );
+    // Origin 2016's Additional Lines: Opposite (the axis line on the far edge, the same setting as
+    // Line and Ticks) and a line at a value of the other axis ("Y =" on the X axis page).
     group_box(ui, "Additional Lines", |ui| {
-        ui.add_enabled(false, egui::Checkbox::new(&mut false, "Opposite"));
+        ui.checkbox(&mut axis.show_opposite, "Opposite");
+        ui.horizontal(|ui| {
+            let mut on = axis.additional_line.is_some();
+            let label = if id == "x" { "Y =" } else { "X =" };
+            if ui.checkbox(&mut on, label).changed() {
+                axis.additional_line = on.then_some(0.0);
+            }
+            let mut v = axis.additional_line.unwrap_or(0.0);
+            if ui.add_enabled(on, DragValue::new(&mut v).speed(0.1)).changed() && on {
+                axis.additional_line = Some(v);
+            }
+        });
     });
 }
 

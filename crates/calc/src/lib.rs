@@ -29,6 +29,7 @@ pub mod freq;
 pub mod hypothesis;
 pub mod integrate;
 pub mod interp;
+pub mod kmeans;
 pub mod levelcross;
 pub mod manip;
 pub mod nonparam;
@@ -36,14 +37,18 @@ pub mod normality;
 pub mod normalize;
 pub mod nptests;
 pub mod outlier;
+pub mod pca;
 pub mod peakchain;
 pub mod peaks;
 pub mod power;
+pub mod roc;
 pub mod signal;
 pub mod smooth;
 pub mod stats;
+pub mod survival;
 pub mod trace;
 mod util;
+pub mod vartest;
 
 pub use anova::{
     Anova, AnovaError, AnovaRow, Comparison, MeansComparison, anova_one_way, compare_means, compare_to_control, ptukey,
@@ -77,6 +82,7 @@ pub use freq::{BinSize, Freq, FreqOptions, FreqRow, auto_bin_range, auto_bin_siz
 pub use hypothesis::{SampleStats, TTest, Tail, ttest_one, ttest_paired, ttest_two};
 pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};
 pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, automatic_smoothing, interp1, interp1xy};
+pub use kmeans::{Cluster, Kmeans, KmeansError, KmeansOptions, VariableAnova, kmeans};
 pub use levelcross::{Crossing, CrossingIndex, level_crossings};
 pub use manip::{
     DUP_TOL, DupMethod, EvenGrid, LinePoint, MedianEdge, REDUCE_AUTO_FACTOR, REDUCE_EVEN_TOLERANCE_PCT, ReduceGroup,
@@ -97,6 +103,7 @@ pub use nptests::{
     SIGN_EXACT_MAX_N, SignTest, friedman, ks_two_sample, median_test, sign_test,
 };
 pub use outlier::{DixonQ, Grubbs, OutlierError, OutlierSide, dixon_q, grubbs};
+pub use pca::{EigenTest, Pca, PcaError, PcaOptions, pca};
 pub use peakchain::{
     BaselineStat, ChainBaseline, ChainError, ChainOptions, ChainResult, FindMethod, FindOptions, LimitMode, PeakInfo,
     analyze_peaks, auto_minima_anchors, find_peak_indices, integrate_peaks,
@@ -106,7 +113,15 @@ pub use power::{
     PowerError, PowerTest, SampleSizes, anova_power, anova_powers, anova_sample_sizes, pnf, pnt, t_power, t_powers,
     t_sample_sizes,
 };
+pub use roc::{Roc, RocError, RocOptions, RocPoint, roc};
 pub use signal::{convolve, correlate, hilbert};
 pub use smooth::{Boundary, LocalSpan, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{RowStats, Stats, mean_confidence_limits, quantile_origin, row_stats, stats};
+pub use survival::{
+    KaplanMeier, Quartile, RankResult, RankTest, SurvivalError, SurvivalRow, SurvivalStep, kaplan_meier, rank_test,
+};
 pub use trace::{TraceMethod, trace_interp, trace_points};
+pub use vartest::{
+    OneProportion, TwoProportions, VarTest, exact_interval, proportion_one, proportion_two, ratio_interval,
+    variance_interval, vartest_one, vartest_two, wald_difference_interval, wald_interval,
+};

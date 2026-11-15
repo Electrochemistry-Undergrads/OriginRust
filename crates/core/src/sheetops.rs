@@ -130,6 +130,7 @@ impl Worksheet {
             }
             c.data.insert_blank_rows(at, count);
         }
+        self.cond_formats_insert_rows(columns, at, count);
         locked
     }
 
@@ -152,6 +153,7 @@ impl Worksheet {
             c.data.remove_rows(rows.clone());
             c.trim_missing_tail();
         }
+        self.cond_formats_delete_rows(columns, rows);
         locked
     }
 

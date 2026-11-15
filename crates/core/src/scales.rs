@@ -289,6 +289,17 @@ pub fn nearest_nice(x: f64) -> f64 {
         .unwrap_or(1.0)
 }
 
+/// A 1/2/5 increment rounded upward, used when the projected reciprocal range exceeds
+/// Origin's default tick limit. Keep the raw comparison at decade boundaries.
+fn reciprocal_promoted_step(high: f64) -> f64 {
+    let raw = high / 10.0;
+    if !(raw.is_finite() && raw > 0.0) {
+        return 1.0;
+    }
+    let base = 10f64.powi(raw.log10().floor() as i32);
+    [1.0, 2.0, 5.0, 10.0].into_iter().map(|m| m * base).find(|v| *v >= raw).map(tidy).unwrap_or(1.0)
+}
+
 /// Limits and step of an automatic axis for data `lo..hi` on `kind` (every scale but the linear and
 /// log10 ones, whose rules are in [`crate::autorange`]); `margin_pct` is the Rescale Margin. `None`
 /// for those two. `lo` and `hi` must be accepted by the scale.
@@ -316,16 +327,32 @@ pub fn auto_range(kind: ScaleKind, lo: f64, hi: f64, margin_pct: f64) -> Option<
             let high_t = thi + pad;
             // A margin that reaches the point at infinity: let the axis end well beyond the data.
             let high_raw = if high_t < 0.0 { kind.inverse(high_t) } else { hi * 100.0 };
-            let inc = if kind == ScaleKind::Reciprocal {
+            let finite_reciprocal =
+                kind == ScaleKind::Reciprocal && hi > lo && low_raw > 0.0 && high_raw.is_finite() && high_t < 0.0;
+            let initial_step = if finite_reciprocal { crate::autorange::linear_step(hi - lo) } else { 0.0 };
+            let measured_step = finite_reciprocal && initial_step / 2.0 > 0.0 && initial_step.is_finite();
+            let mut inc = if measured_step {
+                initial_step
+            } else if kind == ScaleKind::Reciprocal {
                 nearest_nice(high_raw / 12.0)
             } else {
                 nearest_nice((high_raw - low_raw) / 3.0)
             };
-            let h = inc / 2.0;
-            let mut from = tidy(((low_raw / h) + 1e-9).floor() * h);
-            let to = tidy(((high_raw / h) - 1e-9).ceil() * h);
-            if kind == ScaleKind::Reciprocal && from <= 0.0 {
-                from = 1.0;
+            let bounds = |step: f64| {
+                let h = step / 2.0;
+                let mut from = tidy(((low_raw / h) + 1e-9).floor() * h);
+                let to = tidy(((high_raw / h) - 1e-9).ceil() * h);
+                if kind == ScaleKind::Reciprocal && from <= 0.0 {
+                    from = 1.0;
+                }
+                (from, to)
+            };
+            let (mut from, mut to) = bounds(inc);
+            // The cap is checked before rounding the bounds. The promoted increment aims
+            // for ten ticks from zero, rounding upward through 1/2/5 times a power of ten.
+            if measured_step && (high_raw - low_raw) / inc > 20.0 {
+                inc = reciprocal_promoted_step(high_raw);
+                (from, to) = bounds(inc);
             }
             Some(ScaleRange { from, to, inc })
         }

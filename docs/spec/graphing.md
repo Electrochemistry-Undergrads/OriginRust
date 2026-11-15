@@ -206,6 +206,18 @@ half-length in points), ticks inside the break go, the ticks after it can use th
 ### 3.7 Special ticks and reference lines (P1/P2)
 Custom tick positions and labels per tick. Reference lines are not documented for 2016; emulate with `addline` objects.
 
+**Additional Lines (Grids tab, measured 2026-11-14 in Origin 2016's axis dialog, `re-workspace/scratch/addlines`):**
+the Grids tab's last group, "Additional Lines", has `Opposite` (a check box) and a check box with a value box,
+labelled `Y =` on the page of the vertical grid lines (the X axis) and `X =` on the page of the horizontal ones
+(the Y axis); the value starts at 0 and the box is grey until ticked. Exported pictures: `Opposite` on the X axis
+page draws the X axis line along the top edge (as the Line and Ticks tab's top line); `Y =` draws a straight line
+across the whole layer at Y = 0, `X =` one at X = 0, both solid and in the axis line's colour and weight. Not
+measured: a value other than 0 (typing into the box did not take in the scripted dialog), whether the line hides
+with a hidden axis, and its order against the data.
+Sheaf: `Axis::additional_line` (`Some(value)` on the axis whose page has the box); the line is drawn with the axis
+lines in that axis' width and colour, and only when the value lies inside the other axis' range; `Opposite` on the
+Grids tab is the same setting as the opposite line of Line and Ticks. `.opj` saves warn that the line was not written.
+
 ---
 
 ### 3.8 Scale types other than linear and log10 (measured)
@@ -221,12 +233,36 @@ then the limits are rounded outwards as below.
 | Scale | Transform | Valid data | Automatic limits | Ticks |
 |---|---|---|---|---|
 | ln, log2 | ln x, log2 x | x > 0 | with `b` the base: lower = `floor(x / b^k) b^k`, `k = floor(log_b x)`; upper = next tenth of `b^k`, `k = floor(log_b x) + 1` (the same rule as log10, giving its 1..9 ticks). Data 1..9 on ln gives 0.73576..12.0513; 1..1000 gives 0.36788..1788.57; on log2 1..9 gives 0.5..11.2, 1..1000 gives 0.5..1843.2 | `inc` = 1 (step counts powers). Majors at `b^e`, `e = floor(log_b from) + j inc` (so with `inc` 2 and from 0.01 on log2: odd exponents). Labels with up to 5 decimals, trailing zeros dropped (0.36788, 2.71828, 1096.63316, 2980.95799; log2: 0.03125, 0.5, 2048). Minor ticks: the skipped powers when `inc` > 1 (none seen otherwise) |
-| reciprocal | -1/x | x > 0 | margin in the transformed value; limits rounded outwards to multiples of half the step; a lower limit of 0 becomes 1. Data 1..9 gives 1..25, inc 2; 10..100 gives 1..360, inc 20; 2..3 gives 1.75..3.25, inc 0.5. The step rule is only partly understood (our rule: nearest of 1, 2, 5 x 10^k to upper/12; fits 2 of 3) | majors at multiples of `inc` in data units; one minor tick (`minorticks` = 1) in the middle of each gap in data units |
+| reciprocal | -1/x | x > 0 | margin in the transformed value; limits rounded outwards to multiples of half the step; a lower limit of 0 becomes 1. Data 1..9 gives 1..25, inc 2; 10..100 gives 1..360, inc 20; 2..3 gives 1.75..3.25, inc 0.5. The measured increment rule and its limits are below (57 positive ranges) | majors at multiples of `inc` in data units; one minor tick (`minorticks` = 1) in the middle of each gap in data units |
 | offset reciprocal | -1/(x + 273.14) | x > -273.14 | as reciprocal. Data 0..100 gives -25..125, inc 50; 20..300 gives 0..350, inc 100; 5..40 gives 0..45, inc 10 (step: nearest of 1, 2, 5 x 10^k to span/3, fits 3 of 3) | as reciprocal |
 | probability | norminv(p/100) | 0 < p < 100 | margin in z; then the list entry at or below (above) the limit. 1..99 gives 0.1..99.9; 5..60 gives 2..70; 10..90 gives 5..95; 0.1..99.9 gives 0.01..99.99 | list 0.01, 0.1, 0.5, 1, 2, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 98, 99, 99.5, 99.9, 99.99 in percent; every `inc`-th entry counted from the first (0.01) is major, `inc` 3 by default (majors 0.01, 1, 10, 40, 70, 95, 99.5; a lower limit of 0.1 is labelled as well); the lower limit is always labelled; entries in between are minor ticks |
 | probit | norminv(p/100) + 5 | 0 < p < 100 | margin in z, then rounded to the nearest whole sd. 1..99 gives 0.135..99.865 % (probit 2..8); 5..60 gives 2.275..50 (3..5); 10..90 gives 15.87..84.13 (4..6, inside the data) | integer probits (labels 2..8), `inc` 1 sd |
 | logit | ln(p/(100-p)) | 0 < p < 100 | as probability, within 0.1..99.9. 1..99 gives 0.1..99.9; 5..60 gives 1..75 | list 0.01, 0.1, 1, 5, 10, 25, 50, 75, 90, 95, 99, 99.9, 99.99; `inc` 1 by default; with `inc` 2 the labels are 0.1, 1, 10, 50, 90, 99 |
 | Weibull | ln(-ln(1 - p/100)) | 0 < p < 100 | as probability. 1..9 gives 0.5..50; 0.1..0.9 gives 0.01..5; 5..99 gives 1..99.9 | list 0.001, 0.01, 0.1, 0.5, 1, 5, 10, 50, 90, 99, 99.9; default `inc` 2 for limits 0.5..50, 1 for 0.01..5 and 0.001..5, 3 for 1..99.9 (ours: 1 below span 10, 2 below 60, else 3) |
+
+**Reciprocal increment follow-up (Origin 2016, 2026-11-14).** Generated 101-row ramps,
+Normal rescale and 8% margin, with idle pauses and repeated-rescale controls, give the following
+empirical model. Start with the **linear** increment for the original data span (section 4,
+including its one-decade exception). Apply the margin in `-1/x` coordinates and invert to raw
+limits `a..b`. If `(b-a)/inc > 20`, replace the increment with `b/10` rounded **up** through
+`1, 2, 5` times powers of ten. Test this before rounding the limits; then round them out to
+multiples of half the final increment, replacing a nonpositive lower limit with 1.
+This is an inference from the measurements, not a documented internal Origin algorithm.
+Origin's [major-increment FAQ](https://docs.originlab.com/quick-help/why-does-major-axis-increment-not-update)
+documents a default numeric tick limit of 20; Sheaf does not expose Origin's global tick-limit setting.
+
+All 57 recorded ranges agree in increment and extent, including independent holdouts and
+promotion boundaries: 1000..1001 gives 999.75..1001.25, inc 0.5; 2..16.9 gives 1..42, inc 2,
+whereas 2..17 gives 1..42.5, inc 5; 1..12.7 gives 1..200, inc 20, whereas 1..12.8 gives
+1..250, inc 50. Preserve floating-point comparisons before nice-step rounding at decade
+boundaries (1..12 promotes to 20). Fixtures: `crates/core/tests/reciprocal_autorange.rs`;
+`crates/plot/tests/reciprocal_autorange.rs` checks resolved ticks/labels and explicit-step override.
+Raw scripts/results are local in `scratch/reciprocal-autorange` (`batch`, `settled`, `holdout`,
+`count`, `promotion`). One measured Origin case, 0.04..0.48, returned reversed limits 4..1;
+Sheaf keeps extent 1..4 and leaves direction to the explicit Reverse control. Constant data,
+projections reaching infinity, margins other than 8%, and global tick-limit overrides remain
+unmeasured; their existing fallback/parameter handling is retained. Offset reciprocal has its
+separate unchanged rule above.
 
 Implemented in `sheaf_core::scales` (transforms, limits) and `crates/plot/src/ticks_scales.rs` (ticks, labels); the
 fixtures are the tests of those two files. Not measured: minor tick counts beyond the pictures, the effect of
@@ -497,6 +533,18 @@ Validation (2026-11-14): Pillow independently decoded synthetic graph exports in
 Ctrl+J copies page (OLE), Ctrl+Alt+J copy as image, Ctrl+C copies as image by default. Size factor % of original: 100 from 2021b, 40 before, so 2016 default likely 40 [W:quick-help/export-graph-size-small]. Margin control as 9.2. 2016 ini: `AddEMFInCopyPage=1`, `AddWMFInCopyPage=1` (enhanced and Windows metafile put on clipboard) [F:Origin.ini]. View > Show Copy Page/Export Area (Ctrl+4) outlines the region.
 
 Sheaf (Edit > Copy Page, Ctrl+J, `copy_page` in `crates/app/src/app.rs`): size factor 40 % (`COPY_PAGE_SIZE_FACTOR`), margin Auto (= Border, see 9.2), 300 dpi bitmap. On Windows the bitmap (`CF_DIB`) and an enhanced metafile of the same picture (`CF_ENHMETAFILE`, from the EMF writer, same size factor and margin) go on the clipboard in one session (`crates/app/src/winclip.rs`, through the `clipboard-win` crate that eframe's clipboard already brings, plus two Win32 calls). Not done: the WMF (`AddWMFInCopyPage`), the OLE object of Ctrl+J, and "copy as image" variants. Where the metafile cannot be put (not Windows, clipboard busy) the picture goes alone through egui's image copy.
+
+
+### 9.7 Multi-page PDF (T32)
+Origin 2018b added an "Option to export multiple graphs as a single multi-page PDF file" [W:originlab.com/2018b]. It is the `multipage` variable of `expGraph` (int, default `0`): set, the graph pages chosen by `export` go "to one PDF file with multi-pages" [W:x-function/ref/expgraph]. File names index in the order of the Graph Page list.
+
+Not measured (no Origin on the macOS machine; measure on Windows with `tools/origin-ref/`): the dialog label and place of the check box, the name of the combined file, whether pages keep each graph's size or share one paper size, page order, whether `tr`/`tr1` settings apply to every page.
+
+Sheaf (`sheaf_plot::render_multipage_pdf`, `crates/plot/src/multipage.rs`):
+- One page per graph, in the order given (project order for "all graphs"). Each page is the one-page PDF export of that graph with the same size and margin settings (9.2, 9.3): its media box is the exported area, vector, text kept as text. svg2pdf converts each page to its own chunk (`to_chunk`), placed as a form XObject filling the page; fonts are embedded once per page.
+- Paper variant (`render_print_multipage_pdf`, `sheaf print`): each sheet placed by Page Setup as in 19.4, one sheet per graph.
+- Export Graphs dialog: with PDF and more than one graph, the check box "Export as multi-page PDF file" (Sheaf's label), off by default as Origin's `multipage`. One file, named from the file-name template of the first graph; the overwrite rule applies to it.
+- CLI: repeated `--graph NAME` or `--all-graphs` on `sheaf export` (output must be `.pdf` for several graphs) and `sheaf print` (`--output` writes one paper-sized PDF; submission to `lp` sends one job per graph). MCP: `export_graph` with `graphs` or `all_graphs` (docs/spec/mcp.md).
 
 ---
 
@@ -1905,8 +1953,56 @@ Raw inputs/outputs and exported pictures are in `re-workspace/scratch/t13-skip-p
 `skip*.png`; the original dialog controls (unchecked Skip Points and No Line Break for Skipped
 Point(s)) are in `re-workspace/scratch/t13/open3/droplines.controls.txt`. Native and `.opj` companion files
 preserve the frequency. `.opj` alone warns and shows every point, including for line plots with
-skipped errors but no symbols. The No Line Break / Gap to Symbol interaction remains unimplemented;
-Sheaf keeps its existing continuous full-data line. Smart Skip is not offered.
+skipped errors but no symbols. The symbol-gap interaction is described below. Smart Skip is not offered.
+
+Line + Symbol now offers **Gap to Symbol** on Line and **No Line Break for Skipped Point(s)**
+under Drop Lines. Both start unchecked in Origin 2016. No Line Break is enabled only when Gap to
+Symbol and Skip Points are enabled. With Gap to Symbol checked, the connecting line has clearance
+around every data point, including points whose symbols are skipped. Checking No Line Break keeps
+the line continuous at those skipped positions; gaps remain around displayed markers. The line
+still follows all source values, including skipped peaks and the final point without a marker;
+missing data retains its existing break. Other plot kinds ignore these saved switches.
+
+Reference: Origin 2016 GUI controls and 900-pixel PNG exports in
+`re-workspace/scratch/t13-symbol-line-gaps/`: eleven horizontal points, solid blue 20 pt square
+markers, red 3 pt line, frequency 3. `gaps_skip3.png` has ten short red fragments between the eleven
+positions; `gaps_no_break.png` instead has long continuous fragments between markers at rows
+1,4,7,10, with the line continuing to row 11. These observations agree with the published
+[Line tab](https://docs.originlab.com/origin-help/pd-dialog-line-tab/) and
+[display controls](https://docs.originlab.com/origin-help/pd-dialog-plotlevel-display-tab/).
+`gaps_zigzag.png` retains all skipped peaks. A corrected three-row diagonal control at
+(2,0.25), (6,1), (10,1.75), `clean_square.png` and `clean_circle.png`, changes the marker shape
+at the same nominal size without changing any of the 2,031 red line pixels in the plot frame.
+This supports using circular holes independent of marker shape. The earlier diagonal circle
+capture failed to activate Gap to Symbol and is excluded; the earlier square capture had extra
+rows, replaced by the verified three-row control.
+
+Sheaf removes line geometry rather than painting an opaque cover, so backgrounds, grids and fills
+remain visible through gaps, and picking uses the broken path. Mask overlays retain the same
+holes. The shared scene carries the gaps through screen, raster and vector exports. The current
+clearance uses a fixed 30% of the nominal symbol diameter, consistent with the horizontal exports.
+Origin's global symbol-diameter preference is described under
+[Options > Graph](https://docs.originlab.com/origin-help/options-dialog-graph-tab/); changing that
+global preference is not offered. Exact clearance for other preference values and unusual
+connector/marker styles is not measured. Native and companion saves retain both gap switches;
+`.opj` alone warns that symbol/line gaps were omitted.
+
+Line + Symbol also offers **Draw Line in Front** and **Draw Line Behind**. Behind is the default.
+With gaps off, Front paints the connecting line after symbols in both the data plot and legend
+sample. Gap to Symbol disables both radios and overrides the stored Front choice; the selection
+is retained while disabled. Other plot kinds ignore the saved choice. The same scene order feeds
+screen, raster and vector output. Native and companion saves retain the setting, including while
+gaps are enabled; `.opj` alone warns that draw order was omitted.
+
+Measured in Origin 2016 on 2026-11-15: three points (2,1), (6,1), (10,1), solid blue 20 pt squares
+and a red 6 pt line, 900-pixel exports. `behind_verified.png` has blue at the data marker centre
+(468,327) and legend marker centre (694,42); `front_verified.png` has red at both positions.
+The short verified probe returned success and closed with OK. The initial longer probe's valid
+`front`/`gap` control captures show Front selected and then greyed while still selected after
+enabling Gap to Symbol; its interrupted restore/OK sequence canceled, so its final `front.png`
+is excluded from Front raster evidence. Raw controls, steps and exports are under
+`re-workspace/scratch/t13-symbol-line-order/`. This agrees with the
+[documented Symbol/Line interface](https://docs.originlab.com/origin-help/pd-dialog-line-tab/).
 
 Data labels have font, size, colour, rotation, position and the forms X, Y, Row Indices and (X,Y).
 They are written a quarter of the font size from the point, numbers as the worksheet shows them (up to 15
@@ -1925,14 +2021,39 @@ unchecked (`t13/open3/label.controls.txt`). Published controls:
 [Label tab](https://docs.originlab.com/origin-help/pd-dialog-label-tab/),
 [LabTalk label switches](https://docs.originlab.com/labtalk/ref/options_for_data_plot_labels/).
 Sheaf approximates the font box using the measured text advance plus 0.05 em on each side and a
-baseline band from -0.92 to +0.23 em. Exact padding for other fonts is unmeasured; label frames,
-editable margins and leader lines remain open.
+baseline band from -0.92 to +0.23 em. Exact padding for other fonts is unmeasured.
+
+**Label Frame and Margin (Origin 2016, 2026-11-14):** the Label tab offers None (default),
+Box and Shadow, with border/fill color controls enabled for Box/Shadow and a shared margin
+in percent of font height ([documented controls](https://docs.originlab.com/origin-help/pd-dialog-label2-tab/)).
+Synthetic Arial 30 labels "12345", Center, on a gray layer/red line were exported at 900 pixels:
+Box with margin 0 is a black rectangle about 98 x 40 pixels; the initial border and fill are
+both black. At margin 20 it grows to 117 x 59 pixels. White Out is painted **after** the frame,
+clearing only the smaller white text box, so the black margin remains around it. None/margin 20
+and Box/margin 0 with White Out produce byte-identical PNGs. Shadow adds a lower-right black
+rectangle, displaced about 6-7 pixels at both Arial 15 and 30. At 45 degrees the frame is an
+axis-aligned rectangle enclosing the rotated, padded text; the shadow stays to the page's
+lower right, while White Out and text rotate together. Raw GUI steps, control dumps and PNGs:
+`re-workspace/scratch/t13-label-frame-margin/` (`box0`, `box20`, `shadow0`, `shadow20white`,
+`box0white`, `none20white`, `shadow20rot45`, `smallshadow0`).
+
+Sheaf stores `DataLabels::frame`, `margin_percent`, `frame_border` and `frame_fill` with
+backward-compatible defaults None, 0, black and black, omitted when default. The Label tab
+supports these controls, group-dependent editing and the existing Apply/Cancel/history behavior.
+Frame colors use the existing alpha-capable picker. The shared scene draws shadow, frame,
+White Out, then text; clipping, empty text, row selection and Skip Points apply to the whole label.
+The existing approximate font box is retained: margin uses 4/3 of the font size as the font height,
+calibrated to the measured Arial case; shadow is approximated by a fixed 6 pt page offset and
+the border by 0.5 pt. Exact metrics for other fonts remain unmeasured. Negative/nonfinite margin
+uses zero for drawing; margin is limited to 500%. Native and companion saves preserve all frame
+settings, including disabled labels; `.opj` alone retains its existing data-label omission warning.
+Leader lines and automatic overlap avoidance remain open.
 
 The layer Background colour fills the frame behind the grid. Sheaf's own additions
 beyond what was measured (hatch and gradient fills, bar width, label column, rows, decimals and offsets,
 background gradient and border, X/Y axes switches, page border, layer icons, comments, subgroups) are in
-section 18.6. Not done: the other fill modes, label frames, custom forms and display formats
-beyond decimals, leader lines, the No Line Break / Gap to Symbol interaction. The `.opj` writer
+section 18.6. Not done: the other fill modes, custom forms and display formats
+beyond decimals and leader lines. The `.opj` writer
 does not store these settings; the save names them and the companion file keeps them.
 
 ### 18.1 Group tab (measured 2026-11-13)
@@ -2123,10 +2244,48 @@ project file only when they differ from the default (a file written before loads
 
 ### 18.7 Not done
 
-Speed mode and X:Y ratio of Size/Speed, No Line Break for Skipped Point(s) / Gap to Symbol, frame, margin, attach-to,
+Speed mode and X:Y ratio of Size/Speed, attach-to,
 automatic overlap avoidance and leader lines of Label, the other fill modes and
 Origin's list of fill patterns, subgrouping By Column Label, Binned increments, several groups in one layer,
 writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).
+
+### 18.8 Lollipop plot (T33)
+
+Origin's documented facts (from its help, not measured; [W:origin-help/lollipop-plot],
+[W:origin-help/pd-dialog-dropline-tab]):
+
+- Plot > Basic 2D : Lollipop Plot (template `Lollipop.OTPU`, Origin 2021). It needs two or more Y
+  columns (or a range spanning two); X comes from the associated X column, else the row number or
+  sampling interval.
+- It is a variation of the vertical drop-line scatter with X and Y exchanged, with drop lines set to
+  "Next Data Plot": each plot's drop line goes to the next plot at the same X, one by one, and the
+  last Y connects back to the first.
+- Plot Details > Drop Lines tab: "Drop To" offers "Next Data Plot" (selected by default for Lollipop
+  in the Vertical group). The colour list has "Auto" (the symbol colour) and "Y Value: Plus-Minus"
+  (only for Lollipop), which colours drop lines by the sign of the Y value.
+
+Sheaf's own choices, all unmeasured (no Origin at hand):
+
+- `Template::Lollipop` ("lollipop" on the command line and in MCP, menu Plot > Symbol > Lollipop
+  Plot): scatter with the standard scatter symbol and size, vertical drop lines on, Drop To = Next
+  Data Plot. Fewer than two Y columns are refused in `Project::plot_columns` (menu message, CLI and
+  MCP error "a lollipop plot needs two or more Y columns"). `--panels` and `--y2` refuse it (a lollipop has no right Y axis; the app and MCP refuse it too).
+- Exchange X-Y: each plot's X and Y columns and the layer's two axes trade places (as Graph > Exchange
+  X-Y Axes does), so the drop lines run sideways along the value axis. Plots without an X column
+  (row number) cannot be exchanged in the model; they stay upright. Each plot keeps its Y column's
+  name in the legend; the axis titles follow the traded columns (the first plot's name on the value axis).
+- Drop To has two settings, Axis (default, the older behaviour) and Next Data Plot, one per group
+  (Horizontal, Vertical); both groups use the same segment rule when set to Next Data Plot.
+- Next Data Plot: plot k draws from each of its points to the point of plot k+1 of the layer at the same
+  row; the last plot draws back to the first. With exactly two plots only the first draws (no segment twice);
+  one plot draws none. A row where either end is missing, NaN, masked or outside the axis range gives no segment.
+- "Y Value: Plus-Minus": two fixed colours, blue (0, 114, 178) for zero and above and vermilion (213, 94, 0)
+  for negative, per segment, only when the colour is Auto. For a drop to the axis the sign is that of the plotted Y;
+  for a drop to the next plot it is the sign of the start point's value along the direction the segment runs
+  (the horizontal value in an exchanged lollipop). The list offers it when Drop To is Next Data Plot or it is set.
+- Stroke width and style are the Drop Lines defaults (0.5 pt, solid). `.opj` cannot hold either new setting; a save
+  warning names them and the `.opj.sheaf` companion keeps them. Files without the new fields load as Axis / Auto and
+  are written back without them.
 
 ## 19. Printing (File > Print, Print Preview, Page Setup; T27)
 

@@ -119,7 +119,7 @@ pub fn import_files(project: &mut Project, req: &ImportRequest) -> Result<Import
         file_name_in_comments: req.file_name_comments,
         partial_except_first: req.partial_except_first,
     };
-    let result = sheaf_io::batch::import_batch(project, &data_files, &opts);
+    let result = sheaf_io::batch::import_batch_with_excel(project, &data_files, &opts, &req.read.excel_options());
     let mut plotted = std::collections::HashSet::new();
     for item in &result.items {
         let name = project.workbook(item.book).map(|b| b.name.clone()).unwrap_or_default();

@@ -1,6 +1,9 @@
 # T23: Data Manipulation tools and Median Filter
 
-**Status:** done, merged (`f66dbea`), built on macOS without Origin. The four menu items
+**Status:** done, merged (`f66dbea`), built on macOS without Origin. Median Filter measured on Windows
+(2026-11-15, analysis-tools.md 12.3) as Origin's percentile filter at 50 %: even windows act like the next odd
+one, and reflect mirrors without the first point at the start and with the last at the end (Smooth's percentile
+filter corrected the same way). The four menu items
 (and Curve Translate Y, Sheaf's own, next to X) open working dialogs, run as tools of the shared analysis
 frame with Recalculate Manual/Auto, and have `sheaf analyze` subcommands. Every Origin behaviour that is
 not in an earlier spec table is from Origin's public documentation, paraphrased, and is not measured; each

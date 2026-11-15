@@ -386,44 +386,20 @@ impl ImportDialog {
 
     /// Import Mode: where the data goes, and the graph made after the import.
     fn import_mode_page(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.label("Import Mode");
-            egui::ComboBox::from_id_salt("import_mode").selected_text(self.mode.label()).show_ui(ui, |ui| {
-                for m in ImportMode::ALL {
-                    let usable = m == ImportMode::NewBook || self.target.is_some();
-                    ui.add_enabled_ui(usable, |ui| {
-                        ui.selectable_value(&mut self.mode, m, m.label());
-                    });
-                }
-            });
-        });
-        match (&self.target, self.mode) {
-            (Some(t), m) if m != ImportMode::NewBook => {
-                ui.weak(format!("Active sheet: {t}"));
-            }
-            (None, _) => {
-                ui.weak("Open or select a workbook to add to its sheets.");
-            }
-            _ => {}
-        }
-        ui.add_space(6.0);
-        ui.checkbox(&mut self.plot, "Make a graph of each file");
-        ui.add_enabled_ui(self.plot, |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Template");
-                let suggested = match &self.preview {
-                    Some(Ok(p)) => format!("Suggested ({})", p.suggested_template.label()),
-                    _ => "Suggested".to_string(),
-                };
-                let text = self.template.map(|t| t.label().to_string()).unwrap_or_else(|| suggested.clone());
-                egui::ComboBox::from_id_salt("import_template").selected_text(text).show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.template, None, suggested);
-                    for t in Template::ALL {
-                        ui.selectable_value(&mut self.template, Some(t), t.label());
-                    }
-                });
-            });
-        });
+        let suggested = match &self.preview {
+            Some(Ok(p)) => format!("Suggested ({})", p.suggested_template.label()),
+            _ => "Suggested".to_string(),
+        };
+        mode_and_graph_controls(
+            ui,
+            ModeControls {
+                mode: &mut self.mode,
+                target: self.target.as_deref(),
+                plot: &mut self.plot,
+                template: &mut self.template,
+                suggested,
+            },
+        );
     }
 
     /// (Re)Naming Worksheet and Workbook: whether the imported sheet and book are named from the
@@ -582,31 +558,17 @@ impl ImportDialog {
                 }
             }
             if page == ImportPage::HeaderLines {
-                ui.label("Lines before the data");
-                optional_line(ui, &mut o.header_lines, detected.as_ref().map(|d| d.header_lines), "none");
-                ui.end_row();
-                ui.label("Line with the names");
-                optional_line(ui, &mut o.long_name_line, detected.as_ref().map(|d| d.long_name_line), "none");
-                ui.end_row();
-                ui.label("Line with the units");
-                optional_line(ui, &mut o.units_line, detected.as_ref().map(|d| d.units_line), "none");
-                ui.end_row();
-                ui.label("Line with comments");
-                optional_line(ui, &mut o.comments_line, detected.as_ref().map(|d| d.comments_line), "none");
-                ui.end_row();
-                ui.label("Line with the short names");
-                let mut line = o.short_name_line;
-                if ui
-                    .add(
-                        DragValue::new(&mut line)
-                            .range(0..=100_000)
-                            .custom_formatter(|v, _| if v == 0.0 { "none".to_string() } else { format!("{v}") }),
-                    )
-                    .changed()
-                {
-                    o.short_name_line = line;
-                }
-                ui.end_row();
+                header_line_rows(
+                    ui,
+                    HeaderLines {
+                        header_lines: &mut o.header_lines,
+                        long_name_line: &mut o.long_name_line,
+                        units_line: &mut o.units_line,
+                        comments_line: &mut o.comments_line,
+                        short_name_line: &mut o.short_name_line,
+                    },
+                    detected.as_ref().map(|d| [d.header_lines, d.long_name_line, d.units_line, d.comments_line]),
+                );
             }
             if page == ImportPage::ColumnDesignation {
                 ui.label("Columns");
@@ -617,21 +579,7 @@ impl ImportDialog {
                 ui.label("Apply selection");
                 ui.checkbox(&mut self.partial_except_first, "All files except first");
                 ui.end_row();
-                ui.label("Skip data rows");
-                ui.add(DragValue::new(&mut o.skip_rows).range(0..=usize::MAX));
-                ui.end_row();
-                for (axis, selection) in [("row", &mut o.rows), ("column", &mut o.columns)] {
-                    for (label, value, min) in [
-                        (format!("First {axis}"), &mut selection.first, 1),
-                        (format!("Last {axis} (0 = end)"), &mut selection.last, 0),
-                        (format!("Read {axis}s"), &mut selection.read, 1),
-                        (format!("Skip {axis}s in pattern"), &mut selection.skip, 0),
-                    ] {
-                        let name = ui.label(label);
-                        ui.add(DragValue::new(value).range(min..=usize::MAX)).labelled_by(name.id);
-                        ui.end_row();
-                    }
-                }
+                selection_rows(ui, &mut o.skip_rows, &mut o.rows, &mut o.columns);
             }
             if page == ImportPage::Miscellaneous {
                 ui.label("Numbers");
@@ -742,6 +690,122 @@ impl ImportDialog {
                 });
         });
     }
+}
+
+/// The header-line options that the ASCII and the Excel import share.
+pub(super) struct HeaderLines<'a> {
+    pub header_lines: &'a mut Option<usize>,
+    pub long_name_line: &'a mut Option<usize>,
+    pub units_line: &'a mut Option<usize>,
+    pub comments_line: &'a mut Option<usize>,
+    pub short_name_line: &'a mut usize,
+}
+
+/// The rows of the Header Lines page (inside a two-column grid): header lines, then the lines with
+/// the names, units, comments and short names. `detected` is what detection found for these
+/// four, in that order.
+pub(super) fn header_line_rows(ui: &mut egui::Ui, o: HeaderLines<'_>, detected: Option<[usize; 4]>) {
+    let found = |i: usize| detected.map(|d| d[i]);
+    ui.label("Lines before the data");
+    optional_line(ui, o.header_lines, found(0), "none");
+    ui.end_row();
+    ui.label("Line with the names");
+    optional_line(ui, o.long_name_line, found(1), "none");
+    ui.end_row();
+    ui.label("Line with the units");
+    optional_line(ui, o.units_line, found(2), "none");
+    ui.end_row();
+    ui.label("Line with comments");
+    optional_line(ui, o.comments_line, found(3), "none");
+    ui.end_row();
+    ui.label("Line with the short names");
+    let mut line = *o.short_name_line;
+    if ui
+        .add(
+            DragValue::new(&mut line)
+                .range(0..=100_000)
+                .custom_formatter(|v, _| if v == 0.0 { "none".to_string() } else { format!("{v}") }),
+        )
+        .changed()
+    {
+        *o.short_name_line = line;
+    }
+    ui.end_row();
+}
+
+/// The rows of the Partial Import page that both imports have (inside a two-column grid): rows to
+/// skip, and the row and column selections.
+pub(super) fn selection_rows(
+    ui: &mut egui::Ui,
+    skip_rows: &mut usize,
+    rows: &mut sheaf_io::ascii::ImportSelection,
+    columns: &mut sheaf_io::ascii::ImportSelection,
+) {
+    ui.label("Skip data rows");
+    ui.add(DragValue::new(skip_rows).range(0..=usize::MAX));
+    ui.end_row();
+    for (axis, selection) in [("row", rows), ("column", columns)] {
+        for (label, value, min) in [
+            (format!("First {axis}"), &mut selection.first, 1),
+            (format!("Last {axis} (0 = end)"), &mut selection.last, 0),
+            (format!("Read {axis}s"), &mut selection.read, 1),
+            (format!("Skip {axis}s in pattern"), &mut selection.skip, 0),
+        ] {
+            let name = ui.label(label);
+            ui.add(DragValue::new(value).range(min..=usize::MAX)).labelled_by(name.id);
+            ui.end_row();
+        }
+    }
+}
+
+/// What the Import Mode page changes.
+pub(super) struct ModeControls<'a> {
+    pub mode: &'a mut ImportMode,
+    /// Name of the active sheet, when there is one to put data into.
+    pub target: Option<&'a str>,
+    pub plot: &'a mut bool,
+    pub template: &'a mut Option<Template>,
+    /// The text of the "use what the importer suggests" entry of the template list.
+    pub suggested: String,
+}
+
+/// The Import Mode page: where the data goes, and the graph made after the import.
+pub(super) fn mode_and_graph_controls(ui: &mut egui::Ui, c: ModeControls<'_>) {
+    let ModeControls { mode, target, plot, template, suggested } = c;
+    ui.horizontal(|ui| {
+        ui.label("Import Mode");
+        egui::ComboBox::from_id_salt("import_mode").selected_text(mode.label()).show_ui(ui, |ui| {
+            for m in ImportMode::ALL {
+                let usable = m == ImportMode::NewBook || target.is_some();
+                ui.add_enabled_ui(usable, |ui| {
+                    ui.selectable_value(mode, m, m.label());
+                });
+            }
+        });
+    });
+    match (target, *mode) {
+        (Some(t), m) if m != ImportMode::NewBook => {
+            ui.weak(format!("Active sheet: {t}"));
+        }
+        (None, _) => {
+            ui.weak("Open or select a workbook to add to its sheets.");
+        }
+        _ => {}
+    }
+    ui.add_space(6.0);
+    ui.checkbox(plot, "Make a graph of each file");
+    ui.add_enabled_ui(*plot, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Template");
+            let text = template.map(|t| t.label().to_string()).unwrap_or_else(|| suggested.clone());
+            egui::ComboBox::from_id_salt("import_template").selected_text(text).show_ui(ui, |ui| {
+                ui.selectable_value(template, None, suggested);
+                for t in Template::ALL {
+                    ui.selectable_value(template, Some(t), t.label());
+                }
+            });
+        });
+    });
 }
 
 /// A line number that is either detected or typed; 0 means "there is none".

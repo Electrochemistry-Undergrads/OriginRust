@@ -6,6 +6,11 @@ Update the relevant brief/spec when resolving one; the historical snapshot is in
 
 ## Integration after the archived snapshot
 
+- T52 slope annotation (2026-11-15, macOS, no Origin): Tools toolbar "Slope" picks two points of one plot
+  (Data Reader snapping); a segment, dashed rise/run legs and "slope = ..." linked to those rows and the plot's
+  X/Y columns; per decade on log axes (Tafel), units from the drawn axes' columns; follows moved plots;
+  Delete/undo, properties dialog, `sheaf plot --slope A,B`, MCP `style.slope` (graphing.md 17.6, unmeasured).
+
 - T02 Column Browser row ranges (2026-11-15, Windows, feature `d9b4af7`): the lower Rows
   control opens Range with Entire Column(s), From and To. Each added range keeps its own
   bounds, including after removal of a preceding range. Native integer-prefix conversion,

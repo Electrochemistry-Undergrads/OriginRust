@@ -244,6 +244,13 @@ pub enum Cmd {
     DataTool(DataTool),
     /// The Text tool of the Tools toolbar.
     TextTool,
+    /// The Slope tool of the Tools toolbar.
+    SlopeTool,
+    /// Properties of a slope annotation.
+    EditSlope {
+        layer: usize,
+        slope: usize,
+    },
     /// A drawing tool of the Tools toolbar.
     ShapeTool(sheaf_core::shape::ShapeKind),
     /// Properties of a drawn object.
@@ -1808,6 +1815,15 @@ pub fn graph_shape_menu(layer: usize, shape: usize) -> Vec<Entry> {
     ]
 }
 
+/// The menu of a slope annotation.
+pub fn graph_slope_menu(layer: usize, slope: usize) -> Vec<Entry> {
+    vec![
+        keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteSlope { layer, slope })),
+        sep(),
+        item("Properties...", Cmd::EditSlope { layer, slope }),
+    ]
+}
+
 /// The menu of the legend.
 pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
     vec![
@@ -2318,6 +2334,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::DataTool(tool) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Data(*tool) },
         Cmd::TextTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Text },
         Cmd::ShapeTool(kind) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Draw(*kind) },
+        Cmd::SlopeTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Slope },
+        Cmd::EditSlope { layer, slope } => {
+            Action::EditSlope { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, slope: *slope }
+        }
         Cmd::EditShape { layer, shape } => {
             Action::EditShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape }
         }

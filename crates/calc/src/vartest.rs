@@ -2,22 +2,18 @@
 //! Variance (`vartest1`), Two-Sample Test for Variance (`vartest2`), One-Sample Test for Proportion and
 //! Two-Sample Test for Proportions.
 //!
-//! NOT YET MEASURED AGAINST ORIGIN (written on 2026-11-14 in a session that could neither build nor run
-//! Origin; see docs/tasks/T26-variance-proportion-tests.md). The formulas are the textbook ones:
+//! Measured against OriginPro 2016 (docs/spec/statistics.md, section 17; fixtures in
+//! `tests/origin_vartest.rs`). What Origin does, as far as these functions copy it:
 //!
-//! - one sample, variance: `chi2 = (n - 1) s^2 / sigma0^2` with `n - 1` degrees of freedom; the interval of
-//!   the variance is `[(n - 1) s^2 / chi2(1 - a/2), (n - 1) s^2 / chi2(a/2)]`;
-//! - two samples, variance: `F = (s1^2 / s2^2) / ratio0` with `(n1 - 1, n2 - 1)` degrees of freedom; the
-//!   interval of the ratio is `[r / F(1 - a/2), r / F(a/2)]`;
-//! - a two-sided p-value of these asymmetric statistics is `2 min(P(X <= x), P(X >= x))`, at most 1;
-//! - one proportion: `z = (x - n p0) / sqrt(n p0 (1 - p0))`, the exact binomial p-value (two-sided: the
-//!   probability of every count no more likely than the observed one, as R's `binom.test`), the Wald
-//!   interval `p +- z sqrt(p (1 - p) / n)` and the Clopper-Pearson (exact) interval;
-//! - two proportions: `z = (p1 - p2 - d0) / se`, `se` from the pooled proportion (only when `d0 = 0`) or
-//!   from the two separate ones, Fisher's exact p-value of the 2 x 2 table, the Wald interval of `p1 - p2`.
-//!
-//! As in [`crate::hypothesis`], a one-sided test gives the interval of level `1 - 2 alpha` (Origin's rule
-//! for `ttest1`, assumed here until measured).
+//! - one sample, variance: `chi2 = (n - 1) s^2 / sigma0^2` with `n - 1` degrees of freedom; the interval is
+//!   that of the variance, `[(n - 1) s^2 / chi2(1 - a/2), (n - 1) s^2 / chi2(a/2)]`;
+//! - two samples, variance: `F = (s1^2 / s2^2) / ratio0` ... the interval is that of the ratio of the
+//!   variances, `[r / F(1 - a/2), r / F(a/2)]`;
+//! - the two-sided p-value of these asymmetric statistics is `2 min(P(X <= x), P(X >= x))`;
+//! - a one-sided variance test reports the interval of level `1 - 2 alpha` (both limits), as `ttest1`;
+//! - one proportion: see [`proportion_one`] (normal approximation with the quirk that z is 0 below `n p0`,
+//!   exact binomial test, Wald and Clopper-Pearson intervals);
+//! - two proportions: see [`proportion_two`].
 
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal};
 use statrs::function::beta::beta_reg;
@@ -68,26 +64,44 @@ fn p_of(below: f64, above: f64, tail: Tail) -> f64 {
     }
 }
 
-fn alpha_ok(alpha: f64) -> bool {
-    alpha > 0.0 && alpha < 0.5
+/// Origin accepted every significance level below 1 for the two-sided variance tests (0.6 gave the 40 %
+/// interval); a one-sided test needs a level `1 - 2 alpha` above 0, so `alpha < 0.5`.
+fn alpha_ok(alpha: f64, tail: Tail) -> bool {
+    alpha > 0.0 && alpha < if tail == Tail::Two { 1.0 } else { 0.5 }
 }
 
 /// One-sample chi-square test of the variance of `data` against `var0`. NaN entries are ignored. Needs at
-/// least two numbers, `var0 > 0` and `0 < alpha < 0.5`.
+/// least two numbers and `var0 > 0`. A sample without spread gives chi-square 0, 0 degrees of freedom, p 0 and
+/// no interval (Origin's `vartest1` did exactly that and left the limits unset).
 pub fn vartest_one(data: &[f64], var0: f64, tail: Tail, alpha: f64) -> Option<VarTest> {
     let s = SampleStats::of(data);
-    if s.n < 2 || !(var0 > 0.0 && var0.is_finite()) || !alpha_ok(alpha) {
+    if s.n < 2 || !(var0 > 0.0 && var0.is_finite()) || !alpha_ok(alpha, tail) {
         return None;
     }
-    let df = s.n as f64 - 1.0;
+    let level = level_of(tail, alpha);
     let var = s.sd * s.sd;
+    if var == 0.0 {
+        return Some(VarTest {
+            samples: vec![s],
+            estimate: 0.0,
+            hypothesized: var0,
+            statistic: 0.0,
+            df: (0.0, f64::NAN),
+            p: 0.0,
+            lcl: f64::NAN,
+            ucl: f64::NAN,
+            level,
+            tail,
+            alpha,
+        });
+    }
+    let df = s.n as f64 - 1.0;
     let chi = df * var / var0;
     if !chi.is_finite() {
         return None;
     }
     let dist = ChiSquared::new(df).ok()?;
     let p = p_of(dist.cdf(chi), dist.sf(chi), tail);
-    let level = level_of(tail, alpha);
     let half = (1.0 - level) / 2.0;
     let (lcl, ucl) = (df * var / dist.inverse_cdf(1.0 - half), df * var / dist.inverse_cdf(half));
     Some(VarTest {
@@ -105,30 +119,24 @@ pub fn vartest_one(data: &[f64], var0: f64, tail: Tail, alpha: f64) -> Option<Va
     })
 }
 
-/// Two-sample F test of `var(a) / var(b)` against `ratio0` (1 tests equal variances). NaN entries are
-/// ignored. Needs two numbers in each sample, a second sample with some spread, `ratio0 > 0` and
-/// `0 < alpha < 0.5`.
+/// Two-sample F test of `var(a) / var(b)` against `ratio0` (Origin's dialog only tests 1, equal variances).
+/// NaN entries are ignored. Needs two numbers in each sample and `ratio0 > 0`. A flat first sample gives a
+/// ratio of 0 and a flat second one an infinite ratio; Origin left the statistic and p-value unset then and
+/// reported the limits 0 and 0 (first flat) or infinity and infinity (second flat), as here (NaN).
 pub fn vartest_two(a: &[f64], b: &[f64], ratio0: f64, tail: Tail, alpha: f64) -> Option<VarTest> {
     let (s1, s2) = (SampleStats::of(a), SampleStats::of(b));
-    if s1.n < 2 || s2.n < 2 || !(ratio0 > 0.0 && ratio0.is_finite()) || !alpha_ok(alpha) {
+    if s1.n < 2 || s2.n < 2 || !(ratio0 > 0.0 && ratio0.is_finite()) || !alpha_ok(alpha, tail) {
         return None;
     }
     let (df1, df2) = (s1.n as f64 - 1.0, s2.n as f64 - 1.0);
-    let ratio = (s1.sd * s1.sd) / (s2.sd * s2.sd);
-    let f = ratio / ratio0;
-    if !f.is_finite() {
-        return None;
-    }
-    let dist = FisherSnedecor::new(df1, df2).ok()?;
-    let p = p_of(dist.cdf(f), dist.sf(f), tail);
+    let (v1, v2) = (s1.sd * s1.sd, s2.sd * s2.sd);
+    let ratio = v1 / v2;
     let level = level_of(tail, alpha);
-    let half = (1.0 - level) / 2.0;
-    let (lcl, ucl) = (ratio / dist.inverse_cdf(1.0 - half), ratio / dist.inverse_cdf(half));
-    Some(VarTest {
+    let make = |statistic, p, lcl, ucl| VarTest {
         samples: vec![s1, s2],
         estimate: ratio,
         hypothesized: ratio0,
-        statistic: f,
+        statistic,
         df: (df1, df2),
         p,
         lcl,
@@ -136,33 +144,78 @@ pub fn vartest_two(a: &[f64], b: &[f64], ratio0: f64, tail: Tail, alpha: f64) ->
         level,
         tail,
         alpha,
-    })
+    };
+    if v2 == 0.0 {
+        return (v1 > 0.0).then(|| make(f64::NAN, f64::NAN, f64::INFINITY, f64::INFINITY));
+    }
+    if v1 == 0.0 {
+        return Some(make(f64::NAN, f64::NAN, 0.0, 0.0));
+    }
+    let f = ratio / ratio0;
+    let dist = FisherSnedecor::new(df1, df2).ok()?;
+    let p = p_of(dist.cdf(f), dist.sf(f), tail);
+    let half = (1.0 - level) / 2.0;
+    Some(make(f, p, ratio / dist.inverse_cdf(1.0 - half), ratio / dist.inverse_cdf(half)))
 }
 
-/// What a test of one proportion, or of the difference of two, reports. Both the normal-approximation
-/// and the exact p-value are given; which of them Origin shows by default is still to be measured.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ProportionTest {
-    /// Successes and trials of each sample (one or two).
-    pub successes: Vec<u64>,
-    pub trials: Vec<u64>,
-    /// The sample proportion `x / n`, or the difference `x1 / n1 - x2 / n2`.
+/// The confidence interval of a variance (`n` numbers, sample variance `var`) as Origin's dialog reports it:
+/// two-sided `[(n - 1) var / chi2(1 - a/2), (n - 1) var / chi2(a/2)]` with `a = 1 - level`; for the upper-tailed
+/// test only a lower limit `(n - 1) var / chi2(level)` (the upper one is NaN, Origin printed "--"); for the
+/// lower-tailed test only an upper limit `(n - 1) var / chi2(1 - level)` and the lower limit 0. (The X-function
+/// `vartest1` instead gives the two-sided interval of level `1 - 2 alpha` for a one-sided test; that is
+/// [`VarTest::lcl`].) NaN where the sample has no spread.
+pub fn variance_interval(n: usize, var: f64, tail: Tail, level: f64) -> (f64, f64) {
+    if n < 2 || !(var > 0.0) || !(level > 0.0 && level < 1.0) {
+        return (f64::NAN, f64::NAN);
+    }
+    let df = n as f64 - 1.0;
+    let Ok(dist) = ChiSquared::new(df) else { return (f64::NAN, f64::NAN) };
+    let a = 1.0 - level;
+    match tail {
+        Tail::Two => (df * var / dist.inverse_cdf(1.0 - a / 2.0), df * var / dist.inverse_cdf(a / 2.0)),
+        Tail::Upper => (df * var / dist.inverse_cdf(level), f64::NAN),
+        Tail::Lower => (0.0, df * var / dist.inverse_cdf(a)),
+    }
+}
+
+/// The confidence interval of the ratio of two variances `ratio = var1 / var2` (samples of `n1` and `n2`
+/// numbers), one-sided in the way of [`variance_interval`]: two-sided `[r / F(1 - a/2), r / F(a/2)]`, upper
+/// `[r / F(level), NaN]`, lower `[0, r / F(1 - level)]`.
+pub fn ratio_interval(n1: usize, n2: usize, ratio: f64, tail: Tail, level: f64) -> (f64, f64) {
+    if n1 < 2 || n2 < 2 || !(ratio > 0.0 && ratio.is_finite()) || !(level > 0.0 && level < 1.0) {
+        return (f64::NAN, f64::NAN);
+    }
+    let Ok(dist) = FisherSnedecor::new(n1 as f64 - 1.0, n2 as f64 - 1.0) else { return (f64::NAN, f64::NAN) };
+    let a = 1.0 - level;
+    match tail {
+        Tail::Two => (ratio / dist.inverse_cdf(1.0 - a / 2.0), ratio / dist.inverse_cdf(a / 2.0)),
+        Tail::Upper => (ratio / dist.inverse_cdf(level), f64::NAN),
+        Tail::Lower => (0.0, ratio / dist.inverse_cdf(a)),
+    }
+}
+
+/// What the test of one proportion reports (Origin's two sections: normal approximation and binomial test).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OneProportion {
+    pub successes: u64,
+    pub trials: u64,
+    /// The sample proportion `x / n`.
     pub estimate: f64,
-    /// The hypothesized proportion, or the hypothesized difference.
     pub hypothesized: f64,
-    /// Normal approximation: the z statistic and its p-value.
+    /// Normal approximation: `(x - n p0) / sqrt(n p0 (1 - p0))`, but 0 when `x < n p0` (Origin's numbers;
+    /// see the spec), and its p-value (two-sided `2 (1 - Phi(z))`, upper `1 - Phi(z)`, lower `Phi(z)`).
     pub z: f64,
     pub p_normal: f64,
-    /// The exact p-value: binomial (one sample) or Fisher's (two samples; `None` where the 2 x 2 table has an
-    /// empty margin, or the hypothesized difference is not 0).
-    pub p_exact: Option<f64>,
-    /// Wald interval of the estimate.
-    pub wald: (f64, f64),
-    /// Clopper-Pearson interval of the proportion (one sample only).
-    pub exact_interval: Option<(f64, f64)>,
-    pub level: f64,
+    /// Exact binomial p-value (two-sided: the sum of the probabilities of every count no more likely than the
+    /// observed one).
+    pub p_exact: f64,
     pub tail: Tail,
-    pub alpha: f64,
+}
+
+/// Origin shows a warning under the normal approximation when fewer than 10 successes or fewer than 10 failures
+/// were seen.
+pub fn normal_approximation_doubtful(successes: u64, trials: u64) -> bool {
+    successes < 10 || trials.saturating_sub(successes) < 10
 }
 
 fn std_normal() -> Normal {
@@ -212,103 +265,78 @@ fn solve_increasing(f: impl Fn(f64) -> f64, target: f64) -> f64 {
     0.5 * (lo + hi)
 }
 
-/// Clopper-Pearson interval of `x / n` at confidence level `level`.
-fn clopper_pearson(x: u64, n: u64, level: f64) -> (f64, f64) {
-    let half = (1.0 - level) / 2.0;
+/// Lower limit of the Clopper-Pearson interval of `x / n` with `a` in each tail.
+fn cp_lower(x: u64, n: u64, a: f64) -> f64 {
+    if x == 0 {
+        return 0.0;
+    }
     let (xf, nf) = (x as f64, n as f64);
-    // P(X >= x | p) = I_p(x, n - x + 1) grows with p; the lower limit is where it reaches `half`.
-    let lower = if x == 0 { 0.0 } else { solve_increasing(|p| beta_reg(xf, nf - xf + 1.0, p), half) };
-    // P(X <= x | p) = 1 - I_p(x + 1, n - x) falls with p; the upper limit is where it falls to `half`.
-    let upper = if x == n { 1.0 } else { solve_increasing(|p| beta_reg(xf + 1.0, nf - xf, p), 1.0 - half) };
-    (lower, upper)
+    // P(X >= x | p) = I_p(x, n - x + 1) grows with p; the limit is where it reaches `a`.
+    solve_increasing(|p| beta_reg(xf, nf - xf + 1.0, p), a)
 }
 
-/// Test of the proportion of `successes` in `trials` against `p0`. No successes and all successes are
-/// allowed; needs `trials > 0`, `successes <= trials`, `0 < p0 < 1` and `0 < alpha < 0.5`.
-pub fn proportion_one(successes: u64, trials: u64, p0: f64, tail: Tail, alpha: f64) -> Option<ProportionTest> {
-    if trials == 0 || successes > trials || !(p0 > 0.0 && p0 < 1.0) || !alpha_ok(alpha) {
+/// Upper limit of the Clopper-Pearson interval of `x / n` with `a` in the tail.
+fn cp_upper(x: u64, n: u64, a: f64) -> f64 {
+    if x == n {
+        return 1.0;
+    }
+    let (xf, nf) = (x as f64, n as f64);
+    // P(X <= x | p) = 1 - I_p(x + 1, n - x) falls with p; the limit is where it falls to `a`.
+    solve_increasing(|p| beta_reg(xf + 1.0, nf - xf, p), 1.0 - a)
+}
+
+/// Test of the proportion of `successes` in `trials` against `p0`. Needs `trials > 0`, `successes <= trials`
+/// and `0 < p0 < 1`.
+pub fn proportion_one(successes: u64, trials: u64, p0: f64, tail: Tail) -> Option<OneProportion> {
+    if trials == 0 || successes > trials || !(p0 > 0.0 && p0 < 1.0) {
         return None;
     }
     let (x, n) = (successes as f64, trials as f64);
-    let phat = x / n;
-    let z = (x - n * p0) / (n * p0 * (1.0 - p0)).sqrt();
-    let level = level_of(tail, alpha);
-    let crit = std_normal().inverse_cdf(1.0 - (1.0 - level) / 2.0);
-    let half_width = crit * (phat * (1.0 - phat) / n).sqrt();
-    Some(ProportionTest {
-        successes: vec![successes],
-        trials: vec![trials],
-        estimate: phat,
+    let z = ((x - n * p0) / (n * p0 * (1.0 - p0)).sqrt()).max(0.0);
+    Some(OneProportion {
+        successes,
+        trials,
+        estimate: x / n,
         hypothesized: p0,
         z,
         p_normal: z_p(z, tail),
-        p_exact: Some(binomial_p(successes, trials, p0, tail)),
-        wald: (phat - half_width, phat + half_width),
-        exact_interval: Some(clopper_pearson(successes, trials, level)),
-        level,
+        p_exact: binomial_p(successes, trials, p0, tail),
         tail,
-        alpha,
     })
 }
 
-/// Test of `x1 / n1 - x2 / n2` against `diff0`, each sample given as `(successes, trials)`. With `pooled`
-/// (and `diff0 = 0`) the standard error of the z statistic comes from the pooled proportion
-/// `(x1 + x2) / (n1 + n2)`; otherwise from the two separate proportions. The Wald interval always uses the
-/// separate proportions.
-pub fn proportion_two(
-    first: (u64, u64),
-    second: (u64, u64),
-    diff0: f64,
-    pooled: bool,
-    tail: Tail,
-    alpha: f64,
-) -> Option<ProportionTest> {
-    let ((x1, n1), (x2, n2)) = (first, second);
-    if n1 == 0 || n2 == 0 || x1 > n1 || x2 > n2 || !(diff0 > -1.0 && diff0 < 1.0) || !alpha_ok(alpha) {
-        return None;
+/// The Wald (normal approximation) interval `p +- z sqrt(p (1 - p) / n)` of the confidence level `level`
+/// (0 to 1), cut to `[0, 1]`. One-sided: the upper-tailed test gives `[lower, 1]` and the lower-tailed test
+/// `[0, upper]`, each with the whole `1 - level` in its one tail (so the 95 % limit of a one-sided test is the
+/// 90 % two-sided one only in name: it is 1.645 standard errors from the estimate).
+pub fn wald_interval(successes: u64, trials: u64, tail: Tail, level: f64) -> (f64, f64) {
+    let p = successes as f64 / trials as f64;
+    let half_tail = if tail == Tail::Two { (1.0 - level) / 2.0 } else { 1.0 - level };
+    let width = std_normal().inverse_cdf(1.0 - half_tail) * (p * (1.0 - p) / trials as f64).sqrt();
+    match tail {
+        Tail::Two => ((p - width).max(0.0), (p + width).min(1.0)),
+        Tail::Upper => ((p - width).max(0.0), 1.0),
+        Tail::Lower => (0.0, (p + width).min(1.0)),
     }
-    let (p1, p2) = (x1 as f64 / n1 as f64, x2 as f64 / n2 as f64);
-    let (m1, m2) = (n1 as f64, n2 as f64);
-    let separate = (p1 * (1.0 - p1) / m1 + p2 * (1.0 - p2) / m2).sqrt();
-    let se = if pooled && diff0 == 0.0 {
-        let pp = (x1 + x2) as f64 / (m1 + m2);
-        (pp * (1.0 - pp) * (1.0 / m1 + 1.0 / m2)).sqrt()
-    } else {
-        separate
-    };
-    let z = (p1 - p2 - diff0) / se;
-    if z.is_nan() {
-        return None;
+}
+
+/// The Clopper-Pearson (exact binomial) interval of the confidence level `level`, one-sided as for
+/// [`wald_interval`]. The two-sided interval of all successes has no upper limit and of no successes no lower
+/// limit (NaN; Origin printed "--" for the first, the second was not measured: its dialog does not accept 0
+/// successes).
+pub fn exact_interval(successes: u64, trials: u64, tail: Tail, level: f64) -> (f64, f64) {
+    let (x, n) = (successes, trials);
+    match tail {
+        Tail::Two => {
+            let a = (1.0 - level) / 2.0;
+            (
+                if x == 0 { f64::NAN } else { cp_lower(x, n, a) },
+                if x == n { f64::NAN } else { cp_upper(x, n, a) },
+            )
+        }
+        Tail::Upper => (cp_lower(x, n, 1.0 - level), 1.0),
+        Tail::Lower => (0.0, cp_upper(x, n, 1.0 - level)),
     }
-    let level = level_of(tail, alpha);
-    let crit = std_normal().inverse_cdf(1.0 - (1.0 - level) / 2.0);
-    let p_exact = if diff0 == 0.0 {
-        Crosstab::new(vec![vec![x1 as usize, (n1 - x1) as usize], vec![x2 as usize, (n2 - x2) as usize]])
-            .ok()
-            .and_then(|t| t.fisher())
-            .map(|f| match tail {
-                Tail::Two => f.p_two_sided,
-                Tail::Upper => f.p_greater,
-                Tail::Lower => f.p_less,
-            })
-    } else {
-        None
-    };
-    let d = p1 - p2;
-    Some(ProportionTest {
-        successes: vec![x1, x2],
-        trials: vec![n1, n2],
-        estimate: d,
-        hypothesized: diff0,
-        z,
-        p_normal: z_p(z, tail),
-        p_exact,
-        wald: (d - crit * separate, d + crit * separate),
-        exact_interval: None,
-        level,
-        tail,
-        alpha,
-    })
 }
 
 #[cfg(test)]

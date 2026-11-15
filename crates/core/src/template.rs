@@ -579,6 +579,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             },
             labels: Vec::new(),
             shapes: Vec::new(),
+            slopes: Vec::new(),
             palette,
             default_line: LineStyle::solid(Color::BLACK, 0.5),
             default_symbol: SymbolStyle {
@@ -842,6 +843,7 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
     l.plots.clear();
     l.labels.clear();
     l.shapes.clear();
+    l.slopes.clear();
     l.plot_offsets.clear();
     // The right axis has curves of its own: they are not stacked, and its values are shown even
     // when the stacked parent hides its own (offset) Y values.
@@ -1026,6 +1028,13 @@ mod tests {
         assert_eq!(left.palette.colors[0], Color::rgb(0, 0, 0));
         assert_eq!(right.palette.colors[0], Color::rgb(0, 255, 0));
         assert_eq!(left.x_axis.major_tick, TickDirection::Out);
+    }
+
+    #[test]
+    fn right_y_layer_has_no_slope_annotations() {
+        let mut g = Template::Scatter.new_graph(WindowId(1), "g");
+        g.layers[0].slopes.push(crate::graph::SlopeAnnotation::new(crate::ColumnId(1), 0, 1));
+        assert!(right_y_layer(&g.layers[0], 0).slopes.is_empty());
     }
 
     #[test]

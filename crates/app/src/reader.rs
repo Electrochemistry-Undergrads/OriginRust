@@ -197,6 +197,32 @@ pub fn nearest_where(
     best.map(|(_, p)| p)
 }
 
+/// Where a data point is on the screen (`None` when it is not shown or not a number).
+pub fn screen_point(
+    project: &Project,
+    graph: WindowId,
+    geometry: &[LayerGeometry],
+    to_screen: &dyn Fn((f64, f64)) -> Pos2,
+    p: Point,
+) -> Option<Pos2> {
+    place(project, graph, geometry, to_screen, p).map(|(at, _, _)| at)
+}
+
+/// Like [`nearest`], limited to the plot `only` (layer and plot index) when given: the Slope tool's
+/// second click.
+pub fn nearest_in(
+    project: &Project,
+    graph: WindowId,
+    geometry: &[LayerGeometry],
+    to_screen: &dyn Fn((f64, f64)) -> Pos2,
+    pointer: Pos2,
+    only: Option<(usize, usize)>,
+) -> Option<Point> {
+    nearest_where(project, graph, geometry, to_screen, Pick::Reader, pointer, |p| {
+        only.is_none_or(|o| o == (p.layer, p.plot))
+    })
+}
+
 /// The points that `pick` allows whose screen position is inside `area` (edges included), with
 /// their positions.
 pub fn inside(

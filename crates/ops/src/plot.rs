@@ -105,6 +105,8 @@ pub struct Style {
     pub label: Vec<String>,
     /// Shapes, each "KIND@X1,Y1,X2,Y2".
     pub draw: Vec<String>,
+    /// Slope annotations on the first plot of the first layer, each "ROW_A,ROW_B" (worksheet rows from 1).
+    pub slope: Vec<String>,
 }
 
 /// A graph with several panels.
@@ -515,6 +517,22 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
     }
     let labels: Vec<(String, f64, f64)> = s.label.iter().map(|v| parse_label(v)).collect::<Result<_>>()?;
     let shapes: Vec<sheaf_core::shape::Shape> = s.draw.iter().map(|v| parse_draw(v)).collect::<Result<_>>()?;
+    let slopes: Vec<(usize, usize)> = s.slope.iter().map(|v| parse_slope(v)).collect::<Result<_>>()?;
+    let slope_plot = project.graph(graph).and_then(|g| g.layers.first()).and_then(|l| l.plots.first()).cloned();
+    if !slopes.is_empty() {
+        let Some(plot) = &slope_plot else { bail!("--slope needs a plot in the first layer to mark the slope on") };
+        let rows = project.column(plot.y).map_or(0, |c| c.len());
+        for (v, &(a, b)) in s.slope.iter().zip(&slopes) {
+            if a >= rows || b >= rows {
+                bail!("--slope \"{v}\": the first plot has only {rows} rows");
+            }
+            for row in [a, b] {
+                if let Err(why) = sheaf_plot::slope_check_point(project, graph, 0, 0, Some(row)) {
+                    bail!("--slope \"{v}\": {why}");
+                }
+            }
+        }
+    }
     let x_labels = s.x_labels.as_deref().map(|text| x_label_source(project, graph, text)).transpose()?;
     let g = project.graph_mut(graph).ok_or_else(|| anyhow!("graph not found"))?;
     // The layers the options act on, in legend order, and the panels among them.
@@ -605,6 +623,9 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
     }
     if let Some(layer) = g.layers.first_mut() {
         layer.shapes.extend(shapes);
+        if let Some(plot) = &slope_plot {
+            layer.slopes.extend(slopes.iter().map(|&(a, b)| sheaf_core::graph::SlopeAnnotation::for_plot(plot, a, b)));
+        }
         for (text, x, y) in labels {
             let font = layer.new_label_font();
             layer.labels.push(TextLabel::new(text, x, y, font));
@@ -632,6 +653,20 @@ pub fn parse_draw(value: &str) -> Result<sheaf_core::shape::Shape> {
         bail!("--draw \"{value}\": \"{at}\" is not four numbers X1,Y1,X2,Y2; {usage}");
     }
     Ok(Shape::new(kind, (n[0], n[1]), (n[2], n[3])))
+}
+
+/// Reads one `--slope` value, "ROW_A,ROW_B": two different row numbers as the worksheet shows them (from 1);
+/// the result counts from 0.
+pub fn parse_slope(value: &str) -> Result<(usize, usize)> {
+    let usage = "--slope must look like \"ROW_A,ROW_B\" with two different worksheet row numbers (counted from 1), for example --slope 3,8";
+    let row = |s: &str| s.trim().parse::<usize>().ok().filter(|&r| r >= 1);
+    let Some((a, b)) = value.split_once(',').and_then(|(a, b)| Some((row(a)?, row(b)?))) else {
+        bail!("--slope \"{value}\": not two row numbers; {usage}");
+    };
+    if a == b {
+        bail!("--slope \"{value}\": the two rows are the same; {usage}");
+    }
+    Ok((a - 1, b - 1))
 }
 
 /// Reads one `--label` value, "TEXT@X,Y": the text up to the last `@`, then two fractions of the

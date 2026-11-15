@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 161 | 39 | 249 |
+| All rows | 49 | 162 | 39 | 250 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 92 | 39 | 148 |
+| P1 and P2 together | 17 | 93 | 39 | 149 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 61 are P2.
 
@@ -325,6 +325,7 @@ Cross-cutting findings:
 | Axis breaks | Breaks tab | axis dialog, Breaks tab: Enable, Number of Breaks (1 to 7), a row per break with from, to, Auto Position (break k of n at k/(n+1)) or a position, its own tick step after it, and one gap width; the gap and the two slanted strokes as Origin 2016 draws them (graphing 3.6, measured) | ◐ | Origin's Break Half Length unit and Details... page unmeasured (Sheaf: gap in percent of the axis, 1.75 % like the automatic one); Origin's change of the tick step when breaks are added not copied; lines are cut over the gap as Origin draws them, with the page switch to connect them; not written to .opj | P1 |
 | Reference lines, special ticks | add line | special ticks: extra ticks with own labels (Special Ticks tab) | ◐ | no reference lines | P1 |
 | Drawn lines, arrows, shapes | Tools toolbar | Tools bar: Line, Arrow, Rectangle and Circle (drag to draw, Shift to snap or square); move by dragging, Delete, double-click or right-click Properties (colour, width, dash, fill, arrow heads); undo for each step; front/back shape ordering within a layer with selection-safe undo/redo; drawn into the figure exports; kept in the project file (graphing.md 17) | ◐ | no resize handles, ordering across object kinds/layers, Cut, Copy and Paste, grouping, page or scale attachment, polylines, curves or pictures (graphing.md 17.5); not written to .opj (the save warns) | P1 |
+| Slope annotation | Tools toolbar (2026b) | Tools bar: Slope; two clicks on data points of one plot mark the slope (segment, dashed legs, `slope = ...` label, per decade on a log axis); linked to the rows, recomputed with the data; Delete, double-click Properties, undo; CLI `--slope A,B`, MCP; kept in the project file, not written to .opj (graphing.md 17.6) | ◐ | Origin's look, label text and defaults unmeasured (documentation only); no label dragging or decimals setting | P2 |
 | Themes | Theme Organizer | none | ✗ | | P1 |
 | Graph templates | Save Template As | 9 built-in in the Plot menu: Line, Scatter, Line + Symbol, Column, Area, Cyclic voltammetry, Double-Y, Stacked Lines, Waterfall | ◐ | cannot save or load; .otp not read | P1 |
 | Layer arrangement, merge | Arrange Layers | layer frame editable in Plot Details (Size); panel layouts by CLI | ◐ | no Arrange Layers dialog, no Merge Graph Windows (grey) | P1 |

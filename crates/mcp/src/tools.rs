@@ -923,8 +923,9 @@ fn style_from(raw: Option<Map<String, Value>>, size: Option<&SizeArgs>) -> Resul
     let mut map = raw.unwrap_or_default();
     let text_labels = map.remove("text_labels");
     let draw = map.remove("draw");
+    let slope = map.remove("slope");
     let allowed: Vec<String> = match serde_json::to_value(Style::default()) {
-        Ok(Value::Object(o)) => o.keys().filter(|k| *k != "label" && *k != "draw").cloned().collect(),
+        Ok(Value::Object(o)) => o.keys().filter(|k| *k != "label" && *k != "draw" && *k != "slope").cloned().collect(),
         _ => Vec::new(),
     };
     if let Some(bad) = map.keys().find(|k| !allowed.contains(k)) {
@@ -955,6 +956,26 @@ fn style_from(raw: Option<Map<String, Value>>, size: Option<&SizeArgs>) -> Resul
             }
         }
         Some(_) => return Err(ToolError::new("draw must be a list of shapes")),
+        None => {}
+    }
+    match slope {
+        Some(Value::Array(items)) => {
+            for item in items {
+                style.slope.push(match item {
+                    Value::String(t) => t,
+                    Value::Object(o) => {
+                        let n = |k: &str| {
+                            o.get(k).and_then(Value::as_u64).ok_or_else(|| {
+                                ToolError::new(format!("a slope needs the whole number \"{k}\" (a row from 1)"))
+                            })
+                        };
+                        format!("{},{}", n("row_a")?, n("row_b")?)
+                    }
+                    _ => return Err(ToolError::new("a slope is \"A,B\" or an object with row_a and row_b")),
+                });
+            }
+        }
+        Some(_) => return Err(ToolError::new("slope must be a list of row pairs")),
         None => {}
     }
     if let Some(sz) = size {

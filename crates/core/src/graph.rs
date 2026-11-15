@@ -748,6 +748,7 @@ impl Layer {
             }
             q.line.width_pt = src.line.width_pt;
             q.line.connect = src.line.connect;
+            q.line.sort_x = src.line.sort_x;
             if g.line_style == Increment::None {
                 q.line.dash = src.line.dash;
             }
@@ -1089,11 +1090,15 @@ pub struct LineStyle {
     pub dash: Dash,
     #[serde(default)]
     pub connect: Connect,
+    /// Connect the plotted points in increasing X order instead of worksheet order (Origin 2023's
+    /// `layer.plotN.line.sortx`). Only the line path follows it; the worksheet is untouched.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub sort_x: bool,
 }
 
 impl LineStyle {
     pub fn solid(color: Color, width_pt: f64) -> Self {
-        LineStyle { color, width_pt, dash: Dash::Solid, connect: Connect::Straight }
+        LineStyle { color, width_pt, dash: Dash::Solid, connect: Connect::Straight, sort_x: false }
     }
 }
 
@@ -2600,5 +2605,23 @@ mod style_tests {
         d.vertical.color_mode = DropColorMode::PlusMinus;
         let back: DropLines = serde_json::from_str(&serde_json::to_string(&d).unwrap()).unwrap();
         assert_eq!(back, d);
+    }
+}
+
+#[cfg(test)]
+mod sort_x_tests {
+    use super::*;
+
+    #[test]
+    fn sort_x_defaults_off_is_not_written_when_off_and_round_trips() {
+        let mut line = LineStyle::solid(Color::BLACK, 1.0);
+        // A file written before the flag existed has no such key.
+        let old: LineStyle = serde_json::from_str(&serde_json::to_string(&line).unwrap()).unwrap();
+        assert!(!old.sort_x);
+        assert!(!serde_json::to_string(&line).unwrap().contains("sort_x"));
+        line.sort_x = true;
+        let text = serde_json::to_string(&line).unwrap();
+        assert!(text.contains("\"sort_x\":true"));
+        assert!(serde_json::from_str::<LineStyle>(&text).unwrap().sort_x);
     }
 }

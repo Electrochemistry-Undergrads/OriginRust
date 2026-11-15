@@ -1,6 +1,9 @@
 # T39: Line plots sorted by X for drawing only
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `plot-sort-x`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `plot-sort-x`: per-plot
+`LineStyle::sort_x`, Plot Details Line tab "Sort X for line connection", `sheaf plot --sort-x`, MCP
+`style.sort_x`, `.opj` warns. Left: effect on fills, gaps, missing values, ties and splines unmeasured
+against Origin (graphing.md 18.9).
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Graphing: Plot-only X sorting, Origin 2023).
 
 ## Goal

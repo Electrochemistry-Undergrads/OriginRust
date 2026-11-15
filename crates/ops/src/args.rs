@@ -463,6 +463,11 @@ pub struct StyleArgs {
     /// Line width of the data curves in points.
     #[arg(long, value_name = "PT")]
     pub line_width: Option<f64>,
+    /// Connect the points of line and line+symbol curves in increasing X order, leaving the
+    /// worksheet unsorted (Origin 2023's LabTalk layer.plotN.line.sortx). Symbols, labels and
+    /// error bars stay on their points.
+    #[arg(long)]
+    pub sort_x: bool,
     /// Curve colors in legend order (left axis first, then right axis), comma-separated, as
     /// #RRGGBB or basic names.
     #[arg(long, value_delimiter = ',', value_name = "COLORS")]

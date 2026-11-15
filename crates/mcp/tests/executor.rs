@@ -223,6 +223,17 @@ fn results_name_the_book_and_the_sheet() {
     assert_eq!((xlsx["book"].as_str(), xlsx["sheet"].as_str()), (Some("Book1"), Some("a")));
 }
 
+#[test]
+fn the_plot_tool_accepts_the_sort_x_style_flag() {
+    let d = Dirs::new("sortx");
+    write_csv(&d, "a.csv");
+    let mut s = Server::new(d.roots());
+    ok(&headless(&mut s, "import_files", json!({"files": ["a.csv"]})));
+    let plot = ok(&headless(&mut s, "plot", json!({"y": ["B"], "style": {"sort_x": true}})));
+    assert_eq!(plot["graph"], "Graph1");
+    ok(&headless(&mut s, "plot", json!({"graph": "Graph1", "style": {"sort_x": true}})));
+}
+
 // ----- with a history ----------------------------------------------------------------------
 
 #[test]

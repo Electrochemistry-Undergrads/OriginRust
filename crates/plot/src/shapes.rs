@@ -44,8 +44,13 @@ fn polygon(points: &[(f64, f64)]) -> String {
 /// The items of one shape.
 pub(crate) fn shape_items(shape: &Shape, f: Rect) -> Vec<Item> {
     let (a, b) = page_points(shape, f);
-    let style =
-        LineStyle { color: shape.color, width_pt: shape.width_pt, dash: shape.dash, connect: Default::default() };
+    let style = LineStyle {
+        color: shape.color,
+        width_pt: shape.width_pt,
+        dash: shape.dash,
+        connect: Default::default(),
+        sort_x: false,
+    };
     let mut stroke = line_stroke(&style);
     stroke.cap = crate::scene::Cap::Butt;
     let mut items = Vec::new();

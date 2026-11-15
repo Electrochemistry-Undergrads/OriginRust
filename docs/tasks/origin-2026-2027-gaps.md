@@ -57,7 +57,7 @@ outputs or UI behavior.
 | Chord and lollipop plots | 2021 | Lollipop done (T33). Draw relationships as chords between categories. Draw values as stems ending in markers. | [2021][o21] |
 | Network and grouped marginal plots | 2021b | Draw connections among nodes. Pair grouped scatter data with distributions along the margins. | [2021b][o21b] |
 | Sunburst and ridgeline plots | 2022 | Draw a hierarchy as concentric rings or compare distributions as vertically offset density curves. | [2022][o22] |
-| Plot-only X sorting | 2023 | Sort points by X for line connections while preserving worksheet row order. | [2023][o23] |
+| Plot-only X sorting | 2023 | Done (T39). Sort points by X for line connections while preserving worksheet row order. | [2023][o23] |
 | Built-in equation rendering | 2023b | Render LaTeX equations in graph labels and worksheet metadata, carry metadata equations into legends and axis titles, and retain vector output on export. | [2023b][o23b] |
 | Time Series Explorer | 2024b | View the full series and a detail panel for a chosen interval. Step or play through successive intervals. | [2024b][o24b] |
 | Extract data from regions on a graph | 2024b | Draw one or more rectangular, oval or freeform regions and output the enclosed observations to a worksheet. | [2024b][o24b] |

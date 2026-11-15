@@ -64,6 +64,8 @@ mod offset_multiplier_tests;
 #[cfg(test)]
 mod skip_tests;
 #[cfg(test)]
+mod sort_x_tests;
+#[cfg(test)]
 mod symbol_gap_tests;
 #[cfg(test)]
 mod symbol_line_order_tests;

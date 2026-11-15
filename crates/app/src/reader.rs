@@ -21,6 +21,18 @@ pub struct Point {
 /// How far from the pointer, in screen points, a data point is still picked.
 const SNAP: f32 = 30.0;
 
+/// How far from a point the Data menu tools still pick it, in screen points: Origin 2016 picked up
+/// to 8 to 9 pixels from the default symbol and 14 at symbol size 24 (spec 20.4, M7), about half
+/// the symbol plus a margin and not below 9.
+fn edit_reach(project: &Project, graph: WindowId, p: Point) -> f32 {
+    let size = project
+        .graph(graph)
+        .and_then(|g| g.layers.get(p.layer))
+        .and_then(|l| l.plots.get(p.plot))
+        .map_or(0.0, |plot| plot.symbol.size_pt);
+    (size as f32 / 2.0 + 2.0).max(9.0)
+}
+
 /// How far outside the frame, in page points, a point still counts as drawn (a symbol on the axis
 /// limit sits on the frame edge).
 const CLIP_TOLERANCE: f64 = 0.5;
@@ -174,10 +186,12 @@ pub fn nearest_of(
     pick: Pick,
     pointer: Pos2,
 ) -> Option<Point> {
-    nearest_where(project, graph, geometry, to_screen, pick, pointer, |_| true)
+    nearest_where(project, graph, geometry, to_screen, pick, pointer, false, |_| true)
 }
 
-/// The nearest point within reach among those that `pick` allows and `keep` accepts.
+/// The nearest point within reach among those that `pick` allows and `keep` accepts. With
+/// `measured_reach` the reach is the one measured for Origin's Mask click ([`edit_reach`]); the
+/// other callers keep [`SNAP`] (Move's grab and Remove Bad's click were not measured).
 pub fn nearest_where(
     project: &Project,
     graph: WindowId,
@@ -185,12 +199,14 @@ pub fn nearest_where(
     to_screen: &dyn Fn((f64, f64)) -> Pos2,
     pick: Pick,
     pointer: Pos2,
+    measured_reach: bool,
     keep: impl Fn(Point) -> bool,
 ) -> Option<Point> {
     let mut best: Option<(f32, Point)> = None;
     each_point(project, graph, geometry, to_screen, pick, |at, p| {
         let d = at.distance(pointer);
-        if d <= SNAP && best.is_none_or(|(b, _)| d < b) && keep(p) {
+        let reach = if measured_reach { edit_reach(project, graph, p) } else { SNAP };
+        if d <= reach && best.is_none_or(|(b, _)| d < b) && keep(p) {
             best = Some((d, p));
         }
     });
@@ -218,7 +234,7 @@ pub fn nearest_in(
     pointer: Pos2,
     only: Option<(usize, usize)>,
 ) -> Option<Point> {
-    nearest_where(project, graph, geometry, to_screen, Pick::Reader, pointer, |p| {
+    nearest_where(project, graph, geometry, to_screen, Pick::Reader, pointer, false, |p| {
         only.is_none_or(|o| o == (p.layer, p.plot))
     })
 }

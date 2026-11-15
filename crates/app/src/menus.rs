@@ -161,6 +161,8 @@ pub enum Cmd {
     },
     StackPanels,
     LabelPanels,
+    /// Graph > Merge Graph Windows... (T60).
+    MergeGraphs,
     /// Statistics > Multiple Comparisons Plot... (T64).
     ComparisonPlot,
     /// Add / Edit Trendline... on a plot of the active layer.
@@ -1327,7 +1329,7 @@ fn graph_menu() -> Vec<Entry> {
         grey("Add Straight Line..."),
         item("Add Text...", Cmd::AddText),
         grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
-        grey("Merge Graph Windows..."),
+        item("Merge Graph Windows...", Cmd::MergeGraphs),
         sep(),
         keyed("Rescale to Show All", ctrl(Key::R), Cmd::Rescale),
         sub(
@@ -2230,6 +2232,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::PlotPanels { rows, cols } => {
             Action::PlotPanels { book: book?, columns: c.selected.to_vec(), rows: *rows, cols: *cols }
         }
+        Cmd::MergeGraphs => Action::MergeGraphs,
         Cmd::StackPanels => Action::StackPanels { book: book?, columns: c.selected.to_vec() },
         Cmd::ComparisonPlot => Action::ComparisonPlot { book: book?, sheet: None },
         Cmd::LabelPanels => Action::LabelPanels { book: book?, columns: c.selected.to_vec() },

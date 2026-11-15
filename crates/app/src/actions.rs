@@ -386,6 +386,8 @@ pub enum Action {
         book: WindowId,
         columns: Vec<ColumnId>,
     },
+    /// Graph > Merge Graph Windows...
+    MergeGraphs,
     LabelPanels {
         book: WindowId,
         columns: Vec<ColumnId>,

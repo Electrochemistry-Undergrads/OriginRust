@@ -26,6 +26,7 @@ use crate::dialogs::import_theme::Themed;
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::label_panels::{LabelPanelsDialog, Outcome as LabelPanelsOutcome};
 use crate::dialogs::mask_condition::MaskConditionDialog;
+use crate::dialogs::merge_graphs::{MergeGraphsDialog, Outcome as MergeGraphsOutcome};
 use crate::dialogs::power::{PowerDialog, PowerOutcome};
 use crate::dialogs::printing::{PageSetupDialog, PageSetupOutcome, PreviewOutcome, PrintPreview};
 use crate::dialogs::recovery::{RecoveryChoice, RecoveryOffer};
@@ -148,6 +149,7 @@ pub struct SheafApp {
     error_bars: Option<ErrorBarsDialog>,
     trendline: Option<TrendlineDialog>,
     stack_panels: Option<StackPanelsDialog>,
+    merge_graphs: Option<MergeGraphsDialog>,
     label_panels: Option<LabelPanelsDialog>,
     simulate: Option<SimulateDialog>,
     column_props: Option<ColumnPropsDialog>,
@@ -249,6 +251,7 @@ impl SheafApp {
             error_bars: None,
             trendline: None,
             stack_panels: None,
+            merge_graphs: None,
             label_panels: None,
             simulate: None,
             column_props: None,
@@ -765,6 +768,7 @@ impl SheafApp {
         self.error_bars = None;
         self.trendline = None;
         self.stack_panels = None;
+        self.merge_graphs = None;
         self.label_panels = None;
         self.simulate = None;
         self.column_props = None;
@@ -1687,6 +1691,13 @@ impl SheafApp {
                 self.stack_panels = StackPanelsDialog::new(self.doc.project(), book, columns, rows);
                 if self.stack_panels.is_none() {
                     self.warn("Select at least one numeric Y column to stack.");
+                }
+            }
+            Action::MergeGraphs => {
+                if self.doc.project().graphs().count() < 2 {
+                    self.warn("Merge Graph Windows needs at least two graphs");
+                } else {
+                    self.merge_graphs = Some(MergeGraphsDialog::new(self.doc.project()));
                 }
             }
             Action::LabelPanels { book, columns } => {
@@ -3003,6 +3014,7 @@ impl SheafApp {
             || self.error_bars.is_some()
             || self.trendline.is_some()
             || self.stack_panels.is_some()
+            || self.merge_graphs.is_some()
             || self.label_panels.is_some()
             || self.simulate.is_some()
             || self.column_props.is_some()
@@ -3292,6 +3304,17 @@ impl SheafApp {
                     self.stack_panels = None;
                     self.focus(graph);
                     self.say("Created stacked panels");
+                }
+            }
+        }
+        if let Some(d) = &mut self.merge_graphs {
+            match d.show(ctx, &mut self.doc) {
+                MergeGraphsOutcome::Open => {}
+                MergeGraphsOutcome::Closed => self.merge_graphs = None,
+                MergeGraphsOutcome::Created(graph) => {
+                    self.merge_graphs = None;
+                    self.focus(graph);
+                    self.say("Merged the graph windows");
                 }
             }
         }

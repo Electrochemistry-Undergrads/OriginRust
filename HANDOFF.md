@@ -71,6 +71,11 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+T48 graph Data menu measured in Origin 2016 (branch `t48-origin`, graphing 20.4/20.5): Mask (a click masks,
+a drag masks every plot's Y cells, Tab active plot, Space freehand) and Remove Bad (pick, then Enter;
+`@YPR` 1 keeps the row) now follow Origin, with its undo texts and Esc/right-click ending a mode.
+Move Data Points stays unmeasured (synthetic input never engaged it). Checks: fmt, strict Clippy, full tests.
+
 T08 static worksheet-cell substitution (`34c1ba3`) adds fixed qualified cell references,
 measured 15-digit defaults, column-display `W` and preserved text. Expression/core/I/O tests
 cover recalculation, cycles, Undo and native/companion reopen; expression-language section 3
@@ -94,7 +99,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `t19-fntrim` | Claude Windows, session fe4b37eb | T19 file-name trimming on ASCII import (Origin's FNameToSht/Bk From/To rules) and the book long name keeping the file extension (owner's decision 2026-11-15); crates/io ascii naming, app import window, cli flags, import-ascii.md, title tests | claimed 2026-11-15 |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
-| `t48-origin` | Claude Windows, "continue all tasks" | T48 leftover: Origin 2016 measurements of the graph Data menu (Mask/Remove Bad/Move Data Points, graphing.md 20.4) and Sheaf following them; core graph_data.rs, app data_tools/reader/graph_view Data modes only | claimed 2026-11-15; no shape-resize, slope annotation, browser, stats, MCP or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
 | `cell-format` | Claude macOS, "mac-multipdf" | T59 worksheet cell formatting, steps 1, 2 and 4 (model with range maintenance, grid/print/image drawing, Format Cells window, .sheaf/.opj); step 3 (toolbar adapter behind T58's dispatch) left for after T58 slice 3 | claimed 2026-11-15; new core cellformat.rs + Worksheet.cell_formats, sheetops upkeep, app grid.rs body_cell + new dialogs/cell_format.rs + menu items, plot sheet.rs/sheet_print.rs; no toolbar.rs Format bar (T58) or other sessions' scopes |
 | `merge-graphs` | Claude Windows, session fe4b37eb | T60 Merge Graph Windows and Layer Management (all four steps: core merge.rs + panels.rs arrange helpers, merge/layer-management dialogs, Fit Layer to Graph / Fit Page to Layers, CLI `merge-graphs`, Origin merge_graph/layarrange measurements, graphing 15) | claimed 2026-11-15; own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no adding/deleting layers or insets (T61), no Offset/stack items (T62), no text formatting (T58) or other sessions' scopes |

@@ -8,6 +8,9 @@ use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+#[cfg(windows)]
+mod windows;
+
 pub const LOCK_NAME: &str = "mcp.lock";
 pub const INFO_NAME: &str = "mcp.json";
 
@@ -56,8 +59,9 @@ fn own_uid(dir: &Path) -> io::Result<u32> {
 ///
 /// On Unix each folder made has mode 0700. An existing `dir` must be a real folder, not a link, owned by
 /// the user the process runs as; if it is owned by the user and open to the group or others it is set
-/// to 0700 and looked at again; if it is not, or still is open, it is refused. On Windows the folder
-/// keeps the rights it inherits from the user's profile and only the link check applies.
+/// to 0700 and looked at again; if it is not, or still is open, it is refused. On Windows the app
+/// protects the owned runtime folder with a DACL for the process user, SYSTEM and administrators;
+/// clients validate that privacy without changing it. Other owners and reparse points are refused.
 pub fn check_dir(dir: &Path, create: bool) -> Result<(), String> {
     #[cfg(unix)]
     {
@@ -85,6 +89,11 @@ fn check_dir_plain(dir: &Path, create: bool) -> Result<(), String> {
     }
     if !m.is_dir() {
         return Err("is not a folder".to_string());
+    }
+    #[cfg(windows)]
+    {
+        let result = if create { windows::protect(dir, true) } else { windows::check(dir) };
+        result.map_err(|e| format!("runtime folder is not private: {e}"))?;
     }
     Ok(())
 }
@@ -164,6 +173,8 @@ pub fn acquire_lock(dir: &Path) -> Result<File, LockError> {
         options.mode(0o600);
     }
     let file = options.open(&path).map_err(|e| LockError::Other(format!("cannot open '{}': {e}", path.display())))?;
+    #[cfg(windows)]
+    windows::protect(&path, false).map_err(|e| LockError::Other(format!("lock is not private: {e}")))?;
     for attempt in 0..4 {
         match file.try_lock() {
             Ok(()) => return Ok(file),
@@ -183,15 +194,20 @@ pub fn acquire_lock(dir: &Path) -> Result<File, LockError> {
 pub fn write_info(dir: &Path, info: &Info) -> io::Result<()> {
     let tmp = dir.join(format!(".{INFO_NAME}.{}.tmp", std::process::id()));
     let _ = std::fs::remove_file(&tmp);
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let result = options
-        .open(&tmp)
+    #[cfg(windows)]
+    let opened = windows::create_private(&tmp);
+    #[cfg(not(windows))]
+    let opened = {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        options.open(&tmp)
+    };
+    let result = opened
         .and_then(|mut f| f.write_all(info.to_json().to_string().as_bytes()).and_then(|()| f.sync_all()))
         .and_then(|()| std::fs::rename(&tmp, dir.join(INFO_NAME)));
     if result.is_err() {
@@ -247,6 +263,8 @@ pub fn probe(dir: &Path, wait: Duration) -> Result<Info, String> {
     loop {
         match std::fs::read_to_string(dir.join(INFO_NAME)) {
             Ok(text) => {
+                #[cfg(windows)]
+                windows::check(&dir.join(INFO_NAME)).map_err(|e| format!("mcp.json is not private: {e}"))?;
                 let info = serde_json::from_str::<Value>(&text)
                     .map_err(|e| format!("mcp.json cannot be read: {e}"))
                     .and_then(|v| Info::from_json(&v))?;

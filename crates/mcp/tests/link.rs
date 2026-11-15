@@ -900,7 +900,7 @@ fn the_client_tries_every_folder_and_names_those_where_nothing_listens() {
     let a = app("many", Kind::native());
     let nowhere = a.scratch.0.join("nowhere");
     let empty = a.scratch.0.join("empty");
-    std::fs::create_dir(&empty).unwrap();
+    discovery::check_dir(&empty, true).unwrap();
     let opts = ClientOptions::new("c", vec![]);
     // The second folder has the app: the first is only mentioned when nothing is found at all.
     assert!(client::connect(&[nowhere.clone(), a.scratch.run()], &opts).is_ok());

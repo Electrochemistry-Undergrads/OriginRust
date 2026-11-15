@@ -510,8 +510,15 @@ The app side is off by default. The owner turns it on with Tools > `AI Assistant
   folder equals the owner of a probe file that the process just created in it and removed. If its mode has
   any group or other bit and it is owned by the user, it is set to 0700 and checked again; if it still has
   them, or has another owner, it is refused. The client does not create a missing folder (it skips it).
-  On Windows the folder is under the user's profile and keeps the rights it inherits; they are not
-  checked. A link is refused there too.
+- **Windows runtime privacy.** The app checks that the selected runtime folder belongs to its
+  process user, rejects reparse points, and protects its DACL from inherited permissions. Only
+  that user, SYSTEM and administrators receive allow entries. The lock receives its own protected DACL. The temporary discovery file is created with
+  private permissions atomically (CREATE_NEW), then verified before any token bytes are written.
+  The client verifies the folder and discovery file without changing permissions and refuses
+  other owners, reparse points, inherited DACLs or allow entries for other identities. Failure
+  to establish private permissions refuses that candidate; it never publishes a weaker token.
+  Only the selected runtime folder/files are changed, not the profile or parent folder. Restart
+  an older Windows listener with the updated app if its public/inherited descriptor is refused.
 - **Unix socket.** A `UnixListener` on `mcp.sock`, set to mode 0600. A path longer than 100 bytes is
   refused with a message that names `SHEAF_MCP_RUN_DIR`. The peer's user is not asked (`peer_cred` is
   unstable): the 0700 folder is the access control.
@@ -914,9 +921,19 @@ temporary run folder; `Startup::default()` has no folder, so no test can touch t
 - Replacing the project (New, Open) drops the connections.
 - The menu toggle creates and removes the files, and works twice.
 
-On Windows in CI: the TCP and token tests above, the lock behaviour, and the case-insensitive protected
-names. Still to be checked by hand on Windows before the ADR is accepted: a second user account cannot read
-`mcp.json`, and a loopback bind raises no firewall prompt.
+Windows validation (2026-11-15): the real desktop app and stdio attach proxy were run with an
+isolated configuration and a synthetic run folder under the user profile. The listener was
+`127.0.0.1` only; its token had 64 hex digits; wrong-token and HTTP requests were refused. The
+proxy listed tools and read `sheaf://app`; no firewall prompt appeared. Both processes exited
+normally and removed discovery. A native-window capture was inspected.
+
+The initial discovery file inherited read access for another local group. Windows Authz effective
+access checks using two existing non-owner local account SIDs and their resolved groups granted
+`FILE_READ_DATA` before the repair. The same checks on the repaired file returned Access Denied
+for both accounts and allowed the owner. These were effective-access evaluations, without logging
+into another desktop or changing any account. Five Windows-only regressions cover broad parent
+inheritance, broad file/folder refusal without client mutation, and foreign ownership. SYSTEM and
+administrators retain their normal machine-wide authority, just as root does on Unix.
 
 ### 11.16 Setup
 

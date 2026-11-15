@@ -3781,6 +3781,29 @@ fn the_explorer_lists_name_long_name_short_name_and_type_with_the_active_window_
 }
 
 #[test]
+fn the_short_name_of_a_window_follows_origins_rule_and_a_taken_one_is_refused() {
+    let mut h = start(vec![data_file("shortname")]);
+    let (book, graph) = window_ids(&h);
+    right_click(&mut h, "Book1 - sample");
+    click(&mut h, "Properties...");
+    // spaces and symbols dropped, a leading digit gets an A, 13 characters at most (Origin 2016)
+    h.state_mut().rename.as_mut().unwrap().short_name = "2026 raw data, run #3".to_string();
+    click(&mut h, "OK");
+    assert!(h.state().rename.is_none());
+    assert_eq!(project(&h).window(book).unwrap().name(), "A2026rawdatar");
+    assert_eq!(h.state().doc.undo_label(), Some("Rename window"));
+    // the graph's name is taken: refused with a message, the window stays open
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::RenameWindow(graph), &ctx);
+    settle(&mut h);
+    h.state_mut().rename.as_mut().unwrap().short_name = "a2026RAWDATAR".to_string();
+    click(&mut h, "OK");
+    assert!(h.state().rename.as_ref().is_some_and(|r| r.error.is_some()), "refused");
+    assert_eq!(project(&h).window(graph).unwrap().name(), "Graph1");
+    click(&mut h, "Cancel");
+}
+
+#[test]
 fn the_window_menu_of_the_explorer_has_origins_commands_and_the_live_ones_work() {
     let mut h = start(vec![data_file("ctx")]);
     let (book, graph) = window_ids(&h);

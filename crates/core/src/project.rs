@@ -88,6 +88,35 @@ pub struct Project {
     next_id: u64,
 }
 
+/// Origin's rule for the short name of a window (measured on workbooks in Origin 2016 with `win -r`,
+/// workbook-model.md 1): only ASCII letters and digits are kept (spaces, `_`, `-`, `.`, `/`, brackets
+/// and the like are dropped); a name that is then empty or starts with a digit gets an `A` in front;
+/// the result is cut to 13 characters without a message (`12345678901234` becomes `A123456789012`).
+pub fn clean_window_name(text: &str) -> String {
+    let mut name: String = text.chars().filter(char::is_ascii_alphanumeric).collect();
+    if name.is_empty() || name.starts_with(|c: char| c.is_ascii_digit()) {
+        name.insert(0, 'A');
+    }
+    name.chars().take(13).collect()
+}
+
+/// `formula` with every `[old]` (any case) replaced by `[new]`.
+fn replace_book_reference(formula: &str, old: &str, new: &str) -> String {
+    let needle = format!("[{}]", old.to_ascii_lowercase());
+    let lower = formula.to_ascii_lowercase();
+    let mut out = String::with_capacity(formula.len());
+    let mut i = 0;
+    while let Some(k) = lower[i..].find(&needle) {
+        out.push_str(&formula[i..i + k]);
+        out.push('[');
+        out.push_str(new);
+        out.push(']');
+        i += k + needle.len();
+    }
+    out.push_str(&formula[i..]);
+    out
+}
+
 fn default_mask_color() -> u8 {
     1
 }
@@ -260,6 +289,35 @@ impl Project {
             }
         }
         self.next_id = self.next_id.max(max + 1);
+    }
+
+    /// Gives window `id` the short name `wanted`, cleaned by Origin's rule ([`clean_window_name`]).
+    /// Refused (with a message) when another window has the cleaned name, in any case. Column
+    /// formulas that name the old window (`[Old]...`) are changed to the new name. Returns the name
+    /// the window got.
+    pub fn rename_window(&mut self, id: WindowId, wanted: &str) -> Result<String, String> {
+        let new = clean_window_name(wanted);
+        let old = self.window(id).map(|w| w.name().to_string()).ok_or_else(|| "no such window".to_string())?;
+        if self.windows.iter().any(|w| w.id() != id && w.name().eq_ignore_ascii_case(&new)) {
+            return Err(format!("The name {new} is already used by another window."));
+        }
+        match self.windows.iter_mut().find(|w| w.id() == id) {
+            Some(Window::Workbook(b)) => b.name = new.clone(),
+            Some(Window::Graph(g)) => g.name = new.clone(),
+            None => {}
+        }
+        if old != new {
+            for w in &mut self.windows {
+                if let Window::Workbook(b) = w {
+                    for c in b.sheets.iter_mut().flat_map(|s| &mut s.columns) {
+                        if let Some(f) = &mut c.formula {
+                            *f = replace_book_reference(f, &old, &new);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(new)
     }
 
     /// A window name that is not in use: `prefix` followed by the smallest
@@ -1282,6 +1340,43 @@ mod tests {
         // Text columns are never plotted.
         let t = p.add_column(book, 0, Designation::Y, ColumnData::text(vec!["a".into()])).unwrap();
         assert!(!p.default_plot_columns(book, 0, Template::Line).contains(&t));
+    }
+
+    #[test]
+    fn window_short_names_follow_origins_rule_and_formulas_follow_a_rename() {
+        // Origin 2016 `win -r` (workbook-model.md 1)
+        assert_eq!(clean_window_name("ABCDEFGHIJKLMN"), "ABCDEFGHIJKLM");
+        assert_eq!(clean_window_name("abcdefghijklmnopqrstuvwxyz"), "abcdefghijklm");
+        for (typed, got) in [
+            ("a b", "ab"),
+            ("a_b", "ab"),
+            ("a-b", "ab"),
+            ("a.b", "ab"),
+            ("x/y", "xy"),
+            ("ab(c)", "abc"),
+            ("Ab#1", "Ab1"),
+        ] {
+            assert_eq!(clean_window_name(typed), got, "{typed}");
+        }
+        assert_eq!(clean_window_name("1abc"), "A1abc");
+        assert_eq!(clean_window_name("123"), "A123");
+        assert_eq!(clean_window_name("12345678901234"), "A123456789012");
+        assert_eq!(clean_window_name("___"), "A");
+        let mut p = Project::new();
+        let a = p.add_workbook("Data");
+        let b = p.add_workbook("Other");
+        let col = p.add_column(b, 0, crate::Designation::Y, crate::ColumnData::numeric(vec![1.0])).unwrap();
+        p.column_mut(col).unwrap().formula = Some("[Book1]Sheet1!col(A) * 2 + [book1]Sheet1!col(B)".into());
+        let first = p.window(a).unwrap().name().to_string();
+        assert_eq!(first, "Book1");
+        assert_eq!(p.rename_window(a, "Raw data 2026"), Ok("Rawdata2026".to_string()));
+        assert_eq!(
+            p.column(col).unwrap().formula.as_deref(),
+            Some("[Rawdata2026]Sheet1!col(A) * 2 + [Rawdata2026]Sheet1!col(B)")
+        );
+        let taken = p.window(b).unwrap().name().to_string();
+        assert!(p.rename_window(a, &taken.to_lowercase()).is_err(), "another window's name, in any case");
+        assert_eq!(p.window(a).unwrap().name(), "Rawdata2026");
     }
 
     #[test]

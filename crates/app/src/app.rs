@@ -110,6 +110,10 @@ const MAX_TABS_AT_ONCE: usize = 8;
 struct RenameDialog {
     window: WindowId,
     long_name: String,
+    /// The window's short name (Origin's Window Properties have both); cleaned by Origin's rule on OK.
+    short_name: String,
+    /// Why the last OK was refused (a short name another window has).
+    error: Option<String>,
     /// Set when a folder is renamed instead of a window: its path.
     folder: Option<Vec<usize>>,
 }
@@ -1780,8 +1784,13 @@ impl SheafApp {
             }
             Action::RenameFolder(path) => {
                 if let Some(f) = explorer::folder_at(&self.doc.project().root, &path).filter(|_| !path.is_empty()) {
-                    self.rename =
-                        Some(RenameDialog { window: WindowId(0), long_name: f.name.clone(), folder: Some(path) });
+                    self.rename = Some(RenameDialog {
+                        window: WindowId(0),
+                        long_name: f.name.clone(),
+                        short_name: String::new(),
+                        error: None,
+                        folder: Some(path),
+                    });
                 }
             }
             Action::DeleteFolder(path) => {
@@ -1846,7 +1855,8 @@ impl SheafApp {
                         Window::Workbook(b) => b.long_name.clone(),
                         Window::Graph(g) => g.long_name.clone(),
                     };
-                    self.rename = Some(RenameDialog { window: id, long_name, folder: None });
+                    let short_name = w.name().to_string();
+                    self.rename = Some(RenameDialog { window: id, long_name, short_name, error: None, folder: None });
                 }
             }
             Action::Cascade => self.workspace.cascade(),
@@ -3377,9 +3387,20 @@ impl SheafApp {
                     ui.label(label);
                     ui.add(egui::TextEdit::singleline(&mut d.long_name).desired_width(260.0));
                 });
+                if d.folder.is_none() {
+                    ui.horizontal(|ui| {
+                        ui.label("Short Name");
+                        ui.add(egui::TextEdit::singleline(&mut d.short_name).desired_width(200.0));
+                    });
+                    ui.weak("Letters and digits, at most 13 characters (as in Origin).");
+                    if let Some(e) = &d.error {
+                        ui.colored_label(ui.visuals().error_fg_color, e);
+                    }
+                }
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {
                         let (id, name) = (d.window, d.long_name.clone());
+                        let short = d.short_name.clone();
                         if let Some(path) = d.folder.clone() {
                             let name = name.trim().to_string();
                             if !name.is_empty() {
@@ -3389,16 +3410,26 @@ impl SheafApp {
                                     }
                                 });
                             }
+                            done = true;
                         } else {
-                            self.doc.apply("Rename window", move |p| {
+                            // The short name first: a name another window has keeps the window open.
+                            let result = self.doc.edit("Rename window", move |p| {
+                                let current = p.window(id).map(|w| w.name().to_string()).unwrap_or_default();
+                                if short.trim() != current {
+                                    p.rename_window(id, &short)?;
+                                }
                                 if let Some(b) = p.workbook_mut(id) {
                                     b.long_name = name;
                                 } else if let Some(g) = p.graph_mut(id) {
                                     g.long_name = name;
                                 }
+                                Ok::<(), String>(())
                             });
+                            match result {
+                                Ok(()) => done = true,
+                                Err(e) => d.error = Some(e),
+                            }
                         }
-                        done = true;
                     }
                     if ui.button("Cancel").clicked() {
                         done = true;

@@ -661,6 +661,15 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
             } else if let Some((lo, hi)) = v.y_extent() {
                 add(pd.display_y(lo));
                 add(pd.display_y(hi));
+                // The curve ends reach below the smallest value and can be <= 0 where the data are not,
+                // which a log axis cannot show: the data and the box marks keep the range valid.
+                if let (Some(&first), Some(&last)) = (v.values.first(), v.values.last()) {
+                    add(pd.display_y(first));
+                    add(pd.display_y(last));
+                }
+                for y in [b.whisker_low, b.q1, b.median, b.q3, b.whisker_high] {
+                    add(pd.display_y(y));
+                }
             }
             continue;
         }

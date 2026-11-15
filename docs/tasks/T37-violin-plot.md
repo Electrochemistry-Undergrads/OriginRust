@@ -1,6 +1,6 @@
 # T37: Violin plot
 
-**Status:** done 2026-11-15 (session "violin", Claude macOS, no Origin), branch `violin-plot`; spec in graphing.md 14.22. Left: Split Violin, grouped violins from indexed data, violin settings in Plot Details (bandwidth rule, extend, scale mode, scale to maximum, curve next to box, binned data), and measuring Origin's defaults (nothing here is measured).
+**Status:** done 2026-11-15 (session "violin", Claude macOS, no Origin), branch `violin-plot`; spec in graphing.md 14.22. Left: the "Violin with Box" toolbar button (Origin has one on the 2D Graphs toolbar; Sheaf has none yet), Split Violin, grouped violins from indexed data, violin settings in Plot Details (bandwidth rule, extend, scale mode, scale to maximum, curve next to box, binned data), and measuring Origin's defaults (nothing here is measured).
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Graphing: Violin and parallel-coordinate
 plots, Origin 2019; the violin half only; parallel coordinates are left).
 

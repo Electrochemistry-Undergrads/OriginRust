@@ -93,7 +93,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   `violin-quartile`, `violin-stick`, `half-violin`; MCP the same): one mirrored Gaussian kernel density
   silhouette per Y column (Scott bandwidth from Origin's documented formulas, `sheaf_calc::kde`, checked
   against scipy), marks inside per variant, masked rows left out, `.opj` save warns. Origin's defaults
-  are unmeasured; Split Violin and violin settings are left (graphing.md 14.22).
+  are unmeasured; Split Violin, violin settings and the "Violin with Box" toolbar button are left (graphing.md 14.22).
 - T33 lollipop plot (2026-11-15, macOS, no Origin): Plot > Symbol > Lollipop Plot and `sheaf plot -t
   lollipop` (two or more Y columns, X/Y exchanged, drop lines from each plot to the next at the same
   row, the last back to the first); Plot Details Drop Lines "Drop To" (Axis / Next Data Plot) and "Y

@@ -40,8 +40,17 @@ pub struct Density {
     pub density: Vec<f64>,
 }
 
-/// Number of grid points of [`kernel_density`] (Sheaf's choice; Origin's is not documented).
+/// Number of even grid points of [`kernel_density`] (Sheaf's choice; Origin's is not documented).
+/// Where these are further apart than [`MAX_STEP`] bandwidths, more points are added near the data.
 pub const GRID_POINTS: usize = 128;
+/// The widest step of the grid inside the stretches near the data, in bandwidths: a quarter keeps
+/// the Gaussian kernel sampled at least 4 times per bandwidth, so the curve is smooth and its
+/// highest sampled point is within 1 % of the true peak.
+const MAX_STEP: f64 = 0.25;
+/// How far from a value the grid is refined, in bandwidths (the kernel is under 1 % of its peak there).
+const NEAR_REACH: f64 = 3.0;
+/// Most points added by the refinement, however wide the range is.
+const MAX_EXTRA_POINTS: usize = 8192;
 
 fn finite_sorted(data: &[f64]) -> Vec<f64> {
     let mut v: Vec<f64> = data.iter().copied().filter(|x| x.is_finite()).collect();
@@ -105,9 +114,41 @@ pub fn kernel_density(data: &[f64], rule: Bandwidth, extend_pct: f64) -> Option<
     let v = finite_sorted(data);
     let reach = extend_pct.max(0.0) / 100.0 * w;
     let (lo, hi) = (v[0] - reach, v[v.len() - 1] + reach);
-    let grid: Vec<f64> = (0..GRID_POINTS).map(|i| lo + (hi - lo) * i as f64 / (GRID_POINTS - 1) as f64).collect();
+    let mut grid: Vec<f64> = (0..GRID_POINTS).map(|i| lo + (hi - lo) * i as f64 / (GRID_POINTS - 1) as f64).collect();
+    if (hi - lo) / (GRID_POINTS - 1) as f64 > MAX_STEP * w {
+        refine_near_data(&mut grid, &v, w, (lo, hi));
+    }
     let density = grid.iter().map(|&x| density_at(&v, w, x)).collect();
     Some(Density { bandwidth: w, grid, density })
+}
+
+/// Adds points to `grid` (which spans `lo..=hi`) so that, within `NEAR_REACH` bandwidths of any value
+/// of the ascending `v`, the step is at most `MAX_STEP` bandwidths. Without this a few distant values
+/// make the even grid much coarser than the kernel and the bulk of the data falls between points.
+fn refine_near_data(grid: &mut Vec<f64>, v: &[f64], w: f64, (lo, hi): (f64, f64)) {
+    // The stretches within reach of a value, merged where they overlap and clipped to the curve.
+    let mut stretches: Vec<(f64, f64)> = Vec::new();
+    for &x in v {
+        let (a, b) = ((x - NEAR_REACH * w).max(lo), (x + NEAR_REACH * w).min(hi));
+        match stretches.last_mut() {
+            Some(last) if a <= last.1 => last.1 = last.1.max(b),
+            _ => stretches.push((a, b)),
+        }
+    }
+    let total: f64 = stretches.iter().map(|(a, b)| b - a).sum();
+    // At most MAX_EXTRA_POINTS in all: a larger need coarsens the step (huge samples with a wide spread).
+    let step = (MAX_STEP * w).max(total / MAX_EXTRA_POINTS as f64);
+    for (a, b) in stretches {
+        let n = ((b - a) / step).ceil().max(1.0) as usize;
+        grid.extend((0..=n).map(|i| a + (b - a) * i as f64 / n as f64));
+    }
+    grid.sort_by(|a, b| a.total_cmp(b));
+    // Stretch ends meeting the even grid or each other repeat a point.
+    grid.dedup_by(|a, b| *a - *b < 1e-9 * w);
+    // Keep the exact ends: dedup keeps the first of a pair, which could be one just above `lo`.
+    grid[0] = lo;
+    let last = grid.len() - 1;
+    grid[last] = hi;
 }
 
 #[cfg(test)]
@@ -141,7 +182,7 @@ mod tests {
     #[test]
     fn the_curve_covers_the_data_and_extends_by_the_bandwidth() {
         let d = kernel_density(&[1.0, 2.0, 4.0, 8.0, 9.0], Bandwidth::Scott, 300.0).unwrap();
-        assert_eq!(d.grid.len(), GRID_POINTS);
+        assert_eq!(d.grid.len(), GRID_POINTS, "a modest range keeps the even grid");
         assert!((d.grid[0] - (1.0 - 3.0 * d.bandwidth)).abs() < 1e-12);
         assert!((d.grid[GRID_POINTS - 1] - (9.0 + 3.0 * d.bandwidth)).abs() < 1e-12);
         let flat = kernel_density(&[1.0, 2.0, 4.0, 8.0, 9.0], Bandwidth::Scott, 0.0).unwrap();
@@ -166,5 +207,48 @@ mod tests {
         let area: f64 =
             d.grid.windows(2).zip(d.density.windows(2)).map(|(g, f)| (g[1] - g[0]) * (f[0] + f[1]) / 2.0).sum();
         assert!((area - 1.0).abs() < 5e-3, "area {area}");
+    }
+
+    /// 1000 deterministic draws from N(0, 1) (Box-Muller on a linear congruential generator).
+    fn normal_sample(n: usize) -> Vec<f64> {
+        let mut state = 12345u64;
+        let mut next = || {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((state >> 11) as f64 + 0.5) / (1u64 << 53) as f64
+        };
+        (0..n).map(|_| (-2.0 * next().ln()).sqrt() * (2.0 * std::f64::consts::PI * next()).cos()).collect()
+    }
+
+    #[test]
+    fn far_outliers_do_not_leave_the_bulk_unsampled() {
+        let mut data = normal_sample(1000);
+        data.extend([1e6; 5]);
+        let d = kernel_density(&data, Bandwidth::Scott, 200.0).unwrap();
+        let w = d.bandwidth;
+        assert!(w < 0.5, "the bandwidth follows the bulk: {w}");
+        // The ends stay exact and the grid ascends.
+        assert!((d.grid[0] - (data.iter().copied().fold(f64::MAX, f64::min) - 2.0 * w)).abs() < 1e-9);
+        assert_eq!(d.grid[d.grid.len() - 1], 1e6 + 2.0 * w);
+        assert!(d.grid.windows(2).all(|p| p[1] > p[0]));
+        // Inside the bulk the step is at most a quarter of the bandwidth.
+        let bulk: Vec<f64> = d.grid.iter().copied().filter(|x| (-3.0..3.0).contains(x)).collect();
+        assert!(bulk.windows(2).all(|p| p[1] - p[0] <= 0.25 * w + 1e-9), "bulk steps");
+        assert!(bulk.len() > 80, "{} points in the bulk", bulk.len());
+        // The highest sampled point is at the mode of the bulk, not at an outlier.
+        let (i, peak) = d.density.iter().enumerate().fold((0, 0.0), |m, (i, f)| if *f > m.1 { (i, *f) } else { m });
+        assert!(d.grid[i].abs() < 1.0, "peak at {}", d.grid[i]);
+        let true_peak = (-2000..=2000).map(|k| density_at(&data, w, k as f64 * 0.002)).fold(0.0, f64::max);
+        assert!(peak > 0.99 * true_peak, "{peak} against {true_peak}");
+        // Each outlier still has its bump.
+        assert!(d.grid.iter().zip(&d.density).any(|(x, f)| (*x - 1e6).abs() < 0.1 * w && *f > 0.0));
+    }
+
+    #[test]
+    fn the_refinement_is_capped() {
+        // A wide spread of many values cannot add more than the cap.
+        let data: Vec<f64> = (0..5000).map(|i| (i as f64).powi(3) * 1e-3).collect();
+        let d = kernel_density(&data, Bandwidth::Fixed(0.01), 200.0).unwrap();
+        assert!(d.grid.len() <= GRID_POINTS + MAX_EXTRA_POINTS + 2 * 5000, "{}", d.grid.len());
+        assert!(d.grid.windows(2).all(|p| p[1] > p[0]));
     }
 }

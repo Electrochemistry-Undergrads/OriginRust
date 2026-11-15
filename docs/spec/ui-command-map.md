@@ -157,9 +157,10 @@ templates. P2: 3D, specialised, stock.
 The plot toolbars (C-toolbars below) show the same commands with the one-word internal names
 `Line, Scatter, LineSymbol, Bar, Column, Pie, StackArea, Area, FillArea, DoubleY, LineSeries,
 Waterfall, OffsetYs, YError, XYError, VertDropLine, Spline, HorzStep, VertStep, Segment2,
-Segment3, BoxChart, Violin, Histogram, StackBar, StackCol, FloatBar, FloatColumn, IndexSize,
+Segment3, BoxChart, Histogram, StackBar, StackCol, FloatBar, FloatColumn, IndexSize,
 IndexColor, ScatterCentral, ColumnScatter, 3Ys_Y-YY` etc. (OBSERVED in `ou9_64.dll` toolbar
-tooltips, with command text such as "@DoubleY").
+tooltips, with command text such as "@DoubleY"). Violin plots are newer than those 9.3 binaries (Origin 2019): the
+Origin help names a "Violin with Box" button on the 2D Graphs toolbar, but its internal name is UNKNOWN (not observed).
 
 **Column** (P0)
 - Set As: X, Y, Z, Label, Disregard, Y Error, X Error (plot designation of the selected columns).

@@ -54,6 +54,16 @@ fn every_violin_template_draws_one_silhouette_per_y_column() {
         assert!(ok, "{template}: {e}");
         let text = std::fs::read_to_string(&svg).unwrap();
         assert!(text.contains("<svg") && text.contains("alpha") && text.contains("gamma"), "{template}");
+        // One silhouette per Y column: a closed path with a point for each side of every grid point.
+        let silhouettes = text
+            .split("<path ")
+            .filter(|p| {
+                let d = p.split("d=\"").nth(1).and_then(|r| r.split('"').next()).unwrap_or("");
+                d.matches('L').count() + 1 >= 200 && d.ends_with('Z')
+            })
+            .count();
+        // Each silhouette is a fill and an outline.
+        assert_eq!(silhouettes, 2 * 3, "{template}: a fill and an outline for each of three columns");
         let project = sheaf_io::project_file::load(&saved).unwrap();
         let layer = &project.graphs().next().unwrap().layers[0];
         assert_eq!(layer.plots.len(), 3, "{template}");

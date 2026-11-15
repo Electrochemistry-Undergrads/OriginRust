@@ -3,11 +3,11 @@
 //!
 //! The cubic B-spline of Origin is a smoothing spline (Dierckx fit, see [`crate::dierckx`]) whose
 //! smoothing factor `sf` is the allowed sum of squared residuals. With `sf > 0` it is
-//! reproduced exactly. For `sf = 0` Origin picks an automatic factor that we could not find; here
-//! `sf = 0` means the interpolating (not-a-knot) cubic spline, which is therefore NOT what Origin
-//! computes for its default option, except where the data already lie on a cubic polynomial.
-//! Outside the data both forms continue with Origin's straight line through the two nearest data
-//! points. See `docs/spec/analysis-tools.md`.
+//! reproduced exactly. For `sf = 0` (Origin's default) the factor is chosen from the data by
+//! [`automatic_smoothing`], a noise-variance (nugget) estimate from the first lags of the
+//! semivariogram, measured on 236 data sets to 6e-15. Outside the data the curve continues with
+//! Origin's straight line through the two nearest data points. See `docs/spec/analysis-tools.md`,
+//! section 5.
 
 use crate::dierckx::{CubicBSpline, smoothing_spline};
 
@@ -18,8 +18,8 @@ pub enum InterpMethod {
     Linear,
     CubicSpline,
     Akima,
-    /// Cubic B-spline: the Dierckx smoothing spline for a smoothing factor above 0 (matches
-    /// Origin), the interpolating spline for 0 (does not match Origin's automatic factor).
+    /// Cubic B-spline: the Dierckx smoothing spline with the given smoothing factor, or with
+    /// Origin's automatic factor for 0 (both match Origin).
     BSpline,
 }
 
@@ -50,8 +50,8 @@ pub struct InterpOptions {
     pub boundary: SplineBoundary,
     pub extrapolation: Extrapolation,
     /// Smoothing factor of the B-spline method (`sf`): the allowed sum of squared residuals.
-    /// 0 interpolates (Origin's automatic factor is not reproduced); negative or NaN values give
-    /// NaN results. Ignored by the other methods.
+    /// 0 picks the factor automatically as Origin does ([`automatic_smoothing`]); negative or NaN
+    /// values give NaN results. Ignored by the other methods.
     pub smoothing: f64,
 }
 
@@ -138,6 +138,48 @@ fn akima_slopes(x: &[f64], y: &[f64]) -> Vec<f64> {
     s
 }
 
+/// Origin's automatic smoothing factor of the cubic B-spline (`interp1 method:=bspline` with
+/// `sf = 0`), from the points in their worksheet order (missing pairs already dropped, before
+/// sorting or merging equal X).
+///
+/// With `L = min(5, m - 1)` lags and the starts `i = 0 .. m - L - 1` (the same starts for every
+/// lag), it averages `(y[i+d] - y[i])^2 / 2` and `(x[i+d] - x[i])^2` over the starts for each lag
+/// `d = 1 .. L`, fits a straight line to these `L` points by least squares and returns the
+/// absolute value of its intercept: the nugget of the semivariogram against squared distance,
+/// that is an estimate of the noise variance. Fewer than three points give 0. Measured against
+/// Origin 2016 (docs/spec/analysis-tools.md, section 5).
+pub fn automatic_smoothing(x: &[f64], y: &[f64]) -> f64 {
+    let m = x.len().min(y.len());
+    if m < 3 {
+        return 0.0;
+    }
+    let lags = (m - 1).min(5);
+    let starts = m - lags;
+    let mut d = [0.0_f64; 5];
+    let mut g = [0.0_f64; 5];
+    for lag in 1..=lags {
+        let (mut sd, mut sg) = (0.0, 0.0);
+        for i in 0..starts {
+            let dx = x[i + lag] - x[i];
+            let dy = y[i + lag] - y[i];
+            sd += dx * dx;
+            sg += 0.5 * dy * dy;
+        }
+        d[lag - 1] = sd / starts as f64;
+        g[lag - 1] = sg / starts as f64;
+    }
+    let (d, g) = (&d[..lags], &g[..lags]);
+    let n = lags as f64;
+    let dm = d.iter().sum::<f64>() / n;
+    let gm = g.iter().sum::<f64>() / n;
+    let sxx: f64 = d.iter().map(|v| (v - dm) * (v - dm)).sum();
+    let sxy: f64 = d.iter().zip(g).map(|(a, b)| (a - dm) * (b - gm)).sum();
+    // Equal mean squared distances at every lag (not possible for distinct X in any order seen
+    // so far) leave no slope: the intercept is then the mean (unmeasured).
+    let slope = if sxx > 0.0 { sxy / sxx } else { 0.0 };
+    (gm - slope * dm).abs()
+}
+
 /// Replaces runs of points with the same X (sorted input) by one point with the mean Y.
 fn merge_equal_x(pts: &[(f64, f64)]) -> Vec<(f64, f64)> {
     let mut out: Vec<(f64, f64)> = Vec::with_capacity(pts.len());
@@ -161,15 +203,25 @@ pub fn interp1(x: &[f64], y: &[f64], at: &[f64], opts: &InterpOptions) -> Vec<f6
     let mut pts: Vec<(f64, f64)> =
         x.iter().zip(y).filter(|(a, b)| a.is_finite() && b.is_finite()).map(|(&a, &b)| (a, b)).collect();
     let bspline = opts.method == InterpMethod::BSpline;
+    // Origin computes its automatic B-spline factor on the rows in worksheet order, before it sorts
+    // them or merges equal X (measured with unsorted and repeated X).
+    let smoothing = if bspline && opts.smoothing == 0.0 {
+        let (ax, ay): (Vec<f64>, Vec<f64>) = pts.iter().copied().unzip();
+        let s = automatic_smoothing(&ax, &ay);
+        // Squares beyond about 1e154 overflow; the interpolating spline is then the best answer.
+        if s.is_finite() { s } else { 0.0 }
+    } else {
+        opts.smoothing
+    };
     if pts.windows(2).any(|w| w[1].0 < w[0].0) {
         pts.sort_by(|a, b| a.0.total_cmp(&b.0));
     }
     if bspline {
-        // The B-spline needs strictly increasing X: points with the same X become their mean
-        // (Origin's behaviour on duplicates was not compared).
+        // The B-spline needs strictly increasing X: points with the same X become their mean, as
+        // in Origin (measured with sf = 0.2 and with the automatic factor).
         pts = merge_equal_x(&pts);
         // Origin needs four points for the B-spline.
-        if pts.len() < 4 || opts.smoothing.is_nan() || opts.smoothing < 0.0 {
+        if pts.len() < 4 || !smoothing.is_finite() || smoothing < 0.0 {
             return vec![f64::NAN; at.len()];
         }
     } else if pts.len() < 2 {
@@ -178,8 +230,10 @@ pub fn interp1(x: &[f64], y: &[f64], at: &[f64], opts: &InterpOptions) -> Vec<f6
     let xs: Vec<f64> = pts.iter().map(|p| p.0).collect();
     let ys: Vec<f64> = pts.iter().map(|p| p.1).collect();
     let n = xs.len();
-    let smoothing_fit: Option<CubicBSpline> = if bspline && opts.smoothing > 0.0 {
-        match smoothing_spline(&xs, &ys, opts.smoothing) {
+    // A factor of 0 (from constant data, or data on an exact straight variogram) is the
+    // interpolating spline, as Dierckx's routine gives for s = 0.
+    let smoothing_fit: Option<CubicBSpline> = if bspline && smoothing > 0.0 {
+        match smoothing_spline(&xs, &ys, smoothing) {
             Some((spline, _)) => Some(spline),
             None => return vec![f64::NAN; at.len()],
         }

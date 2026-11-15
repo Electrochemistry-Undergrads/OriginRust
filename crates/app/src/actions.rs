@@ -135,6 +135,8 @@ pub enum ImportPick {
     Multiple,
     /// Several files, with the comma preset as the delimiter.
     Csv,
+    /// Excel workbooks (File > Import > Excel).
+    Excel,
 }
 
 #[derive(Debug, Clone)]
@@ -305,6 +307,15 @@ pub enum Action {
         rows: usize,
         cols: usize,
     },
+    /// Plot > Multi-Panel > Stack: choose grouping and layout before making the graph.
+    StackPanels {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    LabelPanels {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     /// Graph > Add Error Bars: choose an existing Y-error column for one plot of the layer.
     AddErrorBars {
         graph: WindowId,
@@ -407,6 +418,12 @@ pub enum Action {
     },
     ExportGraph(WindowId),
     ExportData(WindowId),
+    /// File > Export > Worksheet as Excel...: the sheets of this book as an `.xlsx` file.
+    ExportExcel(WindowId),
+    /// File > Print...: the graph page through the system print dialog.
+    Print(WindowId),
+    PrintPreview(WindowId),
+    PageSetup,
     /// Bring a window's tab to the front, reopening it if it was closed.
     Focus(WindowId),
     /// Close a window: it leaves the workspace, its data stays (Hide in the project explorer).
@@ -460,6 +477,8 @@ pub enum Action {
     About,
     /// Open the window of View > Toolbars.
     Toolbars,
+    /// Open the window of Tools > Autosave.
+    Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
     Quit,

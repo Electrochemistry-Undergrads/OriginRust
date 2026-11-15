@@ -223,6 +223,11 @@ fn kind_of(v: &Value) -> &'static str {
 fn scalar_text(arg: &Arg, name: &str, v: &Value) -> Result<String> {
     let integer = element_type(arg) == "integer";
     match v {
+        Value::String(s) if integer => match s.parse::<i128>() {
+            Ok(i) if i >= lowest(arg) as i128 && i <= INTEGER_CAP as i128 => Ok(i.to_string()),
+            Ok(_) => bail!("option '{name}' must be between {} and {INTEGER_CAP}", lowest(arg)),
+            Err(_) => Ok(s.clone()), // clap reports malformed integers
+        },
         Value::String(s) => Ok(s.clone()),
         // JSON Schema calls 7.0 an integer, and some clients write every number with a fraction.
         Value::Number(n) if integer && n.as_i64().is_none() && n.as_u64().is_none() => match n.as_f64() {
@@ -345,6 +350,33 @@ pub fn clap_message(e: &clap::Error) -> String {
 fn without_delimiters(cmd: Command) -> Command {
     cmd.mut_args(|a| if a.get_value_delimiter().is_some() { a.value_delimiter(None) } else { a })
         .mut_subcommands(without_delimiters)
+}
+
+/// Options that operate on the session, not CLI input/output files.
+pub fn session_filter(command: &str) -> Filter {
+    let excluded = if command == "plot" {
+        vec!["inputs", "output", "dpi", "image_width", "image_height", "margin", "border_width", "save"]
+    } else {
+        vec!["input", "list", "plot", "dpi", "save", "export"]
+    };
+    Filter::excluding(excluded).and_excluding(ids_of::<sheaf_ops::args::ReadOptions>())
+}
+
+/// Parse a session operation, providing placeholders for required CLI files.
+pub fn parse_session(
+    command: &str,
+    options: &Map<String, Value>,
+    resolve: &mut dyn FnMut(&str) -> Result<String>,
+) -> Result<Cli> {
+    let cmd = subcommand(&[command])?;
+    let mut argv = vec!["sheaf".to_string(), command.to_string(), "@session".to_string()];
+    if command == "plot" {
+        argv.push("--output=@session.png".to_string());
+    }
+    argv.extend(to_argv(&cmd, &session_filter(command), options, resolve)?);
+    let matches =
+        without_delimiters(Cli::command()).try_get_matches_from(argv).map_err(|e| anyhow!("{}", clap_message(&e)))?;
+    Cli::from_arg_matches(&matches).map_err(|e| anyhow!("{}", clap_message(&e)))
 }
 
 /// The top-level selection of an `analyze` call, written as the command line's options.

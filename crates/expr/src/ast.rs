@@ -19,6 +19,15 @@ pub enum ColumnRef {
     Long(String),
     /// `col(3)` or `wcol(3)`: 1-based position in the sheet.
     Index(usize),
+    /// `[Book]Sheet!col(A)` or `Sheet!col(A)`. Without a book, use the formula's workbook.
+    Scoped { book: Option<String>, sheet: WorksheetRef, column: Box<ColumnRef> },
+}
+
+/// A worksheet selected by its name or its 1-based position within a workbook.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum WorksheetRef {
+    Name(String),
+    Index(usize),
 }
 
 /// A built-in column header row, using Origin's label-row characters.
@@ -50,6 +59,15 @@ impl std::fmt::Display for ColumnRef {
             ColumnRef::Short(s) => write!(f, "col({s})"),
             ColumnRef::Long(s) => write!(f, "col(\"{s}\")"),
             ColumnRef::Index(n) => write!(f, "col({n})"),
+            ColumnRef::Scoped { book, sheet, column } => {
+                if let Some(book) = book {
+                    write!(f, "[{book}]")?;
+                }
+                match sheet {
+                    WorksheetRef::Name(name) => write!(f, "{name}!{column}"),
+                    WorksheetRef::Index(index) => write!(f, "{index}!{column}"),
+                }
+            }
         }
     }
 }
@@ -249,6 +267,25 @@ impl Expr {
         &self.source
     }
 
+    /// Checks column references without evaluating functions or allocating output rows.
+    /// Useful when a caller must report a missing source before deciding how many rows to fill.
+    pub fn validate_columns(&self, host: &dyn crate::Host) -> Result<(), ExprError> {
+        let mut error = None;
+        self.root.walk(&mut |node| {
+            let column = match &node.kind {
+                Kind::Col { r, .. } | Kind::Label { r, .. } | Kind::Parameter { r, .. } => Some(r),
+                _ => None,
+            };
+            if error.is_none()
+                && let Some(r) = column
+                && !host.has_column(r)
+            {
+                error = Some(ExprError::at(node.pos(), format!("unknown column {r}")));
+            }
+        });
+        error.map_or(Ok(()), Err)
+    }
+
     /// Resolves named subscripts against a host before inspecting dependencies. A parameter row
     /// takes precedence over a variable; otherwise a known variable (including `i`) still indexes
     /// data. An unknown name is an empty parameter row, as in Origin. Evaluation does this too.
@@ -325,6 +362,19 @@ impl Expr {
         let mut found = false;
         self.root.walk(&mut |n| found |= matches!(n.kind, Kind::Parameter { .. }));
         found
+    }
+
+    /// Columns whose user parameter rows are read, after resolving named subscripts.
+    pub fn parameter_columns(&self) -> Vec<ColumnRef> {
+        let mut out = Vec::new();
+        self.root.walk(&mut |n| {
+            if let Kind::Parameter { r, .. } = &n.kind
+                && !out.contains(r)
+            {
+                out.push(r.clone());
+            }
+        });
+        out
     }
 
     fn column_refs(&self, data: bool, labels: bool) -> Vec<ColumnRef> {

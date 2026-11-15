@@ -5,8 +5,8 @@ use anyhow::{Result, bail};
 use sheaf_core::template::Template;
 use sheaf_core::{Project, WindowId};
 use sheaf_io::Imported;
+use sheaf_ops::cli_plot::{plot_spec, style_spec};
 use sheaf_ops::import::{ImportLayout as OpsLayout, ImportRequest};
-use sheaf_ops::plot::{PanelsSpec, PlotSpec, Style};
 use sheaf_ops::render::{ExportSettings, MarginSettings};
 use sheaf_ops::{DataFormat, ReadSettings, ThousandsSetting};
 use std::path::{Path, PathBuf};
@@ -19,6 +19,7 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Import(a) => import(a),
         Command::Plot(a) => plot(*a),
         Command::Export(a) => export(a),
+        Command::Print(a) => print(a),
         Command::ExportData(a) => export_data(a),
         Command::Analyze(a) => crate::analyze::analyze(a),
         Command::Fit(a) => crate::fit::fit(a),
@@ -95,6 +96,9 @@ pub(crate) fn read_settings(r: &ReadOptions) -> ReadSettings {
         no_rename_sheet: r.no_rename_sheet,
         no_rename_book: r.no_rename_book,
         blocks_as_sheets: r.blocks_as_sheets,
+        sheets: r.sheets.clone(),
+        hidden_sheets: r.hidden_sheets,
+        skip_hidden_sheets: r.skip_hidden_sheets,
     }
 }
 
@@ -232,82 +236,12 @@ fn report_save(report: &sheaf_ops::SaveReport) -> Result<()> {
     Ok(())
 }
 
-/// The style options of the command line as the library takes them.
-fn style_spec(s: &StyleArgs) -> Style {
-    Style {
-        x_title: s.x_title.clone(),
-        y_title: s.y_title.clone(),
-        x_min: s.x_min,
-        x_max: s.x_max,
-        y_min: s.y_min,
-        y_max: s.y_max,
-        x_step: s.x_step,
-        y_step: s.y_step,
-        y2_title: s.y2_title.clone(),
-        y2_min: s.y2_min,
-        y2_max: s.y2_max,
-        y2_step: s.y2_step,
-        axis_colors: s.axis_colors.map(|m| match m {
-            AxisColors::Plot => sheaf_ops::plot::AxisColors::Plot,
-            AxisColors::Fixed => sheaf_ops::plot::AxisColors::Fixed,
-        }),
-        width: s.width,
-        height: s.height,
-        line_width: s.line_width,
-        colors: s.colors.clone(),
-        labels: s.labels.clone(),
-        no_legend: s.no_legend,
-        stack: s.stack.clone(),
-        offsets: s.offsets.clone(),
-        waterfall: s.waterfall.clone(),
-        no_y_tick_labels: s.no_y_tick_labels,
-        no_y_ticks: s.no_y_ticks,
-        x_labels: s.x_labels.clone(),
-        x_label_angle: s.x_label_angle,
-        bar_gap: s.bar_gap,
-        bar_overlap: s.bar_overlap,
-        label: s.label.clone(),
-        draw: s.draw.clone(),
-    }
-}
-
 fn export_settings(dpi: f64, width: &Option<String>, height: &Option<String>, m: &MarginArgs) -> ExportSettings {
     ExportSettings {
         dpi,
         image_width: width.clone(),
         image_height: height.clone(),
         margin: MarginSettings { margin: m.margin.clone(), border_width: m.border_width },
-    }
-}
-
-fn plot_spec(a: &PlotArgs) -> PlotSpec {
-    PlotSpec {
-        template: a.template.clone(),
-        y: a.y.clone(),
-        y2: a.y2.clone(),
-        book: a.book.clone(),
-        sheet: a.sheet.clone(),
-        graph: a.graph.clone(),
-        panels: a.panels.as_ref().map(|shape| PanelsSpec {
-            shape: shape.clone(),
-            panel_y: a.panel_y.clone(),
-            per_panel: a.per_panel.clone(),
-            gap: a.panel_gap.clone(),
-            margins: a.panel_margins.clone(),
-            order: a.panel_order.map(|o| match o {
-                PanelOrderArg::BottomUp => sheaf_ops::plot::PanelOrderSetting::BottomUp,
-                PanelOrderArg::TopDown => sheaf_ops::plot::PanelOrderSetting::TopDown,
-            }),
-            link: a.panel_link.map(|l| match l {
-                PanelLinkArg::X => sheaf_ops::plot::PanelLinkSetting::X,
-                PanelLinkArg::Y => sheaf_ops::plot::PanelLinkSetting::Y,
-                PanelLinkArg::Xy => sheaf_ops::plot::PanelLinkSetting::Xy,
-                PanelLinkArg::None => sheaf_ops::plot::PanelLinkSetting::None,
-            }),
-        }),
-        overlay: a.inputs.len() > 1,
-        overlay_books: Vec::new(),
-        style: style_spec(&a.style),
     }
 }
 
@@ -350,8 +284,8 @@ fn is_opj(path: &Path) -> bool {
 
 /// Writes the whole project (or the data file as a one-workbook project) as an Origin project.
 fn export_opj(a: &ExportArgs) -> Result<()> {
-    if a.graph.is_some() {
-        bail!("--graph is for figures; an .opj output holds the whole project");
+    if !a.graph.is_empty() || a.all_graphs {
+        bail!("--graph and --all-graphs are for figures; an .opj output holds the whole project");
     }
     if let (Ok(input), Ok(output)) = (std::fs::canonicalize(&a.project), std::fs::canonicalize(&a.output))
         && input == output
@@ -368,9 +302,171 @@ fn export_opj(a: &ExportArgs) -> Result<()> {
     save_project(&project, &a.output)
 }
 
+fn xlsx_request(x: &XlsxArgs) -> sheaf_ops::tabular::XlsxRequest {
+    sheaf_ops::tabular::XlsxRequest {
+        all_sheets: x.all_sheets,
+        no_long_names: x.no_long_names,
+        no_units: x.no_units,
+        no_comments: x.no_comments,
+        short_names: x.short_names,
+    }
+}
+
+/// Writes a workbook of the project as an Excel file and says so.
+fn write_xlsx(project: &Project, book: Option<&str>, sheet: Option<&str>, x: &XlsxArgs, output: &Path) -> Result<()> {
+    let book = pick_book(project, book)?;
+    let outcome = sheaf_ops::tabular::write_xlsx(project, book, sheet, &xlsx_request(x), output)?;
+    for w in &outcome.warnings {
+        eprintln!("warning: {w}");
+    }
+    println!(
+        "wrote {} ({} sheet(s): {})",
+        outcome.path.display(),
+        outcome.sheet_names.len(),
+        outcome.sheet_names.join(", ")
+    );
+    Ok(())
+}
+
+/// Writes one workbook of the project (or the data file as a one-workbook project) as `.xlsx`.
+fn export_xlsx(a: &ExportArgs) -> Result<()> {
+    if !a.graph.is_empty() || a.all_graphs {
+        bail!("--graph and --all-graphs are for figures; an .xlsx output holds a workbook (see --book and --sheet)");
+    }
+    if let (Ok(input), Ok(output)) = (std::fs::canonicalize(&a.project), std::fs::canonicalize(&a.output))
+        && input == output
+    {
+        bail!("the output '{}' is also the input", a.output.display());
+    }
+    let project = if is_project(&a.project) {
+        load_project(&a.project)?
+    } else {
+        let mut p = Project::new();
+        p.adopt_workbook(read_data_file(&a.project, &read_settings(&a.read))?.workbook);
+        p
+    };
+    write_xlsx(&project, a.book.as_deref(), a.sheet.as_deref(), &a.xlsx, &a.output)
+}
+
+fn print(a: PrintArgs) -> Result<()> {
+    if !is_project(&a.project) {
+        bail!("'{}' is not a project; print needs a .sheaf, .opj or .opju project with a graph", a.project.display());
+    }
+    let project = load_project(&a.project)?;
+    let graphs = pick_graphs(&project, &a.graph, a.all_graphs)?;
+    if let Some(path) = &a.output {
+        use std::io::Write;
+        if !is_pdf(path) {
+            bail!("the print output must have a .pdf extension");
+        }
+        // One graph keeps the one-page writer; several give one sheet each, in order.
+        let pdf = match graphs.as_slice() {
+            [graph] => sheaf_plot::render_print_pdf(&project, *graph)?,
+            _ => sheaf_plot::render_print_multipage_pdf(&project, &graphs)?,
+        };
+        if sheaf_ops::session::same_file(&a.project, path) {
+            bail!("the PDF output cannot overwrite the input project");
+        }
+        let directory = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+        let mut temp = tempfile::Builder::new()
+            .prefix(".sheaf-print-")
+            .tempfile_in(directory)
+            .map_err(|e| anyhow::anyhow!("cannot create PDF in '{}': {e}", directory.display()))?;
+        temp.write_all(&pdf)?;
+        temp.persist(path).map_err(|e| anyhow::anyhow!("cannot write '{}': {}", path.display(), e.error))?;
+        println!("wrote {}", path.display());
+    } else {
+        // One print job per graph, each with its own paper orientation (Sheaf's choice). Every
+        // graph is rendered first so a render error submits nothing.
+        let pdfs = graphs.iter().map(|&g| sheaf_plot::render_print_pdf(&project, g)).collect::<Result<Vec<_>, _>>()?;
+        for (pdf, &graph) in pdfs.iter().zip(&graphs) {
+            submit_print(pdf, &project, graph, a.printer.as_deref())?;
+        }
+    }
+    Ok(())
+}
+
+fn is_pdf(path: &Path) -> bool {
+    path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pdf"))
+}
+
+/// The graphs named by `--graph` (repeatable, in the order given, repeats kept) or every graph
+/// in project order with `--all-graphs`; with neither, the only graph of the project.
+fn pick_graphs(project: &Project, names: &[String], all: bool) -> Result<Vec<WindowId>> {
+    if all {
+        let graphs: Vec<WindowId> = project.graphs().map(|g| g.id).collect();
+        if graphs.is_empty() {
+            bail!("the project has no graph");
+        }
+        return Ok(graphs);
+    }
+    if names.is_empty() {
+        return Ok(vec![sheaf_ops::pick::pick_graph(project, None)?]);
+    }
+    names.iter().map(|n| sheaf_ops::pick::pick_graph(project, Some(n))).collect()
+}
+
+#[cfg(not(windows))]
+fn submit_print(pdf: &[u8], project: &Project, graph: WindowId, printer: Option<&str>) -> Result<()> {
+    use sheaf_core::page_setup::{Orientation, Paper};
+    use std::io::Write;
+    let page = &project.graph(graph).expect("picked above").page;
+    let setup = project.page_setup;
+    let media = match setup.paper {
+        Paper::Letter => "Letter",
+        Paper::Legal => "Legal",
+        Paper::Tabloid => "Tabloid",
+        Paper::A3 => "A3",
+        Paper::A4 => "A4",
+        Paper::A5 => "A5",
+    };
+    let orientation = if setup.orientation_for(page.width_pt, page.height_pt) == Orientation::Landscape {
+        "landscape"
+    } else {
+        "portrait"
+    };
+    let mut tmp = tempfile::Builder::new().prefix("sheaf-print-").suffix(".pdf").tempfile()?;
+    tmp.write_all(pdf)?;
+    tmp.flush()?;
+    let mut cmd = std::process::Command::new("lp");
+    if let Some(printer) = printer {
+        cmd.arg("-d").arg(printer);
+    }
+    cmd.arg("-t").arg(&project.graph(graph).expect("picked above").name);
+    let output = cmd
+        .args([
+            "-o",
+            &format!("media={media}"),
+            "-o",
+            orientation,
+            "-o",
+            "print-scaling=none",
+            "-o",
+            "fit-to-page=Off",
+            "--",
+        ])
+        .arg(tmp.path())
+        .output()
+        .map_err(|e| anyhow::anyhow!("could not start lp: {e}"))?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr);
+        bail!("lp failed ({}): {}", output.status, detail.trim());
+    }
+    print!("{}", String::from_utf8_lossy(&output.stdout));
+    Ok(())
+}
+
+#[cfg(windows)]
+fn submit_print(_pdf: &[u8], _project: &Project, _graph: WindowId, _printer: Option<&str>) -> Result<()> {
+    bail!("printer submission is not available on Windows; use --output to write a PDF")
+}
+
 fn export(a: ExportArgs) -> Result<()> {
     if is_opj(&a.output) {
         return export_opj(&a);
+    }
+    if sheaf_ops::tabular::is_xlsx_path(&a.output) {
+        return export_xlsx(&a);
     }
     require_positive("--dpi", Some(a.dpi))?;
     if !is_project(&a.project) {
@@ -379,18 +475,51 @@ fn export(a: ExportArgs) -> Result<()> {
             a.project.display()
         );
     }
+    if a.graph.len() > 1 && !is_pdf(&a.output) {
+        bail!(multipage_needs_pdf(a.graph.len(), &a.output));
+    }
     let mut project = load_project(&a.project)?;
-    let graph: WindowId = sheaf_ops::pick::pick_graph(&project, a.graph.as_deref())?;
-    sheaf_ops::plot::apply_style(&mut project, graph, &style_spec(&a.style), false)?;
+    let graphs = pick_graphs(&project, &a.graph, a.all_graphs)?;
+    if graphs.len() > 1 && !is_pdf(&a.output) {
+        bail!(multipage_needs_pdf(graphs.len(), &a.output));
+    }
+    let style = style_spec(&a.style);
+    let mut styled: Vec<WindowId> = Vec::new();
+    for &graph in &graphs {
+        // A graph named twice is styled once, so --label and --draw are not added twice.
+        if !styled.contains(&graph) {
+            sheaf_ops::plot::apply_style(&mut project, graph, &style, false)?;
+            styled.push(graph);
+        }
+    }
     let settings = export_settings(a.dpi, &a.image_width, &a.image_height, &a.margin);
-    sheaf_ops::render::write_graph(&project, graph, &a.output, &settings)?;
-    println!("wrote {}", a.output.display());
+    match graphs.as_slice() {
+        [graph] => {
+            sheaf_ops::render::write_graph(&project, *graph, &a.output, &settings)?;
+            println!("wrote {}", a.output.display());
+        }
+        _ => {
+            sheaf_ops::render::write_graphs_pdf(&project, &graphs, &a.output, &settings)?;
+            println!("wrote {} ({} pages)", a.output.display(), graphs.len());
+        }
+    }
     Ok(())
+}
+
+/// The refusal for several graphs with an output that cannot hold pages.
+fn multipage_needs_pdf(count: usize, output: &Path) -> String {
+    format!(
+        "{count} graphs go into one multi-page PDF, but '{}' is not a .pdf file; use a .pdf output (for example out.pdf) or export one --graph at a time",
+        output.display()
+    )
 }
 
 fn export_data(a: ExportDataArgs) -> Result<()> {
     let project = load_project(&a.project)?;
     let book = pick_book(&project, a.book.as_deref())?;
+    if sheaf_ops::tabular::is_xlsx_path(&a.output) {
+        return write_xlsx(&project, a.book.as_deref(), a.sheet.as_deref(), &a.xlsx, &a.output);
+    }
     let sheet = pick_sheet(&project, book, a.sheet.as_deref())?;
     let ws = &project.workbook(book).expect("picked above").sheets[sheet];
     write_sheet(ws, &a.output)

@@ -9,9 +9,15 @@ use egui_kittest::kittest::{By, NodeT, Queryable};
 use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
+mod autosave;
+mod excel;
+mod label_frames;
 mod label_whiteout;
+mod lollipop;
 mod offset_multipliers;
 mod skip_points;
+mod symbol_line_gaps;
+mod symbol_line_order;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {
@@ -34,7 +40,7 @@ fn start(paths: Vec<PathBuf>) -> Harness<'static, SheafApp> {
 }
 
 fn start_auto_hide(paths: Vec<PathBuf>) -> Harness<'static, SheafApp> {
-    let startup = Startup { paths, screenshot: None, show: Vec::new() };
+    let startup = Startup { paths, ..Default::default() };
     // Short frames: a double click needs both clicks within 0.3 s of simulated time, and every
     // pointer event of a click is a frame of its own.
     let mut h = Harness::builder()
@@ -453,6 +459,27 @@ fn the_axis_dialog_switches_between_the_horizontal_and_the_vertical_axis() {
     menu(&mut h, "Edit", "Undo Change graph settings");
     assert_eq!(graph(&h).layers[0].y_axis.scale, ScaleKind::Linear, "both axes were one undo step");
     assert_eq!(graph(&h).layers[0].x_axis.scale, ScaleKind::Linear);
+}
+
+#[test]
+fn the_grids_tab_turns_on_the_opposite_line_and_a_line_at_zero_of_the_other_axis() {
+    let mut h = start(vec![data_file("axis-additional")]);
+    open_props(&mut h, 0, PropsTab::XAxis, None);
+    click(&mut h, "Grids");
+    // Origin labels the X axis page's line "Y =" (a horizontal line at that Y) and starts it at 0.
+    click(&mut h, "Y =");
+    click(&mut h, "Opposite");
+    assert_eq!(graph(&h).layers[0].x_axis.additional_line, Some(0.0));
+    assert!(graph(&h).layers[0].x_axis.show_opposite);
+    click(&mut h, "OK");
+    open_props(&mut h, 0, PropsTab::YAxis, None);
+    click(&mut h, "Grids");
+    click(&mut h, "X =");
+    assert_eq!(graph(&h).layers[0].y_axis.additional_line, Some(0.0));
+    click(&mut h, "OK");
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert_eq!(graph(&h).layers[0].y_axis.additional_line, None, "undo the Y axis change");
+    assert_eq!(graph(&h).layers[0].x_axis.additional_line, Some(0.0), "the X axis change was its own step");
 }
 
 #[test]
@@ -1266,6 +1293,50 @@ fn file_export_graphs_opens_the_export_window_and_close_closes_it() {
 }
 
 #[test]
+fn file_page_setup_changes_the_project_setup_as_an_undo_step() {
+    use sheaf_core::page_setup::Orientation;
+    let mut h = start(vec![data_file("page-setup")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Page Setup..."]);
+    assert!(h.state().page_setup.is_some(), "Page Setup is open");
+    for label in ["Paper", "Size:", "Orientation", "Portrait", "Landscape", "Margins (inches)", "OK", "Cancel"] {
+        assert!(h.query_by_label(label).is_some(), "{label}");
+    }
+    assert_eq!(project(&h).page_setup, sheaf_core::page_setup::PageSetup::default());
+    click(&mut h, "Landscape");
+    click(&mut h, "OK");
+    assert!(h.state().page_setup.is_none());
+    assert_eq!(project(&h).page_setup.orientation, Orientation::Landscape);
+    assert_eq!(h.state().doc.undo_label(), Some("Page Setup"));
+    // Cancel changes nothing.
+    menu_path(&mut h, &["File", "Page Setup..."]);
+    click(&mut h, "Portrait");
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h).page_setup.orientation, Orientation::Landscape);
+}
+
+#[test]
+fn file_print_preview_opens_for_the_active_graph_and_ctrl_p_does_not_reach_a_printer() {
+    let mut h = start(vec![data_file("print-preview")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Print Preview"]);
+    assert!(h.state().print_preview.is_some(), "Print Preview is open");
+    for label in ["Print Preview", "Print...", "Page Setup...", "Close"] {
+        assert!(h.query_by_label(label).is_some(), "{label}");
+    }
+    // Its Page Setup button opens Page Setup.
+    click(&mut h, "Page Setup...");
+    assert!(h.state().page_setup.is_some());
+    click(&mut h, "Cancel");
+    click(&mut h, "Close");
+    assert!(h.state().print_preview.is_none());
+    // Ctrl+P runs the print command; under test it stops before the system dialog.
+    ctrl(&mut h, egui::Key::P);
+    assert!(h.state().message.is_none(), "no error box");
+    assert!(h.state().status.contains("Printing is skipped"), "{}", h.state().status);
+}
+
+#[test]
 fn export_graphs_dialog_has_origins_groups_and_buttons() {
     let mut h = start(vec![data_file("export-layout")]);
     show_window(&mut h, "Graph1 - sample");
@@ -1344,6 +1415,47 @@ fn export_graphs_apply_writes_the_file_and_asks_before_replacing_it() {
 }
 
 #[test]
+fn export_graphs_multipage_pdf_writes_all_graphs_into_one_file() {
+    let mut h = start(vec![data_file("export-multipage-a"), data_file("export-multipage-b")]);
+    assert_eq!(project(&h).graphs().count(), 2);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Export Graphs..."]);
+    let label = "Export as multi-page PDF file";
+    assert!(h.query_by_label(label).is_none(), "only offered for PDF");
+    h.get_by_value("Portable Network Graphics (*.png)").click();
+    settle(&mut h);
+    // PDF is below the fold of the type list.
+    h.get_by_label("Portable Document Format (*.pdf)").scroll_to_me();
+    settle(&mut h);
+    click(&mut h, "Portable Document Format (*.pdf)");
+    // One graph (Active Page): shown but greyed.
+    assert!(h.get_by_label(label).accesskit_node().is_disabled(), "Active Page is one graph");
+    h.get_by_value("Active Page").click();
+    settle(&mut h);
+    click(&mut h, "All Graphs in Project");
+    assert!(!h.get_by_label(label).accesskit_node().is_disabled());
+    click(&mut h, label);
+    assert!(h.query_by_label("File will be saved as sample.pdf (2 pages)").is_some());
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-export-multipage-out-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    h.state_mut().export.as_mut().unwrap().set_path(&dir);
+    settle(&mut h);
+    click(&mut h, "Apply");
+    let pdfs: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "pdf"))
+        .collect();
+    assert_eq!(pdfs, vec![dir.join("sample.pdf")], "one PDF for both graphs");
+    let bytes = std::fs::read(&pdfs[0]).unwrap();
+    assert!(String::from_utf8_lossy(&bytes).contains("/Count 2"), "two pages");
+    assert!(h.state().status.contains("Wrote 2 graphs to"), "{}", h.state().status);
+    assert!(h.state().export.is_some(), "Apply keeps the window open");
+    click(&mut h, "Cancel");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn export_graphs_psd_picker_writes_rgb_grey_and_indexed_images() {
     let mut h = start(vec![data_file("export-psd")]);
     show_window(&mut h, "Graph1 - sample");
@@ -1359,7 +1471,7 @@ fn export_graphs_psd_picker_writes_rgb_grey_and_indexed_images() {
     h.state_mut().export.as_mut().unwrap().set_path(&dir);
     let mut current = "24-bit Color";
     for (name, depth, mode) in
-        [("rgb", "24-bit Color", 3), ("grey", "8-bit Grayscale", 1), ("indexed", "256 Colors", 2)]
+        [("rgb", "24-bit Color", 3), ("grey", "8-bit Gray Scale", 1), ("indexed", "256 Colors", 2)]
     {
         if depth != current {
             h.get_by_value(current).click();
@@ -1864,6 +1976,50 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 2));
 }
 
+/// The Fit Peaks goal of the Peak Analyzer offers Origin's Voigt; OK fits every found peak with it.
+#[test]
+fn peak_analyzer_fits_the_found_peaks_with_voigt() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-peakvoigt-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("peaks.csv");
+    let mut text = String::from(
+        "t,i
+",
+    );
+    for k in 0..400 {
+        let x = k as f64 * 0.05;
+        let g = |c: f64, s: f64, a: f64| a * (-(x - c) * (x - c) / (2.0 * s * s)).exp();
+        text.push_str(&format!(
+            "{x},{}
+",
+            0.1 + 0.01 * x + g(6.0, 0.4, 1.0) + g(13.0, 0.5, 0.6)
+        ));
+    }
+    std::fs::write(&path, text).unwrap();
+    let mut h = start(vec![path]);
+    show_window(&mut h, "Book1 - peaks");
+    menu_path(&mut h, &["Analysis", "Peaks and Baseline", "Peak Analyzer..."]);
+    h.get_by_label("Fit Peaks").scroll_to_me();
+    settle(&mut h);
+    click(&mut h, "Fit Peaks");
+    assert!(label_containing(&h, "Goal - Fit Peaks"));
+    for _ in 0..4 {
+        click(&mut h, "Next");
+    }
+    assert!(has_label(&h, "Voigt"), "the Fit Peaks page offers Voigt");
+    click(&mut h, "Voigt");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = &b.sheets[1];
+    let center = sheet.column_by_name("Fit center").map(|c| c.numeric().unwrap().to_vec());
+    let names: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
+    let center = center.unwrap_or_else(|| panic!("no Fit center column in {names:?}"));
+    assert!((center[0] - 6.0).abs() < 1e-4 && (center[1] - 13.0).abs() < 1e-4, "{center:?}");
+    let logged = h.state().logs.results.iter().flat_map(|r| &r.lines).any(|l| l.contains("Voigt fit of 2 peaks"));
+    assert!(logged, "the fit note in the Results Log names the Voigt shape");
+}
+
 /// A folder for the project files of one save test.
 fn save_dir(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-save-{tag}-{}", std::process::id()));
@@ -2234,7 +2390,9 @@ fn every_command_of_a_workbook_is_reachable_from_its_origin_menu() {
         &["File", "Import", "Single ASCII..."],
         &["File", "Import", "Multiple ASCII..."],
         &["File", "Import", "Comma Delimited (CSV)..."],
+        &["File", "Import", "Excel (XLS, XLSX, XLSM)..."],
         &["File", "Export", "Worksheet as ASCII..."],
+        &["File", "Export", "Worksheet as Excel..."],
         &["File", "Exit"],
         &["Edit", "Undo"],
         &["Edit", "Delete"],
@@ -5906,6 +6064,12 @@ mod clipboard_origin;
 #[path = "ui_tests/clipboard_formats.rs"]
 mod clipboard_formats;
 
+mod go_to;
+mod go_to_picker;
+mod label_panels;
+#[path = "ui_tests/stack_panels.rs"]
+mod stack_panels;
+
 #[test]
 fn update_legend_keeps_custom_text_and_adds_the_plots_it_lacks() {
     let mut h = start(vec![data_file("updleg")]);
@@ -6229,7 +6393,13 @@ fn go_to_window_moves_the_cursor_to_the_typed_cell() {
     show_window(&mut h, "Book1 - sample");
     menu_path(&mut h, &["Edit", "Go to..."]);
     assert!(h.state().go_to.is_some());
+    h.get_by_label("Go to Row").focus();
+    settle(&mut h);
     h.event(egui::Event::Text("3".to_string()));
+    settle(&mut h);
+    h.get_by_label("Go to Column").focus();
+    settle(&mut h);
+    h.event(egui::Event::Text("1".to_string()));
     settle(&mut h);
     h.key_press(egui::Key::Enter);
     settle(&mut h);
@@ -6624,6 +6794,59 @@ fn worksheet_filter_dialog_updates_the_graph_and_disable_undo_redo_restore_it() 
     assert_eq!(svg(&h), original);
     h.state_mut().apply(Action::Redo, &ctx);
     assert_eq!(svg(&h), filtered);
+}
+
+#[test]
+fn filtered_worksheet_keys_and_edit_commits_visit_only_visible_cells() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "filtered-navigation");
+        let book = project(&h).workbooks().next().unwrap().id;
+        h.state_mut().doc.apply("Filter fixture", |p| {
+            let ws = p.workbook_mut(book).unwrap().sheet_mut();
+            ws.columns[0].data = ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0]);
+            ws.columns[1].data = ColumnData::numeric(vec![10.125, 20.125, 30.125, 40.125]);
+            p.set_row_filter(book, 0, "mod(col(A), 2) == 1").unwrap();
+        });
+        settle(&mut h);
+        click_text(&mut h, "10.125");
+        h.key_press(egui::Key::ArrowDown);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)), "Down skips the hidden second row");
+        h.key_press(egui::Key::ArrowDown);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 4)), "spare rows remain reachable");
+        h.key_press(egui::Key::ArrowUp);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)));
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Home);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((0, 0)));
+        h.key_press(egui::Key::ArrowRight);
+        settle(&mut h);
+        h.event(egui::Event::Text("11".into()));
+        settle(&mut h);
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)), "committing the edit skips hidden rows");
+        h.event(egui::Event::Text("33".into()));
+        settle(&mut h);
+        h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Enter);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 0)));
+        assert_eq!(column(&h, "B"), [11.0, 20.125, 33.0, 40.125], "hidden values were not edited");
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::ArrowDown);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)), "jumping to data end stops on visible data");
+        h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::ArrowUp);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 2), end: (1, 0) });
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 0)), "Enter wraps through the visible block cells");
+        h.key_press(egui::Key::Tab);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)), "Tab also skips filtered cells within a block");
+    }
 }
 
 #[test]

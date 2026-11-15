@@ -248,9 +248,9 @@ What Origin does, from its documentation and from black-box runs (a hidden Origi
 Sheaf's rules (the `RecalcMode` and `FormulaState` of a column; `Project::set_column_values_with`, `refresh_formulas`, `recalculate`, `recalculate_pending`, `recalculate_since`):
 
 1. A formula column stores its formula, its mode (None, Auto, Manual) and its row range (a column set on "all rows" has none and follows the length of its inputs). Projects without these keys load as mode None. The CH Instruments importer's `col*1000` formulas stay None: they are one-time values.
-2. Auto and Manual formulas read columns of the same sheet. The reads are found from the parsed formula (`Expr::columns`) and matched by short name, long name or position, exactly as evaluation matches them.
-3. Every change made through a `Document` edit (cell edit, import, analysis result, delete or rename of a column, set column values) is followed, inside the same undo step, by a pass over the sheets that hold Auto or Manual columns. The changed columns are found by comparing the project before and after (data, short name, long name). Undo and redo restore whole snapshots, so source and dependents come back together.
-4. The pass runs the formula columns in dependency order. An Auto column runs when one of its inputs changed or was itself just recalculated; a Manual column is marked Pending instead and keeps its values. The Recalculate command runs one column now, then the columns that read it.
+2. Auto and Manual formulas read local columns or explicit cross-sheet/book references such as `[Book1]Sheet2!col(A)` and `2!wcol(1)` (expression-language.md, Cross-sheet and cross-book columns). Reads are matched by short name, quoted long name or column position within the selected sheet. Workbook short names (preferred), unique display titles and sheet names ignore ASCII case; sheet positions are 1-based. Ambiguous book titles are refused. This qualified formula syntax is Sheaf's extension of Origin's documented range notation; installed Origin 2016 requires range variables.
+3. Every change made through a `Document` edit (cell edit, import, analysis result, delete or rename of a column, set column values) is followed, inside the same undo step, by a project-wide pass over Auto and Manual columns. Data, names, label metadata, display formats and parameter edits invalidate readers. Structural edits re-resolve references and invalidate changed bindings; unrelated new books do not mark Manual formulas pending. Undo and redo restore whole snapshots, so remote sources and their dependents come back together.
+4. The pass runs formula columns in dependency order across books and sheets. An Auto column runs when one of its inputs changed or was itself just recalculated; a Manual column is marked Pending instead and keeps its values. The Recalculate command runs one column now, then local and remote columns that read it.
 5. Only the rows of the stored range are written (default: as many rows as the longest input). Rows outside it keep their values.
 6. A formula that cannot run is marked Broken and keeps its old values: an input column was deleted or renamed, the formula text does not parse, the row limit is exceeded, or text sits outside the rows. It runs again on the next pass once the problem is gone (renaming the column back repairs it).
 7. Setting a formula that would close a loop through other recalculating columns is refused with a message naming the chain (`B -> C -> B`) and changes nothing. A formula that reads its own column runs once and the column becomes mode None, as in Origin. A loop that arrives some other way (a project file edited by hand) marks the columns in it Broken.
@@ -258,7 +258,9 @@ Sheaf's rules (the `RecalcMode` and `FormulaState` of a column; `Project::set_co
 9. The worksheet header shows a small word for these columns: `auto` or `manual` (green) when current, `pending` (yellow), `broken` (red). Origin draws a lock icon in those colours; the words are a stand-in until the Origin-style grid exists. The Set Column Values window has a Recalculate choice (None, Auto, Manual; it opens on Manual for a column without a recalculating formula, as Origin does) and the column menu has Recalculate.
 10. Speed: a cell edit with two chained Auto columns of 1,000,000 rows each took about 0.13 seconds in a debug build (including the undo bookkeeping), measured in `crates/core/tests/recalc.rs`.
 
-Not done: formulas that read other sheets or workbooks, recalculation of analysis and fit results from their source, `Before Formula` scripts, and a command-line option for the mode (the CLI has no Set Column Values command).
+Cross-sheet links and cycle checks, positional rebinding, removed sources, Undo/Redo and native/companion persistence have dedicated `cross_sheet_formulas` regressions. `.opj` recalculation records remain limited to same-sheet inputs; cross-sheet Auto/Manual mode survives in the companion, with the existing omission warning.
+
+Not done: recalculation of analysis and fit results from their source, `Before Formula` scripts, and a command-line option for the mode (the CLI has no Set Column Values command).
 
 ## 11. Built-in functions usable in column formulas
 
@@ -367,6 +369,17 @@ The cell editors retain Tab themselves so egui's widget-focus traversal cannot s
 focus after committing. Each new edit uses a fresh editor state with the cursor after the initial
 typed text, including Unicode; stale cursor positions must not turn typing `a`, then `b`, into
 `ba`. Navigation within an ongoing edit retains its normal cursor/selection state.
+Filtered-table keyboard follow-up (2026-11-14): arrows, Home/End, Page Up/Down,
+Enter/Tab and leaving an edit skip filter-hidden rows and hidden columns. Ctrl+Down/End
+search within the target column's data before falling back to the current visible cell;
+spare entry rows remain reachable. Enter/Tab and their Shift versions walk only visible
+cells within a selected block, retaining source row numbers and wrapping in the existing
+row/column order. Go to and leaving the last label row also land on visible cells. A filter
+that hides the active cell moves it to a visible cell within the selection or to the next
+visible entry row; an editor that becomes hidden is cancelled. New/imported-table UI
+regressions verify movement, edit commits, block traversal and unchanged hidden values.
+This is Sheaf keyboard consistency, not a new Origin shortcut/default measurement.
+
 This selection behavior follows the owner's report, not a new measurement of Origin.
 
 ### 13.4 Clipboard text preservation (T07, 2026-11-14)

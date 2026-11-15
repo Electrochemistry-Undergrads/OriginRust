@@ -730,6 +730,12 @@ fn peaks_chain_integrates_and_fits_every_peak() {
     let exported = std::fs::read_to_string(&export).unwrap();
     assert!(exported.lines().next().unwrap().contains("Area"), "{exported}");
 
+    // Origin's Voigt as the peak shape.
+    let (ok, stdout, stderr) =
+        sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--min-height", "0.3", "--fit", "voigt"]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Voigt fit of 2 peaks") && stdout.contains("Fit FWHM"), "{stdout}");
+
     // Without any chain option the plain peak finder runs, as before.
     let (ok, stdout, _) = sheaf(&["analyze", "peaks", data.to_str().unwrap()]);
     assert!(ok && stdout.contains("Peaks1") && !stdout.contains("Area"), "{stdout}");

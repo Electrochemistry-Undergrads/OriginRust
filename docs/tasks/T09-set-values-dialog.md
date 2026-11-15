@@ -1,6 +1,17 @@
 # T09: Set Column Values dialog in Origin's layout
 
-**Status:** done, merged (`20c37e1`) (menu line, row range, column arrows, Function menu with descriptions, Recalculate drop-down, Apply grey until changed; Before Formula Scripts box is shown but inert; multi-column variant and the find button left). **Size:** M.
+**Status:** main dialog done, merged (`20c37e1`). Find/search done (2026-11-14, branch
+`codex/set-values-function-search`): Find and Function > Search Functions open a searchable list
+from the existing Function-menu catalog, with descriptions/examples and insertion at the formula
+cursor through Add Function, double click or Enter. Cancel/Escape leave the formula and data
+unchanged; Apply remains an undoable worksheet operation. Based on Origin's published search
+behavior; the new search-window layout is not measured against installed Origin 2016.
+Before Formula Scripts remains read-only; the multi-column variant is optional and still open.
+Validation: formatting, strict workspace/all-target Clippy and the full workspace tests pass
+on integrated `1500062` plus this change: 2,030 passed, three existing ignored tests. Six new
+regressions cover matching, cursor insertion, Apply/undo/redo, cancellation/no results,
+Escape/Enter, Unicode cursor positions and single/double-click behavior.
+**Size:** M.
 **Branch:** `set-values-dialog`. **Model:** Sonnet.
 **Detail:** audit B "Set Column Values". **Spec:** `docs/spec/gui-look.md` (search "Set Values").
 

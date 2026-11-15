@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-11-14. This file is short on purpose. **To start work, read this
+Last updated: 2026-11-15. This file is short on purpose. **To start work, read this
 file, then `docs/tasks/README.md`, then one brief `docs/tasks/Txx-*.md`.** Do not read
 `docs/audit/origin-differences-2026-11-12.md` or whole specs up front; the brief names the section to
 open. History of what was merged when is in `git log` (not repeated here).
@@ -19,9 +19,50 @@ open. History of what was merged when is in `git log` (not repeated here).
 - **Two or more sessions** often share this repo. Claim work in `re-workspace/scratch/peer-notes.md`
   (local only, read its last 40 lines on start); merge to `main` one branch at a time, after
   `git fetch`. See LESSONS "Two sessions on one repository need a written split".
+- **Inactive task claims:** If a task has had no edits for at least 48 consecutive hours,
+  another agent may take ownership. Check the task brief, its branch and worktree when
+  available, and the latest peer notes for evidence of newer work. Record the takeover in
+  `re-workspace/scratch/peer-notes.md` with the date, new owner, branch and scope, and preserve
+  earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## State of `main`
 
+- T02 Go To picker/name lookup (2026-11-15, Windows): the flyout lists short names,
+  designations and long names, fills an unambiguous short-name/quoted-long-name reference,
+  and Reset clears only the column. Typed names ignore ASCII case; repeated long names
+  choose the first column. Escape closes the flyout before the dialog. Origin 2016 UI
+  probes, four new UI regressions and a parser fixture cover these rules. Formatting,
+  strict all-target Clippy and 2276 workspace tests pass (three existing ignored). The
+  separate project-wide Column Browser remains unimplemented (gui-look section 5).
+- T13 Draw Line in Front/Behind (2026-11-15, Windows): the Line + Symbol choice controls
+  both plotted curves and legend samples, defaulting to Behind. Gap to Symbol disables the
+  radios and overrides the retained choice, as Origin 2016 controls/PNG exports confirm.
+  Native/companion saves preserve it; `.opj` explicitly warns. Formatting, strict all-target
+  workspace Clippy and 2,243 tests pass (three existing ignored), including five new regressions.
+
+- CI build size (2026-11-15): dev/test debug information is disabled and the cache prefix
+  is reset to `debug0-v1-rust` after the hosted runner exhausted its disk during test linking.
+  The format/lint/test commands remain unchanged. Local formatting, strict all-target workspace
+  Clippy and all 2,226 tests pass with debug information disabled (three existing ignored).
+
+- T13 Symbol/Line interface (2026-11-14, Windows): Gap to Symbol and No Line Break for
+  Skipped Point(s) follow Origin 2016 horizontal, zigzag and three-point diagonal exports.
+  Circular clearance is independent of square/circle marker shape; the current fixed 30%
+  preference and unmeasured styles remain explicit in graphing 18. Shared scene/picking and
+  native/companion saves retain the behavior; `.opj` warns. Formatting, strict all-target
+  workspace Clippy and 2,226 tests pass (three existing ignored), including eight new regressions.
+
+- T33 lollipop plot (2026-11-15, macOS, no Origin): Plot > Symbol > Lollipop Plot and `sheaf plot -t
+  lollipop` (two or more Y columns, X/Y exchanged, drop lines from each plot to the next at the same
+  row, the last back to the first); Plot Details Drop Lines "Drop To" (Axis / Next Data Plot) and "Y
+  Value: Plus-Minus" colour; `.opj` save warns. Origin's defaults are unmeasured (graphing.md 18.8).
+- T32 multi-page PDF (2026-11-15, macOS, no Origin): several graphs into one PDF, one page per
+  graph (Origin 2018b `expGraph` `multipage`). `sheaf_plot::render_multipage_pdf` (each page = that
+  graph's one-page PDF export with the same size/margin; sRGB page groups) and
+  `render_print_multipage_pdf` (Page Setup sheets); Export Graphs check box "Export as multi-page PDF
+  file"; `sheaf export`/`sheaf print` repeated `--graph` and `--all-graphs` (print to `lp`: one job per
+  graph); MCP `export_graph` `graphs`/`all_graphs`. Origin's label, file name and page sizing are
+  unmeasured (graphing.md 9.7, T32 brief).
 - Milestones 1-5 done (M2 waits on the owner's click-through; M5 lacks plot groups/legend frames).
   Owner requests of 2026-11-11 done: parity audit, Origin-style workspace (ADR 0007, most steps),
   `.opj` writer for workbooks and graphs, `.opj` as default save with a `.opj.sheaf` companion for
@@ -30,22 +71,33 @@ open. History of what was merged when is in `git log` (not repeated here).
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
 - T13 follow-ups (Windows, 2026-11-14): Data on Top of Axes (`0b9bd4e`), Skip Points
-  (`ef9ed77`), data-label White Out and Individual X/Y multipliers are merged. Point decorations
-  share the measured Origin 2016 frequency; label backgrounds follow rotation; multipliers
-  transform the drawing while errors, labels and calculations retain source units. Reader and
-  gadget positions follow the transformed curves. Formatting, strict all-target Clippy and
-  1,993 workspace tests passed (two ignored), including integrated Windows clipboard work and
-  ten new multiplier regressions. See the T13 Status.
-- Tests: 1955 passed (one ignored) on `main` on macOS on 2026-11-14 night after the T25 port (`analyze` over MCP reaches every CLI tool, prompts, `.opj` backup link fix); formatting and strict all-target Clippy passed. Before that: 1857 passed (two ignored) on `main` on Windows on 2026-11-14 evening after Envelope, Coherence, Decimation and Trace Interpolation (Signal Processing / Mathematics, analysis-tools 13.2-13.4 and 16); formatting and strict all-target Clippy (toolchain 1.99, two `needless_range_loop` fixes) passed; parity 48 done, 136 partial, 54 missing of 238 rows, P0 32 / 69 / 0. Before that: 1815 passed (one ignored) on `main` on macOS after the T13 look settings, cross tabulation, Dunnett, distribution fit, probability and Q-Q plots and the app icon (2026-11-14); formatting and strict all-target Clippy passed. Before that: 1718 on `main` with filtered plots, the FFT phase-boundary repair and latest FFT Filters. Previous Windows run: 1706 with FFT/IFFT and FFT Filters. Parity: 46 done, 135 partial, 54 missing of 235 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+  (`ef9ed77`), data-label White Out, Individual X/Y multipliers and label Frame/Margin are merged.
+  Point decorations share the measured Origin 2016 frequency. White Out rotates with text;
+  Box/Shadow frames enclose it in page-aligned boxes with configurable border, fill and margin.
+  Font metrics outside the measured Arial cases remain approximate. Multipliers transform the
+  drawing while errors, labels and calculations retain source units; reader/gadget positions
+  follow the curves. Formatting, strict all-target Clippy and 2,142 workspace tests passed
+  (three existing ignored), including seven new frame regressions and a separate autosave UI
+  source-fixture isolation fix. See the T13 Status.
+- Tests: 2219 passed (one ignored) on `excel-io` on macOS on 2026-11-14 night after merging main (T30 Excel with T27 CLI print, T13 label frames); formatting and strict all-target Clippy passed; parity 48 done, 140 partial, 50 missing of 238 rows. Before that: 2119 passed (one ignored) on macOS after T27 CLI graph printing on 2026-11-14; formatting and strict all-target Clippy passed. Before that: 2115 passed (one ignored) on `autosave` after merging main (T08 cross-sheet, T25 plot/fit bridge) on macOS on 2026-11-14 night (T28); formatting and strict all-target Clippy passed; parity 48 done, 138 partial, 52 missing of 238 rows. Before that: 1955 passed (one ignored) on `main` on macOS on 2026-11-14 night after the T25 port (`analyze` over MCP reaches every CLI tool, prompts, `.opj` backup link fix); formatting and strict all-target Clippy passed. Before that: 1857 passed (two ignored) on `main` on Windows on 2026-11-14 evening after Envelope, Coherence, Decimation and Trace Interpolation (Signal Processing / Mathematics, analysis-tools 13.2-13.4 and 16); formatting and strict all-target Clippy (toolchain 1.99, two `needless_range_loop` fixes) passed; parity 48 done, 136 partial, 54 missing of 238 rows, P0 32 / 69 / 0. Before that: 1815 passed (one ignored) on `main` on macOS after the T13 look settings, cross tabulation, Dunnett, distribution fit, probability and Q-Q plots and the app icon (2026-11-14); formatting and strict all-target Clippy passed. Before that: 1718 on `main` with filtered plots, the FFT phase-boundary repair and latest FFT Filters. Previous Windows run: 1706 with FFT/IFFT and FFT Filters. Parity: 46 done, 135 partial, 54 missing of 235 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
 - FFT/IFFT CI portability: phase unwrapping treats half-turn roundoff consistently across FFT backends; the original Origin fixtures remain unchanged (analysis-tools.md 15.1). The Linux-only failure is covered by an adjacent-representable-value regression.
 - CI repair (`4b048d1`): the repeated engineering-format failure (`1.0e-24` instead of `1e-24` with one significant digit) is fixed by parsing the decimal scaling power. Strict formatting expectations remain, with a regression across positive and negative decimal powers. The full macOS workspace at that commit passed 1576 tests (one ignored), formatting, and all-target Clippy. Pushes to `main` cancel older CI runs; use pull-request CI for verification while other sessions are pushing frequently.
 
-## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
+## In flight (check for recent edits before claiming)
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t13-label-frame-margin` | Codex Windows, t13-label-frame-margin | T13 Label Frame (None/Box/Shadow, border/fill colors) and Margin only; core DataLabels, plot label backgrounds, graph_details and focused tests | claimed 2026-11-14; no T01 stack panels, app state/menu, leader lines or other sessions' work |
-| `codex/t01-stack-panels` | Codex Windows, t01-stack-panels | T01 Multi-Panel > Stack dialog over existing panels API; app dialog/menu/state and focused UI tests only | claimed 2026-11-14; no core/plot/offset scaling, clipboard or other sessions' symbols |
+| `codex/t02-find-replace` | Codex Windows, t02-find-replace | T02 existing Find in Sheets/Replace layout, defaults and options measured against Origin; find dialog and focused UI tests | claimed 2026-11-15; no Find in Project, grid/Go To, core/expr/history, plot, statistics, printing or other sessions' scopes |
+| `axis-breaks` | Claude Windows, "axis-breaks" | T11 more than one axis break (Origin's 1-7 breaks, per-break position), measured Origin break layout; core Axis break list, plot axis/tick drawing, graph_axis.rs Breaks tab, persistence and focused tests | claimed 2026-11-15; Axis fields only, no PLOT/plots.rs draw_plot, graph_details, navigation, stats or other sessions' scopes |
+| `codex/t13-fill-sidelines` | Codex Windows, t13-fill-sidelines | T13 Fill Area Sidelines only / Sidelines and Base; plot fill-mode/group copy, draw_fill_under/draw_line boundaries, draw_legend sample, graph_details selector and focused tests | claimed 2026-11-15; no Axis/layout geometry/PDF, mask policy/color, navigation, labels, stats or other sessions scopes |
+| `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
+| `mac-print-panel` | Codex macOS, no Origin | T27 native macOS graph print panel via PDFKit; app print_graph/macprint, macOS dependencies and no-spool validation example | claimed 2026-11-14; no workbook printing, Windows CLI, Excel/imports or other sessions’ scope |
+| `saved-state-recovery` | Codex macOS, no Origin | T28 undo/redo saved-state checkpoints and recovery cleanup; core/history.rs, app save/recovery hooks, autosave and focused UI tests | claimed 2026-11-14; no Excel dialogs/imports, axis/labels, backup settings or other sessions’ scope |
+| `vartest` | Claude Windows, "continue all tasks" (owner's decision) | T26 variance and proportion tests: calc vartest.rs, core Tool::VarTest/PropTest, Hypothesis Testing dialogs, ops analyze vartest/proptest | claimed 2026-11-14, continues 7ec9e48/5a08edf |
+| `stats-multi` | Claude Windows, "continue all tasks" | T29 PCA, ROC, Kaplan-Meier, k-means: calc pca/roc/survival/kmeans.rs, core statistics tools, Statistics menu items, ops analyze | claimed 2026-11-14 |
+| `mcp-attach` | Claude macOS, "mac-attach" | T25 phase 2: ADR 0013, app live link (local socket, off by default, menu + `--mcp`), `sheaf-mcp --attach` forwarding, one undo step per forwarded change, status-bar note; new crates/app module + mcp attach client, docs | claimed 2026-11-14 night; no print, recovery/history internals, Excel, Go To, symbol gaps, stats or other sessions' scope |
+| `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
+| `frozen-panes` | Claude macOS, "mac-multipdf" | T34 worksheet frozen panes (Origin 2023 View: Freeze/Unfreeze Panes, Ctrl+Shift+F): core sheet frozen rows/cols, grid.rs frozen drawing/scroll/hit-testing, workbook View menu item | claimed 2026-11-15; grid.rs, core worksheet field, menus/app action, UI tests; no filter/mask/Go To resolver, formulas, plot or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same
@@ -87,6 +139,22 @@ actual executable (see `docs/spec/windows-packaging.md`). Formatting, strict all
 and 1,973 workspace tests pass (two ignored). Left: a Start Menu shortcut and opening files
 double-clicked in Finder (Apple open-document events; the bundle declares no document types until then).
 
+**T27 Print, Windows half merged (2026-11-14, session "continue all tasks"):** File > Print... (Ctrl+P) prints the active graph page through the system dialog as vector EMF placed by `PageSetup::place` (Letter, Automatic orientation, 1 inch margins by default, as Origin's Page Setup showed); Print Preview draws the same placement; Page Setup is saved in `.sheaf` and the `.opj.sheaf` companion (graphing.md 19). A headless print to Microsoft Print to PDF matched the placement exactly. Left (T27 Status): workbook printing, the macOS print panel (the `lp` fallback is untested), `sheaf print`, Origin's own Print and Print Preview windows (unmeasured).
+
+**T30 Excel merged (2026-11-14 night, macOS session "mac-excel"):** File > Import > Excel (XLS, XLSX, XLSM)... (sheets, hidden sheets, header rows as the ASCII import, import modes, partial import, preview), Export > Worksheet as Excel..., drag-and-drop, `sheaf import/info/export/export-data` with `--sheets`/`--hidden-sheets`, MCP `import_files`; `calamine` and `rust_xlsxwriter` (ADR 0012). **Measured on Windows (2026-11-15, session "t30-origin")** against Origin 2016's `impExcel` (probes in `re-workspace/scratch/t30/`, import-excel.md 2) and copied where Sheaf differed: hidden sheets are read by default (`--skip-hidden-sheets`, untick in the window), the book long name keeps the extension, leading empty columns are kept, dates among text stay dates in a Text & Numeric column; Sheaf still detects header rows (Origin reads none) and keeps Excel's dates before 1900-03-01 (Origin's are a day early). Brief step 6 done: three workbooks on the Windows machine agree cell by cell with `openpyxl`. Left: Origin's import window and export (import-excel.md 10).
+
+
+**T27 CLI graph printing (macOS, no Origin, 2026-11-14):** `sheaf print PROJECT
+[--graph NAME] --output FILE.pdf` writes a paper-sized vector PDF using the project's saved Page
+Setup and `PageSetup::place`. Without `--output`, macOS/Linux submit it through `lp` to the default
+or `--printer NAME` destination; Windows currently supports PDF output only. No print job is sent
+by automated tests (a fake `lp` verifies arguments and cleanup). The PDF's transforms and paper
+size, invalid settings and source-preserving atomic output are covered. Native macOS panel,
+workbook printing, Windows CLI submission and hardware printer checks remain open. See T27 and
+graphing.md 19.6. Formatting, strict all-target Clippy and 2,119 workspace tests passed (one ignored).
+
+**T28 autosave merged (2026-11-14 night, macOS session "mac-autosave"):** Tools > Autosave... (on, 10 minutes, Sheaf's choice; Origin's defaults unmeasured) writes the modified project as `.sheaf` into the platform recovery folder on a worker thread; a crashed run's copy is offered at the next start (Recover / Discard / Later); a clean exit or normal save removes it, 30-day-old leftovers are pruned. Liveness by a held lock file per running instance (`sheaf_io::recovery::Session`), not process ids. `--recovery-dir DIR`/`--no-recovery` for checks; UI tests never touch the real folders. Spec `docs/spec/autosave.md`; leftovers in the T28 Status.
+
 **T25 phase 1 merged (2026-11-14, Windows session 318653a1):** `sheaf-mcp` (crate `crates/mcp`) runs over stdio on the shared `sheaf-ops` crate that now holds the CLI's import, plot, export, analyze and fit work; setup in README and `docs/spec/mcp.md`, leftovers in the T25 Status. Extended the same night (macOS session 'mac-mcp', branch `mcp-port`): the CLI's clap options (`sheaf_ops::args`) and `job_from` (`sheaf_ops::cli_analyze`) moved into `sheaf-ops`, so `analyze` reaches all 55 `sheaf analyze` tools (21 hand-mapped, 34 through `crates/mcp/src/bridge.rs`, schemas generated from the CLI's options); MCP prompts; `backup_original` never writes through a link; shared long names refused instead of taking the first. The CLI was checked byte for byte against the previous `main` on 325 invocations (identical). That session had also built a second, separate MCP server (local branch `mcp-server`, never pushed, deleted); the owner chose to port its useful parts into this one. Lesson: claims in the local peer notes are invisible to the Windows machine; claim a brief in HANDOFF on `main` (pushed) before starting. Plan as written:
 
 **Owner's request (2026-11-14): an MCP server so Claude or any AI tool can use Sheaf.** Brief
@@ -108,12 +176,33 @@ double-clicked in Finder (Apple open-document events; the bundle declares no doc
 6. Phase 2 (separate merge, ADR first): the desktop app listens on a local socket (off by default);
    `sheaf-mcp --attach` drives the open project, every change one undo step, so the owner sees and can undo it.
 
+**T25 plot/fit bridge (macOS, no Origin, 2026-11-14):** MCP `plot` and `fit` accept a
+clap-derived `options` object as well as their existing structured arguments. Both frontends use
+shared CLI-to-library conversions in `sheaf-ops`; mixed selections are validated together,
+duplicate settings are refused, FDF paths stay under the allowed roots, and numeric strings obey
+integer limits. CLI-parity, schema and protocol regressions cover the bridge. Formatting, strict
+all-target Clippy and 2,057 workspace tests passed (one ignored) after integrating the latest
+cross-sheet formula work. Phase 2 attach remains open; new-sheet output is covered below.
+No Origin measurements are needed for this interface.
+
+**T25 new-sheet output (macOS, no Origin, 2026-11-14):** MCP `analyze` accepts
+`output: new_sheet` for hand-mapped and CLI-bridged tools, through `sheaf_ops::analyze::run_job_to`
+and the existing core `analyze_to` path. Source worksheets, including masks and X data, stay
+unchanged; result reports name the new sheet and qualified columns. Intrinsic tables and power
+keep their own layout. Sort/filter refuse the setting before mutation; the default remains
+`next_to_input`. Formatting, strict all-target Clippy and 2,143 workspace tests passed (one ignored).
+Phase 2 attach is still separate.
+
 ## Known issues and table UI verification
 
 - T01 sorting: Sort Range and range Custom respect selected cell/row bounds. Sort Columns
   Ascending/Descending move selected rows together; Each Column modes sort independently.
   Sort Columns and column-header Custom now use the existing nested-sort dialog. Masks,
   outside rows/columns and Undo/Redo are covered; see workbook-model.md 13.1.
+
+- Filtered table navigation: keyboard movement, edit commits and Enter/Tab within blocks skip
+  hidden rows/columns. New/imported-table regressions ensure hidden values are not edited;
+  filter changes repair the active cell (workbook-model.md 13.3).
 
 - T10 filtered plots: graphs, exports, automatic axes/offsets and histogram/box/pie summaries
   skip worksheet-filtered rows. Masks, labels and error bars retain source-row references;
@@ -129,7 +218,7 @@ double-clicked in Finder (Apple open-document events; the bundle declares no doc
   RGB, grayscale and 256 colors with DPI metadata. The image is flattened onto white, without
   editable graph layers. PSD dimensions are limited before pixel allocation; graphing.md 9.4
   records the published references and limits. TIFF now also offers 256 Colors, with the
-  selected None/PackBits/LZW compression and DPI retained; mono and 16-color modes remain open.
+  selected None/PackBits/LZW compression and DPI retained; Monochrome, 16 Colors and 16-bit Color (BMP, TGA) added 2026-11-14 with Origin's per-format lists, ordered dither and 5-5-5 layout (graphing 9.4).
 
 - T19 import separators: **Other** reads a set of delimiter characters, with optional
   **Treat Consecutive Delimiters as One**; **Multiple Characters** reads a whole sequence.
@@ -202,7 +291,7 @@ running release build; its exact commit was not verified and it was not rebuilt 
 ## Next step
 
 Pick the first open brief in `docs/tasks/README.md`. Suggested order by effect on the owner's figures and
-analysis: T25 (MCP server, owner's request; phase 1 needs no Origin), T13 leftovers (other fill modes, Offset multiplier, Data on Top of Axes, several groups per layer, Binned increments, X:Y ratio and speed mode, `.opj` writing of the 18.6 settings), T14 item 6 (2D binning, discrete frequency, cross tabulation, Dunnett, distribution fit, probability and Q-Q plot are done; left: the Windows Origin measurements of cross tabulation and Dunnett in statistics.md 15.3 and of the distribution fit and plots in 16.4, since all are scipy-checked, not Origin), T16 item 6, T18 backlog items that need no Origin
+analysis: T25 (MCP server, owner's request; phase 1 needs no Origin), T13 leftovers (other fill modes, Offset multiplier, Data on Top of Axes, several groups per layer, Binned increments, X:Y ratio and speed mode, `.opj` writing of the 18.6 settings), T14 item 6 (2D binning, discrete frequency, cross tabulation, Dunnett, distribution fit, probability and Q-Q plot are done; left: the Windows Origin measurements of cross tabulation and Dunnett in statistics.md 15.3 and of the distribution fit and plots in 16.4, since all are scipy-checked, not Origin), T16 item 6 (done 2026-11-14: Origin's automatic B-spline factor, analysis-tools 5), T18 backlog items that need no Origin
 (briefs first), merging the matrix branch (asks the owner first: it is another session's unpushed work), T19 item 2 and T04 (wizards, need Origin pages), then
 the new briefs written from the T18 backlog on 2026-11-14: T30 (Excel import and xlsx export, P1; the owner's data is often in Excel), T27 (Print, P1), T28 (autosave), T29 (PCA, k-means, ROC, Kaplan-Meier); T26 (variance and proportion tests) is being built by another session, then
 the leftovers named in each brief's Status (T22-T24 leftovers: level crossing done 2026-11-14, analysis-tools 14, and cumulative sum dropped, Origin has none; drawn

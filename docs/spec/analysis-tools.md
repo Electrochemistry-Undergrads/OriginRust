@@ -15,9 +15,8 @@ regenerates the same data.
 Status by tool: integrate, differentiate, normalize, interpolate (linear, cubic spline, Akima),
 baseline, peak finding (local maximum) and statistics are done and checked. Smooth: adjacent
 averaging, Savitzky-Golay, percentile filter and the FFT filter are done and checked. Cubic
-B-spline interpolation: the smoothing spline for a smoothing factor above 0 is done and matches
-Origin; the default factor 0 is implemented as the interpolating spline and does NOT match Origin
-inside the data (Origin's automatic factor was not found, see section 5).
+B-spline interpolation: done and checked, both for a smoothing factor above 0 and for Origin's default
+factor 0 (an automatic factor from the data, found 2026-11-14, see section 5).
 
 ## 1. Integrate (`integ1`)
 
@@ -204,30 +203,46 @@ x = 0..10, impulses, polynomials, random numbers; scripts `interp-bspline.labtal
   it also agrees with SciPy's `splrep` on 300 random cases (checked once, not kept as a test). A very
   small `sf` ends with one knot per data point (the interpolating spline); a large one with a single
   cubic polynomial.
-* (observed) `sf = 0` (the default) is not an interpolating spline: Origin then uses an automatic
-  factor that depends on the data in a way we did not find. Measured values of this factor for
-  unit impulses on x = 0..10: 1/12, 0.1245, 19/120, 0.1799, 0.1843, 1/6, 1/12, 0.0422, 1/120, 9/680,
-  3/170 for the impulse at x = 0, 1, ..., 10; it is proportional to the square of the data scale and
-  for other data (sin x, random numbers) it is 4 % to 14 % of the sum of squares of y. It is not a
-  quadratic form in y, not the residual of a polynomial fit, and it does not come from limiting the
-  number of knots. Consequently Origin's default B-spline moves up to 0.27 away from the data points
-  of a unit impulse and about 0.2 from sin x on 11 points. Data that already lie on a cubic
-  polynomial (for example y = x^2) are reproduced exactly.
+* (observed) `sf = 0` (the default) is not an interpolating spline: Origin chooses the factor from
+  the data and then runs the same Dierckx fit. The rule (found 2026-11-14 by matching the Dierckx fit
+  to Origin's curve, which pins the factor to about 1e-9, then decoding it from unit impulses and all
+  pairs `e_i + e_j`, `e_i - e_j` on 5, 8 and 11 points; scripts `re-workspace/scratch/t16/gen1.py` to
+  `gen4.py`, raw outputs `probe1-4.out.txt` there):
+  1. Drop rows with a missing X or Y. Keep the rows in worksheet order (do not sort, do not merge
+     repeated X yet).
+  2. With `m` rows, take `L = min(5, m - 1)` lags and the starts `i = 0 .. m - L - 1` (the SAME
+     `m - L` starts for every lag, so the last rows enter fewer pairs: this is why the factor is not
+     symmetric when the data are reversed).
+  3. For each lag `d = 1 .. L`: `h_d` = mean over the starts of `(x[i+d] - x[i])^2`, `g_d` = mean over
+     the starts of `(y[i+d] - y[i])^2 / 2` (a semivariogram against squared distance).
+  4. Fit `g = a + b h` to the `L` points by ordinary least squares; the factor is `|a|`, the nugget,
+     an estimate of the noise variance. The absolute value matters: the intercept is negative for
+     some data (an impulse near the end), and Origin then uses its magnitude.
+  On equally spaced X this is `|sum_i sum_d (89 - 5 d^2) (y[i+d] - y[i])^2| / (340 (m - 5))` for
+  `m >= 6`: a unit impulse inside long data gets `1/(m - 5)`, one at the first row half of that.
+  The factor scales with the square of Y, ignores a constant added to Y and the scale of X, and
+  changes when the rows are reordered (checked: reversed data, unsorted X). With the factor, the
+  Dierckx fit on the sorted points (repeated X merged to their mean, as for `sf > 0`) reproduced
+  Origin's curve on all 236 data sets measured (impulses, pairs, random numbers, noisy sine, uneven
+  and unsorted X, repeated X, missing values, 5 to 200 points) to 6e-15. A factor of 0 (constant
+  Y) gives the interpolating spline. With 4 points any factor gives the interpolating cubic, so
+  nothing there is measurable. Not measured: equal `h_d` at every lag (impossible for distinct X
+  seen so far; Sheaf then uses `a` = mean of `g`), an Origin fit whose knot search stops early.
 * (observed) Outside the data range with the default option Origin continues with the straight
   line through the two nearest data points (not the end slope of the curve), whatever `sf` is.
   `miss` and `repeat` work as for the other methods.
 * (observed) Repeated X values: Origin replaces them by one point with the mean Y (checked for
   `sf` = 0.2 on x = 0 1 2 2 3 4 4; the output equals the fit of the merged points to 1e-9). We do the
-  same for the B-spline method. For the default factor the curve at a repeated X then differs from
-  the mean, which is the same automatic smoothing that is not understood. Fewer than four different
+  same for the B-spline method. With the default factor the merge happens after the factor is
+  computed on the unmerged rows (measured, data set `dupx` of probe 3). Fewer than four different
   X values give no result.
 * Our implementation (`InterpMethod::BSpline`): `smoothing` above 0 is the Dierckx smoothing spline
-  inside the data; 0 is the interpolating (not-a-knot) cubic spline, which agrees with Origin's
-  default only for data that lie on a cubic polynomial; both continue outside the data with Origin's
-  straight line. At least four different X values. A negative or missing factor is refused. The
-  dialog and the command line say that factor 0 is not Origin's automatic smoothing.
+  inside the data; 0 computes Origin's factor (`sheaf_calc::automatic_smoothing`, the rule above) and
+  fits with it; both continue outside the data with Origin's straight line. At least four different
+  X values. A negative or missing factor is refused. Tests: `crates/calc/tests/origin_bspline.rs`
+  and `origin_bspline_auto.rs` (16 Origin data sets at 15 positions each, 1e-10).
 
-Unsorted X: we sort and drop pairs with a missing value (not compared with Origin).
+Unsorted X and missing values: pairs with a missing value are dropped and the points sorted, as in Origin (measured for the B-spline, where the automatic factor is computed before sorting; section 5).
 
 ## 6. Baseline subtraction
 
@@ -282,6 +297,20 @@ oright` and the `_x`, `_y` outputs of each). Runs of 2026-11-13 (scripts `pkfind
   `second` 40 and `residue` exactly the four gaussians; on the clean curve `first` finds 15 including shoulders, `win`
   7); their rules were not worked out, Sheaf's Peak Analyzer methods (section 11) are not calibrated against them.
   An explicit `option:=r height:=10 width:=5` call returned an error for both curves.
+* (observed 2026-11-14, `re-workspace/scratch/pkm`, probes 1 and 2: 15 data sets, 360 calls; rules still not found,
+  these facts narrow them down) `npts` changes nothing for `first`, `second`, `residue` and `win` (1, 2, 3 and 5 give
+  the same rows), and neither does the X spacing (0.5 and 1.0 give the same rows). On a single unit impulse in the
+  middle of N points, `first` reports the impulse and the points `floor(N/10)` rows on either side (N = 21, 41, 81,
+  101: offsets 2, 4, 8, 10), so its derivative window grows with the length of the data; `second` reports offsets
+  2, 4, 6 on both sides for N = 41 (and an uneven set for N = 81, 101); `residue` reports every second row within
+  4 rows for N = 41; `win` reports only the impulse. The rows reported by `first` and `second` include points whose
+  value is 0 or tiny (gaussian tails), so no sign or height test applies, and on a gaussian the side points lie 10
+  rows away for N = 41, not `floor(N/10)`. `win` behaves like the local maximum with a fixed window of about two
+  points, but finds nothing on a gaussian raised by 5 (it measures height from a baseline). `residue` on a cubic
+  returned row 1 repeated for every row (a degenerate result). Tried and failed against all 15 sets: zero crossings
+  of a Savitzky-Golay derivative (windows 3 to 41, orders 1 to 5, five edge modes, three picking rules) and of a
+  slope or span derivative with half window `floor(N/10)` (three edge rules, five picking rules). Origin's own
+  `smooth` (FFT, adjacent averaging, Savitzky-Golay defaults) does not give these rows either.
 Sheaf: `PeakOptions { smooth_points, foot_height, max_half_width }`, `PeakResult { left, right }`; the Find Peaks
 window has Smoothing points, Foot height and a limit for the distance of the feet; the result sheet has Left foot and
 Right foot columns (X values). `sheaf analyze peaks` keeps its own smoothing of the peak chain.
@@ -466,10 +495,11 @@ Steps, in order:
    not sorted" and changes nothing. The area of a positive peak is positive whichever way X runs
    (Origin's `integ1` gives a negative area for falling X, section 1; the table here follows the
    fit columns instead, so the two sets of columns have one sign).
-5. Multi-peak fit (own model, Origin's functions): a sum of Gauss or Lorentz peaks plus a constant or
-   sloped baseline, parameters `y0`, `m`, then `xc`, `w`, `A` per peak, in Origin's parameterisation
-   (Gauss `A/(w sqrt(pi/2)) exp(-2((x-xc)/w)^2)`, FWHM `w sqrt(ln 4)`; Lorentz
-   `2A/pi * w/(4(x-xc)^2+w^2)`, FWHM `w`). Starting values come from the found peaks (centre, FWHM,
+5. Multi-peak fit (own model, Origin's functions): a sum of Gauss, Lorentz or Voigt peaks plus a
+   constant or sloped baseline, parameters `y0`, `m`, then `xc`, `w`, `A` per peak (Voigt: `xc`, `A`,
+   `wG`, `wL`, Origin's order), in Origin's parameterisation (Gauss `A/(w sqrt(pi/2))
+   exp(-2((x-xc)/w)^2)`, FWHM `w sqrt(ln 4)`; Lorentz `2A/pi * w/(4(x-xc)^2+w^2)`, FWHM `w`; Voigt
+   section 11.2). Starting values come from the found peaks (centre, FWHM,
    height above the baseline), with widths bounded to stay positive. The fit uses the nonlinear engine
    of `crates/fit`. The report has centre, height, FWHM, area and area percent per peak, plus a line of
    R squared, reduced chi-square and iterations. The fit uses the data, not the corrected curve, so
@@ -499,7 +529,7 @@ other than the request's range.
 
 Command line: `sheaf analyze peaks FILE [--method local-max|window|first-derivative|second-derivative]
 [--smooth N] [--min-width W] [--baseline none|end-points|minima|anchors] [--baseline-points N]
-[--anchors X1:Y1,X2:Y2] [--limits baseline|half-height] [--integrate] [--fit gauss|lorentz]
+[--anchors X1:Y1,X2:Y2] [--limits baseline|half-height] [--integrate] [--fit gauss|lorentz|voigt]
 [--fit-baseline constant|linear]`, together with the existing `--points`, `--min-height`, `--count`,
 `--direction`. Without any chain option the plain peak finder of section 7 runs. Window: Analysis >
 Analyze Peaks... (command line `--show analysis:peak-chain`).
@@ -564,6 +594,35 @@ measured from, never subtracted from the data), Find Peaks, Integrate Peaks and 
 Center, Row, Height and FWHM match Origin to 1e-9 on the data above, Area % follows Origin's definition,
 and the limit between two peaks (the valley, 6.8) matches; the outer limits do not (Sheaf integrates to
 where the corrected curve meets the baseline or the end of the data: 0 and 20 here, Origin 0.3 and 14.15).
+
+### 11.2 Voigt peaks (measured 2026-11-15)
+
+The Fit Peaks page (`sheaf analyze peaks --fit voigt`) offers Origin's `Voigt` besides Gauss and
+Lorentz: a Gauss of FWHM `wG` convolved with a Lorentz of FWHM `wL`, area `A`. Sheaf evaluates it
+exactly through the Faddeeva function (`sheaf_fit::library::voigt`; scipy's `wofz` gives the same
+digits). Origin's function record (`VOIGT5.FDF`, `docs/spec/data/fit-functions.json`) gives the
+parameter order `y0 xc A wG wL` and the derived FWHM `0.5346 wL + sqrt(0.2166 wL^2 + wG^2)`, which
+Sheaf reports as the peak's FWHM; the height is the value at the centre. A peak starts at the found
+centre with `wG = wL` (as Origin's initialisation, which gave `wG = wL = 1.421` on the probe below)
+chosen so that the start has the found FWHM and height; `wL` is bounded below by 0 (a Gauss) and `wG`
+by 1e-4 of its start.
+
+Measured in Origin 2016 (`re-workspace/scratch/t04v/v1` and `v2`, `tools/origin-ref/run-labtalk-lines.ps1`):
+
+- `nlf_Voigt` is a numerical approximation: at six points (0.2 + Voigt(xc 5, A 4, wG 1.2, wL 0.8) at x
+  = 0, 2, 4.5, 5; a nearly Lorentzian and a nearly Gaussian peak) it differs from the exact value by at
+  most 1.7e-6 of the peak height (2.042942100 against 2.042945314 at the centre).
+- `nlbegin func:=Voigt; nlfit` on 201 points made by `nlf_Voigt` plus a fixed ripple (x = 0 to 10,
+  kept as `crates/fit/tests/data/origin_voigt_probe.tsv`) gave y0 0.199772863732606, xc
+  4.99999967995525, A 4.00225088185448, wG 1.19892425718239, wL 0.801615491802901, reduced
+  chi-square 7.8673486183435684e-05 in 8 iterations. Sheaf's multi-peak fit of the same points with
+  one Voigt peak agrees to 6e-6 relative (xc to 2.3e-9) and the reduced chi-square to 2e-7, the size of
+  the difference between Origin's approximate and Sheaf's exact function. The standard errors of xc
+  and A are 3.4e-4 and 5.3e-3 relative apart (Origin's derivatives of its approximate function would
+  explain it; not measured further). Test: `crates/fit/tests/multipeak_voigt.rs`.
+
+Not done: a different function per peak, constraints between peaks, and Origin's own Peak Analyzer
+Fit Peaks (Pro) page, which was not opened (11.1).
 
 ## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1)
 

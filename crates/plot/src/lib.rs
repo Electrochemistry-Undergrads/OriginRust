@@ -20,6 +20,7 @@ mod layout;
 mod legend;
 mod margin;
 pub mod markup;
+mod multipage;
 mod pie;
 mod plots;
 mod polar;
@@ -29,6 +30,7 @@ pub mod scene;
 mod shapes;
 mod stack;
 mod svg;
+mod symbol_gaps;
 mod ternary;
 mod text;
 pub mod ticks;
@@ -40,15 +42,25 @@ mod detail_tests;
 #[cfg(test)]
 mod export_tests;
 #[cfg(test)]
+mod label_frame_tests;
+#[cfg(test)]
 mod label_whiteout_tests;
 #[cfg(test)]
 mod legend_tests;
 #[cfg(test)]
+mod lollipop_tests;
+#[cfg(test)]
 mod margin_tests;
+#[cfg(test)]
+mod multipage_tests;
 #[cfg(test)]
 mod offset_multiplier_tests;
 #[cfg(test)]
 mod skip_tests;
+#[cfg(test)]
+mod symbol_gap_tests;
+#[cfg(test)]
+mod symbol_line_order_tests;
 #[cfg(test)]
 mod tests;
 
@@ -410,6 +422,79 @@ pub fn render_pdf(project: &Project, graph: WindowId) -> Result<Vec<u8>, PlotErr
     raster::to_pdf(&svg, SystemFonts::shared())
 }
 
+/// Renders the graph on the project's paper using the saved Page Setup, as a vector PDF.
+/// The paper is treated as fully printable, as in Print Preview.
+pub fn render_print_pdf(project: &Project, graph: WindowId) -> Result<Vec<u8>, PlotError> {
+    let svg = print_svg(project, graph)?;
+    raster::to_pdf(&svg, SystemFonts::shared())
+}
+
+/// Renders several graphs into one PDF, one page per graph in the order given (Origin's
+/// Export Graphs `multipage`, graphing.md 9.7). Each page is what [`export_bytes_with`] writes
+/// as a one-page PDF of that graph with the same size and margin settings: the page is the
+/// exported area of the graph, vector, with text kept as text. A graph may appear twice.
+pub fn render_multipage_pdf(
+    project: &Project,
+    graphs: &[WindowId],
+    size: ExportSize,
+    layout: ExportLayout,
+) -> Result<Vec<u8>, PlotError> {
+    multipage::svgs_to_pdf(graphs.iter().map(|&g| export_svg(project, g, size, layout)), SystemFonts::shared())
+}
+
+/// [`render_multipage_pdf`] written to `path`.
+pub fn export_multipage_pdf_file(
+    project: &Project,
+    graphs: &[WindowId],
+    path: &Path,
+    size: ExportSize,
+    layout: ExportLayout,
+) -> Result<(), PlotError> {
+    let bytes = render_multipage_pdf(project, graphs, size, layout)?;
+    std::fs::write(path, bytes).map_err(|source| PlotError::Io { path: path.to_path_buf(), source })
+}
+
+/// Several graphs on the project's paper, one sheet per graph, each placed by the saved Page
+/// Setup as [`render_print_pdf`] places one graph.
+pub fn render_print_multipage_pdf(project: &Project, graphs: &[WindowId]) -> Result<Vec<u8>, PlotError> {
+    multipage::svgs_to_pdf(graphs.iter().map(|&g| print_svg(project, g)), SystemFonts::shared())
+}
+
+fn print_svg(project: &Project, graph: WindowId) -> Result<String, PlotError> {
+    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let (w, h) = (g.page.width_pt, g.page.height_pt);
+    let setup = project.page_setup;
+    let margins = setup.margins;
+    if ![w, h].iter().all(|x| x.is_finite() && *x > 0.0)
+        || ![margins.left, margins.right, margins.top, margins.bottom].iter().all(|x| x.is_finite() && *x >= 0.0)
+    {
+        return Err(PlotError::Size("invalid print page size or margins".into()));
+    }
+    let place = setup.place(w, h).ok_or_else(|| PlotError::Size("print margins leave no space on the paper".into()))?;
+    let (paper_w, paper_h) = setup.paper_pt(w, h);
+    if ![paper_w, paper_h, place.x, place.y, place.w, place.h].iter().all(|x| x.is_finite())
+        || place.w <= 0.0
+        || place.h <= 0.0
+    {
+        return Err(PlotError::Size("invalid print placement".into()));
+    }
+    let svg = render_svg(project, graph)?;
+    // write_svg always emits one root element; its contents use graph-page point coordinates.
+    let start = svg.find('>').ok_or_else(|| PlotError::Svg("missing SVG root".into()))? + 1;
+    let end = svg.rfind("</svg>").ok_or_else(|| PlotError::Svg("missing SVG closing tag".into()))?;
+    let scale = place.w / w;
+    if !scale.is_finite() || scale <= 0.0 {
+        return Err(PlotError::Size("invalid print scale".into()));
+    }
+    let paper_svg = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{paper_w}pt" height="{paper_h}pt" viewBox="0 0 {paper_w} {paper_h}"><defs><clipPath id="print-page-clip"><rect x="0" y="0" width="{w}" height="{h}"/></clipPath></defs><g transform="translate({} {}) scale({scale})"><g clip-path="url(#print-page-clip)">{}</g></g></svg>"#,
+        place.x,
+        place.y,
+        &svg[start..end]
+    );
+    Ok(paper_svg)
+}
+
 /// Renders a graph as Encapsulated PostScript (level 2): vector paths, text in the standard
 /// Helvetica, Times or Courier fonts with ISO Latin-1 encoding, clipping per layer. PostScript
 /// has no transparency, so translucent colours are blended onto the page background.
@@ -571,4 +656,13 @@ pub fn export_bytes_opts(
         "pdf" => raster::to_pdf(&svg, fonts),
         _ => Err(PlotError::UnknownFormat(ext.to_string())),
     }
+}
+
+/// The SVG a vector export of `graph` draws (what `.svg` and `.pdf` export write).
+fn export_svg(project: &Project, graph: WindowId, size: ExportSize, layout: ExportLayout) -> Result<String, PlotError> {
+    let fonts = SystemFonts::shared();
+    let scene = layout::build_scene(project, graph, fonts)?;
+    let view = layout.view(&scene, fonts, None);
+    let scale = size.scale(view.w, view.h)?;
+    Ok(svg::write_svg_view(&scene, view, scale))
 }

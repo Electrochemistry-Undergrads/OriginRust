@@ -1345,6 +1345,7 @@ impl AnalysisDialog {
                     ui.label("Function");
                     ui.radio_value(&mut self.chain_fit, PeakShape::Gauss, "Gauss");
                     ui.radio_value(&mut self.chain_fit, PeakShape::Lorentz, "Lorentz");
+                    ui.radio_value(&mut self.chain_fit, PeakShape::Voigt, "Voigt");
                 });
                 ui.checkbox(&mut self.chain_fit_linear, "Sloped baseline in the fit");
             }
@@ -1981,7 +1982,7 @@ impl AnalysisDialog {
                         ui.add(DragValue::new(&mut self.interp.smoothing).speed(0.01).range(0.0..=1.0e12));
                     });
                     ui.weak(
-                        "The factor is the allowed sum of squared residuals, as in Origin's sf. 0 gives the                          interpolating cubic spline, which is not Origin's automatic smoothing for 0.",
+                        "The factor is the allowed sum of squared residuals, as in Origin's sf. 0 chooses it from the data, as Origin does.",
                     );
                 }
                 if self.interp.method == InterpMethod::CubicSpline {

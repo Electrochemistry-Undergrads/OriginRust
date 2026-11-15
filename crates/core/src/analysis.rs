@@ -127,7 +127,7 @@ pub struct InterpSpec {
     /// X range of the result; `None` is the X range of the data.
     pub range: Option<(f64, f64)>,
     /// Smoothing factor of the B-spline method: the allowed sum of squared residuals (Origin's
-    /// `sf`). 0 gives the interpolating spline, which differs from Origin's automatic factor.
+    /// `sf`). 0 chooses the factor from the data as Origin does (`sheaf_calc::automatic_smoothing`).
     pub smoothing: f64,
     /// Interpolate onto the values of this column instead of an even grid (Mathematics >
     /// Interpolate/Extrapolate Y from X, Origin's `interp1` with `ix` given); `npts` and `range` are
@@ -1406,9 +1406,10 @@ fn run_peak_chain(
             let get = |name: String| report.param(&name).map_or(f64::NAN, |p| p.value);
             let mut total = 0.0;
             for k in 1..=starts.len() {
-                let (xc, w, a) = (get(format!("xc{k}")), get(format!("w{k}")), get(format!("A{k}")));
-                total += a;
-                fitted_peaks.push([xc, fs.shape.height(w, a), fs.shape.fwhm(w), a, 0.0]);
+                let p: Vec<f64> = fs.shape.param_names(k).into_iter().map(get).collect();
+                let peak = fs.shape.summary(&p);
+                total += peak.area;
+                fitted_peaks.push([peak.center, peak.height, peak.fwhm, peak.area, 0.0]);
             }
             for p in fitted_peaks.iter_mut() {
                 p[4] = if total != 0.0 { 100.0 * p[3] / total } else { f64::NAN };
@@ -3942,6 +3943,24 @@ mod tests {
         assert!((t.rows[0].1[h("Fit area %")] + t.rows[1].1[h("Fit area %")] - 100.0).abs() < 1e-9);
         assert_eq!(r.notes.len(), 1);
         assert!(r.notes[0].contains("R^2"));
+    }
+
+    #[test]
+    fn peak_chain_voigt_fit_of_gauss_peaks_gives_their_center_width_and_area() {
+        // Gaussian peaks: the Voigt's Lorentzian width goes to its bound 0 and the Voigt FWHM
+        // (0.5346 wL + sqrt(0.2166 wL^2 + wG^2)) is the Gaussian one.
+        let (mut p, _, y) = two_peaks();
+        let fit = PeakFitSpec { shape: PeakShape::Voigt, baseline: FitBaseline::Linear };
+        let r = p.analyze(&request(&[y], chain(true, Some(fit)))).unwrap();
+        let t = r.table.unwrap();
+        let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
+        assert!((t.rows[0].1[h("Fit center")] - 6.0).abs() < 1e-4);
+        assert!((t.rows[1].1[h("Fit center")] - 13.0).abs() < 1e-4);
+        assert!((t.rows[0].1[h("Fit FWHM")] - 0.4 * 2.354_820).abs() < 1e-3, "{}", t.rows[0].1[h("Fit FWHM")]);
+        let exact = 0.4 * (2.0 * std::f64::consts::PI).sqrt();
+        assert!((t.rows[0].1[h("Fit area")] - exact).abs() < 1e-3);
+        assert!((t.rows[0].1[h("Fit height")] - 1.0).abs() < 1e-3, "{}", t.rows[0].1[h("Fit height")]);
+        assert!(r.notes[0].contains("Voigt fit of 2 peaks"), "{}", r.notes[0]);
     }
 
     #[test]

@@ -106,12 +106,15 @@ companion and the reason, and `structuredContent` has `{companion, refusal}`.
            "skip_rows": 0, "max_rows": 0, "dates": "detect|text", "date_order": "mdy|dmy"},
  "chi": {"split_scans": true, "split_segments": true, "add_milliamp": true,
          "add_charge": true, "invert_current": false, "exact_time": true},
+ "excel": {"sheets": ["Name or 1-based position"], "include_hidden": false},
  "plot": false}
 ```
 
 `files` takes files, folders and wildcards. `layout` defaults to `books` (one workbook per file);
 `sheets` puts each file in a sheet of one workbook. `format` and the option defaults are those of
-`sheaf import`. `plot` adds a default graph per book. Result
+`sheaf import`. An Excel file (`.xls`, `.xlsx`, `.xlsm`) becomes one workbook with a sheet per Excel
+sheet; `excel.sheets` picks sheets, `excel.include_hidden` adds hidden ones, and the header and row
+settings of `ascii` apply too (see `docs/spec/import-excel.md`). `plot` adds a default graph per book. Result
 `{imported:[{file, book, format, suggested_template, warnings}], errors:[string], graphs:[string]}`.
 A file that fails is listed in `errors` and the others are imported; the call is a tool error only
 when no file was imported.
@@ -152,7 +155,7 @@ the formula fails. Limit: 10 000 000 rows. Nothing changes on error.
 
 ### 5.2 Graphs and export
 
-**`plot`** creates a graph or adds plots to an existing one.
+**`plot`** creates a graph or restyles an existing one.
 
 ```json
 {"template": "line|scatter|...",
@@ -174,11 +177,12 @@ the formula fails. Limit: 10 000 000 rows. Nothing changes on error.
            "bar_gap": 0, "bar_overlap": 0,
            "text_labels": [{"text": "peak", "x": 0.5, "y": 0.2}],
            "draw": [{"kind": "line|arrow|rectangle|ellipse", "x1": 0, "y1": 0, "x2": 1, "y2": 1}]},
- "size": {"width_in": 5, "height_in": 3.5}}
+ "size": {"width_in": 5, "height_in": 3.5},
+ "options": {}}
 ```
 
 `template` takes the names of `sheaf plot --template` (`Template::from_name`). `y` defaults to the
-sheet's Y columns. `graph` adds to that graph instead of creating one. `panels` fields and values are
+sheet's Y columns. `graph` restyles that graph instead of creating one; omit `template`, `y` and `y2` with it. `panels` fields and values are
 those of `sheaf plot --panels` and its panel flags. `overlay_files` imports each file and overlays
 each file's Y columns. `text_labels` and `draw` positions are fractions of the layer frame, (0,0) the
 top left; `size` sets the page size (the same as `style.width` and `style.height`, not both). The
@@ -189,15 +193,26 @@ are checked as the CLI checks them: width and height 0.1 to 100 inches, finite a
 differ, colors parsed by `Color::parse`.
 
 **`export_graph`**
-`{graph?, path?, format?: "png|svg|pdf|eps|tiff|emf|jpg|bmp", dpi?, width?, height?, margin?, return_image?}`.
+`{graph?, graphs?: [string], all_graphs?, path?, format?: "png|svg|pdf|eps|tiff|emf|jpg|bmp", dpi?, width?, height?, margin?, return_image?}`.
 `format` defaults to the extension of `path`, else `png`. `dpi` defaults to 300, range 36 to 1200;
 the pixel count is capped at 40 million. `width` and `height` are lengths (`3.5in`, `9cm`, `800px`),
 as the CLI's `--image-width`. `return_image` (default true when `path` is absent, false otherwise)
 adds the PNG as an image content block, scaled to at most 1600 pixels on the long side; the file
 keeps its full size. Result `{graph, path?, format, width_px, height_px, bytes}`.
+`graphs` (names, in page order) or `all_graphs` (every graph, in project order) put several graphs
+into one PDF, one page per graph, as Origin 2018b's multi-page PDF export (expGraph `multipage`).
+Each page is the one-graph PDF export of that graph with the same size and margin settings, and
+each passes the pixel cap. Neither goes with `graph`; names resolve as `graph` does. Sheaf's own
+rules, not measured in Origin: with more than one graph a `path` is required, the format must be
+pdf (by `format` or the extension), `return_image: true` is refused (no image is returned), and
+more than 500 pages (a repeated name counts each time) is refused, writing no file.
+Result `{graph, graphs, pages, path, format, width_px: null, height_px: null, bytes}`, `graph`
+being the first page's graph. A list that resolves to one graph is the one-graph export.
 
-**`export_data`** `{book?, sheet?, path, format?: "csv|tsv"}` writes the sheet as delimited text
-(tabs for `.tsv` and `.txt`). Result `{path, rows, columns}`.
+**`export_data`** `{book?, sheet?, path, format?: "csv|tsv|xlsx", all_sheets?}` writes the sheet as
+delimited text (tabs for `.tsv` and `.txt`), or as an Excel workbook for a path ending in `.xlsx` or
+`format: "xlsx"` (`all_sheets` writes every sheet of the book). Result `{path, rows, columns}`; for
+xlsx also `{sheets, warnings}`.
 
 ### 5.3 Analysis
 
@@ -248,8 +263,14 @@ command name with `_` for `-` (`fft_filter`, `reduce_dup`, `column_math`, `mannw
   under a root. `power` needs no data; its table goes into a new workbook of the project, named in
   the reply. `sort` and `filter` are also available as `sort_sheet` and `filter_sheet` (below).
 
-`output` accepts only `next_to_input`: results go next to the input and tools that write a table
-use a new sheet by themselves (ADR 0005); `new_sheet` is refused with a message. The result is the
+`output` defaults to `next_to_input` (results next to their source columns, ADR 0005).
+`new_sheet` uses the core analysis Output setting: results go into a new worksheet in the same
+workbook, with the X columns needed to plot them. The original worksheet is unchanged. Tools
+that intrinsically create tables or result worksheets keep their own output layout; power analysis
+keeps creating its result workbook. Both hand-mapped and CLI-bridged analysis tools use the same
+core implementation. `new_sheet` is refused for sort and filter jobs before they change anything;
+use `filter_sheet` with `in_place: false` to create a filtered copy. A failed call is rolled back.
+The result names the new sheet and fully qualified result columns. The result is the
 `Report`, for every tool:
 
 ```json
@@ -286,7 +307,7 @@ special:["linear","linearx","poly:N","formula","fdf"]}` (the catalog of
  "confidence": 0.95, "bands": "none|confidence|prediction|both", "band_level": 95,
  "max_iterations": 400, "tolerance": 1e-9, "scale_errors": true,
  "compare_with": "model?", "rank": ["model"], "global": {"share": ["param"]}, "regress": ["x columns"],
- "plot": "Path?"}
+ "plot": "Path?", "options": {}}
 ```
 
 One mode at a time: a plain fit (one per Y column), `compare_with`, `rank`, `global` or `regress`.
@@ -304,6 +325,28 @@ each. `plot` renders the first fit as an image at that path. Result for a fit:
 ```
 
 Comparison and ranking results carry the tables of `CompareOutcome` and `RankOutcome`. NaN is `null`.
+
+### CLI options for plotting and fitting
+
+Both `plot` and `fit` accept an optional `options` object. Its schema in `tools/list` is generated
+from the CLI's clap definitions, and values are parsed with the same types and constraints as the
+CLI. Keys use underscores in place of hyphens; the hyphenated spelling is also accepted. Flags
+are booleans; repeated or delimited options accept arrays. Array elements keep embedded commas.
+Unknown options and duplicate spellings are errors. Do not give the same setting in both the
+structured arguments and `options`.
+
+For example, a plot can use `{"y":["B"],"options":{"x_title":"Potential (V)","line_width":2}}`.
+A fit can use `{"y":["B"],"options":{"model":"poly:2","confidence":0.99}}`.
+The shared CLI-to-library conversions are used by both frontends; no separate plotting or fitting
+implementation runs in the MCP server. Existing structured calls keep their arguments.
+
+The data remains the server's project. CLI input files, read options, save/export switches and
+listing switches and export resolution/sizing controls are excluded; use `import_files`,
+`save_project`, `export_graph`, `export_data`
+and `list_fit_models` for those operations. The existing top-level `fit.plot` path remains
+supported; it is not an option flag here. Allowed path options (including `fit.options.fdf`) are
+checked against `--root`. CLI enum values use their clap spellings, for example
+`options.panel_order: "bottom-up"`; the structured `panels.order` keeps `"bottom_up"`.
 
 ### 5.5 Prompts
 

@@ -591,9 +591,16 @@ fn layer_scene(
     let drawn: &[PlotData] = if layer.display.show_data { pds } else { &[] };
     match waterfall {
         None => {
-            for pd in drawn {
+            for (k, pd) in drawn.iter().enumerate() {
+                // Drop To = Next Data Plot: the next plot, the first after the last; with two
+                // plots only the first draws the segments (the last would repeat them).
+                let next = match drawn.len() {
+                    0 | 1 => None,
+                    2 if k == 1 => None,
+                    n => Some(&drawn[(k + 1) % n]),
+                };
                 let start = scene.plots.len();
-                draw_plot(&mut scene.plots, pd, geom, m);
+                draw_plot(&mut scene.plots, pd, geom, next, m);
                 let kind = ObjectKind::Plot(plot_index(pd));
                 hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
             }
@@ -606,7 +613,7 @@ fn layer_scene(
                 moved.frame.x += k * sx * geom.frame.w;
                 moved.frame.y -= k * sy * geom.frame.h;
                 let start = scene.plots.len();
-                draw_plot(&mut scene.plots, pd, &moved, m);
+                draw_plot(&mut scene.plots, pd, &moved, None, m);
                 let kind = ObjectKind::Plot(plot_index(pd));
                 hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
             }
@@ -674,6 +681,7 @@ fn layer_scene(
     let y_line = Rect { x: if ya.side == AxisSide::Opposite { f.x + f.w } else { f.x }, w: 0.0, ..f };
     let gaps = (geom.x.gap.map(|g| g.span(geom.x.reversed)), geom.y.gap.map(|g| g.span(geom.y.reversed)));
     draw_axis_lines(out, xa, ya, f, xp.line, yp.line, gaps);
+    draw_additional_lines(out, xa, ya, geom, xp.line, yp.line);
     let start = out.len();
     draw_ticks(out, xa, &geom.x, f, true, xp.line);
     if xa.side != AxisSide::Hidden {
@@ -907,6 +915,40 @@ fn draw_axis_lines(
     }
     if shown(ya) && ya.show_opposite {
         line(out, (y_other, t), (y_other, b), ya, yc, gap_y);
+    }
+}
+
+/// Origin's "Additional Lines" (Grids tab): the X axis' line repeated across the layer at a Y value
+/// and the Y axis' line at an X value, in that axis' width and colour. A value outside the axis
+/// range draws nothing.
+fn draw_additional_lines(out: &mut Vec<Item>, xa: &Axis, ya: &Axis, geom: &LayerGeometry, xc: Color, yc: Color) {
+    let f = geom.frame;
+    let stroke = |a: &Axis, color: Color| Stroke {
+        color,
+        width: a.line_width_pt,
+        dash: Vec::new(),
+        cap: Cap::Butt,
+        join: Join::Miter,
+    };
+    if let Some(v) = xa.additional_line {
+        let u = geom.y.to_unit(v);
+        if u.is_finite() && (0.0..=1.0).contains(&u) {
+            let y = f.y + (1.0 - u) * f.h;
+            let mut d = String::new();
+            move_to(&mut d, f.x, y);
+            line_to(&mut d, f.x + f.w, y);
+            out.push(Item::Path { d, fill: None, stroke: Some(stroke(xa, xc)) });
+        }
+    }
+    if let Some(v) = ya.additional_line {
+        let u = geom.x.to_unit(v);
+        if u.is_finite() && (0.0..=1.0).contains(&u) {
+            let x = f.x + u * f.w;
+            let mut d = String::new();
+            move_to(&mut d, x, f.y);
+            line_to(&mut d, x, f.y + f.h);
+            out.push(Item::Path { d, fill: None, stroke: Some(stroke(ya, yc)) });
+        }
     }
 }
 
@@ -1359,6 +1401,7 @@ fn draw_legend(
                     let plot = entries[*k].plot;
                     // A line plot filled under its curve shows a filled box, as Origin's legend does.
                     let filled = plot.decor.fill_under.filter(|_| plot.kind.has_line() && !plot.kind.is_area());
+                    let mut front_line = None;
                     if let Some(fill) = filled {
                         out.push(Item::Rect {
                             rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
@@ -1370,13 +1413,22 @@ fn draw_legend(
                         let mut d = String::new();
                         move_to(&mut d, sx0, cy);
                         line_to(&mut d, sx1, cy);
-                        out.push(Item::Path { d, fill: None, stroke: Some(line_stroke(&plot.line)) });
+                        let line = Item::Path { d, fill: None, stroke: Some(line_stroke(&plot.line)) };
+                        if plot.kind == PlotKind::LineSymbol
+                            && plot.decor.symbol_line.draw_in_front
+                            && !plot.decor.symbol_line.gap_to_symbol
+                        {
+                            front_line = Some(line);
+                        } else {
+                            out.push(line);
+                        }
                     }
                     if plot.kind.has_symbols() {
                         let mut d = String::new();
                         symbol_path(&mut d, plot.symbol.shape, (sx0 + sx1) / 2.0, cy, plot.symbol.size_pt);
                         out.push(symbol_item(d, &plot.symbol));
                     }
+                    out.extend(front_line);
                     if matches!(plot.kind, PlotKind::Histogram | PlotKind::Box) {
                         // An outlined box in the plot's colour, without a fill.
                         out.push(Item::Rect {

@@ -7,8 +7,8 @@ use crate::fill::{fill_polygon, fill_rect};
 use crate::fonts::TextMeasurer;
 use crate::scene::{Anchor, Cap, Item, Join, Stroke, TextItem, line_to, move_to, push_num};
 use sheaf_core::graph::{
-    Connect, DropLine, ErrorDirection, LabelForm, LabelPosition, LineStyle, PlotKind, ScaleKind, SymbolShape,
-    SymbolStyle,
+    Connect, DataLabels, DropColorMode, DropTarget, ErrorDirection, LabelForm, LabelFrame, LabelPosition, LineStyle,
+    PLUS_MINUS_NEGATIVE, PLUS_MINUS_POSITIVE, PlotKind, ScaleKind, SymbolShape, SymbolStyle,
 };
 
 /// Points closer than this (in pt) to the last kept point are dropped.
@@ -39,7 +39,17 @@ pub(crate) fn line_stroke(line: &LineStyle) -> Stroke {
 }
 
 /// Appends the items of one plot to `out`.
-pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m: &dyn TextMeasurer) {
+///
+/// `next` is the plot drawn after this one in the layer (the first plot for the last one; none
+/// when the last plot's partner would only repeat a two-plot segment), the target of drop lines
+/// set to Next Data Plot.
+pub(crate) fn draw_plot(
+    out: &mut Vec<Item>,
+    pd: &PlotData,
+    geom: &LayerGeometry,
+    next: Option<&PlotData>,
+    m: &dyn TextMeasurer,
+) {
     let plot = pd.plot;
     if plot.kind == PlotKind::Pie {
         draw_pie(out, pd, geom);
@@ -68,9 +78,11 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     let offers_drop_lines =
         (plot.kind.has_line() || plot.kind.has_symbols()) && !plot.kind.is_bar() && !plot.kind.is_area();
     if offers_drop_lines && (decor.drop.horizontal.on || decor.drop.vertical.on) {
-        draw_drop_lines(out, pd, geom);
+        draw_drop_lines(out, pd, geom, next);
     }
-    if plot.kind.has_line() && plot.line.width_pt > 0.0 {
+    let line_in_front =
+        plot.kind == PlotKind::LineSymbol && decor.symbol_line.draw_in_front && !decor.symbol_line.gap_to_symbol;
+    if plot.kind.has_line() && plot.line.width_pt > 0.0 && !line_in_front {
         draw_line(out, pd, geom);
     }
     if plot.kind == PlotKind::Box {
@@ -83,6 +95,9 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     }
     if plot.kind.has_symbols() {
         draw_symbols(out, pd, geom);
+    }
+    if line_in_front && plot.line.width_pt > 0.0 {
+        draw_line(out, pd, geom);
     }
     if pd.mask.is_some() && !plot.kind.is_bar() {
         draw_masked(out, pd, geom);
@@ -131,37 +146,81 @@ fn draw_fill_under(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, col
 }
 
 /// Drop lines: from each point across to the left edge of the frame (the Y axis, "Horizontal")
-/// and down to its bottom edge (the X axis, "Vertical").
-fn draw_drop_lines(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+/// and down to its bottom edge (the X axis, "Vertical"); or, with Drop To = Next Data Plot, to
+/// the point of `next` (the next plot of the layer) at the same row.
+///
+/// With the "Y Value: Plus-Minus" colour each segment takes one of two fixed colours by the sign
+/// of the value (Sheaf's own, unmeasured): for a drop to the axis, the plotted Y value; for a drop
+/// to the next plot, the coordinate of the segment's start along the direction the segment runs
+/// (the horizontal value when it runs sideways, as in an exchanged lollipop). A point or a
+/// partner point that is missing, NaN or masked gives no segment.
+fn draw_drop_lines(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, next: Option<&PlotData>) {
     let f = geom.frame;
     let auto = pd.plot.line.color;
-    let stroke = |l: &DropLine| {
-        line_stroke(&LineStyle {
-            color: l.color.unwrap_or(auto),
-            width_pt: l.width_pt,
-            dash: l.dash,
-            connect: Connect::Straight,
-        })
-    };
     let drops = &pd.plot.decor.drop;
-    let (mut h, mut v) = (String::new(), String::new());
-    for i in pd.point_rows() {
-        if let Some((x, y)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
-            if drops.horizontal.on {
-                move_to(&mut h, f.x, y);
-                line_to(&mut h, x, y);
-            }
-            if drops.vertical.on {
-                move_to(&mut v, x, y);
-                line_to(&mut v, x, f.y + f.h);
+    for (l, horizontal) in [(&drops.horizontal, true), (&drops.vertical, false)] {
+        if !l.on {
+            continue;
+        }
+        // Segments in page coordinates with the data value that Plus-Minus looks at.
+        let mut segs: Vec<((f64, f64), (f64, f64), f64)> = Vec::new();
+        // The rows the next plot draws a symbol at (row range, row filters, skip points): a
+        // segment ends only at a point that is drawn.
+        let partner_rows: std::collections::BTreeSet<usize> = match next {
+            Some(n) if l.target == DropTarget::NextDataPlot => n.point_rows().collect(),
+            _ => Default::default(),
+        };
+        for i in pd.point_rows() {
+            let Some((x, y)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
+            if l.target == DropTarget::NextDataPlot {
+                let Some(n) = next else { continue };
+                let masked = |d: &PlotData| d.mask.is_some_and(|m| m.contains(&i));
+                if !partner_rows.contains(&i) || i >= n.y.len() || masked(pd) || masked(n) {
+                    continue;
+                }
+                let Some((nx, ny)) = geom.checked_data_to_page(n.x_at(i), n.y_at(i)) else { continue };
+                if (nx, ny) == (x, y) {
+                    continue;
+                }
+                let sideways = (nx - x).abs() > (ny - y).abs();
+                let value = if sideways { pd.x_at(i) } else { pd.y_at(i) };
+                segs.push(((x, y), (nx, ny), value));
+            } else if horizontal {
+                segs.push(((f.x, y), (x, y), pd.y_at(i)));
+            } else {
+                segs.push(((x, y), (x, f.y + f.h), pd.y_at(i)));
             }
         }
-    }
-    if !h.is_empty() {
-        out.push(Item::Path { d: h, fill: None, stroke: Some(stroke(&drops.horizontal)) });
-    }
-    if !v.is_empty() {
-        out.push(Item::Path { d: v, fill: None, stroke: Some(stroke(&drops.vertical)) });
+        let stroke = |color: sheaf_core::Color| {
+            line_stroke(&LineStyle { color, width_pt: l.width_pt, dash: l.dash, connect: Connect::Straight })
+        };
+        let path = |keep: &dyn Fn(f64) -> bool| {
+            let mut d = String::new();
+            for &((x0, y0), (x1, y1), v) in &segs {
+                if keep(v) {
+                    move_to(&mut d, x0, y0);
+                    line_to(&mut d, x1, y1);
+                }
+            }
+            d
+        };
+        match (l.color, l.color_mode) {
+            (None, DropColorMode::PlusMinus) => {
+                for (color, d) in
+                    [(PLUS_MINUS_POSITIVE, path(&|v| v >= 0.0)), (PLUS_MINUS_NEGATIVE, path(&|v| v < 0.0))]
+                {
+                    if !d.is_empty() {
+                        out.push(Item::Path { d, fill: None, stroke: Some(stroke(color)) });
+                    }
+                }
+            }
+            _ => {
+                let d = path(&|_| true);
+                if !d.is_empty() {
+                    out.push(Item::Path { d, fill: None, stroke: Some(stroke(l.color.unwrap_or(auto))) });
+                }
+            }
+        }
     }
 }
 
@@ -218,8 +277,12 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m:
             anchor,
             rotate_ccw: labels.rotate_deg,
         };
-        if labels.white_out {
-            draw_label_background(out, &item, m.width(&item.text, &labels.font, size));
+        if labels.white_out || !labels.frame.is_none() {
+            let width = m.width(&item.text, &labels.font, size);
+            draw_label_frame(out, &item, width, labels);
+            if labels.white_out {
+                draw_label_background(out, &item, width);
+            }
         }
         out.push(Item::Text(item));
     }
@@ -228,20 +291,72 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m:
 /// White Out follows the text's anchor and rotation. The font box approximates Origin 2016's
 /// Arial background (30 pt "12345": 100 x 40 pixels in a 900-pixel-wide page export).
 fn draw_label_background(out: &mut Vec<Item>, text: &TextItem, width: f64) {
-    if !(width.is_finite() && width > 0.0 && text.size.is_finite() && text.size > 0.0 && text.rotate_ccw.is_finite()) {
+    if let Some(d) = label_box_path(text, width, 0.05 * text.size, 0.0) {
+        out.push(Item::Path { d, fill: Some(sheaf_core::Color::WHITE), stroke: None });
+    }
+}
+
+/// Origin draws the frame and its shadow before White Out, which clears only the text box.
+fn draw_label_frame(out: &mut Vec<Item>, text: &TextItem, width: f64, labels: &DataLabels) {
+    if labels.frame.is_none() {
         return;
+    }
+    let percent = if labels.margin_percent.is_finite() { labels.margin_percent.clamp(0.0, 500.0) } else { 0.0 };
+    // Origin 2016's Arial 30 case expands by 19 pixels across both sides at 20% margin,
+    // against a 40-pixel text box. Other fonts retain the existing approximate font box.
+    let margin = text.size * (4.0 / 3.0) * percent / 100.0;
+    let Some(corners) = label_box_corners(text, width, margin, margin) else { return };
+    let (mut x0, mut x1, mut y0, mut y1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for (x, y) in corners {
+        (x0, x1, y0, y1) = (x0.min(x), x1.max(x), y0.min(y), y1.max(y));
+    }
+    // Origin keeps the frame parallel to the page around the rotated, padded text box.
+    // Its shadow stays to the page's lower right, rather than rotating with the text.
+    if labels.frame == LabelFrame::Shadow {
+        // The same page offset was measured at Arial 15 and 30 pt.
+        let shift = 6.0;
+        out.push(Item::Rect {
+            rect: Rect { x: x0 + shift, y: y0 + shift, w: x1 - x0, h: y1 - y0 },
+            fill: Some(sheaf_core::Color::BLACK),
+            stroke: None,
+        });
+    }
+    // Inset the path by half the stroke so the outer edge stays on the frame box.
+    out.push(Item::Rect {
+        rect: Rect { x: x0 + 0.25, y: y0 + 0.25, w: (x1 - x0 - 0.5).max(0.0), h: (y1 - y0 - 0.5).max(0.0) },
+        fill: Some(labels.frame_fill),
+        stroke: Some(Stroke::solid(labels.frame_border, 0.5)),
+    });
+}
+
+fn label_box_corners(text: &TextItem, width: f64, pad_x: f64, pad_y: f64) -> Option<[(f64, f64); 4]> {
+    if !(width.is_finite()
+        && width > 0.0
+        && text.size.is_finite()
+        && text.size > 0.0
+        && text.rotate_ccw.is_finite()
+        && text.x.is_finite()
+        && text.y.is_finite())
+    {
+        return None;
     }
     let left = match text.anchor {
         Anchor::Start => 0.0,
         Anchor::Middle => -width / 2.0,
         Anchor::End => -width,
     };
-    let pad = 0.05 * text.size;
-    let (x0, x1, y0, y1) = (left - pad, left + width + pad, -0.92 * text.size, 0.23 * text.size);
+    let (x0, x1, y0, y1) = (left - pad_x, left + width + pad_x, -0.92 * text.size - pad_y, 0.23 * text.size + pad_y);
     let (sin, cos) = text.rotate_ccw.to_radians().sin_cos();
+    Some(
+        [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+            .map(|(dx, dy)| (text.x + dx * cos + dy * sin, text.y - dx * sin + dy * cos)),
+    )
+}
+
+fn label_box_path(text: &TextItem, width: f64, pad_x: f64, pad_y: f64) -> Option<String> {
+    let corners = label_box_corners(text, width, pad_x, pad_y)?;
     let mut d = String::new();
-    for (i, (dx, dy)) in [(x0, y0), (x1, y0), (x1, y1), (x0, y1)].into_iter().enumerate() {
-        let (x, y) = (text.x + dx * cos + dy * sin, text.y - dx * sin + dy * cos);
+    for (i, (x, y)) in corners.into_iter().enumerate() {
         if i == 0 {
             move_to(&mut d, x, y);
         } else {
@@ -249,7 +364,7 @@ fn draw_label_background(out: &mut Vec<Item>, text: &TextItem, width: f64) {
         }
     }
     d.push('Z');
-    out.push(Item::Path { d, fill: Some(sheaf_core::Color::WHITE), stroke: None });
+    Some(d)
 }
 
 /// Origin draws a masked point red: its symbol, and the two line segments that meet at it
@@ -267,6 +382,8 @@ fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     };
     let mut lines = String::new();
     let mut symbols = String::new();
+    let line = line_stroke(&pd.plot.line);
+    let gaps = symbol_line_gaps(pd, geom, &line);
     for &i in mask.range(pd.start..pd.end - usize::from(pd.closing.is_some())) {
         let Some(p) = page(i) else { continue };
         // The first point of a radar polygon is also the end of the closing segment.
@@ -276,8 +393,12 @@ fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
             let next = (i + 1..pd.end).find(|&r| pd.row_shown(r));
             for j in [previous, next].into_iter().flatten().chain(wrap) {
                 if let Some(q) = page(j) {
-                    move_to(&mut lines, q.0, q.1);
-                    line_to(&mut lines, p.0, p.1);
+                    if let Some(gaps) = &gaps {
+                        gaps.write_polyline(&[q, p], &mut lines);
+                    } else {
+                        move_to(&mut lines, q.0, q.1);
+                        line_to(&mut lines, p.0, p.1);
+                    }
                 }
             }
         }
@@ -286,7 +407,6 @@ fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         }
     }
     if !lines.is_empty() {
-        let line = crate::plots::line_stroke(&pd.plot.line);
         out.push(Item::Path { d: lines, fill: None, stroke: Some(Stroke { color: Color::RED, ..line }) });
     }
     if !symbols.is_empty() {
@@ -406,8 +526,24 @@ fn draw_area(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     }
 }
 
+fn symbol_line_gaps(pd: &PlotData, geom: &LayerGeometry, stroke: &Stroke) -> Option<crate::symbol_gaps::Gaps> {
+    let interface = pd.plot.decor.symbol_line;
+    let size = pd.plot.symbol.size_pt;
+    if pd.plot.kind != PlotKind::LineSymbol || !interface.gap_to_symbol || !(size.is_finite() && size > 0.0) {
+        return None;
+    }
+    // Use 30% symbol-diameter clearance, matching the measured Origin exports.
+    // Keep it beyond the symbol's half-size, including round stroke end caps.
+    let cap = if stroke.cap == Cap::Round { stroke.width.max(0.0) / 2.0 } else { 0.0 };
+    let radius = size * (0.5 + 0.3) + cap;
+    let rows: Box<dyn Iterator<Item = usize> + '_> =
+        if interface.no_break_skipped { Box::new(pd.point_rows()) } else { Box::new(pd.rows()) };
+    crate::symbol_gaps::Gaps::new(rows.filter_map(|i| geom.checked_data_to_page(pd.x_at(i), pd.y_at(i))), radius)
+}
+
 fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let stroke = line_stroke(&pd.plot.line);
+    let gaps = symbol_line_gaps(pd, geom, &stroke);
     let connect = match pd.plot.line.connect {
         Connect::Spline if !spline_applies(pd) => Connect::Straight,
         c => c,
@@ -421,7 +557,14 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         if piece.len() >= 2 {
             let mut d = String::with_capacity(piece.len() * 12);
             polyline_path(&mut d, piece, connect);
-            out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
+            if let Some(gaps) = &gaps {
+                let points = crate::hit::path_points(&d);
+                d.clear();
+                gaps.write_polyline(&points, &mut d);
+            }
+            if !d.is_empty() {
+                out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
+            }
         }
         piece.clear();
     };

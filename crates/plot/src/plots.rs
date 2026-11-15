@@ -70,7 +70,9 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     if offers_drop_lines && (decor.drop.horizontal.on || decor.drop.vertical.on) {
         draw_drop_lines(out, pd, geom);
     }
-    if plot.kind.has_line() && plot.line.width_pt > 0.0 {
+    let line_in_front =
+        plot.kind == PlotKind::LineSymbol && decor.symbol_line.draw_in_front && !decor.symbol_line.gap_to_symbol;
+    if plot.kind.has_line() && plot.line.width_pt > 0.0 && !line_in_front {
         draw_line(out, pd, geom);
     }
     if plot.kind == PlotKind::Box {
@@ -83,6 +85,9 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     }
     if plot.kind.has_symbols() {
         draw_symbols(out, pd, geom);
+    }
+    if line_in_front && plot.line.width_pt > 0.0 {
+        draw_line(out, pd, geom);
     }
     if pd.mask.is_some() && !plot.kind.is_bar() {
         draw_masked(out, pd, geom);

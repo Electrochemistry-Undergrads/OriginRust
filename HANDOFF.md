@@ -22,6 +22,12 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T13 Draw Line in Front/Behind (2026-11-15, Windows): the Line + Symbol choice controls
+  both plotted curves and legend samples, defaulting to Behind. Gap to Symbol disables the
+  radios and overrides the retained choice, as Origin 2016 controls/PNG exports confirm.
+  Native/companion saves preserve it; `.opj` explicitly warns. Formatting, strict all-target
+  workspace Clippy and 2,243 tests pass (three existing ignored), including five new regressions.
+
 - CI build size (2026-11-15): dev/test debug information is disabled and the cache prefix
   is reset to `debug0-v1-rust` after the hosted runner exhausted its disk during test linking.
   The format/lint/test commands remain unchanged. Local formatting, strict all-target workspace
@@ -58,9 +64,8 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t13-symbol-line-order` | Codex Windows, t13-symbol-line-order | T13 Draw Line in Front/Behind; SymbolLineInterface plot flag, draw_plot ordering, graph_details radios, omission warning and focused tests | claimed 2026-11-15; no Axis/navigation/history, mask policy/color, labels, stats, print or other sessions scopes |
+| `codex/t02-go-to-picker` | Codex Windows, t02-go-to-picker | T02 Go To column picker and typed/duplicate column-name behavior only; go_to dialog/resolver and focused tests | claimed 2026-11-15; no grid/filtered handlers, app lifecycle/history, core/model/formula, plot or other sessions' scopes |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
-| `codex/t02-go-to` | Codex Windows, t02-go-to | T02 Go To dialog layout/defaults, Extend Selection and view-only virtual row visibility/key bounds; go_to dialog, scoped app/grid navigation symbols and focused tests | claimed 2026-11-14; no worksheet data/formula editing, core/plot/print/history or other sessions' symbols |
 | `mac-print-panel` | Codex macOS, no Origin | T27 native macOS graph print panel via PDFKit; app print_graph/macprint, macOS dependencies and no-spool validation example | claimed 2026-11-14; no workbook printing, Windows CLI, Excel/imports or other sessions’ scope |
 | `saved-state-recovery` | Codex macOS, no Origin | T28 undo/redo saved-state checkpoints and recovery cleanup; core/history.rs, app save/recovery hooks, autosave and focused UI tests | claimed 2026-11-14; no Excel dialogs/imports, axis/labels, backup settings or other sessions’ scope |
 | `vartest` | Claude Windows, "continue all tasks" (owner's decision) | T26 variance and proportion tests: calc vartest.rs, core Tool::VarTest/PropTest, Hypothesis Testing dialogs, ops analyze vartest/proptest | claimed 2026-11-14, continues 7ec9e48/5a08edf |

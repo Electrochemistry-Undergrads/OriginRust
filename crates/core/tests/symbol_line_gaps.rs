@@ -6,8 +6,9 @@ use sheaf_core::{ColumnData, Designation, Project};
 fn symbol_line_gaps_load_unchecked_and_follow_dependent_group_edits() {
     let old: PlotDecor = serde_json::from_str("{}").unwrap();
     assert_eq!(old.symbol_line, SymbolLineInterface::default());
+    assert!(!old.symbol_line.draw_in_front, "old projects paint the line behind symbols");
     assert!(!serde_json::to_string(&old).unwrap().contains("symbol_line"));
-    let enabled = SymbolLineInterface { gap_to_symbol: true, no_break_skipped: true };
+    let enabled = SymbolLineInterface { gap_to_symbol: true, no_break_skipped: true, draw_in_front: true };
     let decor = PlotDecor { symbol_line: enabled, ..old };
     assert_eq!(serde_json::from_str::<PlotDecor>(&serde_json::to_string(&decor).unwrap()).unwrap(), decor);
 

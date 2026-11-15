@@ -394,6 +394,10 @@ fn plot_tab_body(
             if plot.kind == PlotKind::LineSymbol {
                 group_box(ui, "Symbol/Line interface", |ui| {
                     ui.checkbox(&mut plot.decor.symbol_line.gap_to_symbol, "Gap to Symbol");
+                    ui.add_enabled_ui(!plot.decor.symbol_line.gap_to_symbol, |ui| {
+                        ui.radio_value(&mut plot.decor.symbol_line.draw_in_front, true, "Draw Line in Front");
+                        ui.radio_value(&mut plot.decor.symbol_line.draw_in_front, false, "Draw Line Behind");
+                    });
                 });
             }
             if !plot.kind.is_area() {

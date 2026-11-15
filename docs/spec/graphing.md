@@ -1984,9 +1984,25 @@ clearance uses a fixed 30% of the nominal symbol diameter, consistent with the h
 Origin's global symbol-diameter preference is described under
 [Options > Graph](https://docs.originlab.com/origin-help/options-dialog-graph-tab/); changing that
 global preference is not offered. Exact clearance for other preference values and unusual
-connector/marker styles is not measured. Draw Line in Front/Behind is not offered; the existing draw
-order is behind symbols, matching Origin's measured default. Native and companion saves retain
-both switches; `.opj` alone warns that symbol/line gaps were omitted.
+connector/marker styles is not measured. Native and companion saves retain both gap switches;
+`.opj` alone warns that symbol/line gaps were omitted.
+
+Line + Symbol also offers **Draw Line in Front** and **Draw Line Behind**. Behind is the default.
+With gaps off, Front paints the connecting line after symbols in both the data plot and legend
+sample. Gap to Symbol disables both radios and overrides the stored Front choice; the selection
+is retained while disabled. Other plot kinds ignore the saved choice. The same scene order feeds
+screen, raster and vector output. Native and companion saves retain the setting, including while
+gaps are enabled; `.opj` alone warns that draw order was omitted.
+
+Measured in Origin 2016 on 2026-11-15: three points (2,1), (6,1), (10,1), solid blue 20 pt squares
+and a red 6 pt line, 900-pixel exports. `behind_verified.png` has blue at the data marker centre
+(468,327) and legend marker centre (694,42); `front_verified.png` has red at both positions.
+The short verified probe returned success and closed with OK. The initial longer probe's valid
+`front`/`gap` control captures show Front selected and then greyed while still selected after
+enabling Gap to Symbol; its interrupted restore/OK sequence canceled, so its final `front.png`
+is excluded from Front raster evidence. Raw controls, steps and exports are under
+`re-workspace/scratch/t13-symbol-line-order/`. This agrees with the
+[documented Symbol/Line interface](https://docs.originlab.com/origin-help/pd-dialog-line-tab/).
 
 Data labels have font, size, colour, rotation, position and the forms X, Y, Row Indices and (X,Y).
 They are written a quarter of the font size from the point, numbers as the worksheet shows them (up to 15

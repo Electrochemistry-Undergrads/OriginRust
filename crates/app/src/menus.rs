@@ -45,6 +45,7 @@ const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
 const NO_UNDO: &str = "Nothing to undo";
 const NO_REDO: &str = "Nothing to redo";
+const NO_AI_UNDO: &str = "The latest change must be an AI change, with no edit or dialog open";
 const ANALYSIS_ON_BOOK: &str = "The active layer has no data plot to analyse: plot a worksheet column first";
 
 /// Which menu bar is shown.
@@ -93,6 +94,7 @@ pub enum Cmd {
     Exit,
     Undo,
     Redo,
+    UndoAiChanges,
     DeleteColumns,
     /// Column > Move Columns.
     MoveColumns(MoveTo),
@@ -320,6 +322,8 @@ pub struct MenuContext<'a> {
     pub cells: bool,
     pub undo: Option<&'a str>,
     pub redo: Option<&'a str>,
+    /// The latest history entry is an AI call and no editor/dialog is active.
+    pub undo_ai: bool,
     /// All windows of the project, in order, with their titles.
     pub windows: Vec<(WindowId, String)>,
     /// A top-level menu to hold open (`--show menu:Plot`, for pictures of the menus).
@@ -488,6 +492,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(sep());
         v.push(keyed("&Undo", ctrl(Key::Z), Cmd::Undo));
         v.push(keyed("&Redo", ctrl_shift(Key::Z), Cmd::Redo));
+        v.push(item("Undo AI Changes", Cmd::UndoAiChanges));
     }
     if kind != WindowKind::None {
         v.push(sep());
@@ -562,6 +567,7 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         keyed("&Undo", ctrl(Key::Z), Cmd::Undo),
         // Origin has no Redo; Sheaf keeps its own, with its own key.
         keyed("&Redo", ctrl_shift(Key::Z), Cmd::Redo),
+        item("Und&o AI Changes", Cmd::UndoAiChanges),
         sep(),
     ];
     if kind == WindowKind::Workbook {
@@ -2017,6 +2023,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             c.redo.ok_or(NO_REDO)?;
             Action::Redo
         }
+        Cmd::UndoAiChanges => {
+            if !c.undo_ai {
+                return Err(NO_AI_UNDO);
+            }
+            Action::UndoAiChanges
+        }
         Cmd::DeleteColumns => {
             book?;
             Action::DeleteColumns(some()?)
@@ -2602,6 +2614,7 @@ mod tests {
             cells: false,
             undo: None,
             redo: None,
+            undo_ai: false,
             windows: Vec::new(),
             open: None,
             panels: [true; 4],

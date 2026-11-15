@@ -1073,6 +1073,27 @@ impl SheafApp {
         self.next_token
     }
 
+    /// Only completed AI calls at the top of history are eligible. An active owner edit or dialog
+    /// must finish first; the handler checks this again in case an enabled menu became stale.
+    fn can_undo_ai_changes(&self) -> bool {
+        self.doc.undo_label().is_some_and(|label| label.starts_with("AI: "))
+            && !self.books.values().any(|book| book.editing.is_some() || book.editing_label.is_some())
+            && !self.dialog_open()
+    }
+
+    fn undo_ai_changes(&mut self, ctx: &egui::Context) {
+        if !self.can_undo_ai_changes() {
+            return;
+        }
+        let mut count = 0;
+        while self.doc.undo_label().is_some_and(|label| label.starts_with("AI: ")) {
+            // Reuse ordinary Undo, including its existing cleanup hooks and per-step log entry.
+            self.apply(Action::Undo, ctx);
+            count += 1;
+        }
+        self.say(format!("Undone {count} AI change{}", if count == 1 { "" } else { "s" }));
+    }
+
     // ----- actions -------------------------------------------------------
 
     fn apply(&mut self, action: Action, ctx: &egui::Context) {
@@ -1128,6 +1149,7 @@ impl SheafApp {
                 }
                 self.close_shape_dialog_if_changed(shapes);
             }
+            Action::UndoAiChanges => self.undo_ai_changes(ctx),
             Action::NewWorkbook => {
                 self.doc.apply("New workbook", |p| {
                     let book = p.add_workbook("");
@@ -2344,6 +2366,7 @@ impl SheafApp {
             cells: book.and_then(|b| self.books.get(&b)).is_some_and(|s| s.sel != Sel::None),
             undo: self.doc.undo_label(),
             redo: self.doc.redo_label(),
+            undo_ai: self.can_undo_ai_changes(),
             windows: project.windows.iter().map(|w| (w.id(), w.title())).collect(),
             open: self.open_menu.as_deref(),
             panels: self.panels.shown_flags(),

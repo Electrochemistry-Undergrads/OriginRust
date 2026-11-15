@@ -138,7 +138,10 @@ fn menu_entry<'a>(h: &'a Harness<'static, SheafApp>, text: &'a str) -> egui_kitt
     };
     let pick =
         |nodes: Vec<egui_kittest::Node<'a>>| nodes.into_iter().max_by(|a, b| a.rect().min.x.total_cmp(&b.rect().min.x));
-    let all: Vec<egui_kittest::Node<'a>> = not_toolbar(h, text);
+    // Ordinary Undo has a dynamic history suffix; the separate batch command also starts with
+    // "Undo" and must not win that prefix lookup when the ordinary item has no exact label.
+    let all: Vec<egui_kittest::Node<'a>> =
+        not_toolbar(h, text).into_iter().filter(|n| text != "Undo" || name(n) != "Undo AI Changes").collect();
     let exact: Vec<egui_kittest::Node<'a>> = all
         .iter()
         .filter(|n| name(n) == text || n.accesskit_node().label().as_deref() == Some(text))

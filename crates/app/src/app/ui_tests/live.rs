@@ -4,6 +4,7 @@
 //! touches the user's real run folders (`Startup::default()` has no folder for the link).
 
 mod app_context;
+mod undo_ai;
 
 use super::*;
 use serde_json::{Value, json};

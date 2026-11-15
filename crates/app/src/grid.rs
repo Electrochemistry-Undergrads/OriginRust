@@ -402,6 +402,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         cells: state.sel != Sel::None,
         undo: None,
         redo: None,
+        undo_ai: false,
         windows: Vec::new(),
         open: None,
         panels: [true; 4],

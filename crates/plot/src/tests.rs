@@ -4300,3 +4300,94 @@ fn a_fitted_curve_of_a_cumulative_member_rides_on_the_sum_below_it() {
     assert!(near(ys[2][7], 14.0 + 7.0) && near(ys[1][7], 14.0 + 7.0), "{:?}", ys[2]);
     assert!(near(ys[3][7], 21.0 + 7.0 + 14.0), "{:?}", ys[3]);
 }
+
+// ----- stacked histograms (graphing spec 13.16) -------------------------------
+
+/// Three numeric columns with different ranges in one sheet.
+fn stacked_hist_project() -> (Project, Vec<sheaf_core::ColumnId>) {
+    let mut p = Project::new();
+    let book = p.add_workbook("data");
+    let cols = [
+        (0..30).map(|i| 10.0 + f64::from(i % 10) * 1.5).collect::<Vec<f64>>(),
+        (0..24).map(|i| 20.0 + f64::from(i % 7) * 2.0).collect(),
+        (0..18).map(|i| 5.0 + f64::from(i * i % 13)).collect(),
+    ];
+    let ids = cols
+        .into_iter()
+        .map(|v| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap())
+        .collect::<Vec<_>>();
+    (p, ids)
+}
+
+#[test]
+fn stacked_histograms_make_one_panel_per_column_from_the_top_with_shared_bins_and_x() {
+    let (mut p, ys) = stacked_hist_project();
+    let g = p.plot_columns(Template::StackedHistograms, &ys).unwrap();
+    let graph = p.graph(g).unwrap();
+    assert_eq!(graph.layers.len(), 3);
+    // Top to bottom in selection order.
+    let tops: Vec<f64> = graph
+        .layers
+        .iter()
+        .map(|l| graph.page_frame(graph.layers.iter().position(|m| std::ptr::eq(m, l)).unwrap()).top)
+        .collect();
+    assert!(tops[0] < tops[1] && tops[1] < tops[2], "{tops:?}");
+    for (k, l) in graph.layers.iter().enumerate() {
+        assert_eq!(l.plots.len(), 1);
+        assert_eq!(l.plots[0].y, ys[k]);
+        assert_eq!(l.plots[0].kind, sheaf_core::graph::PlotKind::Histogram);
+        assert_eq!(l.plots[0].hist, graph.layers[0].plots[0].hist, "the same bins in every panel");
+    }
+    let hist = graph.layers[0].plots[0].hist;
+    assert!(hist.begin.is_some() && hist.end.is_some() && hist.bin_size.is_some());
+    // One shared X scale: the panels after the first are linked to it.
+    assert!(graph.layers[1..].iter().all(|l| l.link.is_some_and(|k| k.parent == 0)));
+    // The bins cover all three columns (5 to 28), and the counts of a panel add up to its rows.
+    assert!(hist.begin.unwrap() <= 5.0 && hist.end.unwrap() >= 29.0, "{hist:?}");
+    let data: Vec<_> = graph.layers.iter().map(|l| data::collect(&p, l).plots).collect();
+    let centres: Vec<Vec<f64>> = data.iter().map(|d| d[0].x.as_ref().unwrap().to_vec()).collect();
+    assert_eq!(centres[0], centres[1]);
+    assert_eq!(centres[1], centres[2]);
+    for (d, n) in data.iter().zip([30.0, 24.0, 18.0]) {
+        assert_eq!(d[0].y.iter().sum::<f64>(), n);
+    }
+    let geoms = fixed_geometry(&p, g);
+    assert!(geoms.iter().all(|m| (m.x.min, m.x.max) == (geoms[0].x.min, geoms[0].x.max)));
+    assert!(svg_of(&p, g).contains("<svg"));
+}
+
+#[test]
+fn stacked_histograms_leave_out_text_columns_and_refuse_data_without_numbers() {
+    let (mut p, ys) = stacked_hist_project();
+    let book = p.workbooks().next().unwrap().id;
+    let text = p.add_column(book, 0, Designation::Y, ColumnData::text(vec!["a".into(); 5])).unwrap();
+    let g = p.plot_columns(Template::StackedHistograms, &[ys[0], text, ys[2]]).unwrap();
+    assert_eq!(p.graph(g).unwrap().layers.len(), 2);
+    assert!(p.plot_columns(Template::StackedHistograms, &[text]).is_err());
+    let empty = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![f64::NAN; 4])).unwrap();
+    let err = p.plot_columns(Template::StackedHistograms, &[empty]).unwrap_err();
+    assert!(err.to_string().contains("numbers"), "{err}");
+    assert!(p.plot_columns(Template::StackedHistograms, &[]).is_err());
+}
+
+#[test]
+fn golden_stacked_histograms() {
+    let (x, curve) = golden_data();
+    let mut p = Project::new();
+    let book = p.add_workbook("data");
+    let _ = x;
+    let ids: Vec<_> = [30.0, 21.5, 12.25]
+        .iter()
+        .map(|a| p.add_column(book, 0, Designation::Y, ColumnData::numeric(curve(*a))).unwrap())
+        .collect();
+    let g = p.plot_columns(Template::StackedHistograms, &ids).unwrap();
+    compare_golden("stacked-histograms", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_cumulative_lines() {
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0), curve(21.5), curve(12.25)]);
+    p.graph_mut(g).unwrap().layers[0].stack = Stack::Cumulative;
+    compare_golden("cumulative-lines", &svg_of(&p, g));
+}

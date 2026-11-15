@@ -892,9 +892,11 @@ fn plot_menu() -> Vec<Entry> {
                 ],
                 vec![item("Ridgeline Chart", Cmd::Plot(Template::Ridgeline))],
                 vec![item("Histogram", Cmd::Plot(Template::Histogram))],
+                vec![
+                    grey("Histogram + Probabilities"),
+                    item("Stacked Histograms", Cmd::Plot(Template::StackedHistograms)),
+                ],
                 greys(&[
-                    "Histogram + Probabilities",
-                    "Stacked Histograms",
                     "Marginal Histograms",
                     "Marginal Box Charts",
                     "2D Kernel Density",

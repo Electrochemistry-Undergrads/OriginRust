@@ -6211,6 +6211,32 @@ fn multi_panel_items_make_one_panel_per_selected_column() {
 }
 
 #[test]
+fn stacked_histograms_item_makes_one_shared_bin_panel_per_selected_column() {
+    let mut h = start(vec![data_file("stackhist")]);
+    let (b, c) = select_b_and_c(&mut h);
+    // The bar has a Statistics menu of its own further right; the submenu of Plot is the leftmost.
+    menu_entry(&h, "Plot").click();
+    settle(&mut h);
+    let inner = h
+        .query_all_by_label_contains("Statistics")
+        .filter(|n| n.accesskit_node().label().unwrap_or_default().trim_end_matches(" \u{23f5}") == "Statistics")
+        .min_by(|a, b| a.rect().min.x.total_cmp(&b.rect().min.x))
+        .expect("the Statistics submenu of Plot");
+    inner.click();
+    settle(&mut h);
+    menu_entry(&h, "Stacked Histograms").click();
+    settle(&mut h);
+    assert_eq!(project(&h).graphs().count(), 2);
+    let g = project(&h).graphs().last().unwrap();
+    assert_eq!(g.layers.len(), 2);
+    assert_eq!(g.layers[0].plots[0].y, b, "the first column is the top panel");
+    assert_eq!(g.layers[1].plots[0].y, c);
+    assert_eq!(g.layers[0].plots[0].hist, g.layers[1].plots[0].hist);
+    assert!(g.layers[0].plots[0].hist.bin_size.is_some());
+    assert!(g.page_frame(0).top < g.page_frame(1).top);
+}
+
+#[test]
 fn y_error_plots_a_scatter_with_the_error_bars_of_the_error_column() {
     let mut h = start(vec![data_file("yerr")]);
     let book = project(&h).workbooks().next().unwrap().id;

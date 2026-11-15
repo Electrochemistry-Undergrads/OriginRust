@@ -200,6 +200,8 @@ pub enum ProjectError {
     NotAGraph(String),
     #[error("there is no column with id {0:?}")]
     NoSuchColumn(ColumnId),
+    #[error("stacked histograms need at least one Y column that holds numbers")]
+    StackedHistogramsNeedNumbers,
     #[error("column '{0}' was not found")]
     NoSuchColumnName(String),
     #[error("the graph has no layer {0}")]
@@ -839,6 +841,9 @@ impl Project {
         for y in ys {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
         }
+        if template == Template::StackedHistograms {
+            return self.plot_stacked_histograms(ys);
+        }
         if template == Template::Lollipop && ys.len() < 2 {
             return Err(ProjectError::LollipopNeedsTwoColumns(ys.len()));
         }
@@ -1225,6 +1230,49 @@ impl Project {
             }
             if let Some(name) = long_name {
                 g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
+    /// Stacked Histograms (graphing spec 13.16): one histogram panel for each Y column that holds numbers, from the
+    /// top in the order of `ys`, linked to share one X scale, and drawn with the same bins in every panel: the
+    /// bins the usual rule gives for all the values together (Sheaf's choice, not measured in Origin). Each
+    /// panel has its own count axis. Columns without numbers are left out; with none left it is an error.
+    pub fn plot_stacked_histograms(&mut self, ys: &[ColumnId]) -> Result<WindowId, ProjectError> {
+        use crate::graph::HistogramStyle;
+        use crate::panels::{PanelLayout, PanelOrder};
+        let columns: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_some()).collect();
+        let all: Vec<f64> = columns
+            .iter()
+            .filter_map(|y| self.numeric(*y))
+            .flat_map(|v| v.iter().copied())
+            .filter(|v| v.is_finite())
+            .collect();
+        let opts = sheaf_calc::freq::FreqOptions {
+            min: None,
+            max: None,
+            size: sheaf_calc::freq::BinSize::Auto,
+            below: false,
+            above: false,
+        };
+        let freq = sheaf_calc::freq::freq_counts(&all, &opts).ok_or(ProjectError::StackedHistogramsNeedNumbers)?;
+        let end = freq.rows.last().map_or(freq.bin_start + freq.bin_size, |r| r.end);
+        let style = HistogramStyle { bin_size: Some(freq.bin_size), begin: Some(freq.bin_start), end: Some(end) };
+        let groups: Vec<Vec<ColumnId>> = columns.iter().map(|y| vec![*y]).collect();
+        let mut layout = PanelLayout::stack(groups.len());
+        layout.order = PanelOrder::TopDown;
+        let graph = self.plot_panels(Template::StackedHistograms, &groups, &layout)?;
+        if let Some(g) = self.graph_mut(graph) {
+            for (k, layer) in g.layers.iter_mut().enumerate() {
+                if !layer.palette.colors.is_empty() {
+                    let n = layer.palette.colors.len();
+                    layer.palette.colors.rotate_left(k % n);
+                    layer.apply_palette();
+                }
+                for plot in &mut layer.plots {
+                    plot.hist = style;
+                }
             }
         }
         Ok(graph)

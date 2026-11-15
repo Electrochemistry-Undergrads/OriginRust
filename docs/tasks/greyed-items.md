@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **454 greyed items: 313 in the menu bar, 47 on the toolbars, 94 in context menus.**
+original inventory baseline. This is not a new runtime audit. **453 greyed items: 312 in the menu bar, 47 on the toolbars, 94 in context menus.**
 
 ## How to read and keep this file
 
@@ -39,7 +39,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T59` | 2 |
 | `T60` | 7 |
 | `T61` | 20 |
-| `T62` | 3 |
+| `T62` | 2 |
 | `T63` | 31 |
 | `B1` | 27 |
 | `B2` | 51 |
@@ -60,7 +60,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 19 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 81 items, backlog packages (`B`) 354, not planned (`N`) 19.
+Briefs (`T`) hold 80 items, backlog packages (`B`) 354, not planned (`N`) 19.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -122,7 +122,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
 - `B15` 3D Symbol/Bar/Vector: 3D Bars · 3D Scatter · 3D Trajectory · 3D Scatter + Error Bar · 3D Vector XYZ XYZ · 3D Vector XYZ dXdYdZ
-- `T62` Statistics: Stacked Histograms
 - `T63` Statistics: Probability Plot · Q-Q Plot
 - `B4` Statistics: Grouped Box Charts · Interval Plot · Histogram + Probabilities · Marginal Histograms · Marginal Box Charts · 2D Kernel Density · QC (X bar R) Chart · Pareto · Scatter Matrix
 - `B14` Contour/Heat Map: Color Fill · B/W Lines + Labels · Gray Scale Map · Heat Map · Polar Contour theta(X) r(Y) · Polar Contour r(X) theta(Y) · Ternary Contour

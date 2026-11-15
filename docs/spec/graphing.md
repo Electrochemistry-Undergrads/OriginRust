@@ -1276,6 +1276,26 @@ Sheaf:
 - **CLI/MCP:** `--stack cumulative` (and the MCP `stack` string).
 
 
+### 13.16 Plot > Statistics > Stacked Histograms (T62 slice 2)
+
+Origin: the command makes one graph with one histogram panel per selected Y column, the panels stacked
+vertically. **Not measured** (all Sheaf's choices): shared versus per-panel bins, panel order, gaps, labels.
+
+Sheaf (`Project::plot_stacked_histograms`; GUI Plot > Statistics > Stacked Histograms; CLI
+`sheaf plot -t stacked-histograms`):
+
+- One panel per Y column that holds numbers (text columns are left out; no numbers at all is an error),
+  **top to bottom in selection order**. The panels reuse `PanelLayout::stack` (one column, no gap, X linked to
+  the first panel so all share one X scale and the inner panels show no X tick labels) with the order turned
+  top-down, and the shared panel helpers `plot_panels`/`panel_layers` of 15.
+- **Shared bins** (provisional): the bin width, first edge and last edge are the ones the histogram rule
+  (frequency-counts automatic bins, measured for single histograms) gives for the **union of all the columns'
+  finite values**; they are stored explicitly on every plot (`hist`), so the panels have identical bin edges
+  and later editing one panel's bins does not touch the others. Each panel has its own count axis.
+- Each panel gets the next colour of the layer palette (starting at the Histogram template's red).
+- `--panels` is refused with this template; the legend of each panel names its column.
+
+
 ---
 
 ## 14. Text tick labels and column charts (P0, GP-COL-01)

@@ -175,6 +175,56 @@ writer still warns that user parameter rows themselves require the companion.
 Regressions: `crates/expr/tests/parameter_labels.rs`, `crates/core/tests/parameter_labels.rs`
 and `crates/io/tests/parameter_labels.rs`. These use only generated metadata and cell values.
 
+### Cross-sheet and cross-book columns
+
+T08 group 6 (2026-11-14, `codex/formula-cross-sheet`) accepts explicit references such as
+`[Book1]Sheet2!col(A)`, `Sheet2!col(A)` within the target workbook, and
+`[Book1]2!wcol(1)` using a 1-based worksheet position. A column still uses its short name,
+quoted long name, or 1-based position. Double quotes allow spaces in workbook and worksheet
+names: `["My Book"]"Raw Data"!col("Current µA")`. Workbook references prefer the actual short
+name, then accept a unique display title; ambiguous titles are refused. Workbook and worksheet
+names ignore ASCII case. Short-name precedence and ambiguity refusal are Sheaf's explicit rules.
+Ordinary unqualified columns still use the target worksheet. No active-window fallback or
+file access occurs. A missing book, sheet or column is an error.
+
+Qualified columns support the existing arithmetic, statistics, vector functions, row indices,
+text reads, display-format conversion, built-in headers and user parameter rows. `i` continues
+to refer to the output row. An initial fill without an explicit row range covers the longer of
+the target worksheet and its data sources, so a remote column can fill an empty target sheet.
+Later recalculation follows source lengths under the existing shrink/empty-source rule.
+Header-only formulas need target rows or an explicit range.
+
+The worksheet host resolves the complete `ColumnRef::Scoped`; `WorksheetRef` selects a sheet
+by name or position. Recalculation now orders data dependencies across the entire project.
+Manual columns retain their values and mark Pending until explicitly recalculated, then their
+remote dependents update. Header and parameter dependencies remain separate from data cycles;
+changing a source sheet's parameter-row order invalidates its `Dn` readers in other sheets.
+Names and positions are resolved anew after structural edits. A moved indexed sheet can change
+the source; adding an unrelated book leaves Manual formulas Current. Renaming/deleting a source
+marks its readers Broken and retains their values; restoring it repairs the link. Formula text
+is not rewritten when names change. Document edits, Undo and Redo include the entire chain.
+
+Reference basis: Origin's published [range notation](https://docs.originlab.com/labtalk/guide/range-notation/)
+and [Set Values reference rules](https://docs.originlab.com/origin-help/wks-setcolval-quickstart/).
+The latter dates direct cross-sheet formulas to Origin 2017; earlier versions require a range
+variable. Installed Origin 2016 probes in `scratch/formula-cross-sheet/ranges*.lines.txt`
+confirm `[Src]Sheet1!col(A)` via a range variable gives `6,12,24` when multiplied by 3,
+and `[src]other!col(A)` gives `11,21,31,41` after adding 1 to `10,20,30,40`.
+The follow-up confirms an unqualified `Sheet1!col(A)` within the same book, sheet position 2,
+its second value 20 and mean 25. It also records that `[Probe]` resolves a book whose actual
+short name is `Book1` and display title is `Probe`.
+The direct qualified-`col()` expression used here is Sheaf's extension of range notation;
+direct-formula syntax, recalculation, structural edits and quoted-name details are not claimed
+as measured Origin 2016 behavior. No range-variable declarations, spreadsheet `A1` shorthand,
+multi-sheet ranges or `%()` substitution are added.
+
+Native saves retain these formulas. The `.opj` writer stores text and values but cannot write
+their cross-sheet recalculation records: its existing warning says the external file uses mode
+None, and the `.opj.sheaf` companion preserves the full mode and linkage for reopening in Sheaf.
+Expression, model and native/companion round-trip regressions are in the `cross_sheet` and
+`cross_sheet_formulas` test files. The sheet-only host used for filters and analysis conditions
+has no project scope and continues to reject qualified references.
+
 ## 4. Calling it from the program
 
 `Expr::parse(text)`, then `eval(&host)` for one value, `eval_rows(&host, n)` for rows `0..n`, or `compile(&host)` to get an object that can be run row by row. Variables and column slices are resolved once at compile time and constant sub-expressions are folded, so a million-row column evaluates without parsing and without per-row allocation. `variables()` and `columns()` list what the formula depends on, in order of first use, so the worksheet can decide when to recalculate.
@@ -191,7 +241,7 @@ and `crates/io/tests/parameter_labels.rs`. These use only generated metadata and
 ## 6. Differences from Origin's LabTalk
 
 - Only a single expression; no `before formula` scripts, assignments, string variables, `%()` substitution or user-defined functions. Those are separate features and are not part of this crate.
-- No cross-sheet references `[Book]Sheet!col(A)` (the cells of other sheets are not visible to the evaluator), `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). The `[a:b]` range is accepted only inside statistics. Parameter-row ordering and the supported parameter-name syntax are described above.
+- No spreadsheet cell notation (`A1`, bare cross-sheet `Sheet!A`), range-variable declarations, or `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). Explicit cross-sheet `col()` references are described above. The `[a:b]` range is accepted only inside statistics. Parameter-row ordering and the supported parameter-name syntax are described above.
 - A single `=` is not a comparison here; use `==`.
 - `e` is the constant 2.718...; a parameter literally named `e` in a fit function cannot be used (rename it).
 - `i` is read-only and always the 1-based row number of the output row.

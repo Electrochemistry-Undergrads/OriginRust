@@ -2213,10 +2213,12 @@ mod tests {
             Ok(o) => o.value,
             Err(e) => panic!("{}", e.message),
         };
-        // canonicalize gives Windows' verbatim form (\\?\C:\...); the tool reports the plain path
-        let shown = path.display().to_string();
-        let shown = shown.strip_prefix(r"\\?\").unwrap_or(&shown);
-        assert_eq!(out["comparison_plot"]["file"], json!(shown));
+        // Windows' canonical form carries a `\\?\` prefix that the reported path may not; compare without it.
+        let plain = |p: &str| p.trim_start_matches(r"\\?\").to_string();
+        assert_eq!(
+            plain(out["comparison_plot"]["file"].as_str().unwrap_or_default()),
+            plain(&path.display().to_string())
+        );
         assert!(std::fs::read_to_string(&path).unwrap().contains("p &lt; 0.0001"));
         let _ = std::fs::remove_dir_all(dir);
     }

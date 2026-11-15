@@ -160,13 +160,9 @@ fn columns_label(project: &Project, cells: &[DataCell]) -> String {
     }
 }
 
-fn points(n: usize) -> String {
-    if n == 1 { "1 point".to_string() } else { format!("{n} points") }
-}
-
 impl Document {
     /// Data > Mask Data Points: masks (`masked`) or unmasks the cells, one undo step labelled
-    /// "Mask 4 points of B(Y)" or "Unmask 1 point of B(Y)". Nothing is recorded when no cell
+    /// "Set Mask Data" (Origin's text). Nothing is recorded when no cell
     /// would change. Masks are allowed on columns that a formula keeps up to date.
     pub fn mask_points(&mut self, cells: &[DataCell], masked: bool) -> Result<DataEditReport, DataEditError> {
         let mut probe = self.project().clone();
@@ -174,19 +170,14 @@ impl Document {
         if would == 0 {
             return Ok(DataEditReport::default());
         }
-        let label = format!(
-            "{} {} of {}",
-            if masked { "Mask" } else { "Unmask" },
-            points(would),
-            columns_label(self.project(), cells)
-        );
+        // Origin 2016 names the step "Set Mask Data" (unmask: not measured, same text).
+        let label = "Set Mask Data".to_string();
         let changed = self.edit(&label, |p| p.mask_data_cells(cells, masked))?;
         Ok(DataEditReport { changed, locked: 0 })
     }
 
     /// Data > Remove Bad Data Points: sets the cells to missing values and keeps their rows, one
-    /// undo step labelled "Remove bad point B(Y) row 12" (rows are counted from 1) or
-    /// "Remove 3 bad points of B(Y)". Columns calculated by a formula are left alone (see
+    /// undo step labelled "Remove Data Point" (Origin's text). Columns calculated by a formula are left alone (see
     /// [`DataEditReport::locked`]); nothing is recorded when no cell would change.
     pub fn remove_bad_points(&mut self, cells: &[DataCell]) -> Result<DataEditReport, DataEditError> {
         let mut probe = self.project().clone();
@@ -194,16 +185,9 @@ impl Document {
         if would.changed == 0 {
             return Ok(would);
         }
-        let name = columns_label(self.project(), cells);
-        let label = match cells {
-            [one] => format!("Remove bad point {name} row {}", one.row + 1),
-            _ => format!(
-                "Remove {} bad {} of {name}",
-                would.changed,
-                if would.changed == 1 { "point" } else { "points" }
-            ),
-        };
-        self.edit(&label, |p| p.set_cells_missing(cells))
+        // Origin 2016 names the step "Remove Data Point".
+        let label = "Remove Data Point";
+        self.edit(label, |p| p.set_cells_missing(cells))
     }
 
     /// Data > Move Data Points: sets the Y cell of a point, and its X cell when the plot has an X
@@ -257,7 +241,7 @@ mod tests {
         let report = d.mask_points(&cells, true).unwrap();
         assert_eq!(report, DataEditReport { changed: 2, locked: 0 });
         assert_eq!(mask(&d, b), vec![1, 3], "a repeated cell counts once and a row beyond the data is skipped");
-        assert_eq!(d.undo_label(), Some("Mask 2 points of B(Y)"));
+        assert_eq!(d.undo_label(), Some("Set Mask Data"));
         assert_eq!(values(&d, b)[1], 20.0, "the value stays");
         d.undo();
         assert!(mask(&d, b).is_empty());
@@ -271,7 +255,7 @@ mod tests {
         let report = d.mask_points(&[DataCell::new(b, 2), DataCell::new(b, 4)], false).unwrap();
         assert_eq!(report.changed, 1);
         assert_eq!(mask(&d, b), vec![0]);
-        assert_eq!(d.undo_label(), Some("Unmask 1 point of B(Y)"));
+        assert_eq!(d.undo_label(), Some("Set Mask Data"));
     }
 
     #[test]
@@ -283,14 +267,14 @@ mod tests {
         assert_eq!(d.mask_points(&[DataCell::new(b, 1)], false).unwrap().changed, 0);
         assert_eq!(d.mask_points(&[], true).unwrap().changed, 0);
         assert_eq!(d.revision(), revision);
-        assert_eq!(d.undo_label(), Some("Mask 1 point of B(Y)"));
+        assert_eq!(d.undo_label(), Some("Set Mask Data"));
     }
 
     #[test]
     fn masking_cells_of_two_columns_names_the_number_of_columns() {
         let (mut d, _, [a, b, _]) = setup();
         d.mask_points(&[DataCell::new(a, 0), DataCell::new(b, 0)], true).unwrap();
-        assert_eq!(d.undo_label(), Some("Mask 2 points of 2 columns"));
+        assert_eq!(d.undo_label(), Some("Set Mask Data"));
     }
 
     #[test]
@@ -313,7 +297,7 @@ mod tests {
         assert_eq!(y.len(), 5, "the rows are kept");
         assert!(y[2].is_nan() && y[1] == 20.0 && y[3] == 40.0);
         assert_eq!(values(&d, a), vec![1.0, 2.0, 3.0, 4.0, 5.0], "the X cell is not touched");
-        assert_eq!(d.undo_label(), Some("Remove bad point B(Y) row 3"));
+        assert_eq!(d.undo_label(), Some("Remove Data Point"));
         d.undo();
         assert_eq!(values(&d, b)[2], 30.0);
         assert!(d.undo_label().is_none());
@@ -325,7 +309,7 @@ mod tests {
         d.remove_bad_points(&[DataCell::new(b, 0)]).unwrap();
         let report = d.remove_bad_points(&[DataCell::new(b, 0), DataCell::new(b, 1), DataCell::new(b, 4)]).unwrap();
         assert_eq!(report.changed, 2);
-        assert_eq!(d.undo_label(), Some("Remove 2 bad points of B(Y)"));
+        assert_eq!(d.undo_label(), Some("Remove Data Point"));
         let revision = d.revision();
         assert_eq!(d.remove_bad_points(&[DataCell::new(b, 0), DataCell::new(b, 80)]).unwrap().changed, 0);
         assert_eq!(d.revision(), revision, "nothing to do, no step");

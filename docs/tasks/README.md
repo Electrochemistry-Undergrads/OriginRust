@@ -67,7 +67,7 @@ All six are **open**. The older index below retains implementation history and p
 | [T58](T58-graph-text-formatting.md) | 1, P0 | L | Graph text, escapes, editor and shared Format toolbar dispatch |
 | [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell format model/dialog; toolbar adapter after T58 slice 3 |
 | [T60](T60-merge-graphs-layer-management.md) | 2, P0 | L | Merge finished graphs, arrange/link layers and fit page/layer |
-| [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Add/delete layers, inset and 3/4-Y templates; coordinate with T60 |
+| [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Add/delete layers, inset and 3/4-Y templates; coordinate with T60; claimed 2026-11-15 (`layers-multi-y`, Claude Windows) |
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Remaining offset menu, Cumulative, stacked histograms, waterfall colours |
 | [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring; claim letters A–K independently |
 
@@ -125,7 +125,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |
 | [T46](T46-import-themes.md) | Saved import settings: Dialog Theme row (`<last used>`, named themes) in the ASCII, CHI and Excel import windows, `sheaf import --theme` | M | done, merged 2026-11-15 (import-ascii.md 17); left: Origin measurements of the theme list and defaults |
 | [T47](T47-simulate-curve.md) | Simulate Curve: a curve from any fit-library function with typed parameters, window, CLI and MCP | M | done, merged 2026-11-15 (fitting.md 13); Origin's window measured and copied 2026-11-15 (13.1); left: Noise Level, user-defined functions, Simulate Surface |
-| [T48](T48-graph-data-tools.md) | Graph Data menu: Mask Data Points (rectangle), Remove Bad Data Points, Move Data Points | M | done, merged 2026-11-15 (graphing.md 20); left: Origin measurements, display range and markers |
+| [T48](T48-graph-data-tools.md) | Graph Data menu: Mask Data Points (rectangle), Remove Bad Data Points, Move Data Points | M | done, merged 2026-11-15 (graphing.md 20); Mask and Remove Bad measured in Origin 2016 and followed; left: Move Data Points unmeasured (synthetic input fails), other plot kinds, display range |
 | [T49](T49-parallel-plot.md) | Parallel Plot and Parallel Index (parallel coordinates) | M | done 2026-11-15 (graphing 14.25, `parallel-plot`, macOS); left: Parallel Sets, curvature, colour map, axis reordering, Origin defaults unmeasured |
 | [T50](T50-treemap.md) | Treemap: nested rectangles sized by value (six Origin layouts) | M | done 2026-11-15 (graphing 14.26, `treemap`, macOS); left: Origin defaults/colours/labels unmeasured, hover and drill-down, colour by value |
 | [T51](T51-sunburst.md) | Sunburst plot: hierarchy as concentric rings coloured by value | M | done 2026-11-15 (graphing 14.27, `sunburst`, macOS); left: Origin defaults unmeasured, hover and Collapse/Expand drilling |

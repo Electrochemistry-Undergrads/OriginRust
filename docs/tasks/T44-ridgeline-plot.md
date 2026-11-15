@@ -1,6 +1,9 @@
 # T44: Ridgeline chart
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `ridgeline`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `ridgeline`: Plot >
+Statistics > Ridgeline Chart, `-t ridgeline`, MCP; four display types, Scott/Silverman/k×SD/Custom bandwidths
+shared with the violin KDE, quantile lines, rug; `.opj` writes plain columns with a warning. Left: grouped
+data, jitter, other curve types; Origin's defaults unmeasured (graphing.md 14.23).
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Graphing: Sunburst and ridgeline plots, Origin
 2022; the ridgeline half only).
 

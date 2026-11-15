@@ -169,6 +169,9 @@ open. History of what was merged when is in `git log` (not repeated here).
 - T42 Window Switcher (2026-11-15, macOS, no Origin): Ctrl+Tab / Ctrl+Shift+Tab (physical Control on macOS)
   over the windows of the Project Explorer folder, hidden included, most recent first; graph thumbnails rendered
   on open, workbook miniatures; release Ctrl activates, Esc cancels; Window > Window Switcher (gui-look.md).
+- T44 ridgeline chart (2026-11-15, macOS, no Origin): Plot > Statistics > Ridgeline Chart (`-t ridgeline`, MCP), one
+  KDE ridge per Y column on baselines labelled with the column names, four display types, Origin's bandwidth rules
+  through the shared `sheaf_calc::kde` (grid refined to h/4 near data), quantile lines and rug (graphing.md 14.23).
 - T43 trendlines (2026-11-15, macOS, no Origin): per-plot `PlotDecor::trendlines` (Linear, Polynomial 2-10, Power, Log,
   Exp, Moving Average 2-10), drawn with an equation/R2 label; plot menu Add/Edit/Remove Trendline, `plot --trendline`,
   MCP `style.trendline`; `.opj` warns. Power/log/exp are least squares on transformed data, R2 in the fitted space,
@@ -239,7 +242,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `recent-files` | Claude macOS, "mac-recent" | T38 Recent Projects and Recent Imports: new sheaf-io recent module, File menu submenus, app open/save/import hooks, Startup recent_path, UI tests, spec | claimed 2026-11-15; no Recent Books/Graphs/Exports, no window saving, no other sessions' scope |
-| `ridgeline` | Claude macOS, "mac-multipdf" | T44 ridgeline chart (Origin 2022): Template/plot kind Ridgeline reusing kde.rs and violin bandwidths, four display types, Plot > Statistical menu, Plot Details ridgeline controls, CLI/MCP | claimed 2026-11-15; core template/plot kind, new plot module, graph_details ridgeline controls only, menus, ops args; no violin results, legend placement, shapes or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

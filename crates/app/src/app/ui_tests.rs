@@ -24,6 +24,7 @@ mod offset_multipliers;
 mod rug;
 mod skip_points;
 mod sort_x;
+mod switcher;
 mod symbol_line_gaps;
 mod symbol_line_order;
 mod toolbar_print;

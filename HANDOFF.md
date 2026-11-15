@@ -138,6 +138,9 @@ open. History of what was merged when is in `git log` (not repeated here).
   `Worksheet.frozen`, saved in `.sheaf`, `.opj` warns. grid.rs draws frozen rows as extra head rows of the one
   table and frozen columns as an overlay over empty placeholder columns (exact scroll sync, hit guard
   `visible_part`); darker heads, 2 px divider, resizable frozen columns. Rules unmeasured (gui-look.md 3).
+- T42 Window Switcher (2026-11-15, macOS, no Origin): Ctrl+Tab / Ctrl+Shift+Tab (physical Control on macOS)
+  over the windows of the Project Explorer folder, hidden included, most recent first; graph thumbnails rendered
+  on open, workbook miniatures; release Ctrl activates, Esc cancels; Window > Window Switcher (gui-look.md).
 - T41 rug plots (2026-11-15, macOS, no Origin): Axis dialog Rug tab with Origin's documented controls, strip
   outside the frame with tick labels pushed out, Plot > Symbol > Scatter + Rug (`-t scatter-rug`, MCP); rug
   Data choice is the plot's Y column; histograms mark raw observations; `.opj` warns (graphing.md 18.10).
@@ -198,13 +201,13 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `break-lines` | Claude Windows, "axis-breaks" | Lines across axis breaks: cut over the break gap as Origin 2016 draws them; page Display "Connect line across Axis Break" switch; core Page field, plot line/polyline clipping against gap bands, page Display tab check box, tests | claimed 2026-11-15; no fill modes, symbols, masks, shapes, MCP, stats or other sessions' scopes |
 | `codex/t02-find-selection` | Codex Windows, t02-find-selection | T02 Find/Replace selected-range restriction: Origin measurement, immutable selection snapshot in `open_find`, dialog predicate/control, focused tests/docs | claimed 2026-11-15; no grid/selection interaction, core/history, Undo AI command, MCP, recent-files, formulas, graph/axis/shape or statistics changes |
 | `codex/t25-undo-ai` | Codex Windows, t25-undo-ai | T25 Undo AI Changes UI command: new app action/helper using existing Undo dispatch, Edit and no-window File Undo/Redo blocks, guard flag + mechanical menu-context initializers, focused UI tests/docs | claimed 2026-11-15; undo completed contiguous AI steps, stop at manual boundary; editor/dialog guard; existing Document undo/redo only; no core/history API, MCP transport/queue/resources/tools, Find, other menu behavior, grid/graph/shape interactions or recent-files hooks; grid/graph menu-context fields initialized false only |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `recent-files` | Claude macOS, "mac-recent" | T38 Recent Projects and Recent Imports: new sheaf-io recent module, File menu submenus, app open/save/import hooks, Startup recent_path, UI tests, spec | claimed 2026-11-15; no Recent Books/Graphs/Exports, no window saving, no other sessions' scope |
-| `window-switcher` | Claude macOS, "mac-multipdf" | T42 Window Switcher (Origin 2025b Ctrl+Tab / Ctrl+Shift+Tab with previews): MRU window order, new switcher overlay, key handling, thumbnails | claimed 2026-11-15; app.rs activation/MRU hooks, new crates/app/src/switcher.rs, menus; no grid Tab behaviour, recent files, MCP/live link or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

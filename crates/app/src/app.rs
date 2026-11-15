@@ -292,7 +292,7 @@ impl SheafApp {
         };
         let original = newest.sidecar.as_ref().and_then(|s| s.original_path());
         self.doc.replace(project);
-        self.doc.dirty = true;
+        self.doc.mark_unsaved();
         self.reset_views();
         self.path = None;
         // A project that came from an Origin file keeps its `.bak` copy when it is saved over it.
@@ -341,6 +341,9 @@ impl SheafApp {
         if !self.doc.dirty {
             if let Err(e) = self.autosave.clear() {
                 self.autosave_failed(&e);
+                ctx.request_repaint_after(std::time::Duration::from_secs(1));
+            } else if self.autosave.write_pending() {
+                ctx.request_repaint_after(std::time::Duration::from_millis(100));
             }
             return;
         }
@@ -604,7 +607,7 @@ impl SheafApp {
             Ok(outcome) => {
                 // The project is safe on disk either way: in the .opj, or in the companion when
                 // the .opj was refused.
-                self.doc.dirty = false;
+                self.doc.mark_saved();
                 let mut said = outcome.status();
                 if let Some(b) = &backup {
                     said.push_str(&format!("; the original Origin file is kept as {}", b.display()));

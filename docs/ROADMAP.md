@@ -254,6 +254,8 @@ the default project format.
       (T05). PSD is a flattened RGB, grayscale or indexed image with resolution metadata.
       TIFF also supports indexed 256 colors with None/PackBits/LZW compression.
       Graph/dialog themes, mono and 16-color modes remain
+- [x] Autosave recovery follows saved content checkpoints: undo/redo back to a normal save clears
+      the modified flag and recovery copy; recovered projects remain modified until saved (T28).
 - [ ] Printing (T27): Windows graph print dialog, Print Preview and saved Page Setup exist;
       `sheaf print` writes paper-sized vector PDF and submits through `lp` on macOS/Linux.
       Workbook printing, native macOS panel and Windows CLI submission remain

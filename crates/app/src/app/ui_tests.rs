@@ -6183,6 +6183,7 @@ mod clipboard_origin;
 #[path = "ui_tests/clipboard_formats.rs"]
 mod clipboard_formats;
 
+mod find_replace;
 mod go_to;
 mod go_to_picker;
 mod label_panels;
@@ -6719,9 +6720,28 @@ fn the_axis_dialog_lists_the_edges_and_has_working_breaks_and_special_ticks_tabs
     }
     click(&mut h, "Breaks");
     assert!(h.query_by_label("Horizontal").is_some() && h.query_by_label("Bottom").is_none());
-    h.get_by_label("Show Break").click();
+    h.get_by_label("Enable").click();
     settle(&mut h);
-    assert!(graph(&h).layers[0].x_axis.axis_break.is_some());
+    let axis = &graph(&h).layers[0].x_axis;
+    assert_eq!(axis.axis_breaks.len(), 1);
+    // The first break is the middle half of the axis and is placed automatically, as in Origin.
+    let b = axis.axis_breaks[0];
+    assert!(b.auto_position && b.from < b.to);
+    // A second break takes the middle half of what the first left, a third likewise.
+    for k in [2, 3] {
+        h.get(By::new().role(egui::accesskit::Role::ComboBox).value((k - 1).to_string().as_str())).click();
+        settle(&mut h);
+        h.get(By::new().role(egui::accesskit::Role::Button).label(k.to_string().as_str())).click();
+        settle(&mut h);
+        let breaks = &graph(&h).layers[0].x_axis.axis_breaks;
+        assert_eq!(breaks.len(), k);
+        let (prev, new) = (breaks[k - 2], breaks[k - 1]);
+        assert!(new.from > prev.to && new.to > new.from, "{breaks:?}");
+    }
+    // Deleting a row removes that break.
+    h.get_all_by_label("Delete").next().expect("a Delete button per row").click();
+    settle(&mut h);
+    assert_eq!(graph(&h).layers[0].x_axis.axis_breaks.len(), 2);
     click(&mut h, "Special Ticks");
     click(&mut h, "Add Tick");
     assert_eq!(graph(&h).layers[0].x_axis.special_ticks.len(), 1);
@@ -7997,6 +8017,7 @@ fn find_in_sheets_moves_the_cursor_to_the_cell_with_the_text() {
     show_window(&mut h, "Book1 - sample");
     menu(&mut h, "Edit", "Find in Sheets...");
     assert!(h.state().find.is_some(), "the window opens");
+    click(&mut h, "String");
     h.state_mut().find.as_mut().unwrap().set_text("4.5");
     settle(&mut h);
     click(&mut h, "Find Next");
@@ -8016,6 +8037,7 @@ fn replace_changes_the_cell_at_the_cursor_and_replace_all_every_cell_in_one_step
     let mut h = start(vec![data_file("replacesheet")]);
     show_window(&mut h, "Book1 - sample");
     menu(&mut h, "Edit", "Replace...");
+    click(&mut h, "String");
     {
         let d = h.state_mut().find.as_mut().expect("the Replace window opens");
         d.set_text("4.5");

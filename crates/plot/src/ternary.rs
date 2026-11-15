@@ -135,7 +135,7 @@ pub(crate) fn scale_axis(axis: &Axis, percent: bool) -> ResolvedAxis {
         major_step: Some(top / 4.0),
         minor_ticks: axis.minor_ticks,
         first_tick: None,
-        axis_break: None,
+        axis_breaks: Vec::new(),
         additional_line: None,
         special_ticks: Vec::new(),
         reverse: false,

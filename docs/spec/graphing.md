@@ -199,9 +199,42 @@ Per direction: major and minor grid each with show, color, style, thickness; plu
 ### 3.6 Breaks [W:axesref-breaks] (P1)
 Enable; half-length (auto = one major tick distance); 1 to 7 breaks; per break from, to, position % of axis length (automatic position even or proportional); per-break "scale after break" and "tick labels after break" (both default to follow main axis).
 
-Sheaf (not measured in Origin, built from the dialog fields above): one break per axis (`Axis::axis_break`): values from..to are
-cut out, the gap opens at `position_pct` of the axis with width `gap_pct` (both percent of the axis length; Origin states a
-half-length in points), ticks inside the break go, the ticks after it can use their own step; values inside cannot be placed.
+**Measured 2026-11-15 in Origin 2016** (axis dialog through `tools/origin-ref/origin-dialog.ps1`, PNG exports 1600 px
+wide of a line plot of 1..100 against itself, axes -25 to 125; raw files in `re-workspace/scratch/axis-breaks`):
+- The Breaks tab (Horizontal, Vertical): tick **Enable** (ticked), **Break Half Length** (an editable list: `<auto>`, 3, 5,
+  8, 10, 15), **Number of Breaks** (None, 1 to 7, starts at None), a table with the columns Break From, Break To, Auto
+  Position (a tick) and Position (greyed while Auto Position is ticked), buttons Delete and Details....
+- Rows the dialog fills in on the axis -25..125: going to 1 gives 12.5..87.5 (the middle half); going on to 2 adds
+  96.875..115.625 and to 3 adds 117.96875..122.65625 (each new row the middle half of what lies after the last break).
+  Jumping from None straight to 2 gave 5..35 and 65..95 instead (the axis in five equal parts); after None again, 3 gave
+  -10..20, 35..65, 80..110 and 4 gave -10..20, 35..50, 65..80, 95..110; 7 gave rows 15 % apart from -17.5..-2.5; going
+  down from 7 to 5 kept the first five rows. The jump rules depend on what the table held before and are not copied.
+- Auto Position puts break k of n at k/(n+1) of the axis: 50; 33, 67; 25, 50, 75; 20, 40, 60, 80; 17 ... 83; 13 ... 88
+  (the table shows them rounded).
+- Each part between breaks is drawn linearly in its share of the axis (the parts of the three-break axis had 2.8, 10.8,
+  44 and 45 px per unit). The gap of the automatic Break Half Length, from the tick positions: 15.4 px of the 879 px
+  Y axis with one break (1.75 %), 15.5 to 16 px with two (1.77 to 1.82 %), 18.6 px of the 1090 px X axis with one
+  (1.71 %) and 18.2 to 18.4 px with two (1.67 to 1.69 %); 7.4 to 9 pt at the export's 2.07 px per point, so it follows
+  the axis length rather than a fixed size. Typing 5 or 10 into Break Half Length in the scripted dialog did not take,
+  so its unit is unmeasured.
+- The mark: the axis line is cut between the two ends, and at each end a straight stroke as thick as the axis line
+  crosses it, centred on the end, reaching about half the gap along the axis to either side (the two strokes meet
+  above and below the middle of the gap) and about 8 pt to either side of the line (35 px across, stroke width
+  included), rising to the right on both the X and the Y axis.
+- Tick steps: with one break on -25..125 (step 50 before) every part was labelled every 5 (`layer.y.inc` became 5), the
+  same on -2500..12500 (5000 to 500); on 1..9 (step 2) and -5..40 (step 10) the step stayed. With three breaks the two
+  short parts at the top had their own step 0.5. No rule fitting all four cases was found; Sheaf keeps the axis step
+  and offers a step after each break.
+
+Sheaf: `Axis::axis_breaks`, up to seven (`MAX_AXIS_BREAKS`); files with the former single `axis_break` read as one
+break. Each break cuts its values from..to out; with Auto Position (`auto_position`, on for new breaks, off for breaks
+read from older files so that they keep their `position_pct`) break k of n sits at k/(n+1), otherwise its middle is at
+`position_pct`; the gap is `gap_pct` of the axis length, 1.75 by default (`BREAK_GAP_PCT`, the measured automatic
+gap). Breaks outside the limits, empty, overlapping the one before or whose gap would not fit after the gap before
+are left out. Ticks inside a break go; `step_after` gives the part after a break its own step up to the next break.
+Values inside a break cannot be placed. The dialog's Enable starts with one break (the middle half), Number of
+Breaks adds rows by the one-at-a-time rule above and removes rows from the end, Delete removes a row, and one "Gap
+(% of axis)" value stands for Origin's Break Half Length. The mark is drawn as measured, 8 pt to either side.
 
 ### 3.7 Special ticks and reference lines (P1/P2)
 Custom tick positions and labels per tick. Reference lines are not documented for 2016; emulate with `addline` objects.

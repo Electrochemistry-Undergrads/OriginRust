@@ -1099,7 +1099,7 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         if axis.reverse {
             notes.push("a reversed axis was written in the normal direction".into());
         }
-        if axis.axis_break.is_some() {
+        if !axis.axis_breaks.is_empty() {
             notes.push("an axis break was not written".into());
         }
         if axis.additional_line.is_some() {

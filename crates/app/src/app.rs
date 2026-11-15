@@ -1049,7 +1049,10 @@ impl SheafApp {
             return;
         }
         let editing = self.books.values().any(|b| b.editing.is_some() || b.editing_label.is_some());
-        let blocked = editing || self.dialog_open();
+        let dialog_open = self.dialog_open();
+        let blocked = editing || dialog_open;
+        let context = live::Context::new(self.active, &self.doc, &self.books, &self.graphs, editing, dialog_open);
+        let app_context = |doc: &Document| context.snapshot(doc);
         let files = sheaf_mcp::files::OpenFiles {
             project: self.path.clone(),
             origin: self.foreign_source.clone(),
@@ -1057,7 +1060,7 @@ impl SheafApp {
         };
         let now = std::time::Instant::now();
         let recovery = self.startup.recovery_dir.as_deref();
-        for note in self.live.step(&mut self.doc, blocked, &files, recovery, now) {
+        for note in self.live.step(&mut self.doc, blocked, &files, recovery, now, &app_context) {
             match note {
                 Note::Info(t) => self.say(t),
                 Note::Warn(t) => self.warn(t),
@@ -1101,8 +1104,8 @@ impl SheafApp {
             Action::ImportPick(pick) => self.start_import(None, pick),
             Action::GoToCell(book) => self.open_go_to(book),
             Action::Power(kind) => self.power = Some(PowerDialog::new(kind)),
-            Action::FindInSheets(book) => self.find = Some(FindDialog::new(book)),
-            Action::ReplaceInSheets(book) => self.find = Some(FindDialog::replace(book)),
+            Action::FindInSheets(book) => self.open_find(book, false),
+            Action::ReplaceInSheets(book) => self.open_find(book, true),
             Action::ImportWizard => {
                 // An open wizard keeps its settings: the command only brings it to the front.
                 if self.import_wizard.is_some() {
@@ -2028,6 +2031,20 @@ impl SheafApp {
                 self.sheet_name = Some(SheetNameDialog { book, sheet: active, name });
             }
         }
+    }
+
+    fn open_find(&mut self, book: WindowId, replacing: bool) {
+        let text = self
+            .books
+            .get(&book)
+            .and_then(|state| state.active_cell())
+            .and_then(|(column, row)| {
+                let workbook = self.doc.project().workbook(book)?;
+                workbook.sheets.get(workbook.active_sheet)?.columns.get(column).map(|column| column.shown_text(row))
+            })
+            .unwrap_or_default();
+        let dialog = if replacing { FindDialog::replace(book) } else { FindDialog::new(book) };
+        self.find = Some(dialog.initial_text(text));
     }
 
     fn open_go_to(&mut self, book: WindowId) {
@@ -3387,6 +3404,13 @@ impl SheafApp {
                         self.layer_contents =
                             Some(crate::dialogs::layer_contents::LayerContentsDialog::new(id, 0, 1_000_000));
                         self.focus(id);
+                    }
+                }
+                "find" | "replace" => {
+                    let book = project.workbooks().next().map(|b| b.id);
+                    if let Some(book) = book {
+                        self.open_find(book, name == "replace");
+                        self.focus(book);
                     }
                 }
                 "go-to" => {

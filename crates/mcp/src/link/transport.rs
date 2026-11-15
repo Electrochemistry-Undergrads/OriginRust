@@ -133,6 +133,15 @@ impl Stream {
         }
     }
 
+    /// Finishes outgoing data while leaving the peer's incoming bytes readable.
+    pub(super) fn shutdown_write(&self) -> io::Result<()> {
+        match self {
+            #[cfg(unix)]
+            Stream::Unix(s) => s.shutdown(Shutdown::Write),
+            Stream::Tcp(s) => s.shutdown(Shutdown::Write),
+        }
+    }
+
     /// Ends both directions; a thread blocked on this connection wakes up with an error or end of input.
     pub fn shutdown(&self) {
         let _ = match self {

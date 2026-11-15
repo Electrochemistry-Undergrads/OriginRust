@@ -428,7 +428,7 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         hide_end_label: false,
         reverse: false,
         first_tick: None,
-        axis_break: None,
+        axis_breaks: Vec::new(),
         additional_line: None,
         special_ticks: Vec::new(),
         tick_label_formula: String::new(),

@@ -313,5 +313,25 @@ parts of the other two. The design critique then changed the transport.
 - On Windows the folder's access rights are inherited from the profile and not checked, and the token
   file is as safe as the profile. It must be verified on Windows (a second user account cannot read
   `mcp.json`; a loopback bind raises no firewall prompt) before this ADR is accepted.
-- Follow-ups, not in phase 2: "Undo AI Changes", a `sheaf://app` resource (active window, selection), a
-  snapshot worker for reads, `--attach=ID` for several instances, and `peer_cred` when it is stable.
+- Follow-ups, not in phase 2: "Undo AI Changes", a snapshot worker for reads, `--attach=ID` for several
+  instances, and `peer_cred` when it is stable. The app-context resource was added by the amendment below.
+
+
+## Amendment: read-only app context (2026-11-15)
+
+The desktop host advertises and serves `sheaf://app`, describing its active window and worksheet,
+cell/row/column/label or graph-object selection, Data Reader pin, and dialog/edit state (mcp.md 11.18).
+The existing `resources_list` / `resource_read` operations are sufficient; link version 1 stays intact.
+Headless hosts omit this resource and retain resource-not-found behavior for its URI.
+
+The UI supplies a borrowed context reader to the queued job executor. It runs only for this URI,
+on the UI thread after the job begins, with read-only access to the current `Document`. The app
+reads its existing view state without adding selection changes or history operations. The result
+contains bounded metadata and source-row indices; editor text and cell/label values are excluded.
+A mid-frame worksheet change suppresses the old grid selection until the view redraws. No context
+is persisted in the project, and healthy reads leave no undo step or document revision.
+
+The proxy's initialization instructions point clients to the resource when listed. Clients still
+name the workbook, sheet and columns in tool arguments. Context requests use the existing queue,
+cancellation, connection lifecycle and error handling. The Windows endpoint acceptance checks
+above and the separate snapshot-worker follow-up remain open.

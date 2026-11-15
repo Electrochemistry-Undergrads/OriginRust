@@ -122,7 +122,7 @@ fn copy_axis_look(dst: &mut Axis, src: &Axis) {
         side: dst.side,
         reverse: dst.reverse,
         first_tick: dst.first_tick,
-        axis_break: dst.axis_break,
+        axis_breaks: dst.axis_breaks.clone(),
         special_ticks: dst.special_ticks.clone(),
         tick_label_source: dst.tick_label_source,
         ..src.clone()
@@ -186,45 +186,83 @@ fn special_ticks_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&Resol
     }
 }
 
+/// Origin's Breaks tab (graphing spec 3.6): Enable, the gap shared by the breaks (Origin's Break Half
+/// Length; Sheaf states the whole gap in percent of the axis length), the Number of Breaks (None, 1 to 7)
+/// and a row per break with Break From, Break To, Auto Position and Position. A new row takes the middle
+/// half of what lies after the last break, as Origin filled the rows one at a time. Sheaf's "Step after"
+/// stands for the tick step of Origin's Details... page.
 fn breaks_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>, id: &str) {
-    let mut on = axis.axis_break.is_some();
-    if ui.checkbox(&mut on, "Show Break").changed() {
-        axis.axis_break = on.then(|| {
-            let (lo, hi) = resolved.map_or((0.0, 1.0), |r| (r.min, r.max));
-            AxisBreak::new(lo + (hi - lo) * 0.4, lo + (hi - lo) * 0.6)
-        });
-    }
-    let span = resolved.map(|r| (r.max - r.min).abs()).unwrap_or(1.0);
+    let (lo, hi) = resolved.map_or((0.0, 1.0), |r| (r.min, r.max));
+    let span = (hi - lo).abs();
     let speed = (span / 200.0).max(1e-12);
-    ui.add_enabled_ui(on, |ui| {
-        let mut fallback = AxisBreak::new(0.0, 1.0);
-        let b = axis.axis_break.as_mut().unwrap_or(&mut fallback);
-        group_box(ui, "Break Region", |ui| {
-            grid(ui, &format!("{id}_break"), |ui| {
-                ui.label("From");
-                ui.add(DragValue::new(&mut b.from).speed(speed).max_decimals(8));
-                ui.end_row();
-                ui.label("To");
-                ui.add(DragValue::new(&mut b.to).speed(speed).max_decimals(8));
-                ui.end_row();
-                ui.label("Position (% of axis)");
-                ui.add(DragValue::new(&mut b.position_pct).range(5.0..=95.0).speed(0.5));
-                ui.end_row();
-                ui.label("Gap (% of axis)");
-                ui.add(DragValue::new(&mut b.gap_pct).range(0.0..=30.0).speed(0.1));
-                ui.end_row();
-                ui.label("Step after break");
-                optional_number(ui, &mut b.step_after, resolved.map(|r| r.step), speed);
-                ui.end_row();
-            });
-        });
-    });
-    if on
-        && let Some(b) = axis.axis_break.as_mut()
-        && b.to < b.from
-    {
-        std::mem::swap(&mut b.from, &mut b.to);
+    let mut on = !axis.axis_breaks.is_empty();
+    if ui.checkbox(&mut on, "Enable").changed() {
+        if on {
+            axis.axis_breaks = vec![AxisBreak::next_after(&[], lo, hi)];
+        } else {
+            axis.axis_breaks.clear();
+        }
     }
+    ui.add_enabled_ui(on, |ui| {
+        grid(ui, &format!("{id}_breaks_head"), |ui| {
+            ui.label("Gap (% of axis)");
+            let mut gap = axis.axis_breaks.first().map_or(BREAK_GAP_PCT, |b| b.gap_pct);
+            if ui.add(DragValue::new(&mut gap).range(0.0..=30.0).speed(0.05).max_decimals(3)).changed() {
+                axis.axis_breaks.iter_mut().for_each(|b| b.gap_pct = gap);
+            }
+            ui.end_row();
+            ui.label("Number of Breaks");
+            let n = axis.axis_breaks.len();
+            let name = |k: usize| if k == 0 { "None".to_string() } else { k.to_string() };
+            let mut want = n;
+            egui::ComboBox::from_id_salt(format!("{id}_break_count")).selected_text(name(n)).show_ui(ui, |ui| {
+                for k in 0..=MAX_AXIS_BREAKS {
+                    ui.selectable_value(&mut want, k, name(k));
+                }
+            });
+            if want != n {
+                axis.axis_breaks.truncate(want);
+                while axis.axis_breaks.len() < want {
+                    let next = AxisBreak::next_after(&axis.axis_breaks, lo, hi);
+                    axis.axis_breaks.push(next);
+                }
+            }
+            ui.end_row();
+        });
+        let n = axis.axis_breaks.len();
+        let mut remove = None;
+        if n > 0 {
+            egui::Grid::new(format!("{id}_breaks_table")).striped(true).show(ui, |ui| {
+                for head in ["Break From", "Break To", "Auto Position", "Position (%)", "Step after", ""] {
+                    ui.strong(head);
+                }
+                ui.end_row();
+                for (k, b) in axis.axis_breaks.iter_mut().enumerate() {
+                    ui.add(DragValue::new(&mut b.from).speed(speed).max_decimals(8));
+                    ui.add(DragValue::new(&mut b.to).speed(speed).max_decimals(8));
+                    ui.checkbox(&mut b.auto_position, "");
+                    if b.auto_position {
+                        // The place the break gets, shown greyed as in Origin.
+                        let mut auto = 100.0 * (k + 1) as f64 / (n + 1) as f64;
+                        ui.add_enabled(false, DragValue::new(&mut auto).max_decimals(0));
+                    } else {
+                        ui.add(DragValue::new(&mut b.position_pct).range(2.0..=98.0).speed(0.5));
+                    }
+                    optional_number(ui, &mut b.step_after, resolved.map(|r| r.step), speed);
+                    if ui.small_button("Delete").clicked() {
+                        remove = Some(k);
+                    }
+                    ui.end_row();
+                    if b.to < b.from {
+                        std::mem::swap(&mut b.from, &mut b.to);
+                    }
+                }
+            });
+        }
+        if let Some(k) = remove {
+            axis.axis_breaks.remove(k);
+        }
+    });
 }
 
 fn scale_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>, id: &str) {

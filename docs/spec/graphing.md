@@ -2017,7 +2017,8 @@ tab; Sheaf shows it under the check box), with the colour's alpha as transparenc
 Transparency slider sets the alpha of the line colour. Both drop lines offer style, width and an
 Auto or chosen colour, drawing from each point to the left and bottom edges of the frame.
 
-Fill Area Under Curve now offers **Normal**, **Sidelines only** and **Sidelines and Base**.
+Fill Area Under Curve offers **Normal**, **Inclusive broken by missing values**, **Sidelines only**
+and **Sidelines and Base**.
 Normal remains the old default and keeps its previous filled rendering. Sidelines only leaves
 an unfilled curve and adds vertical boundaries from its first and last finite displayed points
 to the bottom of the frame. Sidelines and Base also connects those bottom endpoints. These
@@ -2050,6 +2051,29 @@ the mode, including while disabled; the existing `.opj` save warning covers the 
 Cartesian straight-line examples were Origin-measured; other connections use Sheaf's existing
 curve geometry, and specialised coordinates, alternate baselines and unusual stroke preferences
 remain unmeasured. Normal's older hatch/gradient/border fidelity remains covered by section 18.6.
+
+**Inclusive broken by missing values** fills each finite run by directly joining its last point
+back to its first. The connecting stroke also closes that chord, with no added boundary down to
+the frame bottom. Missing rows separate the polygons. A one-point run has no filled area but
+keeps its round connecting-stroke cap. Fill colour, hatch, gradient and transparency remain active;
+the legend keeps a filled box. The same finite-run closure uses the existing connection geometry,
+clipping, row selection and symbol-gap handling. Each closed outline is one stroke, so its joins
+do not receive a second coat of translucent line colour. Normal remains the old default and its
+filled geometry is unchanged. Group editing, Apply/Cancel/history and native/companion saves
+preserve the new mode; `.opj` retains the unsupported-fill warning.
+
+Measured in Origin 2016 on 2026-11-15, `re-workspace/scratch/t13-fill-inclusive/`: the corrected
+`verified_sloping` control selects Inclusive (combo 4, item 1) and applies OK, with blue fill and
+a red 6 pt line through (1,1), (5,3), (10,2), on Y=-1..4. Only the endpoint-chord triangle is blue,
+with a red closing chord and blue filled legend. In `verified_missing`, rows 4/8/10 of a 13-row
+series are explicitly missing (`0/0`, each `ISNA` result 1): three finite runs become three closed
+filled triangles, without bridging the gaps; the isolated ninth row remains a red round cap.
+The initial `sloping`/`missing`/`closed` attempts failed to open Plot Details (setup/command false)
+and are excluded as mode evidence. The verified controls, actions, raw worksheet reads and
+exports remain local. The [published Line-tab reference](https://docs.originlab.com/origin-help/pd-dialog-line-tab/)
+describes the endpoint closure and missing-run behavior. Only Cartesian straight connections
+were Origin-measured; other connections reuse Sheaf's existing geometry. Specialised-coordinate,
+self-intersection and remaining fill-mode parity are still unmeasured.
 
 Data Points Display Control on Drop Lines now offers Skip Points and a frequency. This uses the
 existing `SymbolStyle::every` (the former Symbol tab's Show every field), so old projects keep their

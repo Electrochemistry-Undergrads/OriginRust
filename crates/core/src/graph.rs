@@ -1414,8 +1414,8 @@ pub struct PlotDecor {
     /// Lines from each point to the Y axis (Origin's "Horizontal") and to the X axis ("Vertical").
     #[serde(default, skip_serializing_if = "DropLines::is_default")]
     pub drop: DropLines,
-    /// Enables Fill Area Under Curve. Normal fills to the layer bottom with this colour;
-    /// sidelines use the line style instead. `None` disables both fills and sidelines.
+    /// Enables Fill Area Under Curve with this colour for filled modes; sidelines use the line
+    /// style instead. `None` disables both fills and sidelines.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fill_under: Option<Color>,
     /// The selected fill/outline mode is retained while Fill Area Under Curve is disabled.
@@ -1435,20 +1435,28 @@ pub struct PlotDecor {
 pub enum FillUnderMode {
     #[default]
     Normal,
+    /// Close each finite run directly from its last point to its first, without an axis baseline.
+    InclusiveBrokenByMissingValues,
     SidelinesOnly,
     SidelinesAndBase,
 }
 
 impl FillUnderMode {
-    pub const ALL: [Self; 3] = [Self::Normal, Self::SidelinesOnly, Self::SidelinesAndBase];
+    pub const ALL: [Self; 4] =
+        [Self::Normal, Self::InclusiveBrokenByMissingValues, Self::SidelinesOnly, Self::SidelinesAndBase];
 
     pub fn is_normal(&self) -> bool {
         *self == Self::Normal
     }
 
+    pub fn is_sidelines(&self) -> bool {
+        matches!(self, Self::SidelinesOnly | Self::SidelinesAndBase)
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             Self::Normal => "Normal",
+            Self::InclusiveBrokenByMissingValues => "Inclusive broken by missing values",
             Self::SidelinesOnly => "Sidelines only",
             Self::SidelinesAndBase => "Sidelines and Base",
         }

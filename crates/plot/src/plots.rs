@@ -109,21 +109,35 @@ pub(crate) fn draw_plot(
     }
 }
 
-/// Origin's "Fill Area Under Curve" in its Normal mode: the area between the curve and the bottom
-/// of the layer frame (measured: the fill reaches the bottom axis, not Y = 0). A missing point
+/// Filled modes of "Fill Area Under Curve": Normal fills to the frame bottom (not Y = 0),
+/// while Inclusive closes each finite run directly between its endpoints. A missing point
 /// breaks the area, as it breaks the line.
 fn draw_fill_under(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, color: sheaf_core::Color) {
-    if !pd.plot.decor.fill_under_mode.is_normal() {
+    if pd.plot.decor.fill_under_mode.is_sidelines() {
         // The outline modes are part of the connecting stroke, avoiding double opacity at joins.
         return;
     }
     let bottom = geom.frame.y + geom.frame.h;
     let style = pd.plot.decor.fill;
+    let inclusive = pd.plot.decor.fill_under_mode == FillUnderMode::InclusiveBrokenByMissingValues;
+    let connect = match pd.plot.line.connect {
+        Connect::Spline if !spline_applies(pd) => Connect::Straight,
+        c => c,
+    };
     let mut d = String::new();
     let mut run: Vec<(f64, f64)> = Vec::new();
     let close = |run: &mut Vec<(f64, f64)>, d: &mut String, out: &mut Vec<Item>| {
         if run.len() >= 2 {
-            if style.is_plain() {
+            if inclusive {
+                if style.is_plain() {
+                    polyline_path(d, run, connect);
+                    d.push('Z');
+                } else {
+                    let mut curve = String::new();
+                    polyline_path(&mut curve, run, connect);
+                    fill_polygon(out, &crate::hit::path_points(&curve), color, &style);
+                }
+            } else if style.is_plain() {
                 move_to(d, run[0].0, bottom);
                 for &(x, y) in run.iter() {
                     line_to(d, x, y);
@@ -550,8 +564,11 @@ fn symbol_line_gaps(pd: &PlotData, geom: &LayerGeometry, stroke: &Stroke) -> Opt
 fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let stroke = line_stroke(&pd.plot.line);
     let gaps = symbol_line_gaps(pd, geom, &stroke);
+    let inclusive = pd.plot.decor.fill_under.is_some()
+        && !pd.plot.kind.is_area()
+        && pd.plot.decor.fill_under_mode == FillUnderMode::InclusiveBrokenByMissingValues;
     let side_mode =
-        (pd.plot.decor.fill_under.is_some() && !pd.plot.kind.is_area() && !pd.plot.decor.fill_under_mode.is_normal())
+        (pd.plot.decor.fill_under.is_some() && !pd.plot.kind.is_area() && pd.plot.decor.fill_under_mode.is_sidelines())
             .then_some(pd.plot.decor.fill_under_mode);
     let ends = side_mode.and_then(|_| {
         let mut points = pd.rows().filter_map(|i| geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)).map(|p| (i, p)));
@@ -573,9 +590,19 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
                 piece.push(p);
             }
             let at_end = ends.is_some_and(|((a, _), (b, _))| first_row == Some(a) || last_row == Some(b));
-            if piece.len() >= 2 || (at_end && !piece.is_empty()) {
+            if piece.len() >= 2 || ((at_end || inclusive) && !piece.is_empty()) {
                 let mut d = String::with_capacity(piece.len() * 12);
                 polyline_path(&mut d, piece, connect);
+                if inclusive {
+                    // Origin outlines each closed finite run with the connecting stroke, including
+                    // the endpoint chord. A one-point run has no area but shows the round stroke cap.
+                    // One path keeps transparency uniform at the joins.
+                    if piece.len() == 1 {
+                        line_to(&mut d, piece[0].0, piece[0].1);
+                    } else {
+                        d.push('Z');
+                    }
+                }
                 if let Some(((first, first_point), (last, _))) = ends {
                     // Origin adds boundaries only at the plot's outer endpoints, including across
                     // missing-data breaks. It adds none at internal breaks or isolated middle points.

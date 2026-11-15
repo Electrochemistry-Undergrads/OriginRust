@@ -1401,7 +1401,7 @@ fn draw_legend(
                     let plot = entries[*k].plot;
                     // A line plot filled under its curve shows a filled box, as Origin's legend does.
                     let filled = plot.decor.fill_under.filter(|_| {
-                        plot.kind.has_line() && !plot.kind.is_area() && plot.decor.fill_under_mode.is_normal()
+                        plot.kind.has_line() && !plot.kind.is_area() && !plot.decor.fill_under_mode.is_sidelines()
                     });
                     let mut front_line = None;
                     if let Some(fill) = filled {

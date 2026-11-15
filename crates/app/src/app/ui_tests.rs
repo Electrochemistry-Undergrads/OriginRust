@@ -12,6 +12,7 @@ use sheaf_plot::scene::ObjectKind;
 mod autosave;
 mod cond_format;
 mod excel;
+mod fill_inclusive;
 mod fill_sidelines;
 mod frozen_panes;
 mod label_frames;

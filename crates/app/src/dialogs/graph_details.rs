@@ -432,7 +432,7 @@ fn plot_tab_body(
                             .labelled_by(label.id);
                     });
                 });
-                if plot.decor.fill_under_mode.is_normal()
+                if !plot.decor.fill_under_mode.is_sidelines()
                     && let Some(color) = plot.decor.fill_under.as_mut()
                 {
                     ui.horizontal(|ui| {

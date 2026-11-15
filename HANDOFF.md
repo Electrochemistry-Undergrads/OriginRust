@@ -224,6 +224,10 @@ open. History of what was merged when is in `git log` (not repeated here).
   long-name-and-unit title, per-axis or shared range, one line per row breaking at missing cells, coloured by a numeric
   column (hexbin's colour scale, now shared) or by group (legend), Plot Details Parallel tab (graphing.md 14.25). Parallel
   Sets, curvature and axis reordering not done.
+- T52 Slope annotation (2026-11-15, macOS, no Origin): Tools > Slope (two clicks on data points of one plot, Data Reader snapping, Esc cancels),
+  `Layer::slopes` linked to the plot's Y column and two rows (recomputed with data, remapped on append), segment + dashed legs + `slope = 118.3 mV/dec`
+  label (per decade on log10 axes, e-fold/oct on ln/log2), Delete/undo, double-click Properties, `--slope A,B`, MCP `style.slope`, `.opj` warns
+  (graphing.md 17.6). Origin look and label text unmeasured (docs only); no label dragging or decimals setting.
 - T51 Sunburst plot (2026-11-15, macOS, no Origin): Plot > Categorical > Sunburst Plot (`-t sunburst`, `--group`, `--sunburst-start/-hole/-gap/-labels/-order`, MCP),
   the treemap hierarchy as concentric rings (`sheaf_calc::sunburst`), leaves coloured by value and categories by their leaves' mean on the shared
   ramp with a colour scale, unfilled missing categories, radial labels hidden when they do not fit, Plot Details Pie Geometry tab (graphing.md 14.27).
@@ -311,7 +315,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `violin-plot` | Claude macOS, "violin" | T37 violin plot: core PlotKind/Template, plot data/plots/layout (new violin drawing beside the box chart), calc kernel density, Plot > Statistics menu, CLI/MCP template lists, graphing.md 14.22 | claimed 2026-11-15; no fill-under/sidelines, axis breaks, cell notes, worksheet grid or other sessions' scopes |
 | `graph-data-tools` | Claude macOS, "mac-datatools" | T48 graph Data menu: Mask Data Points, Remove Bad Data Points, Move Data Points; core cell edits, graph_view modes/hit-testing, menus data_menu, UI tests, graphing.md section | claimed 2026-11-15; no display range/markers, no Data Reader changes beyond sharing hit-testing, no other sessions' scope |
 | `surface-fit` | Claude Windows, "continue all tasks" | T15 item 7 surface fits on XYZ worksheet columns (no matrices): 2-variable library functions, NLFit with two independent variables, report and fitted/residual columns, CLI; crates/fit, core fitting.rs, NLFit dialog XYZ input, ops fit, fitting.md | claimed 2026-11-15; no matrix, 3D plot, stats, print or other sessions' scope |
-| `slope-annotation` | Claude macOS, "mac-multipdf" | T52 slope annotation (Origin 2026b): layer SlopeAnnotation linked to two data rows, segment + rise/run legs + slope label (per decade on log axes), toolbar Slope tool with point picking, delete/undo, CLI/MCP | claimed 2026-11-15; core graph.rs layer field, new plot module, app toolbar/graph_view tool mode, small dialog; no drawn-shape ordering, Data Reader changes or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

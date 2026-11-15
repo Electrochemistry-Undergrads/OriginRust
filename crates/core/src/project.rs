@@ -1846,6 +1846,7 @@ mod tests {
             let l = &mut other.graph_mut(g).unwrap().layers[0];
             l.x_axis.rug.plot = Some(cols[0]);
             l.y_axis.rug_opposite.plot = Some(cols[0]);
+            l.slopes.push(crate::graph::SlopeAnnotation::new(cols[0], 0, 2));
         }
         let (new, _) = here.append(other, "f");
         let graph = here.graph(new[1]).unwrap();
@@ -1861,5 +1862,6 @@ mod tests {
         assert_eq!(data(l.x_axis.rug.plot.unwrap()), want(0));
         assert_eq!(data(l.y_axis.rug_opposite.plot.unwrap()), want(0));
         assert_eq!(l.x_axis.rug_opposite.plot, None, "an unset rug choice stays unset");
+        assert_eq!(data(l.slopes[0].plot), want(0), "a slope annotation follows its plot's column");
     }
 }

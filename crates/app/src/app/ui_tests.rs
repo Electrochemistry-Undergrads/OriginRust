@@ -29,6 +29,7 @@ mod recent;
 mod rug;
 mod simulate;
 mod skip_points;
+mod slope;
 mod sort_x;
 mod sunburst;
 mod switcher;

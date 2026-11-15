@@ -1,6 +1,6 @@
 # T52: Slope annotation
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `slope-annotation`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `slope-annotation`. Spec: graphing.md 17.6. Left: Origin's look, label text and defaults are unmeasured (documentation only), label dragging, a decimals setting.
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Graphing: Slope Annotation, Origin 2026b).
 
 ## Goal

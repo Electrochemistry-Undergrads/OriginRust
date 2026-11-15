@@ -109,6 +109,8 @@ pub enum GraphOp {
     DeleteLabel { layer: usize, label: usize },
     /// Delete on a drawn line, arrow, rectangle or ellipse.
     DeleteShape { layer: usize, shape: usize },
+    /// Delete on a slope annotation.
+    DeleteSlope { layer: usize, slope: usize },
     /// Hide Layer (every plot of the layer is hidden).
     HideLayer { layer: usize },
     /// Hide Other Layers.
@@ -126,6 +128,8 @@ pub enum GraphTool {
     Text,
     /// A drawing tool (Line, Arrow, Rectangle, Circle): a drag on the graph draws one object.
     Draw(sheaf_core::shape::ShapeKind),
+    /// The Slope tool: two clicks on data points of one plot mark the slope between them.
+    Slope,
 }
 
 /// Which File > Import item opened the file chooser.
@@ -428,6 +432,20 @@ pub enum Action {
         dx: f64,
         dy: f64,
     },
+    /// Adds a slope annotation to a layer: one undo step.
+    AddSlope {
+        graph: WindowId,
+        layer: usize,
+        slope: sheaf_core::graph::SlopeAnnotation,
+    },
+    /// Opens the properties window of a slope annotation (double click, Properties).
+    EditSlope {
+        graph: WindowId,
+        layer: usize,
+        slope: usize,
+    },
+    /// Writes a hint on the status bar.
+    Hint(String),
     /// Opens the properties window of a drawn object (double click, Properties).
     EditShape {
         graph: WindowId,

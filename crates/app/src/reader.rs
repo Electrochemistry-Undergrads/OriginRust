@@ -58,12 +58,36 @@ pub fn nearest(
     to_screen: &dyn Fn((f64, f64)) -> Pos2,
     pointer: Pos2,
 ) -> Option<Point> {
+    nearest_in(project, graph, geometry, to_screen, pointer, None)
+}
+
+/// Where a data point is on the screen (`None` when it is not shown or not a number).
+pub fn screen_point(
+    project: &Project,
+    graph: WindowId,
+    geometry: &[LayerGeometry],
+    to_screen: &dyn Fn((f64, f64)) -> Pos2,
+    p: Point,
+) -> Option<Pos2> {
+    place(project, graph, geometry, to_screen, p).map(|(at, _, _)| at)
+}
+
+/// Like [`nearest`], limited to the plot `only` (layer and plot index) when given: the Slope tool's
+/// second click.
+pub fn nearest_in(
+    project: &Project,
+    graph: WindowId,
+    geometry: &[LayerGeometry],
+    to_screen: &dyn Fn((f64, f64)) -> Pos2,
+    pointer: Pos2,
+    only: Option<(usize, usize)>,
+) -> Option<Point> {
     let g = project.graph(graph)?;
     let mut best: Option<(f32, Point)> = None;
     for (li, layer) in g.layers.iter().enumerate() {
         let Some(geom) = geometry.get(li) else { continue };
         for (pi, plot) in layer.plots.iter().enumerate() {
-            if !plot.visible {
+            if !plot.visible || only.is_some_and(|o| o != (li, pi)) {
                 continue;
             }
             let Some((x, y)) = plot_xy(project, graph, li, pi) else { continue };

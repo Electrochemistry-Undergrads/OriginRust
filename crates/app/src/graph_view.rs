@@ -99,6 +99,10 @@ pub struct GraphUi {
     pub reader_point: Option<reader::Point>,
     /// The Text tool is on: the next click on the page places a label.
     pub text_tool: bool,
+    /// The Slope tool is on: two clicks on data points of one plot add a slope annotation.
+    pub slope_tool: bool,
+    /// The first point the Slope tool picked.
+    pub slope_first: Option<reader::Point>,
     /// The drawing tool in use (Line, Arrow, Rectangle, Circle): a drag on the page draws one.
     pub shape_tool: Option<ShapeKind>,
     /// An object being drawn.
@@ -152,6 +156,8 @@ impl GraphUi {
     pub fn tool(&self) -> GraphTool {
         if self.reader {
             GraphTool::Reader
+        } else if self.slope_tool {
+            GraphTool::Slope
         } else if self.text_tool {
             GraphTool::Text
         } else if let Some(kind) = self.shape_tool {
@@ -171,6 +177,7 @@ impl GraphUi {
             ObjectKind::YTitle => GraphOp::HideTitle { layer, y: true },
             ObjectKind::Label(label) => GraphOp::DeleteLabel { layer, label },
             ObjectKind::Shape(shape) => GraphOp::DeleteShape { layer, shape },
+            ObjectKind::Slope(slope) => GraphOp::DeleteSlope { layer, slope },
             _ => return None,
         };
         self.selected = None;
@@ -346,6 +353,65 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     }
 
+    // Whether the Slope tool took this frame's click (it switches itself off when the annotation is added).
+    let slope_took_input = state.slope_tool;
+    // The Slope tool: a click on a data point picks the first point, a click on another point of the
+    // same plot adds the annotation.
+    if state.slope_tool {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        let only = state.slope_first.map(|p| (p.layer, p.plot));
+        let hover = response
+            .hover_pos()
+            .and_then(|p| reader::nearest_in(doc.project(), graph_id, &t.geometry, &to_screen, p, only));
+        let marker = |at: Pos2, color: Color32| {
+            let r = Rect::from_center_size(at, egui::vec2(9.0, 9.0));
+            painter.rect_stroke(r, 0.0, Stroke::new(1.5_f32, color), egui::StrokeKind::Middle);
+        };
+        let blue = Color32::from_rgb(0, 90, 200);
+        let first_at =
+            state.slope_first.and_then(|p| reader::screen_point(doc.project(), graph_id, &t.geometry, &to_screen, p));
+        if let Some(a) = first_at {
+            marker(a, blue);
+        }
+        if let Some(h) = hover
+            && let Some(b) = reader::screen_point(doc.project(), graph_id, &t.geometry, &to_screen, h)
+        {
+            marker(b, Color32::from_rgba_unmultiplied(0, 90, 200, 130));
+            if let Some(a) = first_at {
+                painter.line_segment([a, b], Stroke::new(1.0_f32, blue));
+            }
+        }
+        if response.clicked() {
+            match (state.slope_first, hover) {
+                (None, Some(h)) => {
+                    state.slope_first = Some(h);
+                    actions.push(Action::Hint("Slope: click a second point of the same plot; Esc cancels".to_string()));
+                }
+                (Some(first), Some(h)) if h.row != first.row => {
+                    let plot = graph.layers.get(first.layer).and_then(|l| l.plots.get(first.plot));
+                    if let Some(plot) = plot {
+                        let slope = sheaf_core::graph::SlopeAnnotation::new(plot.y, first.row, h.row);
+                        let index = graph.layers[first.layer].slopes.len();
+                        state.slope_tool = false;
+                        state.slope_first = None;
+                        state.selected = Some((first.layer, ObjectKind::Slope(index)));
+                        actions.push(Action::ActivateLayer { graph: graph_id, layer: first.layer });
+                        actions.push(Action::AddSlope { graph: graph_id, layer: first.layer, slope });
+                    }
+                }
+                (Some(_), _) => actions.push(Action::Hint(
+                    "Slope: click a different data point of the same plot; Esc cancels".to_string(),
+                )),
+                (None, None) => actions.push(Action::Hint("Slope: click near a data point; Esc cancels".to_string())),
+            }
+        }
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            state.slope_tool = false;
+            state.slope_first = None;
+            actions.push(Action::Hint("Slope cancelled".to_string()));
+        }
+    }
+
     // The Text tool: a click places a label there, in the layer under the click.
     if state.text_tool {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
@@ -359,6 +425,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && !state.reader
         && !state.text_tool
         && state.shape_tool.is_none()
+        && !state.slope_tool
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Label(label) } = pick(pos)
         && let Some(l) = graph.layers.get(layer).and_then(|l| l.labels.get(label))
@@ -434,6 +501,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && !state.reader
         && !state.text_tool
         && state.shape_tool.is_none()
+        && !state.slope_tool
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Shape(shape) } = pick(pos)
     {
@@ -466,6 +534,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && !state.reader
         && !state.text_tool
         && state.shape_tool.is_none()
+        && !state.slope_tool
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Legend } = pick(pos)
         && let Some(f) = t.geometry.get(layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0)
@@ -520,6 +589,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     } else if response.clicked()
         && !state.reader
+        && !slope_took_input
         && let Some(pos) = response.interact_pointer_pos()
     {
         let hit = pick(pos);
@@ -533,6 +603,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     }
     if response.double_clicked()
         && !state.reader
+        && !slope_took_input
         && let Some(pos) = response.interact_pointer_pos()
     {
         let hit = pick(pos);
@@ -545,6 +616,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                 ObjectKind::Plot(p) => Some(open(layer, PropsTab::Plots, Some(p))),
                 ObjectKind::Label(label) => Some(Action::EditText { graph: graph_id, layer, label }),
                 ObjectKind::Shape(shape) => Some(Action::EditShape { graph: graph_id, layer, shape }),
+                ObjectKind::Slope(slope) => Some(Action::EditSlope { graph: graph_id, layer, slope }),
             },
             Hit::Layer(layer) => Some(open(layer, PropsTab::Plots, None)),
             Hit::Page => Some(open(state.active_layer, PropsTab::Page, None)),
@@ -723,6 +795,7 @@ fn menu_for(
             ObjectKind::Legend => menus::graph_legend_menu(layer),
             ObjectKind::Label(k) => menus::graph_label_menu(layer, k),
             ObjectKind::Shape(k) => menus::graph_shape_menu(layer, k),
+            ObjectKind::Slope(k) => menus::graph_slope_menu(layer, k),
         },
         MenuTarget::Hit(Hit::Layer(layer)) => menus::graph_page_menu(layer),
         MenuTarget::Hit(Hit::Page) => menus::graph_page_menu(0),
@@ -820,6 +893,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::HideTitle { layer, .. }
         | GraphOp::DeleteLabel { layer, .. }
         | GraphOp::DeleteShape { layer, .. }
+        | GraphOp::DeleteSlope { layer, .. }
         | GraphOp::HideLayer { layer }
         | GraphOp::HideOtherLayers { layer } => layer,
     };
@@ -913,6 +987,11 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         GraphOp::DeleteShape { shape, .. } => {
             if shape < l.shapes.len() {
                 l.shapes.remove(shape);
+            }
+        }
+        GraphOp::DeleteSlope { slope, .. } => {
+            if slope < l.slopes.len() {
+                l.slopes.remove(slope);
             }
         }
         GraphOp::HideLayer { .. } => l.plots.iter_mut().for_each(|p| p.visible = false),

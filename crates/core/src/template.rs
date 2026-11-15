@@ -579,6 +579,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             },
             labels: Vec::new(),
             shapes: Vec::new(),
+            slopes: Vec::new(),
             palette,
             default_line: LineStyle::solid(Color::BLACK, 0.5),
             default_symbol: SymbolStyle {

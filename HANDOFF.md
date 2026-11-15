@@ -39,7 +39,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 - Connect line across Missing Data (2026-11-15, Windows, branch `missing-lines`): the page Display
   tab's switch (off by default, `PageStyle::connect_across_missing`) joins the points on either side of
   rows with a missing value, as Origin 2016 draws it (measured, graphing 18.7b); values that cannot be
-  placed still break the line. Tests: see the merge note below.
+  placed still break the line. Formatting, strict all-target Clippy and 2737 workspace tests pass (8 ignored) on f74b7b2.
 - Lines across axis breaks (2026-11-15, Windows, branch `break-lines`): as Origin 2016 draws them
   (measured, graphing 3.6), a segment joining points on both sides of an X or Y break is left out over
   the band of the break's gap; the page Display tab's "Connect line across Axis Break" (off by default,

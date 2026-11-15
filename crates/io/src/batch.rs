@@ -154,6 +154,7 @@ pub fn place_workbook_with(
                     frozen: Default::default(),
                     cond_formats: Vec::new(),
                     notes: Vec::new(),
+                    cell_formats: Vec::new(),
                     comparison_source: None,
                 };
             }
@@ -643,6 +644,7 @@ mod tests {
             frozen: Default::default(),
             cond_formats: Vec::new(),
             notes: Vec::new(),
+            cell_formats: Vec::new(),
             comparison_source: None,
         }];
         b

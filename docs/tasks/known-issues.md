@@ -6,6 +6,15 @@ Update the relevant brief/spec when resolving one; the historical snapshot is in
 
 ## Integration after the archived snapshot
 
+- T59 worksheet cell formatting steps 1, 2 and 4 (2026-11-15, macOS, no Origin, branch `cell-format`):
+  `cellformat.rs` ranges (column ids, open-ended row spans, label rows; whole columns are one record) with
+  upkeep for row insert/delete, sorts (formats follow rows), column delete, duplicate/append and analysis
+  retirement; grid, frozen overlay, label rows, print, PDF and worksheet images draw bold/italic/underline/font/
+  size/colours/fill/alignment (conditional colours win); Format Cells window from the cell, column and row menus
+  and Format > Cell... (one undo per OK/Apply); `.sheaf` and companion keep formats, `.opj` and Excel export warn.
+  Format > Worksheet and Set Data Style stay grey; toolbar adapter waits for T58. All unmeasured (gui-look
+  "Cell formatting (T59)", workbook-model 13b).
+
 - T64 multiple comparisons plot (2026-11-15, macOS, no Origin): the report sheet of a one-way ANOVA with a means
   comparison or a two-sample t-test (button in the sheet tab strip, Statistics > Multiple Comparisons Plot...) makes a graph
   of the groups (bar, box, violin, scatter; SD, SEM or 95 % CI error bars) with significance brackets (asterisks or

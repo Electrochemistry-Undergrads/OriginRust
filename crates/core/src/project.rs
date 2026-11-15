@@ -444,6 +444,7 @@ impl Project {
             }
             sheet.remap_cond_format_columns(&|c| renamed.get(&c).copied());
             sheet.remap_note_columns(&|c| renamed.get(&c).copied());
+            sheet.remap_format_columns(&|c| renamed.get(&c).copied());
         }
         self.windows.push(Window::Workbook(book));
         id
@@ -511,6 +512,7 @@ impl Project {
                         }
                         sheet.remap_cond_format_columns(&|id| Some(c(id)));
                         sheet.remap_note_columns(&|id| Some(c(id)));
+                        sheet.remap_format_columns(&|id| Some(c(id)));
                     }
                 }
                 Window::Graph(graph) => {
@@ -1946,6 +1948,33 @@ mod tests {
         let (new, _) = p.append(other, "f");
         let col = p.workbook(new[0]).unwrap().sheets[0].columns[0].id;
         assert_eq!(p.workbook(new[0]).unwrap().sheets[0].note(col, 0), Some("o"));
+    }
+
+    #[test]
+    fn duplicate_window_and_append_remap_the_cell_formats() {
+        use crate::cellformat::{CellFormat, FormatTarget, LabelKind};
+        let bold = CellFormat { bold: Some(true), ..Default::default() };
+        let mut p = Project::new();
+        let b = p.add_workbook("");
+        let c = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        let s = &mut p.workbook_mut(b).unwrap().sheets[0];
+        s.apply_cell_format(FormatTarget::cells(vec![c], 1, None), bold.clone());
+        s.apply_cell_format(FormatTarget::label_rows(vec![c], vec![LabelKind::Units]), bold.clone());
+        let copy = p.duplicate_window(b).unwrap();
+        let sheet = &p.workbook(copy).unwrap().sheets[0];
+        let col = sheet.columns[0].id;
+        assert_ne!(col, c);
+        assert!(sheet.cell_format_at(col, 1).bold && !sheet.cell_format_at(col, 0).bold);
+        assert!(sheet.format_index().resolve_label(sheet, col, &LabelKind::Units).bold);
+        assert!(p.workbook(b).unwrap().sheets[0].cell_format_at(c, 1).bold, "the original keeps its own ids");
+
+        let mut other = Project::new();
+        let ob = other.add_workbook("");
+        let oc = other.add_column(ob, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+        other.workbook_mut(ob).unwrap().sheets[0].apply_cell_format(FormatTarget::whole_columns(vec![oc]), bold);
+        let (new, _) = p.append(other, "f");
+        let sheet = &p.workbook(new[0]).unwrap().sheets[0];
+        assert!(sheet.cell_format_at(sheet.columns[0].id, 0).bold);
     }
 
     #[test]

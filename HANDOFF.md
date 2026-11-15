@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **463 listed item locations** at the planning
-  baseline (319 menu bar, 47 toolbar, 97 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **459 listed item locations** at the planning
+  baseline (318 menu bar, 47 toolbar, 94 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -71,6 +71,14 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+T02 Column Browser Exclude (`e606eef`) now temporarily hides selected upper-list columns,
+selects the first removed list position (or the final remaining row), and preserves original
+column ordinals and already-added ranges. Scope changes and reopening restore excluded columns;
+gapped original columns cannot form one block. Ten valid isolated Origin cases and seven new UI
+regressions cover this follow-up (46 focused Go To tests). Formatting, strict workspace all-target
+Clippy, 3,394 workspace tests (eight existing ignored) and inventory validation pass on the combined
+T48/T64 tree; incoming Windows MCP test fix `81765e8` is preserved. Saved browser preferences remain.
+
 T48 graph Data menu measured in Origin 2016 (branch `t48-origin`, graphing 20.4/20.5): Mask (a click masks,
 a drag masks every plot's Y cells, Tab active plot, Space freehand) and Remove Bad (pick, then Enter;
 `@YPR` 1 keeps the row) now follow Origin, with its undo texts and Esc/right-click ending a mode.
@@ -93,15 +101,15 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t63-probability-menus` | Codex Windows, t63-probability-menus | T63 parallel wire-up group ONLY: Plot menu Probability and Q-Q Plot entries dispatch to existing analysis commands, with isolated UI tests | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` reused sequentially; app Plot menu/local dispatch, own UI tests, T63/HANDOFF and exact inventory/parity rows; stats-origin retains ALL probability/Q-Q calculation engines, option dialogs, native measurements and fixtures; no T58 toolbar, T59 cells, T60/T61 layers, T62 stack, step lines, MCP/import/export, pending root files or index/roadmap |
 | `codex/text-decorations` | Codex Windows, text-decorations | T58 GRAPH TEXT FORMATTING (`T58-graph-text-formatting.md`), first rendering slice: inline underline/strikethrough, markup/layout/rendering and isolated export tests | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; no toolbar/editor/model fields, significance-plot/brackets (separate T58 brief), shapes/data-tools/browser/export-dialog/import/stats/MCP/printing or other owners |
-| `codex/t02-browser-exclude` | Codex Windows, t02-browser-exclude | T02 Column Browser Exclude control: native behavior, upper-list filtering and own UI tests/docs; integration repair for the newly merged T64 SVG destination test on Windows | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog`, `target/wt-t01-error-bars-dialog`; go_to/browser, own go_to_browser tests, T02/gui-look/HANDOFF, and ONLY the `anova_draws_the_multiple_comparisons_plot_through_the_bridge` path assertion in mcp/tools.rs (canonical filesystem identity); no MCP production/analyze/disconnect changes, saved preferences, navigation, app/MRU/grid/core/history/plot/masks/stats/formulas or other owners; no priority/index/roadmap/parity edits |
 | `codex/t05-export-dialog-themes` | Codex Windows | T05 Dialog Theme row: Origin theme-list/save/reuse behavior, named export-settings themes and isolated persistence/UI regressions | claimed 2026-11-15; own `.claude/worktrees/codex-t13-skip-points`, `target/wt-t13-skip-points`; no Graph Theme, preview, renderers/formats, import behavior, recovery, priority docs or other scopes |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
-| `cell-format` | Claude macOS, "mac-multipdf" | T59 worksheet cell formatting, steps 1, 2 and 4 (model with range maintenance, grid/print/image drawing, Format Cells window, .sheaf/.opj); step 3 (toolbar adapter behind T58's dispatch) left for after T58 slice 3 | claimed 2026-11-15; new core cellformat.rs + Worksheet.cell_formats, sheetops upkeep, app grid.rs body_cell + new dialogs/cell_format.rs + menu items, plot sheet.rs/sheet_print.rs; no toolbar.rs Format bar (T58) or other sessions' scopes |
 | `merge-graphs` | Claude Windows, session fe4b37eb | T60 Merge Graph Windows and Layer Management (all four steps: core merge.rs + panels.rs arrange helpers, merge/layer-management dialogs, Fit Layer to Graph / Fit Page to Layers, CLI `merge-graphs`, Origin merge_graph/layarrange measurements, graphing 15) | claimed 2026-11-15; own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no adding/deleting layers or insets (T61), no Offset/stack items (T62), no text formatting (T58) or other sessions' scopes |
 | `layers-multi-y` | Claude Windows, "continue all tasks" | T61 layers, insets and 3/4 Y axes (all slices): core graph.rs layer add/delete + axis offset (local edits), template.rs 3Ys/4Ys, plot offset axes, app Add Layer buttons/layer icon/Layer Properties/Multiple Y Axes, ops template names, opj/companion | claimed 2026-11-15; no T60 merge/arrange (panels.rs, merge.rs), T58/T59 formatting, T62 stack/offset |
+| `stack-leftovers` | Claude macOS, "mac-multipdf" | T62 all three slices: Offset Grouped Data in Layer menu (None/Cumulative/Constant/Auto/Individual, new Cumulative mode), Stacked Histograms, waterfall Y/Z colour mapping with colour scale | claimed 2026-11-15; core graph.rs Stack + core/stack.rs + autorange, plot/stack.rs, menus offset submenu, template stacked histograms, waterfall colour mapping; no merge/layer management (T60/T61), text formatting (T58) or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

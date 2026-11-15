@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **463 greyed items: 319 in the menu bar, 47 on the toolbars, 97 in context menus.**
+original inventory baseline. This is not a new runtime audit. **459 greyed items: 318 in the menu bar, 47 on the toolbars, 94 in context menus.**
 
 ## How to read and keep this file
 
@@ -36,7 +36,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T56` | 1 |
 | `T57` | 2 |
 | `T58` | 15 |
-| `T59` | 6 |
+| `T59` | 2 |
 | `T60` | 7 |
 | `T61` | 20 |
 | `T62` | 8 |
@@ -60,7 +60,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 19 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 90 items, backlog packages (`B`) 354, not planned (`N`) 19.
+Briefs (`T`) hold 86 items, backlog packages (`B`) 354, not planned (`N`) 19.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -205,7 +205,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B15` Axes: Z Axis... [Graph]
 - `T63` Axis Tick Labels: X Axis Tick Labels... · Y Axis Tick Labels... [Graph]
 - `T58` Axis Titles: X Axis Title... · Y Axis Title... [Graph]
-- `T59` Worksheet... · Cell... [Workbook]
+- `T59` Worksheet... [Workbook]
 - `B6` Snap to Grid · Merge cells [Workbook]
 
 ### Window
@@ -241,16 +241,13 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B5` Worksheet column header: Copy Columns to... · Remove Links · Swap Columns... · Slide Show of Dependent Graphs · Set Sampling Interval... · Show X Column...
 - `T63` Worksheet column header: Frequency Count...
 - `B6` Worksheet column header: Add or Update Sparklines...
-- `T59` Worksheet column header: Format Cells...
 - `T63` Worksheet column header > Fill Column with: Row Numbers · Uniform Random Numbers · Normal Random Numbers
 - `B5` Worksheet column header > Fill Column with: A set of Numbers... · A set of Date/Time values... · Arbitrary set of Text&Numeric values...
 - `B5` Worksheet data cell: Paste Transpose · Paste Link · Paste Link Transpose · Remove Links · Set as Begin · Set as End
 - `B6` Worksheet data cell: Insert Graph... · Insert Images from Files... · Insert Sparklines... · Insert Variables...
-- `T59` Worksheet data cell: Format Cells...
 - `B6` Worksheet data cell > Insert Arrow: Arrow · Double Arrow
 - `T59` Worksheet data cell > Set Data Style: Default
 - `B6` Worksheet row number: Insert Graph...
-- `T59` Worksheet row number: Format Cells...
 - `B6` Worksheet sheet tab: Add Graph as Sheet... · Add Notes as Sheet · Duplicate Without Data · Navigate...
 - `B6` Worksheet sheet tab > Sheet Name to Show: Short Name · Long Name · Both
 - `B6` Worksheet corner: Column Header · Row Header · Column Grid · Row Grid · Page Break Preview Lines

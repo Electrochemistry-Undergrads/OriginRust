@@ -659,6 +659,12 @@ pub struct StyleArgs {
     /// example --draw "arrow@0.2,0.2,0.5,0.4". Repeat the option for more objects.
     #[arg(long, value_name = "KIND@X1,Y1,X2,Y2")]
     pub draw: Vec<String>,
+    /// Mark a slope between two data points of the first plot of the first layer: "ROW_A,ROW_B", the
+    /// worksheet row numbers counted from 1 (for example --slope 3,8). The segment, dashed legs and the
+    /// label "slope = ..." are computed in the axes' own units (per decade on a log10 axis). Repeat the
+    /// option for more slopes; they all apply to the first plot.
+    #[arg(long, value_name = "ROW_A,ROW_B")]
+    pub slope: Vec<String>,
 }
 
 /// Which part of the page a figure shows (Origin's export margin settings).

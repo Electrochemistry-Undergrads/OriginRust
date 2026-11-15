@@ -166,6 +166,7 @@ pub enum Icon {
     Line,
     Rectangle,
     Circle,
+    Slope,
     Hand,
     // 2D graphs
     PlotLine,
@@ -234,7 +235,7 @@ fn tool(icon: Icon, tip: &'static str, cmd: Cmd) -> Item {
 /// True for the commands of tools (no menu entry; pressed while on).
 #[cfg(test)]
 fn is_tool(cmd: &Cmd) -> bool {
-    matches!(cmd, Cmd::Pointer | Cmd::DataReader | Cmd::TextTool | Cmd::ShapeTool(_))
+    matches!(cmd, Cmd::Pointer | Cmd::DataReader | Cmd::TextTool | Cmd::SlopeTool | Cmd::ShapeTool(_))
 }
 
 /// A button for a feature Sheaf lacks.
@@ -361,6 +362,7 @@ fn build(bar: Bar) -> Vec<Item> {
             tool(Icon::Line, "Line", Cmd::ShapeTool(ShapeKind::Line)),
             tool(Rectangle, "Rectangle", Cmd::ShapeTool(ShapeKind::Rectangle)),
             tool(Circle, "Circle", Cmd::ShapeTool(ShapeKind::Ellipse)),
+            tool(Slope, "Slope", Cmd::SlopeTool),
             g(Hand, "Pan"),
         ],
         Bar::ObjectEdit => vec![
@@ -478,6 +480,7 @@ fn draw_button(ui: &mut Ui, bar: Bar, button: &Button, c: &MenuContext, actions:
         Some(Cmd::Pointer) => c.tool == GraphTool::Pointer,
         Some(Cmd::DataReader) => c.tool == GraphTool::Reader,
         Some(Cmd::TextTool) => c.tool == GraphTool::Text,
+        Some(Cmd::SlopeTool) => c.tool == GraphTool::Slope,
         Some(Cmd::ShapeTool(kind)) => c.tool == GraphTool::Draw(kind),
         _ => button.on,
     };
@@ -933,6 +936,12 @@ impl Pen<'_> {
                     self.dot(p, 1.3, true);
                 }
             }
+            Slope => {
+                self.line(&[(2.5, 13.5), (13.5, 4.5)], false);
+                self.line(&[(2.5, 13.5), (13.5, 13.5), (13.5, 4.5)], true);
+                self.dot((2.5, 13.5), 1.5, true);
+                self.dot((13.5, 4.5), 1.5, true);
+            }
             Hand => {
                 self.closed(
                     &[
@@ -1183,7 +1192,10 @@ mod tests {
         };
         assert_eq!(&tips(Bar::Graphs2D)[..5], ["Line", "Scatter", "Line + Symbol", "Column", "Bar"]);
         assert_eq!(&tips(Bar::Tools)[..4], ["Pointer", "Zoom In", "Zoom Out", "Rescale"]);
-        assert_eq!(&tips(Bar::Tools)[4..], ["Data Reader", "Text", "Arrow", "Line", "Rectangle", "Circle", "Pan"]);
+        assert_eq!(
+            &tips(Bar::Tools)[4..],
+            ["Data Reader", "Text", "Arrow", "Line", "Rectangle", "Circle", "Slope", "Pan"]
+        );
         assert_eq!(&tips(Bar::Edit)[..3], ["Cut", "Copy", "Paste"]);
         assert_eq!(&tips(Bar::Standard)[..2], ["New Project", "New Workbook"]);
     }

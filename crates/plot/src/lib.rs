@@ -35,6 +35,8 @@ mod rug;
 pub mod scene;
 mod shapes;
 mod sheet;
+mod slope;
+pub use slope::{NOT_USABLE as SLOPE_NOT_USABLE, check_point as slope_check_point};
 mod stack;
 mod sunburst;
 mod svg;
@@ -82,6 +84,8 @@ mod ridgeline_tests;
 mod rug_tests;
 #[cfg(test)]
 mod skip_tests;
+#[cfg(test)]
+mod slope_tests;
 #[cfg(test)]
 mod sort_x_tests;
 #[cfg(test)]

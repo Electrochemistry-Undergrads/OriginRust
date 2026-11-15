@@ -969,8 +969,7 @@ unlisted windows belong to root. Added ranges survive scope changes. The browser
 Current Sheet each time; preferences are not saved. The parent remains open on browser Cancel
 or Escape. Five UI regressions cover return/apply, cross-book position mapping, Cancel/Escape,
 multiple ranges/Remove and edited/reset references. A fixture covers sheet/book/folder/recursive
-scopes, including unlisted root books. Exclude and editing the lower row ranges remain
-unimplemented; Exclude stays disabled.
+scopes, including unlisted root books. Exclude remains unimplemented and disabled.
 
 The top-table selection follow-up (`re-workspace/scratch/t02-browser-selection/origin/` and
 `verified/`) has nine valid isolated Origin cases, including a final Current Sheet restore.
@@ -993,6 +992,45 @@ and reference transfer. Scope changes clear the top selection and preserve added
 Five additional UI regressions cover contiguous and noncontiguous selection, adjacent Ctrl
 selection, disabled block controls, select-all/group removal, mixed-workbook ranges, scope
 changes and block/list transfer. Navigation still waits for the parent, preserving data/history.
+
+The lower row-range follow-up (`re-workspace/scratch/t02-browser-rows/`) opens the ellipsis
+in a lower Rows cell. Origin 2016 shows a separate Range dialog, with Entire Column(s)
+checked and From/To disabled. In the synthetic sheet whose A/B/C/D columns end at 4/2/6/3,
+the defaults are 1 and 6, and the displayed bound is 1 through 6, including when B is selected.
+The upper bound follows the sheet's data end, rather than the selected column's end or its
+100 allocated view rows. The published [input-data guide](https://docs.originlab.com/origin-help/analydialog-specifyinput/)
+also describes row subsets; the installed-version captures establish the details here.
+
+| Native row-editor case | Observed result |
+|---|---|
+| C From 2, To 4 | lower rows `[2:4]`, qualified C reference with `[2:4]` suffix; parent Row 0 still C6 |
+| B From 3, To 6, although B has two values | accepted `[3:6]`; parent Row 0 still B2 |
+| C From 4, To 2 | accepted literal `[4:2]`, without sorting or an ordering error |
+| Enter 2/4, then Cancel | original entire-column range remains |
+| Save 2/4, reopen, select Entire Column(s), reopen | suffix removed, `[1:end]` restored, disabled From/To reset to 1/6 |
+| From or To 0, To 7, or nonnumeric `abc` | refused; Range remains open with the existing lower range unchanged |
+| Numeric edits `1.5`, `2.9`, `6.9`, `2+1`, `2abc`, `2e1` | leading integers 1, 2, 6, 2, 2, 2; bounds checked after conversion, no arithmetic/exponent evaluation |
+| B:D block, From 2, To 4 | endpoint reference `B"Shared current"[2]:D"Shared current"[4]`; parent Row 0 still D3 |
+| C From 2, To 2 | explicit `[2:2]` interval retained |
+| Empty four-column sheet | disabled From 1/To 0; Enter accepts Entire Column(s), with no row suffix |
+
+Row bounds belong to each added range. The child editor leaves the browser and Go To open,
+and accepting it changes only the browser's range; navigation still waits for the parent OK.
+Cancel and Escape discard the child's pending bounds, preserving the saved range. Selecting
+Entire Column(s) removes the suffix rather than storing an explicit full-length subset.
+The measurements comprise five isolated instances and two sweeps with a fresh synthetic project
+per case: 18 valid cases. The first empty-sheet attempt used two columns, which shortened the
+parent flyout and caused the fixed menu click to miss the browser; that case is excluded and
+replaced by the four-column capture. Scope is explicitly restored to Current Sheet.
+
+Sheaf uses the measured sheet bound and leading-integer conversion, retains reversed and
+single-row intervals, and refuses invalid bounds without closing the child. A block's row subset
+stays attached to its added range when another lower row is removed. Enter accepts the default
+without toggling Entire Column(s), and respects a focused Cancel button. Ten additional UI
+regressions cover row transfer/end mapping, sheet bounds, reversed and numeric inputs, refusal,
+Cancel/Escape/reopening, whole-column reset, empty columns, keyboard focus and block association.
+The browser's Exclude control and saved preferences remain open; these row choices stay local
+to the open dialog and create no document edit or undo entry.
 
 Sheaf's Go To now follows the measured input order/focus, right-aligned OK/Cancel and optional-coordinate, zero/end,
 extension and clamping behavior. Its capacity remains data length plus 30 spare view rows;

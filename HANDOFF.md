@@ -45,10 +45,8 @@ open. History of what was merged when is in `git log` (not repeated here).
   keeps the axis tick step across breaks (Origin changed it on two of four data sets, no rule
   found) and offers a step after each break; the Break Half Length unit is unmeasured (typing in
   the scripted dialog did not take), so Sheaf shows one gap in percent of the axis. Formatting
-  and strict all-target Clippy pass; on the final merge (main d45f267) 2,656 tests pass (seven
-  ignored). Pushed although the MCP link admission tests in crates/mcp/tests/link.rs fail
-  intermittently on this Windows machine (a different one per run, the file passed alone once):
-  pre-existing on main, not touched here, repair 50b5ecb on codex/t02-find-replace.
+  and strict all-target Clippy pass and 2,666 workspace tests pass (seven ignored) on the pushed
+  main 61d568b, which also holds the MCP link admission repair 50b5ecb.
 - T25 busy greeting repair (2026-11-15, Windows): an over-limit TCP connection receives its
   busy reason before closing, using a send-half-close and a bounded receive drain. This
   avoids Winsock reset errors caused by unread hello data, while retaining connection limits
@@ -190,6 +188,8 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t25-undo-ai` | Codex Windows, t25-undo-ai | T25 Undo AI Changes UI command: app action/Undo dispatch, Edit Undo/Redo block and enablement, focused UI tests/docs | claimed 2026-11-15; undo completed contiguous AI steps, stop at manual boundary; editor/dialog guard; existing Document undo/redo only; no core/history API, MCP transport/queue/resources/tools, Find, other menus, graph/shape or recent-files interactions |
+| `xy-ratio` | Claude Windows, "axis-breaks" | T13 Size/Speed "Link Axis Length to Scale" with X:Y Ratio measured in Origin; layer setting in core graph.rs (Layer fields only), frame fitting in plot layout, Size/Speed tab control, persistence and focused tests | claimed 2026-11-15; no plot styles/fill/plots.rs, axis breaks logic, drawn shapes, MCP, stats or other sessions' scopes |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |

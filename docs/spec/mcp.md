@@ -152,7 +152,7 @@ the formula fails. Limit: 10 000 000 rows. Nothing changes on error.
 
 ### 5.2 Graphs and export
 
-**`plot`** creates a graph or adds plots to an existing one.
+**`plot`** creates a graph or restyles an existing one.
 
 ```json
 {"template": "line|scatter|...",
@@ -174,11 +174,12 @@ the formula fails. Limit: 10 000 000 rows. Nothing changes on error.
            "bar_gap": 0, "bar_overlap": 0,
            "text_labels": [{"text": "peak", "x": 0.5, "y": 0.2}],
            "draw": [{"kind": "line|arrow|rectangle|ellipse", "x1": 0, "y1": 0, "x2": 1, "y2": 1}]},
- "size": {"width_in": 5, "height_in": 3.5}}
+ "size": {"width_in": 5, "height_in": 3.5},
+ "options": {}}
 ```
 
 `template` takes the names of `sheaf plot --template` (`Template::from_name`). `y` defaults to the
-sheet's Y columns. `graph` adds to that graph instead of creating one. `panels` fields and values are
+sheet's Y columns. `graph` restyles that graph instead of creating one; omit `template`, `y` and `y2` with it. `panels` fields and values are
 those of `sheaf plot --panels` and its panel flags. `overlay_files` imports each file and overlays
 each file's Y columns. `text_labels` and `draw` positions are fractions of the layer frame, (0,0) the
 top left; `size` sets the page size (the same as `style.width` and `style.height`, not both). The
@@ -286,7 +287,7 @@ special:["linear","linearx","poly:N","formula","fdf"]}` (the catalog of
  "confidence": 0.95, "bands": "none|confidence|prediction|both", "band_level": 95,
  "max_iterations": 400, "tolerance": 1e-9, "scale_errors": true,
  "compare_with": "model?", "rank": ["model"], "global": {"share": ["param"]}, "regress": ["x columns"],
- "plot": "Path?"}
+ "plot": "Path?", "options": {}}
 ```
 
 One mode at a time: a plain fit (one per Y column), `compare_with`, `rank`, `global` or `regress`.
@@ -304,6 +305,28 @@ each. `plot` renders the first fit as an image at that path. Result for a fit:
 ```
 
 Comparison and ranking results carry the tables of `CompareOutcome` and `RankOutcome`. NaN is `null`.
+
+### CLI options for plotting and fitting
+
+Both `plot` and `fit` accept an optional `options` object. Its schema in `tools/list` is generated
+from the CLI's clap definitions, and values are parsed with the same types and constraints as the
+CLI. Keys use underscores in place of hyphens; the hyphenated spelling is also accepted. Flags
+are booleans; repeated or delimited options accept arrays. Array elements keep embedded commas.
+Unknown options and duplicate spellings are errors. Do not give the same setting in both the
+structured arguments and `options`.
+
+For example, a plot can use `{"y":["B"],"options":{"x_title":"Potential (V)","line_width":2}}`.
+A fit can use `{"y":["B"],"options":{"model":"poly:2","confidence":0.99}}`.
+The shared CLI-to-library conversions are used by both frontends; no separate plotting or fitting
+implementation runs in the MCP server. Existing structured calls keep their arguments.
+
+The data remains the server's project. CLI input files, read options, save/export switches and
+listing switches and export resolution/sizing controls are excluded; use `import_files`,
+`save_project`, `export_graph`, `export_data`
+and `list_fit_models` for those operations. The existing top-level `fit.plot` path remains
+supported; it is not an option flag here. Allowed path options (including `fit.options.fdf`) are
+checked against `--root`. CLI enum values use their clap spellings, for example
+`options.panel_order: "bottom-up"`; the structured `panels.order` keeps `"bottom_up"`.
 
 ### 5.5 Prompts
 

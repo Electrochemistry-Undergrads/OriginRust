@@ -276,6 +276,13 @@ pub fn defs() -> Vec<Def> {
                     ),
                     ("style", style_schema()),
                     (
+                        "options",
+                        crate::bridge::schema(
+                            &crate::bridge::subcommand(&["plot"]).expect("plot command"),
+                            &crate::bridge::session_filter("plot"),
+                        ),
+                    ),
+                    (
                         "size",
                         obj(
                             vec![("width_in", n("Page width in inches.")), ("height_in", n("Page height in inches."))],
@@ -431,6 +438,13 @@ pub fn defs() -> Vec<Def> {
                     ("global", obj(vec![("share", strs("Parameters shared by all columns."))], &[])),
                     ("regress", strs("Multiple linear regression of the first y on these X columns.")),
                     ("plot", s("Also render the first fit as an image at this path.")),
+                    (
+                        "options",
+                        crate::bridge::schema(
+                            &crate::bridge::subcommand(&["fit"]).expect("fit command"),
+                            &crate::bridge::session_filter("fit"),
+                        ),
+                    ),
                 ],
                 &[],
             ),

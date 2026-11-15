@@ -107,7 +107,10 @@ impl MultiOptions {
                 });
                 ui.checkbox(&mut s.anova, "Analysis of variance of the variables by cluster");
                 ui.checkbox(&mut s.membership, "Write the cluster of every row");
-                ui.add_enabled(s.membership, egui::Checkbox::new(&mut s.member_distance, "... and its distance to the centre"));
+                ui.add_enabled(
+                    s.membership,
+                    egui::Checkbox::new(&mut s.member_distance, "... and its distance to the centre"),
+                );
                 ui.checkbox(&mut s.graph, "Scatter graph of the first two variables, one plot per cluster");
                 ui.weak(
                     "The initial centres are picked from the rows by replacement in sheet order, as Origin does, so the \

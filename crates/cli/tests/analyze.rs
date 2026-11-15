@@ -1298,11 +1298,7 @@ fn kaplan_meier_runs_from_the_command_line() {
 fn kmeans_runs_from_the_command_line() {
     let dir = scratch("kmeans");
     let path = dir.join("points.csv");
-    std::fs::write(
-        &path,
-        "a,b\n1,1\n1.5,2\n3,4\n5,7\n3.5,5\n4.5,5\n3.5,4.5\n6,8\n7.5,7\n8,9\n7,6.5\n9,8.5\n",
-    )
-    .unwrap();
+    std::fs::write(&path, "a,b\n1,1\n1.5,2\n3,4\n5,7\n3.5,5\n4.5,5\n3.5,4.5\n6,8\n7.5,7\n8,9\n7,6.5\n9,8.5\n").unwrap();
     let file = path.to_str().unwrap();
     let (ok, out, err) = sheaf(&["analyze", "kmeans", file, "--y", "a,b", "--clusters", "2"]);
     assert!(ok, "{err}");

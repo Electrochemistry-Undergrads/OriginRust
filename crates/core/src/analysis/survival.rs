@@ -149,7 +149,17 @@ pub(super) fn run(
 
     let mut headers = vec!["N", "Events", "Censored", "Percent censored"];
     if spec.quartiles {
-        headers.extend(["25%", "25% lower", "25% upper", "50%", "50% lower", "50% upper", "75%", "75% lower", "75% upper"]);
+        headers.extend([
+            "25%",
+            "25% lower",
+            "25% upper",
+            "50%",
+            "50% lower",
+            "50% upper",
+            "75%",
+            "75% lower",
+            "75% upper",
+        ]);
     }
     if spec.mean {
         headers.extend(["Mean", "Mean SE", "Mean lower", "Mean upper"]);
@@ -159,8 +169,8 @@ pub(super) fn run(
     let mut fits = Vec::new();
     let opt = |v: Option<f64>| v.unwrap_or(f64::NAN);
     for (label, t, c) in &cases {
-        let km = calc::kaplan_meier(t, c, spec.confidence)
-            .map_err(|e| AnalysisError::BadOption(format!("{label}: {e}")))?;
+        let km =
+            calc::kaplan_meier(t, c, spec.confidence).map_err(|e| AnalysisError::BadOption(format!("{label}: {e}")))?;
         let mut v = vec![km.n as f64, km.events as f64, km.censored as f64, km.censored as f64 / km.n as f64];
         if spec.quartiles {
             for q in &km.quartiles {
@@ -249,11 +259,23 @@ pub(super) fn run(
             "Status",
             km.rows.iter().map(|r| if r.censored { "+" } else { "" }.to_string()).collect(),
         ));
-        let at = |f: &dyn Fn(f64, f64) -> f64| km.rows.iter().map(|r| r.survival.map_or(f64::NAN, |(s, se)| f(s, se))).collect();
+        let at = |f: &dyn Fn(f64, f64) -> f64| {
+            km.rows.iter().map(|r| r.survival.map_or(f64::NAN, |(s, se)| f(s, se))).collect()
+        };
         on_sheet.push(number_column("Survival", label, Designation::Y, at(&|s, _| s)));
         on_sheet.push(number_column("Standard error", label, Designation::Y, at(&|_, se| se)));
-        on_sheet.push(number_column("Events", label, Designation::Y, km.rows.iter().map(|r| r.events as f64).collect()));
-        on_sheet.push(number_column("At risk", label, Designation::Y, km.rows.iter().map(|r| r.at_risk as f64).collect()));
+        on_sheet.push(number_column(
+            "Events",
+            label,
+            Designation::Y,
+            km.rows.iter().map(|r| r.events as f64).collect(),
+        ));
+        on_sheet.push(number_column(
+            "At risk",
+            label,
+            Designation::Y,
+            km.rows.iter().map(|r| r.at_risk as f64).collect(),
+        ));
 
         // The curve as step vertices, starting at (0, 1) and running on to the largest time.
         let mut x = vec![0.0];
@@ -326,7 +348,8 @@ mod tests {
     fn project() -> (Project, Vec<ColumnId>) {
         let time = vec![2.0, 3.0, 4.0, 4.0, 6.0, 1.0, 5.0, 7.0, 8.0, 9.0];
         let cens = vec![0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
-        let group: Vec<String> = ["a", "a", "a", "a", "a", "b", "b", "b", "b", "b"].iter().map(|s| s.to_string()).collect();
+        let group: Vec<String> =
+            ["a", "a", "a", "a", "a", "b", "b", "b", "b", "b"].iter().map(|s| s.to_string()).collect();
         let mut p = Project::new();
         let book = p.add_workbook("km");
         let t = p.add_column(book, 0, Designation::Y, ColumnData::numeric(time)).unwrap();
@@ -366,7 +389,8 @@ mod tests {
     #[test]
     fn groups_and_tests_and_errors() {
         let (mut p, ids) = project();
-        let spec = KaplanMeierSpec { log_rank: true, breslow: true, tarone_ware: true, curve: false, ..Default::default() };
+        let spec =
+            KaplanMeierSpec { log_rank: true, breslow: true, tarone_ware: true, curve: false, ..Default::default() };
         let r = p.analyze(&request(ids.clone(), spec.clone())).unwrap();
         assert!(r.new_graph.is_none());
         let t = r.table.unwrap();

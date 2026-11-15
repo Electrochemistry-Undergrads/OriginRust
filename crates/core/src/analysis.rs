@@ -49,9 +49,9 @@ pub use curves::{AverageSpec, IntersectSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use multivariate::{KmeansSpec, PcaSpec};
 pub use roc::RocSpec;
-pub use survival::KaplanMeierSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
+pub use survival::KaplanMeierSpec;
 
 /// The multi-peak fit of [`PeakChainSpec`]: a sum of `shape` peaks on `baseline`, one peak for
 /// every peak the search found, started at the found centre, width and height.

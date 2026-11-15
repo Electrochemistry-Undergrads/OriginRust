@@ -737,6 +737,63 @@ variance to 0.005 (two decimals printed). Hand-worked tests in `pca.rs` (two col
   rule, the "Quantities to Compute" ticks), the behaviour of Origin on a column without spread or with fewer
   rows than columns, and a sign rule for a component whose sum is exactly zero.
 
+## 18 K-means cluster analysis (measured against Origin 2016)
+
+Statistics > Multivariate Analysis > K-Means Cluster Analysis. Origin's X-Function is `kmeans` (`ir` input columns,
+`num` number of clusters, `iter`, `anova` and `distance` ticks; outputs `rt` report sheet and `rd` membership
+sheet). Runs: `tools/origin-ref/kmeans-suite1.lines.txt` (12 cases, two variables, two and three clusters, with the
+analysis of variance and the membership sheet) and `kmeans-suite2.lines.txt` (ten cases in one variable with two,
+three and four clusters and the same cases in reverse order; 15 cases in two variables with three, four and five
+clusters and with `iter:=1`). Nine runs gave initial centres, final centres and sizes that fix the algorithm. Raw
+outputs are local (`re-workspace/scratch/t29/km2.out`, `km4.out`). The numerics are `crates/calc/src/kmeans.rs`, the
+tool `crates/core/src/analysis/multivariate.rs`, the command line `sheaf analyze kmeans`, the window Statistics >
+Multivariate Analysis > K-Means Cluster Analysis... (`dialogs/multivariate_options.rs`).
+
+### 18.1 What Origin does (measured)
+
+- **Initial centres are cases**, picked by a replacement rule in sheet order (the SPSS quick-cluster rule): the
+  first `k` cases start as the centres; a later case `x` replaces the nearer of the two closest centres if its
+  distance to its nearest centre exceeds the smallest distance between two centres, otherwise it replaces its nearest
+  centre `m` if its distance to its second-nearest centre exceeds the distance of `m` to the centre nearest to `m`. This
+  gave Origin's initial centres, in Origin's cluster order, in all nine runs; pure "first k cases", "farthest points"
+  and "maximin" rules did not. Cluster numbers follow the order of the rows (the reversed ten cases give clusters in a
+  different order).
+- **Iteration.** The final centres are not what Lloyd's iterations give from those starts in six of the nine
+  runs (for example ten cases with k = 3: Origin ends with 3.25, 9.75 and 17.5, Lloyd's with 4, 11.75 and 20): they are a local optimum under single-case moves, the
+  Hartigan-Wong criterion, which Sheaf uses after the first nearest-centre assignment. Ties go to the lower cluster.
+  `iter:=1` gave the same result as the default (the meaning of the option was not worked out).
+- **Distances** are Euclidean on the raw values. **Report sheet** (columns side by side): per variable the mean, SD, N
+  and missing count; per cluster the initial centre and the final centre (one value per variable), N, the sum of squared
+  distances to the centre, and the mean and the largest distance to the centre, then the `k x k` table of distances
+  between the final centres; with `anova:=1` per variable the degrees of freedom (`k - 1`), the between mean square,
+  the error degrees of freedom (`n - k`), the error mean square, `F` and its probability. **Membership sheet** (`rd`):
+  the cluster number and, with `distance:=1`, the distance to the centre, one row per case.
+- The probability of `F` agrees with the exact `F` tail to 1e-9.
+
+### 18.2 What Sheaf does
+
+The chosen columns are the variables, the chosen rows the cases; a row with a missing number in any column is left out
+(not measured). Options: number of clusters (default 3, at least 2, at most the rows), maximum passes of single-case
+moves (default 100), analysis of variance, write the cluster of every row and its distance, scatter graph. Result sheet
+`KMeans1`: Variable, N, Missing, Mean, SD; Cluster, Initial centre and Centre per variable, Cluster N, Sum of squares,
+Mean distance, Max distance, Distance to Cluster 1..k; ANOVA variable, DF between, MS between, DF error, MS error, F,
+Prob>F; Cluster number and Distance to centre (rows of the input, empty for a left-out row). The scatter graph shows the
+first two variables with one plot per cluster (not made for one variable); one undo removes sheet and graph. Fewer than
+two clusters, more clusters than rows, an infinite number, or two identical rows among the initial centres (a cluster
+would stay empty) are refused.
+
+### 18.3 Fixtures and tolerances
+
+`crates/calc/tests/origin_kmeans.rs`: every run above; centres, SS and distances to 1e-12 relative, the probability of
+`F` to 1e-9, sizes and initial centres exact. Hand-worked tests in `kmeans.rs`.
+
+### 18.4 Not measured
+
+- Missing values, the iteration limit (`iter`) and Origin's convergence test, standardized variables, k-means with a
+  user-chosen set of initial centres (Origin's dialog offers other initial-centre choices that were not run), a case
+  that ties between two centres at the first assignment other than the ones in the runs, k-medians, the report
+  layout and graph that Origin draws, and the behaviour for more clusters than distinct rows.
+
 ## 19 ROC curve (scipy-checked, not Origin)
 
 **Source of the numbers: scipy, not Origin.** Statistics > ROC Curve is an Origin X-Function (`ROCCurve`) that is
@@ -799,6 +856,67 @@ separation, an overlap). Hand-worked tests in `roc.rs`.
 - The positive state when the state column holds text, the report sheet and graph layout, the sheet and graph names,
   and the default confidence level.
 - Not built: Speed Mode, several state ranges, comparing curves, partial area.
+
+## 20 Kaplan-Meier estimator (measured against Origin 2016)
+
+Statistics > Survival Analysis > Kaplan-Meier Estimator. Origin's X-Function is `kaplanmeier` (`irng` time, censor
+and optional group columns, `censor` the censoring value, `quartile`, `mean`, `logrank`, `breslow`, `tarone`;
+outputs `rt` report sheet and `rd` survival-function sheet). Runs: `tools/origin-ref/kaplan-suite1.lines.txt` (14
+cases with ties and 4 censored, one sample and two interleaved groups, with the three rank tests) and
+`kaplan-suite2.lines.txt` (12 cases whose last two are censored or events, and 19 cases in three groups, one of
+them a single case); `kaplan-probe.lines.txt` was a first look. Raw outputs are local
+(`re-workspace/scratch/t29/km1.out`, `km3.out`). The numerics are `crates/calc/src/survival.rs` (the rules are in its
+header), the tool `crates/core/src/analysis/survival.rs`, the command line `sheaf analyze kaplan-meier`, the window
+Statistics > Survival Analysis > Kaplan-Meier Estimator... (`dialogs/multivariate_options.rs`).
+
+### 20.1 What Origin does (measured)
+
+- **Table.** One row per case, sorted by time; at tied times the events come before the censored cases (a case censored
+  at `t` is at risk at `t`). The survival estimate and its standard error are printed on the last of the tied event rows
+  only (other rows show `--`), a `+` marks censored cases, and the running number of events and the number of cases
+  left at risk after the row follow.
+- **Estimate.** `S(t) = prod (1 - d/n)`; standard error Greenwood's `S sqrt(sum d / (n (n - d)))`, 0 once `S` is 0.
+  The `rd` sheet holds the step function (time and survival, the start `(0, 1)` first).
+- **Quartiles** (25, 50, 75 %): the estimate is the smallest event time with `S <= 1 - p`. Its lower and upper limits are
+  the smallest event times at which the **linear** limits `S -/+ z se` are at or below `1 - p` (lower limit of the quartile
+  from the lower limit of `S`, upper limit from the upper one; z for 95 %). When the upper limit is never reached Origin
+  gives the largest event time (seen in two runs).
+- **Mean** is the area under the curve up to the largest time, **censored or not**. Standard error `sqrt(f sum A^2 d /
+  (n (n - d)))`, `A` the area to the right of each event time, with `f = D / (D - 1)` (`D` the number of events) **only when
+  the curve reaches 0** (the largest time is an event); with a censored largest time `f = 1` (six runs). Limits mean -/+ z se.
+- **Tests of groups** (two or more groups): log-rank (weight 1), Breslow (generalised Wilcoxon, weight `n`) and
+  Tarone-Ware (weight `sqrt(n)`); chi-square with `groups - 1` degrees of freedom, hypergeometric variance. Measured with
+  two and three groups; the probability agrees with the exact chi-square tail to 4e-8 (Origin's own tail routine).
+- The confidence limits of the curve itself and the plot: Origin offers them with its survival plot, which the scripting
+  interface refused to draw, so they were not read.
+
+### 20.2 What Sheaf does
+
+The chosen columns are the time, the censor column and, optionally, a grouping column (numbers or text), in that order.
+A case is censored where its censor cell equals the censoring value (default 1; numbers compare by value, text as text);
+rows with a missing time, censor or group cell are left out. Options: censoring value, confidence level (default 95 %),
+quartiles, mean, the three tests, a graph and the confidence limits in it. Result sheet `KaplanMeier1`: one row per
+group (Group, N, Events, Censored, Percent censored, the quartiles with limits, Mean, Mean SE, Mean lower, Mean upper),
+the tests (Test, Chi-square, DF, Prob>Chi-square), and per group the case table (Time, Status, Survival, Standard error,
+Events, At risk), the curve (starting at `(0, 1)`, running to the largest time), the censored cases at their survival
+(and optionally the limits, `S -/+ z se` inside 0 and 1, a choice of Sheaf made from the quartile limits). The graph has
+one step line per group and a symbol at every censored case; one undo removes sheet and graph. Tests with fewer than
+two groups say so in the notes. A time that is negative or infinite, a confidence level outside 0 to 100, or other than two
+or three columns is refused.
+
+### 20.3 Fixtures and tolerances
+
+`crates/calc/tests/origin_survival.rs`: survival, standard errors, per-case events and at-risk columns, quartiles with
+limits, means with standard errors and limits, and the test statistics, to 1e-12 relative (Origin prints 14 digits in the
+table cells, so those use 1e-13); probabilities to 1e-6. Hand-worked tests in `survival.rs`.
+
+### 20.4 Not measured
+
+- Confidence limits of the survival curve (the formula, and the choice among linear, log and arcsine), the quartile
+  limits when the estimate itself or the lower limit is never reached (Sheaf gives none), the mean variance factor when
+  there is exactly one event, more than three groups, stratified and trend tests, left-truncated data, the plot Origin
+  draws and its report layout, text censor values, and the default confidence level.
+
 
 ## 5 Where results go (ADR 0005)
 

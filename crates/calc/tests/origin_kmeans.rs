@@ -3,6 +3,8 @@
 //! `kmeans-suite2.lines.txt`, raw output in `re-workspace/scratch/t29/km2.out` and `km4.out` (local). Origin prints
 //! 17 digits: tolerance 1e-12 relative, 1e-9 for the probabilities.
 
+#![allow(clippy::excessive_precision)]
+
 use sheaf_calc::{KmeansOptions, kmeans};
 
 fn close(a: f64, b: f64, tol: f64, what: &str) {
@@ -100,8 +102,8 @@ fn three_clusters_with_a_cluster_of_two() {
     close(v.p, 0.00024299599110699788, 1e-9, "p");
 }
 
-/// One variable, ten cases: the initial centres (Origin's replacement rule) and the centres Origin ends with, two
-/// of which are not what Lloyd's iterations give from the same start (k = 3: Lloyd keeps 15 with 11).
+/// One variable, ten cases: the initial centres (Origin's replacement rule) and the centres Origin ends with, which
+/// are not what Lloyd's iterations give from the same start for k = 3 and k = 4.
 #[test]
 fn one_variable_two_three_and_four_clusters() {
     let check = |data: Vec<f64>, k: usize, initial: &[f64], centre: &[f64], counts: &[usize]| {
@@ -123,7 +125,13 @@ fn one_variable_two_three_and_four_clusters() {
     close(r.clusters[1].mean_distance, 3.0, 1e-12, "mean 2");
     close(r.centre_distances[0][1], 9.6666666666666679, 1e-12, "distance");
     check(ten(), 3, &[1.0, 11.0, 20.0], &[3.25, 9.75, 17.5], &[4, 4, 2]);
-    let r = check(ten(), 4, &[1.0, 9.0, 20.0, 15.0], &[2.3333333333333335, 7.333333333333333, 20.0, 12.666666666666666], &[3, 3, 1, 3]);
+    let r = check(
+        ten(),
+        4,
+        &[1.0, 9.0, 20.0, 15.0],
+        &[2.3333333333333335, 7.333333333333333, 20.0, 12.666666666666666],
+        &[3, 3, 1, 3],
+    );
     close(r.clusters[3].sum_squares, 8.6666666666666679, 1e-12, "SS 4");
     // The same cases in the reverse order: the cluster numbers follow the order of the cases.
     let reversed = vec![11.0, 6.0, 20.0, 1.0, 12.0, 7.0, 15.0, 4.0, 9.0, 2.0];

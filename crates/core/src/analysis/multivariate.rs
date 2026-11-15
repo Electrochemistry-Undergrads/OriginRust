@@ -233,16 +233,16 @@ fn kmeans(spec: &KmeansSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisErr
         number_column("SD", Designation::Y, r.sd.clone()),
         label_column("Cluster", (0..k).map(cl).collect()),
     ];
-    for j in 0..p {
+    for (j, input) in inputs.iter().enumerate() {
         on_sheet.push(number_column(
-            &format!("Initial centre {}", inputs[j].short),
+            &format!("Initial centre {}", input.short),
             Designation::Y,
             r.clusters.iter().map(|c| c.initial[j]).collect(),
         ));
     }
-    for j in 0..p {
+    for (j, input) in inputs.iter().enumerate() {
         on_sheet.push(number_column(
-            &format!("Centre {}", inputs[j].short),
+            &format!("Centre {}", input.short),
             Designation::Y,
             r.clusters.iter().map(|c| c.centre[j]).collect(),
         ));

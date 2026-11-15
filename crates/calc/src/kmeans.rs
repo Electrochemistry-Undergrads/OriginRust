@@ -15,7 +15,7 @@
 //!   means, then single cases are moved to another cluster for as long as a move lowers the sum of squares
 //!   (Hartigan-Wong's criterion `n_b/(n_b+1) |x - c_b|^2 < n_a/(n_a-1) |x - c_a|^2`, centres updated after each
 //!   move). Origin's final centres and cluster sizes are such a local optimum in the nine measured runs, and
-//!   some of them differ from what plain Lloyd iterations from the same centres give.
+//!   six of them differ from what plain Lloyd iterations from the same centres give.
 //! - Distances are Euclidean on the raw (not standardized) variables. Per cluster Origin reports the number of
 //!   cases, the sum of squared distances to the centre, and the mean and the largest distance to the centre; the
 //!   Euclidean distances between the final centres form a `k x k` table.
@@ -50,7 +50,10 @@ pub enum KmeansError {
     /// Fewer than two clusters asked for.
     TooFewClusters,
     /// More clusters than usable rows.
-    TooManyClusters { clusters: usize, rows: usize },
+    TooManyClusters {
+        clusters: usize,
+        rows: usize,
+    },
     /// A number is infinite.
     NotFinite,
     /// Two of the initial centres are the same row values, so a cluster stays empty.

@@ -4,6 +4,8 @@
 //! tolerance 1e-12 relative for table cells (1e-13 absolute for the 14-digit ones is not needed since we compare
 //! the 17-digit cells), 1e-12 for quartile tables.
 
+#![allow(clippy::excessive_precision)]
+
 use sheaf_calc::{RankTest, kaplan_meier, rank_test};
 
 const T: [f64; 14] = [3.0, 5.0, 5.0, 6.0, 8.0, 8.0, 9.0, 12.0, 12.0, 15.0, 17.0, 20.0, 22.0, 25.0];
@@ -47,10 +49,7 @@ fn single_sample_table_quartiles_and_mean() {
     let at_risk: Vec<usize> = km.rows.iter().map(|r| r.at_risk).collect();
     assert_eq!(at_risk, vec![13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]);
     let shown: Vec<bool> = km.rows.iter().map(|r| r.survival.is_some()).collect();
-    assert_eq!(
-        shown,
-        vec![true, true, false, true, false, true, false, false, true, false, true, true, false, true]
-    );
+    assert_eq!(shown, vec![true, true, false, true, false, true, false, false, true, false, true, true, false, true]);
     // Quartiles with limits, mean with standard error and limits.
     let q = |k: usize| (km.quartiles[k].estimate, km.quartiles[k].lower, km.quartiles[k].upper);
     assert_eq!(q(0), (Some(8.0), Some(5.0), Some(12.0)));
@@ -68,7 +67,8 @@ fn two_groups_quartiles_means_and_rank_tests() {
     let (t2, c2) = sample(Some(2));
     let a = kaplan_meier(&t1, &c1, 95.0).unwrap();
     let b = kaplan_meier(&t2, &c2, 95.0).unwrap();
-    let q = |k: &sheaf_calc::KaplanMeier, i: usize| (k.quartiles[i].estimate, k.quartiles[i].lower, k.quartiles[i].upper);
+    let q =
+        |k: &sheaf_calc::KaplanMeier, i: usize| (k.quartiles[i].estimate, k.quartiles[i].lower, k.quartiles[i].upper);
     assert_eq!(q(&a, 0), (Some(8.0), Some(3.0), Some(20.0)));
     assert_eq!(q(&a, 1), (Some(20.0), Some(8.0), Some(25.0)));
     assert_eq!(q(&a, 2), (Some(25.0), Some(12.0), Some(25.0)));
@@ -107,7 +107,8 @@ fn two_groups_quartiles_means_and_rank_tests() {
 #[test]
 fn censored_largest_time_and_three_groups() {
     let t: Vec<f64> = vec![2.0, 4.0, 4.0, 7.0, 9.0, 11.0, 11.0, 14.0, 16.0, 19.0, 23.0, 23.0];
-    let q = |k: &sheaf_calc::KaplanMeier, i: usize| (k.quartiles[i].estimate, k.quartiles[i].lower, k.quartiles[i].upper);
+    let q =
+        |k: &sheaf_calc::KaplanMeier, i: usize| (k.quartiles[i].estimate, k.quartiles[i].lower, k.quartiles[i].upper);
     // Last two cases censored: the mean is cut off at 23, the variance has no D / (D - 1).
     let c: Vec<bool> = [0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1].iter().map(|&x| x == 1).collect();
     let a = kaplan_meier(&t, &c, 95.0).unwrap();
@@ -128,7 +129,8 @@ fn censored_largest_time_and_three_groups() {
     close(b.mean_upper, 17.89943496997607, 1e-12, "ucl b");
 
     // Three groups; the third has one case.
-    let t: Vec<f64> = vec![2.0, 4.0, 4.0, 7.0, 9.0, 11.0, 11.0, 14.0, 16.0, 19.0, 23.0, 23.0, 5.0, 6.0, 10.0, 12.0, 12.0, 18.0, 21.0];
+    let t: Vec<f64> =
+        vec![2.0, 4.0, 4.0, 7.0, 9.0, 11.0, 11.0, 14.0, 16.0, 19.0, 23.0, 23.0, 5.0, 6.0, 10.0, 12.0, 12.0, 18.0, 21.0];
     let c: Vec<bool> = [0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0].iter().map(|&x| x == 1).collect();
     let g: [usize; 19] = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3];
     let groups: Vec<(Vec<f64>, Vec<bool>)> = (1..=3)
@@ -138,7 +140,7 @@ fn censored_largest_time_and_three_groups() {
         })
         .collect();
     let g2 = kaplan_meier(&groups[1].0, &groups[1].1, 95.0).unwrap();
-        close(g2.mean, 11.5, 1e-12, "mean g2");
+    close(g2.mean, 11.5, 1e-12, "mean g2");
     close(g2.mean_se, 2.3533368744071566, 1e-12, "se g2");
     close(g2.mean_lower, 6.8875444826719141, 1e-12, "lcl g2");
     close(g2.mean_upper, 16.112455517328087, 1e-12, "ucl g2");

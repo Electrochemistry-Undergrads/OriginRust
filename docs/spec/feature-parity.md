@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 48 | 136 | 54 | 238 |
+| All rows | 48 | 138 | 52 | 238 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 16 | 67 | 54 | 137 |
+| P1 and P2 together | 16 | 69 | 52 | 137 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
@@ -67,7 +67,7 @@ Cross-cutting findings:
 | Copy and paste format between graphs | Edit > Copy Format | "Use this style for all plots" button | ◐ | | P1 |
 | Save or duplicate project without data | File menu | none | ✗ | | P2 |
 | Other window types | Matrix, layout, notes, image, Excel windows; matrix operations, image processing, gridding, 3D | Window enum is workbook and graph only; project note text exists | ✗ | no matrix, layout, notes, image windows; no per-type menus | P2 |
-| Autosave and recovery | Tools > Options | atomic save only | ✗ | | P2 |
+| Autosave and recovery | Tools > Options | Tools > Autosave... (on, every 10 minutes by default; Sheaf's choice) writes the modified project as `.sheaf` to the platform recovery folder on a worker thread; at start-up a Recover / Discard / Later dialog offers what a crashed run left; a clean exit and a normal save remove it; recoveries older than 30 days are dropped (autosave.md) | ◐ | Origin's defaults and start-up prompt unmeasured; no "backup project before saving" switch; setting not yet in a Tools > Options dialog | P2 |
 | Tools managers and protection | Theme, Function Builder, Import Filters, Package, Custom Menu | none | ✗ | | P2 |
 | Help | Help menu | About only | ◐ | no help pages | P2 |
 

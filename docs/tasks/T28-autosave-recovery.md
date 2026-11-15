@@ -1,7 +1,13 @@
 # T28: Autosave and recovery
 
-**Status:** open (brief written 2026-11-14 from T18's "Autosave and recovery" row and parity row
-"Autosave and recovery", P2).
+**Status:** done, merged 2026-11-14 night (macOS session "mac-autosave"; spec `docs/spec/autosave.md`).
+`sheaf_io::recovery` (session lock files instead of process ids, orphan listing, discard, 30-day prune,
+`AutosaveSettings`), the app's timer on a worker thread with an injected clock, the start-up Recover /
+Discard / Later dialog, Tools > Autosave..., `--recovery-dir`/`--no-recovery`; 31 io and 26 UI tests;
+reviewed by three agents with each finding checked, five fixed. Left: measure Origin's defaults and
+start-up prompt on Windows (`tools/origin-ref`, screenshot to `re-workspace/scratch/t28/`); Origin's
+"backup project before saving" switch; move the setting into Tools > Options when T18's Options exists;
+undo back to the saved state does not clear the recovery (`Document` keeps no saved revision).
 **Size:** M. **Branch:** `autosave`. **Model:** Sonnet. No Origin needed for the mechanism; the defaults
 are measured once on Windows.
 **Detail:** audit E (autosave and recovery missing).

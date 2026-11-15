@@ -224,6 +224,8 @@ pub enum Cmd {
     Gadget(GadgetOp),
     /// View > Toolbars: the window that shows and hides the bars.
     Toolbars,
+    /// Tools > Autosave...: the window for the autosave switch and interval.
+    Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
     /// File > Close: close (hide) the active window, as its title bar's close button does.
@@ -1221,6 +1223,7 @@ pub fn integrate_gadget_menu(end_point_baseline: bool) -> Vec<Entry> {
 fn tools_menu() -> Vec<Entry> {
     vec![
         grey_keyed("&Options...", ctrl(Key::U)),
+        item("&Autosave...", Cmd::Autosave),
         grey("System Variables..."),
         grey("3D OpenGL Settings..."),
         grey_sub("Protection", &["Protect Project...", "Audit Log"]),
@@ -2080,6 +2083,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,
+        Cmd::Autosave => Action::Autosave,
         Cmd::ToggleStatusBar => Action::ToggleStatusBar,
         Cmd::CloseWindow => Action::HideWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::DuplicateWindow => Action::DuplicateWindow(c.active.ok_or(NEED_WINDOW)?),

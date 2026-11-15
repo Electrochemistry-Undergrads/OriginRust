@@ -19,6 +19,6 @@ the audit section named and the parity table row.
 | Multivariate: PCA, k-means, ROC, Kaplan-Meier | D | brief T29 |
 | Toolbars as separate bars, View > Toolbars customisation | A | |
 | Drawing tools: lines, arrows, rectangles, pictures, inset | C | lines, arrows, rectangles, ellipses: brief T24 (`draw-objects`); pictures and inset still open |
-| Autosave and recovery | E | brief T28; Append Project done (`21c2aea`: File > Append, the appended project in its own folder, its recalculation links dropped with a note) |
+| Autosave and recovery | E | brief T28 done (autosave.md); Append Project done (`21c2aea`: File > Append, the appended project in its own folder, its recalculation links dropped with a note) |
 | Print, Print Preview, Page Setup | A | brief T27 |
 | 3D graphs | C | last (owner's request) |

@@ -13,6 +13,7 @@ pub mod export;
 pub mod opj;
 pub mod opju;
 pub mod project_file;
+pub mod recovery;
 pub mod save;
 mod text;
 

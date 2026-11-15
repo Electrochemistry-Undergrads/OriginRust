@@ -200,7 +200,7 @@ pub fn backup_original(path: &Path) -> Result<Option<PathBuf>, IoError> {
 }
 
 /// Writes to a temporary file next to `path` and renames it over `path`.
-fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), IoError> {
+pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), IoError> {
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "project".into());
     let tmp = path.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
     let result = std::fs::write(&tmp, bytes)

@@ -5,8 +5,10 @@
 //! operations as EMF, PDF or a preview picture, so Print Preview shows what the printer gets.
 //! See `docs/spec/graphing.md`, section "Printing", for what Origin does and what is Sheaf's rule.
 
+use crate::cellformat::{FormatIndex, HAlign, LabelKind, ResolvedStyle};
 use crate::color::Color;
 use crate::column::{Column, DEFAULT_WIDTH, Designation};
+use crate::condformat::CellStyles;
 use crate::page_setup::PageSetup;
 use crate::worksheet::Worksheet;
 use std::ops::Range;
@@ -53,6 +55,16 @@ enum LabelRow {
 }
 
 impl LabelRow {
+    fn kind(&self) -> LabelKind {
+        match self {
+            LabelRow::LongName => LabelKind::LongName,
+            LabelRow::Units => LabelKind::Units,
+            LabelRow::Comments => LabelKind::Comments,
+            LabelRow::Formula => LabelKind::Formula,
+            LabelRow::Param(n) => LabelKind::Param(n.clone()),
+        }
+    }
+
     fn title(&self) -> String {
         match self {
             LabelRow::LongName => "Long Name".into(),
@@ -102,6 +114,10 @@ pub struct SheetTable<'a> {
     rows: Vec<usize>,
     labels: Vec<LabelRow>,
     style: PrintStyle,
+    /// Manual cell formats and the conditional-format colours, so the print shows the sheet as
+    /// the grid does.
+    formats: FormatIndex,
+    cond: Option<CellStyles>,
 }
 
 impl<'a> SheetTable<'a> {
@@ -112,7 +128,47 @@ impl<'a> SheetTable<'a> {
         let mut labels = vec![LabelRow::LongName, LabelRow::Units, LabelRow::Comments, LabelRow::Formula];
         labels.extend(sheet.parameter_names().into_iter().map(LabelRow::Param));
         labels.retain(|l| cols.iter().any(|&c| !l.text(&sheet.columns[c]).is_empty()));
-        SheetTable { sheet, cols, rows, labels, style }
+        let formats = sheet.format_index();
+        let cond = (!sheet.cond_formats.is_empty()).then(|| crate::condformat::evaluate(sheet, &sheet.cond_formats));
+        SheetTable { sheet, cols, rows, labels, style, formats, cond }
+    }
+
+    /// The manual format of a data cell with the conditional colours over it.
+    fn cell_style(&self, column: &Column, row: usize) -> ResolvedStyle<'a> {
+        let manual = self.formats.resolve(self.sheet, column.id, row);
+        manual.with_conditional(self.cond.as_ref().and_then(|c| c.get(column.id, row)))
+    }
+
+    /// The text of a cell in the column at `cx` of width `cw`, placed by its alignment (or the
+    /// default of its kind) and drawn in its manual font, size, colour and style.
+    fn cell_text(&self, cx: f64, cw: f64, y: f64, text: String, default: Align, st: &ResolvedStyle<'_>) -> PrintOp {
+        let s = &self.style;
+        let align = match st.h_align {
+            Some(HAlign::Left) => Align::Left,
+            Some(HAlign::Center) => Align::Center,
+            Some(HAlign::Right) => Align::Right,
+            Some(HAlign::Auto) | None => default,
+        };
+        let x = match align {
+            Align::Left => cx + s.pad,
+            Align::Center => cx + cw / 2.0,
+            Align::Right => cx + cw - s.pad,
+        };
+        PrintOp::Text {
+            x,
+            y,
+            max_w: cw - 2.0 * s.pad,
+            text,
+            align,
+            bold: st.bold,
+            size: st.size_pt.map_or(s.font_pt, |p| f64::from(p) * s.font_pt / GRID_BODY_PT),
+            fmt: TextFmt {
+                italic: st.italic,
+                underline: st.underline,
+                family: st.font.map(str::to_string),
+                color: st.text_color,
+            },
+        }
     }
 
     pub fn column_count(&self) -> usize {
@@ -176,6 +232,25 @@ impl<'a> SheetTable<'a> {
         ops.push(PrintOp::Fill { x: 0.0, y: 0.0, w: width, h: s.row_h, color: head_fill });
         ops.push(PrintOp::Fill { x: 0.0, y: s.row_h, w: width, h: head_h - s.row_h, color: label_fill });
         ops.push(PrintOp::Fill { x: 0.0, y: head_h, w: s.rownum_w, h: height - head_h, color: head_fill });
+        // Manual and conditional fills of cells and label cells.
+        if !self.formats.is_empty() || self.cond.is_some() {
+            let mut x = s.rownum_w;
+            for &c in &cols {
+                let cw = widths[c];
+                let column = &self.sheet.columns[self.cols[c]];
+                for (i, l) in self.labels.iter().enumerate() {
+                    if let Some(color) = self.formats.resolve_label(self.sheet, column.id, &l.kind()).fill {
+                        ops.push(PrintOp::Fill { x, y: s.row_h * (1 + i) as f64, w: cw, h: s.row_h, color });
+                    }
+                }
+                for (j, &r) in rows.iter().enumerate() {
+                    if let Some(color) = self.cell_style(column, self.rows[r]).fill {
+                        ops.push(PrintOp::Fill { x, y: head_h + s.row_h * j as f64, w: cw, h: s.row_h, color });
+                    }
+                }
+                x += cw;
+            }
+        }
         // The grid.
         let mut y = 0.0;
         for _ in 0..=(1 + self.labels.len() + rows.len()) {
@@ -205,21 +280,15 @@ impl<'a> SheetTable<'a> {
                 align: Align::Center,
                 bold: true,
                 size: s.font_pt,
+                fmt: TextFmt::default(),
             });
             for (i, l) in self.labels.iter().enumerate() {
                 let text = l.text(&self.sheet.columns[pos]);
                 if text.is_empty() {
                     continue;
                 }
-                ops.push(PrintOp::Text {
-                    x: cx + s.pad,
-                    y: base(s.row_h * (1 + i) as f64),
-                    max_w: cw - 2.0 * s.pad,
-                    text,
-                    align: Align::Left,
-                    bold: false,
-                    size: s.font_pt,
-                });
+                let st = self.formats.resolve_label(self.sheet, self.sheet.columns[pos].id, &l.kind());
+                ops.push(self.cell_text(cx, cw, base(s.row_h * (1 + i) as f64), text, Align::Left, &st));
             }
         }
         for (i, l) in self.labels.iter().enumerate() {
@@ -231,6 +300,7 @@ impl<'a> SheetTable<'a> {
                 align: Align::Right,
                 bold: false,
                 size: s.font_pt,
+                fmt: TextFmt::default(),
             });
         }
         // Body: row numbers and the cells as the sheet shows them.
@@ -244,6 +314,7 @@ impl<'a> SheetTable<'a> {
                 align: Align::Right,
                 bold: false,
                 size: s.font_pt,
+                fmt: TextFmt::default(),
             });
             for (k, &c) in cols.iter().enumerate() {
                 let column = &self.sheet.columns[self.cols[c]];
@@ -254,16 +325,9 @@ impl<'a> SheetTable<'a> {
                 let numeric = !matches!(column.data, crate::column::ColumnData::Text(_))
                     && column.data.text_cell(self.rows[r]).is_none();
                 let (cx, cw) = (xs[k], widths[c]);
-                let (tx, align) = if numeric { (cx + cw - s.pad, Align::Right) } else { (cx + s.pad, Align::Left) };
-                ops.push(PrintOp::Text {
-                    x: tx,
-                    y: base(top),
-                    max_w: cw - 2.0 * s.pad,
-                    text,
-                    align,
-                    bold: false,
-                    size: s.font_pt,
-                });
+                let default = if numeric { Align::Right } else { Align::Left };
+                let st = self.cell_style(column, self.rows[r]);
+                ops.push(self.cell_text(cx, cw, base(top), text, default, &st));
             }
         }
         if s.footer_h > 0.0 {
@@ -275,6 +339,7 @@ impl<'a> SheetTable<'a> {
                 align: Align::Left,
                 bold: false,
                 size: s.font_pt,
+                fmt: TextFmt::default(),
             });
         }
         ops
@@ -323,8 +388,25 @@ pub enum PrintOp {
         align: Align,
         bold: bool,
         size: f64,
+        /// Manual cell format beyond bold and size (Format Cells); default for all other text.
+        fmt: TextFmt,
     },
 }
+
+/// The parts of a text's look that only formatted cells use.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TextFmt {
+    pub italic: bool,
+    pub underline: bool,
+    /// A font family name; `None` is the printout's own font.
+    pub family: Option<String>,
+    /// `None` is black.
+    pub color: Option<Color>,
+}
+
+/// The font size of the grid's body text in points; a formatted size is scaled by the ratio of
+/// the printed font to this, so that a cell looks as big next to the others as it does on screen.
+const GRID_BODY_PT: f64 = 12.0;
 
 /// One printed page: which of the table's shown rows and visible columns it holds.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -511,6 +593,97 @@ mod tests {
         let has = |s: &str| ops.iter().any(|o| matches!(o, PrintOp::Text { text, .. } if text == s));
         assert!(has("0.84147"), "five decimals as the grid shows");
         assert!(has("t40"));
+    }
+
+    fn styled() -> crate::cellformat::CellFormat {
+        crate::cellformat::CellFormat {
+            bold: Some(true),
+            italic: Some(true),
+            underline: Some(true),
+            font: Some("Courier New".into()),
+            size_pt: Some(24.0),
+            text_color: Some(Color::rgb(200, 0, 0)),
+            fill: Some(Color::rgb(0, 200, 0)),
+            h_align: Some(HAlign::Center),
+        }
+    }
+
+    fn text_op<'a>(ops: &'a [PrintOp], t: &str) -> &'a PrintOp {
+        ops.iter().find(|o| matches!(o, PrintOp::Text { text, .. } if text == t)).expect(t)
+    }
+
+    #[test]
+    fn formatted_cells_print_styled_and_unformatted_ones_do_not() {
+        use crate::cellformat::FormatTarget;
+        let mut ws = sheet();
+        ws.apply_cell_format(FormatTarget::cells(vec![ColumnId(3)], 1, Some(1)), styled());
+        let t = SheetTable::new(&ws, PrintStyle::default());
+        let (pages, _) = t.pages_for(&setup());
+        let ops = t.draw_page(&pages[0], 1);
+        let PrintOp::Text { bold, size, fmt, align, x, .. } = text_op(&ops, "t2") else { unreachable!() };
+        assert!(*bold && fmt.italic && fmt.underline);
+        assert_eq!(fmt.family.as_deref(), Some("Courier New"));
+        assert_eq!(fmt.color, Some(Color::rgb(200, 0, 0)));
+        assert_eq!(*align, Align::Center);
+        assert_eq!(*size, 24.0 * 8.0 / 12.0, "scaled like the printed font");
+        // The cell's centre: the row number column (30) plus two 50 pt columns plus half of the third.
+        assert_eq!(*x, 30.0 + 100.0 + 25.0);
+        let PrintOp::Text { bold, fmt, align, .. } = text_op(&ops, "t1") else { unreachable!() };
+        assert!(!*bold && *fmt == TextFmt::default() && *align == Align::Left);
+        let fills: Vec<_> = ops
+            .iter()
+            .filter(|o| matches!(o, PrintOp::Fill { color, .. } if *color == Color::rgb(0, 200, 0)))
+            .collect();
+        assert_eq!(fills.len(), 1, "one filled cell");
+        let PrintOp::Fill { x, w, h, y, .. } = fills[0] else { unreachable!() };
+        assert_eq!((*x, *w, *h), (130.0, 50.0, 12.0));
+        assert_eq!(*y, t.head_height() + 12.0, "the second data row");
+    }
+
+    #[test]
+    fn printed_label_cells_take_their_format_and_conditional_colours_win() {
+        use crate::cellformat::{CellFormat, FormatTarget, LabelKind};
+        use crate::condformat::{CondFormat, CondRange, Rule};
+        let mut ws = sheet();
+        ws.apply_cell_format(
+            FormatTarget::label_rows(vec![ColumnId(1)], vec![LabelKind::LongName]),
+            CellFormat { bold: Some(true), fill: Some(Color::rgb(1, 2, 3)), ..Default::default() },
+        );
+        // B: manual fill and text colour on every row; a conditional rule colours the maximum.
+        ws.apply_cell_format(
+            FormatTarget::whole_columns(vec![ColumnId(2)]),
+            CellFormat {
+                fill: Some(Color::rgb(9, 9, 9)),
+                text_color: Some(Color::rgb(9, 9, 8)),
+                bold: Some(true),
+                ..Default::default()
+            },
+        );
+        let colours = |fill, font| crate::condformat::Colours { fill: Some(fill), font: Some(font) };
+        let rule = CondFormat::new(
+            &ws,
+            CondRange::whole_columns(vec![ColumnId(2)]),
+            Rule::MinMax {
+                dir: crate::condformat::Direction::ColumnWise,
+                max: colours(crate::condformat::MAX_FILL, crate::condformat::MAX_FONT),
+                min: colours(crate::condformat::MIN_FILL, crate::condformat::MIN_FONT),
+            },
+        );
+        ws.cond_formats.push(rule);
+        let t = SheetTable::new(&ws, PrintStyle::default());
+        let (pages, _) = t.pages_for(&setup());
+        let ops = t.draw_page(&pages[0], 1);
+        assert!(matches!(text_op(&ops, "Index"), PrintOp::Text { bold: true, .. }));
+        assert!(ops.iter().any(|o| matches!(o, PrintOp::Fill { color, .. } if *color == Color::rgb(1, 2, 3))));
+        // Of 40 rows of B, the smallest and the largest get the conditional fill instead.
+        let manual = |o: &&PrintOp| matches!(o, PrintOp::Fill { color, .. } if *color == Color::rgb(9, 9, 9));
+        assert_eq!(ops.iter().filter(manual).count(), 38);
+        assert!(ops.iter().any(|o| matches!(o, PrintOp::Fill { color, .. } if *color == crate::condformat::MIN_FILL)));
+        let PrintOp::Text { fmt, bold, .. } = text_op(&ops, "0.5") else { unreachable!() };
+        assert_eq!(fmt.color, Some(crate::condformat::MIN_FONT));
+        assert!(*bold, "manual bold stays under a conditional colour");
+        let PrintOp::Text { fmt, .. } = text_op(&ops, "1.5") else { unreachable!() };
+        assert_eq!(fmt.color, Some(Color::rgb(9, 9, 8)), "unmarked cells keep the manual colour");
     }
 
     #[test]

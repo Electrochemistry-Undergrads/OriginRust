@@ -20,14 +20,18 @@ use std::ops::Range;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HAlign {
+    /// The default of the cell's kind (left for text, right for numbers); lets a later range
+    /// undo an earlier alignment.
+    Auto,
     Left,
     Center,
     Right,
 }
 
 /// The look of a cell; `None` leaves that property to earlier ranges or to the default.
-/// An empty `font` name means "the default font"; a fill or text colour with zero alpha means
-/// "no fill" / "the default colour" (both let a later range undo an earlier one).
+/// An empty `font` name means "the default font", a size of 0 "the default size", a fill or text
+/// colour with zero alpha "no fill" / "the default colour" and [`HAlign::Auto`] "the default
+/// alignment"; each lets a later range undo an earlier one.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct CellFormat {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -320,10 +324,10 @@ fn finish(f: CellFormat, font: Option<&str>) -> ResolvedStyle<'_> {
         italic: f.italic.unwrap_or(false),
         underline: f.underline.unwrap_or(false),
         font: font.filter(|n| !n.is_empty()),
-        size_pt: f.size_pt,
+        size_pt: f.size_pt.filter(|p| *p > 0.0),
         text_color: visible(f.text_color),
         fill: visible(f.fill),
-        h_align: f.h_align,
+        h_align: f.h_align.filter(|a| *a != HAlign::Auto),
     }
 }
 

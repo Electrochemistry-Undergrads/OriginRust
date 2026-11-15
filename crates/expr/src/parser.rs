@@ -18,6 +18,7 @@ use crate::ast::{ColumnLabel, ColumnRef, Kind, Node, UnOp, WorksheetRef};
 use crate::error::ExprError;
 use crate::funcs::{Agg, BinOp, Func, Resolved, resolve};
 use crate::lexer::{Tok, Token, lex};
+use crate::text::StrFn;
 
 /// How deeply parentheses, signs and `?:` may nest before the parser gives up.
 const MAX_NESTING: u32 = 64;
@@ -260,6 +261,12 @@ impl Parser {
     fn primary(&mut self) -> Result<Node, ExprError> {
         let t = self.advance();
         match t.tok {
+            Tok::Percent => {
+                self.expect(Tok::LParen, "after '%' string substitution")?;
+                let value = self.ternary()?;
+                self.expect(Tok::RParen, "after the substituted expression")?;
+                Node::new(Kind::Call { func: Func::Str(StrFn::Value), args: vec![value] }, t.pos)
+            }
             Tok::LBracket => {
                 let book = self.reference_name("workbook")?;
                 self.expect(Tok::RBracket, "after the workbook name")?;

@@ -1,6 +1,6 @@
 # T24: Drawn objects on graphs: Line, Arrow, Rectangle, Ellipse
 
-**Status:** done, merged (`542fef7`). Checks pass (fmt, clippy with warnings denied, all tests). On 2026-11-13 the Line, Arrow and Rectangle tools were measured in Origin and their defaults copied (0.5 pt, 10 pt head, LT Gray rectangle fill; spec 17). Not done: reading drawn objects from `.opj`, attachment to the page or to scales, copy and paste, ordering.
+**Status:** done, merged (`542fef7`). Checks pass (fmt, clippy with warnings denied, all tests). On 2026-11-13 the Line, Arrow and Rectangle tools were measured in Origin and their defaults copied (0.5 pt, 10 pt head, LT Gray rectangle fill; spec 17). Front/back ordering within a layer is added (`shape-ordering`, 2026-11-15), with selection-safe undo/redo; this ordering scope is Sheaf's choice and unmeasured. Not done: reading drawn objects from `.opj`, attachment to the page or to scales, copy and paste, ordering across object kinds/layers.
 **Size:** M. **Branch:** `draw-objects`. **Model:** Sonnet.
 **Detail:** audit C "Drawing tools"; T18 backlog row "Drawing tools" (this brief covers lines, arrows,
 rectangles and ellipses; pictures and the inset graph stay in the backlog).

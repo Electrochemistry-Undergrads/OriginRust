@@ -107,6 +107,8 @@ pub enum GraphOp {
     DeleteLabel { layer: usize, label: usize },
     /// Delete on a drawn line, arrow, rectangle or ellipse.
     DeleteShape { layer: usize, shape: usize },
+    /// Move a drawn object to the top or bottom of its own layer's shape stack.
+    OrderShape { layer: usize, shape: usize, front: bool },
     /// Hide Layer (every plot of the layer is hidden).
     HideLayer { layer: usize },
     /// Hide Other Layers.

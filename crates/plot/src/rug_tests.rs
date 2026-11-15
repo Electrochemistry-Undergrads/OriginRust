@@ -177,7 +177,7 @@ fn one_plot_can_be_chosen_and_auto_colour_follows_each_plot() {
             .collect::<Vec<_>>()
     };
     assert_eq!(colours(&p), vec![Color::rgb(10, 0, 0), Color::rgb(0, 10, 0)]);
-    set(&mut p, g, |l| l.y_axis.rug.plot = Some(1));
+    set(&mut p, g, |l| l.y_axis.rug.plot = Some(l.plots[1].y));
     assert_eq!(colours(&p), vec![Color::rgb(0, 10, 0)]);
 }
 
@@ -280,4 +280,85 @@ fn the_scatter_rug_template_has_rugs_on_the_bottom_and_left_axes() {
     assert!(!l.x_axis.rug_opposite.show && !l.y_axis.rug_opposite.show);
     let svg = render_svg_with(&p, g, &FixedMetrics).unwrap();
     assert!(svg.contains("<path"));
+}
+
+#[test]
+fn a_histogram_rug_marks_the_raw_observations_on_the_value_axis_only() {
+    let vals = [40.7, 47.4, 47.4, 49.6, 52.0, 69.0];
+    let mut p = Project::new();
+    let b = p.add_workbook("data");
+    let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vals.to_vec())).unwrap();
+    let g = p.add_graph(Template::Histogram);
+    p.add_plot_xy(g, 0, None, y, None).unwrap();
+    set(&mut p, g, |l| {
+        l.plots[0].kind = sheaf_core::graph::PlotKind::Histogram;
+        l.x_axis.rug = rug();
+        l.y_axis.rug = rug();
+        l.x_axis.min = Some(35.0);
+        l.x_axis.max = Some(70.0);
+    });
+    let (s, f) = segs(&p, g);
+    // One vertical line per observation (not per bin), none beside the count axis.
+    assert_eq!(s.len(), vals.len(), "{s:?}");
+    assert!(s.iter().all(|c| near(c.0, c.2)), "all marks are vertical lines under the X axis");
+    let want: Vec<f64> = vals.iter().map(|v| f.x + (v - 35.0) / 35.0 * f.w).collect();
+    for w in want {
+        assert!(s.iter().any(|c| near(c.0, w)), "missing a mark at {w}");
+    }
+}
+
+#[test]
+fn a_rug_follows_its_plot_when_plots_are_removed_and_falls_back_to_all() {
+    let (mut p, g) = graph(&[1.0, 2.0], &[&[1.0, 2.0], &[3.0, 4.0], &[5.0, 6.0]]);
+    set(&mut p, g, |l| {
+        l.plots[0].symbol.color = Color::rgb(10, 0, 0);
+        l.plots[1].symbol.color = Color::rgb(0, 10, 0);
+        l.plots[2].symbol.color = Color::rgb(0, 0, 10);
+        l.y_axis.rug = Rug { show: true, plot: Some(l.plots[1].y), ..Rug::default() };
+    });
+    let colours = |p: &Project| {
+        let s = layout::build_scene(p, g, &FixedMetrics).unwrap();
+        let mut c: Vec<Color> = s.layers[0]
+            .overlay
+            .iter()
+            .filter_map(|i| match i {
+                scene::Item::Path { fill: None, stroke: Some(st), .. }
+                    if [Color::rgb(10, 0, 0), Color::rgb(0, 10, 0), Color::rgb(0, 0, 10)].contains(&st.color) =>
+                {
+                    Some(st.color)
+                }
+                _ => None,
+            })
+            .collect();
+        c.dedup();
+        c
+    };
+    assert_eq!(colours(&p), vec![Color::rgb(0, 10, 0)]);
+    set(&mut p, g, |l| {
+        l.plots.remove(0);
+    });
+    assert_eq!(colours(&p), vec![Color::rgb(0, 10, 0)], "the same plot, now at index 0");
+    set(&mut p, g, |l| {
+        l.plots.remove(0);
+    });
+    assert_eq!(colours(&p), vec![Color::rgb(0, 0, 10)], "no plot with the column: <All> (the one left)");
+}
+
+#[test]
+fn a_waterfall_rug_reserves_no_room_for_ticks_it_does_not_draw() {
+    let build = |ticks: bool| {
+        let (mut p, g) = graph(&[1.0, 2.0, 3.0], &[&[1.0, 2.0, 3.0], &[2.0, 3.0, 4.0]]);
+        set(&mut p, g, |l| {
+            l.stack = sheaf_core::graph::Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 };
+            l.x_axis.rug_opposite = rug();
+            l.y_axis.rug_opposite = rug();
+            l.x_axis.opposite_ticks = ticks;
+            l.y_axis.opposite_ticks = ticks;
+        });
+        let s = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+        s.layers[0].clip
+    };
+    // A waterfall draws no opposite ticks, so the setting must not change the frame.
+    let (a, b) = (build(true), build(false));
+    assert!(near(a.x, b.x) && near(a.y, b.y) && near(a.w, b.w) && near(a.h, b.h), "{a:?} vs {b:?}");
 }

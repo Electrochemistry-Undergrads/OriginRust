@@ -1011,8 +1011,10 @@ pub struct Axis {
 pub struct Rug {
     /// Show the rug panel.
     pub show: bool,
-    /// Which plot's points: its index in the layer; `None` is Origin's `<All>`.
-    pub plot: Option<usize>,
+    /// Which plot's points: the Y column of the plot (the first plot of the layer with that Y column);
+    /// `None` is Origin's `<All>`. A column no plot of the layer uses any more also means `<All>`.
+    /// A column id, not a position, so removing, reordering or moving plots keeps the choice.
+    pub plot: Option<ColumnId>,
     /// Line colour; `None` is Auto, the colour of each plot.
     pub color: Option<Color>,
     /// Line thickness in points.

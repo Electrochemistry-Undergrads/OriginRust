@@ -78,17 +78,17 @@ pub fn dialog_body(
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                 let layer = &mut graph.layers[li];
                 if *tab == AxisTab::Rug {
-                    let names: Vec<String> = layer
-                        .plots
-                        .iter()
-                        .enumerate()
-                        .map(|(i, p)| {
-                            columns
+                    // One entry per Y column (the rug refers to the first plot with that column).
+                    let mut names: Vec<(ColumnId, String)> = Vec::new();
+                    for (i, p) in layer.plots.iter().enumerate() {
+                        if names.iter().all(|n| n.0 != p.y) {
+                            let name = columns
                                 .iter()
                                 .find(|c| c.0 == p.y)
-                                .map_or_else(|| format!("Plot {}", i + 1), |c| c.1.clone())
-                        })
-                        .collect();
+                                .map_or_else(|| format!("Plot {}", i + 1), |c| c.1.clone());
+                            names.push((p.y, name));
+                        }
+                    }
                     let cartesian = layer.coords.polar().is_none() && layer.coords.ternary().is_none();
                     let axis = if *vertical { &mut layer.y_axis } else { &mut layer.x_axis };
                     let id = if *vertical { "y" } else { "x" };
@@ -123,7 +123,7 @@ pub fn rug_mut(axis: &mut Axis, far: bool) -> &mut Rug {
 }
 
 /// The Rug tab (graphing spec 18.10): one short line per plotted point in a strip beside the chosen edge.
-fn rug_tab(ui: &mut egui::Ui, axis: &mut Axis, far: bool, cartesian: bool, plots: &[String], id: &str) {
+fn rug_tab(ui: &mut egui::Ui, axis: &mut Axis, far: bool, cartesian: bool, plots: &[(ColumnId, String)], id: &str) {
     if !cartesian {
         ui.weak("Rugs are offered for 2D Cartesian layers only.");
         return;
@@ -134,14 +134,15 @@ fn rug_tab(ui: &mut egui::Ui, axis: &mut Axis, far: bool, cartesian: bool, plots
     ui.add_enabled_ui(rug.show, |ui| {
         grid(ui, &format!("{id}_rug_head"), |ui| {
             ui.label("Data");
-            let shown = match rug.plot {
-                None => "<All>".to_string(),
-                Some(k) => plots.get(k).cloned().unwrap_or_else(|| format!("Plot {}", k + 1)),
-            };
+            // A column no plot has any more draws as `<All>` too.
+            let shown = rug
+                .plot
+                .and_then(|c| plots.iter().find(|p| p.0 == c))
+                .map_or_else(|| "<All>".to_string(), |p| p.1.clone());
             egui::ComboBox::from_id_salt(format!("{id}_rug_data")).selected_text(shown).show_ui(ui, |ui| {
                 ui.selectable_value(&mut rug.plot, None, "<All>");
-                for (k, name) in plots.iter().enumerate() {
-                    ui.selectable_value(&mut rug.plot, Some(k), name);
+                for (col, name) in plots {
+                    ui.selectable_value(&mut rug.plot, Some(*col), name);
                 }
             });
             ui.end_row();

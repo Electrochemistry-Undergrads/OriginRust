@@ -20,12 +20,13 @@ pub(crate) fn main_extent(axis: &Axis, f: Rect) -> f64 {
 }
 
 /// How far the rug of the opposite edge reaches out of the frame (its ticks, when drawn, come first).
-pub(crate) fn opposite_reach(axis: &Axis, f: Rect) -> f64 {
+/// `ticks_across` is false where the layer draws no ticks on the opposite edge (a waterfall).
+pub(crate) fn opposite_reach(axis: &Axis, f: Rect, ticks_across: bool) -> f64 {
     let s = extent(&axis.rug_opposite, f);
     if s == 0.0 || axis.side == AxisSide::Hidden {
         return 0.0;
     }
-    s + if axis.opposite_ticks { outward_extent(axis) } else { 0.0 }
+    s + if ticks_across && axis.opposite_ticks { outward_extent(axis) } else { 0.0 }
 }
 
 /// The colour of a plot: its line colour for line and area kinds, else its symbol colour.
@@ -38,20 +39,35 @@ pub(crate) fn plot_color(pd: &PlotData) -> Color {
     }
 }
 
-/// The plots a rug shows: all with points, or the one at index `rug.plot` of the layer.
+/// The plots a rug shows: all with points, or the first plot of the layer whose Y column is `rug.plot`
+/// (`<All>` when no plot has that column any more).
 fn selected<'a, 'b>(layer: &Layer, rug: &Rug, pds: &'a [PlotData<'b>]) -> Vec<&'a PlotData<'b>> {
+    let chosen = rug.plot.and_then(|id| layer.plots.iter().find(|p| p.y == id));
     pds.iter()
         .filter(|pd| pd.pie.is_none() && pd.boxed.is_none() && pd.violin.is_none())
-        .filter(|pd| match rug.plot {
-            None => true,
-            Some(k) => layer.plots.get(k).is_some_and(|p| std::ptr::eq(p, pd.plot)),
-        })
+        .filter(|pd| chosen.is_none_or(|c| std::ptr::eq(c, pd.plot)))
         .collect()
 }
 
 /// Positions (0..1 along the axis, 0 at the axis' start) of the points of one plot that the rug
 /// marks: finite in both directions, not masked, within the axis range.
+///
+/// Rugs mark the plotted positions (offsets, stacks and categorical X as drawn). A histogram is the
+/// exception: its plot data is bins, so the rug marks the raw observations along the value axis (X) and
+/// nothing on the count axis.
 pub(crate) fn unit_positions(pd: &PlotData, axis: &ResolvedAxis, horizontal: bool) -> Vec<f64> {
+    if let Some(raw) = &pd.hist_raw {
+        if !horizontal {
+            return Vec::new();
+        }
+        return raw
+            .iter()
+            .filter_map(|&v| {
+                let u = axis.to_unit(v);
+                (v.is_finite() && u.is_finite() && (-1e-9..=1.0 + 1e-9).contains(&u)).then_some(u.clamp(0.0, 1.0))
+            })
+            .collect();
+    }
     pd.rows()
         .filter(|r| !pd.mask.is_some_and(|m| m.contains(r)))
         .filter_map(|r| {

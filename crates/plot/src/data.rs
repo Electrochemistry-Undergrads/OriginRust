@@ -80,6 +80,9 @@ pub(crate) struct PlotData<'a> {
     pub closing: Option<usize>,
     /// The cells of the label column of a plot whose data labels come from a column, one per row.
     pub label_texts: Option<Vec<String>>,
+    /// The observations a histogram plot bins (shown, unmasked rows of its Y column), kept for rugs
+    /// because `x`/`y` hold bin centres and counts; `None` for other kinds.
+    pub hist_raw: Option<Vec<f64>>,
 }
 
 /// The numbers of one box of a box chart (Origin's defaults: the box runs from the 25th to the
@@ -343,6 +346,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             color_z: plot.color_from.and_then(|id| project.numeric(id)),
             spokes: None,
             closing: None,
+            hist_raw: None,
             label_texts: match plot.decor.labels.form {
                 LabelForm::Column { column } if plot.decor.labels.enable => project.column(column).map(cell_texts),
                 _ => None,
@@ -353,6 +357,8 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 // The plot shows the counts of the bins of its Y values: one point per bin.
                 let values = pd.visible_values();
                 let Some((centres, counts)) = histogram_points(&values, &plot.hist) else { continue };
+                pd.hist_raw =
+                    Some(pd.rows().filter(|r| !pd.mask.is_some_and(|m| m.contains(r))).map(|r| pd.y[r]).collect());
                 pd.start = 0;
                 pd.end = counts.len();
                 pd.x = Some(Cow::Owned(centres));

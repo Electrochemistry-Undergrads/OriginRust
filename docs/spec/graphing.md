@@ -2734,7 +2734,16 @@ Sheaf's choices (all unmeasured):
 - Marks: one segment per plotted row across the panel, at the value of the row on that axis (bottom/top: X as
   drawn; left/right: Y as drawn, so horizontal bars and exchanged axes work), through the axis' own transform
   (log, reversed). Rows with a missing X or Y, masked rows, filtered rows and values outside the axis range
-  get no mark. Pie, box and violin plots have none.
+  get no mark. Pie, box and violin plots have none. Rugs mark the plotted positions: stacked and offset
+  plots, and bars or columns with a categorical X, are marked where they are drawn. A histogram is the
+  exception: its plot data is bins, so its rug marks the raw observations (shown, unmasked rows of the Y
+  column) along the value axis (X) and nothing beside the count axis.
+- Data choice: `Rug::plot` is the Y column id of the chosen plot, not a position; the rug marks the first plot
+  of the layer with that Y column, so removing, reordering or moving other plots keeps the choice. When no
+  plot of the layer has that column any more the rug falls back to `<All>` (the dialog shows `<All>`). The
+  dialog lists one entry per Y column.
+- Waterfall: a waterfall layer draws no ticks on the opposite edges, so an opposite rug starts at the frame
+  there and the page fit reserves room for the rug only, the same as drawn.
 - Margin: space left empty at both ends of each segment across the panel, as a percentage of the panel
   (clamped below 50). Gap: with Overlap cleared each selected plot gets a sub-panel, the first plot nearest the
   axis, separated by Gap % of the panel size (the whole panel keeps its Size). Overlap on: all plots share
@@ -2745,5 +2754,5 @@ Sheaf's choices (all unmeasured):
 - Template: Scatter + Rug (`scatter-rug`, Plot > Symbol and the CLI/MCP template name) is the scatter template
   with the rug shown on the bottom and left axes. Polar and ternary layers have no rug.
 - `.opj` save: the rug is not written; a save warning names it, the companion file keeps it.
-- Not done: rug hit testing / selection, rugs in a waterfall, a rug on the right axis of a double-Y layer is
+- Not done: rug hit testing / selection, a rug on the right axis of a double-Y layer is
   possible (it is the opposite edge of that layer's Y axis) but not tuned.

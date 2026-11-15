@@ -314,7 +314,7 @@ fn group_geometry(
             edges.bottom = edges.bottom.max(b);
             continue;
         }
-        label_edges(&mut edges, &g.layers[i], f, x, y, m);
+        label_edges(&mut edges, &g.layers[i], f, x, y, m, stack::waterfall(g, i).is_some());
     }
     let fitted = fit_on_page(bounds, &edges, &g.page);
     let f = if bounds == nominal { fitted } else { scale_into(nominal, bounds, fitted) };
@@ -369,7 +369,18 @@ impl LabelEdges {
 }
 
 /// Widens `e` by the tick labels and titles of one layer laid out at frame `f`.
-fn label_edges(e: &mut LabelEdges, layer: &Layer, f: Rect, x: &ResolvedAxis, y: &ResolvedAxis, m: &dyn TextMeasurer) {
+///
+/// `waterfall` is true for a layer drawn as a waterfall, which draws no ticks on the opposite edges, so
+/// an opposite rug starts at the frame there (the same view of the axes as `layer_scene` draws with).
+fn label_edges(
+    e: &mut LabelEdges,
+    layer: &Layer,
+    f: Rect,
+    x: &ResolvedAxis,
+    y: &ResolvedAxis,
+    m: &dyn TextMeasurer,
+    waterfall: bool,
+) {
     let mut scratch = Vec::new();
     let (xa, ya) = (&layer.x_axis, &layer.y_axis);
     if let Some(p) = layer.coords.polar() {
@@ -404,7 +415,7 @@ fn label_edges(e: &mut LabelEdges, layer: &Layer, f: Rect, x: &ResolvedAxis, y: 
         }
         AxisSide::Hidden => {}
     }
-    let across = crate::rug::opposite_reach(xa, f);
+    let across = crate::rug::opposite_reach(xa, f, !waterfall);
     if across > 0.0 {
         match xa.side {
             AxisSide::Normal => e.top = e.top.min(f.y - across),
@@ -425,7 +436,7 @@ fn label_edges(e: &mut LabelEdges, layer: &Layer, f: Rect, x: &ResolvedAxis, y: 
         }
         AxisSide::Hidden => {}
     }
-    let across = crate::rug::opposite_reach(ya, f);
+    let across = crate::rug::opposite_reach(ya, f, !waterfall);
     if across > 0.0 {
         match ya.side {
             AxisSide::Normal => e.right = e.right.max(f.x + f.w + across),

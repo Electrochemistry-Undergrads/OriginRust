@@ -34,7 +34,7 @@ use sheaf_core::{Project, WindowId};
 /// Builds the scene of a graph.
 pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasurer) -> Result<Scene, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    let pds: Vec<LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
+    let pds: Vec<LayerData> = data::collect_graph(project, g);
     let geoms = graph_geometry(project, g, &pds, m);
     let x_titles = title_places(project, g, &geoms, &pds, Dim::X, m);
     let y_titles = title_places(project, g, &geoms, &pds, Dim::Y, m);
@@ -462,6 +462,10 @@ fn label_edges(
             _ => e.bottom = e.bottom.max(f.y + f.h + across),
         }
     }
+    // The colour scale of a hexbin plot beside the frame.
+    if layer.display.show_data && layer.plots.iter().any(|p| p.visible && p.kind.is_hexbin()) {
+        e.right = e.right.max(f.x + f.w + crate::hexbin::scale_reserve(ya.tick_font.size_pt));
+    }
     let y_size = ya.title_font.size_pt;
     match ya.side {
         AxisSide::Normal => {
@@ -803,6 +807,9 @@ fn layer_scene(
     rec(objects, out, start, ObjectKind::YTitle, &[]);
     if layer.display.data_on_top {
         scene.underlay_len = out.len();
+    }
+    if layer.display.show_data {
+        crate::hexbin::draw_scale(out, layer, pds, geom, m);
     }
     draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
     scene

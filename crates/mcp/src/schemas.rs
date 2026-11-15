@@ -88,6 +88,7 @@ fn style_schema() -> Value {
             ("x_label_angle", n("Angle of the X tick labels in degrees.")),
             ("bar_gap", n("Gap between bars, percent.")),
             ("bar_overlap", n("Overlap of bars, percent.")),
+            ("hex_bins", n("Hexbin plots: number of bins along X, 2 to 1000 (default 20).")),
             (
                 "text_labels",
                 json!({"type": "array", "description": "Text placed in the layer; x and y are fractions of the layer frame, (0,0) the top left.",
@@ -310,7 +311,7 @@ pub fn defs() -> Vec<Def> {
                     (
                         "template",
                         s(
-                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), scatter-rug (scatter with rug marks beside the bottom and left axes), violin (also violin-box, violin-point, violin-quartile, violin-stick, half-violin), ridgeline (one density curve per y column, stacked up the page), ... (the names of sheaf plot --template). Default: what the data suggests.",
+                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), scatter-rug (scatter with rug marks beside the bottom and left axes), violin (also violin-box, violin-point, violin-quartile, violin-stick, half-violin), ridgeline (one density curve per y column, stacked up the page), hexbin (x against the first y column, binned into hexagons coloured by count, with a colour scale; no right axis), ... (the names of sheaf plot --template). Default: what the data suggests.",
                         ),
                     ),
                     ("book", s(BOOK)),

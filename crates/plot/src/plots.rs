@@ -91,6 +91,8 @@ pub(crate) fn draw_plot(
         crate::violin::draw_violin(out, pd, geom);
     } else if plot.kind.is_ridgeline() {
         crate::ridgeline::draw_ridge(out, pd, geom);
+    } else if plot.kind.is_hexbin() {
+        crate::hexbin::draw_hexbin(out, pd, geom);
     } else if plot.kind.is_bar() {
         draw_columns(out, pd, geom);
     }
@@ -1150,7 +1152,7 @@ const BUBBLE_MAX_PT: f64 = 20.0;
 
 /// The colour of a colour mapped symbol at `t` in 0..1: blue, cyan, green, yellow, red (a stand-in:
 /// Origin's default colour map was not measured).
-fn map_color(t: f64) -> sheaf_core::Color {
+pub(crate) fn map_color(t: f64) -> sheaf_core::Color {
     const STOPS: [(f64, f64, f64); 5] =
         [(0.0, 0.0, 255.0), (0.0, 255.0, 255.0), (0.0, 255.0, 0.0), (255.0, 255.0, 0.0), (255.0, 0.0, 0.0)];
     let x = t.clamp(0.0, 1.0) * (STOPS.len() - 1) as f64;

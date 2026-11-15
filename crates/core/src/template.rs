@@ -105,10 +105,13 @@ pub enum Template {
     /// Ridgeline chart (Origin's "Ridgeline Chart", 2022): every Y column a density curve on a
     /// baseline at its column index, with the colours of the box chart template.
     Ridgeline,
+    /// Hexbin plot (Origin's "Hexbin", 2027): the X and Y columns binned into hexagons coloured by their
+    /// count. The legend is hidden: the colour scale beside the layer names the colours.
+    Hexbin,
 }
 
 impl Template {
-    pub const ALL: [Template; 40] = [
+    pub const ALL: [Template; 41] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -133,6 +136,7 @@ impl Template {
         Template::ViolinStick,
         Template::HalfViolin,
         Template::Ridgeline,
+        Template::Hexbin,
         Template::Bubble,
         Template::ColorMapped,
         Template::BubbleColorMapped,
@@ -194,6 +198,7 @@ impl Template {
             Template::ViolinStick => "violin-stick",
             Template::HalfViolin => "half-violin",
             Template::Ridgeline => "ridgeline",
+            Template::Hexbin => "hexbin",
         }
     }
 
@@ -239,6 +244,7 @@ impl Template {
             Template::ViolinStick => "Violin with Stick",
             Template::HalfViolin => "Half Violin",
             Template::Ridgeline => "Ridgeline Chart",
+            Template::Hexbin => "Hexbin",
         }
     }
 
@@ -303,6 +309,13 @@ impl Template {
             Template::ViolinStick => from_red(general(id, name, PlotKind::ViolinStick)),
             Template::HalfViolin => from_red(general(id, name, PlotKind::HalfViolin)),
             Template::Ridgeline => from_red(general(id, name, PlotKind::Ridgeline)),
+            Template::Hexbin => {
+                let mut g = from_red(general(id, name, PlotKind::Hexbin));
+                for l in &mut g.layers {
+                    l.legend.visible = false;
+                }
+                g
+            }
         }
     }
 }
@@ -834,7 +847,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 40);
+        assert_eq!(Template::ALL.len(), 41);
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
         assert_eq!(Template::from_name("violin"), Some(Template::Violin));
         assert_eq!(Template::from_name("violin-box"), Some(Template::ViolinBox));
@@ -1136,6 +1149,32 @@ mod tests {
         assert_eq!(partial.height, 1.5);
         let all: RidgelineStyle = serde_json::from_str("{}").unwrap();
         assert!(all.is_default());
+    }
+
+    #[test]
+    fn the_hexbin_template_has_its_own_kind_and_a_hidden_legend() {
+        use crate::graph::{HexbinBy, HexbinStyle};
+        assert_eq!(Template::from_name("hexbin"), Some(Template::Hexbin));
+        assert_eq!(Template::Hexbin.label(), "Hexbin");
+        let g = Template::Hexbin.new_graph(WindowId(1), "G");
+        assert_eq!(g.layers[0].default_kind, PlotKind::Hexbin);
+        assert!(!g.layers[0].legend.visible);
+        assert!(PlotKind::Hexbin.is_hexbin() && !PlotKind::Hexbin.is_distribution() && !PlotKind::Hexbin.is_bar());
+        assert_eq!(serde_json::to_string(&PlotKind::Hexbin).unwrap(), "\"hexbin\"");
+        let back: crate::graph::Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!(back, g);
+        // Defaults: 20 bins along each axis, data range, regular hexagons, Y derived from X.
+        let d = HexbinStyle::default();
+        assert_eq!((d.x.by, d.y.by), (HexbinBy::Bins(20), HexbinBy::Bins(20)));
+        assert_eq!((d.x.min_center, d.x.max_center, d.prefer_regular, d.derive_y_from_x), (None, None, true, true));
+        // A partial style (older file, or one that sets a single field) fills in the rest.
+        let partial: HexbinStyle =
+            serde_json::from_str(r#"{"x":{"by":{"spacing":2.5},"min_center":0.0},"derive_y_from_x":false}"#).unwrap();
+        assert_eq!(partial.x.by, HexbinBy::Spacing(2.5));
+        assert_eq!((partial.x.min_center, partial.x.max_center), (Some(0.0), None));
+        assert!(!partial.derive_y_from_x && partial.prefer_regular);
+        assert_eq!(partial.y, d.y);
+        assert!(serde_json::from_str::<HexbinStyle>("{}").unwrap().is_default());
     }
 
     #[test]

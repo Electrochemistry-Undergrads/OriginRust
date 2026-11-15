@@ -1715,6 +1715,59 @@ Origin's documented facts (from its help, not measured; no Origin was at hand; [
 - Not done: grouped and indexed-data ridgelines, ordering by something other than column index, jitter, quantile line
   style and per-line colours, other curve types than Kernel Smooth, a ridgeline toolbar button, Origin's real defaults.
 
+### 14.24 Hexbin plot (T45)
+
+Origin's documented facts (Origin 2027 help, not measured; no Origin was at hand; [W:Origin 2027 page],
+[W:origin-help/hexbin-plot]):
+
+- New graph type "Hexbin Plot" in 2027 (with "Binned Scatter Plot"). Menu "Plot > Contour, Heatmap: Hexbin", template
+  `Hexbin.OTPU`; input XY or XYZ columns, a virtual matrix or a matrix. "The color represents the number of data points
+  within each bin."
+- Bin controls per axis: Min Center, Max Center, Bin Spacing, Number of Bins. "Prefer Regular Hexagons" is checked by
+  default and only works for a square (1:1) layer frame. "Derive Y from X" (default) or "Derive X from Y" picks the axis
+  computed from the other.
+- Not documented (Sheaf's choices, unmeasured): default number of bins, colour map, empty bins, orientation, the exact
+  tie rule, colour scale look and placement, what happens to points outside Min and Max Center.
+
+**What Sheaf does** (everything else is Sheaf's choice, unmeasured):
+
+- `PlotKind::Hexbin`, `Template::Hexbin` (`hexbin`, "Hexbin", legend hidden: the colour scale names the colours),
+  per-plot `Plot::hexbin` (`HexbinStyle`, skipped when default): per axis `min_center`, `max_center` (None = data
+  min or max) and `by` (`Bins(n)` or `Spacing(s)`), `prefer_regular` (true), `derive_y_from_x` (true). Defaults:
+  20 bins along X, centres from the data minimum to the maximum. XY input only (the first Y column against X, one
+  hexbin plot per layer); XYZ, matrix input and Binned Scatter are not done.
+- Binning (`sheaf_calc::hexbin`): pointy-top lattice, row r at `y0 + r dy`, even rows at `x0 + c sx`, odd rows half a
+  spacing further. Number of Bins n puts n centres from Min to Max Center (`sx = range / (n - 1)`). Rows run from Min
+  Center to the first centre on or beyond Max Center. Each finite point goes to the nearest centre, the distance measured
+  on the page (in the space where the lattice is regular); an exact tie goes to the lower row, then the lower column; a
+  point outside the closed hexagon of its centre (beyond a narrow Min/Max Center) is not counted. An axis with no width
+  (all values equal, one point) gets width 1 around the value. NaN and infinite values are skipped.
+- Regular hexagons: the derived axis' spacing is `dy = sx * a * (yrange / xrange) * sqrt(3) / 2` (centre ranges),
+  with `a` the frame aspect (width / height) when "Prefer Regular Hexagons" is on and 1 otherwise. The drawing redoes the
+  binning with the real frame and the resolved axis spans, taking `a (yrange / xrange) = (W / H)(Y span / X span)`, so
+  the hexagons are regular on the page for any frame shape, not only a square one (an extension of Origin's 1:1
+  rule); a first pass with the nominal frame sets the axis range. "Derive X from Y" solves the same equation for X.
+  Non-linear axes bin in data units, so the hexagons are not regular there.
+- Drawing (`crates/plot/src/hexbin.rs`): each non-empty bin is a filled hexagon in data coordinates through the layer
+  transform, clipped to the layer; no outline, only a 0.25 pt stroke in the fill colour to hide seams. Colour =
+  `ramp(count / max count)`, linear from 0, with the colour mapped scatter's ramp (`plots::map_color`: blue, cyan, green,
+  yellow, red, unchanged); empty bins are not drawn. The axis range covers the hexagons.
+- Colour scale: a 14 pt wide bar 14 pt right of the frame (gradient of 64 strips, red at the top), title "Count" above
+  it in the Y title font, ticks at 0 and nice counts (1, 2 or 5 x 10^k steps, about four intervals) up to the maximum,
+  labelled in the Y tick font. The frame leaves room for it at the right (`scale_reserve`).
+- Plot Details "Bins" tab: Prefer Regular Hexagons, Derive Y from X / Derive X from Y, per axis Min Center, Max Center
+  (Auto or a value) and Number of Bins or Bin Spacing; the axis that is derived is greyed. Undo works as for other
+  settings. Menu: Plot > Contour/Heat Map > Hexbin (the other items of that submenu stay greyed).
+- CLI `-t hexbin`, `--hex-bins N` (2 to 1000; both axes); MCP template text and `hex_bins`. No right Y axis and no panels
+  (CLI, MCP, `plot_columns_double_y` refuse). `.opj`: written as a scatter plot of the data, the save warns ("hexbin plots
+  were written as scatter plots of their data").
+- Tests: `crates/calc/tests/mpl_hexbin.rs` (counts cell by cell against matplotlib `Axes.hexbin`, fixture made by
+  `tools/hexbin-ref.py`, which also checks a numpy brute force; matplotlib 3.11.2, numpy 2.5.4; these are not Origin
+  numbers) and hand cases in `hexbin.rs`; `hexbin_tests.rs` (regular hexagons on a square and a wide frame, colours,
+  colour scale, autoscale); core template/serde test; CLI test; UI menu and Plot Details tests; `.opj` warning test.
+- Not done: XYZ and matrix input, Binned Scatter, UpSet, a hexbin toolbar button, colour map choice, a tick count
+  setting, Origin's real defaults, outlines, hover read-out of bin counts.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.

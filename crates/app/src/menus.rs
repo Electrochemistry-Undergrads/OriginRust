@@ -851,17 +851,21 @@ fn plot_menu() -> Vec<Entry> {
                 item("Fill Area", Cmd::Plot(Template::FillArea)),
             ],
         ),
-        grey_sub(
+        sub(
             "Contour/&Heat Map",
-            &[
-                "Color Fill",
-                "B/W Lines + Labels",
-                "Gray Scale Map",
-                "Heat Map",
-                "Polar Contour theta(X) r(Y)",
-                "Polar Contour r(X) theta(Y)",
-                "Ternary Contour",
-            ],
+            [
+                greys(&[
+                    "Color Fill",
+                    "B/W Lines + Labels",
+                    "Gray Scale Map",
+                    "Heat Map",
+                    "Polar Contour theta(X) r(Y)",
+                    "Polar Contour r(X) theta(Y)",
+                    "Ternary Contour",
+                ]),
+                vec![item("Hexbin", Cmd::Plot(Template::Hexbin))],
+            ]
+            .concat(),
         ),
         grey_sub("Pro&file", &["Contour Profiles", "Image Profiles"]),
         sub(

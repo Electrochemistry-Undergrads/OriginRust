@@ -730,6 +730,12 @@ impl Layer {
         self.plots.iter().find(|p| p.kind == PlotKind::Ridgeline).map(|p| p.ridge.clone()).unwrap_or_default()
     }
 
+    /// The hexbin settings a plot added to this layer starts with: those of its first hexbin plot, else the
+    /// defaults.
+    pub fn inherited_hexbin(&self) -> HexbinStyle {
+        self.plots.iter().find(|p| p.kind == PlotKind::Hexbin).map(|p| p.hexbin).unwrap_or_default()
+    }
+
     /// Recolors the plots whose color still comes from the palette, in plot order, and leaves
     /// colors chosen by hand alone. Used when plots are added or removed: with a palette that
     /// spreads its colors over the number of plots, every automatic color moves along.
@@ -1379,6 +1385,9 @@ pub enum PlotKind {
     /// Origin's ridgeline chart (2022, ridgeline.OTPU): the plot's Y column as a density curve on
     /// a baseline at its column index (graphing spec 14.23).
     Ridgeline,
+    /// Origin's hexbin plot (2027, Hexbin.OTPU): the plot's X and Y columns binned into hexagons coloured by
+    /// the number of points in each (graphing spec 14.24).
+    Hexbin,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,
@@ -1413,6 +1422,11 @@ impl PlotKind {
     /// True for the kinds drawn as a distribution per plot at 1, 2, 3, ...: box chart and violins.
     pub fn is_distribution(&self) -> bool {
         *self == PlotKind::Box || self.is_violin() || self.is_ridgeline()
+    }
+
+    /// True for [`PlotKind::Hexbin`].
+    pub fn is_hexbin(&self) -> bool {
+        *self == PlotKind::Hexbin
     }
 
     /// True for [`PlotKind::Ridgeline`].
@@ -1571,6 +1585,9 @@ pub struct Plot {
     /// The settings of a ridgeline plot (graphing spec 14.23).
     #[serde(default, skip_serializing_if = "RidgelineStyle::is_default")]
     pub ridge: RidgelineStyle,
+    /// The bin settings of a hexbin plot (graphing spec 14.24).
+    #[serde(default, skip_serializing_if = "HexbinStyle::is_default")]
+    pub hexbin: HexbinStyle,
     /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's
     /// Z column of a Bubble plot).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2422,6 +2439,7 @@ mod tests {
             error: ErrorStyle::default(),
             hist: Default::default(),
             ridge: Default::default(),
+            hexbin: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2463,6 +2481,7 @@ mod tests {
             error: ErrorStyle::default(),
             hist: Default::default(),
             ridge: Default::default(),
+            hexbin: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2581,6 +2600,7 @@ mod tests {
             error: ErrorStyle::default(),
             hist: Default::default(),
             ridge: Default::default(),
+            hexbin: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2772,6 +2792,7 @@ mod style_tests {
             error: ErrorStyle::default(),
             hist: Default::default(),
             ridge: Default::default(),
+            hexbin: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),

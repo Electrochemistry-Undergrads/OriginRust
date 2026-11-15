@@ -39,6 +39,7 @@ pub fn style_spec(s: &StyleArgs) -> Style {
         x_label_angle: s.x_label_angle,
         bar_gap: s.bar_gap,
         bar_overlap: s.bar_overlap,
+        hex_bins: s.hex_bins,
         label: s.label.clone(),
         draw: s.draw.clone(),
     }

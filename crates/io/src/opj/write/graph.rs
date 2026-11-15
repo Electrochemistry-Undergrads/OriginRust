@@ -713,6 +713,9 @@ impl Writer {
         if has(&|k| k.is_violin()) {
             notes.push("violin plots were written as plain columns of their data".into());
         }
+        if has(&|k| k.is_hexbin()) {
+            notes.push("hexbin plots were written as scatter plots of their data".into());
+        }
         if has(&|k| k.is_ridgeline()) {
             notes.push("ridgeline charts were written as plain columns of their data".into());
         }
@@ -744,7 +747,7 @@ impl Writer {
             let p = r.plot;
             let kind = match p.kind {
                 PlotKind::Line => CurveKind::Line,
-                PlotKind::Scatter => CurveKind::Scatter,
+                PlotKind::Scatter | PlotKind::Hexbin => CurveKind::Scatter,
                 PlotKind::LineSymbol => CurveKind::LineSymbol,
                 PlotKind::Column
                 | PlotKind::StackedColumn

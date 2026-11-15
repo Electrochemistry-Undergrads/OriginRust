@@ -16,6 +16,7 @@ mod emf;
 mod eps;
 mod fill;
 mod fonts;
+mod hexbin;
 pub mod hit;
 mod layout;
 mod legend;
@@ -51,6 +52,8 @@ mod export_tests;
 mod fill_inclusive_tests;
 #[cfg(test)]
 mod fill_sideline_tests;
+#[cfg(test)]
+mod hexbin_tests;
 #[cfg(test)]
 mod label_frame_tests;
 #[cfg(test)]
@@ -363,7 +366,7 @@ pub struct Raster {
 /// linked, its parent's X axis.
 pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGeometry>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    let pds: Vec<data::LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
+    let pds = data::collect_graph(project, g);
     Ok(layout::graph_geometry(project, g, &pds, SystemFonts::shared()))
 }
 

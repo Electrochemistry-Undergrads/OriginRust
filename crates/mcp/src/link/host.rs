@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 use sheaf_core::Document;
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -602,10 +602,35 @@ fn accept_loop(shared: &Arc<Shared>, listener: &Listener) {
     }
 }
 
-/// Tells a client that will not be served why, with a short write that cannot hold the accept thread.
+/// Tells an over-limit client why, then briefly drains its hello before closing.
 fn refuse(mut stream: Stream, message: &str) {
     let _ = stream.set_write_timeout(Some(Duration::from_secs(1)));
-    let _ = frame::write_line(&mut stream, &proto::error_line(None, proto::CODE_OTHER, message));
+    if frame::write_line(&mut stream, &proto::error_line(None, proto::CODE_OTHER, message)).is_err()
+        || stream.shutdown_write().is_err()
+    {
+        stream.shutdown();
+        return;
+    }
+    // Winsock resets a connection when SD_BOTH discards unread input. The peer sends its
+    // hello before reading this reply, so leave receives open until it sees the busy reason.
+    // A silent or trickling rejected peer must not hold the accept loop indefinitely.
+    // https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-shutdown
+    let deadline = Instant::now() + Duration::from_millis(100);
+    let mut remaining = frame::HELLO_CAP + 1;
+    let mut buf = [0u8; 1024];
+    while remaining > 0 {
+        let wait = deadline.saturating_duration_since(Instant::now());
+        if wait.is_zero() || stream.set_read_timeout(Some(wait)).is_err() {
+            break;
+        }
+        let count = remaining.min(buf.len());
+        match stream.read(&mut buf[..count]) {
+            Ok(0) => break,
+            Ok(n) => remaining -= n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        }
+    }
     stream.shutdown();
 }
 

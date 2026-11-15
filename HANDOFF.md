@@ -49,6 +49,23 @@ open. History of what was merged when is in `git log` (not repeated here).
   ignored). Pushed although the MCP link admission tests in crates/mcp/tests/link.rs fail
   intermittently on this Windows machine (a different one per run, the file passed alone once):
   pre-existing on main, not touched here, repair 50b5ecb on codex/t02-find-replace.
+- T25 busy greeting repair (2026-11-15, Windows): an over-limit TCP connection receives its
+  busy reason before closing, using a send-half-close and a bounded receive drain. This
+  avoids Winsock reset errors caused by unread hello data, while retaining connection limits
+  and bounded refusal time. The original regression failed on baseline timing attempt 4;
+  the fixed binary passed all 30 attempts plus a 32-refusal/silent-peer integration fixture.
+  Separate repair 50b5ecb; no resource/context/proxy or admission policy changes. Combined
+  formatting, strict all-target Clippy and 2662 workspace tests pass (seven existing ignored),
+  including the latest app-resource merge.
+- T02 Find/Replace (2026-11-15, Windows): one tabbed window, selected-display query seed,
+  Numeric initial mode with measured comparisons/relative tolerance/missing/sign flags,
+  String wildcards and reverse search. `!=` is strict, independently of tolerant equality.
+  Replacement remains one undo action; tabs have distinct accessibility roles from actions.
+  Origin 2016 GUI fixtures, four new UI tests and four matching fixtures cover these rules.
+  Feature e5e0b5a passes combined formatting, strict all-target Clippy and 2662 workspace
+  tests (seven existing ignored), with both native previews inspected.
+  Active-sheet data only; wider scopes, label rows, cell links and saved dialog history remain
+  (gui-look section 5).
 - T25 current app context (2026-11-15, Windows): attached `sheaf://app` reports the active
   window/sheet, worksheet or graph selection, Data Reader pin and dialog/edit state, with one-based
   indices and bounded metadata. It reads current UI state without values/editor text, document or
@@ -168,9 +185,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/mcp-busy-greeting-claim` | Codex Windows, t02-find-replace | T25 connection-admission repair ONLY: host.rs::refuse graceful busy greeting, transport Stream send-half-close helper and focused TCP regression; code will be on codex/t02-find-replace | claimed 2026-11-15; separate commit; no app-resource/proxy/Op/request dispatch, roots/files/exports, history, UI selection or other sessions' scope |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
-| `codex/t02-find-replace` | Codex Windows, t02-find-replace | T02 existing Find in Sheets/Replace layout, defaults and options measured against Origin; find dialog and focused UI tests | claimed 2026-11-15; no Find in Project, grid/Go To, core/expr/history, plot, statistics, printing or other sessions' scopes |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `vartest2` | Claude Windows, "continue all tasks" | T26 leftovers: Origin measurements of the two-sample proportion test (unpooled, tails, differences, Fisher, small samples), two-sample variance dialog with intervals, power analysis outputs; calc vartest.rs, core var/prop runners, their dialogs, statistics.md 21 | claimed 2026-11-15 |

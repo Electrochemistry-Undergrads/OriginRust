@@ -55,6 +55,8 @@ mod skip_tests;
 #[cfg(test)]
 mod symbol_gap_tests;
 #[cfg(test)]
+mod symbol_line_order_tests;
+#[cfg(test)]
 mod tests;
 
 pub use eps::EpsOutput;

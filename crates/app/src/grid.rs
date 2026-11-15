@@ -117,6 +117,8 @@ pub struct BookUi {
     reveal_rect: Option<Rect>,
     /// How many rows fit in the view (for Page Up and Page Down).
     page_rows: usize,
+    /// Destination to reveal while Go To leaves a row/column/range selection in place.
+    navigation_target: Option<(usize, usize)>,
     /// The grid keeps the keyboard (after a click in it or editing a cell) unless a text field
     /// takes it.
     focus_grid: bool,
@@ -135,6 +137,7 @@ pub struct BookUi {
 impl BookUi {
     /// Forgets the selection (a different sheet was shown, a project was loaded).
     pub fn clear_selection(&mut self) {
+        self.navigation_target = None;
         self.selected.clear();
         self.sel = Sel::None;
         self.dragging = false;
@@ -183,8 +186,44 @@ impl BookUi {
         self.focus_grid = true;
     }
 
+    /// Origin's Go To keeps an omitted axis and extends from the opposite edge when moving
+    /// before a region, otherwise from its first edge (including a target inside the region).
+    pub fn go_to_selection(&mut self, sheet: &Worksheet, column: Option<usize>, row: Option<usize>, extend: bool) {
+        if (column.is_none() && row.is_none()) || sheet.columns.is_empty() {
+            return;
+        }
+        let column = column.map(|c| c.min(sheet.columns.len() - 1));
+        let row = row.map(|r| r.min(self.row_capacity(sheet) - 1));
+        let old = self.target(sheet);
+        let cols = old.as_ref().and_then(|t| Some((*t.columns.first()?, *t.columns.last()?))).unwrap_or((0, 0));
+        let rows = old.as_ref().map_or((0, 0), |t| (t.rows.start, t.rows.end.saturating_sub(1).max(t.rows.start)));
+        let axis = |(lo, hi): (usize, usize), destination: Option<usize>| match destination {
+            Some(to) if extend => (if to < lo { hi } else { lo }, to),
+            Some(to) => (to, to),
+            None => (lo, hi),
+        };
+        let (c0, c1) = axis(cols, column);
+        let (r0, r1) = axis(rows, row);
+        if row.is_none() && matches!(self.sel, Sel::Columns) {
+            self.selected = sheet.columns[c0.min(c1)..=c0.max(c1)].iter().map(|c| c.id).collect();
+            self.active = None;
+        } else {
+            self.select_cells(sheet, (c0, r0), (c1, r1));
+        }
+        let destination = (column.unwrap_or(c1), row.unwrap_or(r1));
+        self.navigation_target = Some(destination);
+        self.reveal_rect = None;
+        self.reveal = 4;
+        self.focus_grid = true;
+    }
+
+    pub fn row_capacity(&self, sheet: &Worksheet) -> usize {
+        sheet.row_count().saturating_add(SPARE_ROWS)
+    }
+
     /// Selects a block of cells and records which columns it touches.
     pub fn select_cells(&mut self, sheet: &Worksheet, anchor: (usize, usize), end: (usize, usize)) {
+        self.navigation_target = None;
         self.sel = Sel::Cells { anchor, end };
         self.active = None;
         let (lo, hi) = (anchor.0.min(end.0), anchor.0.max(end.0));
@@ -201,6 +240,7 @@ impl BookUi {
     }
 
     fn focus(&mut self, ctx: &egui::Context) {
+        self.navigation_target = None;
         self.focus_grid = true;
         if let Some(grid) = self.grid {
             ctx.memory_mut(|m| m.request_focus(grid));
@@ -233,6 +273,9 @@ impl BookUi {
 
     /// The cell the view follows after keys: the active cell of a block, else the moving corner.
     fn reveal_target(&self) -> Option<(usize, usize)> {
+        if self.reveal > 0 && self.navigation_target.is_some() {
+            return self.navigation_target;
+        }
         match &self.sel {
             Sel::Cells { anchor, end } if anchor != end && self.active.is_some() => self.active_cell(),
             _ => self.active_corner(),
@@ -245,6 +288,7 @@ impl BookUi {
     }
 
     fn select_rows(&mut self, anchor: usize, end: usize) {
+        self.navigation_target = None;
         self.sel = Sel::Rows { anchor, end };
         self.selected.clear();
     }
@@ -574,13 +618,17 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
             if cell.left() < view.left() {
                 state.h_offset = (state.h_offset - (view.left() - cell.left())).max(0.0);
             } else if cell.right() > view.right() {
-                state.h_offset += (cell.right() - view.right()).min(view.width());
+                let distance = cell.right() - view.right();
+                state.h_offset += if state.navigation_target.is_some() { distance } else { distance.min(view.width()) };
             }
             if view.contains_rect(cell) {
                 state.reveal = 0;
             }
         }
         ui.ctx().request_repaint();
+    }
+    if state.reveal == 0 {
+        state.navigation_target = None;
     }
     state.h_content = output.content_size.x;
     state.h_view = output.inner_rect.width();

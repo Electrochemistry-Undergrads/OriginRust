@@ -987,7 +987,7 @@ impl SheafApp {
                 self.start_import(path.map(|p| vec![p]), pick);
             }
             Action::ImportPick(pick) => self.start_import(None, pick),
-            Action::GoToCell(book) => self.go_to = Some(GoToDialog::new(book)),
+            Action::GoToCell(book) => self.open_go_to(book),
             Action::Power(kind) => self.power = Some(PowerDialog::new(kind)),
             Action::FindInSheets(book) => self.find = Some(FindDialog::new(book)),
             Action::ReplaceInSheets(book) => self.find = Some(FindDialog::replace(book)),
@@ -1831,6 +1831,18 @@ impl SheafApp {
                 let name = b.sheets[active].name.clone();
                 self.sheet_name = Some(SheetNameDialog { book, sheet: active, name });
             }
+        }
+    }
+
+    fn open_go_to(&mut self, book: WindowId) {
+        let can_extend = self
+            .books
+            .get(&book)
+            .is_some_and(|b| matches!(b.sel, Sel::Cells { .. } | Sel::Columns | Sel::Rows { .. } | Sel::All));
+        if let Some(sheet) = self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet)) {
+            let state = self.books.entry(book).or_default();
+            let current = state.target(sheet).map(|t| t.top_left);
+            self.go_to = Some(GoToDialog::new(book, can_extend, state.row_capacity(sheet), current));
         }
     }
 
@@ -2752,12 +2764,12 @@ impl SheafApp {
             match outcome {
                 GoToOutcome::Open => {}
                 GoToOutcome::Closed => self.go_to = None,
-                GoToOutcome::Go { column, row } => {
+                GoToOutcome::Go { column, row, extend } => {
                     if let (Some(sheet), Some(state)) = (
                         self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet)),
                         self.books.get_mut(&book),
                     ) {
-                        state.go_to(sheet, column, row);
+                        state.go_to_selection(sheet, column, row, extend);
                     }
                     self.go_to = None;
                 }
@@ -3133,6 +3145,13 @@ impl SheafApp {
                         self.layer_contents =
                             Some(crate::dialogs::layer_contents::LayerContentsDialog::new(id, 0, 1_000_000));
                         self.focus(id);
+                    }
+                }
+                "go-to" => {
+                    let book = project.workbooks().next().map(|b| b.id);
+                    if let Some(book) = book {
+                        self.open_go_to(book);
+                        self.focus(book);
                     }
                 }
                 "stack-panels" => {

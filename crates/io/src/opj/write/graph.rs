@@ -378,7 +378,7 @@ impl Writer {
             }
             if !p.decor.is_default() {
                 notes.push(
-                    "drop lines, symbol/line gaps, fills under curves (with their pattern, transparency and gradient) and data labels were not written (the companion file keeps them)"
+                    "drop lines, symbol/line gaps and draw order, fills under curves (with their pattern, transparency and gradient) and data labels were not written (the companion file keeps them)"
                         .into(),
                 );
             }

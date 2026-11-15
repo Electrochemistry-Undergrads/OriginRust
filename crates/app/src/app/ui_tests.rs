@@ -16,6 +16,7 @@ mod label_whiteout;
 mod offset_multipliers;
 mod skip_points;
 mod symbol_line_gaps;
+mod symbol_line_order;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {
@@ -5920,6 +5921,7 @@ mod clipboard_origin;
 #[path = "ui_tests/clipboard_formats.rs"]
 mod clipboard_formats;
 
+mod go_to;
 mod label_panels;
 #[path = "ui_tests/stack_panels.rs"]
 mod stack_panels;
@@ -6247,7 +6249,13 @@ fn go_to_window_moves_the_cursor_to_the_typed_cell() {
     show_window(&mut h, "Book1 - sample");
     menu_path(&mut h, &["Edit", "Go to..."]);
     assert!(h.state().go_to.is_some());
+    h.get_by_label("Go to Row").focus();
+    settle(&mut h);
     h.event(egui::Event::Text("3".to_string()));
+    settle(&mut h);
+    h.get_by_label("Go to Column").focus();
+    settle(&mut h);
+    h.event(egui::Event::Text("1".to_string()));
     settle(&mut h);
     h.key_press(egui::Key::Enter);
     settle(&mut h);

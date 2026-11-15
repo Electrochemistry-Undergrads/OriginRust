@@ -22,6 +22,12 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T13 Draw Line in Front/Behind (2026-11-15, Windows): the Line + Symbol choice controls
+  both plotted curves and legend samples, defaulting to Behind. Gap to Symbol disables the
+  radios and overrides the retained choice, as Origin 2016 controls/PNG exports confirm.
+  Native/companion saves preserve it; `.opj` explicitly warns. Formatting, strict all-target
+  workspace Clippy and 2,243 tests pass (three existing ignored), including five new regressions.
+
 - CI build size (2026-11-15): dev/test debug information is disabled and the cache prefix
   is reset to `debug0-v1-rust` after the hosted runner exhausted its disk during test linking.
   The format/lint/test commands remain unchanged. Local formatting, strict all-target workspace
@@ -58,14 +64,16 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t13-fill-sidelines` | Codex Windows, t13-fill-sidelines | T13 Fill Area Sidelines only / Sidelines and Base; plot fill-mode/group copy, draw_fill_under, graph_details selector and focused tests | claimed 2026-11-15; no Axis/layout/PDF, mask policy/color, navigation, labels, stats or other sessions scopes |
+| `codex/t02-go-to-picker` | Codex Windows, t02-go-to-picker | T02 Go To column picker and typed/duplicate column-name behavior only; go_to dialog/resolver and focused tests | claimed 2026-11-15; no grid/filtered handlers, app lifecycle/history, core/model/formula, plot or other sessions' scopes |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
-| `codex/t02-go-to` | Codex Windows, t02-go-to | T02 Go To dialog layout/defaults, Extend Selection and view-only virtual row visibility/key bounds; go_to dialog, scoped app/grid navigation symbols and focused tests | claimed 2026-11-14; no worksheet data/formula editing, core/plot/print/history or other sessions' symbols |
 | `mac-print-panel` | Codex macOS, no Origin | T27 native macOS graph print panel via PDFKit; app print_graph/macprint, macOS dependencies and no-spool validation example | claimed 2026-11-14; no workbook printing, Windows CLI, Excel/imports or other sessions’ scope |
 | `saved-state-recovery` | Codex macOS, no Origin | T28 undo/redo saved-state checkpoints and recovery cleanup; core/history.rs, app save/recovery hooks, autosave and focused UI tests | claimed 2026-11-14; no Excel dialogs/imports, axis/labels, backup settings or other sessions’ scope |
 | `vartest` | Claude Windows, "continue all tasks" (owner's decision) | T26 variance and proportion tests: calc vartest.rs, core Tool::VarTest/PropTest, Hypothesis Testing dialogs, ops analyze vartest/proptest | claimed 2026-11-14, continues 7ec9e48/5a08edf |
 | `stats-multi` | Claude Windows, "continue all tasks" | T29 PCA, ROC, Kaplan-Meier, k-means: calc pca/roc/survival/kmeans.rs, core statistics tools, Statistics menu items, ops analyze | claimed 2026-11-14 |
 | `mcp-attach` | Claude macOS, "mac-attach" | T25 phase 2: ADR 0013, app live link (local socket, off by default, menu + `--mcp`), `sheaf-mcp --attach` forwarding, one undo step per forwarded change, status-bar note; new crates/app module + mcp attach client, docs | claimed 2026-11-14 night; no print, recovery/history internals, Excel, Go To, symbol gaps, stats or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
+| `multipage-pdf` | Claude macOS, "mac-multipdf" | T32 multi-page PDF export (Origin 2018b `expGraph` multipage): sheaf-plot multi-page writer, Export Graphs check box, `sheaf export/print` several graphs, MCP `export_graph` graphs list | claimed 2026-11-15; files crates/plot lib.rs/raster.rs (+ new module), app dialogs/export.rs, ops args/render, cli, mcp export, graphing.md 9.6; no print panel, MCP attach or other sessions' scope |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

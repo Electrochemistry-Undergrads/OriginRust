@@ -15,7 +15,7 @@ fn symbol_line_gaps_survive_native_and_companion_saves_with_an_opj_warning() {
     p.add_plot(g, 0, y).unwrap();
     let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
     plot.symbol.every = 3;
-    plot.decor.symbol_line = SymbolLineInterface { gap_to_symbol: true, no_break_skipped: true };
+    plot.decor.symbol_line = SymbolLineInterface { gap_to_symbol: true, no_break_skipped: true, ..Default::default() };
     let expected = plot.decor.symbol_line;
     for ext in ["sheaf", "opj"] {
         let path = folder.join(format!("gaps.{ext}"));

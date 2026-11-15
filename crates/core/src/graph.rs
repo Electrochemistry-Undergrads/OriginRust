@@ -1366,9 +1366,12 @@ pub struct PlotDecor {
 }
 
 /// How a Line + Symbol connecting line meets its point symbols. Other plot kinds ignore these
-/// saved settings. Both switches start unchecked, as in Origin 2016.
+/// saved settings. Gaps start unchecked and the line starts behind symbols, as in Origin 2016.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct SymbolLineInterface {
+    /// The line is painted over symbols when gaps are off; the saved choice survives enabling gaps.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub draw_in_front: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub gap_to_symbol: bool,
     /// Keep the connecting line intact at skipped markers while retaining gaps at shown markers.

@@ -16,6 +16,7 @@ use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome, ImportRequest};
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::power::{PowerDialog, PowerOutcome};
+use crate::dialogs::printing::{PageSetupDialog, PageSetupOutcome, PreviewOutcome, PrintPreview};
 use crate::dialogs::reshape::{ReshapeDialog, ReshapeOutcome};
 use crate::dialogs::row_filter::RowFilterDialog;
 use crate::dialogs::set_values::SetValuesDialog;
@@ -115,6 +116,8 @@ pub struct SheafApp {
     reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
+    page_setup: Option<PageSetupDialog>,
+    print_preview: Option<PrintPreview>,
     rename: Option<RenameDialog>,
     go_to: Option<GoToDialog>,
     power: Option<PowerDialog>,
@@ -183,6 +186,8 @@ impl SheafApp {
             reshape: None,
             export: None,
             export_sheet: None,
+            page_setup: None,
+            print_preview: None,
             rename: None,
             go_to: None,
             power: None,
@@ -333,6 +338,8 @@ impl SheafApp {
         self.set_values = None;
         self.export = None;
         self.export_sheet = None;
+        self.page_setup = None;
+        self.print_preview = None;
         self.rename = None;
         self.go_to = None;
         self.find = None;
@@ -554,6 +561,40 @@ impl SheafApp {
                 ));
             }
             Err(e) => self.warn(format!("Could not copy the page: {e}")),
+        }
+    }
+
+    /// File > Print... (Ctrl+P): the graph page, as a vector drawing, through the system's print
+    /// dialog, scaled into the paper of Page Setup as File > Print Preview shows. Windows plays the
+    /// page's metafile into the printer; elsewhere the page's PDF goes to `lp`.
+    fn print_graph(&mut self, graph: WindowId) {
+        let project = self.doc.project();
+        let Some((page, title)) = project.graph(graph).map(|g| ((g.page.width_pt, g.page.height_pt), g.name.clone()))
+        else {
+            return;
+        };
+        let setup = project.page_setup;
+        if cfg!(test) {
+            // Tests never reach a printer.
+            self.say("Printing is skipped under test");
+            return;
+        }
+        #[cfg(windows)]
+        match sheaf_plot::render_emf(project, graph) {
+            Ok(emf) => match crate::winprint::print_with_dialog(&emf, page, &setup, &title) {
+                Ok(crate::winprint::Outcome::Printed) => self.say(format!("Printed {title}")),
+                Ok(crate::winprint::Outcome::Cancelled) => {}
+                Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
+            },
+            Err(e) => self.warn(format!("Could not print the graph: {e}")),
+        }
+        #[cfg(not(windows))]
+        match sheaf_plot::render_pdf(project, graph) {
+            Ok(pdf) => match crate::winprint::print_pdf(&pdf, &setup, page, &title) {
+                Ok(()) => self.say(format!("Sent {title} to the default printer")),
+                Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
+            },
+            Err(e) => self.warn(format!("Could not print the graph: {e}")),
         }
     }
 
@@ -1096,6 +1137,9 @@ impl SheafApp {
                 self.export = Some(ExportDialog::new(graph, self.folder()));
             }
             Action::ExportData(book) => self.export_data(book),
+            Action::Print(graph) => self.print_graph(graph),
+            Action::PrintPreview(graph) => self.print_preview = Some(PrintPreview::new(graph)),
+            Action::PageSetup => self.page_setup = Some(PageSetupDialog::new(self.doc.project().page_setup)),
             Action::Focus(id) => self.focus(id),
             Action::HideWindow(id) => self.workspace.hide(id),
             Action::AppendProject(path) => {
@@ -1975,6 +2019,8 @@ impl SheafApp {
             || self.reshape.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
+            || self.page_setup.is_some()
+            || self.print_preview.is_some()
             || self.rename.is_some()
             || self.go_to.is_some()
             || self.power.is_some()
@@ -2326,6 +2372,30 @@ impl SheafApp {
                 }
                 ExportOutcome::Applied(text) => self.say(text),
                 ExportOutcome::Failed(e) => self.message = Some(("Could not export the graph".to_string(), e)),
+            }
+        }
+        if let Some(d) = &mut self.page_setup {
+            match d.show(ctx) {
+                PageSetupOutcome::Open => {}
+                PageSetupOutcome::Closed => self.page_setup = None,
+                PageSetupOutcome::Apply(setup) => {
+                    self.page_setup = None;
+                    if setup != self.doc.project().page_setup {
+                        self.doc.apply("Page Setup", |p| p.page_setup = setup);
+                    }
+                }
+            }
+        }
+        if let Some(d) = &mut self.print_preview {
+            let graph = d.graph;
+            match d.show(ctx, &self.doc) {
+                PreviewOutcome::Open => {}
+                PreviewOutcome::Closed => self.print_preview = None,
+                PreviewOutcome::Print => {
+                    self.print_preview = None;
+                    self.print_graph(graph);
+                }
+                PreviewOutcome::Setup => self.page_setup = Some(PageSetupDialog::new(self.doc.project().page_setup)),
             }
         }
         if let Some(d) = &mut self.export_sheet {

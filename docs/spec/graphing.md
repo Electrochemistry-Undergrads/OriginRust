@@ -2022,4 +2022,85 @@ project file only when they differ from the default (a file written before loads
 Speed mode and X:Y ratio of Size/Speed, No Line Break for Skipped Point(s) / Gap to Symbol, frame, margin, attach-to,
 automatic overlap avoidance and leader lines of Label, the other fill modes and
 Origin's list of fill patterns, subgrouping By Column Label, Binned increments, several groups in one layer,
-print margins, writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).
+writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).
+
+## 19. Printing (File > Print, Print Preview, Page Setup; T27)
+
+Measured in OriginPro 2016 (64-bit) through `tools/origin-ref/origin-screenshot.ps1 -FullScreen`
+with clicks (pictures in the local scratch folder `re-workspace/scratch/t27/s4/`, not committed), one
+line graph active. Everything not listed here is unmeasured.
+
+### 19.1 Menu and toolbar (measured)
+
+- Origin's File menu is collapsible (a short list with a double-chevron at the bottom); the full
+  list has, after Save Project without Data and Duplicate Project without Data, a separator and then
+  three items in this order: **Print...** (Ctrl+P), **Print Preview**, **Page Setup...**, a
+  separator, then Import. Sheaf's menu has the same three in the same place.
+- The Standard toolbar has a Print button (tooltip "Print the active window") and, next to it, a
+  Print Preview button. Clicking the Print button by script only showed the tooltip, so the system
+  dialog behind it was not captured.
+
+### 19.2 Page Setup (measured, window captured)
+
+A small modal window titled "Page Setup", about 360 x 415 px:
+
+- a picture of one sheet with a dashed rectangle for the margins and a drop shadow, at the top;
+- group **Paper**: **Size** (a drop-down, "Letter" on the measuring machine) and **Source** (a
+  drop-down, "Printer auto select");
+- group **Orientation**: radio buttons **Portrait** and **Landscape**; Landscape was selected for the
+  graph (a page wider than tall: the orientation follows the page);
+- group **Margins (inches)**: Left, Right, Top, Bottom fields, shown as 1, 1, 1, 1 and greyed out
+  while the graph was active (so Origin does not let the user change them there; whether Origin
+  applies 1 inch is unmeasured);
+- buttons **Help**, **OK**, **Cancel**.
+
+Sheaf follows this: Paper Size (Letter, Legal, Tabloid, A3, A4, A5), Orientation with a third choice
+**Automatic** that is the default and behaves as Origin showed (landscape for a page wider than
+tall), Margins in inches (editable, default 1 inch: Origin's displayed value), OK and Cancel. There is
+no Source (the tray belongs to the printer's own dialog) and no Help button. Defaults: Letter,
+Automatic, 1 inch. The setting belongs to the project (`Project::page_setup`), saved in `.sheaf` and,
+because an `.opj` has no place for it, in the `.opj.sheaf` companion (the save warns when it is not
+the default). Changing it is an undo step "Page Setup".
+
+### 19.3 Print and Print Preview dialogs (unmeasured)
+
+The system print dialog, Origin's own Print dialog (if it has one: copies, range, scaling, "Print
+to file") and the Print Preview window were not captured: the menu clicks that open them did not
+produce a dialog or a window in the screenshots after several tries (the first menu path of the
+captured Page Setup worked once; the same keystroke path and the toolbar buttons did not). The
+brief's statement that Origin prints a graph as vector output scaled to the paper and page-centred
+is therefore taken as given, not measured. Do not read the layout of Sheaf's Print Preview as
+Origin's; it is Sheaf's own (paper with drop shadow, dashed margin rectangle, the page drawn where it
+prints, a line naming paper, orientation and margins, buttons Print..., Page Setup..., Close).
+
+### 19.4 Placement (Sheaf's rule)
+
+The graph page is scaled uniformly (up as well as down, aspect ratio kept) to the largest size that
+fits inside the paper minus the margins and inside what the printer can reach, and is centred in that
+area (`sheaf_core::page_setup::placement`; Print Preview and the printer path call the same
+function). The paper is Letter etc. turned landscape or not by the orientation. Under Windows the
+page's enhanced metafile (`sheaf_plot::render_emf`) is played into the printer device context
+rectangle computed from `GetDeviceCaps` (`PHYSICALOFFSETX/Y`, `HORZRES/VERTRES`), so the driver
+receives vector drawing, not a bitmap. Elsewhere the page's PDF goes to `lp` (paper and orientation as
+options, `fit-to-page`; not tested on this machine).
+
+### 19.5 Check with "Microsoft Print to PDF" (measured on Sheaf's side)
+
+A synthetic 5-point line graph (`sheaf plot data.csv`, page 600.06 x 500.79 pt) printed with the
+headless function (`print_to_printer`, `DOCINFOW.lpszOutput` set, no dialog; the driver wrote the
+file without asking where to save it, in about one second): the PDF has one page of 792 x 612 pt
+(Letter landscape, from Automatic). The page background rectangle in the content stream is
+560.9 x 468.0 pt at x = 115.6 pt, y = 72 pt: the height limits (612 - 2 x 72 = 468), the width is
+468 x 600.06 / 500.79 = 560.8, the left edge is 72 + (648 - 560.8) / 2 = 115.6. That equals the
+placement function's result, so the printer got the page centred inside the 1 inch margins. The
+page of `sheaf plot ... -o x.pdf` is the page size itself (600.06 x 500.79 pt, drawn at scale 1);
+printing differs from it by the paper and the scale 0.935. The driver reported no unprintable edge.
+The check is the ignored test `winprint::tests::prints_a_page_to_a_named_printer_without_a_dialog`
+(environment variables `SHEAF_PRINT_EMF`, `SHEAF_PRINT_OUT`, `SHEAF_PRINTER`, `SHEAF_PRINT_PAGE`).
+Not checked: a physical printer (the HP on this machine was not used), copies, collation, several
+pages, other paper sizes through the driver.
+
+### 19.6 Not done
+
+Print and Print Preview of a workbook (a sheet as a table), View > Print View and the Standard
+toolbar's Print button, Origin's Source (tray), a `sheaf print` command, the macOS print panel.

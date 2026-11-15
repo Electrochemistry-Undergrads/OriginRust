@@ -407,6 +407,10 @@ pub enum Action {
     },
     ExportGraph(WindowId),
     ExportData(WindowId),
+    /// File > Print...: the graph page through the system print dialog.
+    Print(WindowId),
+    PrintPreview(WindowId),
+    PageSetup,
     /// Bring a window's tab to the front, reopening it if it was closed.
     Focus(WindowId),
     /// Close a window: it leaves the workspace, its data stays (Hide in the project explorer).

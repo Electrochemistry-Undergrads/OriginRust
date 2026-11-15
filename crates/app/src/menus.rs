@@ -79,6 +79,12 @@ pub enum Cmd {
     ReplaceInSheets,
     ExportGraph,
     ExportWorksheet,
+    /// File > Print... (Ctrl+P): the active graph page.
+    Print,
+    /// File > Print Preview.
+    PrintPreview,
+    /// File > Page Setup...
+    PageSetup,
     Exit,
     Undo,
     Redo,
@@ -467,9 +473,9 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         grey("Save Project without Data..."),
         grey("Duplicate Project without Data"),
         sep(),
-        grey_keyed("&Print...", ctrl(Key::P)),
-        grey("Print Pre&view"),
-        grey("Page Setup..."),
+        keyed("&Print...", ctrl(Key::P), Cmd::Print),
+        item("Print Pre&view", Cmd::PrintPreview),
+        item("Page Setup...", Cmd::PageSetup),
         sep(),
         sub(
             "&Import",
@@ -1878,6 +1884,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
+        Cmd::Print => Action::Print(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::PrintPreview => Action::PrintPreview(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::PageSetup => Action::PageSetup,
         Cmd::Exit => Action::Quit,
         Cmd::Undo => {
             c.undo.ok_or(NO_UNDO)?;

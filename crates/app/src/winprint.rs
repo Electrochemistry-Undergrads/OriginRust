@@ -35,12 +35,7 @@ pub fn device_rect(caps: &DeviceCaps, setup: &PageSetup, page_w_pt: f64, page_h_
     }
     let (kx, ky) = (72.0 / caps.dpi_x, 72.0 / caps.dpi_y);
     let paper = (caps.physical_w * kx, caps.physical_h * ky);
-    let printable = Rect {
-        x: caps.offset_x * kx,
-        y: caps.offset_y * ky,
-        w: caps.horz_res * kx,
-        h: caps.vert_res * ky,
-    };
+    let printable = Rect { x: caps.offset_x * kx, y: caps.offset_y * ky, w: caps.horz_res * kx, h: caps.vert_res * ky };
     let r = placement(page_w_pt, page_h_pt, paper, printable, &setup.margins)?;
     let left = (r.x / kx - caps.offset_x).round() as i32;
     let top = (r.y / ky - caps.offset_y).round() as i32;
@@ -58,8 +53,40 @@ pub enum Outcome {
     Cancelled,
 }
 
+/// Elsewhere than Windows: the page's PDF goes to the default printer with `lp` (paper size and
+/// orientation from the Page Setup; the margins are the printer's). A first step: no print dialog.
+#[cfg(not(windows))]
+pub fn print_pdf(pdf: &[u8], setup: &PageSetup, page_pt: (f64, f64), title: &str) -> Result<(), String> {
+    use sheaf_core::page_setup::Orientation;
+    let path = std::env::temp_dir().join(format!("sheaf-print-{}.pdf", std::process::id()));
+    std::fs::write(&path, pdf).map_err(|e| e.to_string())?;
+    let media = match setup.paper {
+        sheaf_core::page_setup::Paper::Letter => "Letter",
+        sheaf_core::page_setup::Paper::Legal => "Legal",
+        sheaf_core::page_setup::Paper::Tabloid => "Tabloid",
+        sheaf_core::page_setup::Paper::A3 => "A3",
+        sheaf_core::page_setup::Paper::A4 => "A4",
+        sheaf_core::page_setup::Paper::A5 => "A5",
+    };
+    let orientation =
+        if setup.orientation_for(page_pt.0, page_pt.1) == Orientation::Landscape { "landscape" } else { "portrait" };
+    let out = std::process::Command::new("lp")
+        .args(["-t", title, "-o", &format!("media={media}"), "-o", orientation, "-o", "fit-to-page"])
+        .arg(&path)
+        .output()
+        .map_err(|e| format!("lp could not be started: {e}"));
+    let _ = std::fs::remove_file(&path);
+    let out = out?;
+    if out.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
+}
+
+/// Printing to a named printer without a dialog; the only caller is the ignored test below, which
+/// prints to "Microsoft Print to PDF" by hand.
 #[cfg(windows)]
-pub use imp::{print_to_printer, print_with_dialog};
+#[cfg_attr(not(test), allow(unused_imports))]
+pub use imp::print_to_printer;
+#[cfg(windows)]
+pub use imp::print_with_dialog;
 
 #[cfg(windows)]
 mod imp {
@@ -68,22 +95,24 @@ mod imp {
     use std::ffi::c_void;
     use std::path::Path;
     use std::ptr::{null, null_mut};
-    use windows_sys::Win32::Foundation::{GetLastError, HWND};
+    use windows_sys::Win32::Foundation::{GetLastError, GlobalFree, HWND};
     use windows_sys::Win32::Graphics::Gdi::{
         CreateDCW, DEVMODEW, DM_ORIENTATION, DM_PAPERSIZE, DeleteDC, DeleteEnhMetaFile, GetDeviceCaps, HDC, HORZRES,
         LOGPIXELSX, LOGPIXELSY, PHYSICALHEIGHT, PHYSICALOFFSETX, PHYSICALOFFSETY, PHYSICALWIDTH, PlayEnhMetaFile,
         SetEnhMetaFileBits, VERTRES,
     };
-    use windows_sys::Win32::Graphics::Printing::{ClosePrinter, DocumentPropertiesW, OpenPrinterW};
+    use windows_sys::Win32::Graphics::Printing::{ClosePrinter, DocumentPropertiesW, OpenPrinterW, PRINTER_HANDLE};
     use windows_sys::Win32::Storage::Xps::{DOCINFOW, EndDoc, EndPage, StartDocW, StartPage};
-    use windows_sys::Win32::System::Memory::{GlobalFree, GlobalLock, GlobalUnlock};
+    use windows_sys::Win32::System::Memory::{GlobalLock, GlobalUnlock};
     use windows_sys::Win32::UI::Controls::Dialogs::{
         PD_NOPAGENUMS, PD_NOSELECTION, PD_RETURNDC, PD_RETURNDEFAULT, PD_USEDEVMODECOPIESANDCOLLATE, PRINTDLGW,
         PrintDlgW,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
+    #[cfg_attr(not(test), allow(dead_code))]
     const DM_IN_BUFFER: u32 = 8;
+    #[cfg_attr(not(test), allow(dead_code))]
     const DM_OUT_BUFFER: u32 = 2;
     const DMORIENT_PORTRAIT: i16 = 1;
     const DMORIENT_LANDSCAPE: i16 = 2;
@@ -93,16 +122,14 @@ mod imp {
     }
 
     /// Sets paper and orientation of a device mode to the Page Setup.
-    fn apply_setup(dm: &mut DEVMODEW, setup: &PageSetup) {
+    fn apply_setup(dm: &mut DEVMODEW, setup: &PageSetup, page_pt: (f64, f64)) {
         dm.dmFields |= DM_PAPERSIZE | DM_ORIENTATION;
-        // SAFETY: the printer half of the union is the one that holds these fields.
-        unsafe {
-            dm.Anonymous1.Anonymous1.dmPaperSize = setup.paper.dmpaper();
-            dm.Anonymous1.Anonymous1.dmOrientation = match setup.orientation {
-                Orientation::Portrait => DMORIENT_PORTRAIT,
-                Orientation::Landscape => DMORIENT_LANDSCAPE,
-            };
-        }
+        // The printer half of the union is the one that holds these fields.
+        dm.Anonymous1.Anonymous1.dmPaperSize = setup.paper.dmpaper();
+        dm.Anonymous1.Anonymous1.dmOrientation = match setup.orientation_for(page_pt.0, page_pt.1) {
+            Orientation::Landscape => DMORIENT_LANDSCAPE,
+            _ => DMORIENT_PORTRAIT,
+        };
     }
 
     /// Plays the metafile into `hdc` as one page, then ends the document. `output` redirects the
@@ -115,7 +142,8 @@ mod imp {
         title: &str,
         output: Option<&Path>,
     ) -> Result<(), String> {
-        let caps = |i| f64::from(unsafe { GetDeviceCaps(hdc, i) });
+        // SAFETY: `hdc` is a live device context.
+        let caps = |i: u32| f64::from(unsafe { GetDeviceCaps(hdc, i as i32) });
         let caps = DeviceCaps {
             dpi_x: caps(LOGPIXELSX),
             dpi_y: caps(LOGPIXELSY),
@@ -186,7 +214,7 @@ mod imp {
             unsafe {
                 let dm = GlobalLock(pd.hDevMode).cast::<DEVMODEW>();
                 if !dm.is_null() {
-                    apply_setup(&mut *dm, setup);
+                    apply_setup(&mut *dm, setup, page_pt);
                     GlobalUnlock(pd.hDevMode);
                 }
             }
@@ -220,6 +248,7 @@ mod imp {
     /// Prints the page on the named printer without any dialog (paper and orientation from the
     /// Page Setup). With `output`, the job is written to that file instead of the port; this suits
     /// "Microsoft Print to PDF" for a check without a printer.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn print_to_printer(
         printer: &str,
         emf: &[u8],
@@ -229,7 +258,7 @@ mod imp {
         output: Option<&Path>,
     ) -> Result<(), String> {
         let name = wide(printer);
-        let mut handle: *mut c_void = null_mut();
+        let mut handle = PRINTER_HANDLE { Value: null_mut::<c_void>() };
         // SAFETY: `name` is NUL-terminated and outlives the call.
         if unsafe { OpenPrinterW(name.as_ptr(), &mut handle, null()) } == 0 {
             return Err(format!("no printer named \"{printer}\""));
@@ -249,7 +278,7 @@ mod imp {
                 if DocumentPropertiesW(null_mut(), handle, name.as_ptr(), dm, null(), DM_OUT_BUFFER) < 0 {
                     null_mut()
                 } else {
-                    apply_setup(&mut *dm, setup);
+                    apply_setup(&mut *dm, setup, page_pt);
                     DocumentPropertiesW(null_mut(), handle, name.as_ptr(), dm, dm, DM_IN_BUFFER | DM_OUT_BUFFER);
                     CreateDCW(wide("WINSPOOL").as_ptr(), name.as_ptr(), null(), dm)
                 }
@@ -292,7 +321,7 @@ mod tests {
     #[test]
     fn a_wide_page_fills_the_width_between_the_margins() {
         let caps = a4_600dpi();
-        let setup = PageSetup::default(); // A4 portrait, 36 pt margins
+        let setup = PageSetup { paper: Paper::A4, orientation: Orientation::Portrait, margins: Margins::all(36.0) };
         let r = device_rect(&caps, &setup, 6.4 * 72.0, 4.8 * 72.0).unwrap();
         // The margin is 0.5 in = 300 px from the sheet edge; the context starts at the offset.
         assert_eq!(r[0], 300 - caps.offset_x as i32);
@@ -344,5 +373,30 @@ mod tests {
         assert!(device_rect(&caps, &setup, 100.0, 100.0).is_none());
         let broken = DeviceCaps { dpi_x: 0.0, ..caps };
         assert!(device_rect(&broken, &PageSetup::default(), 100.0, 100.0).is_none());
+    }
+
+    /// The headless check, run by hand (never in the normal test run, it needs a printer driver):
+    /// `SHEAF_PRINT_EMF` is a page's metafile (`sheaf plot FILE -o page.emf`), `SHEAF_PRINT_OUT` the
+    /// file the job is written to, `SHEAF_PRINTER` the printer (default "Microsoft Print to PDF"),
+    /// `SHEAF_PRINT_PAGE` the page size in points as `WxH` (default 460.8x345.6, the 6.4 x 4.8 in
+    /// page). The call runs on a thread so a driver that opens a window cannot hang the test.
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "prints through a real printer driver; run by hand"]
+    fn prints_a_page_to_a_named_printer_without_a_dialog() {
+        let emf = std::fs::read(std::env::var("SHEAF_PRINT_EMF").expect("SHEAF_PRINT_EMF")).unwrap();
+        let out = std::path::PathBuf::from(std::env::var("SHEAF_PRINT_OUT").expect("SHEAF_PRINT_OUT"));
+        let printer = std::env::var("SHEAF_PRINTER").unwrap_or_else(|_| "Microsoft Print to PDF".to_string());
+        let page = std::env::var("SHEAF_PRINT_PAGE").unwrap_or_else(|_| "460.8x345.6".to_string());
+        let (w, h) = page.split_once('x').unwrap();
+        let page = (w.parse::<f64>().unwrap(), h.parse::<f64>().unwrap());
+        let (tx, rx) = std::sync::mpsc::channel();
+        let target = out.clone();
+        std::thread::spawn(move || {
+            let r = print_to_printer(&printer, &emf, page, &PageSetup::default(), "Sheaf print check", Some(&target));
+            let _ = tx.send(r);
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(90)).expect("the printer did not finish in 90 s").unwrap();
+        assert!(out.exists(), "the job wrote no file");
     }
 }

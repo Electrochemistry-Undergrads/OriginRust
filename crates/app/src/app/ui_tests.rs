@@ -1266,6 +1266,49 @@ fn file_export_graphs_opens_the_export_window_and_close_closes_it() {
 }
 
 #[test]
+fn file_page_setup_changes_the_project_setup_as_an_undo_step() {
+    use sheaf_core::page_setup::Orientation;
+    let mut h = start(vec![data_file("page-setup")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Page Setup..."]);
+    assert!(h.state().page_setup.is_some(), "Page Setup is open");
+    for label in ["Paper", "Size:", "Orientation", "Portrait", "Landscape", "Margins (inches)", "OK", "Cancel"] {
+        assert!(h.query_by_label(label).is_some(), "{label}");
+    }
+    assert_eq!(project(&h).page_setup, sheaf_core::page_setup::PageSetup::default());
+    click(&mut h, "Landscape");
+    click(&mut h, "OK");
+    assert!(h.state().page_setup.is_none());
+    assert_eq!(project(&h).page_setup.orientation, Orientation::Landscape);
+    assert_eq!(h.state().doc.undo_label(), Some("Page Setup"));
+    // Cancel changes nothing.
+    menu_path(&mut h, &["File", "Page Setup..."]);
+    click(&mut h, "Portrait");
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h).page_setup.orientation, Orientation::Landscape);
+}
+
+#[test]
+fn file_print_preview_opens_for_the_active_graph_and_ctrl_p_does_not_reach_a_printer() {
+    let mut h = start(vec![data_file("print-preview")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Print Preview"]);
+    assert!(h.state().print_preview.is_some(), "Print Preview is open");
+    for label in ["Print Preview", "Print...", "Page Setup...", "Close"] {
+        assert!(h.query_by_label(label).is_some(), "{label}");
+    }
+    // Its Page Setup button opens Page Setup.
+    click(&mut h, "Page Setup...");
+    assert!(h.state().page_setup.is_some());
+    click(&mut h, "Cancel");
+    click(&mut h, "Close");
+    assert!(h.state().print_preview.is_none());
+    // Ctrl+P runs the print command; under test it stops before the system dialog.
+    ctrl(&mut h, egui::Key::P);
+    assert!(h.state().message.is_none(), "no error box");
+}
+
+#[test]
 fn export_graphs_dialog_has_origins_groups_and_buttons() {
     let mut h = start(vec![data_file("export-layout")]);
     show_window(&mut h, "Graph1 - sample");

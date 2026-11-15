@@ -155,7 +155,6 @@ all-target Clippy and 3,006 tests pass (eight existing ignored). All eleven focu
 discovery tests pass, including the five new Windows regressions; final native app/proxy
 and effective-access checks passed with atomic private file creation.
 
-
 ## Proxy reader cleanup follow-up (2026-11-15)
 
 Windows stress reproduced the proxy returning while the app still listed its connection.
@@ -168,3 +167,6 @@ The new real-TCP regression omits writer shutdown: the previous reader loop fail
 peer EOF; cancellation passes for both idle and partial replies. The original ten-second
 integration disconnect assertion is unchanged. Fifty full link-suite runs and 200 additional
 exact disconnect runs pass, totaling 1,750 integration checks.
+
+Formatting, strict workspace all-target Clippy and 3,306 workspace tests pass (eight
+existing ignored), with the current formula-formatting, digital-filter and ROC work integrated.

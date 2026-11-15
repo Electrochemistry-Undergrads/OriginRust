@@ -1215,6 +1215,23 @@ Sheaf (`sheaf_calc::iir`: `IirSpec`, `IirFilter`, `iir_filter`, `iir_order`, `so
 - Sheaf's choice, unmeasured: the frequency pre-warping `tan(pi f / Fs)` (scipy's design chain: analog
   prototype, `lp2lp`/`lp2hp`/`lp2bp`/`lp2bs`, bilinear transform; zeros, poles and gain, numerator and
   denominator, agree with scipy to 1e-11 for all four methods and responses).
+- Sheaf's choice, unmeasured: what the cutoff frequency (Fc, `wn`) is depends on the method, as in scipy.
+  Butterworth: the frequency where the gain is down by 3 dB. Chebyshev I and elliptic: the passband edge,
+  where the gain is down by the passband ripple `rp` (the gain at the edge is `10^(-rp/20)`). Chebyshev II:
+  the stopband edge, where the gain is down by the stopband attenuation `rs` (so with `rs` 80 dB the gain at
+  Fc is already -80 dB, and the passband is narrower than a Butterworth filter with the same Fc). The dialog
+  says so under the frequencies; the column comment prints "Fc" whatever the method. Origin does not say.
+- Sheaf's choice, unmeasured: the passband gain follows scipy. Butterworth, Chebyshev II, and odd order
+  Chebyshev I and elliptic low pass filters have gain 1 at DC; an even order Chebyshev I or elliptic low
+  pass filter has gain `10^(-rp/20)` at DC (0.891 for `rp` = 1 dB), not 1. The passband gain of Chebyshev I and
+  elliptic filters ripples between `10^(-rp/20)` and 1. Nothing rescales the output to unit gain. Origin's
+  convention is not documented and not measured.
+- Sheaf's choice, unmeasured: designs of any order up to 200 keep a finite, non-zero gain: the gain is the
+  real part of a ratio of products of the zeros and poles, taken with a scaled running product so that it
+  does not overflow where the products pass 1e308 (order 100 band pass at 0.3 to 0.6 of Nyquist; checked
+  against scipy up to orders 190). A design whose gain would be 0, infinite or NaN is an error ("the filter
+  design gave values that are not finite"; a low pass at 0.95 of Nyquist of order 181 or more
+  is one, where scipy raises an OverflowError). The checks are in `high_order_iir_designs_match_scipy`.
 - Sheaf's choice, unmeasured: the minimum order and the natural frequencies follow scipy's `buttord`,
   `cheb1ord`, `cheb2ord` and `ellipord` (order equal to scipy's on the test cases; the cutoffs of a band
   stop filter agree to 1e-4 only, because scipy moves the pass edges with `fminbound` and Sheaf with a
@@ -1281,7 +1298,14 @@ Sheaf (`sheaf_calc::fir`: `FirSpec`, `FirFilter`, `firwin`, `firls`, `kaiserord`
   symmetric window); the Least Squares method is `scipy.signal.firls` with a constant desired gain in
   each band (1 in the passbands, 0 in the stopbands), the pass weight in the passbands and the stop weight
   in the stopbands, the transition bands left out, generalized to an even number of coefficients
-  (which scipy does not offer). Window values, `firwin` and `firls` agree with scipy to 1e-10 (`firls` 1e-8).
+  (which scipy does not offer; the checks against the weighted least squares optimum, solved in numpy by
+  quadrature, are `even_tap_least_squares_matches_the_weighted_optimum`). Window values, `firwin` and `firls`
+  agree with scipy to 1e-10 (`firls` 1e-8), also for non-default window parameters and for the band and
+  weight mapping of every response type (`least_squares_designs_of_every_response_match_scipy_firls`) and
+  the minimum-order assembly with Kaiser (`minimum_order_window_designs_match_scipy`, dB and linear).
+- A window whose parameter overflows (Kaiser beta of a few hundred, Chebyshev attenuation of thousands of dB,
+  a Tukey fraction that is not a number) is an error ("the filter design gave values that are not finite")
+  with Scale Passband on or off; before, the unscaled design wrote an empty column.
 - Sheaf's choice, unmeasured: the minimum order is `kaiserord` with the ripple `A = -20 log10(min(dp, ds))`
   of the smaller of the passband deviation `dp = (10^(rp/20) - 1) / (10^(rp/20) + 1)` and the stopband
   deviation `ds = 10^(-rs/20)` (the linear unit takes both as deviations), the transition width the

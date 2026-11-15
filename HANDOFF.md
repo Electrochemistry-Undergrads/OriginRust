@@ -83,6 +83,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t02-find-replace` | Codex Windows, t02-find-replace | T02 existing Find in Sheets/Replace layout, defaults and options measured against Origin; find dialog and focused UI tests | claimed 2026-11-15; no Find in Project, grid/Go To, core/expr/history, plot, statistics, printing or other sessions' scopes |
 | `axis-breaks` | Claude Windows, "axis-breaks" | T11 more than one axis break (Origin's 1-7 breaks, per-break position), measured Origin break layout; core Axis break list, plot axis/tick drawing, graph_axis.rs Breaks tab, persistence and focused tests | claimed 2026-11-15; Axis fields only, no PLOT/plots.rs draw_plot, graph_details, navigation, stats or other sessions' scopes |
 | `codex/t13-fill-sidelines` | Codex Windows, t13-fill-sidelines | T13 Fill Area Sidelines only / Sidelines and Base; plot fill-mode/group copy, draw_fill_under, graph_details selector and focused tests | claimed 2026-11-15; no Axis/layout/PDF, mask policy/color, navigation, labels, stats or other sessions scopes |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |

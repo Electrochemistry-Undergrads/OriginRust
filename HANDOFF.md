@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-11-14. This file is short on purpose. **To start work, read this
+Last updated: 2026-11-15. This file is short on purpose. **To start work, read this
 file, then `docs/tasks/README.md`, then one brief `docs/tasks/Txx-*.md`.** Do not read
 `docs/audit/origin-differences-2026-11-12.md` or whole specs up front; the brief names the section to
 open. History of what was merged when is in `git log` (not repeated here).
@@ -19,6 +19,11 @@ open. History of what was merged when is in `git log` (not repeated here).
 - **Two or more sessions** often share this repo. Claim work in `re-workspace/scratch/peer-notes.md`
   (local only, read its last 40 lines on start); merge to `main` one branch at a time, after
   `git fetch`. See LESSONS "Two sessions on one repository need a written split".
+- **Inactive task claims:** If a task has had no edits for at least 48 consecutive hours,
+  another agent may take ownership. Check the task brief, its branch and worktree when
+  available, and the latest peer notes for evidence of newer work. Record the takeover in
+  `re-workspace/scratch/peer-notes.md` with the date, new owner, branch and scope, and preserve
+  earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## State of `main`
 
@@ -67,7 +72,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 - FFT/IFFT CI portability: phase unwrapping treats half-turn roundoff consistently across FFT backends; the original Origin fixtures remain unchanged (analysis-tools.md 15.1). The Linux-only failure is covered by an adjacent-representable-value regression.
 - CI repair (`4b048d1`): the repeated engineering-format failure (`1.0e-24` instead of `1e-24` with one significant digit) is fixed by parsing the decimal scaling power. Strict formatting expectations remain, with a regression across positive and negative decimal powers. The full macOS workspace at that commit passed 1576 tests (one ignored), formatting, and all-target Clippy. Pushes to `main` cancel older CI runs; use pull-request CI for verification while other sessions are pushing frequently.
 
-## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
+## In flight (check for recent edits before claiming)
 
 | Branch | Owner session | What | State |
 |---|---|---|---|

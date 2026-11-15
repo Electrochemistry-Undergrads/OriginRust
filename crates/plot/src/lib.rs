@@ -426,7 +426,7 @@ pub fn render_print_pdf(project: &Project, graph: WindowId) -> Result<Vec<u8>, P
 }
 
 /// Renders several graphs into one PDF, one page per graph in the order given (Origin's
-/// Export Graphs `multipage`, graphing.md 9.6). Each page is what [`export_bytes_with`] writes
+/// Export Graphs `multipage`, graphing.md 9.7). Each page is what [`export_bytes_with`] writes
 /// as a one-page PDF of that graph with the same size and margin settings: the page is the
 /// exported area of the graph, vector, with text kept as text. A graph may appear twice.
 pub fn render_multipage_pdf(

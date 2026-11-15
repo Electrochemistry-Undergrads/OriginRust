@@ -19,7 +19,7 @@ and the MCP server. Pages stay vector (text kept as text), as the one-graph PDF 
   project, Specified). Indexing of file names follows the Graph Page list order.
 - Not measured (no Origin on this machine): the dialog label and where the check box sits, the
   file name used for the combined file, whether each page keeps its graph's own size or a common
-  paper size, page order. Sheaf's choices are labelled in graphing.md 9.6.
+  paper size, page order. Sheaf's choices are labelled in graphing.md 9.7.
 
 ## Where
 
@@ -29,7 +29,7 @@ and the MCP server. Pages stay vector (text kept as text), as the one-graph PDF 
 - `crates/ops/src/args.rs` (`ExportArgs`, `PrintArgs`), `crates/cli`: several `--graph` and
   `--all-graphs` for `.pdf` output.
 - `crates/mcp`: `export_graph` with several graphs.
-- `docs/spec/graphing.md` 9.6 (new), `docs/spec/mcp.md`, README CLI section.
+- `docs/spec/graphing.md` 9.7 (new), `docs/spec/mcp.md`, README CLI section.
 
 ## Steps
 
@@ -47,7 +47,7 @@ and the MCP server. Pages stay vector (text kept as text), as the one-graph PDF 
 ## Done when
 
 One PDF with one page per selected graph is written from the dialog, the CLI and MCP; the checks
-pass; graphing.md 9.6 records what is Origin's and what is Sheaf's choice.
+pass; graphing.md 9.7 records what is Origin's and what is Sheaf's choice.
 
 ## Don't
 

@@ -1,5 +1,5 @@
 //! Several graphs in one PDF, one graph per page (Origin's `expGraph` `multipage`, graphing.md
-//! 9.6). Each page is converted on its own with svg2pdf's chunk API, exactly as the one-page
+//! 9.7). Each page is converted on its own with svg2pdf's chunk API, exactly as the one-page
 //! export converts it, and placed as a form XObject filling a page of the picture's size, so a
 //! page looks the same as the one-graph PDF of that graph.
 

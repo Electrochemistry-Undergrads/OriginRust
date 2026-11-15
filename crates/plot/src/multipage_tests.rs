@@ -1,4 +1,4 @@
-//! Tests of the multi-page PDF writer (graphing.md 9.6).
+//! Tests of the multi-page PDF writer (graphing.md 9.7).
 
 use super::*;
 use sheaf_core::template::Template;

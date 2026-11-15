@@ -534,6 +534,18 @@ Ctrl+J copies page (OLE), Ctrl+Alt+J copy as image, Ctrl+C copies as image by de
 
 Sheaf (Edit > Copy Page, Ctrl+J, `copy_page` in `crates/app/src/app.rs`): size factor 40 % (`COPY_PAGE_SIZE_FACTOR`), margin Auto (= Border, see 9.2), 300 dpi bitmap. On Windows the bitmap (`CF_DIB`) and an enhanced metafile of the same picture (`CF_ENHMETAFILE`, from the EMF writer, same size factor and margin) go on the clipboard in one session (`crates/app/src/winclip.rs`, through the `clipboard-win` crate that eframe's clipboard already brings, plus two Win32 calls). Not done: the WMF (`AddWMFInCopyPage`), the OLE object of Ctrl+J, and "copy as image" variants. Where the metafile cannot be put (not Windows, clipboard busy) the picture goes alone through egui's image copy.
 
+
+### 9.7 Multi-page PDF (T32)
+Origin 2018b added an "Option to export multiple graphs as a single multi-page PDF file" [W:originlab.com/2018b]. It is the `multipage` variable of `expGraph` (int, default `0`): set, the graph pages chosen by `export` go "to one PDF file with multi-pages" [W:x-function/ref/expgraph]. File names index in the order of the Graph Page list.
+
+Not measured (no Origin on the macOS machine; measure on Windows with `tools/origin-ref/`): the dialog label and place of the check box, the name of the combined file, whether pages keep each graph's size or share one paper size, page order, whether `tr`/`tr1` settings apply to every page.
+
+Sheaf (`sheaf_plot::render_multipage_pdf`, `crates/plot/src/multipage.rs`):
+- One page per graph, in the order given (project order for "all graphs"). Each page is the one-page PDF export of that graph with the same size and margin settings (9.2, 9.3): its media box is the exported area, vector, text kept as text. svg2pdf converts each page to its own chunk (`to_chunk`), placed as a form XObject filling the page; fonts are embedded once per page.
+- Paper variant (`render_print_multipage_pdf`, `sheaf print`): each sheet placed by Page Setup as in 19.4, one sheet per graph.
+- Export Graphs dialog: with PDF and more than one graph, the check box "Export as multi-page PDF file" (Sheaf's label), off by default as Origin's `multipage`. One file, named from the file-name template of the first graph; the overwrite rule applies to it.
+- CLI: repeated `--graph NAME` or `--all-graphs` on `sheaf export` (output must be `.pdf` for several graphs) and `sheaf print` (`--output` writes one paper-sized PDF; submission to `lp` sends one job per graph). MCP: `export_graph` with `graphs` or `all_graphs` (docs/spec/mcp.md).
+
 ---
 
 ## 10. Themes and templates

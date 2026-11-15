@@ -92,13 +92,20 @@ impl ExportFormat {
     /// The colour depths the format can store.
     fn depths(self) -> &'static [ColorDepth] {
         match self {
-            // Origin 2016's Color Depth lists, in its order (graphing.md 9.4); its 16-bit Color for
-            // BMP and TGA is not offered.
-            ExportFormat::Png | ExportFormat::Bmp | ExportFormat::Pcx | ExportFormat::Tiff => {
+            // Origin 2016's Color Depth lists, in its order (graphing.md 9.4).
+            ExportFormat::Bmp => &[
+                ColorDepth::Mono,
+                ColorDepth::Colors16,
+                ColorDepth::Colors256,
+                ColorDepth::Bit16,
+                ColorDepth::Bit24,
+                ColorDepth::Grey8,
+            ],
+            ExportFormat::Png | ExportFormat::Pcx | ExportFormat::Tiff => {
                 &[ColorDepth::Mono, ColorDepth::Colors16, ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8]
             }
             ExportFormat::Psd => &[ColorDepth::Mono, ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8],
-            ExportFormat::Tga => &[ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8],
+            ExportFormat::Tga => &[ColorDepth::Colors256, ColorDepth::Bit16, ColorDepth::Bit24, ColorDepth::Grey8],
             ExportFormat::Jpeg => &[ColorDepth::Bit24, ColorDepth::Grey8],
             ExportFormat::Gif => &[ColorDepth::Mono, ColorDepth::Colors16, ColorDepth::Colors256, ColorDepth::Grey8],
             _ => &[],
@@ -111,6 +118,7 @@ fn depth_label(d: ColorDepth) -> &'static str {
         ColorDepth::Mono => "Monochrome",
         ColorDepth::Colors16 => "16 Colors",
         ColorDepth::Colors256 => "256 Colors",
+        ColorDepth::Bit16 => "16-bit Color",
         ColorDepth::Bit24 => "24-bit Color",
         ColorDepth::Grey8 => "8-bit Gray Scale",
     }

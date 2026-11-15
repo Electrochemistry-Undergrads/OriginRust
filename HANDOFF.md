@@ -43,7 +43,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | Branch | Owner session | What | State |
 |---|---|---|---|
 | `codex/t13-offset-multipliers` | Codex Windows, t13-offset-multipliers | T13 Offset tab X/Y Multiplier; core/plot/graph_details, reader, gadget/graph_view display mapping and app.rs `start_integrate` only, focused tests | claimed 2026-11-14; no worksheet copy/paste symbols or numerical analysis/fitting changes |
-| `codex/t07-clipboard-formats` | Codex Windows, t07-clipboard-formats | T07 Windows worksheet clipboard: displayed/15-digit external text plus private lossless internal text; core serializer, new native adapter and copy/paste wiring | claimed 2026-11-14; existing clipboard-win only; no Cargo/build, graph clipboard, other sessions' code |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

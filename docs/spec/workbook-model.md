@@ -415,17 +415,55 @@ numeric paste/Undo. Parameter rows retain Sheaf's displayed alphabetical order (
 model decision); missing cells beyond the stored column length retain their existing empty-field
 behavior because that case was not measured independently.
 
-**Remaining differences:** the app's plain Copy and full-precision Copy both use lossless
-round-trip text, so 0.30000000000000004 keeps its final digits. The app still writes LF with a
-final newline and quotes fields to protect table boundaries. Those choices remain explicit
-Sheaf transport behavior. Origin's separate text/internal clipboard formats have not been
-implemented: changing Sheaf's sole clipboard text to displayed or 15-digit values would lose
-numeric precision during internal paste. The published
+**Transport:** Windows now has separate external text and private lossless data (13.4b).
+Other platforms retain the existing lossless text fallback; parameter order and quoting remain
+explicit differences. The published
 [Origin precision reference](https://docs.originlab.com/quick-help/full-precision-copy/)
 describes full-precision worksheet-to-worksheet copying even when external text uses displayed
 digits. The current
 [copying reference](https://docs.originlab.com/origin-help/copypaste-wks-data/)
 describes a newer label-selection default, which is not substituted for the measured 2016 result.
+
+### 13.4b Windows worksheet clipboard formats (T07)
+
+On Windows, worksheet Copy/Cut publish Unicode text using the current displayed number format;
+Copy Full Precision publishes 15 significant digits. Both use tabs and CRLF without a final
+newline. Copy including label rows uses displayed data and the rows measured above. Ctrl+Alt+C
+and Ctrl+Shift+C keep their precision/label behavior when the native window bridge sends a Copy
+event instead of a key event. Origin's `@CWACC` preference is not imported.
+
+The same clipboard transaction publishes `OriginRust.Sheaf.Worksheet.v1`, a private lossless
+table. A receiving Sheaf instance reads both forms under one clipboard lock, verifies that the
+private external text exactly matches the actual Unicode clipboard contents, and uses the full
+data for worksheet paste. The incoming paste event may contain the raw text or the window
+bridge's one-pass CRLF-to-LF normalization. Literal CR-CR-LF sequences and final-newline differences
+are preserved/checked. A changed clipboard, absent/private-invalid data or an external text-only
+copy uses the incoming text. The format is independent of project/column identifiers and remains
+readable after the writing process exits. Label-cell and text-editor copies remain plain text.
+
+The private bytes are `SHEAFWK1`, two little-endian u64 UTF-8 byte lengths (external then full
+table), and those UTF-8 strings. Length arithmetic, version and UTF-8 are checked; padding after
+the declared data is ignored. The total private payload is capped at 128 MiB. If native writing
+or payload allocation fails, or on non-Windows systems, Copy keeps the existing lossless text
+fallback. Graph Copy Page continues using its bitmap/metafile adapter.
+
+An empty external text cell uses one LF so that the window bridge emits a paste event; its
+private data contains an explicitly quoted empty cell, so pasting clears a destination cell.
+Trailing empty single-column text rows are likewise quoted internally. Copy remains a read-only
+project action; paste and cut retain their existing Undo/Redo boundaries.
+
+Validation: Origin fixtures cover displayed and 15-digit text; core tests cover empty text rows;
+pure payload tests cover versions, lengths, Unicode and event normalization; UI tests cover both
+new/imported tables, exact numeric bits, modifiers, labels, empty cells, Cut/Paste and Undo.
+The manual example `cargo run -p sheaf-app --example worksheet_clipboard_probe` verifies the real
+Windows formats. A second `read` process recovered exact data after the writer exited, and an
+`external` process verified that replacing the clipboard with the same Unicode-only text removes
+the private data. The local scratch wrapper preserved/restored the prior clipboard data object.
+
+Remaining differences: other platforms use the fallback; quoting protects separators rather than
+matching Origin's unquoted commas; parameter rows follow the current alphabetical display order;
+number display details remain those of the column formatter. Formatted/OLE tables, links and
+automatic label detection on paste are separate features.
 
 ## 14. Suggested Rust data model (P0)
 

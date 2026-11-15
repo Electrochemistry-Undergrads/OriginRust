@@ -5845,6 +5845,9 @@ mod error_bars;
 #[path = "ui_tests/clipboard_origin.rs"]
 mod clipboard_origin;
 
+#[path = "ui_tests/clipboard_formats.rs"]
+mod clipboard_formats;
+
 #[test]
 fn update_legend_keeps_custom_text_and_adds_the_plots_it_lacks() {
     let mut h = start(vec![data_file("updleg")]);

@@ -50,11 +50,14 @@ fn full_text(x: f64) -> String {
 }
 
 /// The text of one cell as Copy writes it.
-fn copy_cell(column: &Column, row: usize, full_precision: bool) -> String {
+fn copy_cell(column: &Column, row: usize, full_precision: bool, external: bool) -> String {
+    let precise = |x| {
+        if external { crate::format::format_full_precision(x) } else { full_text(x) }
+    };
     match &column.data {
         ColumnData::Numeric(v) => match v.get(row) {
             Some(x) if x.is_nan() => "--".into(),
-            Some(x) if full_precision && !column.format.is_date_time() && x.is_finite() => full_text(*x),
+            Some(x) if full_precision && !column.format.is_date_time() && x.is_finite() => precise(*x),
             Some(_) => column.shown_text(row),
             None => String::new(),
         },
@@ -62,7 +65,7 @@ fn copy_cell(column: &Column, row: usize, full_precision: bool) -> String {
         ColumnData::Mixed { numbers, .. } => match (column.data.text_cell(row), numbers.get(row)) {
             (Some(t), _) => t.to_string(),
             (None, Some(x)) if x.is_nan() => "--".into(),
-            (None, Some(x)) if full_precision && !column.format.is_date_time() && x.is_finite() => full_text(*x),
+            (None, Some(x)) if full_precision && !column.format.is_date_time() && x.is_finite() => precise(*x),
             (None, Some(_)) => column.shown_text(row),
             (None, None) => String::new(),
         },
@@ -79,26 +82,56 @@ impl Worksheet {
     /// The cells of the columns at these positions (in this order), rows `rows`, as text with a
     /// tab between the cells of a row and a line break after every row.
     pub fn copy_text(&self, columns: &[usize], rows: Range<usize>, options: CopyOptions) -> String {
+        self.copy_text_transport(columns, rows, options, false)
+    }
+
+    /// Text for external applications: displayed digits or Origin's 15 significant digits,
+    /// with CRLF separators and no terminal newline. The private internal copy stays lossless.
+    pub fn copy_external_text(&self, columns: &[usize], rows: Range<usize>, options: CopyOptions) -> String {
+        self.copy_text_transport(columns, rows, options, true)
+    }
+
+    fn copy_text_transport(
+        &self,
+        columns: &[usize],
+        rows: Range<usize>,
+        options: CopyOptions,
+        external: bool,
+    ) -> String {
         let cols: Vec<&Column> = columns.iter().filter_map(|i| self.columns.get(*i)).collect();
         let mut out = String::new();
-        let mut line = |cells: Vec<String>| {
-            out.push_str(&cells.into_iter().map(quote_field).collect::<Vec<_>>().join("\t"));
-            out.push('\n');
+        let mut first = true;
+        let mut line = |cells: Vec<String>, data: bool| {
+            if external && !first {
+                out.push_str("\r\n");
+            }
+            first = false;
+            let empty_row = data && !external && options.full_precision && cells.len() == 1 && cells[0].is_empty();
+            out.push_str(
+                &cells
+                    .into_iter()
+                    .map(|text| if empty_row { "\"\"".into() } else { quote_field(text) })
+                    .collect::<Vec<_>>()
+                    .join("\t"),
+            );
+            if !external {
+                out.push('\n');
+            }
         };
         if options.label_rows {
-            line(cols.iter().map(|c| c.long_name.clone()).collect());
-            line(cols.iter().map(|c| c.units.clone()).collect());
-            line(cols.iter().map(|c| c.comments.clone()).collect());
+            line(cols.iter().map(|c| c.long_name.clone()).collect(), false);
+            line(cols.iter().map(|c| c.units.clone()).collect(), false);
+            line(cols.iter().map(|c| c.comments.clone()).collect(), false);
             // Origin 2016 keeps the F(x) row even when every formula is empty.
-            line(cols.iter().map(|c| c.formula.clone().unwrap_or_default()).collect());
+            line(cols.iter().map(|c| c.formula.clone().unwrap_or_default()).collect(), false);
             for name in self.parameter_names() {
                 if cols.iter().any(|c| c.params.contains_key(&name)) {
-                    line(cols.iter().map(|c| c.params.get(&name).cloned().unwrap_or_default()).collect());
+                    line(cols.iter().map(|c| c.params.get(&name).cloned().unwrap_or_default()).collect(), false);
                 }
             }
         }
         for row in rows {
-            line(cols.iter().map(|c| copy_cell(c, row, options.full_precision)).collect());
+            line(cols.iter().map(|c| copy_cell(c, row, options.full_precision, external)).collect(), true);
         }
         out
     }

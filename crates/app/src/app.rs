@@ -123,6 +123,7 @@ pub struct SheafApp {
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
     copied: String,
+    worksheet_clipboard: crate::wks_clipboard::WorksheetClipboard,
     /// The pixel size of the last page put on the clipboard by Copy Page.
     copied_page: Option<[usize; 2]>,
     about: bool,
@@ -189,6 +190,7 @@ impl SheafApp {
             sort: None,
             sheet_name: None,
             copied: String::new(),
+            worksheet_clipboard: crate::wks_clipboard::WorksheetClipboard::default(),
             copied_page: None,
             about: false,
             toolbars: Toolbars::default(),
@@ -1274,7 +1276,7 @@ impl SheafApp {
             let original = grid::label_text_full(c, &row);
             let replacement = match op {
                 CellOp::Copy(_) | CellOp::Cut => {
-                    ctx.copy_text(original.clone());
+                    self.worksheet_clipboard.write_plain(ctx, original.clone());
                     self.copied = original;
                     if op == CellOp::Cut { Some(String::new()) } else { None }
                 }
@@ -1321,7 +1323,12 @@ impl SheafApp {
                     label_rows: kind == CopyKind::WithLabels,
                 };
                 let text = sheet.copy_text(&t.columns, t.rows.clone(), options);
-                ctx.copy_text(text.clone());
+                let external = sheet.copy_external_text(
+                    &t.columns,
+                    t.rows.clone(),
+                    CopyOptions { full_precision: kind == CopyKind::FullPrecision, label_rows: options.label_rows },
+                );
+                self.worksheet_clipboard.write(ctx, &external, &text);
                 self.copied = text;
                 let what = format!("{} row(s) of {} column(s)", t.rows.len(), t.columns.len());
                 if matches!(op, CellOp::Cut) {
@@ -1372,6 +1379,7 @@ impl SheafApp {
                 ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
             }
             CellOp::PasteText(text) => {
+                let text = self.worksheet_clipboard.for_paste(text);
                 let (col, row) = t.top_left;
                 match self.doc.edit("Paste", |p| p.paste_text(book, sheet_index, col, row, &text)) {
                     Ok(report) => {
@@ -1902,9 +1910,20 @@ impl SheafApp {
         // belong to the cells unless a text field has the keyboard.
         if !typing && let Some(book) = menu_ctx.book {
             let events = ctx.input(|i| i.events.clone());
+            // winit consumes Ctrl+Alt+C and Ctrl+Shift+C as Copy events too, without a C
+            // key event. Keep Origin's variants reachable through the native shortcuts.
+            let copy_kind = ctx.input(|i| {
+                if i.modifiers.alt {
+                    CopyKind::FullPrecision
+                } else if i.modifiers.shift {
+                    CopyKind::WithLabels
+                } else {
+                    CopyKind::Plain
+                }
+            });
             for event in events {
                 let op = match event {
-                    egui::Event::Copy => CellOp::Copy(CopyKind::Plain),
+                    egui::Event::Copy => CellOp::Copy(copy_kind),
                     egui::Event::Cut => CellOp::Cut,
                     egui::Event::Paste(text) => CellOp::PasteText(text),
                     _ => continue,

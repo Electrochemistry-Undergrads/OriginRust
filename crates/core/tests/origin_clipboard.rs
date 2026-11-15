@@ -93,3 +93,42 @@ fn missing_value_tokens_do_not_reduce_internal_numeric_paste_precision() {
         assert_eq!(got.to_bits(), expected.to_bits());
     }
 }
+
+#[test]
+fn external_text_matches_origin_precision_and_line_separators_without_changing_internal_text() {
+    let mut p = Project::new();
+    let book = p.add_workbook("");
+    p.add_column(
+        book,
+        0,
+        Designation::Y,
+        ColumnData::numeric(vec![2.345678901234567, f64::NAN, 0.3, 1.234567890123456e-8]),
+    )
+    .unwrap();
+    let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
+    ws.columns[0].format = NumberFormat::Decimal(2);
+    assert_eq!(ws.copy_external_text(&[0], 0..4, CopyOptions::default()), "2.35\r\n--\r\n0.30\r\n0.00");
+    let full = CopyOptions { full_precision: true, ..Default::default() };
+    assert_eq!(ws.copy_external_text(&[0], 0..4, full), "2.34567890123457\r\n--\r\n0.3\r\n1.23456789012346E-8");
+    assert!(ws.copy_text(&[0], 0..4, full).starts_with("2.345678901234567\n"));
+}
+
+#[test]
+fn lossless_empty_text_rows_survive_single_column_copy_and_paste() {
+    let mut p = Project::new();
+    let book = p.add_workbook("");
+    p.add_column(book, 0, Designation::Label, ColumnData::text(vec!["first".into(), "".into(), "".into()])).unwrap();
+    p.add_column(book, 0, Designation::Label, ColumnData::text(vec!["old".into(); 3])).unwrap();
+    let text = p.workbook(book).unwrap().sheet().copy_text(
+        &[0],
+        0..3,
+        CopyOptions { full_precision: true, ..Default::default() },
+    );
+    assert_eq!(parse_table(&text), [vec!["first"], vec![""], vec![""]]);
+    let pasted_range = p.paste_text(book, 0, 1, 0, &text).unwrap();
+    assert_eq!(pasted_range.rows, 3);
+    let pasted = &p.workbook(book).unwrap().sheet().columns[1];
+    assert_eq!(pasted.cell_text(0), "first");
+    assert_eq!(pasted.cell_text(1), "");
+    assert_eq!(pasted.cell_text(2), "");
+}

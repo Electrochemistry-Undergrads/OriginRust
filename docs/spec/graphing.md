@@ -2304,6 +2304,11 @@ line graph active. Everything not listed here is unmeasured.
   (unmeasured). Clicking the Print button by script only showed the tooltip, so the system dialog
   behind it was not captured.
 
+Sheaf's Standard toolbar Print button uses the same command resolver and print action as
+File > Print. It is available for the same active-window contexts as the menu and uses the
+measured tooltip "Print the active window". Tests switch between workbook and graph focus and
+check menu/toolbar availability and click dispatch; the print backend is skipped by the UI harness.
+
 ### 19.2 Page Setup (measured, window captured)
 
 A small modal window titled "Page Setup", about 360 x 415 px:
@@ -2422,5 +2427,5 @@ Page Setup to change that layout.
 
 ### 19.8 Not done
 
-Print and Print Preview of a workbook (a sheet as a table), View > Print View and the Standard
-toolbar's Print button, Origin's Source (tray), native CLI printer submission on Windows.
+Print and Print Preview of a workbook (a sheet as a table), View > Print View,
+Origin's Source (tray), native CLI printer submission on Windows.

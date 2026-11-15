@@ -7,7 +7,8 @@ CLI graph printing added on macOS without Origin (`cli-print`, 2026-11-14):
 with the graph scaled and centred by `PageSetup::place`; without `--output`, macOS/Linux submit
 that PDF through `lp` to the default or `--printer NAME` destination. Windows supports PDF output
 only. The native macOS graph print panel is added in `mac-print-panel` (2026-11-15), using
-PDFKit and the same print PDF; workbook printing remains separate. No physical printer was used
+PDFKit and the same print PDF. The Standard toolbar Print button now shares the menu command
+and availability rules; workbook printing remains separate. No physical printer was used
 in the automated checks. Formatting, strict all-target Clippy and 2,119 workspace tests passed (one ignored).
 
 **Size:** M. **Branch:** `print`. **Model:** Sonnet. Needs a Windows session for the Windows path and a

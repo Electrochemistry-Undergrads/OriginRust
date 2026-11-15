@@ -3640,3 +3640,52 @@ Still different: the Data menu has no plot list with a check on the active plot;
 instead); Move is Sheaf's design, unmeasured (M4): the reach for the grab (30), X-and-Y, follow-by-distance, undo text
 stay [Sheaf choice]. Unmeasured and left: items 6 and 8 (other plot kinds, Hide Masked Points, filters, clipped
 points, Skip Points, Show Elements Data, waterfall), the exact hit radius, log axes, column plots.
+
+## 21. Layers, insets and three/four Y axes (T61, measured 2026-11-15, Origin 2016)
+
+Everything here was measured in OriginPro 2016 on our own synthetic data (21 rows, X = 0 to 10, five Y columns of very different size) through COM/LabTalk and by driving the menus (`tools/origin-ref`). Raw outputs, pictures and the generator scripts stay in the git-ignored `re-workspace/scratch/t61/`. Anything not listed was **unmeasured**. Layer numbers are 1-based as in LabTalk; frames are in the layer's own unit (`layer.unit` 1 = % of page, 7 = % of linked layer); `showAxes` of an axis is 1 = bottom/left only, 2 = top/right only, 3 = both, 0 = none (`showLabels` follows it).
+
+### 21.1 Graph > New Layer(Axes) and the Graph toolbar
+
+**Menu** (Graph menu of Origin 2016; the short menu shows Add Plot to Layer, Layer Management..., Add Straight Line..., New Layer(Axes), Merge Graph Windows..., Legend, Fit Page to Layers..., Exchange X-Y Axes; the full menu adds Layer Contents... F12, Plot Setup..., Add Error Bars..., Add Function Graph..., Rescale to Show All Ctrl+R, Add Axis Scrollbar, Extract to Graphs..., Apply Palette to Color Map..., Add Graphs to Layout..., Speed Mode..., New Table..., New Color Scale, New Bubble Scale, New XY Scaler, Set Active Layer By Layer Icon Only, Fit Layer to Graph, Offset Grouped Data in Layer, Convert to Standard Font Size). **New Layer(Axes)** has nine items and then a separator and "Open Dialog..." (the `layadd` dialog):
+
+1. Bottom-X Left-Y
+2. Top-X (Linked Y Scale and Dimension)
+3. Right-Y (Linked X Scale and Dimension)
+4. Left-Y (Linked X Scale and Dimension)
+5. Top-X Right-Y (Linked Dimension)
+6. Bottom-X Right-Y (Linked Dimension)
+7. Inset (Linked Dimension)
+8. Inset With Data (Linked Dimension)
+9. No Axes (Linked XY Scale and Dimension)
+
+**There is no "Horizontal Axis Layer..." or "Vertical Axis Layer..." item in Origin 2016** (neither in the menu nor in `layadd`'s `type` list). The two greyed Sheaf items have no reference behaviour and are reassigned (21.8).
+
+**Toolbar.** The vertical Graph toolbar has six layer buttons, top to bottom, with these tooltips: "Add Bottom-X Left-Y Layer" (tooltip text "Add a new layer (X axis at the bottom and Y axis on the left)"), "Add Top-X Layer", "Add Right-Y Layer", "Add Top-X Right-Y Layer", "Add Inset Graph" ("Add a linked inset layer to the active layer") and "Add Inset Graph With Data" ("Add a linked inset layer and include the data from the active layer"). They add the layers of menu items 1, 2, 3, 5, 7 and 8 (the same result in the picture; Bottom-X Right-Y, Left-Y and No Axes have no button). Left-Y and Bottom-X Right-Y exist only in the menu and in `layadd`.
+
+**LabTalk.** `layadd type:=NAME;` with `NAME` = `normal`, `topx`, `righty`, `lefty`, `txry`, `bxry`, `inset`, `insetdata`, `noxy`. The layer is appended as the last layer, becomes the active layer (`page.active` = new index) and is named by `layer.name$` as in the table. `layadd userdef:=1 bottom:=B left:=L top:=T right:=R linkto:=P xaxis:=none|straight|custom yaxis:=none|straight|custom;` makes any combination (measured: `bottom:=1 left:=0 top:=1 right:=1 linkto:=1 xaxis:=straight yaxis:=custom` gave link 1, x.link 1, y.link 2 = custom, both X sides shown (`x.showAxes` 3) and the right Y side (`y.showAxes` 2); `layadd`'s `offset` and `activate` options were not measured).
+
+**Parent.** The parent of the new linked layer is the **active layer** (`layer.link` = its number): with three layers and layer 2 active, `type:=righty` gave link 2; `righty` then `topx` gave the top-X layer link 2. A linked layer's `unit` is 7 (% of linked layer) and its frame is the parent's, `0 0 100 100`.
+
+Measured on a plain Line graph (parent frame left 17.91, top 11.58, width 68.16, height 71.83 % of page; X -2.5 to 12.5, Y -25 to 125; the new layer is empty, so its own scales are the empty defaults 0 to 10, step 2):
+
+| type | `layer.name$` | link | x.link / y.link | frame | axes shown X / Y | scales |
+|---|---|---|---|---|---|---|
+| normal | BottomXLeftY | none (0) | 0 / 0 | unit 1, 15.59 / 8.531 / 68.17 / 71.83 (first run; 20.69 / 7.963 in a second run after data was plotted; the offset from the parent was **not** constant) | 1 / 1 | own |
+| topx | TopX | parent | 0 / 1 (straight) | 0 / 0 / 100 / 100 | 2 / 0 (top line, ticks and labels) | X own, Y = parent's |
+| righty | RightY | parent | 1 (straight) / 0 | 0 / 0 / 100 / 100 | 0 / 2 | X = parent's, Y own |
+| lefty | LeftY | parent | 1 / 0 | 0 / 0 / 100 / 100 | 0 / 1 (a second left axis over the first) | X = parent's, Y own |
+| txry | TopXRightY | parent | 0 / 0 | 0 / 0 / 100 / 100 | 2 / 2 | both own |
+| bxry | BottomXRightY | parent | 0 / 0 | 0 / 0 / 100 / 100 | 1 / 2 | both own |
+| inset | Inset | parent | 0 / 0 | 75 / 0 / 25 / 25 (left / top / width / height, % of linked layer) | 1 / 1 | own (empty 0 to 10) |
+| insetdata | InsetWithData | parent | 0 / 0 | 75 / 0 / 25 / 25 | 1 / 1 | **copied** from the parent (-2.5 to 12.5, -25 to 125) but not linked; the parent's first plot is plotted again in it |
+| noxy | NoAxes | parent | 1 / 1 | 0 / 0 / 100 / 100 | 0 / 0 | both = parent's |
+
+Pictures (PNG exports of each type are in the scratch folder): top-X, right-Y and top-X right-Y layers show ticks pointing out, tick labels and the placeholder titles "X Axis Title" / "Y Axis Title" until data is plotted in them; an empty layer has no curve. The inset is a small box in the parent's top-right corner (left 75 %, top 0 %, 25 % by 25 % of the parent's frame, so it overlaps the parent's own data and legend) with only a bottom X and a left Y axis, no top or right line, and tick label, title and legend fonts scaled down with the layer. Plotting data into any new layer gives it its own legend; with data, right-Y and inset layers show the data's long name and units as the axis title (for example "Sine (mA)"), rotated like the left title, to the right of the right axis. The inset with data keeps the parent's X and Y title text.
+
+Plotting into a new layer: `plotxy iy:=[Book]Sheet!(1,3) plot:=200 ogl:=[Graph1]2!;` (layer 2). Autoscale of an unlinked scale fits that layer's data (an inset's Y became -0.075 to 0.075 for the sine column); a linked scale follows the parent.
+
+### 21.2 Toolbar and menu facts that the app copies
+
+- Undo text after adding any of these layers (button or menu): "Undo Create".
+- The graph shows layer icons "1 2 3 ..." in its top-left corner; the active layer's icon is dark, the others grey (see 21.3).

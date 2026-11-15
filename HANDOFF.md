@@ -42,6 +42,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/windows-exe-icon` | Codex Windows, windows-exe-icon | T31: embed the existing Sheaf `.ico` in Windows executable resources, validate the built PE | claimed 2026-11-14; no Start Menu/file associations or other app work |
 | `codex/t07-origin-copy-defaults` | Codex Windows, t07-origin-copy-defaults | T07 clipboard defaults, label order and precision reference only (core clipboard and focused tests; no worksheet export or other sessions' code) | claimed 2026-11-14; own worktree/build reused sequentially after completed T01 |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 

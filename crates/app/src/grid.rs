@@ -426,6 +426,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         curve: None,
         layer_curves: Vec::new(),
         stack: None,
+        can_cumulate: false,
     }
 }
 

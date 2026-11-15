@@ -6897,6 +6897,35 @@ fn choosing_the_current_offset_mode_is_a_no_op_that_keeps_its_settings() {
     assert_eq!(h.state().doc.undo_label().map(str::to_string), label, "no undo step");
 }
 
+#[test]
+fn cumulative_is_disabled_on_a_layer_without_a_line_scatter_or_symbol_plot() {
+    let mut h = start(vec![data_file("offset-cumulative-column")]);
+    assert!(h.state().menu_context().can_cumulate, "a line plot cumulates");
+    menu_path(&mut h, &["Graph", OFFSET_MENU]);
+    assert!(!menu_entry(&h, "Cumulative").accesskit_node().is_disabled());
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    edit_graph(&mut h, |g| g.layers[0].plots.iter_mut().for_each(|p| p.kind = PlotKind::Column));
+    assert!(!h.state().menu_context().can_cumulate);
+    let undo = h.state().doc.undo_label().map(str::to_string);
+    menu_path(&mut h, &["Graph", OFFSET_MENU]);
+    assert!(menu_entry(&h, "Cumulative").accesskit_node().is_disabled());
+    assert!(!menu_entry(&h, "Constant").accesskit_node().is_disabled(), "the other modes still work");
+    menu_entry(&h, "Cumulative").click();
+    settle(&mut h);
+    assert_eq!(graph(&h).layers[0].stack, Stack::None);
+    assert_eq!(h.state().doc.undo_label().map(str::to_string), undo, "no undo step");
+    // The same in Plot Details.
+    assert!(!sheaf_core::stack::layer_cumulates(&graph(&h).layers[0]));
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Stack");
+    assert!(is_disabled(&h, "Cumulative"));
+    assert!(!is_disabled(&h, "Constant"));
+}
+
 fn window_ids_of(p: &Project) -> WindowId {
     p.graphs().next().unwrap().id
 }

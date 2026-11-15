@@ -154,7 +154,7 @@ cross-sheet formula work. Phase 2 attach and
   RGB, grayscale and 256 colors with DPI metadata. The image is flattened onto white, without
   editable graph layers. PSD dimensions are limited before pixel allocation; graphing.md 9.4
   records the published references and limits. TIFF now also offers 256 Colors, with the
-  selected None/PackBits/LZW compression and DPI retained; Monochrome and 16 Colors added 2026-11-14 with Origin's per-format lists and ordered dither (graphing 9.4); 16-bit Color (BMP, TGA) open.
+  selected None/PackBits/LZW compression and DPI retained; Monochrome, 16 Colors and 16-bit Color (BMP, TGA) added 2026-11-14 with Origin's per-format lists, ordered dither and 5-5-5 layout (graphing 9.4).
 
 - T19 import separators: **Other** reads a set of delimiter characters, with optional
   **Treat Consecutive Delimiters as One**; **Multiple Characters** reads a whole sequence.

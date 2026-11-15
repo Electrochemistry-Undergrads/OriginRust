@@ -465,6 +465,12 @@ Image Type, Image Settings expanded; `re-workspace/scratch/t05/d2`). Labels and 
 - 16 Colors is a 4-bit indexed PNG with an adaptive palette built from the picture (all 16 entries on a 5-bit-per-
   channel grid, for example white as 247, 247, 247 and red as 247, 0, 0); solid colours are not dithered (the red
   line kept its pixel count). Origin's quantiser is a library one and is not reproduced.
+- 16-bit Color (BMP and TGA, measured the same way, `o16bit.bmp`, `o16bit.tga`): BMP is BI_RGB with a 40-byte header,
+  16 bits per pixel, no palette, rows bottom to top padded to 4 bytes; TGA is image type 2 (true colour), 16 bits,
+  descriptor 0 (no attribute bits, rows bottom to top). Pixels are `0RRRRRGGGGGBBBBB`; Origin sets the unused top bit
+  on the page background (0xFFFF) and not inside the layer (0x7FFF). The picture has the same 64 colours as the
+  256-colour export, so Origin draws in 15-bit colour first. Sheaf writes the same layout with the top bit always clear
+  and each channel reduced by dropping its low three bits (other formats given 16-bit write 24-bit).
 - 256 Colors (same probe) also has palette values on that 5-bit grid (levels 0, 57, 99, 140, 181, 214, 255); Sheaf's
   NeuQuant palette differs in the exact entries.
 

@@ -668,3 +668,26 @@ fn gif_mono_16_colour_and_grey_keep_their_exact_palettes() {
         }
     }
 }
+
+#[test]
+fn sixteen_bit_bmp_and_tga_store_five_bits_per_channel_like_origin() {
+    let o = RasterOptions { depth: ColorDepth::Bit16, ..RasterOptions::default() };
+    let bmp = raster_bytes("bmp", &o);
+    let u32_at = |b: &[u8], at: usize| u32::from_le_bytes(b[at..at + 4].try_into().unwrap()) as usize;
+    let (w, h) = (u32_at(&bmp, 18), u32_at(&bmp, 22));
+    assert_eq!(u16::from_le_bytes([bmp[28], bmp[29]]), 16);
+    assert_eq!((u32_at(&bmp, 30), u32_at(&bmp, 10), u32_at(&bmp, 46)), (0, 54, 0), "BI_RGB, no palette");
+    let stride = (w * 2).div_ceil(4) * 4;
+    assert_eq!(bmp.len(), 54 + stride * h);
+    // The white page is 0x7FFF: five bits of each channel, the top bit clear.
+    assert_eq!(u16::from_le_bytes([bmp[54], bmp[55]]), 0x7FFF);
+    let tga = raster_bytes("tga", &o);
+    assert_eq!((tga[1], tga[2], tga[16], tga[17]), (0, 2, 16, 0), "true colour, 16 bits, rows bottom to top");
+    let (tw, th) = (u16::from_le_bytes([tga[12], tga[13]]) as usize, u16::from_le_bytes([tga[14], tga[15]]) as usize);
+    assert_eq!(tga.len(), 18 + 2 * tw * th);
+    assert!(tga[18..].chunks(2).all(|p| u16::from_le_bytes([p[0], p[1]]) & 0x8000 == 0));
+    // The same picture in both: BMP rows are bottom to top as well, so the first rows agree.
+    assert_eq!(&tga[18..18 + 2 * tw], &bmp[54..54 + 2 * w]);
+    // Formats without a 16-bit form write 24-bit colour.
+    assert_eq!(raster_bytes("png", &o), raster_bytes("png", &RasterOptions::default()));
+}

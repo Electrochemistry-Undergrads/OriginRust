@@ -93,6 +93,8 @@ pub enum ColorDepth {
     Colors16,
     /// An optimised palette of at most 256 colours.
     Colors256,
+    /// 16-bit colour, five bits per channel (BMP and TGA; other formats write 24-bit).
+    Bit16,
     /// 24-bit colour (PNG keeps its alpha channel).
     #[default]
     Bit24,
@@ -217,8 +219,14 @@ fn indexed_for(depth: ColorDepth, rgb: &[u8], width: u32) -> Option<Indexed> {
         ColorDepth::Colors16 => Some(quantise_to(rgb, 16)),
         ColorDepth::Colors256 => Some(quantise(rgb)),
         ColorDepth::Grey8 => Some(grey_indexed(rgb)),
-        ColorDepth::Bit24 => None,
+        ColorDepth::Bit16 | ColorDepth::Bit24 => None,
     }
+}
+
+/// A pixel as 16 bits: five bits each of red, green and blue (`0RRRRRGGGGGBBBBB`), the top bit
+/// clear. Origin's 16-bit BMP and TGA store exactly this layout (graphing.md 9.4).
+fn rgb555(p: &[u8; 3]) -> u16 {
+    (u16::from(p[0] >> 3) << 10) | (u16::from(p[1] >> 3) << 5) | u16::from(p[2] >> 3)
 }
 
 /// Bits per pixel of a packed palette image: 1 for mono, 4 for 16 colours, 8 otherwise.
@@ -248,7 +256,7 @@ fn dpm(dpi: f64) -> u32 {
 
 /// Encodes the picture as PNG with the resolution recorded; `Bit24` keeps the alpha channel.
 pub(crate) fn encode_png_with(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec<u8>, PlotError> {
-    if o.depth == ColorDepth::Bit24 {
+    if matches!(o.depth, ColorDepth::Bit24 | ColorDepth::Bit16) {
         return encode_png(r, dpi);
     }
     let rgb = flatten_rgb(r);
@@ -355,7 +363,11 @@ pub(crate) fn encode_bmp(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec<
     let (w, h) = (r.width as usize, r.height as usize);
     let bits = packed_bits(o.depth);
     let colours = 1usize << bits;
-    let (bpp, pal_bytes) = if indexed.is_some() { (bits, 4 * colours) } else { (24, 0) };
+    let (bpp, pal_bytes) = match (&indexed, o.depth) {
+        (Some(_), _) => (bits, 4 * colours),
+        (None, ColorDepth::Bit16) => (16, 0),
+        (None, _) => (24, 0),
+    };
     let stride = (w * bpp).div_ceil(32) * 4;
     let data_len = stride * h;
     let offset = 14 + 40 + pal_bytes;
@@ -388,6 +400,11 @@ pub(crate) fn encode_bmp(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec<
         let start = out.len();
         match &indexed {
             Some(ix) => out.extend_from_slice(&pack_row(&ix.indices[y * w..(y + 1) * w], bits)),
+            None if bpp == 16 => {
+                for p in rgb[y * w * 3..(y + 1) * w * 3].as_chunks::<3>().0 {
+                    out.extend_from_slice(&rgb555(p).to_le_bytes());
+                }
+            }
             None => {
                 for p in rgb[y * w * 3..(y + 1) * w * 3].as_chunks::<3>().0 {
                     out.extend_from_slice(&[p[2], p[1], p[0]]);
@@ -406,7 +423,16 @@ pub(crate) fn encode_tga(r: &Raster, o: &RasterOptions) -> Result<Vec<u8>, PlotE
     let w = u16::try_from(r.width).map_err(|_| too_big())?;
     let h = u16::try_from(r.height).map_err(|_| too_big())?;
     let rgb = flatten_rgb(r);
+    let w_px = usize::from(w);
+    let mut descriptor = 0x20; // rows run top to bottom
     let (image_type, has_map, bpp, body, map): (u8, bool, u8, Vec<u8>, Vec<u8>) = match o.depth {
+        // Origin's 16-bit TGA: true colour, no attribute bits, rows bottom to top (descriptor 0).
+        ColorDepth::Bit16 => {
+            descriptor = 0;
+            let rows: Vec<&[[u8; 3]]> = rgb.as_chunks::<3>().0.chunks(w_px.max(1)).collect();
+            let body = rows.iter().rev().flat_map(|row| row.iter().flat_map(|p| rgb555(p).to_le_bytes())).collect();
+            (2, false, 16, body, Vec::new())
+        }
         ColorDepth::Bit24 => {
             let body = rgb.as_chunks::<3>().0.iter().flat_map(|p| [p[2], p[1], p[0]]).collect();
             (2, false, 24, body, Vec::new())
@@ -431,7 +457,7 @@ pub(crate) fn encode_tga(r: &Raster, o: &RasterOptions) -> Result<Vec<u8>, PlotE
     out.extend_from_slice(&w.to_le_bytes());
     out.extend_from_slice(&h.to_le_bytes());
     out.push(bpp);
-    out.push(0x20); // rows run top to bottom
+    out.push(descriptor);
     out.extend_from_slice(&map);
     out.extend_from_slice(&body);
     Ok(out)
@@ -559,7 +585,9 @@ pub(crate) fn encode_raster(r: &Raster, ext: &str, dpi: f64, o: &RasterOptions) 
 fn encode_psd(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec<u8>, PlotError> {
     let rgb = flatten_rgb(r);
     match o.depth {
-        ColorDepth::Bit24 => crate::psd::encode(r.width, r.height, dpi, crate::psd::Pixels::Rgb(&rgb)),
+        ColorDepth::Bit24 | ColorDepth::Bit16 => {
+            crate::psd::encode(r.width, r.height, dpi, crate::psd::Pixels::Rgb(&rgb))
+        }
         ColorDepth::Grey8 => {
             let grey = luma(&rgb);
             crate::psd::encode(r.width, r.height, dpi, crate::psd::Pixels::Grey(&grey))

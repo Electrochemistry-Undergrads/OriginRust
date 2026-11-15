@@ -97,7 +97,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |
 | [T46](T46-import-themes.md) | Saved import settings: Dialog Theme row (`<last used>`, named themes) in the ASCII, CHI and Excel import windows, `sheaf import --theme` | M | done, merged 2026-11-15 (import-ascii.md 17); left: Origin measurements of the theme list and defaults |
-| [T47](T47-simulate-curve.md) | Simulate Curve: a curve from any fit-library function with typed parameters, window, CLI and MCP | M | done, merged 2026-11-15 (fitting.md 13); left: Origin measurements, user-defined functions, Simulate Surface |
+| [T47](T47-simulate-curve.md) | Simulate Curve: a curve from any fit-library function with typed parameters, window, CLI and MCP | M | done, merged 2026-11-15 (fitting.md 13); Origin's window measured and copied 2026-11-15 (13.1); left: Noise Level, user-defined functions, Simulate Surface |
 | [T48](T48-graph-data-tools.md) | Graph Data menu: Mask Data Points (rectangle), Remove Bad Data Points, Move Data Points | M | claimed 2026-11-15 (`graph-data-tools`, Claude macOS "mac-datatools") |
 | [T49](T49-parallel-plot.md) | Parallel Plot and Parallel Index (parallel coordinates) | M | claimed 2026-11-15 (`parallel-plot`, macOS) |
 

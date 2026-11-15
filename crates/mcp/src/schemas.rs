@@ -558,9 +558,15 @@ pub fn defs() -> Vec<Def> {
                         json!({"type": "object", "additionalProperties": {"type": "number"},
                             "description": "Parameter values by name, for example {\"xc\": 5, \"w\": 2}."}),
                     ),
-                    ("from", t("number", "First X value (default 1). Above to gives falling X.")),
-                    ("to", t("number", "Last X value (default 10).")),
-                    ("points", t("integer", "Number of X values, 2 to 1000000 (default 100).")),
+                    (
+                        "from",
+                        t(
+                            "number",
+                            "First X value (default: the function's range in Origin's Simulate Curve window, Gauss -1). Above to gives falling X.",
+                        ),
+                    ),
+                    ("to", t("number", "Last X value (default: the function's, Gauss 5).")),
+                    ("points", t("integer", "Number of X values, 2 to 1000000 (default 200).")),
                     ("log", b("Space the X values evenly on a logarithmic scale; from and to must be positive.")),
                     (
                         "x_of",

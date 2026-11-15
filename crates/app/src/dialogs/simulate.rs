@@ -63,15 +63,15 @@ struct PreviewKey {
 }
 
 impl SimulateDialog {
-    /// Opens on the Gauss function with the defaults of the tool. `book` is the active workbook, whose
-    /// numeric columns can give the X values and which receives the sheet; with none the output is a new
-    /// workbook.
+    /// Opens on the Gauss function with the defaults of Origin's window (fitting.md 13.1): its X range,
+    /// 200 points, output to a new workbook and a graph of the curve. `book` is the active workbook, whose
+    /// numeric columns can give the X values (and which the Output list offers).
     pub fn new(project: &Project, book: Option<WindowId>) -> Self {
         let defaults = SimulateCurveSpec::default();
         let functions = library::list();
         let (from, to, points) = match defaults.x {
             SimulateX::Range { from, to, points, .. } => (from, to, points),
-            SimulateX::OfColumn(_) => (1.0, 10.0, 100),
+            SimulateX::OfColumn(_) => (-1.0, 5.0, 200),
         };
         let columns = book
             .and_then(|id| project.workbook(id))
@@ -97,8 +97,9 @@ impl SimulateDialog {
             columns,
             x_column: None,
             books,
-            output: book,
-            plot: defaults.plot,
+            // Origin writes the curve to a new workbook and draws it (fitting.md 13.1).
+            output: None,
+            plot: true,
             problem: None,
             preview: None,
         };
@@ -138,6 +139,10 @@ impl SimulateDialog {
         if self.function != name {
             self.function = name.to_string();
             self.reset_values();
+            // As Origin's window: each function comes with its own X range.
+            if let Some(f) = library::get(&self.function) {
+                (self.from, self.to, self.points) = sim::default_range(&f);
+            }
             self.problem = None;
         }
     }

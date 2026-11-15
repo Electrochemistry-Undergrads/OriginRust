@@ -31,7 +31,7 @@ fn the_rug_tab_edits_the_rug_of_each_edge_and_the_change_is_one_undo_step() {
     for label in
         ["Data", "Color", "Thickness", "Transparency (%)", "Size (%)", "Overlap", "Gap Between Rugs (%)", "Margin (%)"]
     {
-        assert!(h.query_by_label(label).is_some(), "{label}");
+        assert!(has_label(&h, label), "{label}");
     }
     h.get_by_label("Show Parallel Border").click();
     h.get_by_label("Show Perpendicular Border").click();

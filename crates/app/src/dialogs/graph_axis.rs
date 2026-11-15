@@ -108,6 +108,7 @@ pub fn dialog_body(
                     AxisTab::LineAndTicks => line_and_ticks_tab(ui, axis, *vertical, id),
                     AxisTab::SpecialTicks => special_ticks_tab(ui, axis, resolved, id),
                     AxisTab::Breaks => breaks_tab(ui, axis, resolved, id),
+                    AxisTab::Rug => {} // handled above: it picks its rug by edge
                 }
             });
         });

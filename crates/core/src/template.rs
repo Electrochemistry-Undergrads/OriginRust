@@ -826,7 +826,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 38);
+        assert_eq!(Template::ALL.len(), 39);
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
         assert_eq!(Template::from_name("violin"), Some(Template::Violin));
         assert_eq!(Template::from_name("violin-box"), Some(Template::ViolinBox));

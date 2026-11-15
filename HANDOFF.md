@@ -44,8 +44,11 @@ open. History of what was merged when is in `git log` (not repeated here).
   added row is the middle half of what the last break left. Decided without Origin's rule: Sheaf
   keeps the axis tick step across breaks (Origin changed it on two of four data sets, no rule
   found) and offers a step after each break; the Break Half Length unit is unmeasured (typing in
-  the scripted dialog did not take), so Sheaf shows one gap in percent of the axis. Formatting,
-  strict all-target Clippy and 2,431 workspace tests pass (four ignored) after merging main.
+  the scripted dialog did not take), so Sheaf shows one gap in percent of the axis. Formatting
+  and strict all-target Clippy pass; on the final merge (main d45f267) 2,656 tests pass (seven
+  ignored). Pushed although the MCP link admission tests in crates/mcp/tests/link.rs fail
+  intermittently on this Windows machine (a different one per run, the file passed alone once):
+  pre-existing on main, not touched here, repair 50b5ecb on codex/t02-find-replace.
 - T25 current app context (2026-11-15, Windows): attached `sheaf://app` reports the active
   window/sheet, worksheet or graph selection, Data Reader pin and dialog/edit state, with one-based
   indices and bounded metadata. It reads current UI state without values/editor text, document or

@@ -36,6 +36,15 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T02 Go To Column Browser (2026-11-15, Windows, feature `c941fb0`): Select Columns opens
+  a metadata table with project/book/sheet/folder scopes and an added-range list. Add/Remove,
+  OK/Cancel and Escape preserve the parent until navigation; typed edits and Reset discard the
+  browser choice. Eight isolated Origin probes establish qualified references, original-sheet
+  position mapping for other books, and the multiple-range last-column rule. Five UI regressions
+  and one folder-scope fixture cover it; all 24 Go To tests pass. Formatting, strict workspace/
+  all-target Clippy and 2974 workspace tests pass (eight ignored). Exclude, block add,
+  top-table multiple selection, row-range editing and saved preferences remain (gui-look section 5).
+
 - T21 thin-width dashes (2026-11-15, Windows): the shared stroke conversion uses
   verified 0.5/1 pt visible-pattern samples, interpolating into the unchanged normal-width
   ratios at 1.5 pt. Four regressions cover seven styles at two raster resolutions,
@@ -258,7 +267,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | Branch | Owner session | What | State |
 |---|---|---|---|
 | `codex/t25-windows-acceptance` | Codex Windows, t25-windows-acceptance | T25 Windows live desktop MCP attach acceptance: isolated synthetic native app/proxy probes, focused runtime regressions/docs | claimed 2026-11-15; no endpoint/proxy/security/history/model/UI feature changes without refinement, no other claimed scopes |
-| `codex/t02-column-browser` | Codex Windows, t02-column-browser | T02 Go To Select Columns / Column Browser: Origin scope and Add/Remove measurements, dedicated Go To browser, navigation outcome and focused UI tests/docs | claimed 2026-11-15; only go_to.rs/internal browser module, open_go_to/GoToOutcome and existing navigation calls; no grid/model/Find, MRU/window-switcher implementation, Undo AI/other menus, MCP, formulas/labels, recent-file hooks, graph/axis/shape or statistics changes |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |

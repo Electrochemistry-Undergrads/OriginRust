@@ -36,6 +36,17 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T21 stock legend defaults (2026-11-15, Windows): new Line/Scatter/Line+Symbol/Column graphs
+  use the measured upper-left anchor (0.8223, -0.1044) of the layer and an opaque white
+  background. Twelve verified Origin exports include resize/content cases, reopening the
+  generated OPJ and a legend hiding the frame/curve beneath it. Automatic can be restored
+  in the existing position chooser and is kept in native/companion files; raw OPJ writes
+  the fixed rectangle. Other templates and saved corner/manual placements stay unchanged.
+  Feature `0051de5`; separate test-only Windows Recent Files path repair `b6e588c` changes
+  two fixture helpers, preserving exact assertions and product behavior. Formatting, strict
+  workspace all-target Clippy and 2,964 tests pass (eight existing ignored); five new
+  regressions and seven inspected SVG goldens pass. See graphing 2.4 and T21 for limits.
+
 - Connect line across Missing Data (2026-11-15, Windows, branch `missing-lines`): the page Display
   tab's switch (off by default, `PageStyle::connect_across_missing`) joins the points on either side of
   rows with a missing value, as Origin 2016 draws it (measured, graphing 18.7b); values that cannot be
@@ -236,7 +247,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t21-legend-position` | Codex Windows, t21-legend-position | T21 measured Line/Scatter/Line+Symbol/Column legend default: new Automatic position + shared anchor and measured opaque white stock background, template defaults, plot/OPJ placement, mechanical Automatic entry in existing position chooser, focused tests/docs; separate Windows Recent Files test-helper repair | claimed 2026-11-15; nine verified Origin exports; preserve CV and other templates, old corners/manual; Recent repair ONLY app/ui_tests/recent.rs and io/recent/tests.rs scratch-path helpers, no production logic; no other editor/drag/content/font/style, trendline/plot/axis/shape, worksheet/history, MCP or other owners |
 | `codex/t02-column-browser` | Codex Windows, t02-column-browser | T02 Go To Select Columns / Column Browser: Origin scope and Add/Remove measurements, dedicated Go To browser, navigation outcome and focused UI tests/docs | claimed 2026-11-15; only go_to.rs/internal browser module, open_go_to/GoToOutcome and existing navigation calls; no grid/model/Find, MRU/window-switcher implementation, Undo AI/other menus, MCP, formulas/labels, recent-file hooks, graph/axis/shape or statistics changes |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |

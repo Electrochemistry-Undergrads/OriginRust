@@ -17,6 +17,10 @@ same rectangle anchor and reports its fixed-centre import so a companion preserv
 The renderer's existing font metrics, padding and row spacing remain separate from placement.
 Five regressions cover render geometry, position history/Cancel, and native/OPJ persistence.
 
+Validation: formatting, strict workspace all-target Clippy and all 2,964 workspace tests pass
+(eight existing ignored), including seven reviewed SVG goldens. Separate Windows Recent Files
+test-helper normalization preserves exact path/Unicode assertions and changes no product code.
+
 ## Today
 
 - Default plot colours: Sheaf's own 9-colour cycle in `crates/core/src/template.rs`. graphing.md 1.5 has

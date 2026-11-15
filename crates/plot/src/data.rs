@@ -306,6 +306,9 @@ pub(crate) struct LayerData<'a> {
     pub plots: Vec<PlotData<'a>>,
     /// The number of members of the layer's stack, hidden plots included.
     pub members: usize,
+    /// The least level step of the layer's significance brackets in the transformed space of its Y axis that
+    /// the label height asks for at the scale last laid out (0 at first; the layout raises it until it settles).
+    pub bracket_step: std::cell::Cell<f64>,
 }
 
 pub(crate) use sheaf_core::stack::row_range;
@@ -528,7 +531,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
     crate::ridgeline::set_scales(&mut plots);
     stack_bars(&mut plots);
     place_bars(&mut plots, &layer.bars);
-    LayerData { plots, members }
+    LayerData { plots, members, bracket_step: std::cell::Cell::new(0.0) }
 }
 
 /// Reads the two columns of a plot of a polar layer as `(angle, radius)`: `x` becomes the angle

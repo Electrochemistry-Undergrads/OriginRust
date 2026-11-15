@@ -1,6 +1,6 @@
 # T59: Worksheet cell formatting
 
-**Status:** open; recovered and refined 2026-11-15. Origin dialog measurement remains open.
+**Status:** steps 1, 2 and 4 claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `cell-format`; step 3 waits for T58 slice 3. Origin dialog measurement remains open.
 **Size:** L. **Branch:** `cell-format`. **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;
 [GUI](../spec/gui-look.md) 3. **Inventory:** 6 locations tagged `T59`.

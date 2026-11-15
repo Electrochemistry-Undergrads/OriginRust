@@ -1615,6 +1615,7 @@ fn analyze_bridged(
         }
         return Ok(ToolOut::json(report_json(s.project, &report)));
     }
+    let plot = sheaf_ops::cli_analyze::comparison_plot_request(&parsed.tool)?;
     let (target_args, job) = job_from(parsed.tool)?;
     let target = Target {
         y: target_args.y,
@@ -1640,6 +1641,11 @@ fn analyze_bridged(
     };
     if !run.load_warnings.is_empty() {
         out["warnings"] = json!(run.load_warnings);
+    }
+    if let Some(request) = &plot {
+        let graph = sheaf_ops::analyze::write_comparison_plot(s.project, &run, request)?;
+        let name = s.project.graph(graph).map_or_else(String::new, |g| g.name.clone());
+        out["comparison_plot"] = json!({"graph": name, "file": request.path.display().to_string()});
     }
     Ok(ToolOut::json(out))
 }
@@ -2182,6 +2188,34 @@ mod tests {
         // Without create, a missing column is an error naming the columns.
         let e = set_column_values(&mut s.ctx(), &json!({"column": "Z", "formula": "1"})).err().unwrap();
         assert!(e.message.contains("was not found"), "{}", e.message);
+    }
+
+    #[test]
+    fn anova_draws_the_multiple_comparisons_plot_through_the_bridge() {
+        let mut s = sheet_with(8, &["A", "B", "C"]);
+        let wb = s.project.workbooks().next().unwrap();
+        let ids: Vec<_> = wb.sheets[0].columns.iter().map(|c| c.id).collect();
+        for (k, id) in ids.iter().enumerate() {
+            *s.project.column_mut(*id).unwrap().numeric_mut().unwrap() =
+                (0..8).map(|i| 10.0 * k as f64 + f64::from(i % 3)).collect();
+        }
+        let dir = std::env::temp_dir().join(format!("sheaf-mcp-comparison-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let dir = dir.canonicalize().unwrap();
+        s.policy = crate::exec::Policy::headless(crate::roots::Roots::new(std::slice::from_ref(&dir)).unwrap());
+        let path = dir.join("plot.svg");
+        let out = analyze(
+            &mut s.ctx(),
+            &json!({"tool": "anova", "columns": ["B", "C"], "options": {
+                "comparison_plot": path.display().to_string(), "all_pairs": true, "labels": "p-values"}}),
+        );
+        let out = match out {
+            Ok(o) => o.value,
+            Err(e) => panic!("{}", e.message),
+        };
+        assert_eq!(out["comparison_plot"]["file"], json!(path.display().to_string()));
+        assert!(std::fs::read_to_string(&path).unwrap().contains("p &lt; 0.0001"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

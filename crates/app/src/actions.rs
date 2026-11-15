@@ -387,6 +387,11 @@ pub enum Action {
         book: WindowId,
         columns: Vec<ColumnId>,
     },
+    /// Multiple Comparisons Plot... (T64) of a report sheet (`None`: the workbook's active sheet).
+    ComparisonPlot {
+        book: WindowId,
+        sheet: Option<usize>,
+    },
     /// A plot's menu: Add Trendline... or Edit Trendline... (the plot's last one).
     Trendline {
         graph: WindowId,

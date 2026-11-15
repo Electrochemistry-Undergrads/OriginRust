@@ -507,6 +507,22 @@ fn drawn_objects_are_named_in_a_warning_and_not_written() {
 }
 
 #[test]
+fn significance_brackets_are_named_in_a_warning_and_not_written() {
+    use sheaf_core::compplot::SignificanceBracket;
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        let b = SignificanceBracket { group_a: 0, group_b: 1, p: 0.01, label: "**".into() };
+        g.layers[0].brackets = vec![b];
+    });
+    let (imp, warnings) = round_trip(&p);
+    let w = warnings.iter().find(|w| w.contains("significance bracket")).unwrap_or_else(|| panic!("{warnings:?}"));
+    assert!(w.contains("layer 1 has 1 significance bracket ") && w.contains(".opj.sheaf"), "{w}");
+    assert!(imp.graphs[0].layers[0].brackets.is_empty());
+    let (_, quiet) = round_trip(&source());
+    assert!(!quiet.iter().any(|w| w.contains("significance bracket")));
+}
+
+#[test]
 fn slope_annotations_are_named_in_a_warning_and_not_written() {
     use sheaf_core::graph::SlopeAnnotation;
     let mut p = source();

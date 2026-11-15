@@ -47,7 +47,17 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
                 .filter(|&j| j < i && g.layers[j].display.show_data)
                 .map(|j| crate::trend::label_lines(&pds[j].plots, &geoms[j]))
                 .sum();
-            layer_scene(project, g, i, &geoms[i], &pds[i].plots, (x_titles[i], y_titles[i]), first_line, m)
+            layer_scene(
+                project,
+                g,
+                i,
+                &geoms[i],
+                &pds[i].plots,
+                (x_titles[i], y_titles[i]),
+                first_line,
+                pds[i].bracket_step.get(),
+                m,
+            )
         })
         .collect();
     // A legend that lists the plots of every layer drawn in its frame (a layer and its right Y
@@ -119,6 +129,23 @@ pub(crate) fn graph_geometry(
         }
         geoms = graph_geometry_once(project, g, pds, m);
     }
+    // Significance brackets: a label needs a fixed height in points, which is a number of data units only at the
+    // final scale of the axis. Convert it with the frame just laid out and resolve the axes again until the level
+    // step stops growing (the axis grows with the step, and so does the step).
+    for _ in 0..30 {
+        let mut grew = false;
+        for ((layer, d), geom) in g.layers.iter().zip(pds).zip(&geoms) {
+            let need = crate::brackets::required_step(layer, geom);
+            if need > d.bracket_step.get() * (1.0 + 1e-4) + 1e-12 {
+                d.bracket_step.set(need);
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+        geoms = graph_geometry_once(project, g, pds, m);
+    }
     geoms
 }
 
@@ -142,9 +169,22 @@ fn graph_geometry_once(project: &Project, g: &Graph, pds: &[LayerData], m: &dyn 
 ///   that the end bars are not cut; a linear Y axis over column plots reaches down to their base.
 /// - An X axis over a date or time column gets date tick labels (see [`data::date_axis`]).
 /// - An axis with a label column shows that column's cells at whole-number ticks.
-fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotData]) -> ResolvedAxis {
+fn resolve_dim(
+    project: &Project,
+    axis: &Axis,
+    dim: Dim,
+    sources: &[&data::PlotData],
+    (layer, bracket_step): (&sheaf_core::graph::Layer, f64),
+) -> ResolvedAxis {
     let first = sources.first().copied();
     let mut range = data::axis_range(sources.iter().copied(), dim, axis.scale);
+    // Significance brackets (T64) are above the data: the Y axis grows to hold them (a log axis in log space),
+    // unless its top is fixed, when they stand in a band above the frame.
+    if dim == Dim::Y
+        && let Some(top) = crate::brackets::needed_top(layer, sources, bracket_step)
+    {
+        range = range.map(|(lo, hi)| (lo, hi.max(top)));
+    }
     let boxes: Vec<&data::BoxStats> = sources.iter().filter_map(|pd| pd.boxed.as_ref()).collect();
     let ridges: Vec<&crate::ridgeline::RidgeData> = sources.iter().filter_map(|pd| pd.ridge.as_ref()).collect();
     let mut resolved = if dim == Dim::Y && !ridges.is_empty() && axis.scale == sheaf_core::graph::ScaleKind::Linear {
@@ -273,11 +313,11 @@ fn group_geometry(
     let shared = |dim: Dim, axis: &Axis| {
         let sources: Vec<&data::PlotData> =
             members.iter().filter(|&&i| shares(i, dim)).flat_map(|&i| pds[i].plots.iter()).collect();
-        resolve_dim(project, axis, dim, &sources)
+        resolve_dim(project, axis, dim, &sources, (rl, pds[root].bracket_step.get()))
     };
     let own = |i: usize, dim: Dim, axis: &Axis| {
         let sources: Vec<&data::PlotData> = pds[i].plots.iter().collect();
-        resolve_dim(project, axis, dim, &sources)
+        resolve_dim(project, axis, dim, &sources, (&g.layers[i], pds[i].bracket_step.get()))
     };
     let spoke_axis = |i: usize, axis: &Axis| match g.layers[i].coords.polar() {
         Some(p) if p.radar => {
@@ -481,6 +521,12 @@ fn label_edges(
         }
         AxisSide::Hidden => {}
     }
+    // The band of significance brackets over the frame (or over the labels and title of a top X axis).
+    if layer.display.show_data
+        && let Some(h) = crate::brackets::band_height_pt(layer)
+    {
+        e.top = e.top.min(band_base(layer, x, f, m) - h);
+    }
     let across = crate::rug::opposite_reach(xa, f, !waterfall);
     if across > 0.0 {
         match xa.side {
@@ -517,6 +563,19 @@ fn label_edges(
             _ => e.left = e.left.min(f.x - across),
         }
     }
+}
+
+/// The page Y a band of significance brackets starts at: the top of the frame, or, with the X axis on the top, the
+/// outer edge of its tick labels and title.
+fn band_base(layer: &Layer, x: &ResolvedAxis, f: Rect, m: &dyn TextMeasurer) -> f64 {
+    let xa = &layer.x_axis;
+    if xa.side != AxisSide::Opposite {
+        return f.y;
+    }
+    let above = draw_x_labels(&mut Vec::new(), xa, x, f, &xa.tick_font, m);
+    let size = xa.title_font.size_pt;
+    let edge = if xa.show_title { above - 0.6 * size - (ASCENT + DESCENT) * size } else { above };
+    edge.min(f.y)
 }
 
 /// The smallest rectangle that holds `b` and `f`; `b` itself when `f` lies inside it (so that a
@@ -654,6 +713,7 @@ fn layer_scene(
     pds: &[PlotData],
     (x_title, y_title): (TitlePlace, TitlePlace),
     first_label_line: usize,
+    bracket_step: f64,
     m: &dyn TextMeasurer,
 ) -> LayerScene {
     let layer = &g.layers[index];
@@ -867,6 +927,7 @@ fn layer_scene(
     }
     if waterfall.is_none() && layer.display.show_data {
         crate::slope::draw(out, objects, project, layer, index, pds, geom, m);
+        crate::brackets::draw(out, layer, pds, geom, (bracket_step, band_base(layer, &geom.x, geom.frame, m)), m);
     }
     draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
     scene

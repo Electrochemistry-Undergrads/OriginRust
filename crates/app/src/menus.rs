@@ -15,7 +15,7 @@
 //! underlined, and Alt plus the letter of a top-level menu opens that menu. Letters inside the
 //! open menus are not handled (egui has no way to pick an item by letter).
 
-use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, DataTool, GraphOp, GraphTool, ImportPick, SheetOp};
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
@@ -235,6 +235,8 @@ pub enum Cmd {
     Pointer,
     /// The Data Reader tool of the Tools toolbar.
     DataReader,
+    /// A tool of the Data menu (Mask, Move or Remove Bad Data Points).
+    DataTool(DataTool),
     /// The Text tool of the Tools toolbar.
     TextTool,
     /// A drawing tool of the Tools toolbar.
@@ -1319,9 +1321,9 @@ fn data_menu() -> Vec<Entry> {
         grey_sub("Analysis Markers", &["Hide", "Show Partial Ranges", "Show All", "Tiny", "Small", "Medium", "Large"]),
         grey_sub("Lock Position", &["Layer Icon", "First Point", "Last Point"]),
         sep(),
-        grey("Mask Data Points"),
-        grey("Move Data Points"),
-        grey("Remove Bad Data Points"),
+        item("Mask Data Points", Cmd::DataTool(DataTool::Mask)),
+        item("Move Data Points", Cmd::DataTool(DataTool::Move)),
+        item("Remove Bad Data Points", Cmd::DataTool(DataTool::RemoveBad)),
     ]
 }
 
@@ -2276,6 +2278,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::GoTo(id) => Action::Focus(*id),
         Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pointer },
         Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Reader },
+        Cmd::DataTool(tool) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Data(*tool) },
         Cmd::TextTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Text },
         Cmd::ShapeTool(kind) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Draw(*kind) },
         Cmd::EditShape { layer, shape } => {

@@ -2,7 +2,7 @@
 //! workbook and graph child windows, dialogs, and the one place where user actions change the
 //! project.
 
-use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, DataEdit, DataTool, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp};
 use crate::autosave::{Autosave, Due};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
@@ -1123,6 +1123,23 @@ impl SheafApp {
         }
     }
 
+    /// A change from a graph's Data menu tools. A column that a formula keeps up to date refuses it, as the
+    /// worksheet refuses a typed value.
+    fn data_edit(&mut self, edit: DataEdit) {
+        let result = match edit {
+            DataEdit::Mask { cells, masked } => self.doc.mask_points(&cells, masked),
+            DataEdit::RemoveBad { cells } => self.doc.remove_bad_points(&cells),
+            DataEdit::Move { y, x } => self.doc.move_point(y, x),
+        };
+        match result {
+            Ok(report) if report.locked > 0 => {
+                self.warn("That column is calculated from a formula; change the formula in Set Column Values");
+            }
+            Ok(_) => {}
+            Err(e) => self.warn(format!("Could not change the data: {e}")),
+        }
+    }
+
     /// Shows a message in the status bar and keeps it in the Messages Log.
     fn say(&mut self, text: impl Into<String>) {
         let text = text.into();
@@ -1637,6 +1654,10 @@ impl SheafApp {
                     GraphTool::Draw(kind) => Some(kind),
                     _ => None,
                 };
+                state.data_tool = match tool {
+                    GraphTool::Data(t) => Some(t),
+                    _ => None,
+                };
                 state.reader_point = None;
                 match tool {
                     GraphTool::Reader => {
@@ -1646,9 +1667,11 @@ impl SheafApp {
                     GraphTool::Draw(kind) => {
                         self.say(format!("{}: drag on the graph (Shift constrains); Esc ends", kind.name()))
                     }
+                    GraphTool::Data(tool) => self.say(crate::data_tools::hint(tool)),
                     GraphTool::Pointer => {}
                 }
             }
+            Action::DataEdit(edit) => self.data_edit(edit),
             Action::AddText { graph, layer, at } => {
                 let state = self.graphs.entry(graph).or_default();
                 state.text_tool = false;
@@ -3583,6 +3606,35 @@ impl SheafApp {
                         let state = self.graphs.entry(id).or_default();
                         state.reader = true;
                         state.reader_point = Some(crate::reader::Point { layer: 0, plot: 0, row: 2 });
+                    }
+                }
+                // data-tool:mask, data-tool:move or data-tool:remove turns that Data menu tool on in the
+                // first graph; mask-points:1,2 masks those rows (from 1) of its first plot.
+                "data-tool" => {
+                    let tool = match arg {
+                        "mask" => Some(DataTool::Mask),
+                        "move" => Some(DataTool::Move),
+                        "remove" => Some(DataTool::RemoveBad),
+                        _ => None,
+                    };
+                    if let (Some(id), Some(tool)) = (first_graph, tool) {
+                        self.graphs.entry(id).or_default().data_tool = Some(tool);
+                        self.say(crate::data_tools::hint(tool));
+                        self.focus(id);
+                    }
+                }
+                "mask-points" => {
+                    let y = first_graph
+                        .and_then(|g| project.graph(g))
+                        .and_then(|g| g.layers.first()?.plots.first())
+                        .map(|p| p.y);
+                    if let Some(y) = y {
+                        let cells: Vec<_> = arg
+                            .split(',')
+                            .filter_map(|r| r.trim().parse::<usize>().ok())
+                            .map(|r| sheaf_core::DataCell::new(y, r.saturating_sub(1)))
+                            .collect();
+                        self.data_edit(DataEdit::Mask { cells, masked: true });
                     }
                 }
                 // text:N opens the Text window of the N-th label (from 1) of the first graph's

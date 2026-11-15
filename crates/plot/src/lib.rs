@@ -387,6 +387,22 @@ pub fn stack_places(
     Ok(stack::places(project, layer).0)
 }
 
+/// How far a plot of a waterfall layer is moved on the page from the front frame, `(dx, dy)` in
+/// page points, for the plot placed by `place` in layer `layer` with geometry `geometry`. Member `k`
+/// is drawn `k` shifts right of and above the front frame (spec 13.6); `(0, 0)` for every plot of a
+/// layer that is not drawn as a waterfall. Add it to `LayerGeometry::data_to_page`.
+pub fn waterfall_shift(
+    project: &Project,
+    graph: WindowId,
+    layer: usize,
+    place: &sheaf_core::stack::Place,
+    geometry: &LayerGeometry,
+) -> (f64, f64) {
+    let Some((sx, sy)) = project.graph(graph).and_then(|g| stack::waterfall(g, layer)) else { return (0.0, 0.0) };
+    let k = place.member.unwrap_or(0) as f64;
+    (k * sx * geometry.frame.w, -k * sy * geometry.frame.h)
+}
+
 /// Renders a graph as SVG text, measuring text with the installed fonts.
 pub fn render_svg(project: &Project, graph: WindowId) -> Result<String, PlotError> {
     render_svg_with(project, graph, SystemFonts::shared())

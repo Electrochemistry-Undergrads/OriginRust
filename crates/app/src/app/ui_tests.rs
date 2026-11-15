@@ -16,6 +16,7 @@ mod excel;
 mod fill_inclusive;
 mod fill_sidelines;
 mod frozen_panes;
+mod graph_data_tools;
 mod import_themes;
 mod label_frames;
 mod label_whiteout;

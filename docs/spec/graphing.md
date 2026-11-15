@@ -3757,12 +3757,64 @@ Not measured: deleting through the icon menu a layer that is a parent (the LabTa
 | 4Ys Y-YYY | 4 | 6.856 / 21.47 / 67.72 / 64.07 | left, blue (0, 0, 255) | right at the frame, green (0, 128, 0) | right `% From Right` **12**, orange (255, 128, 0) | right `% From Right` **23**, magenta (255, 0, 255) |
 | 4Ys YY-YY | 4 | 14.91 / 21.25 / 68.5 / 63.48 | left, blue | **left** `% From Left` **11**, green | right at the frame, magenta | right `% From Right` **11**, orange |
 
-All of layers 2 to 4 are linked to layer 1 (link 1) except layer 3 of Y-YY. The offsets are in % of the X axis length as in 21.3; in the 800 px pictures the outer axes stand 62 px (Y-YY, 10.2 % of the frame width), 66 and 128 px (Y-YYY, 12.2 and 23.6 %), 59 px (YY-YY left, 10.8 %) from the frame edge, which agrees with the stored 10, 12, 23 and 11 % within the picture's resolution. The 3Ys templates reserve no extra page margin of their own beyond the frame values above; Origin does not shrink the frame when axes are added.
+All of layers 2 to 4 are linked to layer 1 (link 1) except layer 3 of Y-YY. The offsets are in % of the X axis length as in 21.3; in the 800 px pictures the outer axes stand 62 px (Y-YY, 10.2 % of the frame width), 66 and 128 px (Y-YYY, 12.2 and 23.6 %), 59 px (YY-YY left, 10.8 %) from the frame edge, which agrees with the stored 10, 12, 23 and 11 % within the picture's resolution.
 
 **Colour of the data in the templates.** The plot of layer *k* has colour index 1, 2, 4 (3Ys: black, red, blue) or 4, 12, 15, 6 (4Ys Y-YYY: blue, green, orange, magenta) or 4, 12, 6, 15 (YY-YY: blue, green, magenta, orange) in LabTalk's `get %C -c`, which are 1-based entries of Origin's colour list (1 black, 2 red, 4 blue are certain; 12 green, 15 orange and 6 magenta read from the pixels, not from the list). Layer 1's axes and plot in 3Ys are black (the colour is the plot's).
 
-**PNG per template**: `re-workspace/scratch/t61/png/C_3Ys_Y_YY_3.png`, `C_3Ys_Y_Y_Y_3.png`, `C_4Ys_Y_YYY_4.png`, `C_4Ys_YY_YY_4.png` (800 px wide, local only); Double-Y and the Y-YYY/YY-YY comparison pictures follow the table above.
-
-**Other properties** (measured, all four): `layer.x.color`, `y.thickness` 1.5; `layer.y.ticks` 10 (the minor-tick count 1); no layer has a name; the layer icons show 1 2 3 (4).
+**PNG per template**: `re-workspace/scratch/t61/png/C_3Ys_Y_YY_3.png`, `C_3Ys_Y_Y_Y_3.png`, `C_4Ys_Y_YYY_4.png`, `C_4Ys_YY_YY_4.png` (800 px wide, local only).
 
 **Unmeasured**: the number of columns the GUI warns about (none observed), the effect of selecting columns with two X columns, grouped column selections of several sheets, legend position values in page units, the exact text of any message for too many columns.
+
+### 21.6 Plot > Multi-Y > Multiple Y Axes... (`plotmyaxes`)
+
+**Dialog** ("Plotting: plotmyaxes", description "Customize Multi-Axes plot", with a Dialog Theme row, an Auto Preview check box, Preview, OK, Cancel and a preview pane on the right; the controls, top to bottom):
+
+- **Input**: the selected columns as a range, for example `[Book1]Sheet1!((A,B),(A,C),(A,D),(A,E))` (one X/Y pair per Y column); a range picker button.
+- **Plot Type**: combo Line (default), Scatter, Line+Symbol, Custom.
+- **Axis and Plot Assignment**: "Number of Left Y Axes" (a number with an Auto check box, ticked), "Number of Right Y Axes" (same), "Add Middle Y Axis" (check box, off), a blue summary "4 Y axes and 4 plots in total", "Number of Plots in Each Layer" (text, default 1, hint "Separate numbers by space. Example: 1 2 3") and a blue line "Actual number of plots in each layer : 1 1 1 1".
+- **Options**: "Link Axis Color to Plot" (on), "Show Y Title" (off), "Show Top X Axis" (off), "Y Axes Gap (%)" (a number, shown 10, with an Auto check box, ticked).
+
+LabTalk: `plotmyaxes iy:=[Book]Sheet!(1,2:5) plottype:=line|scatter|linesymb|custom ly:=N ry:=N my:=0|1 number:="2 1 1" axiscolor:=0|1 ytitle:=0|1 topx:=0|1 gap:=G hide:=0|1;` (`plotmyaxes` is an X-Function; `iy` takes several ranges; `ly`, `ry` and `gap` default to `<auto>`).
+
+**What it builds** (Origin 2016, Line template for the frame; layer 1's frame is 17.91 / 11.58 / 68.16 / 71.83 % of the page for a plain Line graph; the new layers are linked as in 21.5: `link` 1, X straight, Y own, frame 0 0 100 100 in % of linked layer):
+
+- With *N* Y columns it makes *N* layers, one plot each, and the default split of axes is `ly` = floor(*N* / 2) left axes and `ry` = *N* - `ly` right axes (measured *N* = 2: 1 and 1; 3: 1 and 2; 4: 2 and 2; 5: 2 and 3; 6: 3 and 3). *N* = 1 makes an ordinary one-layer graph (no extra layer).
+- Layer 1 is the first left axis (at the frame). Layers 2 to `ly` have **left** axes at `% From Left` = gap, 2 gap, ... (10 % steps by default). Layers `ly` + 1 to *N* have **right** axes at `% From Right` = 0, gap, 2 gap, ... (the first right axis is at the frame). With "Add Middle Y Axis" the layer after the left ones is a left axis at `% From Left` **-50** (the middle of the plot), then the right axes follow; the total of axes is still the number of columns (3 columns, middle on: 1 left, the middle, 1 right).
+- `ly:=0` makes layer 1's own axis a right one (right axes at 0, 10, 20 for three columns); `ry:=0` makes all axes left axes (0, 10, 20).
+- Default gap **10** (% of the X axis length); `gap:=20` gave right offsets 0, 20. With `ytitle:=1` and `topx:=1` (and `axiscolor:=0`) the automatic gap was **14** (which of the three options needs the room was not separated); an explicit gap is used as given.
+- The **frame of layer 1 moves** so that the frame plus the outward offsets is centred on the page: left = (100 - W - L - R) / 2 + L, with W = 68.16, L = (number of left offsets) * gap * W / 100 and R = (number of right offsets) * gap * W / 100 (checked on six layouts, for example 12.52 for one right offset, 9.111 for two, 15.92 for one left and one right, 22.73 for two left offsets and none right, 11.15 for one right offset at gap 14); width and top do not change.
+- Plot colours are Origin's default colour list in order, not the template colours of 21.5: black (0, 0, 0), red (255, 0, 0), green (0, 255, 0), blue (0, 0, 255), cyan (0, 255, 255); `plottype:=scatter` draws squares, circles and up-triangles in the same colours. With `axiscolor:=1` (default) each axis line, tick and label takes its plot's colour; `axiscolor:=0` keeps them black (the picture showed black axes). `ytitle:=1` shows "long name (units)" next to each Y axis, rotated like the left title; `topx:=1` shows the top X axis line with ticks and labels on layer 1 (`x.showAxes` 3).
+- A legend lists every plot of every layer (one legend, in layer 1, top-right above the frame).
+- `number:="2 1 1"` with four columns made three layers (the number of layers is the number of numbers) with 2, 1 and 1 plots in them.
+
+**Unmeasured**: `hide:=1`, the `custom` plot type's template choice, the preview, how the dialog refuses a column count that does not fit `ly + ry (+ 1)` (the OK path was not run), the legend text format, the axis title placement values.
+
+### 21.7 Exact LabTalk used (Origin 2016, through COM, one line at a time; setup `newbook name:=DQ sheet:=1 option:=lsname;` and a worksheet with X in column 1)
+
+```
+plotxy iy:=[DQ]1!(1,2) plot:=200 ogl:=[<new>]; win -r %H G1; win -a G1;
+layadd type:=righty;                       // also normal, topx, lefty, txry, bxry, inset, insetdata, noxy
+page.active = 2; layadd type:=righty;      // the parent is the active layer
+layadd userdef:=1 bottom:=1 left:=0 top:=1 right:=1 linkto:=1 xaxis:=straight yaxis:=custom;
+plotxy iy:=[DQ]1!(1,3) plot:=200 ogl:=[G1]2!;
+page.active = 2; layer -d;                 // delete the active layer; "layer -d 1;" deletes layer 1
+double pv0 = layer.link;  pv0 = layer.x.link;  pv0 = layer.y.link;  pv0 = layer.unit;  pv0 = layer.left;
+pv0 = layer.top;  pv0 = layer.width;  pv0 = layer.height;  pv0 = layer.x.from;  pv0 = layer.x.to;
+pv0 = layer.y.from;  pv0 = layer.y.to;  pv0 = layer.x.showAxes;  pv0 = layer.y.showAxes;
+pv0 = layer.y.position;  pv0 = layer.y.posType;  pv0 = layer.y2.position;  pv0 = layer.y2.posType;
+pv0 = layer.y.color;  pv0 = layer.y2.color;
+string ts$ = layer.name$;  ts$ = xb.text$;  ts$ = yl.text$;  ts$ = %C;   // %C after layer.plot = n;
+get %C -c cc;                              // plot colour index
+win -a DQ; worksheet -s 2 0 4 0; worksheet -p 200 3Ys_Y-YY;     // 3Ys_Y-Y-Y, 4Ys_Y-YYY, 4Ys_YY-YY
+plotmyaxes iy:=[DQ]1!(1,2:5) plottype:=line ly:=2 ry:=2 my:=0 number:="1 1 1 1" axiscolor:=1 ytitle:=0 topx:=0 gap:=10;
+expGraph type:=png path:="DIR" filename:=NAME overwrite:=1 tr1.unit:=2 tr1.width:=800;
+```
+
+A LabTalk variable named `v1` to `v9` is not usable in `double v1 = ...;` (the call returned false; the names `pv1` or `q` work). Properties that do not exist read as -1.23456789E-300. `layer.nplots` does not exist here; count a layer's plots by stepping `layer.plot = n;` and watching `%C` repeat (the index clamps at the last plot).
+
+### 21.8 What Sheaf takes from this
+
+- Add Layer buttons and menu: the nine types of 21.1 (the six toolbar ones as buttons). "Horizontal Axis Layer..." and "Vertical Axis Layer..." do not exist in Origin 2016: the greyed items are reassigned to a later task (not implemented).
+- The new layer's parent is the active layer; a linked layer is placed over its parent (% of linked layer 0 0 100 100); the inset is 75 / 0 / 25 / 25 of the parent.
+- Delete: children of the deleted layer become unlinked and keep its absolute rectangle; other links are renumbered; Undo text "Undelete frame"; no confirmation.
+- 3Ys / 4Ys: build as in 21.5; Multiple Y Axes with the defaults of 21.6; an axis position is a percentage of the X axis length, outward positive, one value per shown side.

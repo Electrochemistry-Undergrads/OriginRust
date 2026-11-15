@@ -161,7 +161,9 @@ impl<'a> SheetTable<'a> {
             text,
             align,
             bold: st.bold,
-            size: st.size_pt.map_or(s.font_pt, |p| f64::from(crate::cellformat::clamp_cell_pt(p)) * s.font_pt / GRID_BODY_PT),
+            size: st
+                .size_pt
+                .map_or(s.font_pt, |p| f64::from(crate::cellformat::clamp_cell_pt(p)) * s.font_pt / GRID_BODY_PT),
             fmt: TextFmt {
                 italic: st.italic,
                 underline: st.underline,

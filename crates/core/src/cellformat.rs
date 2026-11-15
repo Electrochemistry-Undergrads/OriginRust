@@ -321,7 +321,12 @@ fn segments(sheet: &Worksheet, ranges: &[(usize, usize, u32)]) -> Vec<Seg> {
         let name = |s: &Seg| s.font.map(|i| sheet.cell_formats[i as usize].style.font.as_deref());
         let seg = Seg { first: at, last, style: f, font };
         match out.last_mut() {
-            Some(prev) if prev.last != usize::MAX && prev.last + 1 == at && prev.style == seg.style && name(prev) == name(&seg) => {
+            Some(prev)
+                if prev.last != usize::MAX
+                    && prev.last + 1 == at
+                    && prev.style == seg.style
+                    && name(prev) == name(&seg) =>
+            {
                 prev.last = seg.last;
             }
             _ => out.push(seg),

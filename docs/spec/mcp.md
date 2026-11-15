@@ -239,7 +239,7 @@ It names exactly what `analyze` accepts: the 21 hand-mapped tools first, then ev
  "output": "next_to_input"}
 ```
 
-`analyze` reaches every tool of `sheaf analyze`: the CLI command has 55 subcommands and all of them
+`analyze` reaches every tool of `sheaf analyze`: the CLI command has 57 subcommands and all of them
 are tools here (`peaks` and `stats` are also accepted under their command-line names). Names are the
 command name with `_` for `-` (`fft_filter`, `reduce_dup`, `column_math`, `mannwhitney`, `anova2`,
 `signal_correlation`); a name with `-` is accepted too, and so is any case. Two kinds:
@@ -249,7 +249,7 @@ command name with `_` for `-` (`fft_filter`, `reduce_dup`, `column_math`, `mannw
   median_filter, decimate, translate, subtract_line, polygon_area, intersect). Their options are
   those `list_analysis_tools` gives; a column a tool reads besides the Y columns (a reference, a
   second signal) is an option holding a name.
-- **Bridged** (the other 34: convolution, signal_correlation, ifft, fft_filter, coherence,
+- **Bridged** (the other 36: convolution, signal_correlation, ifft, fft_filter, iir_filter, fir_filter, coherence,
   trace_interp, average, reduce_dup, reduce_x, ttest, anova, power, anova2, mannwhitney, signrank,
   rowstats, grubbs, dixon, sign, ks2, mediantest, friedman, kruskal, corr, histogram, crosstab,
   discfreq, bin2d, normality, distfit, probplot, qqplot, sort, filter). Their options are generated

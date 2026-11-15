@@ -1162,7 +1162,156 @@ Sheaf: `sheaf_calc::trace_interp`, `Tool::TraceInterp(TraceInterpSpec)`: the X a
 in a new sheet (`TraceInterp`), the Y labelled "linear trace interpolation of B". Command line:
 `sheaf analyze trace-interp FILE --y B [--method linear|spline|bspline] [--points N]`.
 
+## 17. IIR Filter and FIR Filter (`dfilter`, the FIR Filter app; T55)
+
+Nothing in this section was measured in Origin: no Origin was available, and neither tool has a
+reference script in `tools/origin-ref/` yet. The facts below are from Origin's help pages and the File
+Exchange page of the FIR app, quoted as paraphrase [W:x-function/ref/dfilterpro,
+W:x-function/ref/dfilterapply, W:origin-help/iir-filter-dialog, W:origin-help/iir-filter-algorithm,
+W:tutorials/iir-filter, fileExchange fid=1077]. Everything Origin does not say is Sheaf's choice, labelled
+"Sheaf's choice, unmeasured". The numbers of the designs and the outputs are checked against
+`scipy.signal` (`crates/calc/tests/scipy_filters.rs`, from `tools/iir-fir-ref.py`, scipy 1.18.1), not
+against Origin.
+
+### 17.1 IIR Filter (OriginPro, Analysis > Signal Processing > IIR Filter)
+
+Origin facts (docs, not measured):
+
+- The X-Function is `dfilter` (Pro), brief "Create and apply an IIR filter"; the command line example
+  is `dfilter method:=cheby1 order:=5 sample:=1000 wn:=50 filtfilt:=1 coef:=[<input>]<new>;`. (The
+  name `iirfilter` of the T55 brief is not an Origin X-Function.) `dfilterapply` applies a designed
+  filter given as an SOS matrix or as numerator and denominator coefficients.
+- Variables and defaults: `iy` input signal; `type` response type `low`, `high`, `bandpass`, `bandstop`
+  (default low); `method` `butter`, `cheby1`, `cheby2`, `elliptic` (default Butterworth); `order`
+  10; `unit` `hz` or `normalize` (default Hz); `sample` Fs, `<auto>`; `wn` cutoff (low and high pass),
+  `wn1` and `wn2` (band pass and band stop), all `<auto>`; for the minimum order `wp`, `ws` (or `wp1`,
+  `wp2`, `ws1`, `ws2`); `rp` passband ripple 1 dB; `rs` stopband attenuation 80 dB; `filtfilt`
+  forward-backward filtering, off; outputs `sos`, `zpk`, `abcd` (state space), `coef` (numerator and
+  denominator) and the filtered signal `oy`. Normalized frequency is `f / (Fs / 2)`, so 1 is the Nyquist
+  frequency. Fs is "auto-detected from the associated X column if one exists".
+- The dialog: Response Type, Method (Butterworth, Chebyshev Type I, Chebyshev Type II, Elliptic; Bessel is
+  not offered), Filter Order with a Minimum checkbox (unchecked, an integer; the tutorial unchecks it to
+  set 4, which suggests Minimum is on by default), Frequency Specification (Unit, Sample Frequency,
+  Pass, Stop and Cutoff frequencies depending on response, method and unit), Magnitude Specification
+  (dB), Forward-Backward Filtering, Output Results (SOS matrix, zeros/poles/gain, state space,
+  transfer function coefficients, output signal), and preview panels (filter specification, magnitude
+  and phase response, impulse response, the filter applied to the data with cutoffs that can be dragged).
+  The tutorial's output is a new filtered column and an "SOS Matrix" worksheet.
+- The algorithm: a normalized analog low pass prototype (Butterworth, Chebyshev I or II, elliptic),
+  the frequency transform to the response type (low pass `s/w0`, high pass `w0/s`, band pass and band stop
+  with `w0 = sqrt(w1 w2)` and `B = w2 - w1`), then the bilinear transform. SOS is a gain times `L`
+  biquads (`L x 6`, three numerator and three denominator coefficients). Forward-backward filtering
+  "results in zero phase distortion".
+- Not documented: pre-warping, the order estimation formulas, how `rp` and `rs` enter each prototype,
+  initial conditions, padding and edge handling (one way or forward-backward), whether one-way
+  filtering is a direct form or an SOS cascade, how Fs is computed from the X column, unevenly spaced
+  X, missing values.
+
+Sheaf (`sheaf_calc::iir`: `IirSpec`, `IirFilter`, `iir_filter`, `iir_order`, `sosfilt`, `sosfiltfilt`):
+
+- Methods, responses and options as above with Origin's defaults (Butterworth, low pass, order 10, ripple
+  1 dB, attenuation 80 dB, Hz, no forward-backward filtering). Bessel is not built, as Origin lists no
+  Bessel filter. The order is limited to 200.
+- Sheaf's choice, unmeasured: the frequency pre-warping `tan(pi f / Fs)` (scipy's design chain: analog
+  prototype, `lp2lp`/`lp2hp`/`lp2bp`/`lp2bs`, bilinear transform; zeros, poles and gain, numerator and
+  denominator, agree with scipy to 1e-11 for all four methods and responses).
+- Sheaf's choice, unmeasured: the minimum order and the natural frequencies follow scipy's `buttord`,
+  `cheb1ord`, `cheb2ord` and `ellipord` (order equal to scipy's on the test cases; the cutoffs of a band
+  stop filter agree to 1e-4 only, because scipy moves the pass edges with `fminbound` and Sheaf with a
+  golden section search). The passband ripple and stopband attenuation are the specification of the
+  minimum order; for a fixed order only Chebyshev I (`rp`), Chebyshev II (`rs`) and elliptic (both) use
+  them. Sheaf's default Minimum is off (the X-Function default is the fixed order 10).
+- Sheaf's choice, unmeasured: automatic frequencies are a quarter of the Nyquist frequency (low and
+  high pass cutoff, band pass and band stop Fc1) and three quarters (Fc2); for the minimum order low
+  pass `0.2`/`0.3`, high pass `0.3`/`0.2`, band pass `0.3`, `0.5` against `0.2`, `0.6` and band stop
+  `0.2`, `0.6` against `0.3`, `0.5` (pass/stop, fractions of the Nyquist frequency).
+- Sheaf's choice, unmeasured: Fs is `1 / (mean X step)` (the same step as the FFT filters, 1 without
+  an X column); unevenly spaced X is not checked. Frequencies at or above Nyquist, band edges out of
+  order, a stopband attenuation not above the ripple, and an order outside 1 to 200 are errors.
+- Sheaf's choice, unmeasured: one-way filtering is `sosfilt` with zero initial state (a signal that
+  starts away from zero shows the start-up transient of the filter); forward-backward filtering is
+  `sosfiltfilt` (odd extension of `3 * ntaps` points at both ends, the step response as initial
+  state), which needs more than `3 * ntaps` points (`ntaps = 2 * sections + 1`, an error otherwise).
+  The two agree with scipy's `sosfilt` and `sosfiltfilt` on the cases of the test (1e-9 of the range).
+- Sheaf's choice, unmeasured: the second-order sections are paired by the pole closest to the unit
+  circle last, each with the nearest zeros, the gain in the first section. This is not scipy's `zpk2sos`
+  pairing, so the sections are compared through their response and their output.
+- Not built: the state space output, the SOS / ZPK / coefficient worksheets, `dfilterapply`, `dfilterfcf`,
+  the preview panels. Calc has the zeros, poles, gain, coefficients and sections (`IirFilter`).
+- Missing values: as the other signal tools, trailing blanks are dropped and a blank inside the signal is
+  an error.
+
+Sheaf: `Tool::IirFilter(IirSpec)`; a new column beside each input (or a new sheet or the existing
+columns, the Output node) named "<name> IIR filtered", the unit of the input, the comment "Butterworth
+low pass IIR filter of B (order 4, Fc 50 Hz, forward-backward)". The tool can follow its input
+(Recalculate Auto and Manual, `LinkTool::IirFilter`) and a project saved as `.opj` names such a result in
+the save warnings, as for Smooth. Window: Analysis > Signal Processing > IIR Filter... (X-Function name
+`dfilter`). Command line: `sheaf analyze iir-filter FILE --y B [--type low-pass|high-pass|band-pass|band-stop]
+[--method butterworth|chebyshev1|chebyshev2|elliptic] [--order N | --minimum] [--unit hz|normalized] [--fs HZ]
+[--cutoff F] [--cutoff2 F] [--pass F --pass2 F --stop F --stop2 F] [--ripple DB] [--attenuation DB]
+[--forward-backward]` (alias `iir`; MCP `iir_filter`).
+
+### 17.2 FIR Filter (the FIR Filter app of Origin 2027, Analysis > Signal Processing)
+
+Origin facts (File Exchange page of "FIR_Filter.opx" v1.00, OriginPro, Origin 2027; docs, not measured; no
+page on docs.originlab.com was found):
+
+- "Create and apply an FIR (Finite Impulse Response) digital filter." Response Type: lowpass, highpass,
+  bandpass, bandstop. Method: Least Squares (linear phase) or Window (window-based; no Parks-McClellan).
+  Filter Order: an integer; for the Window method a Minimum checkbox computes it "using the Kaiser
+  window". Window (Window method): Bartlett, Bartlett-Hanning, Blackman, Blackman-Harris, Bohman,
+  Chebyshev, Flat Top, Gaussian, Hamming, Hanning, Kaiser, Nuttall, Parzen, Rectangle, Taylor,
+  Triangular, Tukey, or a window given as data. Scale Passband: normalizes the coefficients so that the
+  passband centre has magnitude 1 (0 dB). Frequency Specification: Hz or normalized (0, 1) with
+  `f / (Fs / 2)`, Fs detected from the X column (Auto) or given; pass, stop and cutoff frequencies by
+  response, method and unit. Magnitude Specification: passband and stopband weights (Least Squares);
+  dB or linear, passband ripple and stopband attenuation (Window with the minimum order).
+  Forward-Backward Filtering: filtering "in both forward and backward directions". Outputs: the
+  coefficients (transfer function) and the output signal; previews as for the IIR dialog.
+- Not documented: defaults (order, window, response, Fs, ripple, attenuation), the Kaiser beta and width
+  parameters, the Least Squares algorithm in detail (band edges, transition band), alignment or
+  delay compensation of the one-way output, edge handling, whether Hamming or Hanning is the default.
+  The option names mirror MATLAB's `firls`, `fir1` and `kaiserord`; nothing documents the formulas.
+
+Sheaf (`sheaf_calc::fir`: `FirSpec`, `FirFilter`, `firwin`, `firls`, `kaiserord`, `window`):
+
+- Sheaf's choice, unmeasured: the filter has `order + 1` coefficients (as `fir1`); high pass and band stop
+  need an even order (an error otherwise); the order is limited to 1000.
+- Sheaf's choice, unmeasured: the Window method is `scipy.signal.firwin` (ideal response times the
+  symmetric window); the Least Squares method is `scipy.signal.firls` with a constant desired gain in
+  each band (1 in the passbands, 0 in the stopbands), the pass weight in the passbands and the stop weight
+  in the stopbands, the transition bands left out, generalized to an even number of coefficients
+  (which scipy does not offer). Window values, `firwin` and `firls` agree with scipy to 1e-10 (`firls` 1e-8).
+- Sheaf's choice, unmeasured: the minimum order is `kaiserord` with the ripple `A = -20 log10(min(dp, ds))`
+  of the smaller of the passband deviation `dp = (10^(rp/20) - 1) / (10^(rp/20) + 1)` and the stopband
+  deviation `ds = 10^(-rs/20)` (the linear unit takes both as deviations), the transition width the
+  smaller gap between a pass and a stop frequency, the cutoffs half way between them; below 8 dB the
+  formula is refused. The window of that design is the selected one, with Kaiser's beta from the
+  attenuation when Kaiser is selected.
+- Sheaf's choice, unmeasured: window parameters default as MATLAB's (Chebyshev 100 dB, Gaussian alpha 2.5,
+  Tukey 0.5, Taylor 30 dB with 4 bands), Kaiser beta 5; the default method is Window with Hamming and order
+  20, Scale Passband on (low pass and band stop at 0 Hz, high pass at Nyquist, band pass at the centre),
+  ripple 1 dB, attenuation 60 dB, Fs from the X column as for the IIR filter, automatic cutoffs a quarter
+  (three quarters) of the Nyquist frequency, automatic pass and stop frequencies as for the IIR minimum order.
+- Sheaf's choice, unmeasured: one-way output is aligned with the input (the delay of `order / 2` points,
+  rounded down, removed; the ends extended by an odd reflection of `order` points; an error if the signal
+  has `order` points or fewer); forward-backward output is `scipy.signal.filtfilt` of the coefficients (odd
+  extension of `3 * (order + 1)` points, so more points than that). Both agree with numpy and scipy to 1e-10.
+- Not built: a window given as data, the coefficient output, the previews. Missing values as for the IIR filter.
+
+Sheaf: `Tool::FirFilter(FirSpec)`, a new column beside each input named "<name> FIR filtered" with the
+comment "Hamming window low pass FIR filter of B (order 100, Fc 50 Hz)" (Least Squares: "least squares ...
+(order 80, pass 50 Hz, stop 100 Hz)"); Recalculate and `.opj` warnings as the IIR filter. Window:
+Analysis > Signal Processing > FIR Filter..., placed under IIR Filter (Sheaf's choice: Origin ships the
+filter as an app, so its menu place is not known). Command line: `sheaf analyze fir-filter FILE --y B
+[--type ...] [--method least-squares|window] [--order N | --minimum] [--window NAME] [--window-param P]
+[--no-scale] [--unit hz|normalized] [--fs HZ] [--cutoff F] [--cutoff2 F] [--pass F --pass2 F --stop F
+--stop2 F] [--pass-weight W] [--stop-weight W] [--magnitude-unit db|linear] [--ripple R] [--attenuation A]
+[--forward-backward]` (alias `fir`; MCP `fir_filter`).
+
 ## Files
+
+`tools/iir-fir-ref.py` makes the scipy numbers of section 17 (not Origin).
 
 Reference scripts (all in `tools/origin-ref/`): `curvemath-suite1..3` (run with
 `run-labtalk-lines.ps1`, they print the result sheet), `integ-suite1..6`, `diff-suite1`, `smooth-suite1`,

@@ -296,6 +296,10 @@ pub enum Action {
     /// Worksheet > Conditional Formatting > Remove Conditional Format: removes the rules that
     /// touch the selection.
     RemoveCondFormat(WindowId),
+    /// Cell menu > Add Note... / Edit Note...: the note editor for the single selected cell.
+    NoteDialog(WindowId),
+    /// Cell menu > Delete Note: removes the note of the single selected cell.
+    DeleteNote(WindowId),
     /// Column > Filter > Reapply Filter.
     ReapplyRowFilter(WindowId),
     /// Open the window that keeps only the rows matching a condition.

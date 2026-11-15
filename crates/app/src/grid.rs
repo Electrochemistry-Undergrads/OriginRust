@@ -524,6 +524,16 @@ pub fn freeze_counts(state: &BookUi, sheet: &Worksheet) -> Result<sheaf_core::Fr
 
 /// The range a conditional format takes from the selection: the columns and rows of a block of
 /// cells, whole columns, whole rows or the whole sheet; or why there is none.
+/// The cell a note belongs to: the single selected data cell.
+pub fn note_cell(state: &BookUi, sheet: &Worksheet) -> Result<(ColumnId, usize), &'static str> {
+    match &state.sel {
+        Sel::Cells { anchor, end } if anchor == end => {
+            sheet.columns.get(anchor.0).map(|c| (c.id, anchor.1)).ok_or("Select a cell of the sheet first")
+        }
+        _ => Err("Select a single cell for a note"),
+    }
+}
+
 pub fn cond_range(state: &BookUi, sheet: &Worksheet) -> Result<sheaf_core::condformat::CondRange, &'static str> {
     use sheaf_core::condformat::CondRange;
     let all_columns = || sheet.columns.iter().map(|c| c.id).collect::<Vec<_>>();
@@ -1805,6 +1815,7 @@ fn body_cell(
     let look = cell_look(state, sheet, position, column, r);
     let single = matches!(&state.sel, Sel::Cells { anchor, end } if anchor == end);
     let cond = state.cond_cache.as_ref().and_then(|c| c.styles.get(column.id, r));
+    let noted = sheet.note(column.id, r);
     match look {
         Look::Dark => {
             ui.painter().rect_filled(rect, 0.0, BLOCK_BLACK);
@@ -1892,7 +1903,32 @@ fn body_cell(
     if response.double_clicked() && !column.is_locked() {
         start_editing(state, column, r);
     }
-    response.context_menu(|ui| menus::show_context(ui, &menus::cell_menu(), &book_ctx(book_id, state), actions));
+    if let Some(note) = noted {
+        paint_note_tab(ui, rect);
+        response.clone().on_hover_ui(|ui| {
+            ui.set_max_width(NOTE_POPUP_WIDTH);
+            ui.label(note);
+        });
+    }
+    response.context_menu(|ui| {
+        menus::show_context(ui, &menus::cell_menu_for(noted.is_some()), &book_ctx(book_id, state), actions)
+    });
+}
+
+/// Width limit of the note popup; longer lines wrap.
+const NOTE_POPUP_WIDTH: f32 = 300.0;
+/// The note tab: a small filled triangle in the upper-right corner of a noted cell. Sheaf's own
+/// look (a dark red, as the comment marker of common spreadsheets); Origin's is unmeasured.
+const NOTE_TAB: Color32 = Color32::from_rgb(192, 0, 0);
+const NOTE_TAB_SIZE: f32 = 7.0;
+
+fn paint_note_tab(ui: &egui::Ui, rect: Rect) {
+    let (x, y) = (rect.right() - 1.0, rect.top() + 1.0);
+    ui.painter().add(egui::Shape::convex_polygon(
+        vec![Pos2::new(x - NOTE_TAB_SIZE, y), Pos2::new(x, y), Pos2::new(x, y + NOTE_TAB_SIZE)],
+        NOTE_TAB,
+        Stroke::NONE,
+    ));
 }
 
 /// The text a cell is edited with: for numbers the shortest text that reads back as exactly the

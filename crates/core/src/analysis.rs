@@ -2896,6 +2896,7 @@ impl Project {
                 c.reorder_rows(&order, n);
             }
         }
+        ws.notes_reorder_rows(&|c| columns.is_empty() || columns.contains(&c), &order, n);
         // The rows moved, so a filter is applied again to the new order.
         let _ = self.reapply_row_filter(book, sheet);
         Ok(())
@@ -2928,11 +2929,16 @@ impl Project {
         }
         let n = ws.row_count();
         let ws = &mut self.workbook_mut(book).expect("checked above").sheets[sheet];
+        let mut orders = Vec::new();
         for c in &mut ws.columns {
             if columns.contains(&c.id) {
                 let order = sort_order_in_rows(&c.data, n, descending, rows.clone());
                 c.reorder_rows(&order, n);
+                orders.push((c.id, order));
             }
+        }
+        for (id, order) in orders {
+            ws.notes_reorder_rows(&|c| c == id, &order, n);
         }
         // The rows moved, so a filter is applied again to the new order.
         let _ = self.reapply_row_filter(book, sheet);
@@ -2989,6 +2995,7 @@ impl Project {
             for c in &mut ws.columns {
                 c.reorder_rows(&keep, n);
             }
+            ws.notes_reorder_rows(&|_| true, &keep, n);
             Ok((kept, sheet))
         }
     }

@@ -425,6 +425,49 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
   rule after creation. The `.opj` writer cannot store the rules: saving to `.opj` warns and the
   companion keeps them.
 
+### Cell notes (T36)
+
+Origin facts (help pages, not measured; no Origin was available) [W:originlab.com/2022,
+W:origin-help/insnote-to-wkscell, W:x-function/ref/insertcmt]:
+
+- Origin 2022: "Add Notes to individual Worksheet Cells", similar to Excel and Google Sheets. Select the
+  cell and click the Mini Toolbar Add Note button; the note displays as a popup when hovering on the
+  tab in the upper-right corner of the cell; the system variable `@NCP = 0` stops the popups. Notes
+  are edited in a Notes window ("Open in Notes Window"); contents are Text or Origin Rich Text. The
+  X-Function `insertCmt` adds a note to a selected cell (search snippet, unconfirmed).
+- Not documented: how to delete a note, the tab's colour and size, behaviour under sort/insert/delete,
+  export.
+
+Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
+
+- **Storage.** Per sheet (`Worksheet.notes`, core `notes.rs`, saved in `.sheaf`, absent when empty): a
+  list sorted by column id and data row, so the saved form is deterministic and a lookup is a binary
+  search (no per-cell scan). Plain text only; empty text is never stored. A note may sit on an empty
+  cell (beyond the data rows) and then follows its row position like any other.
+- **Indicator.** A small filled dark-red triangle (7 px) in the upper-right corner of the cell, also in
+  frozen (overlay) cells and over conditional-format fills. Origin's colour and size are unmeasured.
+- **Popup.** Hovering anywhere on the noted cell (not only the tab) shows the text in a tooltip, wrapped
+  at 300 px. There is no `@NCP` switch.
+- **Editing.** The cell right-click menu replaces the greyed "Insert Notes" item: "Add Note..." on a cell
+  without a note, "Edit Note..." and "Delete Note" on one with a note, for a single selected cell
+  (otherwise a status message). The editor is a small window with a multi-line text box and OK/Cancel
+  (no Notes window, no Mini Toolbar button, no rich text). Each change is one undo step ("Add note",
+  "Edit note", "Delete note"; emptying the text of an existing note deletes it). Clear (Delete key)
+  clears values and leaves the note.
+- **Sort.** Notes move with their row: Sort Worksheet, Sort Range, nested/custom sort (also of selected
+  rows) and Filter Rows (in place, dropping the notes of removed rows) permute the notes of the sorted
+  columns exactly as the values; Sort Columns (each column on its own) and Reverse Order move only that
+  column's notes.
+- **Rows and columns.** Insert rows shifts the notes of the columns inserted into at or below the row;
+  delete rows drops the notes on the deleted cells and shifts those below. Columns have stable ids, so
+  Move Columns and column insert need nothing; deleting a column drops its notes (same undo step).
+  Duplicate (window or sheet) and File > Append keep the notes, on the copy's own columns.
+- **Not carried.** Operations that build a new sheet (Transpose, Stack/Unstack, Split Columns, Reduce
+  Rows, Filter Rows to a new sheet) do not copy notes; neither do the `.opj` writer (save to `.opj`
+  warns "N cell note(s) are not written"; the `.opj.sheaf` companion keeps them), CSV and Excel export.
+- **Left out.** Notes window, rich text, `@NCP`, Mini Toolbar button, hovering only on the tab, notes
+  on labels/headers.
+
 ## 4. Graph window
 
 Pictures: `gr-plain.png`, `gr-graph.png`, `grc-*.png`, `gdlg-*.png`; second study

@@ -57,6 +57,9 @@ open. History of what was merged when is in `git log` (not repeated here).
   `Worksheet.frozen`, saved in `.sheaf`, `.opj` warns. grid.rs draws frozen rows as extra head rows of the one
   table and frozen columns as an overlay over empty placeholder columns (exact scroll sync, hit guard
   `visible_part`); darker heads, 2 px divider, resizable frozen columns. Rules unmeasured (gui-look.md 3).
+- T36 cell notes (2026-11-15, macOS, no Origin): cell menu Add/Edit/Delete Note (plain-text editor window), a
+  dark-red corner tab and a hover popup; per sheet `Worksheet.notes` (core `notes.rs`), kept through sort, row/column
+  edits, duplicate and append; `.sheaf` saves them, `.opj` warns. Unmeasured (gui-look.md "Cell notes (T36)").
 - T35 conditional formatting (2026-11-15, macOS, no Origin): Worksheet > Conditional Formatting (also on
   the cell menu) > Highlight Min Max (row-/column-wise, Origin `wcolorbycr` default colours), Highlight Top
   Bottom (Top/Bottom N items or N %), Remove Conditional Format; rules per sheet (`Worksheet.cond_formats`,
@@ -108,7 +111,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `print-workbook` | Claude Windows, "continue all tasks" | T27 leftover: File > Print / Print Preview of the active workbook sheet as a table (Windows EMF path), app printing dialog + winprint, a sheet-to-page renderer in crates/plot | claimed 2026-11-15; no macOS panel (mac-print-panel), no graph print changes beyond sharing the path |
 | `vartest2` | Claude Windows, "continue all tasks" | T26 leftovers: Origin measurements of the two-sample proportion test (unpooled, tails, differences, Fisher, small samples), two-sample variance dialog with intervals, power analysis outputs; calc vartest.rs, core var/prop runners, their dialogs, statistics.md 21 | claimed 2026-11-15 |
 | `pca-plots` | Claude Windows, "continue all tasks" | T29 leftovers: PCA loading plot and biplot, Origin's report-sheet layout of PCA/k-means/Kaplan-Meier where measurable; core analysis/multivariate.rs, survival.rs, their dialogs, statistics.md 17-20 | claimed 2026-11-15 |
-| `cell-notes` | Claude macOS, "mac-multipdf" | T36 worksheet cell notes (Origin 2022): core per-sheet notes kept through row/column ops and sort, grid corner tab + hover popup, cell menu Add/Edit/Delete Note, note editor | claimed 2026-11-15; core worksheet + sheetops note upkeep, grid.rs body_cell, menus/app/dialogs; no cond-format/frozen/filter/Go To, plot, stats or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

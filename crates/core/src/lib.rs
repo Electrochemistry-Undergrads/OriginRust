@@ -23,6 +23,7 @@ pub mod graph_style;
 pub mod history;
 pub mod ids;
 pub mod localtime;
+pub mod notes;
 pub mod page_setup;
 pub mod panels;
 pub mod project;

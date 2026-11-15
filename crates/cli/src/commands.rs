@@ -23,6 +23,7 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::ExportData(a) => export_data(a),
         Command::Analyze(a) => crate::analyze::analyze(a),
         Command::Fit(a) => crate::fit::fit(a),
+        Command::Simulate(a) => crate::simulate::simulate(a),
     }
 }
 

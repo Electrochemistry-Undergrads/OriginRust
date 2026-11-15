@@ -9,6 +9,7 @@ license.workspace = true
 
 [dependencies]
 sheaf-core.workspace = true
+sheaf-fit.workspace = true
 sheaf-io.workspace = true
 sheaf-plot.workspace = true
 serde.workspace = true

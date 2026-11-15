@@ -24,6 +24,7 @@ mod lollipop;
 mod offset_multipliers;
 mod recent;
 mod rug;
+mod simulate;
 mod skip_points;
 mod sort_x;
 mod switcher;

@@ -31,6 +31,7 @@ use crate::dialogs::reshape::{ReshapeDialog, ReshapeOutcome};
 use crate::dialogs::row_filter::RowFilterDialog;
 use crate::dialogs::set_values::SetValuesDialog;
 use crate::dialogs::shape_object::ShapeDialog;
+use crate::dialogs::simulate::{Outcome as SimulateOutcome, SimulateDialog};
 use crate::dialogs::sort::{SortDialog, SortOutcome};
 use crate::dialogs::stack_panels::{Outcome as StackPanelsOutcome, StackPanelsDialog};
 use crate::dialogs::text_object::TextDialog;
@@ -141,6 +142,7 @@ pub struct SheafApp {
     trendline: Option<TrendlineDialog>,
     stack_panels: Option<StackPanelsDialog>,
     label_panels: Option<LabelPanelsDialog>,
+    simulate: Option<SimulateDialog>,
     column_props: Option<ColumnPropsDialog>,
     text_dialog: Option<TextDialog>,
     shape_dialog: Option<ShapeDialog>,
@@ -234,6 +236,7 @@ impl SheafApp {
             trendline: None,
             stack_panels: None,
             label_panels: None,
+            simulate: None,
             column_props: None,
             text_dialog: None,
             shape_dialog: None,
@@ -583,6 +586,7 @@ impl SheafApp {
         self.trendline = None;
         self.stack_panels = None;
         self.label_panels = None;
+        self.simulate = None;
         self.column_props = None;
         self.set_values = None;
         self.export = None;
@@ -1461,6 +1465,7 @@ impl SheafApp {
                     self.warn("Nothing to fit: choose a column that holds numbers and is set as Y".to_string());
                 }
             }
+            Action::SimulateCurve { book } => self.simulate = Some(SimulateDialog::new(self.doc.project(), book)),
             Action::SortSheet { column, descending } => self.sort_sheet(column, descending),
             Action::SortRange { columns, descending } => self.sort_selected(columns, descending, true),
             Action::SortColumns { columns, descending } => self.sort_selected(columns, descending, false),
@@ -2663,6 +2668,7 @@ impl SheafApp {
             || self.trendline.is_some()
             || self.stack_panels.is_some()
             || self.label_panels.is_some()
+            || self.simulate.is_some()
             || self.column_props.is_some()
             || self.text_dialog.is_some()
             || self.shape_dialog.is_some()
@@ -2958,6 +2964,20 @@ impl SheafApp {
                     self.label_panels = None;
                     self.focus(graph);
                     self.say("Created panels by label");
+                }
+            }
+        }
+        if let Some(d) = &mut self.simulate {
+            match d.show(ctx, &mut self.doc) {
+                SimulateOutcome::Open => {}
+                SimulateOutcome::Closed => self.simulate = None,
+                SimulateOutcome::Done { book, graph, message } => {
+                    self.simulate = None;
+                    self.focus(book);
+                    if let Some(graph) = graph {
+                        self.focus(graph);
+                    }
+                    self.say(message);
                 }
             }
         }
@@ -3631,6 +3651,15 @@ impl SheafApp {
                         self.stack_panels = StackPanelsDialog::new(self.doc.project(), book, columns, None);
                         self.focus(book);
                     }
+                }
+                // simulate or simulate:FUNCTION opens Analysis > Fitting > Simulate Curve on the first workbook.
+                "simulate" => {
+                    let book = project.workbooks().next().map(|b| b.id);
+                    let mut d = SimulateDialog::new(self.doc.project(), book);
+                    if !arg.is_empty() {
+                        d.choose_function_named(arg);
+                    }
+                    self.simulate = Some(d);
                 }
                 "label-panels" => {
                     let book = project.workbooks().next().map(|b| b.id);

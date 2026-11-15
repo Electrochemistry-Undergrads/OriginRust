@@ -16,6 +16,7 @@
 mod analyze;
 mod commands;
 mod fit;
+mod simulate;
 
 use clap::{ArgMatches, CommandFactory, FromArgMatches, parser::ValueSource};
 use sheaf_ops::args;

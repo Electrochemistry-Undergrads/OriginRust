@@ -5,8 +5,9 @@
 //! column the run read changes, an Auto link is run again at once (inside the same undo step as the
 //! edit) and a Manual link is marked pending until [`Project::recalculate_analysis`] is called. The
 //! results are replaced in place, so graphs and formulas that refer to the result columns keep working.
-//! Smooth, Integrate, Find Peaks, Average Multiple Curves, Intersect, Polygon Area and the data
-//! manipulation tools (T23) can be linked; the other tools run once.
+//! Smooth, Integrate, Find Peaks, Average Multiple Curves, Intersect, Polygon Area, the data
+//! manipulation tools (T23) and Simulate Curve (T47, which follows the column its X values come from)
+//! can be linked; the other tools run once.
 
 use std::collections::HashSet;
 
@@ -15,7 +16,7 @@ use sheaf_calc::{PeakOptions, ReduceOptions, SmoothOptions};
 
 use crate::analysis::{
     AnalysisError, AverageSpec, IntegrateSpec, IntersectSpec, MedianFilterSpec, OutputTarget, ReduceDupSpec, Report,
-    Request, RowRange, SubtractLineSpec, Tool, TranslateSpec,
+    Request, RowRange, SimulateCurveSpec, SubtractLineSpec, Tool, TranslateSpec,
 };
 use crate::column::{AnalysisMark, FormulaState, RecalcMode};
 use crate::{ColumnId, Project};
@@ -34,6 +35,7 @@ pub enum LinkTool {
     ReduceDup(ReduceDupSpec),
     Translate(TranslateSpec),
     MedianFilter(MedianFilterSpec),
+    SimulateCurve(SimulateCurveSpec),
 }
 
 impl LinkTool {
@@ -50,6 +52,8 @@ impl LinkTool {
             Tool::ReduceDup(s) => Some(LinkTool::ReduceDup(*s)),
             Tool::Translate(s) => Some(LinkTool::Translate(*s)),
             Tool::MedianFilter(s) => Some(LinkTool::MedianFilter(*s)),
+            // The graph of the first run stays; a repeated run does not draw another.
+            Tool::SimulateCurve(s) => Some(LinkTool::SimulateCurve(SimulateCurveSpec { plot: false, ..s.clone() })),
             _ => None,
         }
     }
@@ -67,6 +71,7 @@ impl LinkTool {
             LinkTool::ReduceDup(s) => Tool::ReduceDup(*s),
             LinkTool::Translate(s) => Tool::Translate(*s),
             LinkTool::MedianFilter(s) => Tool::MedianFilter(*s),
+            LinkTool::SimulateCurve(s) => Tool::SimulateCurve(s.clone()),
         }
     }
 }
@@ -415,6 +420,30 @@ mod tests {
         assert_eq!(p.numeric(out).unwrap(), vec![9.0; 20].as_slice(), "same column, new values");
         assert_eq!(p.workbook(book).unwrap().sheets[0].columns.len(), 3, "no column was added");
         assert_eq!(p.column(out).unwrap().analysis.unwrap().state, FormulaState::Current);
+    }
+
+    #[test]
+    fn a_linked_simulated_curve_follows_its_x_column() {
+        use crate::analysis::{SimulateCurveSpec, SimulateX};
+        let (mut p, x, _y, book) = setup();
+        let spec = SimulateCurveSpec {
+            function: "Line".into(),
+            params: vec![("A".into(), 1.0), ("B".into(), 2.0)],
+            x: SimulateX::OfColumn(x),
+            plot: true,
+        };
+        let req = Request { columns: vec![x], rows: RowRange::All, tool: Tool::SimulateCurve(spec) };
+        let report = p.analyze_linked(&req, &OutputTarget::NextToInput, RecalcMode::Auto).unwrap();
+        let (sx, sy) = (report.new_columns[0], report.new_columns[1]);
+        assert_eq!(p.numeric(sy).unwrap()[3], 1.0 + 2.0 * 3.0);
+        let before = p.clone();
+        p.column_mut(x).unwrap().data = ColumnData::numeric((0..20).map(|i| 10.0 * i as f64).collect());
+        let problems = p.update_analysis_links(&before);
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(p.numeric(sx).unwrap()[1], 10.0, "same columns, new values");
+        assert_eq!(p.numeric(sy).unwrap()[1], 21.0);
+        assert_eq!(p.workbook(book).unwrap().sheets.len(), 2, "no sheet was added");
+        assert_eq!(p.graphs().count(), 1, "the repeated run draws no second graph");
     }
 
     #[test]

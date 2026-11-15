@@ -1,6 +1,6 @@
 # T47: Simulate Curve (Analysis > Fitting > Simulate Curve)
 
-**Status:** claimed 2026-11-15 (branch `simulate-curve`, Claude macOS "mac-simcurve"). Brief written from
+**Status:** done, merged 2026-11-15 (Claude macOS "mac-simcurve"; fitting.md 13): `sheaf_fit::simulate` on the fit evaluator, `Tool::SimulateCurve` (one undo step, linkable), the Simulate Curve window with preview, `sheaf simulate`, MCP `simulate_curve` and `list_simulate_functions`. Reviewed by three agents with each finding checked; four fixed. Left: the Origin measurements in fitting.md 13; user-defined functions; a Recalculate mode in the window; Simulate Surface (matrices). Brief written from
 parity row "Simulate curve" (P1, ✗) and the greyed menu item "Simulate Curve..." under Analysis > Fitting.
 **Size:** M. **Branch:** `simulate-curve`. **Model:** Sonnet. No Origin needed for the mechanism; the
 window layout and defaults are measured once on Windows.

@@ -245,6 +245,10 @@ pub enum Action {
         column: Option<ColumnId>,
         kind: FitMoreKind,
     },
+    /// Analysis > Fitting > Simulate Curve: the window, with the active workbook if there is one.
+    SimulateCurve {
+        book: Option<WindowId>,
+    },
     /// Sort the rows of the sheet that holds this column by the column's values.
     SortSheet {
         column: ColumnId,

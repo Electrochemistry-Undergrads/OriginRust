@@ -51,6 +51,8 @@ pub use multivariate::{KmeansSpec, PcaSpec};
 pub use roc::RocSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
+pub use sheaf_fit::simulate::Spacing as SimulateSpacing;
+pub use simulate::{SimulateCurveSpec, SimulateX};
 pub use summary::{GraphArrangement, GraphSummarySpec};
 pub use survival::KaplanMeierSpec;
 
@@ -884,6 +886,9 @@ pub enum Tool {
     AverageCurves(AverageSpec),
     Intersect(IntersectSpec),
     PolygonArea,
+    /// Analysis > Fitting > Simulate Curve (T47, `docs/spec/fitting.md` section 13): a built-in fit function at typed
+    /// parameters, as an X and a Y column on a new sheet. Reads no data except an optional X column.
+    SimulateCurve(SimulateCurveSpec),
 }
 
 impl Tool {
@@ -971,6 +976,7 @@ impl Tool {
             Tool::AverageCurves(_) => "Average multiple curves",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "Polygon area",
+            Tool::SimulateCurve(_) => "Simulate curve",
         }
     }
 
@@ -1029,6 +1035,7 @@ impl Tool {
             Tool::AverageCurves(_) => "AverageResult",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "PolygonArea",
+            Tool::SimulateCurve(_) => "Simulate",
             _ => "Result",
         }
     }
@@ -1662,6 +1669,7 @@ mod manip;
 mod multivariate;
 mod power;
 mod roc;
+mod simulate;
 mod statistics;
 mod summary;
 mod survival;
@@ -1827,6 +1835,7 @@ impl Project {
                 | Tool::Roc(_)
                 | Tool::KaplanMeier(_)
                 | Tool::GraphSummary(_)
+                | Tool::SimulateCurve(_)
         );
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
@@ -1899,6 +1908,12 @@ impl Project {
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;
+            }
+            Tool::SimulateCurve(spec) => {
+                let out = simulate::run(spec, self)?;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
             }
             Tool::TTest(_)
             | Tool::VarTest(_)

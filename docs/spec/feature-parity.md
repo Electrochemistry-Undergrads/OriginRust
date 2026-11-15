@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 150 | 44 | 243 |
+| All rows | 49 | 151 | 43 | 243 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 81 | 44 | 142 |
+| P1 and P2 together | 17 | 82 | 43 | 142 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
@@ -233,7 +233,7 @@ Cross-cutting findings:
 | Linear fit report details | covariance on sheets, residual plots | covariance only in library | ◐ | | P1 |
 | User function and builder | F8, F9 | formula only; `.FDF` | ◐ | cannot save or reuse; no builder | P1 |
 | Exponential, Sigmoidal, Single Peak shortcuts | Fitting menu | choose in Nonlinear Curve Fit | ◐ | no dedicated entries | P1 |
-| Simulate curve | simcurve | none | ✗ | | P1 |
+| Simulate curve | simcurve | Analysis > Fitting > Simulate Curve... (any fit-library function, typed parameters prefilled with initial values, X range linear/log or the X of a column, new sheet, Plot, preview; one undo step, recalculates when linked), `sheaf simulate`, MCP `simulate_curve` (fitting.md 13) | ◐ | Origin's window, defaults and values unmeasured; user-defined functions not offered; Simulate Surface waits for matrices | P1 |
 | Fit range and several Y columns | nlbeginr | rows or X range; app one column per run | ◐ | | P1 |
 | Global fit | shared parameters | none | ✗ | | P2 |
 | Surface fit | Fitsurface | none | ✗ | one variable only | P2 |

@@ -7,6 +7,7 @@ pub mod args;
 pub mod cli_analyze;
 pub mod cli_fit;
 pub mod cli_plot;
+pub mod cli_simulate;
 pub mod fit;
 pub mod import;
 pub mod info;
@@ -15,6 +16,7 @@ pub mod plot;
 pub mod read;
 pub mod render;
 pub mod session;
+pub mod simulate;
 pub mod tabular;
 pub mod themes;
 

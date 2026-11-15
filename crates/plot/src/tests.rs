@@ -3878,8 +3878,13 @@ fn drop_lines_run_to_the_left_and_bottom_edges_in_the_plot_colour_by_default() {
     let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
     plot.decor.drop.vertical.on = true;
     let blue = Color { r: 0, g: 0, b: 255, a: 255 };
-    plot.decor.drop.horizontal =
-        DropLine { on: true, dash: sheaf_core::graph::Dash::Dash, width_pt: 2.0, color: Some(blue) };
+    plot.decor.drop.horizontal = DropLine {
+        on: true,
+        dash: sheaf_core::graph::Dash::Dash,
+        width_pt: 2.0,
+        color: Some(blue),
+        ..DropLine::default()
+    };
     let line_color = plot.line.color;
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     let f = scene.layers[0].clip;

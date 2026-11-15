@@ -48,6 +48,8 @@ mod label_whiteout_tests;
 #[cfg(test)]
 mod legend_tests;
 #[cfg(test)]
+mod lollipop_tests;
+#[cfg(test)]
 mod margin_tests;
 #[cfg(test)]
 mod multipage_tests;

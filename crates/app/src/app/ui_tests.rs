@@ -13,6 +13,7 @@ mod autosave;
 mod excel;
 mod label_frames;
 mod label_whiteout;
+mod lollipop;
 mod offset_multipliers;
 mod skip_points;
 mod symbol_line_gaps;

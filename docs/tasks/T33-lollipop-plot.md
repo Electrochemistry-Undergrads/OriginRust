@@ -1,6 +1,9 @@
 # T33: Lollipop plot
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `lollipop`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `lollipop`: Plot > Symbol >
+Lollipop Plot, `-t lollipop`, Drop To (Axis / Next Data Plot) and "Y Value: Plus-Minus" drop-line colour,
+`.opj` save warning; `--y2`/`--panels` refused. Left: Origin's defaults (symbol, colours, two-column
+rule) unmeasured (graphing.md 18.8); chord plot and rug plot not started.
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Graphing: Chord and lollipop plots, Origin 2021;
 the lollipop half only; chord, and the rug plot of 2019b, are left).
 
@@ -23,7 +26,7 @@ target and "Y Value: Plus-Minus" drop-line colour available in Plot Details.
   sign of the Y value. Colour "Auto" uses the symbol colour. [W:origin-help/pd-dialog-dropline-tab]
 - Unconfirmed (no Origin here): default symbol, sizes and colours, stem width, whether the last-to-
   first connection is drawn for two columns, horizontal layout details, the Plus-Minus colours.
-  Sheaf's choices go in graphing.md 18.7 labelled as such; measure on Windows with
+  Sheaf's choices go in graphing.md 18.8 labelled as such; measure on Windows with
   `tools/origin-ref/`.
 
 ## Where
@@ -36,13 +39,13 @@ target and "Y Value: Plus-Minus" drop-line colour available in Plot Details.
   Lines tab: Drop To, colour list) only for the drop-lines controls.
 - `crates/ops` / CLI `--template lollipop`, MCP template list; `.opj` save warning for what the
   writer cannot store.
-- `docs/spec/graphing.md` 18.7 (new).
+- `docs/spec/graphing.md` 18.8 (new).
 
 ## Done when
 
 The menu item, CLI and MCP make a lollipop graph from two or more Y columns; drop lines to the next
 plot and the Plus-Minus colour work and save in `.sheaf`; tests cover drawing geometry, the menu,
-the Plot Details controls and loading old files; graphing.md 18.7 records Origin's facts and
+the Plot Details controls and loading old files; graphing.md 18.8 records Origin's facts and
 Sheaf's choices.
 
 ## Don't

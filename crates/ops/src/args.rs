@@ -570,7 +570,8 @@ pub struct PlotArgs {
     /// (default: what the importer suggests). column draws one group of bars per row, the Y columns
     /// side by side, with sample names from a text X column under the bars; double-y puts the 1st,
     /// 3rd, ... Y column on the left axis and the 2nd, 4th, ... on a right axis; stacked moves each
-    /// curve above the one before it.
+    /// curve above the one before it; lollipop (two or more Y columns) joins each Y column's points
+    /// to the next column's at the same row with drop lines, X and Y exchanged.
     #[arg(short, long)]
     pub template: Option<String>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).

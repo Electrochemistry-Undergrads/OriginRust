@@ -1178,6 +1178,7 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
     }
     if !add.is_empty() {
         for a in add {
+            let ridge = layer.inherited_ridge();
             layer.plots.push(Plot {
                 x: a.x,
                 y: a.y,
@@ -1194,7 +1195,7 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 y_base: None,
                 error: ErrorStyle::default(),
                 hist: Default::default(),
-                ridge: Default::default(),
+                ridge,
                 size_from: None,
                 color_from: None,
                 decor: Default::default(),

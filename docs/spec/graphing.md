@@ -1682,10 +1682,23 @@ Origin's documented facts (from its help, not measured; no Origin was at hand; [
 - One ridge per Y column, the baseline of column k at Y = k, the first column at the bottom. The Y axis ticks at 1, 2, 3, ...
   are labelled with the column names (the plot label) and the axis has no title; the X axis is the data values, titled
   "Value". The Y range runs from 0.5 (lower if a rug reaches below) to the highest peak plus 0.1.
-- Density: the shared Gaussian KDE (`density_at`) at 200 even points from `min - 3 h` to `max + 3 h` (the violin uses 128
-  adaptive points and 2 h; its results are unchanged). One scale for the layer: the tallest peak over all ridges is
-  1.5 baseline spacings high, so neighbouring ridges overlap. Fewer than two values or no spread give no curve; points,
-  rug and the baseline label still draw. Masked and filtered rows are left out.
+- Density: the shared Gaussian KDE (`density_at`) on a grid that starts as 200 even points from `min - 3 h` to
+  `max + 3 h` and, where that step is wider than `h / 4` (a narrow kernel and a far outlier), is refined like the violin's
+  (`sheaf_calc::kde::refined_grid`, shared with `kernel_density`, whose results are unchanged): steps of at most `h / 4`
+  within 3 h of every value, at most 8192 added points. The curve is smooth and its sampled peak is within 1 % of the true
+  one; the common peak scale uses the drawn curve, and a quantile line is as high as the smaller of the exact density and
+  the curve drawn at that X, so it never pokes above the curve (the violin uses 128 adaptive points and 2 h). One scale for
+  the layer: the tallest peak over all ridges is 1.5 baseline spacings high, so neighbouring ridges overlap. Fewer than two
+  values or no spread give no curve; points, rug and the baseline label still draw. Masked and filtered rows are left out.
+- Axis scales: the grid stays inside the X scale's domain. Where `min - 3 h` (or `max + 3 h`) cannot be placed (a log or
+  reciprocal axis needs X > 0, a percent scale 0 to 100) the curve starts (ends) a tenth of the way from the domain limit
+  to the data end (log: at `min / 10`); values the scale cannot place do not set the ends. The X range includes the data
+  min and max like the violin's, so it stays valid. The fill polygon closes on the baseline below the first and last
+  curve points that could be placed, never at a dropped end.
+- Output formats: EPS and EMF have no transparency, so there the overlapping ridge fills are flattened opaque (the 30 %
+  transparency is lost and a nearer ridge hides the part of a farther one it overlaps); SVG, PDF and PNG keep it.
+- New plots: a plot added to a layer that already has a ridgeline plot (Layer Contents, Plot Setup, Plot Details "add")
+  starts with that plot's ridge settings (`Layer::inherited_ridge`), so all ridges keep one bandwidth and display.
 - Drawing (`crates/plot/src/ridgeline.rs`): ridges are drawn from the highest baseline down, so nearer ridges overlap the
   farther ones. Each ridge is a polygon from its baseline up to the curve, filled in the plot colour at 30 % transparency
   (the plot's pattern and gradient still apply), and the curve line in the plot colour (line width, at least 0.5 pt).
@@ -1696,7 +1709,8 @@ Origin's documented facts (from its help, not measured; no Origin was at hand; [
 - No right Y axis (`--y2`, MCP and `plot_columns_double_y` refuse). `.opj`: written as plain columns, the save warns
   ("ridgeline charts were written as plain columns of their data"). CLI `-t ridgeline`; MCP template text.
 - Tests: `ridgeline_tests.rs` (bandwidth formulas by hand, curve equals the shared KDE, baselines, peak scaling,
-  back-to-front order, quantile line height, rug, block bars, degenerate data), core template and serde tests, CLI test,
+  back-to-front order, quantile line height, rug, block bars, degenerate data, outlier grid refinement and peak, log X
+  axis range and polygon, inherited ridge settings), core template and serde tests, CLI test,
   UI menu and Plot Details tests, `.opj` warning test.
 - Not done: grouped and indexed-data ridgelines, ordering by something other than column index, jitter, quantile line
   style and per-line colours, other curve types than Kernel Smooth, a ridgeline toolbar button, Origin's real defaults.

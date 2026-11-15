@@ -447,6 +447,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                     project.plot_label(plot),
                     &plot.ridge,
                     &plot.hist,
+                    layer.x_axis.scale,
                 );
                 // The plot is the one point at the left end of its curve, on its baseline.
                 pd.x = Some(Cow::Owned(vec![ridge.x_extent().map_or(0.0, |e| e.0)]));
@@ -717,6 +718,11 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
                 if let Some((lo, hi)) = rd.x_extent() {
                     add(pd.display_x(lo));
                     add(pd.display_x(hi));
+                }
+                // The data themselves keep the range valid where the curve's ends cannot be placed.
+                if let (Some(&first), Some(&last)) = (rd.values.first(), rd.values.last()) {
+                    add(pd.display_x(first));
+                    add(pd.display_x(last));
                 }
             } else {
                 add(pd.display_y(rd.pos - rd.rug_reach(&pd.plot.ridge)));

@@ -114,12 +114,20 @@ pub fn kernel_density(data: &[f64], rule: Bandwidth, extend_pct: f64) -> Option<
     let v = finite_sorted(data);
     let reach = extend_pct.max(0.0) / 100.0 * w;
     let (lo, hi) = (v[0] - reach, v[v.len() - 1] + reach);
-    let mut grid: Vec<f64> = (0..GRID_POINTS).map(|i| lo + (hi - lo) * i as f64 / (GRID_POINTS - 1) as f64).collect();
-    if (hi - lo) / (GRID_POINTS - 1) as f64 > MAX_STEP * w {
-        refine_near_data(&mut grid, &v, w, (lo, hi));
-    }
+    let grid = refined_grid(&v, w, (lo, hi), GRID_POINTS);
     let density = grid.iter().map(|&x| density_at(&v, w, x)).collect();
     Some(Density { bandwidth: w, grid, density })
+}
+
+/// An even grid of `points` from `lo` to `hi`, refined near the ascending values `v` (see
+/// `refine_near_data`) where its step is wider than `MAX_STEP` bandwidths `w`: the step is at most a
+/// quarter bandwidth within 3 bandwidths of a value, with at most `MAX_EXTRA_POINTS` points added.
+pub fn refined_grid(v: &[f64], w: f64, (lo, hi): (f64, f64), points: usize) -> Vec<f64> {
+    let mut grid: Vec<f64> = (0..points).map(|i| lo + (hi - lo) * i as f64 / (points - 1) as f64).collect();
+    if (hi - lo) / (points - 1) as f64 > MAX_STEP * w {
+        refine_near_data(&mut grid, v, w, (lo, hi));
+    }
+    grid
 }
 
 /// Adds points to `grid` (which spans `lo..=hi`) so that, within `NEAR_REACH` bandwidths of any value

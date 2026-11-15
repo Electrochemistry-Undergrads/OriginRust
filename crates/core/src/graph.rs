@@ -724,6 +724,12 @@ fn is_false(b: &bool) -> bool {
 }
 
 impl Layer {
+    /// The ridgeline settings a plot added to this layer starts with: those of its first ridgeline
+    /// plot (so all ridges share bandwidth, display and look), else the defaults.
+    pub fn inherited_ridge(&self) -> RidgelineStyle {
+        self.plots.iter().find(|p| p.kind == PlotKind::Ridgeline).map(|p| p.ridge.clone()).unwrap_or_default()
+    }
+
     /// Recolors the plots whose color still comes from the palette, in plot order, and leaves
     /// colors chosen by hand alone. Used when plots are added or removed: with a palette that
     /// spreads its colors over the number of plots, every automatic color moves along.

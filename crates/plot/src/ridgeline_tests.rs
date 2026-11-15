@@ -85,7 +85,7 @@ fn the_bandwidth_rules_follow_origins_formulas() {
 }
 
 fn data_ridge(v: &[f64], s: &sheaf_core::graph::RidgelineStyle) -> crate::ridgeline::RidgeData {
-    crate::ridgeline::RidgeData::new(v, 1.0, "x".into(), s, &Default::default())
+    crate::ridgeline::RidgeData::new(v, 1.0, "x".into(), s, &Default::default(), ScaleKind::Linear)
 }
 
 fn h_of(v: &[f64], b: RidgeBandwidth) -> f64 {
@@ -234,4 +234,100 @@ fn degenerate_columns_draw_no_curve_and_the_kind_has_no_right_axis() {
     let y = q.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
     assert!(q.plot_columns_double_y(Template::Ridgeline, &[y], &[y]).is_err());
     assert_eq!(p.graph(g).unwrap().layers[0].plots[0].kind, PlotKind::Ridgeline);
+}
+
+/// 99 values of a bell shape plus one far outlier: a narrow kernel next to a wide range.
+fn outlier_column() -> Vec<f64> {
+    let mut v: Vec<f64> = (1..100)
+        .map(|i| {
+            // Normal quantiles: bisection on the CDF integrated by Simpson's rule.
+            let p = i as f64 / 100.0;
+            let (mut lo, mut hi) = (-6.0f64, 6.0f64);
+            for _ in 0..60 {
+                let m = (lo + hi) / 2.0;
+                // CDF of the normal by Simpson integration of the density.
+                let n = 400;
+                let h = (m + 8.0) / n as f64;
+                let f = |x: f64| (-0.5 * x * x).exp() / (2.0 * std::f64::consts::PI).sqrt();
+                let c: f64 = (0..n)
+                    .map(|k| {
+                        h / 6.0
+                            * (f(-8.0 + k as f64 * h)
+                                + 4.0 * f(-8.0 + (k as f64 + 0.5) * h)
+                                + f(-8.0 + (k + 1) as f64 * h))
+                    })
+                    .sum();
+                if c < p { lo = m } else { hi = m }
+            }
+            (lo + hi) / 2.0
+        })
+        .collect();
+    v.push(1000.0);
+    v
+}
+
+#[test]
+fn a_narrow_kernel_and_a_far_outlier_still_give_a_smooth_curve_with_the_true_peak() {
+    let col = outlier_column();
+    let style = sheaf_core::graph::RidgelineStyle::default();
+    let r = data_ridge(&col, &style);
+    let h = r.bandwidth.unwrap();
+    assert!(h < 0.5 && 1000.0 / 199.0 > 10.0 * h, "the even grid would be far too coarse: {h}");
+    assert!(r.grid.windows(2).all(|w| w[1] > w[0]));
+    // Where the kernel matters the step is at most a quarter bandwidth.
+    for w in r.grid.windows(2).filter(|w| w[0] > -3.0 * h && w[1] < 3.0) {
+        assert!(w[1] - w[0] <= 0.25 * h + 1e-9, "{w:?}");
+    }
+    // The highest drawn point is within 1 % of the true highest density (found on a fine scan).
+    let truth = (0..=40000).map(|i| density_at(&col, h, -4.0 + 8.0 * i as f64 / 40000.0)).fold(0.0, f64::max);
+    assert!((r.peak() - truth).abs() / truth < 0.01, "{} vs {truth}", r.peak());
+    assert!(r.grid.len() < 2000);
+    // Quantile lines never exceed the drawn curve.
+    let mut s = style.clone();
+    s.quantile_lines = true;
+    for q in 0..=100 {
+        let x = sheaf_calc::stats::quantile_origin(&col, q as f64 / 100.0);
+        let drawn = r.density_at_x(&s, x);
+        let i = r.grid.partition_point(|&g| g <= x).clamp(1, r.grid.len() - 1);
+        let (x0, x1) = (r.grid[i - 1], r.grid[i]);
+        let line = r.density[i - 1] + (x - x0) / (x1 - x0) * (r.density[i] - r.density[i - 1]);
+        assert!(drawn <= line + 1e-12, "{q}: {drawn} > {line}");
+    }
+}
+
+#[test]
+fn a_log_x_axis_keeps_the_range_and_closes_the_fill_on_the_baseline() {
+    let col: Vec<f64> = (1..=100).map(f64::from).collect();
+    let (mut p, g, _) = ridges(std::slice::from_ref(&col));
+    p.graph_mut(g).unwrap().layers[0].x_axis.scale = ScaleKind::Log10;
+    let l = layer_data(&p, g);
+    let r = l.plots[0].ridge.as_ref().unwrap();
+    assert!(r.grid.iter().all(|&x| x > 0.0), "the grid stays inside the log domain");
+    let (lo, hi) = data::axis_range(l.plots.iter(), Dim::X, ScaleKind::Log10).unwrap();
+    assert!(lo <= 1.0 && hi >= 100.0 && lo > 0.0, "{lo} {hi}");
+    let items = plot_items(&p, g);
+    let area = areas(&items);
+    assert_eq!(area.len(), 1);
+    let a = &area[0];
+    let base = a[0].1;
+    assert!((a[a.len() - 1].1 - base).abs() < 1e-6, "ends on the baseline");
+    // The polygon has every grid point: the first curve point sits above the first corner.
+    assert_eq!(a.len(), r.grid.len() + 2);
+    assert!((a[0].0 - a[1].0).abs() < 1e-6 && (a[a.len() - 1].0 - a[a.len() - 2].0).abs() < 1e-6);
+}
+
+#[test]
+fn a_plot_added_to_a_ridgeline_layer_takes_its_ridge_settings() {
+    let (mut p, g, _) = ridges(&[sample(0.0, 30)]);
+    set(&mut p, g, |r| {
+        r.bandwidth = RidgeBandwidth::Silverman;
+        r.display = RidgeDisplay::WithRug;
+    });
+    let layer = &p.graph(g).unwrap().layers[0];
+    let got = layer.inherited_ridge();
+    assert_eq!(got.bandwidth, RidgeBandwidth::Silverman);
+    assert_eq!(got.display, RidgeDisplay::WithRug);
+    let mut empty = layer.clone();
+    empty.plots.clear();
+    assert_eq!(empty.inherited_ridge(), Default::default());
 }

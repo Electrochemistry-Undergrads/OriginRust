@@ -82,10 +82,14 @@ pub enum Template {
     Radar,
     /// Ternary plot of the X, Y and Z columns (Origin's "Ternary").
     Ternary,
+    /// Lollipop plot (Origin's "Lollipop Plot", Origin 2021): the scatter template with X and Y
+    /// exchanged and vertical drop lines that go from each plot to the next data plot. Needs two
+    /// or more Y columns ([`Project::plot_columns`] refuses fewer).
+    Lollipop,
 }
 
 impl Template {
-    pub const ALL: [Template; 31] = [
+    pub const ALL: [Template; 32] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -117,6 +121,7 @@ impl Template {
         Template::DoubleY,
         Template::StackedLines,
         Template::Waterfall,
+        Template::Lollipop,
     ];
 
     /// The name used on the command line and in menus.
@@ -153,6 +158,7 @@ impl Template {
             Template::PolarRTheta => "polar-r-theta",
             Template::Radar => "radar",
             Template::Ternary => "ternary",
+            Template::Lollipop => "lollipop",
         }
     }
 
@@ -189,6 +195,7 @@ impl Template {
             Template::PolarRTheta => "Polar r(X) theta(Y)",
             Template::Radar => "Radar",
             Template::Ternary => "Ternary",
+            Template::Lollipop => "Lollipop Plot",
         }
     }
 
@@ -231,6 +238,7 @@ impl Template {
             Template::PolarRTheta => polar(id, name, RadiusColumn::X),
             Template::Radar => radar(id, name),
             Template::Ternary => ternary(id, name),
+            Template::Lollipop => general(id, name, PlotKind::Scatter),
         }
     }
 }
@@ -748,7 +756,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 31);
+        assert_eq!(Template::ALL.len(), 32);
+        assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
     }
 
     #[test]
@@ -930,5 +939,32 @@ mod tests {
             assert_eq!(colors(t)[1], Color::rgb(255, 0, 0));
             assert_eq!(colors(t)[2], Color::rgb(0, 0, 255), "black, red, blue, magenta, green, ...");
         }
+    }
+
+    #[test]
+    fn lollipop_needs_two_y_columns_and_exchanges_x_and_y() {
+        use crate::graph::DropTarget;
+        use crate::{ColumnData, Designation, Project};
+        let mut p = Project::new();
+        let b = p.add_workbook("d");
+        let x = p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        let y1 = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![3.0, 4.0])).unwrap();
+        let y2 = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![5.0, 6.0])).unwrap();
+        let err = p.plot_columns(Template::Lollipop, &[y1]).unwrap_err();
+        assert!(err.to_string().contains("two or more Y columns"), "{err}");
+        assert!(p.plot_columns(Template::Lollipop, &[]).is_err());
+        assert_eq!(p.graphs().count(), 0, "a refused plot leaves no graph behind");
+        let g = p.plot_columns(Template::Lollipop, &[y1, y2]).unwrap();
+        let l = &p.graph(g).unwrap().layers[0];
+        assert_eq!(l.default_kind, PlotKind::Scatter);
+        assert_eq!(l.plots.len(), 2);
+        for (plot, y) in l.plots.iter().zip([y1, y2]) {
+            // Exchanged: the Y column runs along X and the X column up the Y axis.
+            assert_eq!((plot.x, plot.y), (Some(y), x));
+            assert!(plot.decor.drop.vertical.on && !plot.decor.drop.horizontal.on);
+            assert_eq!(plot.decor.drop.vertical.target, DropTarget::NextDataPlot);
+        }
+        assert_eq!(p.plot_label(&l.plots[0]), p.column(y1).unwrap().display_name());
+        assert_eq!(Template::Lollipop.label(), "Lollipop Plot");
     }
 }

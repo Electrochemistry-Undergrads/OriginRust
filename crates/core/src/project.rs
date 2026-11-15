@@ -130,6 +130,8 @@ pub enum ProjectError {
     NoSuchPlot(usize),
     #[error("{0}")]
     Panels(#[from] PanelError),
+    #[error("a lollipop plot needs two or more Y columns (got {0}); select at least two Y columns")]
+    LollipopNeedsTwoColumns(usize),
 }
 
 impl Project {
@@ -635,6 +637,9 @@ impl Project {
         for y in ys {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
         }
+        if template == Template::Lollipop && ys.len() < 2 {
+            return Err(ProjectError::LollipopNeedsTwoColumns(ys.len()));
+        }
         let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
         let graph = self.add_graph(template);
         if matches!(template, Template::FloatingColumn | Template::FloatingBar) {
@@ -681,6 +686,9 @@ impl Project {
                 }
             }
         }
+        if template == Template::Lollipop {
+            self.make_lollipop(graph, ys);
+        }
         if let Some(g) = self.graph_mut(graph) {
             // A new graph has no colors chosen by the user, so spread the palette over all plots.
             if let Some(l) = g.layers.first_mut() {
@@ -691,6 +699,32 @@ impl Project {
             }
         }
         Ok(graph)
+    }
+
+    /// Turns the plots of a new graph into a lollipop plot: vertical drop lines to the next data
+    /// plot and, as Origin's template exchanges X and Y, each plot's X and Y columns traded (with
+    /// the two axes) when every plot has an X column. Plots against the row number cannot be
+    /// exchanged here (Sheaf's own limit, unmeasured), so those lollipops stand upright.
+    fn make_lollipop(&mut self, graph: WindowId, ys: &[ColumnId]) {
+        let labels: Vec<String> =
+            ys.iter().map(|y| self.column(*y).map(|c| c.display_name().to_string()).unwrap_or_default()).collect();
+        let Some(l) = self.graph_mut(graph).and_then(|g| g.layers.first_mut()) else { return };
+        for p in &mut l.plots {
+            p.decor.drop.vertical.on = true;
+            p.decor.drop.vertical.target = crate::graph::DropTarget::NextDataPlot;
+        }
+        if l.plots.iter().all(|p| p.x.is_some()) {
+            std::mem::swap(&mut l.x_axis, &mut l.y_axis);
+            for (p, name) in l.plots.iter_mut().zip(labels) {
+                if let Some(x) = p.x {
+                    // The plot keeps the name of its Y column in the legend.
+                    p.label = Some(name);
+                    p.x = Some(p.y);
+                    p.y = x;
+                }
+                std::mem::swap(&mut p.y_error, &mut p.x_error);
+            }
+        }
     }
 
     /// Creates a graph of `template` with the `left` columns on its left Y axis and the `right`

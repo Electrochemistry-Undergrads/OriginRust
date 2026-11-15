@@ -38,7 +38,7 @@ outputs or UI behavior.
 
 | Feature | Release | Functionality to add | Source |
 |---|---|---|---|
-| Multi-page PDF figure export | 2018b | Select several graphs and export them as separate pages in one PDF. | [2018b][o18b] |
+| Multi-page PDF figure export | 2018b | Done (T32): select several graphs and export them as separate pages in one PDF. | [2018b][o18b] |
 | Data Connectors and periodic refresh | 2019b / 2026 | Keep a linked source and its selected data subset in the workbook. Reload the link on a configurable, pausable timer and optionally keep linked data out of the saved project. | [2019b][o19b] · [2026][o26] |
 | Linked HTML/Markdown analysis reports | 2019b | Build a report embedding live links to result values, metadata and figures. Reuse the report with batch analysis and export it as a web page. | [2019b][o19b] |
 | Import PDF Tables | 2021 App | Extract table cells from a PDF into worksheets. | [2021][o21] |

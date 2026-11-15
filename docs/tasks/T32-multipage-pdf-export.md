@@ -1,6 +1,9 @@
 # T32: Multi-page PDF export
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `multipage-pdf`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `multipage-pdf`: sheaf-plot
+multi-page writer (page per graph, Page Setup variant), Export Graphs check box, `sheaf export/print`
+repeated `--graph`/`--all-graphs`, MCP `export_graph` `graphs`/`all_graphs` (500-page bound). Left:
+Origin's dialog label, combined-file name and page sizing are unmeasured (graphing.md 9.7).
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Import, reporting and export: Multi-page PDF
 figure export, Origin 2018b).
 

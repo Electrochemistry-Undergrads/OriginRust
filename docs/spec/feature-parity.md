@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 48 | 140 | 50 | 238 |
+| All rows | 48 | 141 | 49 | 238 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 16 | 71 | 50 | 137 |
+| P1 and P2 together | 16 | 72 | 49 | 137 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
@@ -148,7 +148,7 @@ Cross-cutting findings:
 | COM server | Origin COM object | none | ✗ | | P2 |
 | Read themes and templates | .oth, .otp | none | ✗ | | P2 |
 | Read .opju | File > Open | none | ✗ | | P2 |
-| Other exports | sheet as image, multi-page PDF, matrix ASCII, GIF | none | ✗ | | P2 |
+| Other exports | sheet as image, multi-page PDF, matrix ASCII, GIF | multi-page PDF (`render_multipage_pdf`, T32, graphing 9.7); GIF graph export | ◐ | sheet as image, matrix ASCII | P2 |
 
 ## 5 Mathematics and data manipulation
 
@@ -326,7 +326,7 @@ Cross-cutting findings:
 |---|---|---|---|---|---|
 | PNG with dpi and size | File > Export Graphs | `render_png`; dialog; CLI | ✓ | always 24-bit RGBA | P0 |
 | SVG | export type | `render_svg` | ✓ | | P0 |
-| PDF | expPDFw | `render_pdf`, text kept as text | ◐ | no PDF options, multi-page, several graphs | P0 |
+| PDF | expPDFw | `render_pdf`, text kept as text; several graphs as one multi-page PDF (dialog, CLI, MCP; T32) | ◐ | no PDF options | P0 |
 | Size, margin and units | Image Settings | page size and dpi; export width and height in in, cm, mm, pt, px or % that scale the whole picture (CLI `--image-width`/`--image-height`, the app's export window "Scale to" in in, cm, px or % of page); margin modes Auto, Border, Tight, Page, Tight in page with a border width (CLI `--margin`, `--border-width`, the export window) | ✓ | Origin's value of the -2 Auto margin and of the default border width are not measured (Sheaf: Border, 5 pt); the app sets the width only; no margin offsets | P0 |
 | One scene renderer for screen and exports | | `layout.rs` to `scene.rs` | ✓ | | P0 |
 | Other image types | EMF, WMF, TIF, JPG, EPS, BMP, GIF, AI and more | TIFF (24-bit, grayscale or indexed 256 colors; none, PackBits or LZW), JPEG, BMP, GIF, TGA, PCX and flattened PSD (24-bit, grey or 256 colours where the format allows; PSD records DPI), EPS (level 2, vector, standard PostScript fonts re-encoded to Latin-1, Greek from Symbol) and EMF (vector, text as text, written from the public format description) in the app (export window), the CLI (`-o fig.eps`, `-o fig.psd` and so on) and `export_file`; sizes scale as for SVG and PDF | ◐ | transparency is blended onto the page background in EPS and EMF and onto white in PSD; PSD has no editable layers; characters outside Latin-1, Greek and a few signs are replaced and reported (EPS); EMF was checked by loading it with GDI+, EPS only by structure (no PostScript interpreter was available); TGA and PCX were read back by an independent decoder (Pillow); WMF and AI are missing | P1 |

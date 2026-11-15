@@ -100,7 +100,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T47](T47-simulate-curve.md) | Simulate Curve: a curve from any fit-library function with typed parameters, window, CLI and MCP | M | done, merged 2026-11-15 (fitting.md 13); left: Origin measurements, user-defined functions, Simulate Surface |
 | [T48](T48-graph-data-tools.md) | Graph Data menu: Mask Data Points (rectangle), Remove Bad Data Points, Move Data Points | M | claimed 2026-11-15 (`graph-data-tools`, Claude macOS "mac-datatools") |
 | [T49](T49-parallel-plot.md) | Parallel Plot and Parallel Index (parallel coordinates) | M | done 2026-11-15 (graphing 14.25, `parallel-plot`, macOS); left: Parallel Sets, curvature, colour map, axis reordering, Origin defaults unmeasured |
-| [T50](T50-treemap.md) | Treemap: nested rectangles sized by value (six Origin layouts) | M | claimed 2026-11-15 (`treemap`, macOS) |
+| [T50](T50-treemap.md) | Treemap: nested rectangles sized by value (six Origin layouts) | M | done 2026-11-15 (graphing 14.26, `treemap`, macOS); left: Origin defaults/colours/labels unmeasured, hover and drill-down, colour by value |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

@@ -1,6 +1,6 @@
 # T50: Treemap
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `treemap`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `treemap`. Spec: graphing.md 14.26. Not done: Origin's real defaults, colours and labels (unmeasured), hover/picking of rectangles, drill-down, colour by value, reading Origin treemaps from .opj.
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Graphing: Treemap, Origin 2025b).
 
 ## Goal

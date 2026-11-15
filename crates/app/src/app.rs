@@ -194,6 +194,8 @@ pub struct SheafApp {
     recovered_from: Option<PathBuf>,
     /// The endpoint of `sheaf-mcp --attach`, when Tools > AI Assistants (MCP) is ticked.
     live: Live,
+    /// The Window Switcher (Ctrl+Tab) while it is open.
+    switcher: Option<crate::switcher::Switcher>,
 }
 
 impl SheafApp {
@@ -267,12 +269,13 @@ impl SheafApp {
             recovery_offer: None,
             recovered_from: None,
             live: Live::new(cc.egui_ctx.clone(), startup_dirs),
+            switcher: None,
         };
         app.start_recovery();
         let paths = std::mem::take(&mut app.startup.paths);
         app.open_paths(paths, false);
         app.sync_windows();
-        app.run_startup_show();
+        app.run_startup_show(&cc.egui_ctx);
         if app.startup.mcp {
             app.set_link(true);
         }
@@ -998,6 +1001,55 @@ impl SheafApp {
         }
     }
 
+    /// Opens the Window Switcher on the windows of the Project Explorer's selected folder, most
+    /// recently used first. With fewer than two windows nothing opens.
+    fn open_switcher(&mut self, ctx: &egui::Context, backward: bool, sticky: bool) {
+        let ids = explorer::windows_in(self.doc.project(), &self.panels.explorer.folder);
+        let ids = self.workspace.recent_order(&ids);
+        let workspace = &self.workspace;
+        self.switcher = crate::switcher::Switcher::open(
+            ctx,
+            self.doc.project(),
+            &ids,
+            |id| !workspace.is_shown(id),
+            workspace.active(),
+            backward,
+            sticky,
+        );
+    }
+
+    /// The keys of the Window Switcher: Ctrl+Tab opens it, Tab and the arrows move, releasing
+    /// Ctrl or Enter activates the selection, Esc closes it. Runs before the grid reads keys.
+    fn switcher_keys(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        use crate::switcher::Nav;
+        let open = self.switcher.is_some();
+        let keys = crate::switcher::take_keys(ctx, open, !self.dialog_open());
+        for nav in keys {
+            match &mut self.switcher {
+                None => {
+                    if matches!(nav, Nav::Next | Nav::Prev) {
+                        self.open_switcher(ctx, nav == Nav::Prev, false);
+                    }
+                }
+                Some(s) => match nav {
+                    Nav::Confirm => {
+                        actions.push(Action::Focus(s.selected()));
+                        self.switcher = None;
+                    }
+                    Nav::Cancel => self.switcher = None,
+                    other => s.go(other),
+                },
+            }
+        }
+        if let Some(s) = &self.switcher
+            && !s.sticky
+            && !crate::switcher::ctrl_down(ctx)
+        {
+            actions.push(Action::Focus(s.selected()));
+            self.switcher = None;
+        }
+    }
+
     fn focus(&mut self, id: WindowId) {
         if self.doc.project().window(id).is_some() {
             if !self.workspace.contains(id) {
@@ -1569,6 +1621,7 @@ impl SheafApp {
             Action::PrintPreview(graph) => self.print_preview = Some(PrintPreview::new(graph)),
             Action::PageSetup => self.page_setup = Some(PageSetupDialog::new(self.doc.project().page_setup)),
             Action::Focus(id) => self.focus(id),
+            Action::OpenSwitcher => self.open_switcher(ctx, false, true),
             Action::HideWindow(id) => self.workspace.hide(id),
             Action::AppendProject(path) => {
                 let path = path.or_else(|| {
@@ -2408,6 +2461,7 @@ impl SheafApp {
     fn shortcuts(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         // A widget with the keyboard is a text field, except the grid itself (it takes the
         // keyboard when a cell is clicked so that Tab and the arrows stay with it).
+        self.switcher_keys(ctx, actions);
         let grids: HashSet<egui::Id> = self.books.keys().map(|b| grid::grid_id(*b)).collect();
         let typing = ctx.memory(|m| m.focused()).is_some_and(|id| !grids.contains(&id));
         // Delete on a graph removes its selected object (a legend, a title, a text label).
@@ -2526,6 +2580,7 @@ impl SheafApp {
             || self.pending.is_some()
             || self.autosave_dialog.is_some()
             || self.recovery_offer.is_some()
+            || self.switcher.is_some()
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
@@ -3303,7 +3358,7 @@ impl SheafApp {
     // ----- checking the interface without a person ------------------------
 
     /// Opens the things named by `--show` on the command line.
-    fn run_startup_show(&mut self) {
+    fn run_startup_show(&mut self, ctx: &egui::Context) {
         let shows = self.startup.show.clone();
         for what in shows {
             let (name, arg) = what.split_once(':').unwrap_or((what.as_str(), ""));
@@ -3313,6 +3368,8 @@ impl SheafApp {
             let named = project.window_by_name(arg).map(Window::id);
             match name {
                 "menu" => self.open_menu = Some(arg.to_string()),
+                // The Window Switcher, held open (as from the menu).
+                "switcher" => self.open_switcher(ctx, false, true),
                 // panel:explorer (slid out), panel:explorer-docked, panel:explorer-hidden; the
                 // names are explorer, objects, messages and results.
                 "panel" => {
@@ -3782,6 +3839,16 @@ impl eframe::App for SheafApp {
             self.panels.flyouts(ctx, &data, &mut actions);
         }
         self.dialogs(ctx);
+        if let Some(s) = &mut self.switcher {
+            match s.show(ctx) {
+                Some(crate::switcher::Click::Window(id)) => {
+                    actions.push(Action::Focus(id));
+                    self.switcher = None;
+                }
+                Some(crate::switcher::Click::Dismiss) => self.switcher = None,
+                None => {}
+            }
+        }
         for action in actions {
             self.apply(action, ctx);
         }

@@ -109,31 +109,40 @@ pub fn check_target(path: &Path, kind: RecentKind) -> Result<(), String> {
 
 /// The file name and the folder of an entry, as the menu shows them. The folder is shortened from
 /// the left (`...`) when longer than `max_chars`; the whole path is the tooltip.
-pub fn entry_parts(path: &Path, max_chars: usize) -> (String, String) {
-    let name = path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned());
-    let folder = path.parent().map(|p| p.display().to_string()).unwrap_or_default();
-    (name, shorten_start(&folder, max_chars))
-}
-
-/// The text cut from the left to `max_chars` characters, with `...` in front when something was cut.
-fn shorten_start(text: &str, max_chars: usize) -> String {
-    let n = text.chars().count();
-    if n <= max_chars {
-        return text.to_string();
+/// The text of an entry as Origin 2016 shows it: the whole path without the extension, shortened
+/// to `max_chars` by replacing the folders after the first one with `...` until it fits (the drive and
+/// first folder stay, then as many trailing parts as fit; measured, recent-files.md 2). A file name
+/// that does not fit even so is shown alone.
+pub fn entry_text(path: &Path, max_chars: usize) -> String {
+    let full = path.with_extension("").display().to_string();
+    if full.chars().count() <= max_chars {
+        return full;
     }
-    let keep = max_chars.saturating_sub(3);
-    let tail: String = text.chars().skip(n - keep).collect();
-    format!("...{tail}")
+    let sep = if full.contains('\\') { '\\' } else { '/' };
+    let parts: Vec<&str> = full.split(sep).collect();
+    if parts.len() < 3 {
+        return full;
+    }
+    let head = format!("{}{sep}{}{sep}...", parts[0], parts[1]);
+    // drop the folders after the first one, from the left, until the rest fits
+    for start in 2..parts.len() {
+        let tail = parts[start..].join(&sep.to_string());
+        let candidate = format!("{head}{sep}{tail}");
+        if candidate.chars().count() <= max_chars {
+            return candidate;
+        }
+    }
+    parts[parts.len() - 1].to_string()
 }
 
-/// The label of the `n`-th entry (from 0): `&1 name` to `&9 name`, then `1&0 name` for the tenth,
-/// and no accelerator after that. `&` in the name is doubled.
+/// The label of the `n`-th entry (from 0), numbered as Origin 2016 does: `&1 name` to `&9 name`, then
+/// `&A name` to `&F name`; no number after the fifteenth. `&` in the name is doubled.
 pub fn numbered(n: usize, name: &str) -> String {
     let name = name.replace('&', "&&");
     match n {
         0..=8 => format!("&{} {name}", n + 1),
-        9 => format!("1&0 {name}"),
-        _ => format!("{} {name}", n + 1),
+        9..=14 => format!("&{} {name}", char::from(b'A' + (n - 9) as u8)),
+        _ => name,
     }
 }
 
@@ -149,11 +158,31 @@ mod tests {
     }
 
     #[test]
-    fn the_tenth_entry_has_its_accelerator_on_the_zero() {
-        assert_eq!(numbered(0, "a.sheaf"), "&1 a.sheaf");
-        assert_eq!(numbered(8, "a.sheaf"), "&9 a.sheaf");
-        assert_eq!(numbered(9, "a.sheaf"), "1&0 a.sheaf");
-        assert_eq!(numbered(10, "a.sheaf"), "11 a.sheaf");
+    fn entries_are_numbered_one_to_nine_then_a_to_f_as_in_origin() {
+        assert_eq!(numbered(0, "a"), "&1 a");
+        assert_eq!(numbered(8, "a"), "&9 a");
+        assert_eq!(numbered(9, "a"), "&A a");
+        assert_eq!(numbered(14, "a"), "&F a");
+        assert_eq!(numbered(15, "a"), "a");
+        assert_eq!(numbered(0, "R&D"), "&1 R&&D");
+    }
+
+    #[test]
+    fn long_paths_lose_folders_after_the_first_as_origin_shows_them() {
+        // the two cases measured in Origin 2016's File menu (80 characters, extension left out)
+        let p = Path::new(r"C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t21-legend-position\legend.opj");
+        assert_eq!(entry_text(p, 80), r"C:\Users\...\OriginRust\re-workspace\scratch\t21-legend-position\legend");
+        let b = Path::new(r"C:\Program Files\OriginLab\Origin2016\Samples\Curve Fitting\Dose Response Analysis.ogw");
+        assert_eq!(entry_text(b, 80), r"C:\Program Files\...\Origin2016\Samples\Curve Fitting\Dose Response Analysis");
+        // a 76-character path stays whole
+        let short = Path::new(r"C:\Program Files\OriginLab\Origin2016\Samples\Curve Fitting\Single Peak Fit.ogw");
+        assert_eq!(
+            entry_text(short, 80),
+            r"C:\Program Files\OriginLab\Origin2016\Samples\Curve Fitting\Single Peak Fit"
+        );
+        // a name too long to fit is shown alone
+        let name = "x".repeat(90);
+        assert_eq!(entry_text(Path::new(&format!(r"C:\a\b\{name}.opj")), 80), name);
     }
 
     #[test]
@@ -163,13 +192,12 @@ mod tests {
     }
 
     #[test]
-    fn a_long_folder_is_cut_from_the_left_and_a_short_one_is_kept() {
-        let long = Path::new("/a/very/long/folder/name/that/goes/on/and/on/file.csv");
-        let (name, folder) = entry_parts(long, 20);
-        assert_eq!(name, "file.csv");
-        assert_eq!(folder.chars().count(), 20);
-        assert!(folder.starts_with("...") && folder.ends_with("on/and/on"), "{folder}");
-        assert_eq!(entry_parts(Path::new("/a/b/c.csv"), 20), ("c.csv".to_string(), "/a/b".to_string()));
+    fn unix_paths_are_shortened_the_same_way() {
+        let long =
+            Path::new("/home/user/a/very/long/folder/name/that/goes/on/and/on/and/on/and/on/and/on/and/on/file.csv");
+        let text = entry_text(long, 40);
+        assert!(text.starts_with("/home/...") && text.ends_with("/on/file") && text.chars().count() <= 40, "{text}");
+        assert_eq!(entry_text(Path::new("/a/b/c.csv"), 40), "/a/b/c");
     }
 
     #[test]

@@ -11,9 +11,25 @@ clicking one opens it through the normal Open path (the question about unsaved c
 File > Import > Recent Imports lists the data files imported most recently and imports one again with
 the default settings of its type. The lists survive a restart and are shared by every running instance.
 
-## 2. Origin facts (not measured)
+## 2. Origin facts
 
-Nothing here was measured: the session that wrote this had no Origin. From Origin's public
+**Measured 2026-11-15 in Origin 2016 on Windows** (read-only: the list file and File menu screenshots,
+which stay local because they show the owner's paths; `re-workspace/scratch/t38`):
+
+- The lists live in `MRFiles.ini` in the user folder, one section each: `[Recent File List]` (projects,
+  keys `File1`... newest first, 16 keys present), `[Recent Books]`, `[Recent Graphs]`. There is no section
+  for imports or exports in this version.
+- File > Recent Projects showed 15 entries, numbered `1` to `9` then `A` to `F` (the accelerator
+  character, then a space), newest first; Recent Books has the same form.
+- The text of an entry is the whole path **without the extension**. A long path is shortened in the
+  middle: the drive and first folder stay, the next folders are replaced by `...`, and as many trailing
+  parts are kept as fit in 80 characters (an 84-character path dropped two folders and became
+  `C:\Users\...\OriginRust\...` of 71 characters; an 82-character one dropped one folder; paths of 76
+  and 78 characters were shown whole). This is the usual rule of Windows recent-file menus.
+- Not measured: whether the number can be set, behaviour for a missing file, an empty list's text,
+  multi-file imports, and spelling variants of one file.
+
+Before that measurement nothing here was known: the session that first wrote this had no Origin. From Origin's public
 documentation, paraphrased: the File menu has Recent Books, Recent Graphs and Recent Projects
 submenus, and Import and Export each have a Recent submenu; the lists hold the most recently used
 files, newest first.
@@ -40,9 +56,9 @@ Until then every number and wording below is Sheaf's own choice.
 
 | Choice | Value |
 |---|---|
-| Length | 10 entries in Recent Projects, 10 in Recent Imports (separate lists) |
+| Length | 15 entries in Recent Projects, as Origin 2016 shows (measured); 15 in Recent Imports too (Origin 2016 has no import list) |
 | Order | newest first; using an entry again moves it to the top, never repeats it |
-| Entry text | numbered `&1 name` to `&9 name`, then `1&0 name` for the tenth (name = the file name), the folder after it in a weaker colour, the full path as the tooltip |
+| Entry text | as Origin 2016 (measured): numbered `&1` to `&9`, then `&A` to `&F`; the path without its extension, shortened in the middle to 80 characters; the full path as the tooltip |
 | Empty list | one greyed item "(none)" |
 | Clear | an item "Clear Recent Projects" / "Clear Recent Imports" below a separator |
 | Missing file | a message in the Messages log and a dialog naming the file; the entry is removed |
@@ -51,7 +67,7 @@ Until then every number and wording below is Sheaf's own choice.
 | Import again | with the default settings of the file's type, as if the file had been dropped on the window |
 | What is listed | a project file opened or saved (Open, Save, Save As, command line, drag and drop, the list itself), and a data file imported (menu, drag and drop, command line); not recovered projects, not the autosave files, not templates |
 | Batch import | the files are pushed one after the other in import order, so the last one imported is first |
-| Long file name | a name longer than 60 characters loses its middle (`...`) and keeps its end, the extension; the tooltip shows the whole path (unmeasured) |
+| Long file name | a file name that does not fit in 80 characters even with every middle folder dropped is shown alone; the tooltip shows the whole path |
 | Where | not in the project file |
 
 ## 4. The file

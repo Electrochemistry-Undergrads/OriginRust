@@ -2510,8 +2510,9 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
     }
 }
 
-/// The entries of a recent list: numbered, the name first and the folder after it in a weaker
-/// colour, the full path as the tooltip. An empty list shows a greyed "(none)".
+/// The entries of a recent list as Origin 2016 shows them: numbered 1 to 9 and A to F, the path
+/// without its extension shortened to 80 characters, the full path as the tooltip. An empty list
+/// shows a greyed "(none)".
 fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &mut Vec<Action>) {
     let list = if kind == RecentKind::Projects { c.recent_projects } else { c.recent_imports };
     if list.is_empty() {
@@ -2519,13 +2520,7 @@ fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &m
         return;
     }
     for (n, path) in list.iter().enumerate() {
-        let (name, folder) = recent::entry_parts(path, RECENT_FOLDER_CHARS);
-        let mut job = label_job(ui, &recent::numbered(n, &name), true);
-        if !folder.is_empty() {
-            let font_id = TextStyle::Button.resolve(ui.style());
-            let weak = TextFormat { font_id, color: ui.visuals().weak_text_color(), ..Default::default() };
-            job.append(&folder, 14.0, weak);
-        }
+        let job = label_job(ui, &recent::numbered(n, &recent::entry_text(path, RECENT_ENTRY_CHARS)), true);
         let full = path.display().to_string();
         let response = ui.add(egui::Button::new(job)).on_hover_text(&full);
         if response.contains_pointer() {
@@ -2542,7 +2537,8 @@ fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &m
 }
 
 /// The longest folder text an entry shows; longer folders are cut from the left (Sheaf's choice).
-const RECENT_FOLDER_CHARS: usize = 48;
+/// Origin 2016 shortens a recent entry to 80 characters (recent-files.md 2).
+const RECENT_ENTRY_CHARS: usize = 80;
 
 /// A check mark in the room left of the label.
 fn tick(ui: &egui::Ui, response: &egui::Response) {

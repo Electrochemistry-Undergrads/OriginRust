@@ -30,6 +30,10 @@ pub const CELL_CAP: usize = 10_000;
 const ROW_CAP: usize = 10_000_000;
 /// Largest image the server renders.
 const PIXEL_CAP: f64 = 40_000_000.0;
+
+/// The most pages one `export_graph` call writes into a multi-page PDF. Sheaf's own bound for
+/// one tool call (not an Origin limit): each page costs a render and a conversion.
+const MAX_EXPORT_PAGES: usize = 500;
 /// Longest side of an image returned in a reply.
 const IMAGE_SIDE: f64 = 1600.0;
 /// Largest file `import_files` reads.
@@ -1249,14 +1253,24 @@ fn export_graph_list(project: &Project, a: &ExportArgs) -> Result<Option<Vec<Win
     }
     let ids = match (&a.graphs, a.all_graphs) {
         (Some(_), true) => return Err(ToolError::new("give graphs or all_graphs, not both")),
+        (Some(names), false) if names.len() > MAX_EXPORT_PAGES => return Err(too_many_pages(names.len())),
         (Some(names), false) => names.iter().map(|n| pick_graph(project, Some(n))).collect::<Result<Vec<_>, _>>()?,
         (None, true) => project.graphs().map(|g| g.id).collect(),
         (None, false) => return Ok(None),
     };
+    if ids.len() > MAX_EXPORT_PAGES {
+        return Err(too_many_pages(ids.len()));
+    }
     if ids.is_empty() {
         return Err(ToolError::new(if a.all_graphs { "the project has no graph" } else { "graphs is empty" }));
     }
     Ok(Some(ids))
+}
+
+fn too_many_pages(n: usize) -> ToolError {
+    ToolError::new(format!(
+        "{n} graphs is too many for one PDF; the limit is {MAX_EXPORT_PAGES} pages per call. Export them in several files"
+    ))
 }
 
 fn check_dpi(dpi: f64) -> Result<(), ToolError> {

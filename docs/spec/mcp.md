@@ -204,7 +204,8 @@ into one PDF, one page per graph, as Origin 2018b's multi-page PDF export (expGr
 Each page is the one-graph PDF export of that graph with the same size and margin settings, and
 each passes the pixel cap. Neither goes with `graph`; names resolve as `graph` does. Sheaf's own
 rules, not measured in Origin: with more than one graph a `path` is required, the format must be
-pdf (by `format` or the extension), and `return_image: true` is refused (no image is returned).
+pdf (by `format` or the extension), `return_image: true` is refused (no image is returned), and
+more than 500 pages (a repeated name counts each time) is refused, writing no file.
 Result `{graph, graphs, pages, path, format, width_px: null, height_px: null, bytes}`, `graph`
 being the first page's graph. A list that resolves to one graph is the one-graph export.
 

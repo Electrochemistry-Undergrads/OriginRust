@@ -179,3 +179,17 @@ fn all_graphs_without_a_graph_is_refused() {
     let msg = refused(&call(&mut s, "export_graph", json!({"all_graphs": true, "path": "x.pdf"})));
     assert!(msg.contains("no graph"), "{msg}");
 }
+
+#[test]
+fn more_pages_than_the_limit_are_refused_and_write_no_file() {
+    let d = Dirs::new("limit");
+    let mut s = two_graphs(&d);
+    let names: Vec<&str> = (0..501).map(|_| "Graph1").collect();
+    let msg = refused(&call(&mut s, "export_graph", json!({"graphs": names, "path": "big.pdf"})));
+    assert!(msg.contains("500"), "{msg}");
+    assert!(!d.root.join("big.pdf").exists(), "nothing was written");
+    // The limit itself is allowed.
+    let names: Vec<&str> = (0..500).map(|_| "Graph1").collect();
+    let out = ok(&call(&mut s, "export_graph", json!({"graphs": names, "path": "max.pdf"})));
+    assert_eq!(out["pages"], 500);
+}

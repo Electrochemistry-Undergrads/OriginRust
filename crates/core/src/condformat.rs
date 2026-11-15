@@ -221,16 +221,17 @@ pub fn evaluate(sheet: &Worksheet, rules: &[CondFormat]) -> CellStyles {
     let mut painter = Painter { styles: &mut styles, rows: row_count, palette_of: HashMap::new() };
     for (index, rule) in rules.iter().enumerate().take(MAX_RULES) {
         // The range's columns in sheet order, numeric ones only.
-        let columns: Vec<(ColumnId, &[f64], &std::collections::BTreeSet<usize>)> = sheet
+        // Masked cells are left out, unless masking is disabled.
+        let columns: Vec<(ColumnId, &[f64], Option<&std::collections::BTreeSet<usize>>)> = sheet
             .columns
             .iter()
             .filter(|c| rule.range.columns.contains(&c.id))
-            .filter_map(|c| c.numeric().map(|v| (c.id, v, &c.mask)))
+            .filter_map(|c| c.numeric().map(|v| (c.id, v, c.active_mask())))
             .collect();
         let rows = rule.range.rows(row_count);
-        let value = |col: &(ColumnId, &[f64], &std::collections::BTreeSet<usize>), r: usize| -> Option<f64> {
+        let value = |col: &(ColumnId, &[f64], Option<&std::collections::BTreeSet<usize>>), r: usize| -> Option<f64> {
             let v = *col.1.get(r)?;
-            (!v.is_nan() && !col.2.contains(&r)).then_some(v)
+            (!v.is_nan() && !col.2.is_some_and(|m| m.contains(&r))).then_some(v)
         };
         match &rule.rule {
             Rule::MinMax { dir: Direction::ColumnWise, max, min } => {

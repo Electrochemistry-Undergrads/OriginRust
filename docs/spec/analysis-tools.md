@@ -105,7 +105,9 @@ acts like the next odd number (observed for 6 with averaging and Savitzky-Golay)
   `m p / 100` is a whole number (unknown which one Origin uses).
 * Boundary `none`: averaging and percentile shrink the window symmetrically (the first and last point
   stay as they are); Savitzky-Golay fits the first (or last) full window and evaluates it at the edge
-  point. `reflect`: mirror including the end point (`y[-1] = y[0]`). `repeat`: the end value.
+  point. `reflect`: mirror including the end point (`y[-1] = y[0]`), except for the percentile
+  filter, which mirrors without the first point at the start (`y[-1] = y[1]`) and with the last point
+  at the end (`y[n] = y[n-1]`; measured at 50 %, 12.3). `repeat`: the end value.
   `periodic`: wrap around. `extrapolate`: the straight line through the two end points. For the
   padded modes the window is full everywhere. All observed.
 * FFT filter (`method:=fft`; `npts` is not a window length but sets the cutoff). All rules were
@@ -633,7 +635,7 @@ column's comment says the same. `--fit-shapes` needs `--fit`.
 Not done: constraints between peaks, and Origin's own Peak Analyzer Fit Peaks (Pro) page, which was
 not opened (11.1).
 
-## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1)
+## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1 to 12.3)
 
 Analysis > Data Manipulation has Subtract Straight Line, Reduce Duplicate X Data (12.1), Reduce to Evenly Spaced X and Curve
 Translate X; Analysis > Mathematics has Median Filter. Nothing in this section was run in Origin:
@@ -672,10 +674,10 @@ link mechanism):
   (Sheaf's own item, next to X): adds a constant to Y, or shifts so that the curve's value at X = `at`
   (between data points by straight lines) becomes `to`; the result is a new Y column behind each
   input named "<name> shifted". A point outside the X range is refused.
-- Median Filter: the window has an odd number of points (at least 1; the default is 5), centred on
-  each point. Edge choices: shrink (default), repeat the end value, reflect including the end point.
-  Even windows are refused. The result is a new Y column behind each input named "Median filtered
-  <name>".
+- Median Filter: Origin's percentile filter at 50 % (12.3). The window has `2 (npts / 2) + 1`
+  points (an even `npts` acts like the next odd one; at least 1; the default is 5), centred on each
+  point. Edge choices: shrink (default), repeat the end value, reflect as Origin's percentile filter.
+  The result is a new Y column behind each input named "Median filtered <name>".
 
 Not measured (to be measured in Origin; nothing here may be quoted as Origin's behaviour):
 
@@ -693,9 +695,8 @@ Not measured (to be measured in Origin; nothing here may be quoted as Origin's b
 4. Curve Translate: whether Origin moves data in place or writes a copy, how its "move a point to
    a value" mode reads a Y at an X between data points, and whether it works on the graph
    interactively. Curve Translate Y is not an Origin item as far as we know; its numbers are Sheaf's.
-5. Median Filter: whether Origin's window must be odd, what an even window does, its boundary
-   rule at the ends (we assume the percentile filter's), the handling of missing values (we assume
-   the smoothing rule), and the default window size.
+5. Median Filter: measured, see 12.3 (missing values follow the smoothing rule measured in
+   section 3; the default window of 5 is Sheaf's, Origin has no median item for curves).
 6. The Recalculate behaviour of these items in Origin (which of None, Manual, Auto they offer),
    the long names, units and comments of the output columns, and the row-range handling.
 
@@ -763,6 +764,28 @@ Command line: `sheaf analyze subtract-line FILE --y B --x1 X --x2 X [--y1 V] [--
 `sheaf analyze reduce-x` (12.2), `sheaf analyze translate FILE --y B [--axis x|y] (--by D | --at X --to V)`
 and `sheaf analyze median-filter FILE --y B [--points N] [--edge shrink|repeat|reflect]`. Windows:
 `--show analysis:subtract-line`, `reduce-x`, `translate-x`, `translate-y`, `median-filter`.
+
+### 12.3 Median Filter (measured in Origin)
+
+Origin 2016 has no median filter for curves; its median of a curve is Smooth's percentile filter at
+50 % (`smooth method:=pf percent:=50`). Measured on 2026-11-15 with
+`tools/origin-ref/run-labtalk-lines.ps1` (`re-workspace/scratch/t23m/m1`): 40 points with ties and
+outliers, windows 1, 4, 5, 7 and 8, boundaries none, reflect and repeat; the sheet is
+`crates/calc/tests/fixtures/origin_median.tsv`.
+
+- An even `npts` acts like the next odd one: 4 gives the result of 5, 8 that of 9 (as section 3 found
+  for averaging). `npts:=1` returns the data.
+- `none`: the window shrinks symmetrically at the ends, so the first and last point keep their value.
+- `repeat`: the end value fills the window.
+- `reflect` is not symmetric: before the start the data are mirrored without the first point
+  (`y[-1] = y[1]`, `y[-2] = y[2]`), past the end with the last point repeated (`y[n] = y[n-1]`). The
+  second row of the probe tells the two rules apart at the start (the mirror with `y[-1] = y[0]` gives
+  7.8108 where Origin gives 7.0353) and the next-to-last row at the end. Sheaf's Smooth followed the
+  symmetric rule for the percentile filter too, and was corrected; its averaging and Savitzky-Golay
+  reflection, measured in section 3, is unchanged.
+
+Sheaf's Median Filter (`calc::median_filter`) and Smooth's percentile filter reproduce all eight
+Origin columns exactly (a median is one of the values): `crates/calc/tests/origin_median.rs`.
 
 ## 13. Convolution and Correlation (`conv`, `corr1`)
 

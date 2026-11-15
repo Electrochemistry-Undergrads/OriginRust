@@ -264,6 +264,11 @@ pub struct Column {
     /// graphs (drawn red) but analysis, fits and statistics leave it out.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub mask: BTreeSet<usize>,
+    /// Column > Mask > Disable Masking: the mask is kept but not applied, so analysis reads the
+    /// masked cells and graphs draw them as ordinary points (Origin's `@MM = 1`). A copy of the
+    /// project's switch ([`crate::project::Project::masking_disabled`]), kept in line after every edit.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub mask_disabled: bool,
     /// Column > Set as Categorical: the values are categories (groups), not quantities. Tools
     /// that need a grouping column, such as Unstack Columns, offer these columns first.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -348,14 +353,19 @@ impl Column {
     /// analysis, fits and statistics read. Borrowed when nothing is masked.
     pub fn numeric_unmasked(&self) -> Option<Cow<'_, [f64]>> {
         let v = self.numeric()?;
-        if self.mask.is_empty() {
+        let Some(mask) = self.active_mask() else {
             return Some(Cow::Borrowed(v));
-        }
+        };
         let mut owned = v.to_vec();
-        for r in self.mask.range(..owned.len()) {
+        for r in mask.range(..owned.len()) {
             owned[*r] = f64::NAN;
         }
         Some(Cow::Owned(owned))
+    }
+
+    /// The masked rows that are in force: `None` when nothing is masked or masking is disabled.
+    pub fn active_mask(&self) -> Option<&BTreeSet<usize>> {
+        (!self.mask_disabled && !self.mask.is_empty()).then_some(&self.mask)
     }
 
     /// Puts the rows in the order `order` (new row i takes old row `order[i]`), data and mask
@@ -396,6 +406,7 @@ impl Column {
             hidden: false,
             width: None,
             mask: BTreeSet::new(),
+            mask_disabled: false,
             categorical: false,
             data,
         }

@@ -1,6 +1,6 @@
 # T13: Missing Plot Details tabs and controls
 
-**Status:** base tabs merged from `plot-details` (2026-11-14); Data on Top of Axes, Skip Points, Label White Out, Offset multipliers, Label Frame/Margin, symbol gaps and Front/Behind line order completed in the follow-ups below. The measured parts were already on `main`. Measured against Origin (graphing spec 18, 18.1 to 18.5): Drop Lines and Label tabs, line Transparency, Fill Area Under Curve (Normal), the layer Background colour, the Group tab (Edit Mode, increments, members), Offset (X and Y offsets), Display, Size/Speed (units), Link Axes Scales, Stack, the page tabs Print/Dimensions, Display and Legends/Titles, the tree names, Layer Contents and Plot Setup as Origin's own windows, the Workbook and ">>" buttons. Ported from the branch onto those dialogs, **Sheaf's own and not measured** (spec 18.6): a hatch, gradient and transparency for the fill of columns, bars, areas and the fill under a curve (Pattern tab; for areas too); bar Width (in %) on Spacing; Label by a column of the project, a list of rows, decimals and offsets; subgroups by size on the Group tab; the layer Background gradient and border; the X Axes and Y Axes switches of Display; the page's border, layer icons switch, comments (hover text in the Object Manager), window title choice, Miscellaneous tab, and Print/Dimensions keeping the layers' size; the right Y layer no longer copies its parent's background; drop lines are drawn only for the kinds whose tab offers them; deleting a column resets the X error, base and data labels that name it; "Use this style for all plots" copies the look settings. Not taken from the branch because main's measured version replaced it: the second Layer Contents and Plot Setup dialogs, the second Group, Drop Lines, Label and Link tabs, its tree text, its Workbook button and side panel, line transparency as a percentage field. **Left:** the other fill modes and Origin's pattern list, several groups per layer, subgrouping by column label, Binned, Size/Speed X:Y ratio, caching and speed mode, label leader lines, print margins, writing the new settings to `.opj` (the writer names them in its save warnings). **Unmeasured:** everything in spec 18.6 (compare with Origin on the Windows machine). **Size:** M. **Model:** Sonnet.
+**Status:** base tabs merged from `plot-details` (2026-11-14); Data on Top of Axes, Skip Points, Label White Out, Offset multipliers, Label Frame/Margin, symbol gaps, Front/Behind line order and the sidelines/Inclusive fill modes completed in the follow-ups below. The measured parts were already on `main`. Measured against Origin (graphing spec 18, 18.1 to 18.5): Drop Lines and Label tabs, line Transparency, Fill Area Under Curve (Normal), the layer Background colour, the Group tab (Edit Mode, increments, members), Offset (X and Y offsets), Display, Size/Speed (units), Link Axes Scales, Stack, the page tabs Print/Dimensions, Display and Legends/Titles, the tree names, Layer Contents and Plot Setup as Origin's own windows, the Workbook and ">>" buttons. Ported from the branch onto those dialogs, **Sheaf's own and not measured** (spec 18.6): a hatch, gradient and transparency for the fill of columns, bars, areas and the fill under a curve (Pattern tab; for areas too); bar Width (in %) on Spacing; Label by a column of the project, a list of rows, decimals and offsets; subgroups by size on the Group tab; the layer Background gradient and border; the X Axes and Y Axes switches of Display; the page's border, layer icons switch, comments (hover text in the Object Manager), window title choice, Miscellaneous tab, and Print/Dimensions keeping the layers' size; the right Y layer no longer copies its parent's background; drop lines are drawn only for the kinds whose tab offers them; deleting a column resets the X error, base and data labels that name it; "Use this style for all plots" copies the look settings. Not taken from the branch because main's measured version replaced it: the second Layer Contents and Plot Setup dialogs, the second Group, Drop Lines, Label and Link tabs, its tree text, its Workbook button and side panel, line transparency as a percentage field. **Left:** the other fill modes and Origin's pattern list, several groups per layer, subgrouping by column label, Binned, Size/Speed X:Y ratio, caching and speed mode, label leader lines, print margins, writing the new settings to `.opj` (the writer names them in its save warnings). **Unmeasured:** everything in spec 18.6 (compare with Origin on the Windows machine). **Size:** M. **Model:** Sonnet.
 **Detail:** audit B "Plot Details", "Layer Contents (F12) and Plot Setup".
 **Spec:** `docs/spec/gui-look.md` (Plot Details), `docs/spec/ui-command-map.md` D1/D3.
 
@@ -120,6 +120,45 @@ Validation on integrated Go To `cb1270a` plus the docs-only scope update: format
 workspace all-target Clippy and 2,243 workspace tests pass (three existing ignored). All five
 new regressions and the extended model fixture pass. All Origin workflows/builders exited
 before merge; shared pending files and graphify artifacts remain outside this commit.
+
+## Sidelines fill modes follow-up (2026-11-15)
+
+The Line tab offers Normal, Sidelines only and Sidelines and Base. Normal stays the old default;
+the other two use an unfilled line-coloured outline to the frame bottom, with Base closing the
+bottom edge. Origin 2016 verified mode/color/negative-axis examples establish this behavior and
+the line legend sample. Verified missing cells show boundaries only at the outer endpoints,
+without internal sidelines or a line through the isolated middle point. Invalid initial mode
+selector and missing-value attempts are explicitly excluded in graphing 18.
+
+One stroke preserves transparency at joins; existing curves, clipping and row selection stay
+in use. Group editing, Apply/Cancel/history and native/companion saves preserve the mode; old
+projects keep Normal and `.opj` retains the existing unsupported-fill warning. Eight new
+core/plot/UI/IO regressions cover these behaviors, hidden-mask endpoint integration and every vector backend. Other fill modes,
+custom baselines and specialised-coordinate parity remain open.
+
+Validation on integrated violin `9af42a9` plus the docs-only scope updates: formatting, strict
+workspace all-target Clippy and 2,609 workspace tests pass (five existing ignored). All eight
+new regressions pass, along with the latest MCP attach tests after a Unix-only argument and
+three Windows canonical-path fixture expectations were made portable. All reference workflows
+and the validation builder exited; a native Plot Details preview is retained locally.
+
+## Inclusive fill follow-up (2026-11-15)
+
+The Line tab offers Inclusive broken by missing values. Each finite run fills to its own
+endpoint chord and closes with the connecting stroke. Missing values separate the polygons;
+a one-point run has no fill but retains its round stroke cap. Corrected Origin 2016 controls,
+exports and explicit ISNA checks establish these rules; the invalid initial capture batch is
+excluded (graphing 18). Fill styling and a filled legend remain active. Normal stays the default;
+group editing, Apply/Cancel/history and native/companion saves retain the mode, with the existing
+`.opj` warning. Four new renderer/UI regressions and the existing all-mode model/save tests cover
+geometry, alpha joins, connections/exports, saved preferences and editing history. Other fill
+modes, alternate baselines and specialised-coordinate parity remain open.
+
+Validation on integrated `b66251e` plus the docs-only scope update: formatting, strict workspace
+all-target Clippy and all 2,616 workspace tests pass (seven existing ignored). All four new
+regressions and the extended all-mode model/save cases pass.
+All three corrected Origin cases have verified applied controls and exports; all reference
+workflows and builders exited before merge.
 
 ## Today
 

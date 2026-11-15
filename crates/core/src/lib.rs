@@ -31,6 +31,7 @@ pub mod reshape;
 pub mod rowfilter;
 pub mod scales;
 pub mod shape;
+pub mod sheet_print;
 pub mod sheetops;
 pub mod stack;
 pub mod template;

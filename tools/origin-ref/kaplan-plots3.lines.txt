@@ -1,0 +1,68 @@
+string nm$ = "";
+newbook;
+col(1) = {3, 5, 5, 6, 8, 8, 9, 12, 12, 15, 17, 20, 22, 25};
+wks.addcol(); col(2) = {0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0};
+wks.addcol(); col(3) = {1, 2, 1, 2, 1, 2, 2, 1, 2, 1, 2, 1, 2, 1};
+kaplanmeier irng:=(1,2,3) censor:=1 sf:=1 sfci:=1 plotinone:=0 rd:=<new name:=SFa> rt:=<new name:=RTa>;
+nm$ = "";
+doc -e P { win -a %H; nm$ = nm$ + "%H|%(page.longname$)|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc) ## "; expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="kci_%H.png" overwrite:=1 tr1.unit:=2 tr1.width:=800; }
+$nm$
+win -a Book1;
+page.active$ = SFa;
+string a$ = wks.col1.lname$;
+$a$
+string c$ = wks.col1.comment$;
+$c$
+?wks.col1.type
+string a$ = wks.col2.lname$;
+$a$
+string c$ = wks.col2.comment$;
+$c$
+?wks.col2.type
+string a$ = wks.col3.lname$;
+$a$
+string c$ = wks.col3.comment$;
+$c$
+?wks.col3.type
+string a$ = wks.col4.lname$;
+$a$
+string c$ = wks.col4.comment$;
+$c$
+?wks.col4.type
+string a$ = wks.col5.lname$;
+$a$
+string c$ = wks.col5.comment$;
+$c$
+?wks.col5.type
+string a$ = wks.col6.lname$;
+$a$
+string c$ = wks.col6.comment$;
+$c$
+?wks.col6.type
+string a$ = wks.col7.lname$;
+$a$
+string c$ = wks.col7.comment$;
+$c$
+?wks.col7.type
+string a$ = wks.col8.lname$;
+$a$
+string c$ = wks.col8.comment$;
+$c$
+?wks.col8.type
+newbook;
+col(1) = {3, 5, 5, 6, 8, 8, 9, 12, 12, 15, 17, 20, 22, 25};
+wks.addcol(); col(2) = {0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0};
+wks.addcol(); col(3) = {1, 2, 1, 2, 1, 2, 2, 1, 2, 1, 2, 1, 2, 1};
+kaplanmeier irng:=(1,2,3) censor:=1 sf:=1 plotinone:=1 rd:=<new name:=SFb> rt:=<new name:=RTb>;
+nm$ = "";
+doc -e P { win -a %H; nm$ = nm$ + "%H|%(page.longname$)|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc) ## "; expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="kone_%H.png" overwrite:=1 tr1.unit:=2 tr1.width:=800; }
+$nm$
+newbook;
+col(1) = {3, 5, 5, 6, 8, 8, 9, 12, 12, 15, 17, 20, 22, 25};
+wks.addcol(); col(2) = {0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0};
+wks.addcol(); col(3) = {1, 2, 1, 2, 1, 2, 2, 1, 2, 1, 2, 1, 2, 1};
+kaplanmeier irng:=(1,2) censor:=1 sf:=1 sfci:=1 plotinone:=0 quartile:=1 mean:=1 conf:=99 rd:=<new name:=SFc> rt:=<new name:=RTc>;
+#[Book3]SFc
+nm$ = "";
+doc -e P { win -a %H; nm$ = nm$ + "%H|%(page.longname$)|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc) ## "; expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="kci1_%H.png" overwrite:=1 tr1.unit:=2 tr1.width:=800; }
+$nm$

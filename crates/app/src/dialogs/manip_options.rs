@@ -287,7 +287,8 @@ impl ManipOptions {
             }
             _ => {
                 ui.horizontal(|ui| {
-                    ui.label("Points of window (odd)");
+                    ui.label("Points of window")
+                        .on_hover_text("An even number acts like the next odd one, as in Origin's smoothing");
                     let mut n = self.median.npts;
                     ui.add(DragValue::new(&mut n).range(1..=100_001));
                     self.median.npts = n;

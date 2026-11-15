@@ -1,0 +1,240 @@
+string nm$ = "";
+newbook;
+col(1) = {3, 5, 5, 6, 8, 8, 9, 12, 12, 15, 17, 20, 22, 25};
+wks.addcol(); col(2) = {0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0};
+wks.addcol(); col(3) = {1, 2, 1, 2, 1, 2, 2, 1, 2, 1, 2, 1, 2, 1};
+kaplanmeier irng:=(1,2) censor:=1 sf:=1 sfci:=1 plotinone:=0 rd:=<new name:=SFE> rt:=<new name:=RTE>;
+#[Book1]SFE
+nm$ = "";
+doc -e P { nm$ = nm$ + "%H|"; }
+$nm$
+win -a SF;
+$page.name$
+$page.longname$
+?page.nlayers
+?layer.nplots
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+string tx$ = xb.text$;
+$tx$
+string ty$ = yl.text$;
+$ty$
+string ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+$ds$
+expGraph type:=png path:="%WORK%" filename:=kmE_SF overwrite:=1 tr1.unit:=2 tr1.width:=800;
+win -a SF1;
+$page.name$
+$page.longname$
+?page.nlayers
+?layer.nplots
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+string tx$ = xb.text$;
+$tx$
+string ty$ = yl.text$;
+$ty$
+string ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+$ds$
+expGraph type:=png path:="%WORK%" filename:=kmE_SF1 overwrite:=1 tr1.unit:=2 tr1.width:=800;
+win -a SF2;
+$page.name$
+$page.longname$
+?page.nlayers
+?layer.nplots
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+string tx$ = xb.text$;
+$tx$
+string ty$ = yl.text$;
+$ty$
+string ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+$ds$
+expGraph type:=png path:="%WORK%" filename:=kmE_SF2 overwrite:=1 tr1.unit:=2 tr1.width:=800;
+win -a Graph1;
+$page.name$
+$page.longname$
+?page.nlayers
+?layer.nplots
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+string tx$ = xb.text$;
+$tx$
+string ty$ = yl.text$;
+$ty$
+string ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+$ds$
+expGraph type:=png path:="%WORK%" filename:=kmE_Graph1 overwrite:=1 tr1.unit:=2 tr1.width:=800;
+win -a Graph2;
+$page.name$
+$page.longname$
+?page.nlayers
+?layer.nplots
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+string tx$ = xb.text$;
+$tx$
+string ty$ = yl.text$;
+$ty$
+string ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+$ds$
+expGraph type:=png path:="%WORK%" filename:=kmE_Graph2 overwrite:=1 tr1.unit:=2 tr1.width:=800;
+newbook;
+col(1) = {3, 5, 5, 6, 8, 8, 9, 12, 12, 15, 17, 20, 22, 25};
+wks.addcol(); col(2) = {0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0};
+wks.addcol(); col(3) = {1, 2, 1, 2, 1, 2, 2, 1, 2, 1, 2, 1, 2, 1};
+kaplanmeier irng:=(1,2,3) censor:=1 sf:=1 sfci:=1 plotinone:=0 logrank:=1 quartile:=1 mean:=1 rd:=<new name:=SFF> rt:=<new name:=RTF>;
+#[Book2]SFF
+nm$ = "";
+doc -e P { nm$ = nm$ + "%H|"; }
+$nm$
+win -a SF;
+$page.name$
+$page.longname$
+?page.nlayers
+?layer.nplots
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+string tx$ = xb.text$;
+$tx$
+string ty$ = yl.text$;
+$ty$
+string ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+$ds$
+expGraph type:=png path:="%WORK%" filename:=kmF_SF overwrite:=1 tr1.unit:=2 tr1.width:=800;
+win -a SF1;
+$page.name$
+$page.longname$
+?page.nlayers
+?layer.nplots
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+string tx$ = xb.text$;
+$tx$
+string ty$ = yl.text$;
+$ty$
+string ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+$ds$
+expGraph type:=png path:="%WORK%" filename:=kmF_SF1 overwrite:=1 tr1.unit:=2 tr1.width:=800;
+win -a SF2;
+$page.name$
+$page.longname$
+?page.nlayers
+?layer.nplots
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+string tx$ = xb.text$;
+$tx$
+string ty$ = yl.text$;
+$ty$
+string ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+$ds$
+expGraph type:=png path:="%WORK%" filename:=kmF_SF2 overwrite:=1 tr1.unit:=2 tr1.width:=800;
+win -a SF3;
+$page.name$
+$page.longname$
+?page.nlayers
+?layer.nplots
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+string tx$ = xb.text$;
+$tx$
+string ty$ = yl.text$;
+$ty$
+string ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+$ds$
+expGraph type:=png path:="%WORK%" filename:=kmF_SF3 overwrite:=1 tr1.unit:=2 tr1.width:=800;
+win -a SF4;
+$page.name$
+$page.longname$
+?page.nlayers
+?layer.nplots
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+string tx$ = xb.text$;
+$tx$
+string ty$ = yl.text$;
+$ty$
+string ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+$ds$
+expGraph type:=png path:="%WORK%" filename:=kmF_SF4 overwrite:=1 tr1.unit:=2 tr1.width:=800;
+win -a Graph1;
+$page.name$
+$page.longname$
+?page.nlayers
+?layer.nplots
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+string tx$ = xb.text$;
+$tx$
+string ty$ = yl.text$;
+$ty$
+string ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+$ds$
+expGraph type:=png path:="%WORK%" filename:=kmF_Graph1 overwrite:=1 tr1.unit:=2 tr1.width:=800;
+win -a Graph2;
+$page.name$
+$page.longname$
+?page.nlayers
+?layer.nplots
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+string tx$ = xb.text$;
+$tx$
+string ty$ = yl.text$;
+$ty$
+string ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+$ds$
+expGraph type:=png path:="%WORK%" filename:=kmF_Graph2 overwrite:=1 tr1.unit:=2 tr1.width:=800;
+win -a Graph3;
+$page.name$
+$page.longname$
+?page.nlayers
+?layer.nplots
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+string tx$ = xb.text$;
+$tx$
+string ty$ = yl.text$;
+$ty$
+string ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+$ds$
+expGraph type:=png path:="%WORK%" filename:=kmF_Graph3 overwrite:=1 tr1.unit:=2 tr1.width:=800;

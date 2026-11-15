@@ -492,8 +492,7 @@ mod tests {
         let (mut p, _x, y, book) = setup();
         let y2 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 20])).unwrap();
         let two = Request { columns: vec![y, y2], ..smooth_request(y) };
-        let (_, first) =
-            p.analyze_linked_into(None, &two, &OutputTarget::NextToInput, RecalcMode::Manual).unwrap();
+        let (_, first) = p.analyze_linked_into(None, &two, &OutputTarget::NextToInput, RecalcMode::Manual).unwrap();
         assert_eq!(first.len(), 2);
         let (keep, gone) = (first[0], first[1]);
         let s = p.workbook_mut(book).unwrap().sheet_mut();

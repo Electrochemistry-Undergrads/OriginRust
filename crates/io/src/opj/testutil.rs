@@ -106,6 +106,30 @@ impl FileBuilder {
         self
     }
 
+    /// A data set with a mask block in Origin's layout (opj-format.md 3.2): `masked` are 0-based rows.
+    pub fn dataset_masked(
+        &mut self,
+        name: &str,
+        type_code: u16,
+        cell_size: u8,
+        data: &[u8],
+        masked: &[usize],
+    ) -> &mut Self {
+        let rows = data.len() / usize::from(cell_size.max(1));
+        let mut b = framed(&dataset_header(name, type_code, cell_size, rows as u32));
+        b.extend(framed(data));
+        let len = 40 + rows + 4;
+        let mut mask = vec![0u8; len];
+        mask[..4].copy_from_slice(&[0x90, 0xe5, 0x2e, 0x0f]);
+        mask[4..8].copy_from_slice(&(len as u32).to_le_bytes());
+        for &r in masked {
+            mask[40 + r] = 1;
+        }
+        b.extend(framed(&mask));
+        self.datasets.push(b);
+        self
+    }
+
     pub fn window(&mut self, name: &str, label: &str, sheets: &[(&str, &[(u16, u8, &str, &[u8])])]) -> &mut Self {
         self.window_with(name, label, sheets, false, 0)
     }

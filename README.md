@@ -111,6 +111,26 @@ For Claude Desktop, add this to `claude_desktop_config.json` and restart the app
 }
 ```
 
+### Work on the project that is open in Sheaf
+
+By default the assistant gets a project of its own, which it saves to a file. To let it work on the
+project you have open instead, so you see every change as it happens, start the app with `--mcp` or tick
+Tools > AI Assistants (MCP), and give the assistant the attach form of the server:
+
+```sh
+claude mcp add sheaf -- /path/to/target/release/sheaf-mcp --attach --root /path/to/my/data
+```
+
+For Claude Desktop use `"args": ["--attach", "--root", "/path/to/my/data"]`. The status bar shows
+`AI: connected (1)`; hover it to see which assistant is connected and which folders it named. Each change
+is one undo step named `AI: ...` (Edit > Undo, within the 100-step undo limit). Files an assistant writes
+are not undone. In this mode it cannot open, create or save projects (you do that), and it never overwrites
+a file or touches the files of your open project. Untick the item to disconnect. The folders in `--root`
+are chosen by the assistant's own configuration, not by Sheaf, and only a well-behaved client keeps to
+them: turn the link on only while you want an assistant to work, and see
+[docs/adr/0013-mcp-attach-live-link.md](docs/adr/0013-mcp-attach-live-link.md) for what it does and does
+not protect against.
+
 The tools and their limits are listed in [docs/spec/mcp.md](docs/spec/mcp.md).
 
 ## Under the hood

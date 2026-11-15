@@ -68,9 +68,10 @@ fn p_of(below: f64, above: f64, tail: Tail) -> f64 {
 }
 
 /// Origin accepted every significance level below 1 for the two-sided variance tests (0.6 gave the 40 %
-/// interval); a one-sided test needs a level `1 - 2 alpha` above 0, so `alpha < 0.5`.
-fn alpha_ok(alpha: f64, tail: Tail) -> bool {
-    alpha > 0.0 && alpha < if tail == Tail::Two { 1.0 } else { 0.5 }
+/// interval). A one-sided test with `alpha >= 0.5` has no interval of level `1 - 2 alpha` (NaN limits; not
+/// measured in Origin).
+fn alpha_ok(alpha: f64) -> bool {
+    alpha > 0.0 && alpha < 1.0
 }
 
 /// One-sample chi-square test of the variance of `data` against `var0`. NaN entries are ignored. Needs at
@@ -78,7 +79,7 @@ fn alpha_ok(alpha: f64, tail: Tail) -> bool {
 /// no interval (Origin's `vartest1` did exactly that and left the limits unset).
 pub fn vartest_one(data: &[f64], var0: f64, tail: Tail, alpha: f64) -> Option<VarTest> {
     let s = SampleStats::of(data);
-    if s.n < 2 || !(var0 > 0.0 && var0.is_finite()) || !alpha_ok(alpha, tail) {
+    if s.n < 2 || !(var0 > 0.0 && var0.is_finite()) || !alpha_ok(alpha) {
         return None;
     }
     let level = level_of(tail, alpha);
@@ -106,7 +107,11 @@ pub fn vartest_one(data: &[f64], var0: f64, tail: Tail, alpha: f64) -> Option<Va
     let dist = ChiSquared::new(df).ok()?;
     let p = p_of(dist.cdf(chi), dist.sf(chi), tail);
     let half = (1.0 - level) / 2.0;
-    let (lcl, ucl) = (df * var / dist.inverse_cdf(1.0 - half), df * var / dist.inverse_cdf(half));
+    let (lcl, ucl) = if level > 0.0 {
+        (df * var / dist.inverse_cdf(1.0 - half), df * var / dist.inverse_cdf(half))
+    } else {
+        (f64::NAN, f64::NAN)
+    };
     Some(VarTest {
         samples: vec![s],
         estimate: var,
@@ -128,7 +133,7 @@ pub fn vartest_one(data: &[f64], var0: f64, tail: Tail, alpha: f64) -> Option<Va
 /// reported the limits 0 and 0 (first flat) or infinity and infinity (second flat), as here (NaN).
 pub fn vartest_two(a: &[f64], b: &[f64], ratio0: f64, tail: Tail, alpha: f64) -> Option<VarTest> {
     let (s1, s2) = (SampleStats::of(a), SampleStats::of(b));
-    if s1.n < 2 || s2.n < 2 || !(ratio0 > 0.0 && ratio0.is_finite()) || !alpha_ok(alpha, tail) {
+    if s1.n < 2 || s2.n < 2 || !(ratio0 > 0.0 && ratio0.is_finite()) || !alpha_ok(alpha) {
         return None;
     }
     let (df1, df2) = (s1.n as f64 - 1.0, s2.n as f64 - 1.0);
@@ -158,7 +163,12 @@ pub fn vartest_two(a: &[f64], b: &[f64], ratio0: f64, tail: Tail, alpha: f64) ->
     let dist = FisherSnedecor::new(df1, df2).ok()?;
     let p = p_of(dist.cdf(f), dist.sf(f), tail);
     let half = (1.0 - level) / 2.0;
-    Some(make(f, p, ratio / dist.inverse_cdf(1.0 - half), ratio / dist.inverse_cdf(half)))
+    let (lcl, ucl) = if level > 0.0 {
+        (ratio / dist.inverse_cdf(1.0 - half), ratio / dist.inverse_cdf(half))
+    } else {
+        (f64::NAN, f64::NAN)
+    };
+    Some(make(f, p, lcl, ucl))
 }
 
 /// The confidence interval of a variance (`n` numbers, sample variance `var`) as Origin's dialog reports it:

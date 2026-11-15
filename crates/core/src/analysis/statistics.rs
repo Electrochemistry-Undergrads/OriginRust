@@ -288,20 +288,13 @@ fn ttest(spec: &TTestSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
 }
 
 // ----- tests of variances and proportions ------------------------------------------------------------
+//
+// The result sheets follow Origin's report: one group of columns for each of its tables (the descriptive
+// statistics, the test statistics, the confidence intervals; for proportions one set for each method), the
+// null and alternative hypotheses and the conclusion as notes. See docs/spec/statistics.md section 17.
 
-/// The significance level that makes the calc functions give an interval of confidence level `percent`
-/// (a one-tailed test gives the interval of level `1 - 2 alpha`).
-fn alpha_for_level(percent: f64, tail: Tail) -> Result<f64, AnalysisError> {
-    if !(percent > 0.0 && percent < 100.0) {
-        return Err(AnalysisError::BadOption(format!(
-            "a confidence level must lie between 0 and 100 %, not {percent}"
-        )));
-    }
-    let miss = 1.0 - percent / 100.0;
-    Ok(if tail == Tail::Two { miss } else { miss / 2.0 })
-}
-
-fn check_levels(intervals: bool, levels: &[f64], tail: Tail) -> Result<Vec<f64>, AnalysisError> {
+/// Checks the confidence levels (percent) and returns them, or nothing when the intervals are off.
+fn check_levels(intervals: bool, levels: &[f64]) -> Result<Vec<f64>, AnalysisError> {
     if !intervals {
         return Ok(Vec::new());
     }
@@ -309,7 +302,9 @@ fn check_levels(intervals: bool, levels: &[f64], tail: Tail) -> Result<Vec<f64>,
         return Err(AnalysisError::BadOption("give at least one confidence level, or switch the intervals off".into()));
     }
     for &l in levels {
-        alpha_for_level(l, tail)?;
+        if !(l > 0.0 && l < 100.0) {
+            return Err(AnalysisError::BadOption(format!("a confidence level must lie between 0 and 100 %, not {l}")));
+        }
     }
     Ok(levels.to_vec())
 }
@@ -318,75 +313,89 @@ fn squared(unit: &str) -> String {
     if unit.is_empty() { String::new() } else { format!("{unit}^2") }
 }
 
+/// Origin's null and alternative hypothesis text, `name` the tested quantity and `value` the hypothesized one.
+fn hypotheses(name: &str, value: f64, tail: Tail) -> [String; 2] {
+    let (null, alt) = match tail {
+        Tail::Two => ("=", "<>"),
+        Tail::Upper => ("<=", ">"),
+        Tail::Lower => (">=", "<"),
+    };
+    [
+        format!("Null Hypothesis: {name} {null} {}", num(value)),
+        format!("Alternative Hypothesis: {name} {alt} {}", num(value)),
+    ]
+}
+
+/// The columns of Origin's "Confidence Intervals" table: for each input a row per confidence level.
+fn interval_columns(rows: Vec<(String, f64, f64, f64)>) -> Vec<SheetColumn> {
+    vec![
+        label_column("Data", rows.iter().map(|r| r.0.clone()).collect()),
+        number_column("Conf. Levels in %", "", rows.iter().map(|r| r.1).collect()),
+        number_column("Lower Limits", "", rows.iter().map(|r| r.2).collect()),
+        number_column("Upper Limits", "", rows.iter().map(|r| r.3).collect()),
+    ]
+}
+
 fn var_test(spec: &VarTestSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
     check_alpha(spec.alpha)?;
-    let levels = check_levels(spec.intervals, &spec.levels, spec.tail)?;
-    let mut notes = Vec::new();
-    let verdict = |p: f64| {
-        if p < spec.alpha {
-            format!("the null hypothesis is rejected at the {} level", num(spec.alpha))
-        } else {
-            format!("the null hypothesis is not rejected at the {} level", num(spec.alpha))
-        }
-    };
+    let levels = check_levels(spec.intervals, &spec.levels)?;
     let bad = |what: &str| {
         AnalysisError::BadOption(format!(
-            "{what}: the test needs two or more numbers in each column, a positive hypothesized value and a significance level below 0.5"
+            "{what}: the test needs two or more numbers in each column and a positive hypothesized value"
         ))
     };
-    let interval_headers = |headers: &mut Vec<String>| {
-        for l in &levels {
-            headers.push(format!("LCL({}%)", num(*l)));
-            headers.push(format!("UCL({}%)", num(*l)));
-        }
-    };
-    let table = match spec.kind {
+    let mut notes = Vec::new();
+    let mut on_sheet = Vec::new();
+    let level_pct = |l: &f64| l / 100.0;
+    match spec.kind {
         VarTestKind::OneSample { variance } => {
-            let mut headers: Vec<String> =
-                ["N", "Mean", "SD", "Variance", "Hypothesized variance", "Chi-Square", "DF", "Prob", "Reject"]
-                    .map(str::to_string)
-                    .to_vec();
-            interval_headers(&mut headers);
-            let mut table = ResultTable::new(&headers.iter().map(String::as_str).collect::<Vec<_>>());
+            let (mut n, mut mean, mut sd, mut var) = (vec![], vec![], vec![], vec![]);
+            let (mut chi, mut df, mut prob) = (vec![], vec![], vec![]);
+            let mut intervals = Vec::new();
             for inp in inputs {
                 let r = calc::vartest_one(inp.ys(), variance, spec.tail, spec.alpha).ok_or_else(|| bad(&inp.name))?;
                 let s = r.samples[0];
-                let u = &inp.units;
-                let sq = squared(u);
-                let mut values = vec![
-                    s.n as f64,
-                    s.mean,
-                    s.sd,
-                    r.estimate,
-                    variance,
-                    r.statistic,
-                    r.df.0,
-                    r.p,
-                    f64::from(u8::from(r.rejected())),
-                ];
-                let mut units: Vec<String> =
-                    ["", u, u, &sq, &sq, "", "", "", ""].into_iter().map(str::to_string).collect();
+                n.push(s.n as f64);
+                mean.push(s.mean);
+                sd.push(s.sd);
+                var.push(r.estimate);
+                chi.push(r.statistic);
+                df.push(r.df.0);
+                prob.push(r.p);
                 for l in &levels {
-                    let at = calc::vartest_one(inp.ys(), variance, spec.tail, alpha_for_level(*l, spec.tail)?)
-                        .ok_or_else(|| bad(&inp.name))?;
-                    values.extend([at.lcl, at.ucl]);
-                    units.extend([sq.clone(), sq.clone()]);
+                    let (lo, hi) = calc::variance_interval(s.n, r.estimate, spec.tail, level_pct(l));
+                    intervals.push((inp.label.clone(), *l, lo, hi));
                 }
-                table.push_row(inp.label.clone(), values, units);
                 notes.push(format!(
-                    "{}: one-sample test for variance, {}: the variance {} {} (variance = {}, chi-square({}) = {}, p = {}); {}",
+                    "{}: At the {} level, the population variance is {}significantly {} the test variance({}).",
                     inp.name,
-                    tail_name(spec.tail),
-                    tail_words(spec.tail),
-                    num(variance),
-                    num(r.estimate),
-                    num(r.df.0),
-                    num(r.statistic),
-                    num(r.p),
-                    verdict(r.p)
+                    num(spec.alpha),
+                    if r.rejected() { "" } else { "NOT " },
+                    match spec.tail {
+                        Tail::Two => "different from",
+                        Tail::Upper => "greater than",
+                        Tail::Lower => "less than",
+                    },
+                    num(variance)
                 ));
             }
-            table
+            let units = shared_units(inputs);
+            let sq = squared(&units);
+            on_sheet.push(label_column("Data", inputs.iter().map(|i| i.label.clone()).collect()));
+            on_sheet.push(number_column("N", "", n));
+            on_sheet.push(number_column("Mean", &units, mean));
+            on_sheet.push(number_column("SD", &units, sd));
+            on_sheet.push(number_column("Variance", &sq, var));
+            on_sheet.push(number_column("Chi-Square", "", chi));
+            on_sheet.push(number_column("DF", "", df));
+            let prob_name = if spec.tail == Tail::Lower { "Prob<Chi-Square" } else { "Prob>Chi-Square" };
+            on_sheet.push(number_column(prob_name, "", prob));
+            if !levels.is_empty() {
+                on_sheet.extend(interval_columns(intervals));
+            }
+            let [null, alt] = hypotheses("Variance", variance, spec.tail);
+            notes.insert(0, alt);
+            notes.insert(0, null);
         }
         VarTestKind::TwoSample { ratio } => {
             if inputs.len() != 2 {
@@ -395,76 +404,52 @@ fn var_test(spec: &VarTestSpec, inputs: &[Input<'_>]) -> Result<Output, Analysis
                     inputs.len()
                 )));
             }
-            let mut headers: Vec<String> = [
-                "N1",
-                "SD1",
-                "Variance1",
-                "N2",
-                "SD2",
-                "Variance2",
-                "Ratio of variances",
-                "Hypothesized ratio",
-                "F",
-                "DF1",
-                "DF2",
-                "Prob",
-                "Reject",
-            ]
-            .map(str::to_string)
-            .to_vec();
-            interval_headers(&mut headers);
-            let mut table = ResultTable::new(&headers.iter().map(String::as_str).collect::<Vec<_>>());
             let (a, b) = (&inputs[0], &inputs[1]);
             let name = format!("{} vs {}", a.name, b.name);
             let r = calc::vartest_two(a.ys(), b.ys(), ratio, spec.tail, spec.alpha).ok_or_else(|| bad(&name))?;
             let (s1, s2) = (r.samples[0], r.samples[1]);
+            on_sheet.push(label_column("Data", vec![a.label.clone(), b.label.clone()]));
+            on_sheet.push(number_column("N", "", vec![s1.n as f64, s2.n as f64]));
             let (u1, u2) = (&a.units, &b.units);
-            let (q1, q2) = (squared(u1), squared(u2));
-            let mut values = vec![
-                s1.n as f64,
-                s1.sd,
-                s1.sd * s1.sd,
-                s2.n as f64,
-                s2.sd,
-                s2.sd * s2.sd,
-                r.estimate,
-                ratio,
-                r.statistic,
-                r.df.0,
-                r.df.1,
-                r.p,
-                f64::from(u8::from(r.rejected())),
-            ];
-            let mut units: Vec<String> =
-                ["", u1, &q1, "", u2, &q2, "", "", "", "", "", "", ""].into_iter().map(str::to_string).collect();
-            for l in &levels {
-                let at = calc::vartest_two(a.ys(), b.ys(), ratio, spec.tail, alpha_for_level(*l, spec.tail)?)
-                    .ok_or_else(|| bad(&name))?;
-                values.extend([at.lcl, at.ucl]);
-                units.extend([String::new(), String::new()]);
-            }
-            table.push_row(name.clone(), values, units);
-            notes.push(format!(
-                "{name}: two-sample test for variance, {}: the ratio of the variances {} {} (ratio = {}, F({}, {}) = {}, p = {}); {}",
-                tail_name(spec.tail),
-                tail_words(spec.tail),
-                num(ratio),
-                num(r.estimate),
-                num(r.df.0),
-                num(r.df.1),
-                num(r.statistic),
-                num(r.p),
-                verdict(r.p)
+            let same = u1 == u2;
+            on_sheet.push(number_column("Mean", if same { u1 } else { "" }, vec![s1.mean, s2.mean]));
+            on_sheet.push(number_column("SD", if same { u1 } else { "" }, vec![s1.sd, s2.sd]));
+            on_sheet.push(number_column(
+                "Variance",
+                &if same { squared(u1) } else { String::new() },
+                vec![s1.sd * s1.sd, s2.sd * s2.sd],
             ));
-            table
+            on_sheet.push(number_column("F", "", vec![r.statistic]));
+            on_sheet.push(number_column("Numer. DF", "", vec![r.df.0]));
+            on_sheet.push(number_column("Denom. DF", "", vec![r.df.1]));
+            on_sheet.push(number_column(if spec.tail == Tail::Lower { "Prob < F" } else { "Prob > F" }, "", vec![r.p]));
+            if !levels.is_empty() {
+                let rows = levels
+                    .iter()
+                    .map(|l| {
+                        let (lo, hi) = calc::ratio_interval(s1.n, s2.n, r.estimate, spec.tail, level_pct(l));
+                        (name.clone(), *l, lo, hi)
+                    })
+                    .collect();
+                on_sheet.extend(interval_columns(rows));
+            }
+            let [null, alt] = hypotheses("Variance1/Variance2", ratio, spec.tail);
+            notes.push(null);
+            notes.push(alt);
+            let rel = match spec.tail {
+                Tail::Two => "different",
+                Tail::Upper => "greater than the test ratio",
+                Tail::Lower => "less than the test ratio",
+            };
+            notes.push(format!(
+                "At the {} level, the {} {}significantly {rel}.",
+                num(spec.alpha),
+                if spec.tail == Tail::Two { "two population variances are" } else { "ratio of the population variances is" },
+                if r.rejected() { "" } else { "NOT " },
+            ));
         }
-    };
-    if !levels.is_empty() {
-        notes.push(
-            "A one-tailed test gives the interval of level 1 - 2 alpha for the level asked, as the t-tests do.".into(),
-        );
     }
-    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new() })
+    Ok(Output { table: None, on_sheet, notes, plots: Vec::new() })
 }
 
 pub(super) fn prop_test(spec: &PropTestSpec) -> Result<Output, AnalysisError> {
@@ -472,112 +457,100 @@ pub(super) fn prop_test(spec: &PropTestSpec) -> Result<Output, AnalysisError> {
     if !(spec.normal || spec.exact) {
         return Err(AnalysisError::BadOption("tick at least one of Normal Approximation and Binomial Test".into()));
     }
-    let levels = check_levels(spec.intervals, &spec.levels, spec.tail)?;
+    let levels = check_levels(spec.intervals, &spec.levels)?;
     let bad = || {
         AnalysisError::BadOption(
-            "the proportion test needs a sample size above 0, no more successes than the sample size, a test proportion strictly between 0 and 1 (a difference between -1 and 1 for two samples) and a significance level below 0.5"
+            "the proportion test needs a sample size above 0, no more successes than the sample size and a test proportion strictly between 0 and 1 (a difference between -1 and 1 for two samples)"
                 .into(),
         )
     };
-    let run_at = |alpha: f64| -> Option<calc::ProportionTest> {
-        match spec.kind {
-            PropTestKind::OneSample { successes, size, proportion } => {
-                calc::proportion_one(successes, size, proportion, spec.tail, alpha)
-            }
-            PropTestKind::TwoSample { first, second, difference } => {
-                calc::proportion_two(first, second, difference, spec.pooled, spec.tail, alpha)
-            }
-        }
-    };
-    let r = run_at(spec.alpha).ok_or_else(bad)?;
-    let one = matches!(spec.kind, PropTestKind::OneSample { .. });
-    let mut headers: Vec<String> = if one {
-        ["Successes", "N", "Proportion", "Test proportion", "Z"].map(str::to_string).to_vec()
-    } else {
-        [
-            "Successes1",
-            "N1",
-            "Proportion1",
-            "Successes2",
-            "N2",
-            "Proportion2",
-            "Difference",
-            "Hypothesized difference",
-            "Z",
-        ]
-        .map(str::to_string)
-        .to_vec()
-    };
-    let mut values: Vec<f64> = if one {
-        vec![r.successes[0] as f64, r.trials[0] as f64, r.estimate, r.hypothesized, r.z]
-    } else {
-        let (p1, p2) = (r.successes[0] as f64 / r.trials[0] as f64, r.successes[1] as f64 / r.trials[1] as f64);
-        vec![
-            r.successes[0] as f64,
-            r.trials[0] as f64,
-            p1,
-            r.successes[1] as f64,
-            r.trials[1] as f64,
-            p2,
-            r.estimate,
-            r.hypothesized,
-            r.z,
-        ]
-    };
+    let tail = spec.tail;
+    let head_level = 1.0 - spec.alpha;
+    let head = |what: &str| format!("{}% {what}", num(head_level * 100.0));
+    let mut on_sheet = Vec::new();
     let mut notes = Vec::new();
-    if spec.normal {
-        headers.push("Prob (normal)".into());
-        values.push(r.p_normal);
-        headers.push("Reject (normal)".into());
-        values.push(f64::from(u8::from(r.p_normal < spec.alpha)));
-    }
-    if spec.exact {
-        let p = r.p_exact.unwrap_or(f64::NAN);
-        headers.push(if one { "Prob (binomial)" } else { "Prob (Fisher)" }.into());
-        values.push(p);
-        headers.push("Reject (exact)".into());
-        values.push(if p.is_nan() { f64::NAN } else { f64::from(u8::from(p < spec.alpha)) });
-        if p.is_nan() {
-            notes.push("The exact test of two samples is only given for a hypothesized difference of 0.".into());
+    // The headline LCL and UCL (level 1 - alpha) and the table of the confidence levels.
+    let limits = |on_sheet: &mut Vec<SheetColumn>, f: &dyn Fn(f64) -> (f64, f64)| {
+        if !spec.intervals {
+            return;
+        }
+        let (lo, hi) = f(head_level);
+        on_sheet.push(number_column(&head("LCL"), "", vec![lo]));
+        on_sheet.push(number_column(&head("UCL"), "", vec![hi]));
+    };
+    let level_table = |on_sheet: &mut Vec<SheetColumn>, f: &dyn Fn(f64) -> (f64, f64)| {
+        if levels.is_empty() {
+            return;
+        }
+        let rows: Vec<(f64, f64)> = levels.iter().map(|l| f(l / 100.0)).collect();
+        on_sheet.push(number_column("Conf. Levels in %", "", levels.clone()));
+        on_sheet.push(number_column("Lower Limits", "", rows.iter().map(|r| r.0).collect()));
+        on_sheet.push(number_column("Upper Limits", "", rows.iter().map(|r| r.1).collect()));
+    };
+    match spec.kind {
+        PropTestKind::OneSample { successes, size, proportion } => {
+            let r = calc::proportion_one(successes, size, proportion, tail).ok_or_else(bad)?;
+            let [null, alt] = hypotheses("Proportion", proportion, tail);
+            notes.push(null);
+            notes.push(alt);
+            let basics = |on_sheet: &mut Vec<SheetColumn>| {
+                on_sheet.push(number_column("Success", "", vec![successes as f64]));
+                on_sheet.push(number_column("N", "", vec![size as f64]));
+                on_sheet.push(number_column("Sample P", "", vec![r.estimate]));
+            };
+            if spec.normal {
+                basics(&mut on_sheet);
+                on_sheet.push(number_column("Z", "", vec![r.z]));
+                on_sheet.push(number_column("P", "", vec![r.p_normal]));
+                let wald = |level: f64| calc::wald_interval(successes, size, tail, level);
+                limits(&mut on_sheet, &wald);
+                level_table(&mut on_sheet, &wald);
+                if calc::vartest::normal_approximation_doubtful(successes, size) {
+                    notes.push(
+                        "The normal approximation may be unreliable with fewer than 10 successes or fewer than 10 failures."
+                            .into(),
+                    );
+                }
+            }
+            if spec.exact {
+                basics(&mut on_sheet);
+                on_sheet.push(number_column("Exact P", "", vec![r.p_exact]));
+                let exact = |level: f64| calc::exact_interval(successes, size, tail, level);
+                limits(&mut on_sheet, &exact);
+                level_table(&mut on_sheet, &exact);
+            }
+        }
+        PropTestKind::TwoSample { first, second, difference } => {
+            let r = calc::proportion_two(first, second, difference, spec.pooled, tail).ok_or_else(bad)?;
+            let [null, alt] = hypotheses("Proportion1 - Proportion2", difference, tail);
+            notes.push(null);
+            notes.push(alt);
+            if spec.normal {
+                on_sheet.push(label_column("Sample", vec!["Sample1".into(), "Sample2".into()]));
+                on_sheet.push(number_column("Success", "", vec![first.0 as f64, second.0 as f64]));
+                on_sheet.push(number_column("N", "", vec![first.1 as f64, second.1 as f64]));
+                on_sheet.push(number_column(
+                    "Sample P",
+                    "",
+                    vec![first.0 as f64 / first.1 as f64, second.0 as f64 / second.1 as f64],
+                ));
+                on_sheet.push(label_column("Difference", vec!["Sample1 - Sample2".into()]));
+                on_sheet.push(number_column("Estimate for difference", "", vec![r.estimate]));
+                on_sheet.push(number_column("Z", "", vec![r.z]));
+                on_sheet.push(number_column("P", "", vec![r.p_normal]));
+                let wald = |level: f64| calc::wald_difference_interval(first, second, tail, level);
+                limits(&mut on_sheet, &wald);
+                level_table(&mut on_sheet, &wald);
+            }
+            if let (true, Some(p)) = (spec.exact, r.p_fisher) {
+                on_sheet.push(label_column("Difference", vec!["Sample1 - Sample2".into()]));
+                on_sheet.push(number_column("Exact P", "", vec![p]));
+            } else if spec.exact {
+                notes.push("Fisher's exact test is only given for a hypothesized difference of 0.".into());
+            }
         }
     }
-    for l in &levels {
-        let at = run_at(alpha_for_level(*l, spec.tail)?).ok_or_else(bad)?;
-        if spec.normal {
-            headers.push(format!("LCL({}%)", num(*l)));
-            values.push(at.wald.0);
-            headers.push(format!("UCL({}%)", num(*l)));
-            values.push(at.wald.1);
-        }
-        if let (true, Some((lo, hi))) = (spec.exact, at.exact_interval) {
-            headers.push(format!("Exact LCL({}%)", num(*l)));
-            values.push(lo);
-            headers.push(format!("Exact UCL({}%)", num(*l)));
-            values.push(hi);
-        }
-    }
-    let mut table = ResultTable::new(&headers.iter().map(String::as_str).collect::<Vec<_>>());
-    let n = values.len();
-    let label = if one { "Sample".to_string() } else { "Sample 1 vs Sample 2".to_string() };
-    table.push_row(label, values, vec![String::new(); n]);
-    let what = if one { "the proportion" } else { "the difference of the proportions" };
-    let mut line = format!(
-        "{} proportion test, {}: {what} {} {} (estimate {}",
-        if one { "One-sample" } else { "Two-sample" },
-        tail_name(spec.tail),
-        tail_words(spec.tail),
-        num(r.hypothesized),
-        num(r.estimate)
-    );
-    if spec.normal {
-        line.push_str(&format!(", z = {}, p = {} by the normal approximation", num(r.z), num(r.p_normal)));
-    }
-    if let (true, Some(p)) = (spec.exact, r.p_exact) {
-        line.push_str(&format!(", exact p = {}", num(p)));
-    }
-    line.push(')');
-    notes.insert(0, line);
-    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new() })
+    Ok(Output { table: None, on_sheet, notes, plots: Vec::new() })
 }
 
 // ----- one-way ANOVA ---------------------------------------------------------------------------------
@@ -1829,20 +1802,36 @@ mod tests {
         };
         let r = run(&mut p, &ids[..1], Tool::VarTest(one.clone()));
         assert!(r.message.contains("One-sample test for variance") && r.message.contains("VarTest1"), "{}", r.message);
-        let close = |got: Vec<f64>, want: f64| assert!((got[0] - want).abs() <= 1e-7 * want.abs(), "{got:?} {want}");
-        close(cell(&p, &r, "Chi-Square"), 6.378_838_199_014_966);
-        close(cell(&p, &r, "Prob"), 0.992_549_330_449_127_7);
-        close(cell(&p, &r, "LCL(95%)"), 0.796_719_176_361_770_8);
-        close(cell(&p, &r, "UCL(95%)"), 7.54950463751445);
-        assert!(cell(&p, &r, "UCL(99%)")[0] > cell(&p, &r, "UCL(95%)")[0]);
-        let plain = run(&mut p, &ids[..1], Tool::VarTest(VarTestSpec { intervals: false, ..one }));
+        let close = |got: Vec<f64>, want: &[f64]| {
+            assert_eq!(got.len(), want.len(), "{got:?}");
+            for (g, w) in got.iter().zip(want) {
+                assert!((g - w).abs() <= 1e-7 * w.abs(), "{got:?} {want:?}");
+            }
+        };
+        close(cell(&p, &r, "Chi-Square"), &[6.378_838_199_014_966]);
+        close(cell(&p, &r, "Prob>Chi-Square"), &[0.992_549_330_449_127_7]);
+        close(cell(&p, &r, "Conf. Levels in %"), &[95.0, 99.0]);
+        // Origin's report for the two-sided test: the limits of the 95 and 99 % intervals.
+        let (lo, hi) = (cell(&p, &r, "Lower Limits"), cell(&p, &r, "Upper Limits"));
+        close(lo[..1].to_vec(), &[0.796_719_176_361_770_8]);
+        close(hi[..1].to_vec(), &[7.54950463751445]);
+        assert!(lo[1] < lo[0] && hi[1] > hi[0]);
+        assert!(r.notes.iter().any(|n| n.starts_with("Null Hypothesis: Variance = 2")), "{:?}", r.notes);
+        assert!(r.notes.iter().any(|n| n.contains("NOT significantly different from the test variance(2)")));
+        let plain = run(&mut p, &ids[..1], Tool::VarTest(VarTestSpec { intervals: false, ..one.clone() }));
         let ws = &p.workbook(plain.book).unwrap().sheets[plain.new_sheet.unwrap()];
-        assert!(ws.columns.iter().all(|c| !c.long_name.starts_with("LCL")));
+        assert!(ws.columns.iter().all(|c| c.long_name != "Lower Limits"));
+        // A lower-tailed test names its probability Prob<Chi-Square and has no lower limit.
+        let low = run(&mut p, &ids[..1], Tool::VarTest(VarTestSpec { tail: Tail::Lower, ..one }));
+        assert_eq!(cell(&p, &low, "Lower Limits"), [0.0, 0.0]);
+        assert_eq!(cell(&p, &low, "Prob<Chi-Square").len(), 1);
 
         let two = VarTestSpec { kind: VarTestKind::TwoSample { ratio: 1.0 }, ..Default::default() };
         let r = run(&mut p, &ids[..2], Tool::VarTest(two.clone()));
-        close(cell(&p, &r, "F"), 0.453_230_229_143_458_5);
-        close(cell(&p, &r, "Prob"), 0.309_348_277_840_741_8);
+        close(cell(&p, &r, "F"), &[0.453_230_229_143_458_5]);
+        close(cell(&p, &r, "Prob > F"), &[0.309_348_277_840_741_8]);
+        close(cell(&p, &r, "Numer. DF"), &[7.0]);
+        close(cell(&p, &r, "Denom. DF"), &[9.0]);
         assert!(p.analyze(&request(&ids, Tool::VarTest(two))).is_err());
         let bad = VarTestSpec { levels: vec![150.0], intervals: true, ..Default::default() };
         assert!(p.analyze(&request(&ids[..1], Tool::VarTest(bad))).is_err());
@@ -1859,15 +1848,19 @@ mod tests {
         };
         let r = run(&mut p, &ids[..1], Tool::PropTest(spec.clone()));
         assert!(r.message.contains("PropTest1"), "{}", r.message);
-        assert!((cell(&p, &r, "Prob (binomial)")[0] - 0.34375).abs() < 1e-12);
+        assert!((cell(&p, &r, "Exact P")[0] - 0.34375).abs() < 1e-12);
         assert!((cell(&p, &r, "Z")[0] - 1.2649110640673518).abs() < 1e-12);
-        assert_eq!(cell(&p, &r, "Exact LCL(95%)").len(), 1);
+        assert_eq!(cell(&p, &r, "95% LCL").len(), 1);
+        // Both methods: the normal section and the binomial section each have a table of levels.
+        assert_eq!(cell(&p, &r, "Conf. Levels in %"), [90.0, 95.0, 99.0]);
+        let ws = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(ws.columns.iter().filter(|c| c.long_name == "Lower Limits").count(), 2);
         let two = PropTestSpec {
             kind: PropTestKind::TwoSample { first: (15, 40), second: (9, 35), difference: 0.0 },
             ..Default::default()
         };
         let r = run(&mut p, &ids[..1], Tool::PropTest(two));
-        assert!(cell(&p, &r, "Prob (normal)")[0] > 0.0 && r.notes[0].contains("Two-sample"));
+        assert!(cell(&p, &r, "P")[0] > 0.0 && cell(&p, &r, "Estimate for difference").len() == 1);
         let none = PropTestSpec { normal: false, exact: false, ..spec.clone() };
         assert!(p.analyze(&request(&ids[..1], Tool::PropTest(none))).is_err());
         let over = PropTestSpec { kind: PropTestKind::OneSample { successes: 11, size: 10, proportion: 0.5 }, ..spec };

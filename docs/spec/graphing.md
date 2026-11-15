@@ -2012,10 +2012,10 @@ a double-click on the graph; pictures and control lists in `re-workspace/scratch
   clipping margins), Stack.
 
 Sheaf (`Plot::decor`, `Layer::background`, drawn in `crates/plot/src/plots.rs` and `layout.rs`):
-Fill Area Under Curve in the Normal mode only, with its own colour (Origin puts the colour on the
-Pattern tab; Sheaf shows it under the check box) and the alpha of that colour as transparency; the
-line's Transparency slider sets the alpha of the line colour; both drop lines with style, width and
-an Auto or chosen colour, drawn from each point to the left edge and to the bottom edge of the frame.
+Fill Area Under Curve uses its own colour in Normal mode (Origin puts the colour on the Pattern
+tab; Sheaf shows it under the check box), with the colour's alpha as transparency. The line's
+Transparency slider sets the alpha of the line colour. Both drop lines offer style, width and an
+Auto or chosen colour, drawing from each point to the left and bottom edges of the frame.
 
 Fill Area Under Curve now offers **Normal**, **Sidelines only** and **Sidelines and Base**.
 Normal remains the old default and keeps its previous filled rendering. Sidelines only leaves
@@ -2045,8 +2045,8 @@ The shared scene keeps one stroke across the curve and its added boundaries, pre
 at the joins, and changes the legend sample to a line. Screen, raster and vector exports share
 that scene; existing connection styles, clipping, skipped symbols and row selection still apply.
 Source values and axes are unchanged. Hidden masked rows follow the existing missing-data
-view policy, so a hidden endpoint leaves no dangling sideline. Native and companion files preserve the mode, including
-while disabled; the existing `.opj` save warning covers the unsupported fill settings. Only
+view policy, so a hidden endpoint leaves no dangling sideline. Native and companion files preserve
+the mode, including while disabled; the existing `.opj` save warning covers the unsupported fill settings. Only
 Cartesian straight-line examples were Origin-measured; other connections use Sheaf's existing
 curve geometry, and specialised coordinates, alternate baselines and unusual stroke preferences
 remain unmeasured. Normal's older hatch/gradient/border fidelity remains covered by section 18.6.

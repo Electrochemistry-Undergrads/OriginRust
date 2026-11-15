@@ -136,9 +136,11 @@ projects keep Normal and `.opj` retains the existing unsupported-fill warning. E
 core/plot/UI/IO regressions cover these behaviors, hidden-mask endpoint integration and every vector backend. Other fill modes,
 custom baselines and specialised-coordinate parity remain open.
 
-Validation on integrated `83ea822`: formatting, strict workspace all-target Clippy and
-2,457 workspace tests pass (five existing ignored). All eight new regressions pass;
-all reference workflows and the final builder exited before the validated checkpoint.
+Validation on integrated violin `9af42a9` plus the docs-only scope updates: formatting, strict
+workspace all-target Clippy and 2,609 workspace tests pass (five existing ignored). All eight
+new regressions pass, along with the latest MCP attach tests after a Unix-only argument and
+three Windows canonical-path fixture expectations were made portable. All reference workflows
+and the validation builder exited; a native Plot Details preview is retained locally.
 
 ## Today
 

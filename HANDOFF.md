@@ -46,6 +46,9 @@ open. History of what was merged when is in `git log` (not repeated here).
 |---|---|---|---|
 | `codex/t13-label-frame-margin` | Codex Windows, t13-label-frame-margin | T13 Label Frame (None/Box/Shadow, border/fill colors) and Margin only; core DataLabels, plot label backgrounds, graph_details and focused tests | claimed 2026-11-14; no T01 stack panels, app state/menu, leader lines or other sessions' work |
 | `codex/t01-stack-panels` | Codex Windows, t01-stack-panels | T01 Multi-Panel > Stack dialog over existing panels API; app dialog/menu/state and focused UI tests only | claimed 2026-11-14; no core/plot/offset scaling, clipboard or other sessions' symbols |
+| `print` | Claude Windows, "continue all tasks" | T27 Print, Print Preview, Page Setup (Windows half): app winprint.rs, page setup model in core, save/companion, menus File > Print | claimed 2026-11-14 |
+| `vartest` | Claude Windows, "continue all tasks" (owner's decision) | T26 variance and proportion tests: calc vartest.rs, core Tool::VarTest/PropTest, Hypothesis Testing dialogs, ops analyze vartest/proptest | claimed 2026-11-14, continues 7ec9e48/5a08edf |
+| `stats-multi` | Claude Windows, "continue all tasks" | T29 PCA, ROC, Kaplan-Meier, k-means: calc pca/roc/survival/kmeans.rs, core statistics tools, Statistics menu items, ops analyze | claimed 2026-11-14 |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

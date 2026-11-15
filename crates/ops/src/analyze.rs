@@ -198,6 +198,15 @@ fn math_tool(
 
 /// Runs a job on the project.
 pub fn run_job(project: &mut Project, target: &Target, job: Job) -> Result<Run> {
+    run_job_to(project, target, job, &analysis::OutputTarget::NextToInput)
+}
+
+/// Runs a job with a choice of destination for per-row results. Table-producing tools retain
+/// their intrinsic destinations. Sorting and filtering have their own sheet-level semantics.
+pub fn run_job_to(project: &mut Project, target: &Target, job: Job, output: &analysis::OutputTarget) -> Result<Run> {
+    if !matches!(output, analysis::OutputTarget::NextToInput) && matches!(&job, Job::Sort { .. } | Job::Filter { .. }) {
+        bail!("sort and filter require next_to_input output");
+    }
     let book = pick_book(project, target.book.as_deref())?;
     let sheet = pick_sheet(project, book, target.sheet.as_deref())?;
     let mut run = Run {
@@ -257,7 +266,7 @@ pub fn run_job(project: &mut Project, target: &Target, job: Job) -> Result<Run> 
         bail!("there are no numeric Y columns to work on; name them with --y");
     }
     let rows = row_range(target.rows.as_deref(), target.x_range.as_deref())?;
-    let report = project.analyze(&analysis::Request { columns, rows, tool })?;
+    let report = project.analyze_to(&analysis::Request { columns, rows, tool }, output)?;
     run.result_sheet = report.new_sheet.unwrap_or(sheet);
     run.outcome = Outcome::Report(report);
     Ok(run)

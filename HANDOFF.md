@@ -46,7 +46,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 |---|---|---|---|
 | `saved-state-recovery` | Codex macOS, no Origin | T28 undo/redo saved-state checkpoints and recovery cleanup; core/history.rs, app save/recovery hooks, autosave and focused UI tests | claimed 2026-11-14; no Excel dialogs/imports, axis/labels, backup settings or other sessions’ scope |
 | `codex/reciprocal-autorange` | Codex Windows, reciprocal-autorange | T11 reciprocal-axis automatic major step/range only; core scales.rs, isolated fixtures and graphing 3.8 | claimed 2026-11-14; no graph model, app/UI, label/plot styles, export, statistics, MCP or other sessions' scope |
-| `mcp-new-sheet` | Codex macOS, no Origin | T25 MCP analyze output:new_sheet via shared ops/core output path; crates/mcp and ops analyze, protocol tests/docs | claimed 2026-11-14; no app, Excel, statistics implementation or desktop attach |
 | `codex/t13-label-frame-margin` | Codex Windows, t13-label-frame-margin | T13 Label Frame (None/Box/Shadow, border/fill colors) and Margin only; core DataLabels, plot label backgrounds, graph_details and focused tests | claimed 2026-11-14; no T01 stack panels, app state/menu, leader lines or other sessions' work |
 | `vartest` | Claude Windows, "continue all tasks" (owner's decision) | T26 variance and proportion tests: calc vartest.rs, core Tool::VarTest/PropTest, Hypothesis Testing dialogs, ops analyze vartest/proptest | claimed 2026-11-14, continues 7ec9e48/5a08edf |
 | `stats-multi` | Claude Windows, "continue all tasks" | T29 PCA, ROC, Kaplan-Meier, k-means: calc pca/roc/survival/kmeans.rs, core statistics tools, Statistics menu items, ops analyze | claimed 2026-11-14 |
@@ -132,8 +131,16 @@ shared CLI-to-library conversions in `sheaf-ops`; mixed selections are validated
 duplicate settings are refused, FDF paths stay under the allowed roots, and numeric strings obey
 integer limits. CLI-parity, schema and protocol regressions cover the bridge. Formatting, strict
 all-target Clippy and 2,057 workspace tests passed (one ignored) after integrating the latest
-cross-sheet formula work. Phase 2 attach and
-`output: new_sheet` remain open; no Origin measurements are needed for this interface.
+cross-sheet formula work. Phase 2 attach remains open; new-sheet output is covered below.
+No Origin measurements are needed for this interface.
+
+**T25 new-sheet output (macOS, no Origin, 2026-11-14):** MCP `analyze` accepts
+`output: new_sheet` for hand-mapped and CLI-bridged tools, through `sheaf_ops::analyze::run_job_to`
+and the existing core `analyze_to` path. Source worksheets, including masks and X data, stay
+unchanged; result reports name the new sheet and qualified columns. Intrinsic tables and power
+keep their own layout. Sort/filter refuse the setting before mutation; the default remains
+`next_to_input`. Formatting, strict all-target Clippy and 2,143 workspace tests passed (one ignored).
+Phase 2 attach is still separate.
 
 ## Known issues and table UI verification
 

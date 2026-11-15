@@ -234,6 +234,7 @@ Note: the analysis agent's own feature-level spec (analysis-features.md) does no
 | SP-SM-03 | Smooth: FFT filter, Lowess, Loess, binomial | Other smoothing methods | P1 | XF smooth | |
 | SP-FFT-01 | FFT and inverse FFT | Spectrum and window functions | P1 | XF fft1, ifft1 | |
 | SP-FLT-01 | FFT filters | Low pass, high pass, band pass, band block | P1 | XF fft_filters | |
+| SP-FLT-02 | IIR and FIR filters | Butterworth, Chebyshev, elliptic IIR; window and least squares FIR | P2 | XF dfilter, FIR Filter app | |
 | SP-CORR-01 | Correlation and convolution | Signal operations | P2 | XF only | |
 | SP-WAV-01 | Wavelet analysis | Transform and denoise | P2 | XF Signal Processing/Wavelet | |
 | SP-DEC-01 | Decimation, envelope, coherence | Other signal tools | P2 | XF only | |

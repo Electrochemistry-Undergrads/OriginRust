@@ -1,7 +1,7 @@
 //! JSON-RPC 2.0 framing, the MCP methods and the state of the one project.
 
 use crate::roots::Roots;
-use crate::{resources, tools};
+use crate::{prompts, resources, tools};
 use serde_json::{Map, Value, json};
 use sheaf_core::Project;
 use sheaf_core::template::Template;
@@ -134,6 +134,21 @@ impl Server {
                     Err(_) => Err(RpcError::new(INTERNAL_ERROR, "internal error while reading the resource")),
                 }
             }
+            "prompts/list" => Ok(prompts::list()),
+            "prompts/get" => {
+                let name = params
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| RpcError::new(INVALID_PARAMS, "invalid params: missing the prompt \"name\""))?;
+                let args = match params.get("arguments") {
+                    None | Some(Value::Null) => Map::new(),
+                    Some(Value::Object(a)) => a.clone(),
+                    Some(_) => {
+                        return Err(RpcError::new(INVALID_PARAMS, "invalid params: \"arguments\" must be an object"));
+                    }
+                };
+                prompts::get(name, &args).map_err(|e| RpcError::new(INVALID_PARAMS, format!("invalid params: {e}")))
+            }
             m if m.starts_with("notifications/") => Ok(json!({})),
             m => Err(RpcError::new(METHOD_NOT_FOUND, format!("method not found: {m}"))),
         }
@@ -149,7 +164,8 @@ impl Server {
             "protocolVersion": self.protocol,
             "capabilities": {
                 "tools": {"listChanged": false},
-                "resources": {"subscribe": false, "listChanged": false}
+                "resources": {"subscribe": false, "listChanged": false},
+                "prompts": {"listChanged": false}
             },
             "serverInfo": {"name": "sheaf-mcp", "version": env!("CARGO_PKG_VERSION")},
             "instructions": self.instructions()
@@ -321,6 +337,32 @@ mod tests {
             assert!(t["name"].is_string() && t["description"].is_string(), "{t}");
             assert_eq!(t["inputSchema"]["type"], "object", "{t}");
             assert!(t["annotations"]["readOnlyHint"].is_boolean(), "{t}");
+        }
+    }
+
+    #[test]
+    fn prompts_are_listed_and_fetched() {
+        let mut s = server();
+        let init = reply(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#,
+        );
+        assert_eq!(init["result"]["capabilities"]["prompts"]["listChanged"], false);
+        let l = reply(&mut s, r#"{"jsonrpc":"2.0","id":2,"method":"prompts/list"}"#);
+        assert_eq!(l["result"]["prompts"].as_array().unwrap().len(), 3);
+        let g = reply(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":3,"method":"prompts/get","params":{"name":"fit_curve","arguments":{"column":"B","model":"Gauss"}}}"#,
+        );
+        let text = g["result"]["messages"][0]["content"]["text"].as_str().unwrap();
+        assert!(text.contains("Gauss") && text.contains("fit"), "{g}");
+        for bad in [
+            r#"{"jsonrpc":"2.0","id":4,"method":"prompts/get","params":{"name":"nope"}}"#,
+            r#"{"jsonrpc":"2.0","id":4,"method":"prompts/get","params":{"name":"fit_curve","arguments":{"column":"B"}}}"#,
+            r#"{"jsonrpc":"2.0","id":4,"method":"prompts/get","params":{}}"#,
+            r#"{"jsonrpc":"2.0","id":4,"method":"prompts/get","params":{"name":"fit_curve","arguments":[1]}}"#,
+        ] {
+            assert_eq!(code(&reply(&mut s, bad)), INVALID_PARAMS, "{bad}");
         }
     }
 

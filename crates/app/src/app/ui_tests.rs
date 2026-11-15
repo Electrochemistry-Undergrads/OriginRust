@@ -514,6 +514,33 @@ fn the_layer_size_speed_and_display_tabs_show_origins_controls() {
     assert!(graph(&h).layers[0].display.grid_on_top);
 }
 
+#[test]
+fn data_on_top_of_axes_can_be_cancelled_applied_and_undone() {
+    let mut h = start(vec![data_file("data-on-top")]);
+    let open_display = |h: &mut Harness<'static, SheafApp>| {
+        open_props(h, 0, PropsTab::Plots, None);
+        click(h, "Layer 1");
+        click(h, "Display");
+    };
+    open_display(&mut h);
+    assert!(!graph(&h).layers[0].display.data_on_top);
+    click(&mut h, "Data on Top of Axes");
+    assert!(graph(&h).layers[0].display.data_on_top);
+    click(&mut h, "Cancel");
+    assert!(!graph(&h).layers[0].display.data_on_top);
+
+    open_display(&mut h);
+    click(&mut h, "Data on Top of Axes");
+    click(&mut h, "Apply");
+    click(&mut h, "Data on Top of Axes");
+    click(&mut h, "Cancel");
+    assert!(graph(&h).layers[0].display.data_on_top, "Cancel keeps the applied value");
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert!(!graph(&h).layers[0].display.data_on_top);
+    menu(&mut h, "Edit", "Redo Change graph settings");
+    assert!(graph(&h).layers[0].display.data_on_top);
+}
+
 /// Origin's Link Axes Scales tab: only for a layer after the first; Straight on the Y side links the
 /// Y scale too, and Link to None unlinks the layer without moving it.
 #[test]

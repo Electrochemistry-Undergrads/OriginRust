@@ -304,6 +304,36 @@ fn the_x_and_y_axes_switches_hide_one_axis_each() {
     assert_eq!(count(&p), full);
 }
 
+#[test]
+fn data_on_top_preserves_legends_annotations_and_the_independent_grid_order() {
+    for template in [Template::LineSymbol, Template::Polar, Template::Ternary] {
+        let (mut p, g) = project(template);
+        let l = layer_mut(&mut p, g);
+        l.display.data_on_top = true;
+        l.x_axis.major_grid = Some(LineStyle::solid(Color::rgb(11, 22, 33), 0.5));
+        l.y_axis.major_grid = Some(LineStyle::solid(Color::rgb(11, 22, 33), 0.5));
+        let s = scene(&p, g);
+        let l = &s.layers[0];
+        let (axes, annotations) = l.split_overlay();
+        assert!(!axes.is_empty(), "{template:?}: axes exist");
+        assert!(!annotations.is_empty(), "{template:?}: legend exists");
+        for object in &l.objects {
+            if object.kind == scene::ObjectKind::Legend {
+                assert!(object.items.start >= l.underlay_len, "legend remains above data");
+            }
+        }
+        let old_clip = l.clip;
+        let old_axes = axes.to_vec();
+        let old_annotations = annotations.to_vec();
+        layer_mut(&mut p, g).display.grid_on_top = true;
+        let on_top = scene(&p, g);
+        let l = &on_top.layers[0];
+        assert_eq!(l.clip, old_clip);
+        assert_eq!(l.split_overlay(), (old_axes.as_slice(), old_annotations.as_slice()));
+        assert!(l.grid.is_empty(), "grid moves above the data independently");
+    }
+}
+
 /// The overlay items (line, ticks, labels, title) that one axis has drawn, and its objects' items.
 fn axis_items(s: &scene::Scene, kinds: &[scene::ObjectKind]) -> Vec<scene::Item> {
     let l = &s.layers[0];

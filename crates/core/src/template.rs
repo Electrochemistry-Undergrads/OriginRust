@@ -86,6 +86,9 @@ pub enum Template {
     /// exchanged and vertical drop lines that go from each plot to the next data plot. Needs two
     /// or more Y columns ([`Project::plot_columns`] refuses fewer).
     Lollipop,
+    /// Scatter plot with a rug on the bottom and left axes (Origin's "Scatter + Rug", 2019b): one short
+    /// line per point beside each axis, all plots overlapping in one strip (graphing spec 18.10).
+    ScatterRug,
     /// Violin plot (Origin's "Violin Plot"): every Y column a kernel density silhouette, with the
     /// colours of the box chart template.
     Violin,
@@ -102,7 +105,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 38] = [
+    pub const ALL: [Template; 39] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -141,6 +144,7 @@ impl Template {
         Template::StackedLines,
         Template::Waterfall,
         Template::Lollipop,
+        Template::ScatterRug,
     ];
 
     /// The name used on the command line and in menus.
@@ -178,6 +182,7 @@ impl Template {
             Template::Radar => "radar",
             Template::Ternary => "ternary",
             Template::Lollipop => "lollipop",
+            Template::ScatterRug => "scatter-rug",
             Template::Violin => "violin",
             Template::ViolinBox => "violin-box",
             Template::ViolinPoint => "violin-point",
@@ -221,6 +226,7 @@ impl Template {
             Template::Radar => "Radar",
             Template::Ternary => "Ternary",
             Template::Lollipop => "Lollipop Plot",
+            Template::ScatterRug => "Scatter + Rug",
             Template::Violin => "Violin Plot",
             Template::ViolinBox => "Violin with Box",
             Template::ViolinPoint => "Violin with Point",
@@ -283,6 +289,7 @@ impl Template {
             Template::Radar => radar(id, name),
             Template::Ternary => ternary(id, name),
             Template::Lollipop => general(id, name, PlotKind::Scatter),
+            Template::ScatterRug => scatter_rug(id, name),
             Template::Violin => from_red(general(id, name, PlotKind::Violin)),
             Template::ViolinBox => from_red(general(id, name, PlotKind::ViolinBox)),
             Template::ViolinPoint => from_red(general(id, name, PlotKind::ViolinPoint)),
@@ -437,7 +444,19 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         tick_width_pt: None,
         tick_prefix: String::new(),
         tick_suffix: String::new(),
+        rug: Default::default(),
+        rug_opposite: Default::default(),
     }
+}
+
+/// The scatter template with a default rug on the bottom and left axes.
+fn scatter_rug(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::Scatter);
+    for l in &mut g.layers {
+        l.x_axis.rug = Rug::shown();
+        l.y_axis.rug = Rug::shown();
+    }
+    g
 }
 
 fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
@@ -1081,5 +1100,28 @@ mod tests {
         assert!(json.contains("\"default_kind\":\"box\""));
         let back: crate::graph::Graph = serde_json::from_str(&json).unwrap();
         assert_eq!(back, g);
+    }
+
+    #[test]
+    fn scatter_rug_template_and_rug_serde() {
+        assert_eq!(Template::from_name("scatter-rug"), Some(Template::ScatterRug));
+        assert_eq!(Template::ScatterRug.label(), "Scatter + Rug");
+        let g = Template::ScatterRug.new_graph(WindowId(1), "g");
+        let l = &g.layers[0];
+        assert!(l.x_axis.rug.show && l.y_axis.rug.show && l.x_axis.rug.overlap);
+        assert!(!l.x_axis.rug_opposite.show && !l.y_axis.rug_opposite.show);
+        assert_eq!((l.x_axis.rug.size_pct, l.x_axis.rug.thickness_pt, l.x_axis.rug.margin_pct), (5.0, 0.5, 0.0));
+        // Round trip.
+        let back: Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!(back, g);
+        // Graphs without a rug carry no rug keys; old files read as no rug.
+        let plain = Template::Scatter.new_graph(WindowId(1), "g");
+        let json = serde_json::to_string(&plain).unwrap();
+        assert!(!json.contains("rug"), "{json}");
+        let back: Graph = serde_json::from_str(&json).unwrap();
+        assert!(back.layers[0].x_axis.rug.is_default());
+        // A partly written rug keeps the defaults for the rest.
+        let r: Rug = serde_json::from_str(r#"{"show":true,"plot":2}"#).unwrap();
+        assert!(r.show && r.plot == Some(2) && r.overlap && r.size_pct == 5.0);
     }
 }

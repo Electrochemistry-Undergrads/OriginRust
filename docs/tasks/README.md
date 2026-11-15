@@ -91,7 +91,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T38](T38-recent-files.md) | Recent Projects and Recent Imports (File menu lists that survive a restart) | M | claimed 2026-11-15 (`recent-files`, Claude macOS "mac-recent") |
 | [T39](T39-plot-sort-x.md) | Line plots connected in X order without sorting the sheet | M | done 2026-11-15 (graphing 18.9, `plot-sort-x`, macOS); left: Origin's effect on symbols, fills, missing values, ties and splines unmeasured |
 | [T40](T40-graphical-summary.md) | Graphical Summary: statistics, CIs, Anderson-Darling and charts per variable/group | L | done 2026-11-15 (statistics.md 22); left: three other arrangements, Origin layout unmeasured |
-| [T41](T41-rug-plot.md) | Rug plots: Axis dialog Rug tab and Scatter + Rug template | M | claimed 2026-11-15 (`rug-plot`, macOS) |
+| [T41](T41-rug-plot.md) | Rug plots: Axis dialog Rug tab and Scatter + Rug template | M | done 2026-11-15 (graphing 18.10); left: Origin's defaults unmeasured, no rug hit testing, not written to .opj |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

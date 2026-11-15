@@ -1102,6 +1102,9 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         if !axis.axis_breaks.is_empty() {
             notes.push("an axis break was not written".into());
         }
+        if !axis.rug.is_default() || !axis.rug_opposite.is_default() {
+            notes.push("an axis rug (Rug tab, Scatter + Rug) was not written; the companion file keeps it".into());
+        }
         if axis.additional_line.is_some() {
             notes.push("an additional line at a value of the other axis (Grids tab) was not written".into());
         }

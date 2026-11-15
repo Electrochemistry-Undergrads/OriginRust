@@ -650,6 +650,16 @@ fn lollipop_drop_settings_are_named_in_the_save_warnings() {
 }
 
 #[test]
+fn an_axis_rug_is_named_in_the_save_warnings() {
+    let mut p = source();
+    line_graph(&mut p, |l| l.y_axis.rug = sheaf_core::graph::Rug::shown());
+    let (_, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("axis rug")), "{:?}", out.warnings);
+    let (_, out) = round_trip(&source());
+    assert!(!out.warnings.iter().any(|w| w.contains("axis rug")), "{:?}", out.warnings);
+}
+
+#[test]
 fn violin_plots_are_written_as_plain_columns_with_a_save_warning() {
     for kind in [sheaf_core::graph::PlotKind::Violin, sheaf_core::graph::PlotKind::HalfViolin] {
         let mut p = source();

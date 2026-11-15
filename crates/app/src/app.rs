@@ -32,6 +32,7 @@ use crate::dialogs::row_filter::RowFilterDialog;
 use crate::dialogs::set_values::SetValuesDialog;
 use crate::dialogs::shape_object::ShapeDialog;
 use crate::dialogs::simulate::{Outcome as SimulateOutcome, SimulateDialog};
+use crate::dialogs::slope_object::SlopeDialog;
 use crate::dialogs::sort::{SortDialog, SortOutcome};
 use crate::dialogs::stack_panels::{Outcome as StackPanelsOutcome, StackPanelsDialog};
 use crate::dialogs::text_object::TextDialog;
@@ -150,6 +151,7 @@ pub struct SheafApp {
     column_props: Option<ColumnPropsDialog>,
     text_dialog: Option<TextDialog>,
     shape_dialog: Option<ShapeDialog>,
+    slope_dialog: Option<SlopeDialog>,
     set_values: Option<SetValuesDialog>,
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
@@ -248,6 +250,7 @@ impl SheafApp {
             column_props: None,
             text_dialog: None,
             shape_dialog: None,
+            slope_dialog: None,
             set_values: None,
             analysis: None,
             fit: None,
@@ -1208,6 +1211,7 @@ impl SheafApp {
             GraphOp::HideTitle { .. } => "Delete axis title",
             GraphOp::DeleteLabel { .. } => "Delete text",
             GraphOp::DeleteShape { .. } => "Delete drawn object",
+            GraphOp::DeleteSlope { .. } => "Delete slope annotation",
             GraphOp::OrderShape { front: true, .. } => "Bring drawn object to front",
             GraphOp::OrderShape { front: false, .. } => "Push drawn object to back",
             GraphOp::HideLayer { .. } => "Hide layer",
@@ -1881,6 +1885,8 @@ impl SheafApp {
                 let state = self.graphs.entry(graph).or_default();
                 state.reader = tool == GraphTool::Reader;
                 state.text_tool = tool == GraphTool::Text;
+                state.slope_tool = tool == GraphTool::Slope;
+                state.slope_first = None;
                 state.shape_tool = match tool {
                     GraphTool::Draw(kind) => Some(kind),
                     _ => None,
@@ -1895,6 +1901,7 @@ impl SheafApp {
                         self.say("Data Reader: click a data point; Left and Right step through the rows; Esc ends")
                     }
                     GraphTool::Text => self.say("Text: click where the text goes; Esc ends"),
+                    GraphTool::Slope => self.say("Slope: click near a data point; Esc cancels"),
                     GraphTool::Draw(kind) => {
                         self.say(format!("{}: drag on the graph (Shift constrains); Esc ends", kind.name()))
                     }
@@ -1928,6 +1935,18 @@ impl SheafApp {
                     }
                 });
             }
+            Action::AddSlope { graph, layer, slope } => {
+                self.doc.apply("Add slope annotation", |p| {
+                    if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
+                        l.slopes.push(slope);
+                    }
+                });
+                self.say("Slope annotation added");
+            }
+            Action::EditSlope { graph, layer, slope } => {
+                self.slope_dialog = SlopeDialog::edit(&self.doc, graph, layer, slope);
+            }
+            Action::Hint(text) => self.say(text),
             Action::EditShape { graph, layer, shape } => {
                 self.shape_dialog = ShapeDialog::edit(&self.doc, graph, layer, shape);
             }
@@ -2959,6 +2978,7 @@ impl SheafApp {
             || self.column_props.is_some()
             || self.text_dialog.is_some()
             || self.shape_dialog.is_some()
+            || self.slope_dialog.is_some()
             || self.set_values.is_some()
             || self.analysis.is_some()
             || self.fit.is_some()
@@ -3288,6 +3308,11 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.shape_dialog = None;
+        }
+        if let Some(d) = &mut self.slope_dialog
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.slope_dialog = None;
         }
         if let Some(d) = &mut self.set_values
             && !d.show(ctx, &mut self.doc)

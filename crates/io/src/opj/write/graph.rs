@@ -1091,6 +1091,16 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
             names.join(", ")
         ));
     }
+    if !layer.slopes.is_empty() {
+        notes.push(format!(
+            "layer {} has {} slope annotation{} that an Origin project file written here cannot hold; {} not written (the .opj.sheaf companion keeps {})",
+            index + 1,
+            layer.slopes.len(),
+            if layer.slopes.len() == 1 { "" } else { "s" },
+            if layer.slopes.len() == 1 { "it was" } else { "they were" },
+            if layer.slopes.len() == 1 { "it" } else { "them" },
+        ));
+    }
     if matches!(roles[index], Role::RightY { x_straight: false, .. }) {
         notes.push(
             "the X scale of a right Y layer that is not linked to its parent's was written with the link only".into(),

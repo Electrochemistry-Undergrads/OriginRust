@@ -73,6 +73,313 @@ fn select_with(h: &mut Harness<'static, SheafApp>, label: &str, modifiers: egui:
     settle(h);
 }
 
+fn row_button(h: &mut Harness<'static, SheafApp>, label: &str) {
+    h.get_all_by_label(label).find(|node| !node.accesskit_node().is_disabled()).unwrap().click();
+    settle(h);
+}
+
+fn edit_rows(h: &mut Harness<'static, SheafApp>, reference: &str) {
+    click(h, &format!("Edit rows for {reference}"));
+    assert!(h.query_by_label("Entire Column(s)").is_some());
+}
+
+#[test]
+fn browser_row_subset_transfers_without_changing_the_original_column_end_or_history() {
+    let (mut h, book) = fixture("goto-browser-row-subset");
+    let before = project(&h).clone();
+    let revision = h.state().doc.revision();
+    ctrl(&mut h, egui::Key::G);
+    field(&mut h, "Go to Row", "0");
+    browser(&mut h);
+    add(&mut h, "Book1 / Sheet1 / C(Y): Potential");
+    edit_rows(&mut h, "[Book1]Sheet1!C\"Potential\"");
+    assert!(h.get_by_label("From").accesskit_node().is_disabled());
+    assert!(h.get_by_label("To").accesskit_node().is_disabled());
+    assert_eq!(h.get_by_label("From").accesskit_node().value().as_deref(), Some("1"));
+    assert_eq!(h.get_by_label("To").accesskit_node().value().as_deref(), Some("6"));
+    click(&mut h, "Entire Column(s)");
+    field(&mut h, "From", "2");
+    field(&mut h, "To", "4");
+    row_button(&mut h, "OK");
+    assert!(h.query_by_label("Entire Column(s)").is_none());
+    assert!(h.query_by_label("[Book1]Sheet1!C\"Potential\"[2:4]").is_some());
+    assert_eq!(original_cell(&h, book), Some((2, 6)));
+    click(&mut h, "OK");
+    assert_eq!(
+        h.get_by_label("Go to Column").accesskit_node().value().as_deref(),
+        Some("[Book1]Sheet1!C\"Potential\"[2:4]")
+    );
+    assert_eq!(original_cell(&h, book), Some((2, 6)));
+    click(&mut h, "OK");
+    assert_eq!(original_cell(&h, book), Some((2, 5)), "row subset does not redefine Go To Row 0");
+    assert_eq!(project(&h), &before);
+    assert_eq!(h.state().doc.revision(), revision);
+}
+
+#[test]
+fn browser_row_editor_uses_the_sheet_end_even_for_a_shorter_selected_column() {
+    let (mut h, book) = fixture("goto-browser-rows-sheet-end");
+    let before = project(&h).clone();
+    ctrl(&mut h, egui::Key::G);
+    field(&mut h, "Go to Row", "0");
+    browser(&mut h);
+    add(&mut h, "Book1 / Sheet1 / B(Y): Shared current");
+    edit_rows(&mut h, "[Book1]Sheet1!B\"Shared current\"");
+    assert_eq!(h.get_by_label("To").accesskit_node().value().as_deref(), Some("6"), "B ends at 2, sheet at 6");
+    click(&mut h, "Entire Column(s)");
+    field(&mut h, "From", "3");
+    field(&mut h, "To", "6");
+    row_button(&mut h, "OK");
+    assert!(h.query_by_label("[Book1]Sheet1!B\"Shared current\"[3:6]").is_some());
+    click(&mut h, "OK");
+    assert_eq!(
+        h.get_by_label("Go to Column").accesskit_node().value().as_deref(),
+        Some("[Book1]Sheet1!B\"Shared current\"[3:6]")
+    );
+    click(&mut h, "OK");
+    assert_eq!(original_cell(&h, book), Some((1, 1)));
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn browser_row_editor_preserves_reversed_endpoints_as_origin_does() {
+    let (mut h, book) = fixture("goto-browser-row-reversed");
+    let before = project(&h).clone();
+    ctrl(&mut h, egui::Key::G);
+    browser(&mut h);
+    add(&mut h, "Book1 / Sheet1 / C(Y): Potential");
+    edit_rows(&mut h, "[Book1]Sheet1!C\"Potential\"");
+    click(&mut h, "Entire Column(s)");
+    field(&mut h, "From", "4");
+    field(&mut h, "To", "2");
+    row_button(&mut h, "OK");
+    assert!(h.query_by_label("[Book1]Sheet1!C\"Potential\"[4:2]").is_some());
+    edit_rows(&mut h, "[Book1]Sheet1!C\"Potential\"[4:2]");
+    assert_eq!(h.get_by_label("From").accesskit_node().value().as_deref(), Some("4"));
+    assert_eq!(h.get_by_label("To").accesskit_node().value().as_deref(), Some("2"));
+    row_button(&mut h, "Cancel");
+    click(&mut h, "OK");
+    assert_eq!(
+        h.get_by_label("Go to Column").accesskit_node().value().as_deref(),
+        Some("[Book1]Sheet1!C\"Potential\"[4:2]")
+    );
+    click(&mut h, "Cancel");
+    assert_eq!(original_cell(&h, book), Some((2, 6)));
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn browser_row_editor_entire_column_restores_the_reference_and_default_bounds() {
+    let (mut h, book) = fixture("goto-browser-row-entire");
+    let before = project(&h).clone();
+    ctrl(&mut h, egui::Key::G);
+    field(&mut h, "Go to Row", "0");
+    browser(&mut h);
+    add(&mut h, "Book1 / Sheet1 / C(Y): Potential");
+    edit_rows(&mut h, "[Book1]Sheet1!C\"Potential\"");
+    click(&mut h, "Entire Column(s)");
+    field(&mut h, "From", "2");
+    field(&mut h, "To", "4");
+    row_button(&mut h, "OK");
+    edit_rows(&mut h, "[Book1]Sheet1!C\"Potential\"[2:4]");
+    click(&mut h, "Entire Column(s)");
+    assert!(h.get_by_label("From").accesskit_node().is_disabled());
+    assert!(h.get_by_label("To").accesskit_node().is_disabled());
+    row_button(&mut h, "OK");
+    assert!(h.query_by_label("[Book1]Sheet1!C\"Potential\"[2:4]").is_none());
+    edit_rows(&mut h, "[Book1]Sheet1!C\"Potential\"");
+    assert_eq!(h.get_by_label("From").accesskit_node().value().as_deref(), Some("1"));
+    assert_eq!(h.get_by_label("To").accesskit_node().value().as_deref(), Some("6"));
+    assert!(h.get_by_label("From").accesskit_node().is_disabled());
+    row_button(&mut h, "Cancel");
+    click(&mut h, "OK");
+    assert_eq!(
+        h.get_by_label("Go to Column").accesskit_node().value().as_deref(),
+        Some("[Book1]Sheet1!C\"Potential\"")
+    );
+    click(&mut h, "OK");
+    assert_eq!(original_cell(&h, book), Some((2, 5)));
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn browser_row_editor_enter_keeps_the_entire_column_and_respects_focused_cancel() {
+    for cancel in [false, true] {
+        let (mut h, book) = fixture(&format!("goto-browser-row-enter-{cancel}"));
+        let before = project(&h).clone();
+        ctrl(&mut h, egui::Key::G);
+        browser(&mut h);
+        add(&mut h, "Book1 / Sheet1 / C(Y): Potential");
+        edit_rows(&mut h, "[Book1]Sheet1!C\"Potential\"");
+        if cancel {
+            click(&mut h, "Entire Column(s)");
+            field(&mut h, "From", "2");
+            field(&mut h, "To", "4");
+            h.get_all_by_label("Cancel").find(|node| !node.accesskit_node().is_disabled()).unwrap().focus();
+            settle(&mut h);
+        }
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+        assert!(h.query_by_label("Entire Column(s)").is_none());
+        assert!(h.query_by_label("List Columns").is_some());
+        assert!(h.query_by_label("[Book1]Sheet1!C\"Potential\"").is_some());
+        assert!(h.query_by_label("[Book1]Sheet1!C\"Potential\"[2:4]").is_none());
+        assert!(h.query_by_label("[Book1]Sheet1!C\"Potential\"[1:6]").is_none(), "Enter must not toggle Entire");
+        click(&mut h, "Cancel");
+        click(&mut h, "Cancel");
+        assert_eq!(original_cell(&h, book), Some((2, 6)));
+        assert_eq!(project(&h), &before);
+    }
+}
+
+#[test]
+fn browser_block_rows_use_endpoint_references_and_survive_removing_a_preceding_range() {
+    let (mut h, book) = fixture("goto-browser-block-rows");
+    let before = project(&h).clone();
+    ctrl(&mut h, egui::Key::G);
+    field(&mut h, "Go to Row", "0");
+    browser(&mut h);
+    add(&mut h, "Book1 / Sheet1 / A(X): Time");
+    click(&mut h, "Book1 / Sheet1 / B(Y): Shared current");
+    select_with(&mut h, "Book1 / Sheet1 / D(Y): Shared current", egui::Modifiers::SHIFT);
+    click(&mut h, "Add as One Block");
+    edit_rows(&mut h, "[Book1]Sheet1!B\"Shared current\":D\"Shared current\"");
+    click(&mut h, "Entire Column(s)");
+    field(&mut h, "From", "2");
+    field(&mut h, "To", "4");
+    row_button(&mut h, "OK");
+    let reference = "[Book1]Sheet1!B\"Shared current\"[2]:D\"Shared current\"[4]";
+    assert!(h.query_by_label(reference).is_some());
+    click(&mut h, "[Book1]Sheet1!A\"Time\"");
+    click(&mut h, "Remove");
+    assert!(h.query_by_label(reference).is_some());
+    edit_rows(&mut h, reference);
+    assert_eq!(h.get_by_label("From").accesskit_node().value().as_deref(), Some("2"));
+    assert_eq!(h.get_by_label("To").accesskit_node().value().as_deref(), Some("4"));
+    row_button(&mut h, "Cancel");
+    click(&mut h, "OK");
+    assert_eq!(h.get_by_label("Go to Column").accesskit_node().value().as_deref(), Some(reference));
+    click(&mut h, "OK");
+    assert_eq!(original_cell(&h, book), Some((3, 2)));
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn browser_row_editor_normalizes_native_integer_prefixes_and_keeps_single_row_intervals() {
+    for (index, (from, to, first, last)) in
+        [("1.5", "6", 1, 6), ("2.9", "6.9", 2, 6), ("2+1", "6", 2, 6), ("2abc", "2e1", 2, 2)].into_iter().enumerate()
+    {
+        let (mut h, book) = fixture(&format!("goto-browser-row-prefix-{index}"));
+        let before = project(&h).clone();
+        ctrl(&mut h, egui::Key::G);
+        browser(&mut h);
+        add(&mut h, "Book1 / Sheet1 / C(Y): Potential");
+        edit_rows(&mut h, "[Book1]Sheet1!C\"Potential\"");
+        click(&mut h, "Entire Column(s)");
+        field(&mut h, "From", from);
+        field(&mut h, "To", to);
+        row_button(&mut h, "OK");
+        let reference = format!("[Book1]Sheet1!C\"Potential\"[{first}:{last}]");
+        edit_rows(&mut h, &reference);
+        assert_eq!(h.get_by_label("From").accesskit_node().value().as_deref(), Some(first.to_string().as_str()));
+        assert_eq!(h.get_by_label("To").accesskit_node().value().as_deref(), Some(last.to_string().as_str()));
+        row_button(&mut h, "Cancel");
+        click(&mut h, "OK");
+        assert_eq!(h.get_by_label("Go to Column").accesskit_node().value().as_deref(), Some(reference.as_str()));
+        click(&mut h, "Cancel");
+        assert_eq!(original_cell(&h, book), Some((2, 6)));
+        assert_eq!(project(&h), &before);
+    }
+}
+
+#[test]
+fn browser_row_editor_refuses_out_of_bounds_or_nonnumeric_input_without_closing_or_changing_the_range() {
+    let (mut h, book) = fixture("goto-browser-row-invalid");
+    let before = project(&h).clone();
+    ctrl(&mut h, egui::Key::G);
+    browser(&mut h);
+    add(&mut h, "Book1 / Sheet1 / C(Y): Potential");
+    edit_rows(&mut h, "[Book1]Sheet1!C\"Potential\"");
+    click(&mut h, "Entire Column(s)");
+    for (from, to) in [("0", "6"), ("1", "0"), ("1", "7"), ("abc", "6")] {
+        field(&mut h, "From", from);
+        field(&mut h, "To", to);
+        row_button(&mut h, "OK");
+        assert!(h.query_by_label("Entire Column(s)").is_some());
+        assert!(h.query_by_label("[Book1]Sheet1!C\"Potential\"").is_some());
+        assert_eq!(original_cell(&h, book), Some((2, 6)));
+        assert_eq!(project(&h), &before);
+    }
+    field(&mut h, "From", "4");
+    field(&mut h, "To", "2");
+    row_button(&mut h, "OK");
+    assert!(h.query_by_label("[Book1]Sheet1!C\"Potential\"[4:2]").is_some());
+    click(&mut h, "Cancel");
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn browser_row_editor_allows_entire_empty_columns_with_native_zero_end_and_default_enter() {
+    let (mut h, book) = fixture("goto-browser-row-empty");
+    h.state_mut().doc.apply("Empty browser fixture", |project| {
+        for column in &mut project.workbook_mut(book).unwrap().sheets[0].columns {
+            column.data = ColumnData::numeric(Vec::new());
+        }
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    ctrl(&mut h, egui::Key::G);
+    browser(&mut h);
+    add(&mut h, "Book1 / Sheet1 / C(Y): Potential");
+    edit_rows(&mut h, "[Book1]Sheet1!C\"Potential\"");
+    assert_eq!(h.get_by_label("From").accesskit_node().value().as_deref(), Some("1"));
+    assert_eq!(h.get_by_label("To").accesskit_node().value().as_deref(), Some("0"));
+    assert!(h.get_by_label("To").accesskit_node().is_disabled());
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert!(h.query_by_label("Entire Column(s)").is_none());
+    assert!(h.query_by_label("[Book1]Sheet1!C\"Potential\"").is_some());
+    click(&mut h, "Cancel");
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn browser_row_editor_cancel_and_escape_keep_the_existing_range_and_both_parents() {
+    for escape in [false, true] {
+        let (mut h, book) = fixture(&format!("goto-browser-row-cancel-{escape}"));
+        let before = project(&h).clone();
+        ctrl(&mut h, egui::Key::G);
+        browser(&mut h);
+        add(&mut h, "Book1 / Sheet1 / C(Y): Potential");
+        edit_rows(&mut h, "[Book1]Sheet1!C\"Potential\"");
+        click(&mut h, "Entire Column(s)");
+        field(&mut h, "From", "2");
+        field(&mut h, "To", "4");
+        row_button(&mut h, "OK");
+        edit_rows(&mut h, "[Book1]Sheet1!C\"Potential\"[2:4]");
+        assert_eq!(h.get_by_label("From").accesskit_node().value().as_deref(), Some("2"));
+        assert_eq!(h.get_by_label("To").accesskit_node().value().as_deref(), Some("4"));
+        field(&mut h, "From", "1");
+        field(&mut h, "To", "3");
+        if escape {
+            h.key_press(egui::Key::Escape);
+            settle(&mut h);
+        } else {
+            row_button(&mut h, "Cancel");
+        }
+        assert!(h.query_by_label("Entire Column(s)").is_none());
+        assert!(h.query_by_label("List Columns").is_some());
+        assert!(h.query_by_label("[Book1]Sheet1!C\"Potential\"[2:4]").is_some());
+        assert!(h.state().go_to.is_some());
+        assert_eq!(original_cell(&h, book), Some((2, 6)));
+        click(&mut h, "Cancel");
+        click(&mut h, "Cancel");
+        assert_eq!(project(&h), &before);
+    }
+}
+
 #[test]
 fn browser_shift_range_adds_individual_columns_or_one_block_without_editing_the_document() {
     for block in [false, true] {

@@ -261,12 +261,8 @@ impl Parser {
     fn primary(&mut self) -> Result<Node, ExprError> {
         let t = self.advance();
         match t.tok {
-            Tok::Percent => {
-                self.expect(Tok::LParen, "after '%' string substitution")?;
-                let value = self.ternary()?;
-                self.expect(Tok::RParen, "after the substituted expression")?;
-                Node::new(Kind::Call { func: Func::Str(StrFn::Value), args: vec![value] }, t.pos)
-            }
+            Tok::Percent => self.substitution(t.pos, false),
+            Tok::QuotedSubstitution => self.substitution(t.pos, true),
             Tok::LBracket => {
                 let book = self.reference_name("workbook")?;
                 self.expect(Tok::RBracket, "after the workbook name")?;
@@ -310,6 +306,61 @@ impl Parser {
             Tok::Ident(name) | Tok::Str(name) if !name.is_empty() => Ok(name),
             _ => Err(ExprError::at(token.pos, format!("expected a {what} name or a quoted name"))),
         }
+    }
+
+    fn substitution(&mut self, pos: usize, quoted: bool) -> Result<Node, ExprError> {
+        self.expect(Tok::LParen, "after '%' string substitution")?;
+        // A static [book]sheet,column prefix distinguishes the legacy cell form from a
+        // single expression such as %([Book]Sheet!col(A)$). Names remain real dependencies.
+        let worksheet =
+            matches!(self.peek_tok(), Tok::LBracket) && self.toks.get(self.at + 4).is_some_and(|t| t.tok == Tok::Comma);
+        let value = if worksheet { self.worksheet_substitution(pos)? } else { self.ternary()? };
+        self.expect(Tok::RParen, "after the substituted expression")?;
+        if quoted { Ok(value) } else { Node::new(Kind::Call { func: Func::Str(StrFn::Value), args: vec![value] }, pos) }
+    }
+
+    fn worksheet_substitution(&mut self, pos: usize) -> Result<Node, ExprError> {
+        let column_pos = self.advance().pos; // '['
+        let book = self.reference_name("workbook")?;
+        self.expect(Tok::RBracket, "after the workbook name")?;
+        let sheet = self.worksheet_ref()?;
+        self.expect(Tok::Comma, "after the worksheet")?;
+        let column = self.advance();
+        let column = match column.tok {
+            Tok::Ident(name) => ColumnRef::Short(name),
+            Tok::Str(name) => ColumnRef::Long(name),
+            Tok::Num(n) if n >= 1.0 && n.fract() == 0.0 && n < 1e9 => ColumnRef::Index(n as usize),
+            _ => {
+                return Err(ExprError::at(
+                    column.pos,
+                    "expected a column name, quoted long name or positive column number",
+                ));
+            }
+        };
+        let r = ColumnRef::Scoped { book: Some(book), sheet, column: Box::new(column) };
+        let column = Node::new(Kind::Col { r, pos: column_pos }, column_pos)?;
+        self.expect(Tok::Comma, "before the worksheet cell row")?;
+        // Keep the row separate from Kind::Index: a variable matching a parameter-row name
+        // is still a numeric row expression here, never a metadata read.
+        let mut args = vec![column, self.ternary()?];
+        if self.eat(&Tok::Comma) {
+            let start = self.at;
+            let format = if let Tok::Str(s) = self.peek_tok() {
+                let s = s.clone();
+                self.advance();
+                s
+            } else {
+                while matches!(self.peek_tok(), Tok::Num(_) | Tok::Ident(_) | Tok::Star) {
+                    self.advance();
+                }
+                if self.at == start {
+                    return Err(ExprError::at(self.toks[start].pos, "expected a static worksheet cell format"));
+                }
+                self.source[self.toks[start].pos..self.toks[self.at].pos].trim().to_string()
+            };
+            args.push(Node::new(Kind::Str(format), self.toks[start].pos)?);
+        }
+        Node::new(Kind::Call { func: Func::Str(StrFn::WorksheetCell), args }, pos)
     }
 
     fn worksheet_index(value: f64, pos: usize) -> Result<WorksheetRef, ExprError> {

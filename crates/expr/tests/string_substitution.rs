@@ -64,13 +64,13 @@ fn errors_inside_substitution_report_offsets_in_the_original_utf8_formula() {
 }
 
 #[test]
-fn malformed_and_legacy_substitutions_fail_with_an_error() {
+fn malformed_and_unsupported_substitutions_fail_with_an_error() {
     for source in [
         r#""x %(col(A)$""#,
         r#""x %("unterminated)"#,
         r#""%()""#,
         r#"%()"#,
-        r#""%([Book]Sheet,A,1)""#,
+        r#""%([Book]Sheet,A)""#,
         r#""%(session$)""#,
     ] {
         assert!(Expr::parse(source).is_err(), "{source}");

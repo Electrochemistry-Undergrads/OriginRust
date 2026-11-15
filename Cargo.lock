@@ -3115,6 +3115,7 @@ dependencies = [
  "sheaf-expr",
  "sheaf-io",
  "sheaf-plot",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -29,6 +29,7 @@ mod reader;
 mod theme;
 mod toolbar;
 mod winclip;
+mod winprint;
 mod workspace;
 
 use std::path::PathBuf;

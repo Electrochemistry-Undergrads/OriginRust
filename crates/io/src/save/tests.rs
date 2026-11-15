@@ -299,3 +299,29 @@ fn a_save_to_opju_is_refused_and_writes_nothing() {
     assert!(!path.exists(), "no file is written");
     assert!(!dir.join("fig.opju.sheaf").exists(), "and no companion");
 }
+
+#[test]
+fn page_setup_survives_a_sheaf_project_and_the_opj_companion() {
+    use sheaf_core::page_setup::{Margins, Orientation, PageSetup, Paper};
+    let dir = scratch("page-setup");
+    let mut p = project_with_graph();
+    p.page_setup = PageSetup {
+        paper: Paper::Letter,
+        orientation: Orientation::Landscape,
+        margins: Margins { left: 10.0, top: 20.0, right: 30.0, bottom: 40.0 },
+    };
+    // A .sheaf project.
+    let out = save_project(&p, &dir.join("a.sheaf")).unwrap();
+    assert!(out.main_written);
+    assert_eq!(project_file::load(&dir.join("a.sheaf")).unwrap().page_setup, p.page_setup);
+    // An .opj cannot hold it: the companion does, and opening the .opj takes the companion.
+    let out = save_project(&p, &dir.join("b.opj")).unwrap();
+    assert!(out.companion.is_some(), "{:?}", out.warnings);
+    assert!(out.warnings.iter().any(|w| w.contains("Page Setup")), "{:?}", out.warnings);
+    let opened = open_project(&dir.join("b.opj")).unwrap();
+    assert!(opened.companion_used);
+    assert_eq!(opened.project.page_setup, p.page_setup);
+    // The default setup alone does not force a companion.
+    let out = save_project(&project_with_graph(), &dir.join("c.opj")).unwrap();
+    assert!(out.companion.is_none(), "{:?}", out.warnings);
+}

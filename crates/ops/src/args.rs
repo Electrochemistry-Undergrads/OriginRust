@@ -1127,6 +1127,8 @@ pub enum PeakLimitKind {
 pub enum PeakFitKind {
     Gauss,
     Lorentz,
+    /// Origin's Voigt: a Gauss of FWHM wG convolved with a Lorentz of FWHM wL.
+    Voigt,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]

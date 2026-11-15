@@ -476,6 +476,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     shape: match shape {
                         PeakFitKind::Gauss => analysis::PeakShape::Gauss,
                         PeakFitKind::Lorentz => analysis::PeakShape::Lorentz,
+                        PeakFitKind::Voigt => analysis::PeakShape::Voigt,
                     },
                     baseline: match fit_baseline {
                         PeakFitBaselineKind::Constant => analysis::FitBaseline::Constant,

@@ -1,6 +1,6 @@
 # T04: Peak Analyzer as Origin's multi-page wizard
 
-**Status:** pages measured and the window rebuilt as Origin's wizard (2026-11-13, analysis-tools.md 11.1); Constant baseline and Origin's Area % added. Left: Origin's Auto integration window rule (measured, not understood), Create/Subtract Baseline goals, Auto Subtract Baseline, the other baseline modes, anchor editing, Voigt, per-peak functions. **Size:** L. **Branch:** `peak-wizard`.
+**Status:** pages measured and the window rebuilt as Origin's wizard (2026-11-13, analysis-tools.md 11.1); Constant baseline and Origin's Area % added. Voigt added to the Fit Peaks page and `sheaf analyze peaks --fit voigt` (2026-11-15, analysis-tools.md 11.2): a single Voigt fit agrees with Origin 2016's `nlfit` Voigt to 6e-6 relative (Origin's `nlf_Voigt` is an approximation within 2e-6 of the height; Sheaf's is exact). Left: Origin's Auto integration window rule (measured, not understood), Create/Subtract Baseline goals, Auto Subtract Baseline, the other baseline modes, anchor editing, per-peak functions. **Size:** L. **Branch:** `peak-wizard`.
 **Detail:** audit B "Analysis X-Function dialogs" and its re-check note; D "Partial" (baseline).
 **Spec:** `docs/spec/analysis-tools.md` (peak chain), `docs/spec/gui-look.md`.
 
@@ -19,7 +19,8 @@ Mode, Baseline Treatment, Find Peaks, Integrate Peaks (or Fit Peaks), Finish. To
 - Baseline: Sheaf's calc has constant/line/anchor (`crates/calc/src/baseline.rs`), but the Peak
   Analyzer offers None/EndPoints/Minima only; Origin also has user-defined anchors, ALS, dataset,
   auto baseline.
-- Multi-peak fit: Gauss and Lorentz only (`crates/fit/src/multipeak.rs`), one shape for all peaks.
+- Multi-peak fit: Gauss, Lorentz and Voigt (`crates/fit/src/multipeak.rs`, Voigt since 2026-11-15), one
+  shape for all peaks.
   Origin allows per-peak function and Voigt.
 
 ## Steps

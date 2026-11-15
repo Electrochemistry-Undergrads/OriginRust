@@ -1975,6 +1975,50 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 2));
 }
 
+/// The Fit Peaks goal of the Peak Analyzer offers Origin's Voigt; OK fits every found peak with it.
+#[test]
+fn peak_analyzer_fits_the_found_peaks_with_voigt() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-peakvoigt-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("peaks.csv");
+    let mut text = String::from(
+        "t,i
+",
+    );
+    for k in 0..400 {
+        let x = k as f64 * 0.05;
+        let g = |c: f64, s: f64, a: f64| a * (-(x - c) * (x - c) / (2.0 * s * s)).exp();
+        text.push_str(&format!(
+            "{x},{}
+",
+            0.1 + 0.01 * x + g(6.0, 0.4, 1.0) + g(13.0, 0.5, 0.6)
+        ));
+    }
+    std::fs::write(&path, text).unwrap();
+    let mut h = start(vec![path]);
+    show_window(&mut h, "Book1 - peaks");
+    menu_path(&mut h, &["Analysis", "Peaks and Baseline", "Peak Analyzer..."]);
+    h.get_by_label("Fit Peaks").scroll_to_me();
+    settle(&mut h);
+    click(&mut h, "Fit Peaks");
+    assert!(label_containing(&h, "Goal - Fit Peaks"));
+    for _ in 0..4 {
+        click(&mut h, "Next");
+    }
+    assert!(has_label(&h, "Voigt"), "the Fit Peaks page offers Voigt");
+    click(&mut h, "Voigt");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = &b.sheets[1];
+    let center = sheet.column_by_name("Fit center").map(|c| c.numeric().unwrap().to_vec());
+    let names: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
+    let center = center.unwrap_or_else(|| panic!("no Fit center column in {names:?}"));
+    assert!((center[0] - 6.0).abs() < 1e-4 && (center[1] - 13.0).abs() < 1e-4, "{center:?}");
+    let logged = h.state().logs.results.iter().flat_map(|r| &r.lines).any(|l| l.contains("Voigt fit of 2 peaks"));
+    assert!(logged, "the fit note in the Results Log names the Voigt shape");
+}
+
 /// A folder for the project files of one save test.
 fn save_dir(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-save-{tag}-{}", std::process::id()));

@@ -1328,6 +1328,7 @@ impl AnalysisDialog {
                     ui.label("Function");
                     ui.radio_value(&mut self.chain_fit, PeakShape::Gauss, "Gauss");
                     ui.radio_value(&mut self.chain_fit, PeakShape::Lorentz, "Lorentz");
+                    ui.radio_value(&mut self.chain_fit, PeakShape::Voigt, "Voigt");
                 });
                 ui.checkbox(&mut self.chain_fit_linear, "Sloped baseline in the fit");
             }

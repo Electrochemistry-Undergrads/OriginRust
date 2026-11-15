@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 147 | 46 | 242 |
+| All rows | 49 | 148 | 46 | 243 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 78 | 46 | 141 |
+| P1 and P2 together | 17 | 79 | 46 | 142 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
@@ -48,6 +48,7 @@ Cross-cutting findings:
 | Analysis and Statistics menu structure | Mathematics, Signal Processing, Fitting, Peaks and Baseline submenus; Statistics menu | Analysis has Mathematics, Data Manipulation, Fitting, Signal Processing and Peaks and Baseline submenus; Statistics has Descriptive Statistics, Hypothesis Testing, ANOVA and more; the graph bar has a Gadgets menu | ◐ | most entries are grey; on a graph window the Analysis entries say to activate a workbook; no user-extensible menus | P0 |
 | Toolbars | about 30, View > Toolbars | Standard, Edit, Format, Graph, 2D Graphs, Tools and Object Edit bars with drawn icons; View > Toolbars shows and hides each | ◐ | buttons for features Sheaf lacks are greyed (most of 2D Graphs, Graph, Format, Tools, Object Edit); no Style, Mask, Layout, 3D bars; bars are not draggable or customisable | P0 |
 | Origin look: MDI windows, classic chrome | main window | child windows with title bar, minimise, maximise and close in a grey workspace; Cascade, Tile Horizontally, Tile Vertically; window places saved in the project and restored on opening; light theme with small text, square corners and flat controls (`workspace.rs`, `theme.rs`) | ◐ | colours are measured and icons drawn by us, not Origin's; controls are egui's; not compared with Origin side by side in this pass (code read only) | P0 |
+| Window Switcher (2025b) | Ctrl+Tab / Ctrl+Shift+Tab: thumbnails of the folder's windows, Tab moves, releasing Ctrl activates | Ctrl+Tab (Control key on macOS) and Window > Window Switcher: cards with graph thumbnails and worksheet miniatures, most recently used first, hidden windows included and marked, blue frame on the selection, arrows, Enter, Esc and clicks (`switcher.rs`, gui-look.md Window Switcher (T42)) | ◐ | order, Esc, sizes and minimised handling are Sheaf's choices (the documentation gives none; not measured in Origin); no floating windows or matrix and notes types to list | P2 |
 | Keyboard shortcuts | Ctrl+K import, Ctrl+Q set values, Ctrl+D, Ctrl+R, F-keys, Alt+n | Ctrl+N, O, S, Shift+S; Ctrl+K import; Ctrl+Q Set Column Values; Ctrl+D Add New Columns; Ctrl+Y Nonlinear Curve Fit; Ctrl+R Rescale; Ctrl+J Copy Page; Ctrl+T Toolbars; Ctrl+Z, Shift+Ctrl+Z; Ctrl+C, X, V; Delete; F2 Page Properties; F12 Layer Contents; Alt+1, 2, 6, 8 panels; Alt+Enter Properties. Worksheet keys taken from spreadsheet programs, none bound in Origin's worksheet: Ctrl+A select the sheet, Ctrl+Space the columns and Shift+Space the rows of the selection, Backspace empty the cell and edit it, Ctrl+Enter store the typed value in the whole block, Ctrl+Plus insert and Ctrl+Minus delete at the selection, Ctrl+Page Up/Down previous/next sheet (Excel's Ctrl+D, Ctrl+R and Ctrl+Y stay Origin's Add New Columns, Rescale and Nonlinear Curve Fit) | ◐ | many Origin keys are listed in the menus but grey and do nothing (F5, F7 to F11, Ctrl+U, Ctrl+3, Ctrl+4, Ctrl+I and Ctrl+M zoom, view keys, Alt+3, 4, 5, 7) | P0 |
 | New window kinds | File > New: Worksheet, Matrix, Graph, Image, Excel, Layout, Notes, Function Plot, from Template | File > New > Project and Worksheet; the Plot menu makes a graph from the selected columns | ◐ | no empty graph, matrix, image, layout, notes, function plot, new-from-template (grey in File > New) | P1 |
 | Append project | File > Append | CLI `import --append` (workbooks only) | ◐ | none in the app; graphs not merged | P1 |

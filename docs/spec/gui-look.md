@@ -911,6 +911,41 @@ measured axis/range cases, forward/backward/inside extension, capacity/end navig
 keyboard continuation, far-column jumps in both directions, invalid entries and cancel/history; parser fixtures include the 100-row,
 four-populated-row distinction and a new unequal-column end fixture. `--show go-to` supports native screenshots.
 
+### Window Switcher (T42)
+
+Origin facts (documentation, not measured here): 2025b adds Ctrl+Tab (forward) and Ctrl+Shift+Tab
+(backward) "to toggle child windows with preview" [W:originlab.com/2025b]. Pressing Ctrl and then
+Tab shows the Window Switcher; each Tab moves on until Ctrl is released; it shows thumbnails of
+all windows of the same folder, including floating and hidden windows; the selected window has a
+blue frame; arrow keys and a mouse click also select; clicking Ctrl alone closes it. LabTalk:
+`doc -nav` then Tab [W:origin-help/operate-childwindow-basic].
+
+Sheaf's choices (unmeasured, the documentation gives no order, Esc or sizes):
+
+- **Order:** most recently activated first (`Workspace::recent_order`; activation by click, menu,
+  Project Explorer, Go To, opening). So the first Ctrl+Tab selects the second card, the previous
+  window. A window that is closed or minimised drops to the end of the list (or behind the new
+  active window), so it is not "previous". Windows never activated follow in creation order.
+- **Keys:** Ctrl+Tab opens with the second card selected, Ctrl+Shift+Tab with the last. While
+  open: Tab / Shift+Tab and Left / Right move and wrap, Up / Down move by a row, Enter confirms,
+  Esc cancels, releasing Ctrl activates the selection (showing it if hidden), a click on a card
+  activates it, a click outside cancels. Ctrl+Tab is read before the grid, so it works while a
+  worksheet has the keyboard; plain Tab still moves the cell. Not opened while a dialog is open.
+- **macOS:** Ctrl is the physical Control key (Cmd+Tab belongs to the system); the Window menu
+  shows the shortcut as the Control symbol plus Tab. On Windows and Linux it is Ctrl+Tab.
+- **Windows listed:** all windows of the Project Explorer's selected folder (not subfolders),
+  hidden ones marked "(hidden)" and drawn paler. Sheaf has no floating windows. With 0 or 1
+  window Ctrl+Tab does nothing.
+- **Menu:** Window > Window Switcher opens it held open (no Ctrl to release): Tab / arrows move,
+  Enter or a click chooses, Esc closes.
+- **Look:** a dimmed backdrop and a centred panel of 168 x 134 pt cards (up to six per row),
+  each with a thumbnail, the window name and "Graph" or "Workbook"; the selected card has a 3 pt
+  blue frame. Graphs are rendered when the switcher opens at 148 x 98 pt (their own
+  `render_raster`, not the window cache, which is sized to the window and absent for closed
+  graphs) and the textures are dropped on close; at most 24 graphs per opening, the rest show the
+  type icon. Workbooks show a drawn miniature of the first four columns and five rows.
+  Nothing is redrawn per frame. `--show switcher` opens it for screenshots.
+
 ## 6. Mouse and keyboard summary
 
 - Pointer tool is the default; every other tool (zoom, data reader, text...) stays active until

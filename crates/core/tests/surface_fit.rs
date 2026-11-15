@@ -129,3 +129,16 @@ fn the_surface_function_list_has_origins_category() {
     assert!(list.iter().all(|f| f.category == "Surface Fitting" && f.formula.is_some()));
     assert!(list.iter().any(|f| f.name == "Gauss2D" && f.params.len() == 6));
 }
+
+#[test]
+fn an_x_range_keeps_every_row_in_range_although_x_cycles() {
+    let (mut p, _, _, z) = xyz_sheet();
+    let mut r = request(z, "Plane");
+    r.rows = sheaf_core::analysis::RowRange::XBetween(0.0, 1.0);
+    let out = p.fit(&r).unwrap();
+    // x in {0, 0.5, 1} for each of the 11 Y values.
+    assert_eq!(out.report.stats.n_points, 33);
+    let mut none = request(z, "Plane");
+    none.rows = sheaf_core::analysis::RowRange::XBetween(100.0, 200.0);
+    assert!(p.fit(&none).is_err());
+}

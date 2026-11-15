@@ -327,7 +327,8 @@ Plane function, `nlbeginz iz:=(1,2,3)`, `nlfit`, `nlend output:=1`):
   refused, and nothing in the project changes. Rows (all, a range of rows, an X range), the start values, fixed values and
   bounds, weighting (error column or direct weights), scale errors, algorithm, iteration limit, tolerance and the
   confidence level are those of a curve fit; a missing x, y, z or weight leaves the row out. Masked and filtered cells count
-  as missing.
+  as missing. The exception is the X range: X cycles in XYZ data, so a surface fit keeps every row whose X lies in the range
+  (not only the first unbroken run as a curve fit does); none is an error. Origin's choice for XYZ data is unmeasured.
 * Results (`Project::fit` returns a `FitOutcome` with `surface = true`): sheet `FitSurface1` (the first free number of
   `FitSurface1` and `FitSurface1Stats`) with the parameter table and `FitSurface1Stats` with model, equation, data, rows,
   statistics, ANOVA and derived quantities (FWHM and volume of the peak surfaces), laid out as `FitNL1`; two columns after the Z column

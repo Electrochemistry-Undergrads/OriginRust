@@ -15,7 +15,7 @@ use super::{
     BandChoice, FitData, FitModel, FitOutcome, FitRequest, FitRequestError, FitWeighting, FunctionInfo, Project,
     apply_settings, linspace, scale_errors, sheet_column, stats_rows, weighting,
 };
-use crate::analysis::{AnalysisError, column_label, free_sheet_name, resolve_rows};
+use crate::analysis::{AnalysisError, RowRange, column_label, free_sheet_name, resolve_rows};
 use crate::column::{Column, ColumnData, Designation};
 use crate::ids::ColumnId;
 use crate::worksheet::Worksheet;
@@ -145,7 +145,25 @@ impl Project {
         let n_rows = z_all.len();
         let fill = |v: &[f64]| -> Vec<f64> { (0..n_rows).map(|i| v.get(i).copied().unwrap_or(f64::NAN)).collect() };
         let (x_all, y_all) = (fill(&x_raw), fill(&y_raw));
-        let (first, last) = resolve_rows(request.rows, &z_col.short_name, &x_all, n_rows)?;
+        // The rows used. A row range is contiguous. An X range keeps every row whose X lies inside it:
+        // in XYZ data X cycles (once per Y), so the curve rule (the first unbroken run) would drop most
+        // of the points. The X-range choice for XYZ data is unmeasured in Origin.
+        let sel: Vec<usize> = match request.rows {
+            RowRange::XBetween(a, b) => {
+                let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+                let sel: Vec<usize> = (0..n_rows).filter(|&i| x_all[i] >= lo && x_all[i] <= hi).collect();
+                if sel.is_empty() {
+                    return Err(AnalysisError::NoRowsInXRange(z_col.short_name.clone(), lo, hi).into());
+                }
+                sel
+            }
+            rows => {
+                let (first, last) = resolve_rows(rows, &z_col.short_name, &x_all, n_rows)?;
+                (first..=last).collect()
+            }
+        };
+        let (first, last) = (sel[0], sel[sel.len() - 1]);
+        let pick = |v: &[f64]| -> Vec<f64> { sel.iter().map(|&i| v[i]).collect() };
         let z_index = sheet.column_index(z_id).expect("located here");
         let y_error = match request.weighting {
             FitWeighting::Instrumental | FitWeighting::Direct => {
@@ -157,13 +175,13 @@ impl Project {
                 let e = err_col
                     .numeric()
                     .ok_or_else(|| FitRequestError::ErrorColumnNotNumeric(err_col.short_name.clone()))?;
-                Some((first..=last).map(|i| e.get(i).copied().unwrap_or(f64::NAN)).collect::<Vec<f64>>())
+                Some(sel.iter().map(|&i| e.get(i).copied().unwrap_or(f64::NAN)).collect::<Vec<f64>>())
             }
             _ => None,
         };
         let data = FitData {
-            x: x_all[first..=last].to_vec(),
-            y: z_all[first..=last].to_vec(),
+            x: pick(&x_all),
+            y: pick(&z_all),
             y_error,
             x_error: None,
             weighting: request.weighting,
@@ -173,12 +191,14 @@ impl Project {
             scale_errors: request.scale_errors,
             algorithm: request.algorithm,
         };
-        let ys = y_all[first..=last].to_vec();
+        let ys = pick(&y_all);
         let source_label = format!("{}, {}, {}", column_label(x_col), column_label(y_col), column_label(z_col));
         let z_name = z_col.display_name().to_string();
         let (x_units, y_units, z_units) = (x_col.units.clone(), y_col.units.clone(), z_col.units.clone());
-        let rows_note = if first == 0 && last + 1 == n_rows {
+        let rows_note = if sel.len() == n_rows {
             format!("all {n_rows} rows")
+        } else if sel.len() != last + 1 - first {
+            format!("{} of {n_rows} rows (X range)", sel.len())
         } else {
             format!("{} to {}", first + 1, last + 1)
         };
@@ -234,7 +254,9 @@ impl Project {
         // ----- change the project ----------------------------------------------------------
         let align = |values: &[f64]| {
             let mut out = vec![f64::NAN; n_rows];
-            out[first..=last].copy_from_slice(values);
+            for (&i, v) in sel.iter().zip(values) {
+                out[i] = *v;
+            }
             out
         };
         let fitted_id = self.new_column_id();

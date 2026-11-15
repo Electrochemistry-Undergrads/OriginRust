@@ -59,6 +59,162 @@ fn add(h: &mut Harness<'static, SheafApp>, name: &str) {
     click(h, "Add");
 }
 
+fn select_with(h: &mut Harness<'static, SheafApp>, label: &str, modifiers: egui::Modifiers) {
+    pause(h);
+    let at = h.get_by_label(label).rect().center();
+    h.event(egui::Event::PointerMoved(at));
+    h.step();
+    for pressed in [true, false] {
+        h.input_mut().modifiers = modifiers;
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers });
+        h.step();
+    }
+    h.input_mut().modifiers = egui::Modifiers::NONE;
+    settle(h);
+}
+
+#[test]
+fn browser_shift_range_adds_individual_columns_or_one_block_without_editing_the_document() {
+    for block in [false, true] {
+        let (mut h, book) = fixture(&format!("goto-browser-shift-{block}"));
+        let before = project(&h).clone();
+        let revision = h.state().doc.revision();
+        ctrl(&mut h, egui::Key::G);
+        field(&mut h, "Go to Row", "0");
+        browser(&mut h);
+        click(&mut h, "Book1 / Sheet1 / B(Y): Shared current");
+        for _ in 0..2 {
+            h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::ArrowDown);
+            settle(&mut h);
+        }
+        assert!(!h.get_by_label("Add as One Block").accesskit_node().is_disabled());
+        click(&mut h, if block { "Add as One Block" } else { "Add" });
+        if block {
+            assert!(h.query_by_label("[Book1]Sheet1!B\"Shared current\":D\"Shared current\"").is_some());
+            assert!(h.query_by_label("[Book1]Sheet1!C\"Potential\"").is_none());
+        } else {
+            for reference in [
+                "[Book1]Sheet1!B\"Shared current\"",
+                "[Book1]Sheet1!C\"Potential\"",
+                "[Book1]Sheet1!D\"Shared current\"",
+            ] {
+                assert!(h.query_by_label(reference).is_some(), "{reference}");
+            }
+        }
+        click(&mut h, "OK");
+        let expected = if block {
+            "[Book1]Sheet1!B\"Shared current\":D\"Shared current\""
+        } else {
+            "[Book1]Sheet1!(B\"Shared current\",C\"Potential\",D\"Shared current\")"
+        };
+        assert_eq!(h.get_by_label("Go to Column").accesskit_node().value().as_deref(), Some(expected));
+        assert_eq!(original_cell(&h, book), Some((2, 6)));
+        click(&mut h, "OK");
+        assert_eq!(original_cell(&h, book), Some((3, 2)));
+        assert_eq!(project(&h), &before);
+        assert_eq!(h.state().doc.revision(), revision);
+    }
+}
+
+#[test]
+fn browser_ctrl_selection_requires_a_contiguous_same_sheet_block_and_toggles_columns() {
+    let (mut h, book) = fixture("goto-browser-ctrl");
+    let before = project(&h).clone();
+    ctrl(&mut h, egui::Key::G);
+    field(&mut h, "Go to Row", "0");
+    browser(&mut h);
+    click(&mut h, "Book1 / Sheet1 / A(X): Time");
+    select_with(&mut h, "Book1 / Sheet1 / C(Y): Potential", egui::Modifiers::CTRL);
+    assert!(h.get_by_label("Add as One Block").accesskit_node().is_disabled());
+    click(&mut h, "Add as One Block");
+    assert!(h.get_by_label("OK").accesskit_node().is_disabled());
+    click(&mut h, "Add");
+    assert!(h.query_by_label("[Book1]Sheet1!A\"Time\"").is_some());
+    assert!(h.query_by_label("[Book1]Sheet1!C\"Potential\"").is_some());
+    assert!(h.query_by_label("[Book1]Sheet1!B\"Shared current\"").is_none());
+    select_with(&mut h, "Book1 / Sheet1 / A(X): Time", egui::Modifiers::CTRL);
+    select_with(&mut h, "Book1 / Sheet1 / B(Y): Shared current", egui::Modifiers::CTRL);
+    assert!(!h.get_by_label("Add as One Block").accesskit_node().is_disabled());
+    click(&mut h, "Add as One Block");
+    assert!(h.query_by_label("[Book1]Sheet1!B\"Shared current\":C\"Potential\"").is_some());
+    click(&mut h, "Cancel");
+    assert_eq!(original_cell(&h, book), Some((2, 6)));
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn browser_select_all_adds_one_range_and_remove_deletes_the_entire_group() {
+    let (mut h, book) = fixture("goto-browser-all-remove");
+    let before = project(&h).clone();
+    ctrl(&mut h, egui::Key::G);
+    browser(&mut h);
+    click(&mut h, "Book1 / Sheet1 / A(X): Time");
+    h.key_press_modifiers(egui::Modifiers::CTRL, egui::Key::A);
+    settle(&mut h);
+    click(&mut h, "Add as One Block");
+    click(&mut h, "[Book1]Sheet1!A\"Time\":D\"Shared current\"");
+    click(&mut h, "Remove");
+    assert!(h.get_by_label("OK").accesskit_node().is_disabled());
+    assert!(h.query_by_label("[Book1]Sheet1!A\"Time\":D\"Shared current\"").is_none());
+    click(&mut h, "Cancel");
+    click(&mut h, "Cancel");
+    assert_eq!(original_cell(&h, book), Some((2, 6)));
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn browser_block_and_singleton_preserve_grouped_references_and_the_native_last_column_rule() {
+    for append in [false, true] {
+        let (mut h, book) = fixture(&format!("goto-browser-block-list-{append}"));
+        let before = project(&h).clone();
+        ctrl(&mut h, egui::Key::G);
+        field(&mut h, "Go to Row", "0");
+        browser(&mut h);
+        click(&mut h, "Book1 / Sheet1 / B(Y): Shared current");
+        select_with(&mut h, "Book1 / Sheet1 / C(Y): Potential", egui::Modifiers::SHIFT);
+        click(&mut h, "Add as One Block");
+        if append {
+            add(&mut h, "Book1 / Sheet1 / D(Y): Shared current");
+            assert!(h.query_by_label("[Book1]Sheet1!B\"Shared current\":C\"Potential\"").is_some());
+            assert!(h.query_by_label("[Book1]Sheet1!D\"Shared current\"").is_some());
+        }
+        click(&mut h, "OK");
+        let expected = if append {
+            "[Book1]Sheet1!(B\"Shared current\":C\"Potential\",D\"Shared current\")"
+        } else {
+            "[Book1]Sheet1!B\"Shared current\":C\"Potential\""
+        };
+        assert_eq!(h.get_by_label("Go to Column").accesskit_node().value().as_deref(), Some(expected));
+        click(&mut h, "OK");
+        assert_eq!(original_cell(&h, book), Some((3, 2)), "a B:C range still targets original D3");
+        assert_eq!(project(&h), &before);
+    }
+}
+
+#[test]
+fn browser_shift_click_across_books_cannot_be_added_as_a_block_and_scope_resets_selection() {
+    let (mut h, book) = fixture("goto-browser-mixed");
+    let before = project(&h).clone();
+    ctrl(&mut h, egui::Key::G);
+    browser(&mut h);
+    click(&mut h, "List Columns");
+    click(&mut h, "in Current Project");
+    click(&mut h, "Book1 / Sheet1 / D(Y): Shared current");
+    select_with(&mut h, "Book2 / Sheet1 / A(X): Other X", egui::Modifiers::SHIFT);
+    assert!(h.get_by_label("Add as One Block").accesskit_node().is_disabled());
+    click(&mut h, "Add");
+    assert!(h.query_by_label("[Book1]Sheet1!D\"Shared current\"").is_some());
+    assert!(h.query_by_label("[Book2]Sheet1!A\"Other X\"").is_some());
+    click(&mut h, "List Columns");
+    click(&mut h, "in Current Sheet");
+    assert!(h.get_by_label("Add").accesskit_node().is_disabled());
+    assert!(h.query_by_label("[Book2]Sheet1!A\"Other X\"").is_some(), "added ranges survive scope changes");
+    click(&mut h, "Cancel");
+    click(&mut h, "Cancel");
+    assert_eq!(original_cell(&h, book), Some((2, 6)));
+    assert_eq!(project(&h), &before);
+}
+
 #[test]
 fn column_browser_returns_a_qualified_duplicate_name_without_navigating_until_parent_ok() {
     let (mut h, book) = fixture("goto-browser-qualified");

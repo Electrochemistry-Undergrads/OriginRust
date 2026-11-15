@@ -951,8 +951,30 @@ unlisted windows belong to root. Added ranges survive scope changes. The browser
 Current Sheet each time; preferences are not saved. The parent remains open on browser Cancel
 or Escape. Five UI regressions cover return/apply, cross-book position mapping, Cancel/Escape,
 multiple ranges/Remove and edited/reset references. A fixture covers sheet/book/folder/recursive
-scopes, including unlisted root books. Exclude, top-table multiple selection/Add as One Block,
-and editing the lower row ranges remain unimplemented; the first two buttons stay disabled.
+scopes, including unlisted root books. Exclude and editing the lower row ranges remain
+unimplemented; Exclude stays disabled.
+
+The top-table selection follow-up (`re-workspace/scratch/t02-browser-selection/origin/` and
+`verified/`) has nine valid isolated Origin cases, including a final Current Sheet restore.
+Shift+Down extends B through D; ordinary Add appends B, C and D as three lower rows.
+Add as One Block instead appends one `[Book1]Sheet1!B"Shared current":D"Shared current"`
+range. Ctrl-selected adjacent B/C can form a block; noncontiguous A/C and a range crossing
+workbooks disable block add. Ctrl+A selects all four columns and can add one A:D block.
+Remove deletes the entire selected lower block; an empty list disables OK. A B:C block plus
+a separately added D remains two lower rows and transfers a parenthesized `(B:C,D)` reference;
+parent OK with Row 0 still selects original D3, including for B:C alone. Quoted long names
+remain on each endpoint. The initial noncontiguous case's programmatic click bypassed the
+disabled block button, so its activation/result are excluded; later probes check native
+enablement and skip disabled buttons. One composite capture failed to open the browser and
+is excluded; its fresh-instance retry supplies the valid block-plus-singleton observation.
+
+Sheaf now supports plain, Ctrl/Command and Shift row clicks, Shift+Up/Down and select-all
+while the top table has focus. Add preserves selected columns in table order; block add
+requires consecutive columns in one worksheet. Blocks remain single lower rows for Remove
+and reference transfer. Scope changes clear the top selection and preserve added ranges.
+Five additional UI regressions cover contiguous and noncontiguous selection, adjacent Ctrl
+selection, disabled block controls, select-all/group removal, mixed-workbook ranges, scope
+changes and block/list transfer. Navigation still waits for the parent, preserving data/history.
 
 Sheaf's Go To now follows the measured input order/focus, right-aligned OK/Cancel and optional-coordinate, zero/end,
 extension and clamping behavior. Its capacity remains data length plus 30 spare view rows;

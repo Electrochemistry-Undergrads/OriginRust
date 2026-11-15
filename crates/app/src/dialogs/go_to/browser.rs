@@ -88,8 +88,11 @@ pub(super) struct ColumnBrowser {
     book: WindowId,
     sheet: usize,
     scope: Scope,
-    selected: Option<Choice>,
-    added: Vec<Choice>,
+    selected: Vec<Choice>,
+    anchor: Option<Choice>,
+    cursor: Option<Choice>,
+    table_focus: Option<egui::Id>,
+    added: Vec<Vec<Choice>>,
     selected_range: Option<usize>,
     expanded: bool,
     first_frame: bool,
@@ -101,7 +104,10 @@ impl ColumnBrowser {
             book,
             sheet,
             scope: Scope::Sheet,
-            selected: None,
+            selected: Vec::new(),
+            anchor: None,
+            cursor: None,
+            table_focus: None,
             added: Vec::new(),
             selected_range: None,
             expanded: true,
@@ -136,23 +142,88 @@ impl ColumnBrowser {
             .collect()
     }
 
-    fn selection(&self, project: &Project) -> Option<(String, usize)> {
-        let entries = self.added.iter().map(|choice| choice.resolve(project)).collect::<Option<Vec<_>>>()?;
-        let first = entries.first()?;
-        if entries.len() == 1 {
-            return Some((first.reference(), first.index + 1));
+    fn select(&mut self, entries: &[Entry<'_>], index: usize, modifiers: egui::Modifiers) {
+        let choice = entries[index].choice;
+        let toggle = modifiers.command || modifiers.ctrl;
+        if modifiers.shift {
+            let anchor = self.anchor.and_then(|anchor| entries.iter().position(|entry| entry.choice == anchor));
+            let anchor = anchor.unwrap_or(index);
+            if !toggle {
+                self.selected.clear();
+            }
+            for entry in &entries[anchor.min(index)..=anchor.max(index)] {
+                if !self.selected.contains(&entry.choice) {
+                    self.selected.push(entry.choice);
+                }
+            }
+            self.anchor = Some(entries[anchor].choice);
+        } else {
+            if toggle {
+                if let Some(index) = self.selected.iter().position(|selected| *selected == choice) {
+                    self.selected.remove(index);
+                } else {
+                    self.selected.push(choice);
+                }
+            } else {
+                self.selected = vec![choice];
+            }
+            self.anchor = Some(choice);
         }
-        let reference = if entries
+        self.cursor = Some(choice);
+    }
+
+    fn range<'a>(choices: &[Choice], project: &'a Project) -> Option<Vec<Entry<'a>>> {
+        choices.iter().map(|choice| choice.resolve(project)).collect()
+    }
+
+    fn local_reference(entries: &[Entry<'_>]) -> Option<String> {
+        let first = entries.first()?;
+        let start = super::column_reference(first.column);
+        Some(if entries.len() == 1 {
+            start
+        } else {
+            format!("{start}:{}", super::column_reference(entries.last()?.column))
+        })
+    }
+
+    fn range_reference(choices: &[Choice], project: &Project) -> Option<String> {
+        let entries = Self::range(choices, project)?;
+        let first = entries.first()?;
+        Some(if entries.len() == 1 {
+            first.reference()
+        } else {
+            format!("{}{}", first.prefix(), Self::local_reference(&entries)?)
+        })
+    }
+
+    fn selection(&self, project: &Project) -> Option<(String, usize)> {
+        let ranges = self.added.iter().map(|choices| Self::range(choices, project)).collect::<Option<Vec<_>>>()?;
+        let first = ranges.first()?.first()?;
+        if ranges.len() == 1 {
+            return Some((
+                Self::range_reference(&self.added[0], project)?,
+                if ranges[0].len() == 1 { first.index + 1 } else { 0 },
+            ));
+        }
+        let reference = if ranges
             .iter()
+            .flatten()
             .all(|entry| entry.choice.book == first.choice.book && entry.choice.sheet == first.choice.sheet)
         {
             format!(
                 "{}({})",
                 first.prefix(),
-                entries.iter().map(|entry| super::column_reference(entry.column)).collect::<Vec<_>>().join(",")
+                ranges.iter().map(|entries| Self::local_reference(entries)).collect::<Option<Vec<_>>>()?.join(",")
             )
         } else {
-            format!("({})", entries.iter().map(Entry::reference).collect::<Vec<_>>().join(","))
+            format!(
+                "({})",
+                self.added
+                    .iter()
+                    .map(|choices| Self::range_reference(choices, project))
+                    .collect::<Option<Vec<_>>>()?
+                    .join(",")
+            )
         };
         Some((reference, 0))
     }
@@ -180,20 +251,50 @@ impl ColumnBrowser {
                     self.first_frame = false;
                 }
                 if previous != self.scope {
-                    self.selected = None;
+                    self.selected.clear();
+                    self.anchor = None;
+                    self.cursor = None;
+                    self.table_focus = None;
                 }
                 ui.add_enabled(false, egui::Button::new("Exclude"));
             });
             let entries = self.entries(project);
+            let mut reveal = None;
+            if !popup_was_open
+                && !egui::Popup::is_any_open(ctx)
+                && self.table_focus.is_some_and(|id| ctx.memory(|memory| memory.has_focus(id)))
+            {
+                let modifiers = ctx.input(|input| input.modifiers);
+                if (modifiers.command || modifiers.ctrl)
+                    && ctx.input_mut(|input| input.consume_key(modifiers, egui::Key::A))
+                {
+                    self.selected = entries.iter().map(|entry| entry.choice).collect();
+                }
+                for (key, down) in [(egui::Key::ArrowDown, true), (egui::Key::ArrowUp, false)] {
+                    if !entries.is_empty() && ctx.input_mut(|input| input.consume_key(modifiers, key)) {
+                        let index = self
+                            .cursor
+                            .and_then(|cursor| entries.iter().position(|entry| entry.choice == cursor))
+                            .unwrap_or(0);
+                        let index = if down { (index + 1).min(entries.len() - 1) } else { index.saturating_sub(1) };
+                        self.select(&entries, index, modifiers);
+                        reveal = Some(index);
+                    }
+                }
+            }
             egui::ScrollArea::horizontal().id_salt("goto_browser_columns").show(ui, |ui| {
                 // Leave the scroll bar below every row, rather than over the final row's hit area.
                 ui.set_min_height(270.0);
-                TableBuilder::new(ui)
+                let mut table = TableBuilder::new(ui)
                     .striped(true)
                     .sense(egui::Sense::click())
                     .columns(TableColumn::auto().at_least(60.0), 10)
                     .min_scrolled_height(215.0)
-                    .max_scroll_height(235.0)
+                    .max_scroll_height(235.0);
+                if let Some(index) = reveal {
+                    table = table.scroll_to_row(index, None);
+                }
+                table
                     .header(22.0, |mut header| {
                         for label in [
                             "Sheet",
@@ -214,15 +315,22 @@ impl ColumnBrowser {
                     })
                     .body(|body| {
                         body.rows(20.0, entries.len(), |mut row| {
-                            let entry = &entries[row.index()];
-                            let selected = self.selected == Some(entry.choice);
+                            let index = row.index();
+                            let entry = &entries[index];
+                            let selected = self.selected.contains(&entry.choice);
                             row.set_selected(selected);
                             let mut clicked = false;
+                            let mut focus = None;
                             row.col(|ui| {
                                 let response = ui.selectable_label(selected, &entry.sheet.name);
                                 let _ =
                                     ctx.accesskit_node_builder(response.id, |node| node.set_label(entry.row_label()));
                                 clicked = response.clicked();
+                                focus = Some(response.id);
+                                if reveal == Some(index) {
+                                    response.request_focus();
+                                    self.table_focus = Some(response.id);
+                                }
                             });
                             for value in [
                                 entry.book.long_name.clone(),
@@ -240,22 +348,36 @@ impl ColumnBrowser {
                                 });
                             }
                             if clicked || row.response().clicked() {
-                                self.selected = Some(entry.choice);
+                                self.select(&entries, index, ctx.input(|input| input.modifiers));
+                                if let Some(id) = focus {
+                                    ctx.memory_mut(|memory| memory.request_focus(id));
+                                    self.table_focus = Some(id);
+                                }
                             }
                         });
                     });
             });
+            // Arrow keys extend/move this table's selection, rather than traversing other widgets.
+            if let Some(id) = self.table_focus {
+                ctx.memory_mut(|memory| {
+                    memory.set_focus_lock_filter(id, egui::EventFilter { vertical_arrows: true, ..Default::default() })
+                });
+            }
             ui.horizontal(|ui| {
                 ui.weak("Column Selected");
-                ui.add_enabled(false, egui::Button::new("Add as One Block"));
-                let add_response = ui.add_enabled(
-                    self.selected.and_then(|choice| choice.resolve(project)).is_some(),
-                    egui::Button::new("Add"),
-                );
-                if add_response.clicked()
-                    && let Some(choice) = self.selected
-                {
-                    self.added.push(choice);
+                let selected = entries.iter().filter(|entry| self.selected.contains(&entry.choice)).collect::<Vec<_>>();
+                let block = selected.len() > 1
+                    && selected.windows(2).all(|pair| {
+                        pair[0].choice.book == pair[1].choice.book
+                            && pair[0].choice.sheet == pair[1].choice.sheet
+                            && pair[0].index + 1 == pair[1].index
+                    });
+                if ui.add_enabled(block, egui::Button::new("Add as One Block")).clicked() {
+                    self.added.push(selected.iter().map(|entry| entry.choice).collect());
+                }
+                let add_response = ui.add_enabled(!selected.is_empty(), egui::Button::new("Add"));
+                if add_response.clicked() {
+                    self.added.extend(selected.iter().map(|entry| vec![entry.choice]));
                 }
                 if ui.add_enabled(self.selected_range.is_some(), egui::Button::new("Remove")).clicked()
                     && let Some(index) = self.selected_range.take().filter(|index| *index < self.added.len())
@@ -289,10 +411,9 @@ impl ColumnBrowser {
                             ui.strong("Range");
                             ui.strong("Rows");
                             ui.end_row();
-                            for (index, choice) in self.added.iter().enumerate() {
-                                let reference = choice
-                                    .resolve(project)
-                                    .map_or_else(|| "Unavailable column".into(), |entry| entry.reference());
+                            for (index, choices) in self.added.iter().enumerate() {
+                                let reference = Self::range_reference(choices, project)
+                                    .unwrap_or_else(|| "Unavailable column".into());
                                 if ui.selectable_label(self.selected_range == Some(index), reference).clicked() {
                                     self.selected_range = Some(index);
                                 }

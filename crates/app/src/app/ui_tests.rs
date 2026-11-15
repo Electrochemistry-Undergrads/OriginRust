@@ -9,6 +9,8 @@ use egui_kittest::kittest::{By, NodeT, Queryable};
 use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
+mod skip_points;
+
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-{tag}-{}", std::process::id()));

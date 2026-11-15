@@ -1726,7 +1726,7 @@ a double-click on the graph; pictures and control lists in `re-workspace/scratch
   -1 up to 3 and back on a -2 to 4 axis was filled down to -2). The fill starts in the line's colour,
   "Follow line transparency" is ticked, and the legend sample becomes a filled box.
 - Drop Lines tab: Horizontal and Vertical check boxes (both off), each with Style (Solid), Width (0.5)
-  and Color (Auto, the plot's colour); Skip Points.
+  and Color (Auto, the plot's colour); Skip Points (the display frequency described below).
 - Label tab: Enable (off), Font "Default: Arial", Size 22, Color Black, White Out, bold/italic/
   underline, Frame (None, Box, Shadow), Margin, Rotate 0, Horizontal and Vertical Offset 0, Position
   Right (Center, Left, Right, Above, Below), Label Form Y (X, Y, Row Indices, (X,Y), Custom, a
@@ -1740,15 +1740,39 @@ Sheaf (`Plot::decor`, `Layer::background`, drawn in `crates/plot/src/plots.rs` a
 Fill Area Under Curve in the Normal mode only, with its own colour (Origin puts the colour on the
 Pattern tab; Sheaf shows it under the check box) and the alpha of that colour as transparency; the
 line's Transparency slider sets the alpha of the line colour; both drop lines with style, width and
-an Auto or chosen colour, drawn from each point to the left edge and to the bottom edge of the frame;
-data labels with font, size, colour, rotation, position and the forms X, Y, Row Indices and (X,Y),
-written a quarter of the font size from the point, numbers as the worksheet shows them (up to 15
+an Auto or chosen colour, drawn from each point to the left edge and to the bottom edge of the frame.
+
+Data Points Display Control on Drop Lines now offers Skip Points and a frequency. This uses the
+existing `SymbolStyle::every` (the former Symbol tab's Show every field), so old projects keep their
+stored frequency. It selects the first of every n points for drop lines, symbols (including
+bubbles/colour mapped symbols), X/Y error bars and data labels. Source row indices remain intact;
+the plotted row range anchors the phase. Mask overlays do not restore skipped symbols. Zero and
+one mean no skipping; an empty range draws nothing. Bars and areas do not offer the control and
+keep every point. The full-resolution connecting line, underlying data and automatic axes are
+unchanged. Worksheet filters retain the existing compacted display order; their interaction with
+the frequency has not been measured in Origin.
+
+Measured in Origin 2016 on 2026-11-14 through `set %C -skip n` and PNG exports of an eleven-point
+scatter plot: n=0 and 1 show all eleven points, n=2 shows rows 1,3,5,7,9,11, n=3 shows 1,4,7,10,
+and n=20 shows only row 1. A plot limited to rows 3..10 with n=3 shows rows 3,6,9. A missing Y at
+row 4 does not shift the phase: n=3 shows rows 1,7,10 (`missing.lines.txt`, `missing4_verified.png`). Origin 2016
+does **not** force the last point to appear, unlike newer versions described in the
+[current display-control documentation](https://docs.originlab.com/origin-help/pd-dialog-plotlevel-display-tab/).
+Raw inputs/outputs and exported pictures are in `re-workspace/scratch/t13-skip-points/png2.*` and
+`skip*.png`; the original dialog controls (unchecked Skip Points and No Line Break for Skipped
+Point(s)) are in `re-workspace/scratch/t13/open3/droplines.controls.txt`. Native and `.opj` companion files
+preserve the frequency. `.opj` alone warns and shows every point, including for line plots with
+skipped errors but no symbols. The No Line Break / Gap to Symbol interaction remains unimplemented;
+Sheaf keeps its existing continuous full-data line. Smart Skip is not offered.
+
+Data labels have font, size, colour, rotation, position and the forms X, Y, Row Indices and (X,Y).
+They are written a quarter of the font size from the point, numbers as the worksheet shows them (up to 15
 significant digits); the layer Background colour fills the frame behind the grid. Sheaf's own additions
 beyond what was measured (hatch and gradient fills, bar width, label column, rows, decimals and offsets,
 background gradient and border, X/Y axes switches, page border, layer icons, comments, subgroups) are in
 section 18.6. Not done: the other fill modes, label frames, white out, custom forms and display formats
-beyond decimals, leader lines, skip points. The `.opj` writer does not store any of these; the save names
-them and the companion file keeps them.
+beyond decimals, leader lines, the No Line Break / Gap to Symbol interaction. The `.opj` writer
+does not store these settings; the save names them and the companion file keeps them.
 
 ### 18.1 Group tab (measured 2026-11-13)
 
@@ -1919,7 +1943,7 @@ project file only when they differ from the default (a file written before loads
 
 ### 18.7 Not done
 
-Speed mode and X:Y ratio of Size/Speed, Skip Points of Drop Lines, "White Out", frame, margin, attach-to,
+Speed mode and X:Y ratio of Size/Speed, No Line Break for Skipped Point(s) / Gap to Symbol, "White Out", frame, margin, attach-to,
 automatic overlap avoidance and leader lines of Label, X and Y multiplier of Offset, the other fill modes and
 Origin's list of fill patterns, subgrouping By Column Label, Binned increments, several groups in one layer,
 print margins, writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).

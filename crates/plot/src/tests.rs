@@ -322,7 +322,7 @@ fn symbols_every_nth_and_error_bars() {
     // Error bars first, then symbols (no line for a scatter plot).
     assert_eq!(plots.len(), 2);
     let bars = plots[0].attribute("d").unwrap();
-    assert_eq!(bars.matches('M').count(), 3 * 10);
+    assert_eq!(bars.matches('M').count(), 3 * 4, "errors follow the same selected points as symbols");
     assert_eq!(plots[0].attribute("stroke-width"), Some("0.5")); // half the line width, at least 0.5 pt
     let symbols = plots[1].attribute("d").unwrap();
     assert_eq!(symbols.matches('Z').count(), 4, "points 0, 3, 6, 9");

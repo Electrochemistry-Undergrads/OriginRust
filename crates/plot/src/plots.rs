@@ -144,7 +144,7 @@ fn draw_drop_lines(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     };
     let drops = &pd.plot.decor.drop;
     let (mut h, mut v) = (String::new(), String::new());
-    for i in pd.rows() {
+    for i in pd.point_rows() {
         if let Some((x, y)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
             if drops.horizontal.on {
                 move_to(&mut h, f.x, y);
@@ -178,8 +178,7 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let gap = size * 0.25;
     // From the baseline to the middle of a line of digits.
     let mid = size * 0.35;
-    let last = if pd.closing.is_some() { pd.end.saturating_sub(1) } else { pd.end };
-    for i in pd.rows().take_while(|&i| i < last) {
+    for i in pd.point_rows() {
         let Some((px, py)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
         let (xv, yv) = (pd.cat_at(i) - pd.ox, pd.y.get(i).copied().unwrap_or(f64::NAN));
         if !labels.labels_row(i) {
@@ -226,6 +225,8 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
 fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     use sheaf_core::Color;
     let Some(mask) = pd.mask else { return };
+    let sampled_masks = (pd.plot.kind.has_symbols() && pd.point_interval() > 1)
+        .then(|| pd.point_rows().filter(|i| mask.contains(i)).collect::<std::collections::BTreeSet<_>>());
     let page = |i: usize| -> Option<(f64, f64)> {
         if i < pd.start || i >= pd.end || !pd.row_shown(i) {
             return None;
@@ -248,7 +249,7 @@ fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
                 }
             }
         }
-        if pd.plot.kind.has_symbols() {
+        if pd.plot.kind.has_symbols() && sampled_masks.as_ref().is_none_or(|rows| rows.contains(&i)) {
             symbol_path(&mut symbols, pd.plot.symbol.shape, p.0, p.1, pd.plot.symbol.size_pt);
         }
     }
@@ -849,7 +850,7 @@ fn draw_error_bars(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     };
     let cap_low = dir != ErrorDirection::Plus;
     let cap_high = dir != ErrorDirection::Minus;
-    for i in pd.rows() {
+    for i in pd.point_rows() {
         if let Some((below, above)) = pd.reach(pd.err_at(i), dir) {
             let (cat, val) = (pd.cat_at(i) + shift, pd.val_at(i));
             let place = |v: f64| {
@@ -915,7 +916,7 @@ fn draw_varied_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry)
     let sym = &pd.plot.symbol;
     let size_range = pd.size_z.map(|z| z_range(z, pd));
     let color_range = pd.color_z.map(|z| z_range(z, pd));
-    for i in pd.rows() {
+    for i in pd.point_rows() {
         let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
         let mut style = sym.clone();
         if let (Some(z), Some(range)) = (pd.size_z, size_range) {
@@ -946,14 +947,14 @@ fn draw_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         return draw_varied_symbols(out, pd, geom);
     }
     let sym = &pd.plot.symbol;
-    let every = sym.every.max(1) as usize;
+    let every = pd.point_interval();
     let mut d = String::new();
     // With very many points, symbols that would sit on top of an already drawn
     // one (same small cell of the page) are left out; the picture is the same.
     let end = pd.end - usize::from(pd.closing.is_some());
     let thin = (end - pd.start) / every > SYMBOL_THIN_ABOVE;
     let mut taken: std::collections::HashSet<(i64, i64)> = std::collections::HashSet::new();
-    for i in pd.rows().take_while(|&i| i < end).step_by(every) {
+    for i in pd.point_rows() {
         let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
         if !near_frame(geom, p, sym.size_pt + sym.edge_width_pt) {
             continue;

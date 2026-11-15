@@ -373,8 +373,8 @@ impl Writer {
             if p.rows.is_some() {
                 notes.push("a plot's row range was not written; all rows of its columns are plotted".into());
             }
-            if p.symbol.every != 1 && p.kind.has_symbols() {
-                notes.push("symbols on every n-th point only were not written; every point has a symbol".into());
+            if p.symbol.every > 1 && p.kind.supports_skip_points() {
+                notes.push("Skip Points (symbols, drop lines, error bars and labels on every n-th point only) was not written; the companion file keeps it".into());
             }
             if !p.decor.is_default() {
                 notes.push(

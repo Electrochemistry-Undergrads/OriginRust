@@ -436,7 +436,8 @@ fn plot_tab_body(
             }
         }
         DetailTab::DropLines => {
-            let drop = &mut graph.layers[l].plots[p].decor.drop;
+            let plot = &mut graph.layers[l].plots[p];
+            let drop = &mut plot.decor.drop;
             grid(ui, "plot_drop", |ui| {
                 ui.label("");
                 ui.checkbox(&mut drop.horizontal.on, "Horizontal");
@@ -457,6 +458,24 @@ fn plot_tab_body(
                     ui.add_enabled_ui(d.on, |ui| auto_color_ui(ui, &mut d.color));
                 }
                 ui.end_row();
+            });
+            ui.group(|ui| {
+                ui.label("Data Points Display Control");
+                ui.horizontal(|ui| {
+                    let mut skipping = plot.symbol.every > 1;
+                    if ui.checkbox(&mut skipping, "Skip Points").changed() {
+                        plot.symbol.every = if skipping { 2 } else { 1 };
+                    }
+                    let label = ui.label("Frequency");
+                    let mut frequency = plot.symbol.every.max(2);
+                    if ui
+                        .add_enabled(skipping, DragValue::new(&mut frequency).range(2..=u32::MAX))
+                        .labelled_by(label.id)
+                        .changed()
+                    {
+                        plot.symbol.every = frequency;
+                    }
+                });
             });
         }
         DetailTab::Label => {
@@ -524,9 +543,6 @@ fn plot_tab_body(
                     plot.line.color = plot.symbol.color;
                     plot.auto_color = false;
                 }
-                ui.end_row();
-                ui.label("Show every");
-                ui.add(DragValue::new(&mut plot.symbol.every).range(1..=100000).suffix(" th point"));
                 ui.end_row();
             });
         }

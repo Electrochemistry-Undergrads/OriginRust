@@ -44,6 +44,8 @@ mod legend_tests;
 #[cfg(test)]
 mod margin_tests;
 #[cfg(test)]
+mod skip_tests;
+#[cfg(test)]
 mod tests;
 
 pub use eps::EpsOutput;

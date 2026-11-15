@@ -1104,7 +1104,8 @@ pub struct SymbolStyle {
     /// Filled with the color, or drawn as an outline.
     pub filled: bool,
     pub edge_width_pt: f64,
-    /// Draw a symbol only on every n-th point (1 = every point).
+    /// Drop Lines > Skip Points: draw point decorations (symbols, drop lines, errors and labels)
+    /// on the first of every n source points in the plot range (0 or 1 = every point).
     #[serde(default = "one")]
     pub every: u32,
 }
@@ -1170,6 +1171,11 @@ pub enum PlotKind {
 }
 
 impl PlotKind {
+    /// Kinds whose Drop Lines tab offers Skip Points. Area and bar plots keep every point.
+    pub fn supports_skip_points(&self) -> bool {
+        matches!(self, PlotKind::Line | PlotKind::Scatter | PlotKind::LineSymbol)
+    }
+
     pub fn has_line(&self) -> bool {
         matches!(self, PlotKind::Line | PlotKind::LineSymbol) || self.is_area()
     }

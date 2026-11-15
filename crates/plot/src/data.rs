@@ -153,6 +153,19 @@ impl PlotData<'_> {
         (self.start..self.end).filter(|&r| self.row_shown(r))
     }
 
+    /// Display frequency for point decorations. Lines, ranges and analysis still read every row.
+    pub fn point_interval(&self) -> usize {
+        if self.plot.kind.supports_skip_points() { self.plot.symbol.every.max(1) as usize } else { 1 }
+    }
+
+    /// Points selected by Drop Lines > Skip Points, retaining original worksheet row indices.
+    /// Missing values count toward the frequency; filtered rows retain the existing compacted
+    /// display order. A synthetic radar closing point has no extra symbol, error or label.
+    pub fn point_rows(&self) -> impl Iterator<Item = usize> + Clone + '_ {
+        let end = self.end - usize::from(self.closing.is_some());
+        self.rows().take_while(move |&row| row < end).step_by(self.point_interval())
+    }
+
     fn visible_values(&self) -> Cow<'_, [f64]> {
         if self.filters.is_empty() {
             Cow::Borrowed(&self.y[self.start..self.end])

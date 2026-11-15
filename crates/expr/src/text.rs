@@ -129,7 +129,11 @@ pub(crate) fn apply(f: StrFn, args: Vec<Value>) -> Value {
         }
         StrFn::Value => match &args[0] {
             Value::Num(x) => Value::Num(*x),
-            Value::Text(s) => Value::Num(s.trim().parse::<f64>().ok().filter(|v| v.is_finite()).unwrap_or(NA)),
+            Value::Text(s) => Value::Num(if s.is_empty() {
+                0.0
+            } else {
+                s.trim().parse::<f64>().ok().filter(|v| v.is_finite()).unwrap_or(NA)
+            }),
         },
         _ => {
             let mut it = args.into_iter();

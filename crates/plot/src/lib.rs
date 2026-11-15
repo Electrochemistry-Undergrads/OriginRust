@@ -20,6 +20,7 @@ mod layout;
 mod legend;
 mod margin;
 pub mod markup;
+pub(crate) mod trend;
 mod multipage;
 mod pie;
 mod plots;
@@ -70,6 +71,8 @@ mod skip_tests;
 mod sort_x_tests;
 #[cfg(test)]
 mod symbol_gap_tests;
+#[cfg(test)]
+mod trend_tests;
 #[cfg(test)]
 mod symbol_line_order_tests;
 #[cfg(test)]

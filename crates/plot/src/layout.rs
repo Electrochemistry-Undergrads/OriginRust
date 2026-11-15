@@ -656,6 +656,9 @@ fn layer_scene(
             }
         }
     }
+    if waterfall.is_none() {
+        crate::trend::draw(&mut scene.plots, layer, drawn, geom, m);
+    }
     // Grid on Top of Data: the grid lines (not the background) are drawn after the plots.
     if layer.display.grid_on_top {
         let keep = background_items.min(scene.grid.len());

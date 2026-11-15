@@ -1590,6 +1590,56 @@ pub struct PlotDecor {
     /// The text written next to each point.
     #[serde(default, skip_serializing_if = "DataLabels::is_default")]
     pub labels: DataLabels,
+    /// Fitted curves and moving averages drawn over the plot (graphing spec 18.11), in the order
+    /// added; each is recomputed from the plotted data when drawn.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trendlines: Vec<Trendline>,
+}
+
+pub use sheaf_calc::trend::TrendKind;
+
+/// One on-graph trendline of a plot (Origin 2025b's Add Trend Line, graphing spec 18.11).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Trendline {
+    pub kind: TrendKind,
+    /// Write the fitted equation (not for a moving average).
+    #[serde(default = "yes")]
+    pub show_equation: bool,
+    /// Write R-squared (not for a moving average).
+    #[serde(default = "yes")]
+    pub show_r2: bool,
+    /// `None` is Auto: the plot's colour.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Color>,
+    #[serde(default = "Trendline::default_width")]
+    pub width_pt: f64,
+    #[serde(default)]
+    pub dash: Dash,
+    /// Moves the label from its default place (points; +x right, +y down).
+    #[serde(default, skip_serializing_if = "is_zero_pair")]
+    pub label_offset_pt: (f64, f64),
+}
+
+fn is_zero_pair(v: &(f64, f64)) -> bool {
+    *v == (0.0, 0.0)
+}
+
+impl Trendline {
+    fn default_width() -> f64 {
+        1.5
+    }
+
+    pub fn new(kind: TrendKind) -> Self {
+        Trendline {
+            kind,
+            show_equation: true,
+            show_r2: true,
+            color: None,
+            width_pt: Self::default_width(),
+            dash: Dash::Solid,
+            label_offset_pt: (0.0, 0.0),
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -2865,5 +2915,29 @@ mod sort_x_tests {
         let text = serde_json::to_string(&line).unwrap();
         assert!(text.contains("\"sort_x\":true"));
         assert!(serde_json::from_str::<LineStyle>(&text).unwrap().sort_x);
+    }
+}
+
+#[cfg(test)]
+mod trendline_tests {
+    use super::*;
+
+    #[test]
+    fn trendlines_are_skipped_when_empty_and_round_trip() {
+        let mut decor = PlotDecor::default();
+        assert!(!serde_json::to_string(&decor).unwrap().contains("trendlines"));
+        assert!(decor.is_default());
+        let mut t = Trendline::new(TrendKind::Polynomial { order: 3 });
+        t.color = Some(Color::BLACK);
+        t.label_offset_pt = (4.0, -2.0);
+        decor.trendlines.push(t.clone());
+        decor.trendlines.push(Trendline::new(TrendKind::MovingAverage { window: 5 }));
+        assert!(!decor.is_default());
+        let text = serde_json::to_string(&decor).unwrap();
+        let back: PlotDecor = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.trendlines, decor.trendlines);
+        // A minimal record reads with the defaults.
+        let old: Trendline = serde_json::from_str(r#"{"kind":"linear"}"#).unwrap();
+        assert_eq!(old, Trendline::new(TrendKind::Linear));
     }
 }

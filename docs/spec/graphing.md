@@ -1941,8 +1941,40 @@ Raw inputs/outputs and exported pictures are in `re-workspace/scratch/t13-skip-p
 `skip*.png`; the original dialog controls (unchecked Skip Points and No Line Break for Skipped
 Point(s)) are in `re-workspace/scratch/t13/open3/droplines.controls.txt`. Native and `.opj` companion files
 preserve the frequency. `.opj` alone warns and shows every point, including for line plots with
-skipped errors but no symbols. The No Line Break / Gap to Symbol interaction remains unimplemented;
-Sheaf keeps its existing continuous full-data line. Smart Skip is not offered.
+skipped errors but no symbols. The symbol-gap interaction is described below. Smart Skip is not offered.
+
+Line + Symbol now offers **Gap to Symbol** on Line and **No Line Break for Skipped Point(s)**
+under Drop Lines. Both start unchecked in Origin 2016. No Line Break is enabled only when Gap to
+Symbol and Skip Points are enabled. With Gap to Symbol checked, the connecting line has clearance
+around every data point, including points whose symbols are skipped. Checking No Line Break keeps
+the line continuous at those skipped positions; gaps remain around displayed markers. The line
+still follows all source values, including skipped peaks and the final point without a marker;
+missing data retains its existing break. Other plot kinds ignore these saved switches.
+
+Reference: Origin 2016 GUI controls and 900-pixel PNG exports in
+`re-workspace/scratch/t13-symbol-line-gaps/`: eleven horizontal points, solid blue 20 pt square
+markers, red 3 pt line, frequency 3. `gaps_skip3.png` has ten short red fragments between the eleven
+positions; `gaps_no_break.png` instead has long continuous fragments between markers at rows
+1,4,7,10, with the line continuing to row 11. These observations agree with the published
+[Line tab](https://docs.originlab.com/origin-help/pd-dialog-line-tab/) and
+[display controls](https://docs.originlab.com/origin-help/pd-dialog-plotlevel-display-tab/).
+`gaps_zigzag.png` retains all skipped peaks. A corrected three-row diagonal control at
+(2,0.25), (6,1), (10,1.75), `clean_square.png` and `clean_circle.png`, changes the marker shape
+at the same nominal size without changing any of the 2,031 red line pixels in the plot frame.
+This supports using circular holes independent of marker shape. The earlier diagonal circle
+capture failed to activate Gap to Symbol and is excluded; the earlier square capture had extra
+rows, replaced by the verified three-row control.
+
+Sheaf removes line geometry rather than painting an opaque cover, so backgrounds, grids and fills
+remain visible through gaps, and picking uses the broken path. Mask overlays retain the same
+holes. The shared scene carries the gaps through screen, raster and vector exports. The current
+clearance uses a fixed 30% of the nominal symbol diameter, consistent with the horizontal exports.
+Origin's global symbol-diameter preference is described under
+[Options > Graph](https://docs.originlab.com/origin-help/options-dialog-graph-tab/); changing that
+global preference is not offered. Exact clearance for other preference values and unusual
+connector/marker styles is not measured. Draw Line in Front/Behind is not offered; the existing draw
+order is behind symbols, matching Origin's measured default. Native and companion saves retain
+both switches; `.opj` alone warns that symbol/line gaps were omitted.
 
 Data labels have font, size, colour, rotation, position and the forms X, Y, Row Indices and (X,Y).
 They are written a quarter of the font size from the point, numbers as the worksheet shows them (up to 15
@@ -1993,7 +2025,7 @@ The layer Background colour fills the frame behind the grid. Sheaf's own additio
 beyond what was measured (hatch and gradient fills, bar width, label column, rows, decimals and offsets,
 background gradient and border, X/Y axes switches, page border, layer icons, comments, subgroups) are in
 section 18.6. Not done: the other fill modes, custom forms and display formats
-beyond decimals, leader lines, the No Line Break / Gap to Symbol interaction. The `.opj` writer
+beyond decimals and leader lines. The `.opj` writer
 does not store these settings; the save names them and the companion file keeps them.
 
 ### 18.1 Group tab (measured 2026-11-13)
@@ -2184,7 +2216,7 @@ project file only when they differ from the default (a file written before loads
 
 ### 18.7 Not done
 
-Speed mode and X:Y ratio of Size/Speed, No Line Break for Skipped Point(s) / Gap to Symbol, attach-to,
+Speed mode and X:Y ratio of Size/Speed, attach-to,
 automatic overlap avoidance and leader lines of Label, the other fill modes and
 Origin's list of fill patterns, subgrouping By Column Label, Binned increments, several groups in one layer,
 writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).

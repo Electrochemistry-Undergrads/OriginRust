@@ -323,6 +323,8 @@ fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     };
     let mut lines = String::new();
     let mut symbols = String::new();
+    let line = line_stroke(&pd.plot.line);
+    let gaps = symbol_line_gaps(pd, geom, &line);
     for &i in mask.range(pd.start..pd.end - usize::from(pd.closing.is_some())) {
         let Some(p) = page(i) else { continue };
         // The first point of a radar polygon is also the end of the closing segment.
@@ -332,8 +334,12 @@ fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
             let next = (i + 1..pd.end).find(|&r| pd.row_shown(r));
             for j in [previous, next].into_iter().flatten().chain(wrap) {
                 if let Some(q) = page(j) {
-                    move_to(&mut lines, q.0, q.1);
-                    line_to(&mut lines, p.0, p.1);
+                    if let Some(gaps) = &gaps {
+                        gaps.write_polyline(&[q, p], &mut lines);
+                    } else {
+                        move_to(&mut lines, q.0, q.1);
+                        line_to(&mut lines, p.0, p.1);
+                    }
                 }
             }
         }
@@ -342,7 +348,6 @@ fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         }
     }
     if !lines.is_empty() {
-        let line = crate::plots::line_stroke(&pd.plot.line);
         out.push(Item::Path { d: lines, fill: None, stroke: Some(Stroke { color: Color::RED, ..line }) });
     }
     if !symbols.is_empty() {
@@ -462,8 +467,24 @@ fn draw_area(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     }
 }
 
+fn symbol_line_gaps(pd: &PlotData, geom: &LayerGeometry, stroke: &Stroke) -> Option<crate::symbol_gaps::Gaps> {
+    let interface = pd.plot.decor.symbol_line;
+    let size = pd.plot.symbol.size_pt;
+    if pd.plot.kind != PlotKind::LineSymbol || !interface.gap_to_symbol || !(size.is_finite() && size > 0.0) {
+        return None;
+    }
+    // Use 30% symbol-diameter clearance, matching the measured Origin exports.
+    // Keep it beyond the symbol's half-size, including round stroke end caps.
+    let cap = if stroke.cap == Cap::Round { stroke.width.max(0.0) / 2.0 } else { 0.0 };
+    let radius = size * (0.5 + 0.3) + cap;
+    let rows: Box<dyn Iterator<Item = usize> + '_> =
+        if interface.no_break_skipped { Box::new(pd.point_rows()) } else { Box::new(pd.rows()) };
+    crate::symbol_gaps::Gaps::new(rows.filter_map(|i| geom.checked_data_to_page(pd.x_at(i), pd.y_at(i))), radius)
+}
+
 fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let stroke = line_stroke(&pd.plot.line);
+    let gaps = symbol_line_gaps(pd, geom, &stroke);
     let connect = match pd.plot.line.connect {
         Connect::Spline if !spline_applies(pd) => Connect::Straight,
         c => c,
@@ -477,7 +498,14 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         if piece.len() >= 2 {
             let mut d = String::with_capacity(piece.len() * 12);
             polyline_path(&mut d, piece, connect);
-            out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
+            if let Some(gaps) = &gaps {
+                let points = crate::hit::path_points(&d);
+                d.clear();
+                gaps.write_polyline(&points, &mut d);
+            }
+            if !d.is_empty() {
+                out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
+            }
         }
         piece.clear();
     };

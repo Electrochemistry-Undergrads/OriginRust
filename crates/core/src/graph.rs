@@ -759,6 +759,7 @@ impl Layer {
                 q.symbol.filled = src.symbol.filled;
             }
             q.decor.drop = src.decor.drop.clone();
+            q.decor.symbol_line = src.decor.symbol_line;
             q.decor.labels = src.decor.labels.clone();
             q.decor.fill_under = src.decor.fill_under.map(|_| q.line.color);
             if same_color {
@@ -1345,6 +1346,9 @@ pub struct Plot {
 /// What a plot draws besides its line, symbols, bars and error bars.
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct PlotDecor {
+    /// The Line tab's Symbol/Line interface and Drop Lines' skipped-point gap control.
+    #[serde(default, skip_serializing_if = "SymbolLineInterface::is_default")]
+    pub symbol_line: SymbolLineInterface,
     /// Lines from each point to the Y axis (Origin's "Horizontal") and to the X axis ("Vertical").
     #[serde(default, skip_serializing_if = "DropLines::is_default")]
     pub drop: DropLines,
@@ -1359,6 +1363,23 @@ pub struct PlotDecor {
     /// The text written next to each point.
     #[serde(default, skip_serializing_if = "DataLabels::is_default")]
     pub labels: DataLabels,
+}
+
+/// How a Line + Symbol connecting line meets its point symbols. Other plot kinds ignore these
+/// saved settings. Both switches start unchecked, as in Origin 2016.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct SymbolLineInterface {
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub gap_to_symbol: bool,
+    /// Keep the connecting line intact at skipped markers while retaining gaps at shown markers.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub no_break_skipped: bool,
+}
+
+impl SymbolLineInterface {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 impl PlotDecor {

@@ -120,6 +120,14 @@ The tools and their limits are listed in [docs/spec/mcp.md](docs/spec/mcp.md).
 
 Requires Git and [Rust](https://www.rust-lang.org/tools/install) 1.90 or newer.
 
+### Windows executable icon
+
+Windows builds embed Sheaf's existing multi-size icon in `sheaf-app.exe`, so Explorer and
+shortcuts can display it. Install the Windows C++ build tools and Windows SDK (including `rc.exe`).
+Build with `cargo build --release -p sheaf-app`; verify the actual executable with
+`python tools/check-windows-icon.py target/release/sheaf-app.exe`. Details are in
+[Windows packaging](docs/spec/windows-packaging.md).
+
 ### First time: download, build, and run
 
 Run these commands in the folder where you want to keep Sheaf. The first launch downloads

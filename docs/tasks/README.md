@@ -77,7 +77,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | [T28](T28-autosave-recovery.md) | Autosave to a recovery folder and crash recovery at start-up | M | open |
 | [T29](T29-multivariate-roc-survival.md) | PCA, k-means, ROC curve, Kaplan-Meier | L | open; Origin measurements on Windows |
 | [T30](T30-excel-import-export.md) | Excel import (xls, xlsx, xlsm) and xlsx export | L | open; an ADR for the reader/writer crates first |
-| [T31](T31-windows-executable-icon.md) | Embed the existing app icon in Windows executable resources | S | claimed `codex/windows-exe-icon`; built-PE verification required |
+| [T31](T31-windows-executable-icon.md) | Embed the existing app icon in Windows executable resources | S | done; all seven built-PE icon frames match the source and Windows extracts both sizes |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

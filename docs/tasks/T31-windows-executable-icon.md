@@ -1,6 +1,8 @@
 # T31: Windows executable icon
 
-**Status:** claimed on `codex/windows-exe-icon` (2026-11-14, Windows); implementation pending.
+**Status:** done on `codex/windows-exe-icon` (2026-11-14, Windows): native icon resources embedded;
+all seven frames match the source ICO and Windows extracts both sizes. Formatting, strict
+workspace all-target Clippy and 1,973 workspace tests pass (two ignored), on integrated `c045e46`.
 **Size:** S. **Source:** HANDOFF's app-icon owner request (2026-11-14).
 
 ## Goal
@@ -37,6 +39,11 @@ copy Origin's icon or alter Sheaf's branding assets.
 The native Windows executable contains the expected icon resources, the source artwork is
 unchanged, and the required checks pass. Native resource verification must inspect the actual
 executable, rather than merely checking that the source/build script contains an icon path.
+
+Validation used a native debug executable. The verifier rejected a no-icon CLI test executable;
+the actual build script skipped resource work for a non-Windows target with the resource compiler
+unavailable. All source artwork hashes remained unchanged. Details and repeatable commands are in
+[`windows-packaging.md`](../spec/windows-packaging.md). Release uses the same resource script.
 
 ## Don't
 

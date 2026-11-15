@@ -43,7 +43,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | Branch | Owner session | What | State |
 |---|---|---|---|
 | `codex/t07-clipboard-formats` | Codex Windows, t07-clipboard-formats | T07 Windows worksheet clipboard: displayed/15-digit external text plus private lossless internal text; core serializer, new native adapter and copy/paste wiring | claimed 2026-11-14; existing clipboard-win only; no Cargo/build, graph clipboard, other sessions' code |
-| `codex/windows-exe-icon` | Codex Windows, windows-exe-icon | T31: embed the existing Sheaf `.ico` in Windows executable resources, validate the built PE | claimed 2026-11-14; no Start Menu/file associations or other app work |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same
@@ -78,9 +77,12 @@ O(lines x edges) on a very long fill-under run; Dunnett at s = 1 above 5000 df h
 App icon (owner's request, 2026-11-14, branch `app-icon`): `tools/make-icon.py` builds the icon from the
 owner's bronze S (`docs/brand/sheaf.png`) into `crates/app/assets/icon/` (PNG, `.ico`, `.icns`); the app embeds
 `sheaf-256.png` as its window, Dock and taskbar icon. `tools/make-macos-app.sh --install` builds `Sheaf.app` into
-`~/Applications` (Spotlight, Launchpad, Dock). Left: the `.ico` in the Windows `.exe` resources (Explorer icon;
-needs a Windows session to add and test a `build.rs`), a Start Menu shortcut, and opening files double-clicked in
-Finder (Apple open-document events; the bundle declares no document types until then).
+`~/Applications` (Spotlight, Launchpad, Dock). T31 (Windows, 2026-11-14) embeds the existing `.ico`
+in `sheaf-app.exe` resources through a target-gated `build.rs`; all seven built-PE frames match the
+source and Windows extracts the large/small icons. `tools/check-windows-icon.py` verifies the
+actual executable (see `docs/spec/windows-packaging.md`). Formatting, strict all-target Clippy
+and 1,973 workspace tests pass (two ignored). Left: a Start Menu shortcut and opening files
+double-clicked in Finder (Apple open-document events; the bundle declares no document types until then).
 
 **T25 phase 1 merged (2026-11-14, Windows session 318653a1):** `sheaf-mcp` (crate `crates/mcp`) runs over stdio on the shared `sheaf-ops` crate that now holds the CLI's import, plot, export, analyze and fit work; setup in README and `docs/spec/mcp.md`, leftovers in the T25 Status. Extended the same night (macOS session 'mac-mcp', branch `mcp-port`): the CLI's clap options (`sheaf_ops::args`) and `job_from` (`sheaf_ops::cli_analyze`) moved into `sheaf-ops`, so `analyze` reaches all 55 `sheaf analyze` tools (21 hand-mapped, 34 through `crates/mcp/src/bridge.rs`, schemas generated from the CLI's options); MCP prompts; `backup_original` never writes through a link; shared long names refused instead of taking the first. The CLI was checked byte for byte against the previous `main` on 325 invocations (identical). That session had also built a second, separate MCP server (local branch `mcp-server`, never pushed, deleted); the owner chose to port its useful parts into this one. Lesson: claims in the local peer notes are invisible to the Windows machine; claim a brief in HANDOFF on `main` (pushed) before starting. Plan as written:
 

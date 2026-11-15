@@ -69,3 +69,10 @@ lossless text representation for all Copy variants, with existing LF/quoting; ma
 displayed external text while retaining full internal precision needs a separate rich clipboard
 transport. User parameter order still follows Sheaf's displayed alphabetical order. These are
 remaining differences, not measured-parity claims.
+
+Windows formats follow-up (`codex/t07-clipboard-formats`, claimed 2026-11-14): use the existing
+`clipboard-win` dependency to publish displayed text for Copy and 15-digit text for Full Precision,
+plus a named private lossless worksheet format for internal paste. Add a core external serializer,
+an app adapter and scoped copy/paste wiring, with pure/native/UI checks. Non-Windows behavior
+keeps the current lossless fallback. No graph clipboard, dependencies/build resources, formulas,
+statistics, worksheet export, IO or other sessions' code is in this claim.

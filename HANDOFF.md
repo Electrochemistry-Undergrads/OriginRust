@@ -42,6 +42,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t07-clipboard-formats` | Codex Windows, t07-clipboard-formats | T07 Windows worksheet clipboard: displayed/15-digit external text plus private lossless internal text; core serializer, new native adapter and copy/paste wiring | claimed 2026-11-14; existing clipboard-win only; no Cargo/build, graph clipboard, other sessions' code |
 | `codex/windows-exe-icon` | Codex Windows, windows-exe-icon | T31: embed the existing Sheaf `.ico` in Windows executable resources, validate the built PE | claimed 2026-11-14; no Start Menu/file associations or other app work |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 

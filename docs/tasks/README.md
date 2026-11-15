@@ -65,9 +65,9 @@ All six are **open**. The older index below retains implementation history and p
 | Brief | Wave | Size | Scope and dependency |
 |---|---|---|---|
 | [T58](T58-graph-text-formatting.md) | 1, P0 | L | Graph text, escapes, editor and shared Format toolbar dispatch |
-| [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell format model/dialog; toolbar adapter after T58 slice 3 |
+| [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell format model, drawing and Format Cells done (unmeasured); toolbar adapter, Format > Worksheet, Set Data Style after T58 slice 3 |
 | [T60](T60-merge-graphs-layer-management.md) | 2, P0 | L | Merge finished graphs, arrange/link layers and fit page/layer |
-| [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Add/delete layers, inset and 3/4-Y templates; coordinate with T60 |
+| [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Add/delete layers, inset and 3/4-Y templates; coordinate with T60; claimed 2026-11-15 (`layers-multi-y`, Claude Windows) |
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Remaining offset menu, Cumulative, stacked histograms, waterfall colours |
 | [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring; claim letters A–K independently |
 
@@ -82,7 +82,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T02](T02-menu-shortcut-differences.md) | Menu labels, shortcuts and context menus that differ from Origin | M | done (`bbdb60a`); unmeasured details listed in brief |
 | [T03](T03-analysis-dialog-frame.md) | Analysis dialogs: Recalculate, Output, smoothing methods, pkFind options | M | done (`859c78e`); left: pkFind methods win/first/second/residue, linking more tools |
 | [T04](T04-peak-analyzer-wizard.md) | Peak Analyzer as Origin's multi-page wizard | L | pages measured and the wizard built (analysis-tools 11.1); Voigt fit added and checked against Origin (11.2), a function per peak; left: Auto integration window rule, baseline goals and modes |
-| [T05](T05-export-graphs-dialog.md) | Export Graphs dialog, raster formats, units, Ctrl+G, Copy Page | M | done (`c32e585`); TGA, PCX, flattened PSD and 256-color TIFF done; mono, 16-colour and 16-bit modes done (Origin's lists, dither, 5-5-5 layout); Graph Theme, Dialog Theme row left |
+| [T05](T05-export-graphs-dialog.md) | Export Graphs dialog, raster formats, units, Ctrl+G, Copy Page | M | done (`c32e585`); TGA, PCX, flattened PSD and 256-color TIFF done; mono, 16-colour and 16-bit modes done (Origin's lists, dither, 5-5-5 layout); named export Dialog Themes/defaults done (graphing 9.8); Graph Theme left |
 | [T06](T06-opj-remaining-graph-features.md) | `.opj` writer: X offsets, bar overlap, waterfall, date ticks, window places | L | X offsets, waterfall as offsets, month/day/year ticks, window places written (13.14); bar overlap, group colours, grouped error bars, hidden end label not found (need the GUI) |
 | [T07](T07-worksheet-export-and-copy.md) | Worksheet export and clipboard as Origin (missing `--`, formats, label rows) | S | done (`826f390`); clipboard text round-trip fixed; Origin Copy defaults unmeasured |
 | [T08](T08-formula-functions.md) | Missing Set Column Values functions in `sheaf-expr` | M | groups 1-3, 5 done (`04a8a80`); `sum`/`count` as Origin, local `now()`, strings and `cell()` dependencies done (`d8d1416`); `substitute`, text-function `$` suffix and built-in column labels done; `char`/`code` done; cross-sheet refs, parameter rows and Origin global/`@SD` defaults left; explicit `format` and direct-column Text defaults done |
@@ -125,7 +125,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |
 | [T46](T46-import-themes.md) | Saved import settings: Dialog Theme row (`<last used>`, named themes) in the ASCII, CHI and Excel import windows, `sheaf import --theme` | M | done, merged 2026-11-15 (import-ascii.md 17); left: Origin measurements of the theme list and defaults |
 | [T47](T47-simulate-curve.md) | Simulate Curve: a curve from any fit-library function with typed parameters, window, CLI and MCP | M | done, merged 2026-11-15 (fitting.md 13); Origin's window measured and copied 2026-11-15 (13.1); left: Noise Level, user-defined functions, Simulate Surface |
-| [T48](T48-graph-data-tools.md) | Graph Data menu: Mask Data Points (rectangle), Remove Bad Data Points, Move Data Points | M | done, merged 2026-11-15 (graphing.md 20); left: Origin measurements, display range and markers |
+| [T48](T48-graph-data-tools.md) | Graph Data menu: Mask Data Points (rectangle), Remove Bad Data Points, Move Data Points | M | done, merged 2026-11-15 (graphing.md 20); Mask and Remove Bad measured in Origin 2016 and followed; left: Move Data Points unmeasured (synthetic input fails), other plot kinds, display range |
 | [T49](T49-parallel-plot.md) | Parallel Plot and Parallel Index (parallel coordinates) | M | done 2026-11-15 (graphing 14.25, `parallel-plot`, macOS); left: Parallel Sets, curvature, colour map, axis reordering, Origin defaults unmeasured |
 | [T50](T50-treemap.md) | Treemap: nested rectangles sized by value (six Origin layouts) | M | done 2026-11-15 (graphing 14.26, `treemap`, macOS); left: Origin defaults/colours/labels unmeasured, hover and drill-down, colour by value |
 | [T51](T51-sunburst.md) | Sunburst plot: hierarchy as concentric rings coloured by value | M | done 2026-11-15 (graphing 14.27, `sunburst`, macOS); left: Origin defaults unmeasured, hover and Collapse/Expand drilling |

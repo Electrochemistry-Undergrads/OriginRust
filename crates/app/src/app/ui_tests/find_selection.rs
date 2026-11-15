@@ -21,7 +21,7 @@ fn selected_book(name: &str) -> (Harness<'static, SheafApp>, WindowId) {
         }
     });
     settle(&mut h);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let source = sheet(&h).clone();
     h.state_mut().books.get_mut(&book).unwrap().select_cells(&source, (1, 1), (1, 2));
     settle(&mut h);

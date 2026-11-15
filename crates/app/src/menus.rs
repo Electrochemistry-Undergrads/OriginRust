@@ -131,6 +131,8 @@ pub enum Cmd {
     CondFormat(crate::dialogs::cond_format::CondKind),
     /// Worksheet > Conditional Formatting > Remove Conditional Format.
     RemoveCondFormat,
+    /// Format Cells... for the selected cells, rows, columns or label cell.
+    FormatCells,
     /// Cell menu > Add Note... / Edit Note...: the note editor for the selected cell.
     EditNote,
     /// Cell menu > Delete Note.
@@ -1453,7 +1455,7 @@ fn format_menu(kind: WindowKind) -> Vec<Entry> {
             grey("Menu"),
             grey_keyed("&Worksheet...", plain_key(Key::F4)),
             item("&Column...", Cmd::ColumnProperties),
-            grey("Cell..."),
+            item("Cell...", Cmd::FormatCells),
             sep(),
             grey("Snap to Grid"),
             grey_keyed("Merge cells", ctrl(Key::R)),
@@ -1617,7 +1619,8 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(grey("Swap Columns..."));
     v.push(item("Column Width...", Cmd::ColumnProperties));
     v.extend(greys(&["-", "Slide Show of Dependent Graphs"]));
-    v.extend(greys(&["Add or Update Sparklines...", "-", "Format Cells..."]));
+    v.extend(greys(&["Add or Update Sparklines...", "-"]));
+    v.push(item("Format Cells...", Cmd::FormatCells));
     v.push(item("Properties...", Cmd::ColumnProperties));
     v
 }
@@ -1649,8 +1652,8 @@ pub fn cell_menu_for(noted: bool) -> Vec<Entry> {
         "Insert Sparklines...",
         "Insert Variables...",
         "-",
-        "Format Cells...",
     ]));
+    v.push(item("Format Cells...", Cmd::FormatCells));
     if noted {
         v.push(item("Edit Note...", Cmd::EditNote));
         v.push(item("Delete Note", Cmd::DeleteNote));
@@ -1670,7 +1673,8 @@ pub fn row_menu() -> Vec<Entry> {
     v.push(item("Insert", Cmd::InsertCells));
     v.push(item("Delete", Cmd::DeleteCells));
     v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
-    v.extend(greys(&["Insert Graph...", "Format Cells..."]));
+    v.push(grey("Insert Graph..."));
+    v.push(item("Format Cells...", Cmd::FormatCells));
     v
 }
 
@@ -2245,6 +2249,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::CondFormat(kind) => {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             Action::CondFormatDialog { book: book?, kind: *kind }
+        }
+        Cmd::FormatCells => {
+            c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            Action::FormatCellsDialog(book?)
         }
         Cmd::EditNote => {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;

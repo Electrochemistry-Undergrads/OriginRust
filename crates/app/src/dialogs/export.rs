@@ -10,6 +10,8 @@ use sheaf_core::{Document, WindowId};
 use sheaf_plot::{ColorDepth, ExportLayout, ExportSize, Margin, RasterOptions, SizeUnit, TiffCompression};
 use std::path::{Path, PathBuf};
 
+mod themes;
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ExportFormat {
     Png,
@@ -202,6 +204,7 @@ pub fn substitute(template: &str, short: &str, long: &str, index: usize, enabled
 }
 
 pub struct ExportDialog {
+    themes: themes::Themes,
     pub graph: WindowId,
     format: ExportFormat,
     which: Which,
@@ -250,6 +253,7 @@ impl ExportDialog {
     pub fn new(graph: WindowId, folder: Option<PathBuf>) -> Self {
         let folder = folder.or_else(|| std::env::current_dir().ok()).unwrap_or_default();
         ExportDialog {
+            themes: themes::Themes::default(),
             graph,
             format: ExportFormat::Png,
             which: Which::ActivePage,
@@ -386,11 +390,12 @@ impl ExportDialog {
             {
                 return ExportOutcome::Failed(e.to_string());
             }
-            return if close {
+            let outcome = if close {
                 ExportOutcome::Saved(file.clone())
             } else {
                 ExportOutcome::Applied(format!("Wrote {} graphs to {}", ids.len(), file.display()))
             };
+            return self.remember_export(outcome);
         }
         for (id, file) in &jobs {
             let r = sheaf_plot::export_file_opts(
@@ -406,13 +411,14 @@ impl ExportDialog {
                 return ExportOutcome::Failed(e.to_string());
             }
         }
-        if close {
+        let outcome = if close {
             ExportOutcome::Saved(jobs[jobs.len() - 1].1.clone())
         } else if jobs.len() == 1 {
             ExportOutcome::Applied(format!("Wrote {}", jobs[0].1.display()))
         } else {
             ExportOutcome::Applied(format!("Wrote {} files to {}", jobs.len(), self.path.trim()))
-        }
+        };
+        self.remember_export(outcome)
     }
 
     fn settings_key(&self) -> String {
@@ -461,7 +467,12 @@ impl ExportDialog {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
+            .enabled(!self.themes.modal_open())
             .show(ctx, |ui| {
+                let modified = self.theme_modified();
+                if let Some(command) = self.themes.ui(ui, modified) {
+                    self.theme_command(command);
+                }
                 let raster_dpi = self.format.is_raster().then_some(self.dpi);
                 let area = sheaf_plot::export_area(doc.project(), self.graph, self.layout(), raster_dpi).ok();
                 let (page_w, page_h) = (graph.page.width_pt / 72.0, graph.page.height_pt / 72.0);
@@ -793,6 +804,9 @@ impl ExportDialog {
                     });
                 });
             });
+        if let Some(command) = self.themes.prompt_ui(ctx) {
+            self.theme_command(command);
+        }
         if self.show_preview {
             let stale = self.preview.as_ref().is_none_or(|(_, k)| *k != self.settings_key());
             if want_preview || (self.auto_preview && stale) {

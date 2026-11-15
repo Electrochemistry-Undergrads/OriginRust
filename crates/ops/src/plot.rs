@@ -1098,7 +1098,7 @@ fn require_two_axes(left: &[ColumnId], right: &[ColumnId]) -> Result<()> {
 /// The legend text of each column of one file in an overlay: the file name, plus the column when
 /// the file gives several curves.
 fn overlay_labels(project: &Project, book: WindowId, columns: &[ColumnId]) -> Vec<String> {
-    let file = project.workbook(book).map(|b| b.long_name.clone()).unwrap_or_default();
+    let file = project.workbook(book).map(|b| b.title_for_graph()).unwrap_or_default();
     columns
         .iter()
         .map(|y| {

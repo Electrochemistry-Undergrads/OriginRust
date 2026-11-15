@@ -153,6 +153,9 @@ struct Notes {
     frozen_dropped: usize,
     /// Sheets with conditional formatting rules: the file written here holds none.
     cond_formats_dropped: usize,
+    /// Sheets with cell formats (bold, italic, underline, font, size, colours, alignment): the
+    /// file written here holds none.
+    cell_formats_dropped: usize,
     /// Cell notes: the file written here holds none (counted per note).
     cell_notes_dropped: usize,
     /// Analysis results that recalculate from their source (Recalculate Manual or Auto), not stored.
@@ -313,6 +316,7 @@ impl Writer {
         self.notes.filters_dropped += usize::from(sheet.filter.is_some());
         self.notes.frozen_dropped += usize::from(!sheet.frozen.is_none());
         self.notes.cond_formats_dropped += usize::from(!sheet.cond_formats.is_empty());
+        self.notes.cell_formats_dropped += usize::from(!sheet.cell_formats.is_empty());
         self.notes.cell_notes_dropped += sheet.notes.len();
         for (i, column) in sheet.columns.iter().enumerate() {
             let dataset_name = format!("{}_{}{}", book.name, column.short_name, suffix);
@@ -725,6 +729,12 @@ impl Writer {
             warnings.push(format!(
                 "{} sheet(s) have conditional formatting; the project file written here does not hold it, so Origin shows none.",
                 n.cond_formats_dropped
+            ));
+        }
+        if n.cell_formats_dropped > 0 {
+            warnings.push(format!(
+                "{} sheet(s) have cell formatting (font, size, bold, italic, underline, colours or alignment); the project file written here does not hold it, so Origin shows plain cells.",
+                n.cell_formats_dropped
             ));
         }
         if n.cell_notes_dropped > 0 {

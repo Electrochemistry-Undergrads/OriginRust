@@ -22,7 +22,7 @@ fn ctrl_shift_q(h: &mut Harness<'static, SheafApp>) {
 
 fn open_book(tag: &str) -> Harness<'static, SheafApp> {
     let mut h = start(vec![five_columns(tag)]);
-    show_window(&mut h, "Book1 - multi");
+    show_window(&mut h, "Book1 - multi.csv");
     h
 }
 

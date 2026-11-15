@@ -500,8 +500,35 @@ impl ImportDialog {
         let ascii = self.shown_format() == "ascii";
         ui.add_enabled_ui(ascii, |ui| {
             let o = &mut self.ascii;
+            // Trim Filename From/To (Origin's rule, import-ascii.md): 1-based characters, negative
+            // from the end, To 0 to the end; the sheet uses the name without extension, the book
+            // title the name with it.
+            let trim = |ui: &mut egui::Ui, on: bool, range: &mut (i32, i32), id: &str| {
+                ui.add_enabled_ui(on, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.add_space(18.0);
+                        ui.label("Trim Filename From");
+                        ui.add(egui::DragValue::new(&mut range.0).range(-260..=260)).on_hover_text(id);
+                        ui.label("To");
+                        ui.add(egui::DragValue::new(&mut range.1).range(-260..=260))
+                            .on_hover_text("0 keeps the name to its end; negative numbers count from the end");
+                    });
+                });
+            };
             ui.checkbox(&mut o.rename_sheet, "Rename Sheet with (Partial) Filename");
+            trim(
+                ui,
+                o.rename_sheet,
+                &mut o.sheet_name_range,
+                "first character of the file name (without extension) kept for the sheet",
+            );
             ui.checkbox(&mut o.rename_book, "Rename Book with (Partial) Filename");
+            trim(
+                ui,
+                o.rename_book,
+                &mut o.book_name_range,
+                "first character of the file name (with extension) kept for the book title",
+            );
         });
         if !ascii {
             ui.weak("The naming options apply to delimited text files.");

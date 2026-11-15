@@ -351,6 +351,9 @@ pub enum Action {
     /// Worksheet > Conditional Formatting > Remove Conditional Format: removes the rules that
     /// touch the selection.
     RemoveCondFormat(WindowId),
+    /// Format Cells... (cell, column and row menus; Format > Cell...): the window for the
+    /// formats of the selection.
+    FormatCellsDialog(WindowId),
     /// Cell menu > Add Note... / Edit Note...: the note editor for the single selected cell.
     NoteDialog(WindowId),
     /// Cell menu > Delete Note: removes the note of the single selected cell.

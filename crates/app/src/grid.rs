@@ -9,6 +9,7 @@ use crate::actions::{Action, CellOp, LabelRow, SheetOp};
 use crate::menus::{self, MenuContext, WindowKind};
 use eframe::egui::{self, Align, Color32, Layout, Pos2, Rect, RichText, Sense, Shape, Stroke, UiBuilder, vec2};
 use egui_extras::{Column as TableColumn, TableBuilder};
+use sheaf_core::cellformat::{HAlign, ResolvedStyle};
 use sheaf_core::{Column, ColumnId, Document, FormulaState, RecalcMode, WindowId, Worksheet};
 use std::collections::HashMap;
 use std::ops::Range;
@@ -18,6 +19,13 @@ struct CondCache {
     revision: u64,
     sheet: usize,
     styles: std::sync::Arc<sheaf_core::condformat::CellStyles>,
+}
+
+/// Cell-format lookup index with what it was built for (see `sheaf_core::cellformat`).
+struct FormatCache {
+    revision: u64,
+    sheet: usize,
+    index: std::sync::Arc<sheaf_core::cellformat::FormatIndex>,
 }
 
 /// What is selected in a worksheet.
@@ -138,6 +146,8 @@ pub struct BookUi {
     /// The styles the conditional formats give the cells of the sheet shown, evaluated once per
     /// change of the document (its revision) and sheet, not per frame or per cell.
     cond_cache: Option<CondCache>,
+    /// Which cell-format ranges reach each column, built once per document revision and sheet.
+    fmt_cache: Option<FormatCache>,
     /// Horizontal scroll position and the sizes it ranges over, from the last frame; the bar
     /// next to the sheet tabs draws and changes them.
     h_offset: f32,
@@ -573,6 +583,19 @@ pub fn cond_range(state: &BookUi, sheet: &Worksheet) -> Result<sheaf_core::condf
     }
 }
 
+/// The cells Format Cells works on, from the selection: a block of cells, whole columns or rows,
+/// the whole sheet, or one label cell. A selection that runs to the last row of the data keeps
+/// following the data (like [`cond_range`]), so formatting a column is one record however many
+/// rows it has.
+pub fn format_target(state: &BookUi, sheet: &Worksheet) -> Result<sheaf_core::cellformat::FormatTarget, &'static str> {
+    use sheaf_core::cellformat::FormatTarget;
+    if let Sel::Label { column, row } = &state.sel {
+        return Ok(FormatTarget::label_rows(vec![*column], vec![label_kind(row)]));
+    }
+    let r = cond_range(state, sheet).map_err(|_| "Select cells, rows, columns or a label cell first")?;
+    Ok(FormatTarget::cells(r.columns, r.first_row, r.last_row))
+}
+
 /// The part of `rect` where the pointer really reaches it: inside the clip of the ui that draws
 /// it and, for a cell that scrolls (not `overlay`), right of the frozen columns that cover it.
 fn visible_part(ui: &egui::Ui, rect: Rect, overlay: bool, state: &BookUi) -> Rect {
@@ -599,6 +622,18 @@ fn label_rows(sheet: &Worksheet) -> Vec<LabelRow> {
     let mut rows = vec![LabelRow::LongName, LabelRow::Units, LabelRow::Comments, LabelRow::Formula];
     rows.extend(sheet.parameter_names().into_iter().map(LabelRow::Param));
     rows
+}
+
+/// The model's name of a label row (for cell formats).
+pub fn label_kind(row: &LabelRow) -> sheaf_core::cellformat::LabelKind {
+    use sheaf_core::cellformat::LabelKind;
+    match row {
+        LabelRow::LongName => LabelKind::LongName,
+        LabelRow::Units => LabelKind::Units,
+        LabelRow::Comments => LabelKind::Comments,
+        LabelRow::Formula => LabelKind::Formula,
+        LabelRow::Param(name) => LabelKind::Param(name.clone()),
+    }
 }
 
 fn row_title(row: &LabelRow) -> String {
@@ -648,6 +683,17 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
             revision: doc.revision(),
             sheet: sheet_index,
             styles: std::sync::Arc::new(sheaf_core::condformat::evaluate(sheet, &sheet.cond_formats)),
+        });
+    }
+
+    // Cell formats: the per-column index is rebuilt only when the document changed.
+    if sheet.cell_formats.is_empty() {
+        state.fmt_cache = None;
+    } else if !state.fmt_cache.as_ref().is_some_and(|c| c.revision == doc.revision() && c.sheet == sheet_index) {
+        state.fmt_cache = Some(FormatCache {
+            revision: doc.revision(),
+            sheet: sheet_index,
+            index: std::sync::Arc::new(sheet.format_index()),
         });
     }
 
@@ -1404,7 +1450,13 @@ fn label_cell(
         state.reveal_frozen_y = true;
         state.reveal_frozen_x = state.frozen_cols.contains(&column.id);
     }
-    let fill = if column_selected { BLOCK_BLACK } else { LABEL_YELLOW };
+    let manual =
+        state.fmt_cache.as_ref().map(|c| c.index.resolve_label(sheet, column.id, &label_kind(row))).unwrap_or_default();
+    let fill = if column_selected {
+        BLOCK_BLACK
+    } else {
+        manual.fill.map_or(LABEL_YELLOW, |f| Color32::from_rgb(f.r, f.g, f.b))
+    };
     ui.painter().rect_filled(cell, 0.0, fill);
     if selected {
         ui.painter().rect_stroke(cell.shrink(0.5), 0.0, Stroke::new(1.5_f32, Color32::BLACK), egui::StrokeKind::Inside);
@@ -1450,7 +1502,11 @@ fn label_cell(
         return;
     }
     let text = label_text(column, row);
-    let color = if column_selected { Color32::WHITE } else { TEXT };
+    let color = if column_selected {
+        Color32::WHITE
+    } else {
+        manual.text_color.map_or(TEXT, |c| Color32::from_rgb(c.r, c.g, c.b))
+    };
     let response = ui.interact(cell, ui.id().with(("label", column.id.0, row_title(row))), Sense::CLICK);
     response.widget_info(|| {
         egui::WidgetInfo::selected(
@@ -1480,8 +1536,8 @@ fn label_cell(
         left = 17.0;
     }
     let inner = Rect::from_min_max(Pos2::new(cell.left() + left, cell.top()), cell.right_bottom());
-    ui.scope_builder(UiBuilder::new().max_rect(inner).layout(Layout::left_to_right(Align::Center)), |ui| {
-        ui.label(RichText::new(text).color(color));
+    ui.scope_builder(UiBuilder::new().max_rect(inner).layout(aligned_layout(manual.h_align, false)), |ui| {
+        formatted_text(ui, &text, color, &manual);
     });
     if response.clicked() {
         state.select_label(column.id, row.clone());
@@ -1819,6 +1875,9 @@ fn body_cell(
     let look = cell_look(state, sheet, position, column, r);
     let single = matches!(&state.sel, Sel::Cells { anchor, end } if anchor == end);
     let cond = state.cond_cache.as_ref().and_then(|c| c.styles.get(column.id, r));
+    let manual = state.fmt_cache.as_ref().map(|c| c.index.resolve(sheet, column.id, r)).unwrap_or_default();
+    // Conditional colours win over manual ones; the other manual properties stay.
+    let look_of_cell = manual.with_conditional(cond);
     let noted = sheet.note(column.id, r);
     match look {
         Look::Dark => {
@@ -1831,7 +1890,7 @@ fn body_cell(
             ui.painter().rect_filled(rect, 0.0, MASK_FILL);
         }
         _ => {
-            if let Some(fill) = cond.and_then(|c| c.fill) {
+            if let Some(fill) = look_of_cell.fill {
                 ui.painter().rect_filled(rect, 0.0, Color32::from_rgb(fill.r, fill.g, fill.b));
             }
         }
@@ -1889,19 +1948,17 @@ fn body_cell(
     let color = match look {
         Look::Dark => Color32::WHITE,
         _ if column.mask.contains(&r) => MASK_TEXT,
-        _ => match cond.and_then(|c| c.font) {
+        _ => match look_of_cell.text_color {
             Some(font) => Color32::from_rgb(font.r, font.g, font.b),
             None => TEXT,
         },
     };
-    let layout = if numeric && !is_text_cell {
-        Layout::right_to_left(Align::Center)
-    } else {
-        Layout::left_to_right(Align::Center)
-    };
+    let layout = aligned_layout(look_of_cell.h_align, numeric && !is_text_cell);
     ui.with_layout(layout, |ui| {
-        ui.add_space(4.0);
-        ui.label(RichText::new(&text).color(color));
+        if look_of_cell.h_align != Some(HAlign::Center) {
+            ui.add_space(4.0);
+        }
+        formatted_text(ui, &text, color, &look_of_cell);
     });
     // The values of a recalculating column come from its formula.
     if response.double_clicked() && !column.is_locked() {
@@ -1922,6 +1979,60 @@ fn body_cell(
             state.select_cells(sheet, (position, r), (position, r));
         }
     });
+}
+
+/// The layout of a cell's text: the manual alignment, or right for numbers and left otherwise.
+fn aligned_layout(h_align: Option<HAlign>, numeric: bool) -> Layout {
+    match h_align {
+        Some(HAlign::Left) => Layout::left_to_right(Align::Center),
+        Some(HAlign::Right) => Layout::right_to_left(Align::Center),
+        Some(HAlign::Center) => Layout::centered_and_justified(egui::Direction::LeftToRight),
+        Some(HAlign::Auto) | None if numeric => Layout::right_to_left(Align::Center),
+        Some(HAlign::Auto) | None => Layout::left_to_right(Align::Center),
+    }
+}
+
+// Font sizes in the grid are the formatted points as they are (the default body text is 12).
+
+/// egui can draw only its built-in families, so a manual font maps to the monospace family when
+/// its name says so and to the proportional one otherwise (installed fonts are a leftover).
+fn grid_family(name: &str) -> egui::FontFamily {
+    let n = name.to_ascii_lowercase();
+    if ["courier", "consolas", "mono", "menlo", "lucida console"].iter().any(|k| n.contains(k)) {
+        egui::FontFamily::Monospace
+    } else {
+        egui::FontFamily::Proportional
+    }
+}
+
+/// Draws `text` in the current layout with the manual format of its cell. egui has no bold
+/// face, so bold text is drawn twice, a fraction of a pixel apart.
+fn formatted_text(ui: &mut egui::Ui, text: &str, color: Color32, f: &ResolvedStyle<'_>) {
+    let mut rich = RichText::new(text).color(color);
+    if let Some(pt) = f.size_pt {
+        rich = rich.size(sheaf_core::cellformat::clamp_cell_pt(pt));
+    }
+    if let Some(name) = f.font {
+        rich = rich.family(grid_family(name));
+    }
+    if f.italic {
+        rich = rich.italics();
+    }
+    if f.underline {
+        rich = rich.underline();
+    }
+    if !f.bold {
+        ui.label(rich);
+        return;
+    }
+    let enabled = ui.is_enabled();
+    let (pos, galley, response) = egui::Label::new(rich).selectable(false).layout_in_ui(ui);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, enabled, text));
+    if ui.is_rect_visible(response.rect) {
+        for dx in [0.0, 0.6] {
+            ui.painter().add(egui::epaint::TextShape::new(pos + vec2(dx, 0.0), galley.clone(), color));
+        }
+    }
 }
 
 /// Longest note shown in the hover popup (tooltips cannot scroll): lines and characters.

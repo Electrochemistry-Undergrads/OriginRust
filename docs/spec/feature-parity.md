@@ -25,9 +25,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 163 | 40 | 252 |
-| P0 | 32 | 70 | 1 | 103 |
-| P1 and P2 together | 17 | 93 | 39 | 149 |
+| All rows | 49 | 165 | 39 | 253 |
+| P0 | 32 | 71 | 0 | 103 |
+| P1 and P2 together | 17 | 94 | 39 | 150 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
 
@@ -131,7 +131,7 @@ Cross-cutting findings:
 | Simple math on columns | Analysis > Mathematics > Simple Column Math | Simple Column Math window, `analyze column-math`, `Tool::ColumnMath` | ✓ | row by row with a constant or a column, result into the input column by default; checked against Origin (analysis-tools 9.1) | P1 |
 | Row filter | Column > Filter | live sheet filter: a condition in the formula language with presets (above/below average, within 3 sigma, not missing); Enable/Disable, Reapply, Remove; the grid, plots, automatic ranges, analysis and fits skip filtered rows; the Data Reader skips them while retaining source row numbers; sorts and row edits reapply it; Filter Rows (in place or new sheet) remains | ◐ | one filter per sheet, not per column; no date or text filters; no Ignore Hidden Rows override or compression of categorical ticks/spokes | P1 |
 | Masking | Column > Mask | Apply, Remove, Swap on selected cells; masks follow rows through sorts, inserts and deletes; statistics, analysis tools and fits leave masked cells out; masked points draw red with their adjacent line segments (measured in Origin) | ◐ | no Change Color, Disable Masking, mask by condition or from the graph; two-way ANOVA ignores masks; the .opj reader skips masks and the writer leaves them to the companion | P1 |
-| Manual worksheet cell formatting | Format Cells; Format toolbar | No persisted manual cell/range font, style, colour or alignment model; column numeric formats and conditional colours are separate | ✗ | T59 (wave 1, P0): range model/upkeep, dialog, grid/print/image drawing, toolbar target after T58; Format Worksheet/Cell and context entries grey | P0 |
+| Manual worksheet cell formatting | Format Cells; Format toolbar | Range model with upkeep, Format Cells window, grid/print/image drawing, `.sheaf`; unmeasured against Origin | ◐ | T59 steps 1, 2, 4 done; toolbar target after T58, Format > Worksheet and Set Data Style grey | P0 |
 | Conditional formatting | Worksheet > Conditional Formatting | Highlight Min Max (row- or column-wise, Origin's default colours) and Highlight Top Bottom (Top/Bottom N items or N%) on the selected cells, live, per sheet, saved in `.sheaf`; Remove Conditional Format; undo (gui-look.md 3, T35) | ◐ | no Conditional Highlight, Heatmap, Pareto, Outliers or Manager; ties, masks, N% rounding and Top Bottom colours are unmeasured; `.opj` save warns | P2 |
 | Internal types | double, short, long, complex | f64 only | ✗ | | P1 |
 | Categorical columns | Set as Categorical | Set as Categorical toggle (column and Column menus); Unstack Columns offers categorical columns first; Group and Subject designations in Set As and Column Properties | ◐ | no analysis tool reads Group or Subject yet; the .opj file codes of Group and Subject are unknown (companion keeps them) | P1 |
@@ -226,7 +226,7 @@ Cross-cutting findings:
 |---|---|---|---|---|---|
 | Gadgets and data cursors | integrate, statistics, quick fit, quick peaks, FFT, rise time on a graph region | Gadgets > Integrate on the active graph; the Data Reader tool snaps to the nearest data point, a click pins it and the arrow keys step through rows | ◐ | Statistics, Quick Fit, Quick Sigmoidal Fit, Quick Peaks, Differentiate, Interpolate, Intersect, Rise Time, Cluster, FFT, Vertical Cursor and Go To are grey | P0 |
 | Analysis menu on the active graph | graph Analysis menu | with a graph active, the Analysis menu's tools and fits run on the selected data plot, or else the active layer's first plot (`MenuContext::curve`); results go to its workbook, and a fit draws its curve on the graph | ◐ | results of tools other than fits are not drawn on the graph; one plot at a time; the Integrate gadget is the other tool that runs on a graph | P0 |
-| Data menu | display range, markers, mask points, remove bad points | Data > Mask Data Points (drag a rectangle; click a masked point to unmask), Remove Bad Data Points (the Y cell becomes missing, rows kept) and Move Data Points (X and Y follow the drag), each one undo step on the source worksheet, following formula-column rules and analysis links (graphing.md 20) | ◐ | Set Display Range, Reset to Full Range, data markers, Analysis Markers and Lock Position grey (no column display range yet); tools act on the plot under the pointer (no active plot); Origin's behaviour unmeasured | P1 |
+| Data menu | display range, markers, mask points, remove bad points | Data > Mask Data Points (drag a rectangle or, with Space, a freehand path over every plot of the layer, Tab for the active plot, a click masks one point, U unmasks), Remove Bad Data Points (click or Left/Right picks, Enter makes the Y cell missing, rows kept) and Move Data Points (X and Y follow the drag), the first two as measured in Origin 2016, Mask and Remove Bad each one undo step ("Set Mask Data", "Remove Data Point") on the source worksheet, Move one undo step with Sheaf's own text, all following formula-column rules and analysis links (graphing.md 20) | ◐ | Set Display Range, Reset to Full Range, data markers, Analysis Markers and Lock Position grey (no column display range yet); no plot list in the menu and no Tools-toolbar mask flyout; Move Data Points, other plot kinds, clipping and Skip Points unmeasured in Origin | P1 |
 
 ## 9 Fitting
 
@@ -357,6 +357,7 @@ Cross-cutting findings:
 | Other image types | EMF, WMF, TIF, JPG, EPS, BMP, GIF, AI and more | TIFF (24-bit, grayscale or indexed 256 colors; none, PackBits or LZW), JPEG, BMP, GIF, TGA, PCX and flattened PSD (24-bit, grey or 256 colours where the format allows; PSD records DPI), EPS (level 2, vector, standard PostScript fonts re-encoded to Latin-1, Greek from Symbol) and EMF (vector, text as text, written from the public format description) in the app (export window), the CLI (`-o fig.eps`, `-o fig.psd` and so on) and `export_file`; sizes scale as for SVG and PDF | ◐ | transparency is blended onto the page background in EPS and EMF and onto white in PSD; PSD has no editable layers; characters outside Latin-1, Greek and a few signs are replaced and reported (EPS); EMF was checked by loading it with GDI+, EPS only by structure (no PostScript interpreter was available); TGA and PCX were read back by an independent decoder (Pillow); WMF and AI are missing | P1 |
 | Batch export and naming | Export all, overwrite rules | one graph at a time | ◐ | no folder export, name templates | P1 |
 | Export preview | Preview button | Export Graphs preview pane with Auto Preview (T05) | ◐ | no Graph tab in the preview | P1 |
+| Export dialog themes | Dialog Theme flyout | named export settings, custom default/reset, last successful export, Save/Save As/Delete with isolated persistence (T05; graphing 9.8) | ◐ | no Compare/Generate Script, Recent Exports, graph-specific settings or `.ois` interchange | P1 |
 | Send to PowerPoint or Word | Graph menu | none | ✗ | | P2 |
 
 ## 14 Dialog details

@@ -9,7 +9,7 @@ fn shown(h: &Harness<'static, SheafApp>, text: &str) -> bool {
 #[test]
 fn the_symbol_menu_has_a_live_lollipop_item_that_needs_two_y_columns() {
     let mut h = start(vec![data_file("lollipop-menu")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let before = project(&h).graphs().count();
     // One Y column: refused with a message, no graph.
     click_text(&mut h, "C(Y1)");

@@ -11,7 +11,7 @@ fn named_columns(tag: &str) -> Harness<'static, SheafApp> {
         }
     });
     settle(&mut h);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "4.5");
     h
 }

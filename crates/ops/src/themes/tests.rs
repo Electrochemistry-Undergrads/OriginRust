@@ -22,6 +22,9 @@ fn busy_text_options() -> AsciiOptions {
         short_name_line: 2,
         rename_sheet: false,
         rename_book: false,
+        // the trimming ranges have no CLI flags yet, so a CLI theme keeps the defaults
+        sheet_name_range: (1, 0),
+        book_name_range: (1, 0),
         decimal_comma: true,
         thousands: Thousands::Dot,
         param_lines: vec![2, 3],

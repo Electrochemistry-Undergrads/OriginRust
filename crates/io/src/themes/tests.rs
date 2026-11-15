@@ -25,6 +25,8 @@ fn busy_ascii() -> AsciiOptions {
         short_name_line: 5,
         rename_sheet: false,
         rename_book: false,
+        sheet_name_range: (2, 5),
+        book_name_range: (1, -4),
         decimal_comma: true,
         thousands: Thousands::Apostrophe,
         param_lines: vec![6, 7],

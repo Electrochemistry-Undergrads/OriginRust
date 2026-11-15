@@ -37,6 +37,7 @@ pub mod normalize;
 pub mod nptests;
 pub mod outlier;
 pub mod pca;
+pub mod kmeans;
 pub mod peakchain;
 pub mod peaks;
 pub mod power;
@@ -100,6 +101,7 @@ pub use nptests::{
     SIGN_EXACT_MAX_N, SignTest, friedman, ks_two_sample, median_test, sign_test,
 };
 pub use outlier::{DixonQ, Grubbs, OutlierError, OutlierSide, dixon_q, grubbs};
+pub use kmeans::{Cluster, Kmeans, KmeansError, KmeansOptions, VariableAnova, kmeans};
 pub use pca::{EigenTest, Pca, PcaError, PcaOptions, pca};
 pub use peakchain::{
     BaselineStat, ChainBaseline, ChainError, ChainOptions, ChainResult, FindMethod, FindOptions, LimitMode, PeakInfo,

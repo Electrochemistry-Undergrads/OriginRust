@@ -168,6 +168,10 @@ Phase 2 attach is still separate.
   Sort Columns and column-header Custom now use the existing nested-sort dialog. Masks,
   outside rows/columns and Undo/Redo are covered; see workbook-model.md 13.1.
 
+- Filtered table navigation: keyboard movement, edit commits and Enter/Tab within blocks skip
+  hidden rows/columns. New/imported-table regressions ensure hidden values are not edited;
+  filter changes repair the active cell (workbook-model.md 13.3).
+
 - T10 filtered plots: graphs, exports, automatic axes/offsets and histogram/box/pie summaries
   skip worksheet-filtered rows. Masks, labels and error bars retain source-row references;
   the Data Reader skips hidden points. Filter Disable/Remove and Undo/Redo restore the view.

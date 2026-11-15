@@ -45,10 +45,8 @@ open. History of what was merged when is in `git log` (not repeated here).
   keeps the axis tick step across breaks (Origin changed it on two of four data sets, no rule
   found) and offers a step after each break; the Break Half Length unit is unmeasured (typing in
   the scripted dialog did not take), so Sheaf shows one gap in percent of the axis. Formatting
-  and strict all-target Clippy pass; on the final merge (main d45f267) 2,656 tests pass (seven
-  ignored). Pushed although the MCP link admission tests in crates/mcp/tests/link.rs fail
-  intermittently on this Windows machine (a different one per run, the file passed alone once):
-  pre-existing on main, not touched here, repair 50b5ecb on codex/t02-find-replace.
+  and strict all-target Clippy pass and 2,666 workspace tests pass (seven ignored) on the pushed
+  main 61d568b, which also holds the MCP link admission repair 50b5ecb.
 - T25 busy greeting repair (2026-11-15, Windows): an over-limit TCP connection receives its
   busy reason before closing, using a send-half-close and a bounded receive drain. This
   avoids Winsock reset errors caused by unread hello data, while retaining connection limits
@@ -133,6 +131,11 @@ open. History of what was merged when is in `git log` (not repeated here).
   `Worksheet.frozen`, saved in `.sheaf`, `.opj` warns. grid.rs draws frozen rows as extra head rows of the one
   table and frozen columns as an overlay over empty placeholder columns (exact scroll sync, hit guard
   `visible_part`); darker heads, 2 px divider, resizable frozen columns. Rules unmeasured (gui-look.md 3).
+- T40 Graphical Summary (2026-11-15, macOS, no Origin): Statistics > Descriptive Statistics > Graphical Summary
+  (Origin 2026, Separate Graphs arrangement only): per variable/group descriptive statistics, mean (t), median
+  (exact binomial) and SD (chi-square) intervals, Anderson-Darling from the existing normality code; one graph per
+  variable-group (histogram + normal curve, interval plot, probability plot); `sheaf analyze graphsummary`, MCP.
+  Checked against scipy, not Origin (statistics.md 22).
 - T39 plot-only X sorting (2026-11-15, macOS, no Origin): Origin 2023 `layer.plotN.line.sortx` as a per-plot
   `LineStyle::sort_x`; line, fill, gaps and No Line Break follow X order, the sheet is not sorted; Plot Details
   Line tab check box, `sheaf plot --sort-x`, MCP `style.sort_x`; `.opj` warns (graphing.md 18.9, unmeasured).
@@ -185,12 +188,15 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t02-find-selection` | Codex Windows, t02-find-selection | T02 Find/Replace selected-range restriction: Origin measurement, immutable selection snapshot in `open_find`, dialog predicate/control, focused tests/docs | claimed 2026-11-15; no grid/selection interaction, core/history, Undo AI command, MCP, recent-files, formulas, graph/axis/shape or statistics changes |
+| `codex/t25-undo-ai` | Codex Windows, t25-undo-ai | T25 Undo AI Changes UI command: new app action/helper using existing Undo dispatch, Edit and no-window File Undo/Redo blocks, guard flag + mechanical menu-context initializers, focused UI tests/docs | claimed 2026-11-15; undo completed contiguous AI steps, stop at manual boundary; editor/dialog guard; existing Document undo/redo only; no core/history API, MCP transport/queue/resources/tools, Find, other menu behavior, grid/graph/shape interactions or recent-files hooks; grid/graph menu-context fields initialized false only |
+| `xy-ratio` | Claude Windows, "axis-breaks" | T13 Size/Speed "Link Axis Length to Scale" with X:Y Ratio measured in Origin; layer setting in core graph.rs (Layer fields only), frame fitting in plot layout, Size/Speed tab control, persistence and focused tests | claimed 2026-11-15; no plot styles/fill/plots.rs, axis breaks logic, drawn shapes, MCP, stats or other sessions' scopes |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `vartest2` | Claude Windows, "continue all tasks" | T26 leftovers: Origin measurements of the two-sample proportion test (unpooled, tails, differences, Fisher, small samples), two-sample variance dialog with intervals, power analysis outputs; calc vartest.rs, core var/prop runners, their dialogs, statistics.md 21 | claimed 2026-11-15 |
 | `recent-files` | Claude macOS, "mac-recent" | T38 Recent Projects and Recent Imports: new sheaf-io recent module, File menu submenus, app open/save/import hooks, Startup recent_path, UI tests, spec | claimed 2026-11-15; no Recent Books/Graphs/Exports, no window saving, no other sessions' scope |
-| `graph-summary` | Claude macOS, "mac-multipdf" | T40 Graphical Summary (Origin 2026, Separate Graphs layout): new core analysis tool + report sheet + graphs, Statistics menu item and dialog, `sheaf analyze graphsummary` | claimed 2026-11-15; new calc/core modules, analysis registration, menus/dialog, ops args; no changes to existing normality/descriptive/distfit/ANOVA/crosstab/vartest results or other sessions' scopes |
+| `rug-plot` | Claude macOS, "mac-multipdf" | T41 rug plots (Origin 2019b): per-axis Rug settings, rug strip drawing beside the axis, Axis dialog Rug tab, Scatter + Rug template, CLI/MCP template | claimed 2026-11-15; core graph.rs axis rug field + template, plot axis-side drawing/layout, graph_axis.rs Rug tab, menus; no axis breaks, X:Y ratio, shapes or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

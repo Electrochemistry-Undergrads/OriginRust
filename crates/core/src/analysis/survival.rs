@@ -76,7 +76,7 @@ fn number_column(name: &str, table: &str, units: &str, designation: Designation,
 }
 
 /// The group a case belongs to, as text; `None` for a missing cell.
-fn group_cell(c: &Column, row: usize) -> Option<String> {
+pub(super) fn group_cell(c: &Column, row: usize) -> Option<String> {
     if let Some(t) = c.data.text_cell(row) {
         let t = t.trim();
         return (!t.is_empty()).then(|| t.to_string());

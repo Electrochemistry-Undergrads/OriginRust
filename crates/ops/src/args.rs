@@ -2263,6 +2263,26 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Graphical summary (Statistics > Descriptive Statistics > Graphical Summary): for each --y column (and each
+    /// group of the --groups columns) a report of descriptive statistics, confidence intervals of the mean, median
+    /// and standard deviation and the Anderson-Darling normality test, and a graph with a histogram and normal
+    /// curve, an interval plot and a normal probability plot.
+    #[command(name = "graphsummary", alias = "graph-summary")]
+    GraphSummary {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Group columns, comma-separated short or long names; each group (combination of values) is summarized
+        /// on its own.
+        #[arg(long, value_delimiter = ',')]
+        groups: Vec<String>,
+        /// Confidence level of the intervals, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        level: f64,
+        /// Graph arrangement: separate (one graph per variable and group). The other three Origin arrangements
+        /// (per-variable, per-group, all-in-one) are not available yet.
+        #[arg(long, default_value = "separate")]
+        arrangement: String,
+    },
     /// Sort the rows of the sheet by one column.
     Sort {
         #[command(flatten)]

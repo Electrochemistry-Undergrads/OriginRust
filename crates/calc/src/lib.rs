@@ -36,9 +36,11 @@ pub mod normality;
 pub mod normalize;
 pub mod nptests;
 pub mod outlier;
+pub mod pca;
 pub mod peakchain;
 pub mod peaks;
 pub mod power;
+pub mod roc;
 pub mod signal;
 pub mod smooth;
 pub mod stats;
@@ -54,6 +56,8 @@ pub use baseline::{BaselineMethod, subtract_baseline, subtract_constant, subtrac
 pub use bin2d::{AxisBins, AxisLayout, Bin, Bin2d, Bin2dOptions, Bin2dStat, axis_layout, bin2d};
 pub use coherence::{CoherenceOptions, CoherenceResult, CoherenceWindow, coherence, coherence_window};
 pub use correlation::{Corr, CorrKind, CorrMatrix, correlation, correlation_matrix};
+pub use pca::{EigenTest, Pca, PcaError, PcaOptions, pca};
+pub use roc::{Roc, RocError, RocOptions, RocPoint, roc};
 pub use crosstab::{ChiSquareTest, Crosstab, CrosstabError, Fisher};
 pub use curvemath::{CurveMathResult, CurveOp, column_math, curve_math_const, curve_math_ref};
 pub use curves::{

@@ -106,6 +106,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T53](T53-set-multiple-columns.md) | Set Multiple Columns Values (Ctrl+Shift+Q): one formula over the selected columns with `j` | M | done, merged 2026-11-15 (expression-language 7); left: Origin measurements of `j` |
 | [T54](T54-save-window-as.md) | Save Window As (`.sheafbook`/`.sheafgraph` window files opened by appending) and Recent Books / Recent Graphs | M | done, merged 2026-11-15 (window-files.md); left: Origin measurements, Save Template As |
 | [T55](T55-iir-fir-filters.md) | IIR Filter (Butterworth, Chebyshev, elliptic, Bessel) and FIR Filter design and application | L | claimed 2026-11-15 (`digital-filters`, Claude macOS "violin") |
+| [T56](T56-user-graph-templates.md) | Save Template As and Plot > User Templates (a graph's look without data, applied to new columns; CLI `--template`) | M | claimed 2026-11-15 (`user-templates`, Claude macOS "mac-templates") |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

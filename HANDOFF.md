@@ -10,15 +10,28 @@ open. History of what was merged when is in `git log` (not repeated here).
 - **When unsure, copy Origin:** measure it through `tools/origin-ref/` (or read its docs for
   behaviour) and copy it; record the measurement in the spec. Don't ask the owner what Origin can
   answer. Clean-room: copy behaviour and layout, never code, icons, help text or files.
-- **Subagents:** Sonnet for building, research, reviews; Haiku for running tests and checking outputs.
+- **Subagents:** Claude sessions use Sonnet for building, research and reviews, and Haiku for tests
+  and output checks. **Codex sessions use Terra instead of Sonnet and Luna instead of Haiku.**
+- **Codex GitHub monitor:** keep a dedicated Luna subagent checking GitHub periodically while work
+  is in flight. Watch remote `main`, branches and task claims for another session taking or
+  overlapping the task; reconcile new work before merging and never overwrite another session's work.
+- **Codex continuous work:** the owner requested an ongoing queue: finish, review, verify and
+  merge/push one suitable task, then find and claim another. Do not stop merely because one task
+  is complete. Refresh GitHub and the handoff before selecting the next task; respect active claims.
+- **Codex on the owner's current Mac:** this computer has no access to Origin. Choose tasks that
+  need no new Origin measurements (Sheaf's own interfaces/mechanisms or already specified behavior).
+  Preserve measured behavior and explicitly document anything still unmeasured; leave new Origin
+  probes to a machine that has Origin.
 - **No co-author line:** never add `Co-Authored-By: Claude ...` or "Generated with Claude Code" to
   commits or PRs; say so in every subagent prompt. (History was rewritten on 2026-11-12 to remove
   them; branches older than that must be rebased onto `main`, matching commits by tree.)
 - **Repository:** https://github.com/Electrochemistry-Undergrads/OriginRust (private). Nothing on the
   owner's personal account.
-- **Two or more sessions** often share this repo. Claim work in `re-workspace/scratch/peer-notes.md`
-  (local only, read its last 40 lines on start); merge to `main` one branch at a time, after
-  `git fetch`. See LESSONS "Two sessions on one repository need a written split".
+- **Two or more sessions** often share this repo. Pull the latest changes and inspect branches,
+  worktrees and claims before choosing work. Publish the task claim in this file on `main` (push it)
+  and in `re-workspace/scratch/peer-notes.md` (local only, read its last 40 lines on start), so other
+  computers can see the split. Merge to `main` one branch at a time, after `git fetch`.
+  See LESSONS "Two sessions on one repository need a written split".
 - **Inactive task claims:** If a task has had no edits for at least 48 consecutive hours,
   another agent may take ownership. Check the task brief, its branch and worktree when
   available, and the latest peer notes for evidence of newer work. Record the takeover in

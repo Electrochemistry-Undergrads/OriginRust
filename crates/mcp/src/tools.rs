@@ -1214,6 +1214,11 @@ fn plot(s: &mut Server, a_raw: &Value) -> Res {
 #[serde(deny_unknown_fields)]
 struct ExportArgs {
     graph: Option<String>,
+    /// Several graphs, in page order, for one multi-page PDF.
+    graphs: Option<Vec<String>>,
+    /// Every graph of the project, in project order.
+    #[serde(default)]
+    all_graphs: bool,
     path: Option<String>,
     format: Option<String>,
     dpi: Option<f64>,
@@ -1234,14 +1239,104 @@ fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
     Some((be(16), be(20)))
 }
 
-fn export_graph(s: &mut Server, a: &Value) -> Res {
-    let a: ExportArgs = args(a)?;
-    let graph = pick_graph(&s.project, a.graph.as_deref())?;
-    let graph_name = s.project.graph(graph).map(|g| g.name.clone()).unwrap_or_default();
-    let dpi = a.dpi.unwrap_or(300.0);
+/// The graphs `graphs` or `all_graphs` name, each resolved as `pick_graph` does; `None` when
+/// neither is given.
+fn export_graph_list(project: &Project, a: &ExportArgs) -> Result<Option<Vec<WindowId>>, ToolError> {
+    if a.graph.is_some() && (a.graphs.is_some() || a.all_graphs) {
+        return Err(ToolError::new(
+            "give graph for one graph, or graphs or all_graphs for several; not graph together with them",
+        ));
+    }
+    let ids = match (&a.graphs, a.all_graphs) {
+        (Some(_), true) => return Err(ToolError::new("give graphs or all_graphs, not both")),
+        (Some(names), false) => names.iter().map(|n| pick_graph(project, Some(n))).collect::<Result<Vec<_>, _>>()?,
+        (None, true) => project.graphs().map(|g| g.id).collect(),
+        (None, false) => return Ok(None),
+    };
+    if ids.is_empty() {
+        return Err(ToolError::new(if a.all_graphs { "the project has no graph" } else { "graphs is empty" }));
+    }
+    Ok(Some(ids))
+}
+
+fn check_dpi(dpi: f64) -> Result<(), ToolError> {
     if !(dpi.is_finite() && (36.0..=1200.0).contains(&dpi)) {
         return Err(ToolError::new(format!("dpi must be between 36 and 1200 (got {dpi})")));
     }
+    Ok(())
+}
+
+/// Fails when the figure of `graph` at this size and dpi would pass the pixel cap.
+fn check_pixels(project: &Project, graph: WindowId, size: sheaf_plot::ExportSize, dpi: f64) -> Result<(), ToolError> {
+    let page = project.graph(graph).map(|g| (g.page.width_pt, g.page.height_pt)).unwrap_or((360.0, 252.0));
+    let scale = size.scale(page.0, page.1).map_err(|e| ToolError::new(e.to_string()))?;
+    let (est_w, est_h) = (page.0 / 72.0 * scale * dpi, page.1 / 72.0 * scale * dpi);
+    if est_w * est_h > PIXEL_CAP {
+        return Err(ToolError::new(format!(
+            "the figure would be about {est_w:.0} x {est_h:.0} pixels; the limit is 40 million pixels. Lower dpi or the size"
+        )));
+    }
+    Ok(())
+}
+
+/// Several graphs into one PDF, one page per graph (Origin 2018b's multi-page PDF export,
+/// expGraph `multipage`). Sheaf's own rules: a path is needed, the format must be pdf, no image
+/// is returned, and each page passes the same pixel cap as a one-graph export.
+fn export_pages(s: &Server, a: &ExportArgs, ids: &[WindowId], dpi: f64) -> Res {
+    let Some(path) = a.path.as_deref() else {
+        return Err(ToolError::new("several graphs go into one PDF file; give a path ending in .pdf"));
+    };
+    let path = s.roots.check(path)?;
+    let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
+    let format = a.format.as_deref().map(str::to_ascii_lowercase).or(ext.clone());
+    if format.as_deref() != Some("pdf") || ext.as_deref().is_some_and(|e| e != "pdf") {
+        return Err(ToolError::new(
+            "several graphs can only be exported as one multi-page PDF; use a path ending in .pdf, or one graph",
+        ));
+    }
+    if a.return_image == Some(true) {
+        return Err(ToolError::new(
+            "return_image works with one graph only; export the graphs to the PDF, then one graph to look at",
+        ));
+    }
+    let settings = ExportSettings {
+        dpi,
+        image_width: a.width.clone(),
+        image_height: a.height.clone(),
+        margin: MarginSettings { margin: a.margin.clone().unwrap_or_else(|| "auto".to_string()), border_width: None },
+    };
+    let (size, layout) = settings.resolve()?;
+    for &g in ids {
+        check_pixels(&s.project, g, size, dpi)?;
+    }
+    let bytes = sheaf_plot::render_multipage_pdf(&s.project, ids, size, layout)
+        .context("could not render the graphs as one PDF")?;
+    std::fs::write(&path, &bytes)
+        .with_context(|| format!("could not write '{}'", path.display()))
+        .map_err(ToolError::from)?;
+    let names: Vec<String> = ids.iter().filter_map(|&g| s.project.graph(g)).map(|g| g.name.clone()).collect();
+    Ok(ToolOut::json(json!({
+        "graph": names.first(), "graphs": names, "pages": ids.len(), "path": path, "format": "pdf",
+        "width_px": None::<u32>, "height_px": None::<u32>, "bytes": bytes.len(),
+    })))
+}
+
+fn export_graph(s: &mut Server, a: &Value) -> Res {
+    let a: ExportArgs = args(a)?;
+    let list = export_graph_list(&s.project, &a)?;
+    let dpi = a.dpi.unwrap_or(300.0);
+    if let Some(ids) = &list
+        && ids.len() > 1
+    {
+        check_dpi(dpi)?;
+        return export_pages(s, &a, ids, dpi);
+    }
+    let graph = match list {
+        Some(ids) => ids[0],
+        None => pick_graph(&s.project, a.graph.as_deref())?,
+    };
+    let graph_name = s.project.graph(graph).map(|g| g.name.clone()).unwrap_or_default();
+    check_dpi(dpi)?;
     let path = a.path.as_deref().map(|p| s.roots.check(p)).transpose()?;
     let from_path = path.as_ref().and_then(|p| p.extension()).and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
     let same = |f: &str, e: &str| {
@@ -1278,14 +1373,7 @@ fn export_graph(s: &mut Server, a: &Value) -> Res {
         margin: MarginSettings { margin: a.margin.clone().unwrap_or_else(|| "auto".to_string()), border_width: None },
     };
     let (size, _) = settings.resolve()?;
-    let page = s.project.graph(graph).map(|g| (g.page.width_pt, g.page.height_pt)).unwrap_or((360.0, 252.0));
-    let scale = size.scale(page.0, page.1).map_err(|e| ToolError::new(e.to_string()))?;
-    let (est_w, est_h) = (page.0 / 72.0 * scale * dpi, page.1 / 72.0 * scale * dpi);
-    if est_w * est_h > PIXEL_CAP {
-        return Err(ToolError::new(format!(
-            "the figure would be about {est_w:.0} x {est_h:.0} pixels; the limit is 40 million pixels. Lower dpi or the size"
-        )));
-    }
+    check_pixels(&s.project, graph, size, dpi)?;
     let bytes = sheaf_ops::render::render_graph(&s.project, graph, &settings, &format)?;
     if let Some(p) = &path {
         std::fs::write(p, &bytes)

@@ -2781,3 +2781,67 @@ Sheaf's choices (all unmeasured):
 - `.opj` save: the rug is not written; a save warning names it, the companion file keeps it.
 - Not done: rug hit testing / selection, a rug on the right axis of a double-Y layer is
   possible (it is the opposite edge of that layer's Y axis) but not tuned.
+
+### 18.11 Trendlines (T43)
+
+Origin facts (documentation only, nothing measured; no Origin on the machine that built this):
+
+- Origin 2025b: "Mini toolbar to add trendline for single or multiple plots". Types: Linear, Polynomial,
+  Power, Logarithmic, Exponential, Moving Average. [W:originlab.com/2025b]
+- Mini Toolbar, Add Trend Line (single-plot and group-plot tabs): Polynomial order 2 to 10; Moving Average
+  "Points of Window" 2 to 10; the fitted equation and/or the R-Square value (Pearson's R for linear) can be
+  shown, not for Moving Average; a Label Position button; line colour, thickness (pt) and style. A hidden
+  trendline cannot be brought back (it is added again). [W:origin-help/mini-toolbar; quick-help/add-trendlines]
+- Not documented: default type, order and window, how Power, Logarithmic and Exponential are fitted, how
+  R-square is defined for them, trailing or centred averaging, the label's default place and style.
+
+Sheaf's choices (all unmeasured):
+
+- Model: `PlotDecor::trendlines: Vec<Trendline>` (so on each plot; empty by default and not written, which
+  keeps graphs without trendlines identical in files and exports). A `Trendline` is the kind (`TrendKind`:
+  Linear, Polynomial{order 2..=10}, Power, Logarithmic, Exponential, MovingAverage{window 2..=10}), Show
+  Equation, Show R-squared (both on), colour (`None` = Auto, the plot's colour: line colour for line and area
+  kinds, else symbol colour), width (1.5 pt), dash (solid) and a label offset in points. Computed when drawn,
+  so a trendline follows the data and its edits; it makes no worksheet output. Dependent plot groups do not
+  copy trendlines.
+- Points: the plotted ones as drawn (offsets, multipliers and stacking applied, before the axis transform),
+  skipping rows that are masked, filtered, or have a missing or non-finite X or Y. Pie, box, violin and
+  histogram plots and polar, ternary and waterfall layers get no trendline.
+- Fits (`sheaf_calc::trend`): Linear and Polynomial are ordinary least squares on (x, y) (the centred and
+  scaled solver of the smoothing tools; coefficients are reported as powers of x). Power `y = a x^b`,
+  Exponential `y = a e^(bx)` and Logarithmic `y = a + b ln x` are least squares on the transformed data
+  (`ln y` on `ln x`, `ln y` on `x`, `y` on `ln x`), as spreadsheets do, not nonlinear fits of y. Points that
+  cannot be transformed are skipped: Power needs x > 0 and y > 0, Exponential y > 0, Logarithmic x > 0.
+  A fit needs more than `order` usable points (more than 1 for the others) with distinct X.
+- R-squared is `1 - SSres/SStot` in the space that was fitted: on y for Linear, Polynomial and Logarithmic,
+  on `ln y` for Power and Exponential (the Excel convention). The label says "R2" for Linear too (the square
+  of Pearson's r; Origin's Pearson's R is not shown). It is absent when SStot is 0.
+- Moving average: the trailing mean of `window` consecutive points taken in increasing X (stable for equal X),
+  drawn through the point at the last X of each window, so the curve starts at the window-th point. Origin's
+  choice (trailing or centred) is unknown. No equation or R-squared.
+- Drawing: after the layer's data, in the trendline colour, clipped to the layer. A fit is evaluated at 200
+  places from the smallest to the largest plotted X, evenly spaced along the X axis' own scale (so log and
+  reciprocal axes get an even curve; reversed axes work), through the layer transform; a value that cannot
+  be placed (ln of a non-positive number) breaks the curve, and page coordinates are limited to
+  +-100000 pt. The moving average joins its points with straight segments.
+- Label: one line per trendline in the layer, from the top-left corner of the frame (6 pt in) down, in the
+  legend's font at its size, coloured like the curve, plus the trendline's label offset. Text is
+  `y = 1.234x + 0.56` (4 significant digits, trailing zeros dropped, scientific outside 1e-3 .. 1e6 as
+  `1.235x10^-5`; polynomial terms highest power first with `\+(n)` superscripts; power `y = 2.566x^0.9951`;
+  exponential `y = 2.12e^(0.3152x)`; logarithmic `y = 8.888ln(x) + 1.167`), then `, R2 = 0.9876` (superscript
+  2). Show Equation and Show R-squared choose the parts; a line with neither is not written. A trendline
+  whose fit cannot be made draws nothing.
+- App: the plot's right-click menu has Add Trendline... (always), and Edit Trendline... and Remove Trendline
+  (only when the plot has one). With several, Edit and Remove act on the last one. The dialog has Type, Order
+  or Points of Window, Show Equation, Show R2, Color (Auto or fixed), Width, Dash, OK, Cancel; OK is one undo
+  step ("Add trendline", "Edit trendline"), Remove is one ("Remove trendline").
+- CLI and MCP: `sheaf plot ... --trendline linear|poly:N|power|log|exp|ma:N` (repeatable; also `poly` = order
+  2 and `ma` = window 2) and `--no-trendline-label`; MCP `style.trendline` (array of the same strings) and
+  `style.no_trendline_label`. The option replaces the trendlines of every curve it styles (so repeating the
+  command does not pile them up), except curves that follow another (a fit curve over its data); equation
+  and R-squared show by default.
+- `.opj` save: trendlines are not written; a save warning names them, the companion file keeps them.
+- Reference values: the calc tests compare with numpy 2.5.4 (`np.polyfit`, with the transformed data for
+  power, exponential and logarithmic).
+- Not done: a Mini Toolbar, a label dragged with the mouse (the offset is in the model only), a trendline per
+  group of plots, a trendline hit test, Pearson's R for linear, confidence bands, fit parameters to a sheet.

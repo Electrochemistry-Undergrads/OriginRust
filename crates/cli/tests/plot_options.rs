@@ -142,7 +142,8 @@ fn trendline_adds_curves_and_a_label_and_refuses_bad_kinds() {
     let base = ["plot", data, "--template", "scatter", "--colors", "#ff0000"];
     let (ok, _, e) = sheaf(&[&base[..], &["-o", plain.to_str().unwrap()]].concat());
     assert!(ok, "{e}");
-    let (ok, _, e) = sheaf(&[&base[..], &["--trendline", "linear", "--trendline", "ma:3", "-o", with.to_str().unwrap()]].concat());
+    let (ok, _, e) =
+        sheaf(&[&base[..], &["--trendline", "linear", "--trendline", "ma:3", "-o", with.to_str().unwrap()]].concat());
     assert!(ok, "{e}");
     let (plain, with) = (std::fs::read_to_string(&plain).unwrap(), std::fs::read_to_string(&with).unwrap());
     // Curves in the plot colour: the two trendline paths are new; the label is written.
@@ -150,7 +151,8 @@ fn trendline_adds_curves_and_a_label_and_refuses_bad_kinds() {
     assert_eq!(paths(&with), paths(&plain) + 2);
     assert!(with.contains("y = 2.02") && with.contains("R"), "label text missing");
     assert!(!plain.contains("y = 2.02"));
-    let (ok, _, e) = sheaf(&[&base[..], &["--trendline", "poly:11", "-o", dir.join("x.svg").to_str().unwrap()]].concat());
+    let (ok, _, e) =
+        sheaf(&[&base[..], &["--trendline", "poly:11", "-o", dir.join("x.svg").to_str().unwrap()]].concat());
     assert!(!ok && e.contains("--trendline") && e.contains("2 to 10"), "{e}");
     let (ok, _, e) = sheaf(&[&base[..], &["--trendline", "cubic", "-o", dir.join("x.svg").to_str().unwrap()]].concat());
     assert!(!ok && e.contains("cubic"), "{e}");

@@ -153,7 +153,11 @@ pub enum Cmd {
     StackPanels,
     LabelPanels,
     /// Add / Edit Trendline... on a plot of the active layer.
-    Trendline { layer: usize, plot: usize, edit: bool },
+    Trendline {
+        layer: usize,
+        plot: usize,
+        edit: bool,
+    },
     /// Graph > Add Error Bars... on the active layer.
     AddErrorBars,
     /// Window > Refresh (F5).

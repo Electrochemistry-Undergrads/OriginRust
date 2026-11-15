@@ -74,7 +74,9 @@ impl TrendKind {
             "power" if arg.is_none() => Ok(TrendKind::Power),
             "log" | "logarithmic" if arg.is_none() => Ok(TrendKind::Logarithmic),
             "exp" | "exponential" if arg.is_none() => Ok(TrendKind::Exponential),
-            "ma" | "moving-average" | "movingaverage" => Ok(TrendKind::MovingAverage { window: num(2, 10, "moving average window", 2)? }),
+            "ma" | "moving-average" | "movingaverage" => {
+                Ok(TrendKind::MovingAverage { window: num(2, 10, "moving average window", 2)? })
+            }
             _ => Err(format!("unknown trendline '{s}' (linear, poly:N, power, log, exp, ma:N)")),
         }
     }
@@ -112,7 +114,11 @@ impl TrendFit {
             TrendKind::Power => self.coeffs[0] * x.powf(self.coeffs[1]),
             TrendKind::Exponential => self.coeffs[0] * (self.coeffs[1] * x).exp(),
             TrendKind::Logarithmic => {
-                if x > 0.0 { self.coeffs[0] + self.coeffs[1] * x.ln() } else { f64::NAN }
+                if x > 0.0 {
+                    self.coeffs[0] + self.coeffs[1] * x.ln()
+                } else {
+                    f64::NAN
+                }
             }
             TrendKind::MovingAverage { .. } => f64::NAN,
         }
@@ -188,7 +194,7 @@ pub fn sig_str(v: f64, sig: usize) -> String {
 fn r_squared(y: &[f64], pred: impl Fn(usize) -> f64) -> Option<f64> {
     let mean = y.iter().sum::<f64>() / y.len() as f64;
     let sstot: f64 = y.iter().map(|v| (v - mean).powi(2)).sum();
-    if !(sstot > 0.0) {
+    if sstot <= 0.0 || sstot.is_nan() {
         return None;
     }
     let ssres: f64 = y.iter().enumerate().map(|(i, v)| (v - pred(i)).powi(2)).sum();
@@ -201,7 +207,7 @@ fn to_powers(uc: &[f64], x0: f64, scale: f64) -> Vec<f64> {
     // (x - x0)^k / scale^k expanded by the binomial theorem.
     let mut out = vec![0.0; n];
     let mut binom = vec![1.0_f64];
-    for k in 0..n {
+    for (k, &uk) in uc.iter().enumerate() {
         if k > 0 {
             let mut next = vec![1.0; k + 1];
             for j in 1..k {
@@ -209,7 +215,7 @@ fn to_powers(uc: &[f64], x0: f64, scale: f64) -> Vec<f64> {
             }
             binom = next;
         }
-        let f = uc[k] / scale.powi(k as i32);
+        let f = uk / scale.powi(k as i32);
         for j in 0..=k {
             out[j] += f * binom[j] * (-x0).powi((k - j) as i32);
         }
@@ -353,7 +359,18 @@ mod tests {
     #[test]
     fn moving_average_is_trailing_over_sorted_x() {
         let ma = moving_average(&X, &Y, 3);
-        let want = [2.7333333333333, 3.4666666666667, 4.9333333333333, 6.3666666666667, 8.5, 10.2333333333333, 12.8666666666667, 15.8666666666667, 20.1, 25.0666666666667];
+        let want = [
+            2.7333333333333,
+            3.4666666666667,
+            4.9333333333333,
+            6.3666666666667,
+            8.5,
+            10.2333333333333,
+            12.8666666666667,
+            15.8666666666667,
+            20.1,
+            25.0666666666667,
+        ];
         assert_eq!(ma.len(), 10);
         for (p, w) in ma.iter().zip(want) {
             assert!((p.1 - w).abs() < 1e-9);

@@ -236,8 +236,11 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
     let colors: Vec<Color> =
         s.colors.iter().map(|c| c.parse::<Color>().map_err(|e| anyhow!("{e}"))).collect::<Result<_>>()?;
     let stack = stack_option(s)?;
-    let trends: Vec<TrendKind> =
-        s.trendline.iter().map(|t| TrendKind::parse(t).map_err(|e| anyhow!("--trendline: {e}"))).collect::<Result<_>>()?;
+    let trends: Vec<TrendKind> = s
+        .trendline
+        .iter()
+        .map(|t| TrendKind::parse(t).map_err(|e| anyhow!("--trendline: {e}")))
+        .collect::<Result<_>>()?;
     require_range("--x-label-angle", s.x_label_angle, -90.0, 90.0)?;
     require_range("--bar-gap", s.bar_gap, 0.0, 100.0)?;
     require_range("--bar-overlap", s.bar_overlap, -100.0, 100.0)?;

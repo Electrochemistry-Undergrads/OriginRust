@@ -71,7 +71,9 @@ fn style_schema() -> Value {
             ),
             (
                 "trendline",
-                strs("Trendlines added to every curve (replacing its own), each linear, poly:N (order 2-10), power, log, exp or ma:N (moving average, window 2-10). Fitted ones write their equation and R-squared at the top left."),
+                strs(
+                    "Trendlines added to every curve (replacing its own), each linear, poly:N (order 2-10), power, log, exp or ma:N (moving average, window 2-10). Fitted ones write their equation and R-squared at the top left.",
+                ),
             ),
             ("no_trendline_label", t("boolean", "Leave the equation and R-squared label off the trendlines.")),
             ("colors", strs("Plot colors in legend order: names or #RRGGBB.")),

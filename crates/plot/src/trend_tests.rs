@@ -191,7 +191,12 @@ fn style_and_hidden_kinds() {
     plot.decor.trendlines[0].color = None;
     plot.symbol.color = plot_color;
     let s = scene(&p, g);
-    assert!(s.layers[0].plots.iter().any(|i| matches!(i, Item::Text(t) if t.color == plot_color && t.text.starts_with("y"))));
+    assert!(
+        s.layers[0]
+            .plots
+            .iter()
+            .any(|i| matches!(i, Item::Text(t) if t.color == plot_color && t.text.starts_with("y")))
+    );
 }
 
 #[test]

@@ -20,7 +20,6 @@ mod layout;
 mod legend;
 mod margin;
 pub mod markup;
-pub(crate) mod trend;
 mod multipage;
 mod pie;
 mod plots;
@@ -38,6 +37,7 @@ mod ternary;
 mod text;
 pub mod ticks;
 mod ticks_scales;
+pub(crate) mod trend;
 mod vector;
 mod violin;
 
@@ -72,11 +72,11 @@ mod sort_x_tests;
 #[cfg(test)]
 mod symbol_gap_tests;
 #[cfg(test)]
-mod trend_tests;
-#[cfg(test)]
 mod symbol_line_order_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod trend_tests;
 #[cfg(test)]
 mod violin_tests;
 

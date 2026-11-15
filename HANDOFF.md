@@ -141,6 +141,10 @@ open. History of what was merged when is in `git log` (not repeated here).
 - T42 Window Switcher (2026-11-15, macOS, no Origin): Ctrl+Tab / Ctrl+Shift+Tab (physical Control on macOS)
   over the windows of the Project Explorer folder, hidden included, most recent first; graph thumbnails rendered
   on open, workbook miniatures; release Ctrl activates, Esc cancels; Window > Window Switcher (gui-look.md).
+- T43 trendlines (2026-11-15, macOS, no Origin): per-plot `PlotDecor::trendlines` (Linear, Polynomial 2-10, Power, Log,
+  Exp, Moving Average 2-10), drawn with an equation/R2 label; plot menu Add/Edit/Remove Trendline, `plot --trendline`,
+  MCP `style.trendline`; `.opj` warns. Power/log/exp are least squares on transformed data, R2 in the fitted space,
+  trailing moving average: all unmeasured (graphing.md 18.11).
 - T41 rug plots (2026-11-15, macOS, no Origin): Axis dialog Rug tab with Origin's documented controls, strip
   outside the frame with tick labels pushed out, Plot > Symbol > Scatter + Rug (`-t scatter-rug`, MCP); rug
   Data choice is the plot's Y column; histograms mark raw observations; `.opj` warns (graphing.md 18.10).

@@ -172,7 +172,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   choose the first column. Escape closes the flyout before the dialog. Origin 2016 UI
   probes, four new UI regressions and a parser fixture cover these rules. Formatting,
   strict all-target Clippy and 2276 workspace tests pass (three existing ignored). The
-  separate project-wide Column Browser remains unimplemented (gui-look section 5).
+  project-wide Column Browser was added in `c941fb0`; advanced selection controls remain (gui-look section 5).
 - T13 Draw Line in Front/Behind (2026-11-15, Windows): the Line + Symbol choice controls
   both plotted curves and legend samples, defaulting to Behind. Gap to Symbol disables the
   radios and overrides the retained choice, as Origin 2016 controls/PNG exports confirm.
@@ -270,6 +270,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t02-browser-selection` | Codex Windows, t02-browser-selection | T02 Go To Column Browser top-table Ctrl/Shift range selection and Add as One Block: native measurements, browser state and focused UI tests/docs | claimed 2026-11-15; only go_to/browser.rs and own go_to_browser tests/docs; no Exclude, row-range editing/preferences, navigation semantics, app/MRU/grid/core/history/MCP/plot/stats/formula/label or other owner changes |
 | `codex/t25-windows-acceptance` | Codex Windows, t25-windows-acceptance | T25 Windows attach acceptance and measured permissions repair: discovery run-folder/token-file owner/protected DACL, isolated Windows ACL/access regressions, direct existing windows-sys dependency/docs | claimed 2026-11-15; native baseline token inherited another local group read; only runtime folder/files, no global profile/account ACL or protocol/proxy/queue/history/UI/model changes, no other claimed scopes |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |

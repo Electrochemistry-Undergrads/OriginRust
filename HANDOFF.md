@@ -199,6 +199,10 @@ open. History of what was merged when is in `git log` (not repeated here).
 - T42 Window Switcher (2026-11-15, macOS, no Origin): Ctrl+Tab / Ctrl+Shift+Tab (physical Control on macOS)
   over the windows of the Project Explorer folder, hidden included, most recent first; graph thumbnails rendered
   on open, workbook miniatures; release Ctrl activates, Esc cancels; Window > Window Switcher (gui-look.md).
+- T45 hexbin plot (2026-11-15, macOS, no Origin): Plot > Contour/Heat Map > Hexbin (`-t hexbin`, `--hex-bins`, MCP), XY data
+  binned into pointy-top hexagons (`sheaf_calc::hexbin`, checked against matplotlib hexbin), coloured by count with the
+  colour mapped scatter ramp and a "Count" colour scale, Plot Details Bins tab (graphing.md 14.24). XYZ/matrix input and
+  Binned Scatter not done.
 - T44 ridgeline chart (2026-11-15, macOS, no Origin): Plot > Statistics > Ridgeline Chart (`-t ridgeline`, MCP), one
   KDE ridge per Y column on baselines labelled with the column names, four display types, Origin's bandwidth rules
   through the shared `sheaf_calc::kde` (grid refined to h/4 near data), quantile lines and rug (graphing.md 14.23).
@@ -274,7 +278,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `vartest2` | Claude Windows, "continue all tasks" | T26 leftovers: Origin measurements of the two-sample proportion test (unpooled, tails, differences, Fisher, small samples), two-sample variance dialog with intervals, power analysis outputs; calc vartest.rs, core var/prop runners, their dialogs, statistics.md 21 | claimed 2026-11-15 |
 | `cell-notes` | Claude macOS, "mac-multipdf" | T36 worksheet cell notes (Origin 2022): core per-sheet notes kept through row/column ops and sort, grid corner tab + hover popup, cell menu Add/Edit/Delete Note, note editor | claimed 2026-11-15; core worksheet + sheetops note upkeep, grid.rs body_cell, menus/app/dialogs; no cond-format/frozen/filter/Go To, plot, stats or other sessions' scopes |
 | `violin-plot` | Claude macOS, "violin" | T37 violin plot: core PlotKind/Template, plot data/plots/layout (new violin drawing beside the box chart), calc kernel density, Plot > Statistics menu, CLI/MCP template lists, graphing.md 14.22 | claimed 2026-11-15; no fill-under/sidelines, axis breaks, cell notes, worksheet grid or other sessions' scopes |
-| `hexbin` | Claude macOS, "mac-multipdf" | T45 hexbin plot (Origin 2027): hexagonal binning in calc, Template/plot kind Hexbin, hexagon drawing + colour scale, Contour/Heat Map > Hexbin menu item, Plot Details bin controls, CLI/MCP | claimed 2026-11-15; new calc/plot modules, core template/kind, menus, graph_details bin controls only; no matrices/contour (originrust-3a), legend placement or other sessions' scopes |
 | `graph-data-tools` | Claude macOS, "mac-datatools" | T48 graph Data menu: Mask Data Points, Remove Bad Data Points, Move Data Points; core cell edits, graph_view modes/hit-testing, menus data_menu, UI tests, graphing.md section | claimed 2026-11-15; no display range/markers, no Data Reader changes beyond sharing hit-testing, no other sessions' scope |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 

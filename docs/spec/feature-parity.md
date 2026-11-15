@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 151 | 43 | 243 |
+| All rows | 49 | 152 | 42 | 243 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 82 | 43 | 142 |
+| P1 and P2 together | 17 | 83 | 42 | 142 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
@@ -287,7 +287,7 @@ Cross-cutting findings:
 | Stock | Plot > Stock | none | ✗ | | P2 |
 | Vector | Plot > Vector | none | ✗ | | P2 |
 | 3D plots | Plot > 3D | none | ✗ | no 3D renderer | P2 |
-| Contour, heat map | Plot > Contour | none | ✗ | needs matrices | P2 |
+| Contour, heat map | Plot > Contour | Plot > Contour/Heat Map > Hexbin only (T45, graphing.md 14.24; `-t hexbin`) | ◐ | Hexbin of XY data with Origin's bin controls and a count colour scale; contour and heat map need matrices | P2 |
 | Inset, pictures in graphs | Zoom, Insert picture | none | ✗ | | P2 |
 | Other plot-type IDs when reading .opj | area, box, bar, histogram, pie | only types 200 to 203 mapped | ✗ | | P2 |
 | Plotting X-Functions | plotgroup, plotbylabel, plotxyz | none | ✗ | | P2 |

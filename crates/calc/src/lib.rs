@@ -27,6 +27,7 @@ pub mod envelope;
 pub mod fft;
 pub mod freq;
 pub mod graph_summary;
+pub mod hexbin;
 pub mod hypothesis;
 pub mod integrate;
 pub mod interp;

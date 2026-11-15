@@ -342,6 +342,7 @@ fn new_plot(layer: &Layer, x: Option<ColumnId>, y: ColumnId, y_error: Option<Col
         error: ErrorStyle::default(),
         hist: Default::default(),
         ridge: layer.inherited_ridge(),
+        hexbin: layer.inherited_hexbin(),
         size_from: None,
         color_from: None,
         decor: Default::default(),

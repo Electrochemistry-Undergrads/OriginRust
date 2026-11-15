@@ -160,6 +160,8 @@ pub enum ProjectError {
     ViolinNoRightAxis,
     #[error("a ridgeline chart cannot have a right Y axis; use one Y axis or another template")]
     RidgelineNoRightAxis,
+    #[error("a hexbin plot cannot have a right Y axis; use one Y axis or another template")]
+    HexbinNoRightAxis,
 }
 
 impl Project {
@@ -602,6 +604,7 @@ impl Project {
             error: ErrorStyle::default(),
             hist: Default::default(),
             ridge: Default::default(),
+            hexbin: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -719,6 +722,8 @@ impl Project {
         if template == Template::Lollipop && ys.len() < 2 {
             return Err(ProjectError::LollipopNeedsTwoColumns(ys.len()));
         }
+        // One hexbin plot per layer: the colour scale and the hexagons of a second plot would cover the first's.
+        let ys = if template == Template::Hexbin { &ys[..ys.len().min(1)] } else { ys };
         let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
         let graph = self.add_graph(template);
         if matches!(template, Template::FloatingColumn | Template::FloatingBar) {
@@ -823,6 +828,9 @@ impl Project {
         }
         if template == Template::Ridgeline {
             return Err(ProjectError::RidgelineNoRightAxis);
+        }
+        if template == Template::Hexbin {
+            return Err(ProjectError::HexbinNoRightAxis);
         }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;

@@ -85,6 +85,8 @@ pub(crate) struct PlotData<'a> {
     /// The observations a histogram plot bins (shown, unmasked rows of its Y column), kept for rugs
     /// because `x`/`y` hold bin centres and counts; `None` for other kinds.
     pub hist_raw: Option<Vec<f64>>,
+    /// The points a hexbin plot bins and their first binning; `None` for other kinds.
+    pub hex: Option<crate::hexbin::HexData>,
 }
 
 /// The numbers of one box of a box chart (Origin's defaults: the box runs from the 25th to the
@@ -302,6 +304,21 @@ pub(crate) struct LayerData<'a> {
 
 pub(crate) use sheaf_core::stack::row_range;
 
+/// [`collect`] for every layer of a graph, with the hexbin plots binned for the nominal frame of their layer.
+pub(crate) fn collect_graph<'a>(project: &'a Project, g: &'a sheaf_core::graph::Graph) -> Vec<LayerData<'a>> {
+    let mut all: Vec<LayerData> = g.layers.iter().map(|layer| collect(project, layer)).collect();
+    for (layer, d) in g.layers.iter().zip(&mut all) {
+        let aspect = crate::hexbin::nominal_aspect(layer, g.page.width_pt, g.page.height_pt);
+        for pd in &mut d.plots {
+            let style = pd.plot.hexbin;
+            if let Some(h) = &mut pd.hex {
+                h.refit(&style, aspect);
+            }
+        }
+    }
+    all
+}
+
 /// The drawable plots of a layer, in plot order, with their stack offsets. A plot that is hidden
 /// or whose Y column is missing or not numeric is skipped (a hidden plot still keeps its place in
 /// the stack).
@@ -359,6 +376,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             spokes: None,
             closing: None,
             hist_raw: None,
+            hex: None,
             label_texts: match plot.decor.labels.form {
                 LabelForm::Column { column } if plot.decor.labels.enable => project.column(column).map(cell_texts),
                 _ => None,
@@ -460,6 +478,11 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.xerr = None;
                 pd.base = None;
                 pd.ridge = Some(ridge);
+            }
+            PlotKind::Hexbin => {
+                // The nominal frame is not known here (`collect_graph` refits it); a square one for now.
+                pd.hex =
+                    Some(crate::hexbin::HexData::new(&pd, &plot.hexbin, 1.0, layer.x_axis.scale, layer.y_axis.scale));
             }
             _ => {}
         }
@@ -713,6 +736,18 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
         }
     };
     for pd in pds {
+        if let Some(hex) = &pd.hex {
+            if let Some((x0, x1, y0, y1)) = hex.extent() {
+                if dim == Dim::X {
+                    add(x0);
+                    add(x1);
+                } else {
+                    add(y0);
+                    add(y1);
+                }
+            }
+            continue;
+        }
         if let Some(rd) = &pd.ridge {
             if dim == Dim::X {
                 if let Some((lo, hi)) = rd.x_extent() {

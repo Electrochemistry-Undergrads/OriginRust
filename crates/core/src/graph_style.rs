@@ -511,3 +511,79 @@ impl RidgelineStyle {
         *self == RidgelineStyle::default()
     }
 }
+
+/// How the centres of one axis of a hexbin plot are spaced (Origin's Bin Spacing or Number of Bins).
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HexbinBy {
+    /// This many centres from Min Center to Max Center.
+    Bins(u32),
+    /// The distance between neighbouring centres, in axis units.
+    Spacing(f64),
+}
+
+/// The bin settings of one axis of a hexbin plot (Origin's Min Center, Max Center, and Bin Spacing or
+/// Number of Bins); `None` is the minimum or maximum of the data.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HexbinAxis {
+    pub min_center: Option<f64>,
+    pub max_center: Option<f64>,
+    pub by: HexbinBy,
+}
+
+impl Default for HexbinAxis {
+    fn default() -> HexbinAxis {
+        HexbinAxis { min_center: None, max_center: None, by: HexbinBy::Bins(sheaf_calc::hexbin::DEFAULT_BINS as u32) }
+    }
+}
+
+impl HexbinAxis {
+    fn to_calc(self) -> sheaf_calc::hexbin::HexAxisSetup {
+        use sheaf_calc::hexbin::{HexAxisSetup, HexStep};
+        HexAxisSetup {
+            min_center: self.min_center,
+            max_center: self.max_center,
+            step: match self.by {
+                HexbinBy::Bins(n) => HexStep::Bins(n as usize),
+                HexbinBy::Spacing(s) => HexStep::Spacing(s),
+            },
+        }
+    }
+}
+
+/// The settings of a hexbin plot (graphing spec 14.24). Every field is skipped when written while it
+/// has its default, so older files load unchanged.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HexbinStyle {
+    pub x: HexbinAxis,
+    pub y: HexbinAxis,
+    /// Origin's "Prefer Regular Hexagons" (checked by default).
+    pub prefer_regular: bool,
+    /// Origin's "Derive Y from X" (the default); false is "Derive X from Y".
+    pub derive_y_from_x: bool,
+}
+
+impl Default for HexbinStyle {
+    fn default() -> HexbinStyle {
+        HexbinStyle { x: HexbinAxis::default(), y: HexbinAxis::default(), prefer_regular: true, derive_y_from_x: true }
+    }
+}
+
+impl HexbinStyle {
+    pub fn is_default(&self) -> bool {
+        *self == HexbinStyle::default()
+    }
+
+    /// The setting the binning takes, for a frame of `frame_aspect` (width / height on the page).
+    pub fn to_calc(&self, frame_aspect: f64) -> sheaf_calc::hexbin::HexSetup {
+        sheaf_calc::hexbin::HexSetup {
+            x: self.x.to_calc(),
+            y: self.y.to_calc(),
+            derive_y_from_x: self.derive_y_from_x,
+            prefer_regular: self.prefer_regular,
+            frame_aspect,
+        }
+    }
+}

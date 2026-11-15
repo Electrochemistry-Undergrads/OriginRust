@@ -81,6 +81,8 @@ pub struct Style {
     pub x_label_angle: Option<f64>,
     pub bar_gap: Option<f64>,
     pub bar_overlap: Option<f64>,
+    /// Hexbin plots: the number of bins along X (and, for Derive X from Y, along Y).
+    pub hex_bins: Option<usize>,
     /// Text labels, each "TEXT@X,Y".
     pub label: Vec<String>,
     /// Shapes, each "KIND@X1,Y1,X2,Y2".
@@ -144,6 +146,14 @@ impl PlotSpec {
         }
         if !self.y2.is_empty() && self.template.as_deref().and_then(Template::from_name) == Some(Template::Ridgeline) {
             bail!("a ridgeline chart cannot have a right Y axis; leave out --y2 or choose another template");
+        }
+        if self.template.as_deref().and_then(Template::from_name) == Some(Template::Hexbin) {
+            if !self.y2.is_empty() {
+                bail!("a hexbin plot cannot have a right Y axis; leave out --y2 or choose another template");
+            }
+            if self.panels.is_some() {
+                bail!("a hexbin plot cannot be made in panels; leave out --panels or choose another template");
+            }
         }
         if !self.y2.is_empty() && self.template.as_deref().and_then(Template::from_name) == Some(Template::Waterfall) {
             bail!("a waterfall cannot have a right Y axis; leave out --y2 or choose another template");
@@ -247,6 +257,11 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
     require_range("--x-label-angle", s.x_label_angle, -90.0, 90.0)?;
     require_range("--bar-gap", s.bar_gap, 0.0, 100.0)?;
     require_range("--bar-overlap", s.bar_overlap, -100.0, 100.0)?;
+    if let Some(n) = s.hex_bins
+        && !(2..=1000).contains(&n)
+    {
+        bail!("--hex-bins must be between 2 and 1000 (got {n})");
+    }
     let labels: Vec<(String, f64, f64)> = s.label.iter().map(|v| parse_label(v)).collect::<Result<_>>()?;
     let shapes: Vec<sheaf_core::shape::Shape> = s.draw.iter().map(|v| parse_draw(v)).collect::<Result<_>>()?;
     let x_labels = s.x_labels.as_deref().map(|text| x_label_source(project, graph, text)).transpose()?;
@@ -290,6 +305,14 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
         let bars = &mut g.layers[i].bars;
         bars.gap_pct = s.bar_gap.unwrap_or(bars.gap_pct);
         bars.overlap_pct = s.bar_overlap.unwrap_or(bars.overlap_pct);
+    }
+    if let Some(n) = s.hex_bins {
+        for &i in &styled {
+            for p in g.layers[i].plots.iter_mut().filter(|p| p.kind.is_hexbin()) {
+                p.hexbin.x.by = sheaf_core::graph::HexbinBy::Bins(n as u32);
+                p.hexbin.y.by = sheaf_core::graph::HexbinBy::Bins(n as u32);
+            }
+        }
     }
     style_plots(g, &styled, s, &colors, &trends);
     for &i in &mains {

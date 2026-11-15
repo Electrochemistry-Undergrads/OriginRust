@@ -605,6 +605,10 @@ pub struct StyleArgs {
     /// --bar-overlap=-20).
     #[arg(long, value_name = "PCT", allow_hyphen_values = true)]
     pub bar_overlap: Option<f64>,
+    /// Hexbin plots (-t hexbin): the number of bins along X (the page's regular hexagons set Y
+    /// from it), from 2 to 1000 (default 20).
+    #[arg(long, value_name = "N")]
+    pub hex_bins: Option<usize>,
     /// Add a free text label to the first layer: "TEXT@X,Y", where X and Y are fractions of the
     /// layer frame (0,0 is its top left corner, 1,1 its bottom right; the label's text starts
     /// there). The text may use Origin's escapes, for example --label "\b(Zn-LMO)@0.85,0.1".
@@ -663,7 +667,8 @@ pub struct PlotArgs {
     /// with a rug (one short line per point) beside the bottom and left axes; violin draws each
     /// Y column as a mirrored kernel density silhouette, like box (also violin-box, violin-point,
     /// violin-quartile, violin-stick and half-violin, which differ in the marks inside); ridgeline draws
-    /// each Y column as a density curve on its own baseline, the columns stacked up the page.
+    /// each Y column as a density curve on its own baseline, the columns stacked up the page; hexbin bins
+    /// the X column against the first Y column into hexagons coloured by their count (see --hex-bins).
     #[arg(short, long)]
     pub template: Option<String>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).

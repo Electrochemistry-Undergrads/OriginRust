@@ -706,6 +706,19 @@ fn ridgeline_charts_are_written_as_plain_columns_with_a_save_warning() {
 }
 
 #[test]
+fn hexbin_plots_are_written_as_scatter_plots_with_a_save_warning() {
+    let mut p = source();
+    line_graph(&mut p, |l| l.plots[0].kind = sheaf_core::graph::PlotKind::Hexbin);
+    let (_, out) = round_trip(&p);
+    assert!(
+        out.warnings.iter().any(|w| w.contains("hexbin plots were written as scatter plots")),
+        "{:?}",
+        out.warnings
+    );
+    assert!(!out.warnings.iter().any(|w| w.contains("ridgeline")), "{:?}", out.warnings);
+}
+
+#[test]
 fn violin_plots_are_written_as_plain_columns_with_a_save_warning() {
     for kind in [sheaf_core::graph::PlotKind::Violin, sheaf_core::graph::PlotKind::HalfViolin] {
         let mut p = source();

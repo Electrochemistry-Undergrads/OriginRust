@@ -40,6 +40,8 @@ pub enum DetailTab {
     /// A ridgeline plot's Display and Distribution tabs (Origin's names; graphing spec 14.23).
     RidgeDisplay,
     RidgeDistribution,
+    /// A hexbin plot's Bins tab (graphing spec 14.24).
+    HexBins,
     Display,
     PageDisplay,
     LegendsTitles,
@@ -93,6 +95,9 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
                 tabs.push((DetailTab::RidgeDisplay, "Display", true));
                 tabs.push((DetailTab::RidgeDistribution, "Distribution", true));
             }
+            if plot.kind.is_hexbin() {
+                tabs.push((DetailTab::HexBins, "Bins", true));
+            }
             let curve = plot.kind.has_line() || plot.kind.has_symbols();
             if curve && !plot.kind.is_bar() && !plot.kind.is_area() {
                 tabs.push((DetailTab::DropLines, "Drop Lines", true));
@@ -120,7 +125,8 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
 
 /// The tab to show when the one that was shown does not exist for the new node.
 fn first_tab(tabs: &[(DetailTab, &str, bool)]) -> DetailTab {
-    let preferred = [DetailTab::RidgeDisplay, DetailTab::Line, DetailTab::Pattern, DetailTab::Symbol];
+    let preferred =
+        [DetailTab::RidgeDisplay, DetailTab::HexBins, DetailTab::Line, DetailTab::Pattern, DetailTab::Symbol];
     preferred.into_iter().find(|t| tabs.iter().any(|(x, _, on)| x == t && *on)).unwrap_or(tabs[0].0)
 }
 
@@ -149,6 +155,7 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::ViolinStick => "Violin with Stick",
         PlotKind::HalfViolin => "Half Violin",
         PlotKind::Ridgeline => "Ridgeline Chart",
+        PlotKind::Hexbin => "Hexbin",
         PlotKind::Pie => "Pie",
         PlotKind::Pie3D => "3D Color Pie",
         PlotKind::PieBw => "2D B&W Pie",
@@ -236,6 +243,7 @@ pub fn dialog_body(
                                 PlotKind::ViolinStick,
                                 PlotKind::HalfViolin,
                                 PlotKind::Ridgeline,
+                                PlotKind::Hexbin,
                                 PlotKind::Pie,
                                 PlotKind::Pie3D,
                                 PlotKind::PieBw,
@@ -728,6 +736,7 @@ fn plot_tab_body(
         }
         DetailTab::RidgeDisplay => ridge_display_tab(ui, &mut graph.layers[l].plots[p]),
         DetailTab::RidgeDistribution => ridge_distribution_tab(ui, &mut graph.layers[l].plots[p].ridge),
+        DetailTab::HexBins => hexbin_tab(ui, &mut graph.layers[l].plots[p].hexbin),
         DetailTab::Spacing => {
             let bars = &mut graph.layers[l].bars;
             grid(ui, "plot_spacing", |ui| {
@@ -1196,6 +1205,7 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 error: ErrorStyle::default(),
                 hist: Default::default(),
                 ridge,
+                hexbin: layer.inherited_hexbin(),
                 size_from: None,
                 color_from: None,
                 decor: Default::default(),
@@ -1675,4 +1685,66 @@ fn ridge_distribution_tab(ui: &mut egui::Ui, r: &mut RidgelineStyle) {
         }
     });
     ui.weak("Scott 0.9*A*n^(-1/5), Silverman 1.059*A*n^(-1/5), A = min(SD, IQR/1.349).");
+}
+
+/// One value that may be left to the data: a check box "Auto" and, when off, the number.
+fn auto_value(ui: &mut egui::Ui, v: &mut Option<f64>, fallback: f64) {
+    ui.horizontal(|ui| {
+        let mut auto = v.is_none();
+        if ui.checkbox(&mut auto, "Auto").changed() {
+            *v = if auto { None } else { Some(fallback) };
+        }
+        if let Some(x) = v {
+            ui.add(DragValue::new(x).speed(0.01));
+        }
+    });
+}
+
+/// One axis of the Bins tab: Min Center, Max Center and Bin Spacing or Number of Bins. The spacing controls
+/// of the derived axis are disabled (its spacing follows the other axis); its Min and Max Center still apply.
+fn hexbin_axis(ui: &mut egui::Ui, name: &str, a: &mut HexbinAxis, derived: bool) {
+    ui.strong(name);
+    grid(ui, name, |ui| {
+        ui.label("Min Center");
+        auto_value(ui, &mut a.min_center, 0.0);
+        ui.end_row();
+        ui.label("Max Center");
+        auto_value(ui, &mut a.max_center, 1.0);
+        ui.end_row();
+        ui.label("Binning");
+        let bins = matches!(a.by, HexbinBy::Bins(_));
+        ui.add_enabled_ui(!derived, |ui| {
+            egui::ComboBox::from_id_salt((name, "by"))
+                .selected_text(if bins { "Number of Bins" } else { "Bin Spacing" })
+                .show_ui(ui, |ui| {
+                    if ui.selectable_label(bins, "Number of Bins").clicked() && !bins {
+                        a.by = HexbinBy::Bins(sheaf_calc::hexbin::DEFAULT_BINS as u32);
+                    }
+                    if ui.selectable_label(!bins, "Bin Spacing").clicked() && bins {
+                        a.by = HexbinBy::Spacing(1.0);
+                    }
+                });
+        });
+        ui.end_row();
+        ui.label(if bins { "Number of Bins" } else { "Bin Spacing" });
+        ui.add_enabled_ui(!derived, |ui| match &mut a.by {
+            HexbinBy::Bins(n) => ui.add(DragValue::new(n).range(2..=10_000)),
+            HexbinBy::Spacing(s) => ui.add(DragValue::new(s).range(1e-12..=1e12).speed(0.01)),
+        });
+        ui.end_row();
+    });
+}
+
+/// Origin's Hexbin bin controls: per axis Min Center, Max Center and Bin Spacing or Number of Bins, "Prefer
+/// Regular Hexagons" and Derive Y from X / Derive X from Y (the derived axis' spacing follows the other's).
+fn hexbin_tab(ui: &mut egui::Ui, h: &mut HexbinStyle) {
+    ui.checkbox(&mut h.prefer_regular, "Prefer Regular Hexagons");
+    ui.horizontal(|ui| {
+        ui.radio_value(&mut h.derive_y_from_x, true, "Derive Y from X");
+        ui.radio_value(&mut h.derive_y_from_x, false, "Derive X from Y");
+    });
+    let y_from_x = h.derive_y_from_x;
+    hexbin_axis(ui, "X", &mut h.x, !y_from_x);
+    hexbin_axis(ui, "Y", &mut h.y, y_from_x);
+    ui.weak("The other axis' spacing makes the hexagons regular on the page; its Min and Max Center still apply (only its spacing is disabled).");
 }

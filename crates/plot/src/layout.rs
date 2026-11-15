@@ -34,7 +34,7 @@ use sheaf_core::{Project, WindowId};
 /// Builds the scene of a graph.
 pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasurer) -> Result<Scene, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    let pds: Vec<LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
+    let pds: Vec<LayerData> = data::collect_graph(project, g);
     let geoms = graph_geometry(project, g, &pds, m);
     let x_titles = title_places(project, g, &geoms, &pds, Dim::X, m);
     let y_titles = title_places(project, g, &geoms, &pds, Dim::Y, m);
@@ -102,6 +102,27 @@ pub(crate) fn graph_geometry(
     pds: &[LayerData],
     m: &dyn TextMeasurer,
 ) -> Vec<LayerGeometry> {
+    let mut geoms = graph_geometry_once(project, g, pds, m);
+    // Hexbin: the axis range comes from the binning for the nominal frame, the drawing bins for the real
+    // one (narrowed by the colour scale). Widen the range to the hexagons as drawn until they fit.
+    for _ in 0..6 {
+        let mut grew = false;
+        for (d, geom) in pds.iter().zip(&geoms) {
+            for pd in &d.plots {
+                if let Some(h) = &pd.hex {
+                    grew |= h.grow_to_drawn(&pd.plot.hexbin, geom);
+                }
+            }
+        }
+        if !grew {
+            break;
+        }
+        geoms = graph_geometry_once(project, g, pds, m);
+    }
+    geoms
+}
+
+fn graph_geometry_once(project: &Project, g: &Graph, pds: &[LayerData], m: &dyn TextMeasurer) -> Vec<LayerGeometry> {
     let mut out: Vec<Option<LayerGeometry>> = vec![None; g.layers.len()];
     for root in 0..g.layers.len() {
         if g.root_of(root) == root {
@@ -462,6 +483,10 @@ fn label_edges(
             _ => e.bottom = e.bottom.max(f.y + f.h + across),
         }
     }
+    // The colour scale of a hexbin plot beside the frame.
+    if layer.display.show_data && layer.plots.iter().any(|p| p.visible && p.kind.is_hexbin()) {
+        e.right = e.right.max(f.x + f.w + crate::hexbin::scale_reserve(ya.tick_font.size_pt));
+    }
     let y_size = ya.title_font.size_pt;
     match ya.side {
         AxisSide::Normal => {
@@ -655,6 +680,7 @@ fn layer_scene(
     };
     // Display tab: Show Elements Data off draws no plot.
     let drawn: &[PlotData] = if layer.display.show_data { pds } else { &[] };
+    crate::hexbin::share_max(drawn, geom);
     match waterfall {
         None => {
             // Ridgelines are drawn back to front: the highest baseline first, so that nearer ridges
@@ -803,6 +829,9 @@ fn layer_scene(
     rec(objects, out, start, ObjectKind::YTitle, &[]);
     if layer.display.data_on_top {
         scene.underlay_len = out.len();
+    }
+    if layer.display.show_data {
+        crate::hexbin::draw_scale(out, layer, pds, geom, m);
     }
     draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
     scene

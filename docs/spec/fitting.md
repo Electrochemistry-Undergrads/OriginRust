@@ -168,21 +168,21 @@ Storage: these tools only create ordinary worksheets and columns (no analysis-li
 
 Analysis > Fitting > Simulate Curve (Origin's `simcurve` X-Function) makes the curve of a fit function for parameter values that are typed instead of fitted. Task T47. Simulate Surface (two independent variables) waits for matrices and stays grey.
 
-Status of the facts: nothing here is measured in Origin (no Origin on the machine that wrote this). From Origin's public documentation only the shape is taken: a category and function, parameters with initial values, an X range (from, to, number of points), output to a workbook, an optional graph. Every choice below is labelled **Sheaf's choice** and is listed in "To measure on Windows" at the end; none of them may be quoted as Origin's behaviour.
+Status of the facts: the window, its per-function values, the output names and the Gauss values were measured in Origin 2016 on 2026-11-15 (13.1) and are copied; what is still labelled **Sheaf's choice** was not measured and may not be quoted as Origin's behaviour.
 
 ### What is computed
 
 - The function is any entry of the fit library (`sheaf_fit::library`, the list the NLFit window offers; user-defined functions are not offered yet). Values come from `FitFunction::eval`, the evaluator of the fits, so the formula text, the Rust-coded Voigt and GammaCDF and the branch conditionals behave exactly as in a fit. `sheaf_fit::simulate::simulate(function, params, xs)` returns one value per X; a point where the function has no value (a logarithm of a negative number, a pole) is NaN, shown as a missing value. If there is no value at any X the call fails with a message instead of writing an empty column. Parameters must be finite numbers; their number must match the function's.
 - Parameter bounds and "fixed" flags of the fit library are ignored: the typed values are used as they are (a width of -1 is the user's request, not an error).
-- **Sheaf's choice** (starting values): the parameter grid starts at `initial_params`: the function's own initial value where the library has one, otherwise 1 (what a fit starts from when it has no guess), moved into the parameter's default bounds if those exclude 1 (a lower bound of 3 gives 3). Where 1 makes the function degenerate (division by zero, ln 0, overflow) another value is used: Beta w2 = w3 = 2, BoxLucas2 a1 = 2, Log2P1 a = 0, Logarithm A = 0, MYEGA C = 0.1, SRichards1 d = 0.5, SRichards2 d = 2. Origin's own initial values are not in the data we have (only 39 parameters of 237 functions carry one) and its guess routines need data, so the real defaults must be measured. A test simulates every library function at these values on X = 0.1 to 10 (Bradley on 0.1 to 0.9, where ln(-b ln x) exists) and requires finite values.
+- **Starting values** (`initial_params`): for the 20 functions of Origin's "Origin Basic Functions" category that are in the library, the values Origin's window shows (13.1; typed values, so bounds are not applied). **Sheaf's choice** for the other functions: the function's own initial value where the library has one, otherwise 1 (what a fit starts from when it has no guess), moved into the parameter's default bounds if those exclude 1 (a lower bound of 3 gives 3); where 1 makes the function degenerate (division by zero, ln 0, overflow) another value: Beta w2 = w3 = 2 (Beta is measured now), BoxLucas2 a1 = 2, Log2P1 a = 0, Logarithm A = 0, MYEGA C = 0.1, SRichards1 d = 0.5, SRichards2 d = 2. A test simulates every library function at its starting values on X = 0.1 to 10 (Bradley on 0.1 to 0.9, where ln(-b ln x) exists) and requires finite values.
 - X values (`x_values(from, to, points, spacing)`): linear `from (1 - t) + to t` with `t = i/(n-1)` (not `from + (to - from) t`, whose difference overflows for a range wider than the largest number), or logarithmic `exp(ln from + (ln to - ln from) i/(n-1))`, both with the first and last value exactly the typed bounds. Needs `points` of 2 to 1 000 000, finite bounds, `from != to` (`from > to` gives falling X), and positive bounds for logarithmic spacing. The X values may instead be those of an existing numeric column, row by row (a missing X gives a missing Y; text columns are refused).
-- **Sheaf's choice** (defaults of the window and of `SimulateCurveSpec::default()`): function Gauss, X from 1 to 10, 100 points, linear. Chosen so that both spacings are valid without editing; Origin's defaults are not known.
+- **Defaults** (`SimulateCurveSpec::default()`, the window, `sheaf simulate`): Gauss, X from -1 to 5, 200 points, linear, as Origin's window (13.1). Choosing another function sets its X range (`default_range`: Origin's for the 20 measured functions, **Sheaf's choice** 1 to 10 for the others, valid for logarithmic spacing too).
 
 ### Where it goes
 
 `Tool::SimulateCurve(SimulateCurveSpec)` of `Project::analyze` writes a new sheet `Simulate<n>` in the workbook of the request's first column, with an X column and a Y column. The tool reads no data except an optional X column, so the request's `columns` only name the workbook (with an X column as source, pass that column).
 
-- **Sheaf's choice** (names): the X column's long name is `X` (the source column's long name, with its unit, when X comes from a column) and its comment `N points from A to B, linear spacing` (or `logarithmic`, or `X of column C`); the Y column's long name is the function name (`Gauss`) and its comment `Simulated Gauss: y0=0, xc=5, w=1, A=1`, the parameters in the function's order. The report notes give the equation and the parameter list. The sheet name prefix `Simulate` and the long names are not Origin's.
+- **Names** (as Origin, 13.1): the X column's long name is `Simulated X1` and the Y column's `Simulated Y1`, each with the function's name (`Gauss`) as the comment. **Sheaf's choice**: with X of a column, the X column takes the source column's long name and unit and the comment `X of column C`; the report notes give the equation and the parameter list; the sheet name prefix `Simulate` is not Origin's.
 - **Sheaf's choice** (output): the tool always writes a new sheet of the workbook of the request's column. The window's Output list offers "New workbook" and "New sheet in <book>" for every workbook (default: the active one, or a new workbook if there is none); with X of a column the sheet goes to that column's workbook and the list is greyed. "New workbook" makes the workbook, runs the tool on a placeholder column, then drops the empty first sheet, all inside one undo step. Origin offers a new workbook or an existing sheet; whether it writes into an existing sheet is not known.
 - `plot` draws the curve as a line graph (log10 X axis for logarithmic spacing; axis titles X and the function name) in the same step. One call to `analyze` is one undo step of the document: the sheet and the graph are removed together.
 - Recalculate: the tool can be linked (Auto or Manual). The link follows the X column of `SimulateX::OfColumn`; with a typed range nothing changes, so linking only makes sense with a column. The graph belongs to the first run; a repeated run replaces the values in the same columns and draws no second graph.
@@ -195,7 +195,7 @@ Sheaf's own layout until the window of Origin is measured; every control below i
 - Category and Function lists (the categories and functions of `sheaf_fit::library::list()`; not shared with the NLFit window's code, which also carries the linear, polynomial and user-defined pages) and the formula under them.
 - A parameter grid with one field per parameter, prefilled with `initial_params` of the function (the starting values of the tool, see above); choosing another function resets the values; "Initial values" puts them back. Typed values are used as typed, bounds are not applied.
 - X range (From, To, Points, "Logarithmic spacing") or "X of a column" (the numeric columns of the active sheet of the workbook that was active when the window opened; greyed when there are none). Points are not clamped in the field: a count below 2 or above `MAX_POINTS` is refused with the tool's message.
-- Output list and "Plot the curve" (off by default, like `SimulateCurveSpec::default()`).
+- Output list (default "New workbook", as Origin's `(<new>,<new>)`) and "Plot the curve" (on by default, as Origin draws the curve; the tool's own default stays off, so the command line and MCP draw only when asked).
 - A live preview of the curve under the controls: the tool's own simulation on at most 400 points (at most 2000 rows of a chosen column), drawn with the fit window's small plot, redrawn when a setting or the project changes. An error that the run would give (equal bounds, log with a non-positive bound, a function with no value anywhere) is shown in red in place of the curve.
 - OK runs `Tool::SimulateCurve` through `Document::edit` as one undo step ("Undo Simulate curve"), focuses the new workbook (its new sheet active) and the graph if one was made, and puts the report message on the status line. A refused run changes nothing and keeps the window open with the message under the preview. Cancel, Escape and the close button change nothing. The window does not offer a Recalculate mode yet; the core tool is linkable (`LinkTool::SimulateCurve`).
 - `sheaf-app --show simulate[:FUNCTION]` opens the window on the first workbook (for screenshots).
@@ -208,16 +208,222 @@ Sheaf's own layout until the window of Origin is measured; every control below i
 
 `sheaf simulate [INPUT] [--function NAME] [--param NAME=VALUE]... [--from A --to B --points N [--log] | --x-of COLUMN] [--book B --sheet S] [--plot FIGURE [--dpi D]] [--graph] [-o FILE] [--save PROJECT]` and `sheaf simulate --list`. `sheaf-ops` has one `SimulateSpec` and one `run(project, spec)` that call `Tool::SimulateCurve` on the project, so the numbers of the command line, the MCP server and the app are the same function of the same code; there is no second evaluator. All of it is **Sheaf's choice** (nothing is measured in Origin):
 
-- The defaults are those of the tool: Gauss, X from 1 to 10, 100 points, linear. `--param` repeats and takes commas (`-p xc=5,w=2`); a parameter not given keeps the starting value that `--list` prints; names match as in `resolve_params`. A bound is not applied to a typed value.
+- The defaults are those of Origin's window: Gauss, X from -1 to 5, 200 points, linear; another function takes its own range (`default_range`). `--param` repeats and takes commas (`-p xc=5,w=2`); a parameter not given keeps the starting value that `--list` prints; names match as in `resolve_params`. A bound is not applied to a typed value.
 - `INPUT` (a data file, a `.sheaf`, `.opj` or `.opju` project) is the workbook that gets the new sheet `Simulate<n>`; the first column of the sheet only anchors the request. `--x-of COLUMN` takes the X values of that column (in `--sheet`, default the active sheet) and cannot be combined with `--from`, `--to`, `--points` or `--log`; it needs an input. Without `INPUT` the run makes a project of its own that holds only the new sheet.
 - `-o FILE` writes the X and Y columns (with the long names and comments as the sheet has them) as delimited text (tabs for `.tsv` and `.txt`, commas otherwise) or, for `.xlsx`, as an Excel workbook; `--save PROJECT` saves the project with the new sheet (and the graph); `--plot FIGURE` draws the curve (log spacing gives a log X axis) and writes the figure, and `--graph` only adds the graph to the saved project. With neither `-o` nor `--save` the curve is printed as CSV on standard output and the notes (equation, parameters, one-line summary) go to standard error, so a pipe gets only data.
 - `--list` prints each function with its parameters and their starting values.
 - A bad request (unknown function or parameter, fewer than 2 points, equal ends, a log range with a non-positive end, a function with no value on the range) is an error with a message and writes nothing.
 - MCP: `list_simulate_functions {category?}` (pure like `list_fit_models`; `{functions:[{name, category, parameters:[{name, start}]}]}`) and `simulate_curve {function?, params?:{NAME:number}, from?, to?, points?, log?, x_of?, book?, sheet?, plot?, image?, values?}`. It is a dedicated tool, not an `analyze` subcommand: the sheet and the graph are one undo step (`AI: simulate_curve Gauss Book1`), `image` (under the roots, never replacing a file) implies `plot` and is all or nothing like the `fit` plot, and the reply has `book`, `sheet`, `x_column`, `y_column`, `function`, `points`, `graph`, `image`, `notes`, `message` and, up to 1000 points (or when `values` is true), the `x` and `y` arrays. Without a workbook in the session the tool makes one that holds only the new sheet. The option names are those of the command line with `_` for `-`.
 
-### To measure on Windows (`tools/origin-ref`)
+### 13.1 Measured in Origin 2016 (2026-11-15)
+
+`simcurve` cannot be run from a script in Origin 2016 (every call, also `simcurve -d`, returns an error
+and writes nothing), so the window was opened through Analysis > Fitting > Simulate Curve... with
+`tools/origin-ref/origin-dialog.ps1 -MenuClicks`, its fields read and OK pressed (`re-workspace/scratch/t47`,
+local only: `d2` window, `d4` and `d7` every function of the first category, `d6` the output of OK).
+The X-Function itself lists `x1` -10, `x2` 10, `nx` 100, `scale` Linear/Log/"Use Source Graph Scale
+Type" and a `noise` (%) variable, but the window does not show those defaults.
+
+- **Window** "Simulate Curve: simcurve": Recalculate (None, Manual), Category (25 categories, default
+  "Origin Basic Functions"), Function (default Gauss), Parameters (one field per parameter), X Data
+  Type (X Scale Type Linear or Log, X Minimum, X Maximum, X Points), Noise Level (%), Output
+  (`(<new>,<new>)`), Auto Preview (off), Preview, OK, Cancel, Apply and a Preview graph beside.
+- **Values per function**: every function comes with its own parameter values and X range, always
+  200 points and Noise Level 0 (10 for Allometric1). Origin Basic Functions:
+
+  | Function | Parameters | X |
+  |---|---|---|
+  | Allometric1 | a 1, b -0.5 | 2 to 3 |
+  | Beta | y0 0, xc 8, A 1, w1 15, w2 3, w3 4 | -1 to 20 |
+  | Boltzmann | A1 0, A2 1, x0 0, dx 1 | -7 to 7 |
+  | dHyperbl | P1 1, P2 1, P3 1, P4 -2, P5 5 | -4 to 6 |
+  | ExpAssoc | y0 1, A1 1, t1 1, A2 2, t2 2 | -10 to 2 |
+  | ExpDec1 | y0 1, A1 2, t1 1 | -10 to 0 |
+  | ExpDec2 | y0 1, A1 1, t1 1, A2 2, t2 2 | -10 to 0 |
+  | ExpDec3 | y0 -2, A1 1, t1 3, A2 2, t2 2, A3 3, t3 4 | -10 to 8 |
+  | ExpGrow1 | y0 1, x0 1, A1 2, t1 1 | 2 to 10 |
+  | ExpGrow2 | y0 0, x0 0, A1 1, t1 1, A2 2, t2 2 | 2 to 10 |
+  | Gauss | y0 1, xc 2, w 1.5, A 5 | -1 to 5 |
+  | GaussAmp | y0 0, xc 0, w 1, A 10 | -5 to 5 |
+  | Hyperbl | P1 1, P2 1 | -10 to 10 |
+  | Logistic | A1 0, A2 1, x0 5, p 3 | 0 to 25 |
+  | LogNormal | y0 0, xc 5, w 0.3, A 1 | -2 to 15 |
+  | Lorentz | y0 0, xc 5, w 2, A 1 | 1 to 9 |
+  | Poisson | y0 1, r 1 | 1 to 9 |
+  | Pulse | y0 0, x0 0, A 1, t1 0.5, P 1, t2 0.5 | -1 to 5 |
+  | Rational0 | a 1, b 1, c 35 | -5 to 5 |
+  | Sine | y0 0, xc 1, w 1, A 1 | -2 to 2 |
+  | Voigt | y0 0, xc 5, A 1, wG 1, wL 1 | 0 to 10 |
+
+  The function files (`.FDF`) hold none of these values.
+- **Output of OK** with the defaults (Gauss): a new workbook (Book2, no long name, hidden from the
+  window list as it opened) with one sheet of two columns: A (X), long name `Simulated X1`, comment
+  `Gauss`; B (Y), long name `Simulated Y1`, comment `Gauss`; no units; 200 rows, X = -1 + 6 i / 199.
+  A graph (`Graph1`, long name `Gauss`) is made too, its axis titles the column labels, X axis -2 to 6.
+- **Numbers**: the 200 values agree with Sheaf's evaluation of the library Gauss to 1e-12 (X to 1e-14);
+  `crates/fit/tests/origin_simulate.rs` with the sheet as `tests/data/origin_simulate_gauss.tsv`.
+
+What Sheaf copies: the values and X range of the 20 functions above that are in its library (not
+dHyperbl) as starting values (`sheaf_fit::simulate::initial_params`, `default_range`), 200 points,
+Gauss -1 to 5 as the default, the long names `Simulated X1` / `Simulated Y1` with the function's name
+as the comment, and in the window a new workbook with a graph. Not copied: Noise Level (Sheaf has no
+noise), Recalculate None/Manual (Sheaf links Auto or Manual), the numbering of a second run's columns
+(unmeasured; Sheaf's run always writes a sheet of its own, so its columns are X1 and Y1).
+
+### Still to measure on Windows
+
+1. Simulated values of ExpDec1, Boltzmann, Voigt and a branch function against Origin's sheet (only
+   Gauss was compared), and logarithmic spacing (Origin's Log scale type).
+2. A second run into the same workbook (column numbering), the Noise Level (random noise, Sheaf has
+   none), Apply, Recalculate Manual, user-defined functions, and the X range of the functions of the
+   other 24 categories.
 
 1. The window: category and function lists, the parameter grid, the X range controls, the output controls and the graph tick; the default function, X range, number of points and parameter values (and whether the initial values are those of the function file or computed).
 2. Output: workbook and sheet names, column names, long names, comments and units of the X and Y columns, whether parameters are recorded, what "create a graph" draws.
 3. The numbers: simulated values of Gauss, ExpDec1 and Boltzmann (and Voigt and a branch function such as Bigaussian) against `simcurve` for typed parameters, linear and logarithmic X, compared to 1e-12; store as a fixture in `crates/fit/tests/data/` and add a test.
 4. Whether `simcurve` offers a logarithmic spacing and how it names it; behaviour for a function with no value at some X (missing value or error); whether parameter bounds are enforced; whether it applies to user-defined functions; whether the curve is live on a preview graph.
+
+## 14. Surface fits on XYZ worksheet columns (T15 item 7, engine and library)
+
+Scope: `z = f(x, y)` fitted to three worksheet columns. Matrices and 3D plotting are not part of this. The engine pieces are
+`nlsf::FitFunction::from_formula_xy` and `x2_name`, `nlsf::fit_xyz` / `Fitter::new_xyz`, the table in `crates/fit/src/surface.rs`
+(22 functions; `library::get` also finds them, `library::list` does not list them) and the FDF import of files with two
+independent variables (`fdf::FdfFunction::to_fit_function`; three or more are still refused). A one-variable fit of a surface
+function, and the reverse, is an error. Points with a missing x, y or z (or weight) are dropped, as for curves. The fitting
+algorithm, statistics and report numbers are the ones of section 3 and 4 with no change.
+
+### Measured in Origin 2016 (`tools/origin-ref/nlfit-surface-suite.lines.txt`, made by `nlfit-surface-gen.py`)
+
+* Command: `nlbeginz iz:=(1,2,3) func:=<name> nltree:=tt`, then `nlfit`, `nlend output:=1` (the plain `nlbegin` refuses
+  XYZ ranges). The tree holds the parameters (`tt.<name>`, read before `nlfit` they are the initial values) and `tt.niter`.
+  The report is the sheet `FitSurface1` (layout as the curve report: parameter table in columns 7 to 11, statistics column 12,
+  ANOVA from column 21 or later; `tools/origin-ref/nlfit-surface-make-fixture.py` reads it). It also makes `FitSurfaceCurve1`.
+  The statistics are the curve ones: n, DOF, reduced chi-square, RSS, R-square, adjusted R-square, ANOVA, `Succeeded(100)`.
+* Data: 11 x 11 grids (9 x 9 for the last case) of `z` plus a fixed sine noise term, made inside Origin; fits of Plane,
+  Parabola2D, Poly2D, Gauss2D (also with 5 missing z), Lorentz2D, Voigt2D, Gaussian2D (rotated), Exponential2D, Rational2D and
+  Plane with 3 missing x or z values. A missing cell is made with the assignment of `-1.23456789E-300`; the constant `NANUM`
+  does nothing in a cell assignment.
+* Origin's iterations on these were 3 to 11 (Plane 4, Parabola2D 3, Poly2D 3, Gauss2D 6, Lorentz2D 5, Voigt2D 6, Gaussian2D 7,
+  Exponential2D 11, Rational2D 8).
+* The 22 functions in Origin's FDF files (category Surface Fitting) and their formulas, parameter names and bounds are in
+  `surface.rs`: Plane, Parabola2D, Poly2D, Polynomial2D, Gauss2D, Gaussian2D, Lorentz2D, Voigt2D, Voigt2DMod, Exponential2D,
+  Extreme2D, LogNormal2D, Power2D, Rational2D, RationalTaylor, DoseResp, GaussCum, LogisticCum, ExtremeCum, Chebyshev2D, Cosine,
+  Fourier2D (our names carry a `2D` suffix for DoseResp, GaussCum, LogisticCum, ExtremeCum and Cosine, which in Origin share the
+  name of a one-variable function). Bounds on by default: widths `w1`, `w2` (and `C`, `E` of DoseResp) above 0, `mu` of Voigt in [0, 1].
+  A parameter named `E` is a parameter here, not Euler's number (internally written `E__` in the formula).
+
+### Starting values
+
+Origin's rules (from the function files): Plane, Parabola2D, Poly2D start from polynomial fits of z against x and of z against y
+(after sort and smoothing; Poly2D has `f = 0`); the peak surfaces take position, width, base and height from two slice curves
+interpolated from the data, `w1`, `w2` are the slice widths times 0.85 (Gauss2D, Gaussian2D, Voigt2D) or divided by 2 (Lorentz2D),
+`mu = 0`, `theta = 0`; Exponential2D uses the extremes of z and the x and y extent. The slices come from a native
+scattered-data interpolation that is not reproduced: ours are the grid lines through the highest point. Measured Origin
+starts against ours (Gauss2D: Origin `z0 0.683, A 2.673, xc 2.653, w1 1.637, yc 2.245, w2 1.320`; ours `0.577, 2.76, 2.5, 2.10,
+2.0, 1.79`) agree to a few percent for the polynomial surfaces and are rougher for the peak surfaces. From our starts every measured
+case reaches Origin's result (test `surface_fits_from_own_starting_values_reach_origin_results`).
+
+### Test and tolerances (`crates/fit/tests/origin_surface.rs`, data `tests/data/origin_surface.json`)
+
+From Origin's starting values our engine takes the same number of iterations in every case but Rational2D and agrees in
+parameters, standard errors, t, dependency, statistics and ANOVA to 1e-7 (relative). Rational2D (dependencies near 1) stops at
+a slightly different point of its flat valley: values agree to 1e-2, standard errors to 1e-1 relative. From our own starting
+values the tolerance is 1e-4 (values) and 1e-3 (statistics).
+
+### Unmeasured
+
+Origin's fits of Polynomial2D, Voigt2DMod, Extreme2D, LogNormal2D, Power2D, RationalTaylor, DoseResp, GaussCum, LogisticCum,
+ExtremeCum, Chebyshev2D, Cosine and Fourier2D (our formulas are copied from the files, no run); the starting values of those and of
+Exponential2D beyond the case above; the scaling applied by Chebyshev2D and Cosine (the files say x and y are scaled to -1..1 and
+0..pi, we apply none); weighted surface fits; fits with fixed parameters, user-set bounds or the simplex algorithm; whether
+`nlbeginz` accepts a worksheet range with a column of errors; the dialog and the report sheet layout in the application
+(part 2).
+
+## 15. Surface fits (XYZ) in the application, command line and project
+
+Section 14 holds the engine, the 22 functions and what was compared with Origin's `nlbeginz` runs. This section is what
+the application does with three worksheet columns. Scope is as there: `z = f(x, y)` on XYZ columns; matrices and 3D
+plotting are not part of it.
+
+### Measured in Origin 2016 (raw output in `re-workspace/scratch/t15-surface/`, local only)
+
+Run with `tools/origin-ref/run-labtalk-lines.ps1` on a new book with X, Y, Z columns (an 11 x 11 grid of 121 rows, the
+Plane function, `nlbeginz iz:=(1,2,3)`, `nlfit`, `nlend output:=1`):
+
+* The book then holds three sheets: the data sheet (still three columns: no fitted or residual column is added to it),
+  `FitSurface1` (the report; layout and statistics in section 14) and `FitSurfaceCurve1`.
+* `FitSurfaceCurve1` has 2500 rows and 8 columns. The first three have the long names `FitX`, `FitY`, `FitZ` and the
+  designations X, Y, Z (`wks.col.type` 4, 1 and 6). They are the fitted surface on a regular 50 x 50 grid over the data
+  range of x and y (for x from 0 to 5: 0, 5/49, 2 x 5/49, ...), x changing fastest and y once per 50 rows; `FitZ` is the
+  function at those points. Columns 4 to 8 start with the data x and y, the function at the data points (twice) and a
+  column of zeros in the first rows; what the last five columns are exactly was not worked out, and Sheaf does not
+  write them.
+* The report sheet of a surface fit has the title "Nonlinear Surface Fit", the three input ranges (`[Book1]Sheet1!A`, `B`,
+  `C`, as the cell range text `[1*:121*]`), the equation as `z=z0+a*x+b*y;` and otherwise the layout of the curve report
+  (section 3 and 4; section 14 lists its statistics).
+* `nlfit -d` (open the dialog) after `nlbeginz` does not open a window: Origin's command returned false. The window is
+  reached through the menu: `tools/origin-ref/origin-dialog.ps1 -MenuClicks "300,300;K:^a;K:%a;K:F;K:{DOWN} x 6;K:{ENTER}"`
+  on a book whose third column is set to Z (Alt+A, F, six Down, Enter lands on Analysis > Fitting > Nonlinear Surface
+  Fit...; pictures and control lists in `dlg2` and `dlg3`). What it shows: title "NLFit ()" and the NLFit layout of
+  section 9 (Dialog Theme, tabs Settings, Code, Parameters, Bounds, the lower panel with Fit Curve, Residual, Formula,
+  Sample Curve, Messages, Function File, Hints, and Fit, Done, Cancel). Function Selection: the Category box holds
+  "Surface Fitting" and is grey, the Function box is empty, so the window says "Function is empty. Please specify it to
+  continue." and the preview says "No Preview"; Iteration Algorithm (Levenberg Marquardt; the list has a second entry
+  "Orthogonal Distance Regression (Pro)"), Description and File Name(.FDF). The Function list holds, in this order,
+  Chebyshev2D, Cosine, DoseResp2D, Exponential2D, Extreme2D, ExtremeCum, Fourier2D, Gauss2D, Gaussian2D, GaussCum, LogisticCum,
+  LogNormal2D, Lorentz2D, Parabola2D, Plane, Poly2D, Polynomial2D, Power2D, Rational2D, RationalTaylor, Voigt2D, Voigt2DMod
+  (so Origin's names have no `2D` suffix for Cosine, ExtremeCum, GaussCum and LogisticCum), then `<New...>` and `<Add...>`. The pages
+  of the Settings list are Function Selection, Data Selection, Fitted Curves, Find Z, Advanced, Output (the curve window's
+  "Find X/Y" is "Find Z"). Data Selection shows "Multi-Data Fit Mode" (Independent Fit - Consolidated Report, grey) and an
+  "Input Data" node whose range text is `[Book1]Sheet1!(A,B,C)`: one X, Y, Z triple. Find Z holds one node "Find Z from XY"
+  with a check box. The Fitted Curves, Advanced and Output pages were not read (the clicks did not change the page).
+
+### What Sheaf does
+
+* Request: `FitRequest.surface = Some(SurfaceColumns { x, y })` and `FitRequest.y` is then the Z column. `x` and `y` left
+  `None` are the sheet's own: the X column to the left of the Z column (as for curve fits) and the nearest column to its left
+  designated Y that is not a fit result (`surface_columns`). Model: a surface function by name (`FitModel::BuiltIn`), a
+  formula in `x` and `y` (`FitModel::Formula`, parameters named by the caller) or an `.FDF` file with two independent
+  variables. A curve model, a one-variable function, equal X, Y and Z columns, or bands are
+  refused, and nothing in the project changes. Rows (all, a range of rows, an X range), the start values, fixed values and
+  bounds, weighting (error column or direct weights), scale errors, algorithm, iteration limit, tolerance and the
+  confidence level are those of a curve fit; a missing x, y, z or weight leaves the row out. Masked and filtered cells count
+  as missing. The exception is the X range: X cycles in XYZ data, so a surface fit keeps every row whose X lies in the range
+  (not only the first unbroken run as a curve fit does); none is an error. Origin's choice for XYZ data is unmeasured.
+* Results (`Project::fit` returns a `FitOutcome` with `surface = true`): sheet `FitSurface1` (the first free number of
+  `FitSurface1` and `FitSurface1Stats`) with the parameter table and `FitSurface1Stats` with model, equation, data, rows,
+  statistics, ANOVA and derived quantities (FWHM and volume of the peak surfaces), laid out as `FitNL1`; two columns after the Z column
+  (fitted Z and residual, marked as fit results, so they are not offered as Y columns); and `FitSurfaceCurve1`, the 50 x 50
+  grid above with the columns `FitX`, `FitY`, `FitZ` (X, Y, Z designations). Sheaf adds the fitted and residual columns,
+  which Origin's `nlend output:=1` run did not. There is no graph and `FitOutcome::curve_x` and `curve_y` are the grid's X and
+  Z columns.
+* Saving: the results are ordinary sheets and columns, so the `.sheaf` file holds them (test
+  `a_plane_is_fitted_and_the_results_are_placed`). `FitRequest` itself is not stored in a project, and there is no
+  recalculation link for any fit result in Sheaf (feature-parity: "analysis and fit results are not linked"), so
+  the surface results are static as the curve results are. The `.opj` writer does not write fit result sheets of either
+  kind (feature-parity), so the `.opj.sheaf` companion has nothing of its own for them.
+* Window: Analysis > Fitting > Nonlinear Surface Fit... (an item of Origin's own menu, measured earlier in
+  `gui-look.md`, grey until now) opens the NLFit window with the category "Surface Fitting" (grey, as in Origin) and the function Gauss2D (Origin
+  starts with an empty function; Sheaf starts on Gauss2D so that the window can fit at once). With a surface function chosen, Data Selection shows three boxes X, Y and Z
+  (the Z box is the column that is fitted; choosing it takes X and Y from the sheet's designations again), the Fitted
+  Curves page says where the surface goes instead of the curve options, there are no bands and no other-dataset check
+  boxes, and the lower panel's preview says there is nothing to preview. 1 Iteration, Fit until converged, Revert, Fit,
+  Done and Cancel work as for curves (section 9) and Fit writes everything above in one undo step ("Fit"). The category and
+  function boxes list the 22 functions with their formulas written `z = ...`. The Settings list calls the fourth page "Find Z" as Origin does. Sheaf's single Input Data node is three boxes X, Y and Z;
+  the rest is the NLFit layout of section 9 with these differences. Sheaf's function names follow section 14 (`Cosine2D`,
+  `GaussCum2D`, `LogisticCum2D`, `ExtremeCum2D`), not Origin's list order or names.
+* Command line: `sheaf fit FILE --z COLUMN [--x COLUMN] [--y COLUMN] --model Gauss2D` (also `--formula` in x and y with
+  `--params`, `--fdf`, `--init`, `--fix`, `--bounds`, `--weight`, `--rows`, `--x-range`, `--confidence`, `--max-iterations`,
+  `--tolerance`, `--save`, `--export`); `--y` is then the Y column, not the fitted one. `--global`, `--regress`, `--compare`,
+  `--rank`, `--xerr`, `--bands` and `--plot` are refused with a surface fit; `--list` shows the category "Surface Fitting".
+  Tests: `crates/core/tests/surface_fit.rs`, `crates/cli/tests/fit.rs` (`a_surface_fit_takes_z_and_a_surface_function`) and
+  the window test `crates/app/src/app/ui_tests/surface_fit.rs`.
+
+### Unmeasured
+
+The Fitted Curves, Advanced and Output pages of Origin's window with a surface function chosen, its Parameters and Bounds tabs, and
+what a chosen function changes in the Data Selection page (the function was empty in the run); the "Find Z from XY" tool; what columns 4 to 8 of `FitSurfaceCurve1` hold; whether the grid
+size of 50 is a default that the window changes; weighted surface fits and surface fits with fixed or bounded
+parameters in Origin; Origin's response to a Z column that is not designated Z; the report sheet's layout in the
+application (Sheaf writes its own parameter and statistics sheets, as for curves); the three-variable functions,
+Simulate Surface, and matrices.

@@ -46,6 +46,18 @@ fn a_gauss_with_typed_parameters_goes_to_a_new_sheet_in_one_undo_step() {
     let mut h = start(vec![data_file("simulate-gauss")]);
     let before = project(&h).clone();
     open_window(&mut h);
+    // Origin's window writes to a new workbook and draws a graph; here: a new sheet, no graph.
+    h.get_by_label("Output").click();
+    settle(&mut h);
+    let into = h
+        .query_all(By::new())
+        .find(|n| n.accesskit_node().label().is_some_and(|l| l.starts_with("New sheet in")))
+        .expect("the Output list offers the open workbook")
+        .rect()
+        .center();
+    click_at(&mut h, into);
+    settle(&mut h);
+    click(&mut h, "Plot the curve");
     type_gauss(&mut h);
     assert_eq!(h.state().simulate.as_ref().unwrap().values_for_test(), [1.0, 5.0, 2.0, 4.0]);
     let revision = h.state().doc.revision();
@@ -64,8 +76,8 @@ fn a_gauss_with_typed_parameters_goes_to_a_new_sheet_in_one_undo_step() {
     for (x, y) in xs.iter().zip(ys) {
         assert!((y - gauss(*x, 1.0, 5.0, 2.0, 4.0)).abs() < 1e-12, "x = {x}: {y}");
     }
-    assert_eq!(made.columns[1].long_name, "Gauss");
-    assert!(made.columns[1].comments.contains("xc=5"), "{}", made.columns[1].comments);
+    // Origin's names (fitting.md 13.1).
+    assert_eq!((made.columns[1].long_name.as_str(), made.columns[1].comments.as_str()), ("Simulated Y1", "Gauss"));
     assert!(h.state().status.starts_with("Simulate curve"), "{}", h.state().status);
     assert_eq!(project(&h).graphs().count(), before.graphs().count(), "no graph without Plot");
     menu(&mut h, "Edit", "Undo Simulate curve");
@@ -79,7 +91,7 @@ fn another_function_starts_on_its_initial_values_and_the_preview_follows_the_win
     let mut h = start(vec![data_file("simulate-function")]);
     open_window(&mut h);
     let d = h.state().simulate.as_ref().unwrap();
-    assert_eq!(d.preview_for_test(), Some(Ok(100)));
+    assert_eq!(d.preview_for_test(), Some(Ok(200)), "Origin's 200 points");
     h.state_mut().simulate.as_mut().unwrap().set_for_test("ExpDec1", 1.0, 10.0, 7, false);
     settle(&mut h);
     let d = h.state().simulate.as_ref().unwrap();
@@ -101,8 +113,10 @@ fn the_output_can_be_a_new_workbook_that_holds_only_the_curve() {
     assert_eq!(made.sheets.len(), 1, "the empty first sheet is not left behind");
     assert_eq!(made.sheets[0].name, "Simulate1");
     assert_eq!(made.sheets[0].columns.len(), 2);
-    assert_eq!(made.sheets[0].columns[1].numeric().unwrap().len(), 100);
-    assert_eq!(h.state().active, Some(made.id));
+    assert_eq!(made.sheets[0].columns[1].numeric().unwrap().len(), 200);
+    // As in Origin, the curve is also drawn, and its graph comes to the front.
+    let graph = p.graphs().last().expect("Plot the curve is on by default");
+    assert_eq!(h.state().active, Some(graph.id));
     menu(&mut h, "Edit", "Undo Simulate curve");
     assert_eq!(project(&h).workbooks().count(), 1);
 }
@@ -130,7 +144,7 @@ fn plot_makes_one_graph_with_a_log_axis_for_log_spacing() {
     type_number(&mut h, "From", "0.1");
     type_number(&mut h, "To", "100");
     click(&mut h, "Logarithmic spacing");
-    click(&mut h, "Plot the curve");
+    // "Plot the curve" is on by default, as Origin draws the curve.
     click(&mut h, "OK");
     assert_eq!(project(&h).graphs().count(), graphs + 1);
     let graph = project(&h).graphs().last().unwrap();
@@ -149,6 +163,7 @@ fn a_range_that_cannot_be_used_is_refused_with_a_message_and_changes_nothing() {
     let before = project(&h).clone();
     let revision = h.state().doc.revision();
     open_window(&mut h);
+    type_number(&mut h, "From", "1");
     type_number(&mut h, "To", "1");
     click(&mut h, "OK");
     assert!(h.state().simulate.is_some(), "the window stays open");

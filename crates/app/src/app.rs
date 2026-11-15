@@ -218,6 +218,8 @@ pub struct SheafApp {
     switcher: Option<crate::switcher::Switcher>,
 }
 
+type ShapeLayerSnapshot = (WindowId, usize, Option<Vec<sheaf_core::shape::Shape>>);
+
 impl SheafApp {
     pub fn new(cc: &eframe::CreationContext<'_>, startup: Startup) -> Self {
         theme::apply(&cc.egui_ctx);
@@ -1206,6 +1208,8 @@ impl SheafApp {
             GraphOp::HideTitle { .. } => "Delete axis title",
             GraphOp::DeleteLabel { .. } => "Delete text",
             GraphOp::DeleteShape { .. } => "Delete drawn object",
+            GraphOp::OrderShape { front: true, .. } => "Bring drawn object to front",
+            GraphOp::OrderShape { front: false, .. } => "Push drawn object to back",
             GraphOp::HideLayer { .. } => "Hide layer",
             GraphOp::HideOtherLayers { .. } => "Hide other layers",
             GraphOp::MovePlotToAxis { right: true, .. } => "Move plot to right Y axis",
@@ -1216,8 +1220,55 @@ impl SheafApp {
         // The present axis ranges, for the zoom (an automatic axis has no stored limits).
         let resolved = sheaf_plot::layout_geometry(self.doc.project(), graph).ok();
         let shapes = self.shape_dialog_shapes();
+        let selected = self.snapshot_shape_interactions();
         self.doc.apply(label, |p| graph_view::apply_op(p, graph, op, resolved.as_deref()));
+        // Keep the moved object selected at its new index; clear any other selection in a changed
+        // shape stack, whose old index may now identify a different object.
+        let mut preserved = None;
+        if let GraphOp::OrderShape { layer, shape, front } = op
+            && let Some((_, _, Some(before))) = selected.iter().find(|(id, l, _)| *id == graph && *l == layer)
+            && let Some(after) = self.doc.project().graph(graph).and_then(|g| g.layers.get(layer)).map(|l| &l.shapes)
+            && before != after
+            && shape < before.len()
+            && let Some(state) = self.graphs.get_mut(&graph)
+            && state.selected == Some((layer, sheaf_plot::scene::ObjectKind::Shape(shape)))
+        {
+            state.selected =
+                Some((layer, sheaf_plot::scene::ObjectKind::Shape(if front { after.len() - 1 } else { 0 })));
+            preserved = Some((graph, layer));
+        }
+        self.clear_changed_shape_selections(selected, preserved);
         self.close_shape_dialog_if_changed(shapes);
+    }
+
+    /// Snapshot layers with index-based shape interactions so a changed layer cannot leave an
+    /// index pointing at a different object.
+    fn snapshot_shape_interactions(&self) -> Vec<ShapeLayerSnapshot> {
+        self.graphs
+            .iter()
+            .flat_map(|(id, state)| {
+                state.shape_interaction_layers().into_iter().map(move |layer| {
+                    let shapes =
+                        self.doc.project().graph(*id).and_then(|g| g.layers.get(layer)).map(|l| l.shapes.clone());
+                    (*id, layer, shapes)
+                })
+            })
+            .collect()
+    }
+
+    fn clear_changed_shape_selections(
+        &mut self,
+        before: Vec<ShapeLayerSnapshot>,
+        preserved: Option<(WindowId, usize)>,
+    ) {
+        for (id, layer, shapes) in before {
+            let current = self.doc.project().graph(id).and_then(|g| g.layers.get(layer)).map(|l| &l.shapes);
+            if shapes.as_ref() != current
+                && let Some(state) = self.graphs.get_mut(&id)
+            {
+                state.invalidate_shape_interaction(layer, preserved == Some((id, layer)));
+            }
+        }
     }
 
     /// The drawn objects of the layer the drawn-object window edits, if it is open.
@@ -1438,18 +1489,22 @@ impl SheafApp {
                 }
             }
             Action::Undo => {
+                let selected = self.snapshot_shape_interactions();
                 let shapes = self.shape_dialog_shapes();
                 if let Some(label) = self.doc.undo() {
                     self.say(format!("Undone: {label}"));
                 }
                 self.close_shape_dialog_if_changed(shapes);
+                self.clear_changed_shape_selections(selected, None);
             }
             Action::Redo => {
+                let selected = self.snapshot_shape_interactions();
                 let shapes = self.shape_dialog_shapes();
                 if let Some(label) = self.doc.redo() {
                     self.say(format!("Redone: {label}"));
                 }
                 self.close_shape_dialog_if_changed(shapes);
+                self.clear_changed_shape_selections(selected, None);
             }
             Action::UndoAiChanges => self.undo_ai_changes(ctx),
             Action::NewWorkbook => {

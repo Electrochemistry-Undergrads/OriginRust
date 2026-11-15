@@ -41,5 +41,7 @@ pub fn fit_spec(a: &FitArgs) -> FitSpec {
         sheet: a.sheet.clone(),
         rows: a.rows.clone(),
         x_range: a.x_range.clone(),
+        z: a.z.clone(),
+        x: a.x.clone(),
     }
 }

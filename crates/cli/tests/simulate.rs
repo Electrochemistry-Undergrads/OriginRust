@@ -111,12 +111,12 @@ fn log_spacing_and_the_defaults_of_the_window() {
         let want = 1.0 + 2.0 * (-xi / 10.0).exp();
         assert!((yi - want).abs() <= 1e-12, "x={xi}: {yi} against {want}");
     }
-    // Nothing typed: Gauss, 100 points from 1 to 10, printed as CSV on standard output.
+    // Nothing typed: Origin's window for Gauss, 200 points from -1 to 5, printed as CSV on standard output.
     let (ok, stdout, stderr) = sheaf(&["simulate"]);
     assert!(ok, "{stderr}");
     let (x, _) = xy(&stdout);
-    assert_eq!((x.len(), x[0], x[99]), (100, 1.0, 10.0));
-    assert!(stderr.contains("Simulated Gauss: 100 points"), "{stderr}");
+    assert_eq!((x.len(), x[0], x[199]), (200, -1.0, 5.0));
+    assert!(stderr.contains("Simulated Gauss: 200 points"), "{stderr}");
     assert!(!stdout.contains("Parameters"), "the notes stay out of the curve: {stdout}");
 }
 

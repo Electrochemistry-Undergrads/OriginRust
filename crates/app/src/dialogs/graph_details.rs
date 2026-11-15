@@ -190,6 +190,7 @@ pub fn dialog_body(
     names: &[Vec<String>],
     sources: &[Source],
     columns: &[(ColumnId, String)],
+    numeric: &[ColumnId],
     add_from: &mut usize,
     spans: &[(f64, f64)],
 ) {
@@ -324,7 +325,7 @@ pub fn dialog_body(
                         _ => page_tab(ui, graph),
                     },
                     Node::Layer(l) => layer_tab(ui, *tab, graph, l, sources, add_from, spans),
-                    Node::Plot(l, p) => plot_tab(ui, *tab, graph, l, p, labels, columns, node),
+                    Node::Plot(l, p) => plot_tab(ui, *tab, graph, l, p, labels, columns, numeric, node),
                 },
             );
         });
@@ -371,11 +372,12 @@ fn plot_tab(
     p: usize,
     labels: &[Vec<String>],
     columns: &[(ColumnId, String)],
+    numeric: &[ColumnId],
     node: &mut Node,
 ) {
     // In Origin's Dependent edit mode a change to one plot's look is made to the whole group.
     let before = graph.layers[l].plots[p].clone();
-    plot_tab_body(ui, tab, graph, l, p, labels, columns, node);
+    plot_tab_body(ui, tab, graph, l, p, labels, columns, numeric, node);
     // The ridgeline settings are shared by the ridgeline plots of the layer: one chart, one look
     // (each plot keeps its own colour).
     if matches!(tab, DetailTab::RidgeDisplay | DetailTab::RidgeDistribution)
@@ -416,6 +418,7 @@ fn plot_tab_body(
     p: usize,
     labels: &[Vec<String>],
     columns: &[(ColumnId, String)],
+    numeric: &[ColumnId],
     node: &mut Node,
 ) {
     match tab {
@@ -763,7 +766,7 @@ fn plot_tab_body(
         DetailTab::HexBins => hexbin_tab(ui, &mut graph.layers[l].plots[p].hexbin),
         DetailTab::Parallel => {
             let kind = graph.layers[l].plots[p].kind;
-            parallel_tab(ui, &mut graph.layers[l].plots[p].parallel, kind, columns)
+            parallel_tab(ui, &mut graph.layers[l].plots[p].parallel, kind, columns, numeric)
         }
         DetailTab::Spacing => {
             let bars = &mut graph.layers[l].bars;
@@ -1778,10 +1781,22 @@ fn hexbin_tab(ui: &mut egui::Ui, h: &mut HexbinStyle) {
     ui.weak("The other axis' spacing makes the hexagons regular on the page; its Min and Max Center still apply (only its spacing is disabled).");
 }
 
+/// The columns the Parallel tab offers: any column to group a Parallel Index by, only numeric ones to colour a
+/// Parallel Plot (a text column would be ignored by the colour ramp).
+fn color_choices(kind: PlotKind, columns: &[(ColumnId, String)], numeric: &[ColumnId]) -> Vec<(ColumnId, String)> {
+    columns.iter().filter(|(c, _)| kind == PlotKind::ParallelIndex || numeric.contains(c)).cloned().collect()
+}
+
 /// Origin's Plot Details Parallel tab (Width, Transparency) with the Axes dialog's "Rescale Each Axis Independently"
 /// and Sheaf's choice of the column that colours the lines (graphing spec 14.25). The parallel plots of the layer
 /// share these settings.
-fn parallel_tab(ui: &mut egui::Ui, s: &mut ParallelStyle, kind: PlotKind, columns: &[(ColumnId, String)]) {
+fn parallel_tab(
+    ui: &mut egui::Ui,
+    s: &mut ParallelStyle,
+    kind: PlotKind,
+    columns: &[(ColumnId, String)],
+    numeric: &[ColumnId],
+) {
     ui.checkbox(&mut s.rescale_each_axis, "Rescale Each Axis Independently");
     grid(ui, "parallel_tab", |ui| {
         ui.label("Width");
@@ -1803,8 +1818,8 @@ fn parallel_tab(ui: &mut egui::Ui, s: &mut ParallelStyle, kind: PlotKind, column
         };
         egui::ComboBox::from_id_salt("parallel_color").selected_text(name(s.color)).width(260.0).show_ui(ui, |ui| {
             ui.selectable_value(&mut s.color, None, none);
-            for (c, n) in columns {
-                ui.selectable_value(&mut s.color, Some(*c), n);
+            for (c, n) in color_choices(kind, columns, numeric) {
+                ui.selectable_value(&mut s.color, Some(c), n);
             }
         });
         ui.end_row();
@@ -1813,5 +1828,19 @@ fn parallel_tab(ui: &mut egui::Ui, s: &mut ParallelStyle, kind: PlotKind, column
         ui.weak("Rows with the same text in the group column share a colour and a legend entry.");
     } else {
         ui.weak("A numeric column colours the lines through the colour ramp, with a colour scale beside the graph.");
+    }
+}
+
+#[cfg(test)]
+mod parallel_choice_tests {
+    use super::*;
+
+    #[test]
+    fn a_parallel_plot_offers_only_numeric_colour_columns_and_a_parallel_index_any() {
+        let cols: Vec<(ColumnId, String)> = (0..3u64).map(|i| (ColumnId(i), format!("c{i}"))).collect();
+        let numeric = [ColumnId(1), ColumnId(2)];
+        let ids = |k| color_choices(k, &cols, &numeric).into_iter().map(|(c, _)| c).collect::<Vec<_>>();
+        assert_eq!(ids(PlotKind::Parallel), vec![ColumnId(1), ColumnId(2)]);
+        assert_eq!(ids(PlotKind::ParallelIndex), vec![ColumnId(0), ColumnId(1), ColumnId(2)]);
     }
 }

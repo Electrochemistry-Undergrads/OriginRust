@@ -227,7 +227,14 @@ fn parallel_graph(
     let color = if name.trim().eq_ignore_ascii_case("none") {
         None
     } else {
-        Some(named_columns(project, book, sheet, &[name.to_string()])?[0])
+        let id = named_columns(project, book, sheet, &[name.to_string()])?[0];
+        if template == Template::Parallel && project.numeric(id).is_none() {
+            bail!(
+                "--group {name}: the colour column of a parallel plot must be numeric (it colours the lines through a \
+                 colour ramp); to group by a text column use -t parallel-index"
+            );
+        }
+        Some(id)
     };
     Ok(project.plot_parallel(template, &axes, color)?)
 }

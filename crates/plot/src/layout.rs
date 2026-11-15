@@ -773,8 +773,11 @@ fn layer_scene(
         }
         rec(objects, out, start, ObjectKind::YAxis, &[]);
         if layer.display.show_data {
+            // The colour scale and the legend of the groups are the layer's legend: pickable and movable as one.
+            let start = out.len();
             crate::parallel::draw_scale(out, layer, pds, geom, m);
             crate::parallel::draw_legend(out, layer, pds, f, m);
+            rec(objects, out, start, ObjectKind::Legend, &[]);
         }
         if layer.display.data_on_top {
             scene.underlay_len = out.len();

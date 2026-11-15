@@ -163,3 +163,14 @@ fn a_parallel_index_colours_by_group_and_refuses_what_it_cannot_draw() {
     assert!(!ok);
     assert!(e.contains("--group needs"), "{e}");
 }
+
+#[test]
+fn a_parallel_plot_refuses_a_text_colour_column_and_points_to_parallel_index() {
+    let dir = scratch("textcolor");
+    let csv = csv(&dir);
+    let svg = dir.join("o.svg");
+    let (ok, e) =
+        sheaf(&["plot", csv.to_str().unwrap(), "-t", "parallel", "--group", "species", "-o", svg.to_str().unwrap()]);
+    assert!(!ok, "a text colour column is refused");
+    assert!(e.contains("numeric") && e.contains("parallel-index"), "{e}");
+}

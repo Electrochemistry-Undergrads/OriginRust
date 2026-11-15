@@ -301,3 +301,39 @@ fn other_plot_kinds_are_drawn_as_before() {
     assert!(t.contains(&"9".to_string()) || t.contains(&"8".to_string()) || t.iter().any(|s| s == "2"), "{t:?}");
     assert!(layer(&p, g).plots.iter().all(|it| !matches!(it, scene::Item::Path { d, .. } if d.is_empty())));
 }
+
+fn legend_object(l: &scene::LayerScene) -> Option<&scene::SceneObject> {
+    l.objects.iter().find(|o| o.kind == scene::ObjectKind::Legend)
+}
+
+#[test]
+fn the_parallel_index_legend_is_a_hit_test_object_that_a_manual_position_moves() {
+    let (mut p, g) = index(&four());
+    let sc = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let obj = legend_object(&sc.layers[0]).expect("the legend is recorded");
+    let b = obj.bounds;
+    let at = (b.x + b.w / 2.0, b.y + b.h / 2.0);
+    match crate::hit::hit_test(&sc, at, 1.0) {
+        crate::hit::Hit::Object { kind: scene::ObjectKind::Legend, .. } => {}
+        other => panic!("{other:?}"),
+    }
+    // Moving the layer legend moves the drawn one.
+    p.graph_mut(g).unwrap().layers[0].legend.position = sheaf_core::graph::LegendPosition::Manual { x: 0.5, y: 0.5 };
+    let sc2 = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let b2 = legend_object(&sc2.layers[0]).unwrap().bounds;
+    assert!((b2.x - b.x).abs() > 10.0, "{b:?} {b2:?}");
+    assert!(matches!(
+        crate::hit::hit_test(&sc2, (b2.x + b2.w / 2.0, b2.y + b2.h / 2.0), 1.0),
+        crate::hit::Hit::Object { kind: scene::ObjectKind::Legend, .. }
+    ));
+}
+
+#[test]
+fn the_parallel_plot_colour_scale_is_a_legend_object_that_a_position_moves() {
+    let (mut p, g, _) = parallel(&four());
+    let sc = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let b = legend_object(&sc.layers[0]).expect("the colour scale is recorded").bounds;
+    p.graph_mut(g).unwrap().layers[0].legend.position = sheaf_core::graph::LegendPosition::TopLeft;
+    let b2 = legend_object(&layout::build_scene(&p, g, &FixedMetrics).unwrap().layers[0]).unwrap().bounds;
+    assert!(b2.x < b.x - 10.0, "{b:?} {b2:?}");
+}

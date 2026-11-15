@@ -334,6 +334,25 @@ pub(crate) fn draw_axes(
     }
 }
 
+/// How far the colour scale is moved from its place right of the frame: the layer legend's position places it, as it
+/// places the legend of the groups (automatic: not moved; a corner or a manual position puts the block of title,
+/// bar and labels there, its height that of the frame).
+fn scale_shift(layer: &Layer, f: Rect, title: &str, ticks: &[(f64, String)], m: &dyn TextMeasurer) -> (f64, f64) {
+    let ya = &layer.y_axis;
+    let labels = ticks.iter().map(|(_, t)| text::width(m, t, &ya.tick_font, ya.tick_font.size_pt)).fold(0.0, f64::max);
+    let title_w = text::width(m, title, &ya.title_font, ya.title_font.size_pt);
+    let w = (crate::hexbin::BAR_W_PT + 3.0 + crate::hexbin::LABEL_GAP_PT + labels).max(title_w);
+    let edge = 0.8 * layer.legend.font.size_pt;
+    let x0 = f.x + f.w + crate::hexbin::BAR_GAP_PT;
+    let (tx, ty) = match layer.legend.position {
+        LegendPosition::Automatic => return (0.0, 0.0),
+        LegendPosition::TopLeft | LegendPosition::BottomLeft => (f.x + edge, f.y),
+        LegendPosition::TopRight | LegendPosition::BottomRight => (f.x + f.w - edge - w, f.y),
+        LegendPosition::Manual { x, y } => (f.x + x * f.w - w / 2.0, f.y + y * f.h - f.h / 2.0),
+    };
+    (tx - x0, ty - f.y)
+}
+
 /// The colour scale of a Parallel Plot beside the frame.
 pub(crate) fn draw_scale(
     out: &mut Vec<Item>,
@@ -345,7 +364,8 @@ pub(crate) fn draw_scale(
     if let Some(ParallelData { color: ParColor::Ramp { title, ticks, .. }, .. }) =
         pds.iter().find_map(|pd| pd.parallel.as_deref())
     {
-        crate::hexbin::draw_color_bar(out, layer, geom, m, title, ticks);
+        let shift = scale_shift(layer, geom.frame, title, ticks, m);
+        crate::hexbin::draw_color_bar(out, layer, geom, m, title, ticks, shift);
     }
 }
 

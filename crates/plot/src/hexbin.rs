@@ -41,7 +41,7 @@ pub(crate) const BAR_GAP_PT: f64 = 14.0;
 /// Width of the colour scale bar, in pt.
 pub(crate) const BAR_W_PT: f64 = 14.0;
 /// Distance from the bar to its tick labels, in pt (the tick is 3 pt long).
-const LABEL_GAP_PT: f64 = 6.0;
+pub(crate) const LABEL_GAP_PT: f64 = 6.0;
 /// Number of strips the gradient of the bar is drawn with.
 const BAR_STRIPS: usize = 64;
 /// The title of the colour scale.
@@ -275,7 +275,7 @@ pub(crate) fn draw_scale(
     }
     let ticks: Vec<(f64, String)> =
         scale_ticks(max_count).into_iter().map(|v| (v as f64 / max_count as f64, v.to_string())).collect();
-    draw_color_bar(out, layer, geom, m, SCALE_TITLE, &ticks);
+    draw_color_bar(out, layer, geom, m, SCALE_TITLE, &ticks, (0.0, 0.0));
 }
 
 /// Draws a colour scale beside the frame: the title above a vertical bar of the colour ramp (0 at the bottom, 1 at
@@ -288,8 +288,9 @@ pub(crate) fn draw_color_bar(
     m: &dyn TextMeasurer,
     title: &str,
     ticks: &[(f64, String)],
+    shift: (f64, f64),
 ) {
-    let f = geom.frame;
+    let f = Rect { x: geom.frame.x + shift.0, y: geom.frame.y + shift.1, ..geom.frame };
     let ya = &layer.y_axis;
     let size = ya.tick_font.size_pt;
     let title_size = ya.title_font.size_pt;

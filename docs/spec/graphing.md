@@ -1930,18 +1930,26 @@ Origin's documented facts (Origin 2019 help, not measured; no Origin was at hand
   sample in the group's colour and the group's text ("(blank)" for an empty one). Automatic (the template's) places it
   right of the frame, 14 pt away and top aligned, and the frame leaves room for it; the corner and manual positions place
   it inside the frame as the ordinary legend does. A custom legend text and columns are not used. `draw_legend` of the
-  ordinary legend returns at once for parallel plots (it would list the axes).
+  ordinary legend returns at once for parallel plots (it would list the axes). The group legend and the Parallel Plot's
+  colour scale are recorded together as one `ObjectKind::Legend` (their drawn rect), so in the app they are picked,
+  selected, dragged and double-clicked to the Legend tab like any legend. The layer legend's position places both: the
+  drag sets `LegendPosition::Manual` (centre at fractions of the frame); the colour scale (title, bar and labels, as high
+  as the frame) is moved by the same rule (`parallel::scale_shift`; Automatic leaves it right of the frame, a corner puts
+  it at the frame's left or right inside edge, Manual centres it on the point). There is no separate offset.
 - Plot Details "Parallel" tab: Rescale Each Axis Independently, Width, Transparency (%), and Color Column (Parallel Plot) or
-  Group Column (Parallel Index), a list of every column of the project with "None". The settings are shared by the layer's
+  Group Column (Parallel Index), a list of every column of the project (any, for the group) or only the numeric columns
+  (for the colour of a Parallel Plot, a text column would be ignored) with "None". The settings are shared by the layer's
   parallel plots. Undo works as for other settings. Menu: Plot > Categorical > Parallel Plot and Parallel Index (a new
   submenu), also in Column > Plot.
 - CLI `-t parallel`, `-t parallel-index`, `--group COLUMN` (`none` for the plot colour; with `-t parallel` a numeric
-  colour column); MCP `template` text and `group`. `.opj`: written as line plots of the columns, the save warns
+  colour column: a text one is refused with a message that suggests `-t parallel-index`); MCP `template` text and `group`. `.opj`: written as line plots of the columns, the save warns
   ("parallel plots and parallel indexes were written as line plots of their columns; their axes, colours and groups were
   not written").
 - Tests: `crates/plot/src/parallel_tests.rs` (axis places, scaling on and off, breaks at missing and masked cells, colour by
-  column and by group, titles, colour scale, legend, width and transparency); core template/refusal/serde test; `.opj`
-  warning test; `crates/cli/tests/parallel.rs` (both kinds as SVG, `--group`, refusals); UI menu, group-from-text-column and
+  column and by group, titles, colour scale, legend, width and transparency; the legend and scale are hit-test objects
+  that a Manual or corner position moves); core template/refusal/serde test; `.opj`
+  warning test; `crates/cli/tests/parallel.rs` (both kinds as SVG, `--group`, refusals, a text colour column);
+  `graph_details.rs` colour-column choices test; UI menu, group-from-text-column and
   Plot Details tests. The existing hexbin and golden tests pin that other kinds are unchanged.
 - Not done: Parallel Sets, a curvature setting, a custom colour map or By Points tab, log axes, dragging a column onto the
   plot, reordering or flipping axes, hover read-out of rows, hit-testing of the axes, a toolbar button, Origin's real defaults.

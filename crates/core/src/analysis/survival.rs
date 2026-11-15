@@ -12,6 +12,9 @@ use super::statistics::num;
 use super::*;
 use crate::graph::{PlotKind, ScaleKind};
 
+/// The most groups one run takes; a near-unique grouping column (an ID) is refused.
+const MAX_GROUPS: usize = 1000;
+
 /// What [`Tool::KaplanMeier`] does.
 #[derive(Debug, Clone, PartialEq)]
 pub struct KaplanMeierSpec {
@@ -115,6 +118,7 @@ pub(super) fn run(
 
     // Cases per group, in the order of the group labels (numbers by value, otherwise as text).
     let mut cases: Vec<(String, Vec<f64>, Vec<bool>)> = Vec::new();
+    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for row in first..=last {
         let t = times.get(row).copied().unwrap_or(f64::NAN);
         let Some(is_censored) = cell_equals(censor_col, row, censor, censor_number) else { continue };
@@ -128,12 +132,20 @@ pub(super) fn run(
             },
             None => column_label(time_col),
         };
-        match cases.iter_mut().find(|c| c.0 == label) {
-            Some(c) => {
-                c.1.push(t);
-                c.2.push(is_censored);
+        match index.get(&label) {
+            Some(&k) => {
+                cases[k].1.push(t);
+                cases[k].2.push(is_censored);
             }
-            None => cases.push((label, vec![t], vec![is_censored])),
+            None => {
+                if cases.len() >= MAX_GROUPS {
+                    return Err(AnalysisError::BadOption(format!(
+                        "the grouping column has more than {MAX_GROUPS} different values; choose a column with fewer groups"
+                    )));
+                }
+                index.insert(label.clone(), cases.len());
+                cases.push((label, vec![t], vec![is_censored]));
+            }
         }
     }
     if cases.is_empty() {

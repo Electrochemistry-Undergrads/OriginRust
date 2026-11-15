@@ -190,6 +190,7 @@ pub fn pca(columns: &[Vec<f64>], options: &PcaOptions) -> Result<Pca, PcaError> 
             Some(*acc)
         })
         .collect();
+    let rank_tol = eigenvalues.first().copied().unwrap_or(0.0).max(0.0) * 1e-12;
     let keep = options.components.clamp(1, p);
     let loadings: Vec<Vec<f64>> = order[..keep]
         .iter()
@@ -205,7 +206,13 @@ pub fn pca(columns: &[Vec<f64>], options: &PcaOptions) -> Result<Pca, PcaError> 
         .iter()
         .enumerate()
         .map(|(k, v)| {
-            let scale = if options.standardize_scores { eigenvalues[k].sqrt() } else { 1.0 };
+            let scale = if !options.standardize_scores {
+                1.0
+            } else if eigenvalues[k] > rank_tol {
+                eigenvalues[k].sqrt()
+            } else {
+                f64::NAN // a rank-deficient component has no meaningful standardized score
+            };
             let mut s = vec![f64::NAN; rows];
             for &r in &complete {
                 let z: f64 = (0..p)
@@ -227,6 +234,9 @@ pub fn pca(columns: &[Vec<f64>], options: &PcaOptions) -> Result<Pca, PcaError> 
                 let q = rest.len() as f64;
                 if rest.len() < 2 {
                     return EigenTest { chi_square: 0.0, df: 0.0, p: 0.0 };
+                }
+                if rest.iter().any(|&l| l <= rank_tol) {
+                    return EigenTest { chi_square: f64::NAN, df: (q + 2.0) * (q - 1.0) / 2.0, p: f64::NAN };
                 }
                 let logs: f64 = rest.iter().map(|l| l.ln()).sum();
                 let chi = (n - 1.0 - (2.0 * p as f64 + 5.0) / 6.0) * (q * (rest.iter().sum::<f64>() / q).ln() - logs);

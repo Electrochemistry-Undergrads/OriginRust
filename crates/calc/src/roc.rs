@@ -177,9 +177,10 @@ pub fn roc(values: &[f64], positive: &[bool], options: &RocOptions) -> Result<Ro
         }
         points.push(RocPoint { cutoff: sign * v, sensitivity: tp as f64 / mf, specificity: 1.0 - fp as f64 / nf });
     }
-    let mut best = 0;
+    // Real cut-offs only (the (0, 0) start has an infinite one); the highest wins among equal indexes.
+    let mut best = 1;
     let mut best_j = f64::NEG_INFINITY;
-    for (k, pt) in points.iter().enumerate() {
+    for (k, pt) in points.iter().enumerate().skip(1) {
         let j = pt.sensitivity + pt.specificity - 1.0;
         if j > best_j + 1e-12 {
             best_j = j;
@@ -224,6 +225,12 @@ mod tests {
         // Youden: sens + spec - 1 = 1/3 (cut 5), 1/3 (cut 4), 2/3 (cut 3): best is 3.
         assert_eq!(r.points[r.best].cutoff, 3.0);
         assert!(r.lcl < r.auc && r.ucl == 1.0);
+    }
+
+    #[test]
+    fn best_cutoff_is_always_a_real_one() {
+        let r = roc(&[1.0, 2.0, 3.0, 4.0], &[true, true, false, false], &RocOptions::default()).unwrap();
+        assert!(r.points[r.best].cutoff.is_finite());
     }
 
     #[test]

@@ -880,7 +880,7 @@ Statistics > Survival Analysis > Kaplan-Meier Estimator... (`dialogs/multivariat
 - **Quartiles** (25, 50, 75 %): the estimate is the smallest event time with `S <= 1 - p`. Its lower and upper limits are
   the smallest event times at which the **linear** limits `S -/+ z se` are at or below `1 - p` (lower limit of the quartile
   from the lower limit of `S`, upper limit from the upper one; z for 95 %). When the upper limit is never reached Origin
-  gives the largest event time (seen in two runs).
+  gives the largest event time (seen once, for a quartile whose estimate is reached; for a quartile never reached Sheaf gives no limits, unmeasured).
 - **Mean** is the area under the curve up to the largest time, **censored or not**. Standard error `sqrt(f sum A^2 d /
   (n (n - d)))`, `A` the area to the right of each event time, with `f = D / (D - 1)` (`D` the number of events) **only when
   the curve reaches 0** (the largest time is an event); with a censored largest time `f = 1` (six runs). Limits mean -/+ z se.

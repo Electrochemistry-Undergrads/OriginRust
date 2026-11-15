@@ -14,8 +14,8 @@
 //!   smallest event times at which the **linear** limits `S -/+ z se` (z of the normal distribution for the
 //!   chosen confidence level) are at or below `1 - p/100`: the lower limit of the quartile uses the lower
 //!   limit of `S`, the upper limit of the quartile the upper limit of `S`. When the upper limit is never
-//!   reached Origin reports the largest event time (measured once; the lower limit and the estimate itself
-//!   are `None` when never reached, which was not measured).
+//!   reached Origin reports the largest event time (measured once, for a quartile whose estimate is reached; the
+//!   lower limit and a quartile whose estimate is never reached are `None`, which was not measured).
 //! - The mean is the area under the curve up to the **largest time, censored or not**; its standard error is
 //!   `sqrt(D / (D - 1) sum A_i^2 d_i / (n_i (n_i - d_i)))` with `A_i` the area after the i-th event time and `D` the
 //!   number of events; the factor `D / (D - 1)` is applied only when the curve reaches 0 (the largest time is an
@@ -124,7 +124,8 @@ impl KaplanMeier {
 
     /// The estimate at `t` (1 before the first event).
     pub fn survival_at(&self, t: f64) -> f64 {
-        self.steps.iter().take_while(|s| s.time <= t).last().map_or(1.0, |s| s.survival)
+        let k = self.steps.partition_point(|s| s.time <= t);
+        k.checked_sub(1).map_or(1.0, |k| self.steps[k].survival)
     }
 }
 
@@ -191,12 +192,10 @@ pub fn kaplan_meier(time: &[f64], censored: &[bool], confidence: f64) -> Result<
     let quartiles = [25.0, 50.0, 75.0].map(|percent| {
         let level = 1.0 - percent / 100.0;
         let first = |f: &dyn Fn(&SurvivalStep) -> f64| steps.iter().find(|st| f(st) <= level).map(|st| st.time);
-        Quartile {
-            percent,
-            estimate: first(&|st| st.survival),
-            lower: first(&|st| st.lower),
-            upper: first(&|st| st.upper).or_else(|| steps.last().map(|st| st.time)),
-        }
+        let estimate = first(&|st| st.survival);
+        // The largest-event-time fallback only applies to a quartile that is reached.
+        let upper = first(&|st| st.upper).or_else(|| estimate.and(steps.last().map(|st| st.time)));
+        Quartile { percent, estimate, lower: first(&|st| st.lower), upper }
     });
 
     // Mean: area under the curve up to the largest time; areas[k] is the area after step k.
@@ -280,12 +279,25 @@ pub fn rank_test(groups: &[(Vec<f64>, Vec<bool>)], test: RankTest) -> Result<Ran
     let mut times: Vec<f64> = groups.iter().flatten().filter(|c| !c.1).map(|c| c.0).collect();
     times.sort_by(f64::total_cmp);
     times.dedup();
+    let mut groups = groups;
+    for g in &mut groups {
+        g.sort_by(|a, b| a.0.total_cmp(&b.0));
+    }
+    // Per group, the index of the first case with time >= t (the cases before it have left the risk set).
+    let mut ptr = vec![0usize; k];
     let m = k - 1;
     let mut diff = DVector::<f64>::zeros(m);
     let mut cov = DMatrix::<f64>::zeros(m, m);
     for &t in &times {
-        let at_risk: Vec<f64> = groups.iter().map(|g| g.iter().filter(|c| c.0 >= t).count() as f64).collect();
-        let deaths: Vec<f64> = groups.iter().map(|g| g.iter().filter(|c| c.0 == t && !c.1).count() as f64).collect();
+        let mut at_risk = vec![0.0; k];
+        let mut deaths = vec![0.0; k];
+        for (gi, g) in groups.iter().enumerate() {
+            while ptr[gi] < g.len() && g[ptr[gi]].0 < t {
+                ptr[gi] += 1;
+            }
+            at_risk[gi] = (g.len() - ptr[gi]) as f64;
+            deaths[gi] = g[ptr[gi]..].iter().take_while(|c| c.0 == t).filter(|c| !c.1).count() as f64;
+        }
         let n: f64 = at_risk.iter().sum();
         let d: f64 = deaths.iter().sum();
         let w = match test {
@@ -337,6 +349,7 @@ mod tests {
         close(km.mean, 2.0 + 1.6 + 8.0 / 15.0);
         assert_eq!(km.quartiles[0].estimate, Some(4.0));
         assert_eq!(km.quartiles[2].estimate, None, "S never reaches 0.25");
+        assert_eq!(km.quartiles[2].upper, None, "no limit for a quartile that is not reached");
         let marks = km.censor_marks();
         assert_eq!(marks.len(), 2);
         close(marks[0].1, 0.8);

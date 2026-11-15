@@ -310,8 +310,9 @@ pub enum MedianEdge {
     Shrink,
     /// The window is full everywhere; points beyond the end repeat the end value.
     Repeat,
-    /// The window is full everywhere; points beyond the end mirror the data, including the end
-    /// point (`y[-1] = y[0]`).
+    /// The window is full everywhere; points beyond the ends mirror the data as Origin's
+    /// percentile filter does: before the start without repeating the first point
+    /// (`y[-1] = y[1]`), past the end with the last point repeated (`y[n] = y[n-1]`), measured.
     Reflect,
 }
 
@@ -326,12 +327,14 @@ fn median_of(mut w: Vec<f64>) -> f64 {
 /// A running median over a window of `npts` points (centred on each point).
 ///
 /// Missing values are removed, the rest is filtered as one series and the missing rows are put back
-/// as missing (as Origin's smoothing does). The window needs an odd number of points, at least 1;
-/// `None` otherwise.
+/// as missing (as Origin's smoothing does). The window has `2 (npts / 2) + 1` points, so an even
+/// `npts` acts like the next odd number, as in Origin's `smooth` (measured with its percentile
+/// filter at 50 %, which is Origin's median of a curve; analysis-tools.md 12.3). `None` for 0.
 pub fn median_filter(y: &[f64], npts: usize, edge: MedianEdge) -> Option<Vec<f64>> {
-    if npts == 0 || npts.is_multiple_of(2) {
+    if npts == 0 {
         return None;
     }
+    let npts = 2 * (npts / 2) + 1;
     let valid: Vec<f64> = y.iter().copied().filter(|v| v.is_finite()).collect();
     let n = valid.len();
     let h = npts / 2;
@@ -346,10 +349,7 @@ pub fn median_filter(y: &[f64], npts: usize, edge: MedianEdge) -> Option<Vec<f64
                     .map(|j| valid[(i as isize + j).clamp(0, n as isize - 1) as usize])
                     .collect(),
                 MedianEdge::Reflect => (-(h as isize)..=h as isize)
-                    .map(|j| {
-                        let r = (i as isize + j).rem_euclid(2 * n as isize);
-                        valid[if r < n as isize { r } else { 2 * n as isize - 1 - r } as usize]
-                    })
+                    .map(|j| valid[crate::smooth::percentile_reflect_index(i as isize + j, n)])
                     .collect(),
             };
             median_of(window)
@@ -656,7 +656,7 @@ mod tests {
         // 5 1 2 3 4, window 3, end value repeated: (5,5,1)=5, (5,1,2)=2, (1,2,3)=2, (2,3,4)=3, (3,4,4)=4.
         let r = [5.0, 1.0, 2.0, 3.0, 4.0];
         close(&median_filter(&r, 3, MedianEdge::Repeat).unwrap(), &[5.0, 2.0, 2.0, 3.0, 4.0]);
-        // Reflect, window 5: i=0 window (1,5,5,1,2) -> 2; i=4 window (2,3,4,4,3) -> 3.
+        // Reflect, window 5: i=0 window (2,1,5,1,2) -> 2; i=4 window (2,3,4,4,3) -> 3.
         let m = median_filter(&r, 5, MedianEdge::Reflect).unwrap();
         close(&m[..1], &[2.0]);
         close(&m[4..], &[3.0]);
@@ -667,7 +667,8 @@ mod tests {
         // The missing row is removed, the rest filtered as one series (1 9 2 -> 1 2 2), put back.
         let y = [1.0, f64::NAN, 9.0, 2.0];
         close(&median_filter(&y, 3, MedianEdge::Shrink).unwrap(), &[1.0, f64::NAN, 2.0, 2.0]);
-        assert!(median_filter(&y, 4, MedianEdge::Shrink).is_none());
+        // An even window acts like the next odd one, as in Origin's smoothing.
+        close(&median_filter(&y, 4, MedianEdge::Shrink).unwrap(), &median_filter(&y, 5, MedianEdge::Shrink).unwrap());
         assert!(median_filter(&y, 0, MedianEdge::Shrink).is_none());
         close(&median_filter(&[3.0, 1.0, 2.0], 1, MedianEdge::Shrink).unwrap(), &[3.0, 1.0, 2.0]);
         close(&median_filter(&[3.0, 1.0, 2.0], 9, MedianEdge::Shrink).unwrap(), &[3.0, 2.0, 2.0]);

@@ -1978,7 +1978,8 @@ fn simulate_curve(s: &mut Ctx, a_raw: &Value) -> Res {
         "sheet": ws.name,
         "x_column": qualified(project, x.id),
         "y_column": qualified(project, y.id),
-        "function": y.long_name,
+        // The Y column's comment is the function's name (Origin's naming, fitting.md 13.1).
+        "function": y.comments,
         "points": points,
         "graph": run.report.new_graph.and_then(|g| project.graph(g)).map(|g| g.name.clone()),
         "image": image,

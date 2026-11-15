@@ -301,3 +301,47 @@ fn regress_compare_and_rank_print_their_tables() {
     assert!(ok, "{err}");
     assert!(out.contains("Rank") && out.contains("ExpDec1"), "{out}");
 }
+
+/// An XYZ file on an 11 x 11 grid: columns x, y and z = 2 + 0.5 x - 0.25 y + 0.4 x*y (exact).
+fn xyz_file(dir: &Path) -> PathBuf {
+    let mut text = String::from("x,y,z\n");
+    for i in 0..121 {
+        let (x, y) = (f64::from(i % 11) * 0.5, f64::from(i / 11) * 0.5);
+        text.push_str(&format!(
+            "{x},{y},{}\n",
+            2.0 + 0.5 * x - 0.25 * y + 0.4 * x * y + 0.02 * (13.0 * f64::from(i)).sin()
+        ));
+    }
+    let path = dir.join("xyz.csv");
+    std::fs::write(&path, text).unwrap();
+    path
+}
+
+#[test]
+fn a_surface_fit_takes_z_and_a_surface_function() {
+    let dir = scratch("surface");
+    let data = xyz_file(&dir);
+    let d = data.to_str().unwrap();
+    let project = dir.join("surface.sheaf");
+    // The file's columns are X, Y, Y: name the independent Y column and the Z column.
+    let (ok, stdout, stderr) =
+        sheaf(&["fit", d, "--z", "z", "--y", "y", "--model", "Poly2D", "--save", project.to_str().unwrap()]);
+    assert!(ok, "stderr: {stderr}");
+    let value = |name: &str| -> f64 { row(&stdout, name)[1].parse().unwrap() };
+    assert!((value("z0") - 2.0).abs() < 0.05, "{stdout}");
+    assert!((value("a") - 0.5).abs() < 0.05, "{stdout}");
+    assert!((value("f") - 0.4).abs() < 0.05, "{stdout}");
+    assert!(stdout.contains("FitSurface1") && stdout.contains("Corrected Total"), "{stdout}");
+    assert!(project.exists());
+
+    // The list names the surface category; a curve function or a plot request is refused.
+    let (ok, list, _) = sheaf(&["fit", "--list"]);
+    assert!(ok);
+    assert!(list.contains("Surface Fitting") && list.contains("Gauss2D"), "{list}");
+    let (ok, _, stderr) = sheaf(&["fit", d, "--z", "z", "--y", "y", "--model", "Gauss"]);
+    assert!(!ok && stderr.contains("surface function"), "{stderr}");
+    let (ok, _, stderr) = sheaf(&["fit", d, "--z", "z", "--y", "y", "--model", "Plane", "--plot", "x.png"]);
+    assert!(!ok && stderr.contains("--plot"), "{stderr}");
+    let (ok, _, stderr) = sheaf(&["fit", d, "--x", "x", "--y", "z"]);
+    assert!(!ok && stderr.contains("--z"), "{stderr}");
+}

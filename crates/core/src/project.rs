@@ -117,6 +117,33 @@ fn replace_book_reference(formula: &str, old: &str, new: &str) -> String {
     out
 }
 
+/// `formula` with every `[old]` (any case) of `renames` replaced by `[new]`, in one pass over the
+/// text, so a name that is the new name of another is not changed twice.
+fn replace_book_references(formula: &str, renames: &[(String, String)]) -> String {
+    let mut out = String::with_capacity(formula.len());
+    let mut rest = formula;
+    while let Some(open) = rest.find('[') {
+        out.push_str(&rest[..open]);
+        let after = &rest[open + 1..];
+        let Some(close) = after.find(']') else {
+            out.push_str(&rest[open..]);
+            return out;
+        };
+        let name = &after[..close];
+        match renames.iter().find(|(old, _)| old.eq_ignore_ascii_case(name)) {
+            Some((_, new)) => {
+                out.push('[');
+                out.push_str(new);
+                out.push(']');
+            }
+            None => out.push_str(&rest[open..open + close + 2]),
+        }
+        rest = &after[close + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
 fn default_mask_color() -> u8 {
     1
 }
@@ -453,9 +480,21 @@ impl Project {
     /// File > Append: brings every window of `other` into this project, in a new folder named
     /// `folder` that holds `other`'s folder tree. Window and column ids of `other` are moved past
     /// this project's ids (graphs keep plotting their own columns); window names that are taken
-    /// here get free names. `other`'s analysis results that recalculate are kept as plain values.
+    /// here get free names, and the formulas of the appended workbooks follow the new names.
+    /// `other`'s analysis results that recalculate are kept as plain values.
     /// Returns the new windows' ids and how many recalculation links were dropped.
-    pub fn append(&mut self, mut other: Project, folder: &str) -> (Vec<WindowId>, usize) {
+    pub fn append(&mut self, other: Project, folder: &str) -> (Vec<WindowId>, usize) {
+        self.append_into(other, Some(folder))
+    }
+
+    /// Opening a window file (File > Save Window As): like [`Project::append`], but the windows
+    /// join this project's root folder and no folder is made (Origin adds a window to the active
+    /// folder; Sheaf has no active folder yet). `other`'s folders are dropped.
+    pub fn append_windows(&mut self, other: Project) -> (Vec<WindowId>, usize) {
+        self.append_into(other, None)
+    }
+
+    fn append_into(&mut self, mut other: Project, folder: Option<&str>) -> (Vec<WindowId>, usize) {
         let shift = self.next_id;
         let w = |id: WindowId| WindowId(id.0 + shift);
         let c = |id: ColumnId| ColumnId(id.0 + shift);
@@ -490,6 +529,8 @@ impl Project {
         }
         shift_folder(&mut other.root, &w);
         self.next_id = shift + other.next_id;
+        let first_new = self.windows.len();
+        let mut renames: Vec<(String, String)> = Vec::new();
         for window in other.windows {
             let wanted = window.name().to_string();
             let taken = self.windows.iter().any(|x| x.name().eq_ignore_ascii_case(&wanted));
@@ -497,6 +538,9 @@ impl Project {
             if taken {
                 let prefix = if matches!(window, Window::Graph(_)) { "Graph" } else { "Book" };
                 let name = self.unique_name(prefix);
+                if matches!(window, Window::Workbook(_)) {
+                    renames.push((wanted, name.clone()));
+                }
                 match &mut window {
                     Window::Workbook(b) => b.name = name,
                     Window::Graph(g) => g.name = name,
@@ -505,9 +549,21 @@ impl Project {
             new_ids.push(window.id());
             self.windows.push(window);
         }
-        let mut sub = other.root;
-        sub.name = folder.to_string();
-        self.root.folders.push(sub);
+        if !renames.is_empty() {
+            for window in &mut self.windows[first_new..] {
+                let Window::Workbook(book) = window else { continue };
+                for col in book.sheets.iter_mut().flat_map(|s| &mut s.columns) {
+                    if let Some(f) = &mut col.formula {
+                        *f = replace_book_references(f, &renames);
+                    }
+                }
+            }
+        }
+        if let Some(folder) = folder {
+            let mut sub = other.root;
+            sub.name = folder.to_string();
+            self.root.folders.push(sub);
+        }
         (new_ids, dropped_links)
     }
 
@@ -1761,6 +1817,56 @@ mod tests {
         assert_eq!(here.root.folders.last().unwrap().name, "XRD project");
         let fresh = here.new_column_id();
         assert!(fresh.0 > y.0, "new ids come after the appended ones");
+    }
+
+    #[test]
+    fn append_windows_puts_the_windows_in_the_root_folder_without_a_new_folder() {
+        let mut here = Project::new();
+        here.add_workbook("");
+        let mut other = Project::new();
+        let ob = other.add_workbook("");
+        other.add_column(ob, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+        let (ids, dropped) = here.append_windows(other);
+        assert_eq!((ids.len(), dropped), (1, 0));
+        assert!(here.root.folders.is_empty());
+        assert_eq!(here.windows.len(), 2);
+        assert_ne!(here.windows[1].name(), here.windows[0].name(), "a clash is renamed");
+    }
+
+    #[test]
+    fn append_renames_the_books_that_formulas_of_the_appended_windows_read() {
+        let mut here = Project::new();
+        here.add_workbook("");
+        here.add_workbook("");
+        let mut other = Project::new();
+        let a = other.add_workbook("");
+        let b = other.add_workbook("");
+        other.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        let ca = other.add_column(a, 0, Designation::Y, ColumnData::numeric(vec![0.0, 0.0])).unwrap();
+        other.set_column_values(ca, "[Book2]Sheet1!col(A) * 10", None).unwrap();
+        let (ids, _) = here.append(other, "x");
+        let names: Vec<String> = ids.iter().map(|i| here.window(*i).unwrap().name().to_string()).collect();
+        assert_eq!(names, ["Book3", "Book4"]);
+        let formula = here
+            .windows
+            .iter()
+            .flat_map(|w| match w {
+                Window::Workbook(b) => {
+                    b.sheets.iter().flat_map(|s| s.columns.iter()).filter_map(|c| c.formula.clone()).collect()
+                }
+                Window::Graph(_) => Vec::new(),
+            })
+            .next();
+        assert_eq!(formula.as_deref(), Some("[Book4]Sheet1!col(A) * 10"));
+    }
+
+    #[test]
+    fn replacing_book_names_in_one_pass_never_changes_a_name_twice() {
+        let renames = [("Book1".to_string(), "Book2".to_string()), ("Book2".to_string(), "Book3".to_string())];
+        assert_eq!(
+            replace_book_references("[book1]S!col(A) + [Book2]S!col(A) + [Other]S!col(A) + [x", &renames),
+            "[Book2]S!col(A) + [Book3]S!col(A) + [Other]S!col(A) + [x"
+        );
     }
 
     fn book_with_rule(p: &mut Project) -> (WindowId, ColumnId) {

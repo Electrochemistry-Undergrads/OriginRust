@@ -28,11 +28,14 @@ mod offset_multipliers;
 mod parallel;
 mod recent;
 mod rug;
+mod save_window;
 mod set_multiple;
+mod shape_ordering;
 mod simulate;
 mod skip_points;
 mod sort_x;
 mod sunburst;
+mod surface_fit;
 mod switcher;
 mod symbol_line_gaps;
 mod symbol_line_order;
@@ -7732,6 +7735,9 @@ fn a_drawn_arrow_is_moved_and_deleted_with_undo() {
     assert_eq!(h.state().doc.undo_label(), Some("Move drawn object"));
     menu(&mut h, "Edit", "Undo Move drawn object");
     assert_eq!(shapes(&h)[0], before);
+    // Undo clears a shape selection whose layer changed; select the restored arrow again.
+    let at = frame_point(&h, 0.4, 0.2);
+    click_at(&mut h, at);
     // Delete removes the selected object; Undo brings it back.
     h.key_press(egui::Key::Delete);
     settle(&mut h);

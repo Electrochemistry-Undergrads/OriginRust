@@ -173,6 +173,39 @@ impl GraphUi {
         }
     }
 
+    /// Layers with an index-based shape selection, context menu or drag.
+    pub fn shape_interaction_layers(&self) -> Vec<usize> {
+        let mut layers = Vec::new();
+        if let Some((layer, ObjectKind::Shape(_))) = self.selected {
+            layers.push(layer);
+        }
+        if let Some(MenuTarget::Hit(Hit::Object { layer, kind: ObjectKind::Shape(_) })) = self.menu_on
+            && !layers.contains(&layer)
+        {
+            layers.push(layer);
+        }
+        if let Some(drag) = self.shape_drag
+            && !layers.contains(&drag.layer)
+        {
+            layers.push(drag.layer);
+        }
+        layers
+    }
+
+    /// Discard index-based shape interactions after a layer's shape list changes.
+    pub fn invalidate_shape_interaction(&mut self, layer: usize, keep_selection: bool) {
+        if !keep_selection && matches!(self.selected, Some((l, ObjectKind::Shape(_))) if l == layer) {
+            self.selected = None;
+        }
+        if matches!(self.menu_on, Some(MenuTarget::Hit(Hit::Object { layer: l, kind: ObjectKind::Shape(_) })) if l == layer)
+        {
+            self.menu_on = None;
+        }
+        if self.shape_drag.is_some_and(|drag| drag.layer == layer) {
+            self.shape_drag = None;
+        }
+    }
+
     /// What the Delete key does to the selected object: a legend, an axis title or a text label
     /// goes; other objects have no Delete in Origin's menus either.
     pub fn delete_selected(&mut self) -> Option<GraphOp> {
@@ -685,6 +718,8 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         windows: Vec::new(),
         open: None,
         recent_projects: &[],
+        recent_books: &[],
+        recent_graphs: &[],
         recent_imports: &[],
         panels: [true; 4],
         ai_link: false,
@@ -853,6 +888,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::HideTitle { layer, .. }
         | GraphOp::DeleteLabel { layer, .. }
         | GraphOp::DeleteShape { layer, .. }
+        | GraphOp::OrderShape { layer, .. }
         | GraphOp::HideLayer { layer }
         | GraphOp::HideOtherLayers { layer } => layer,
     };
@@ -946,6 +982,17 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         GraphOp::DeleteShape { shape, .. } => {
             if shape < l.shapes.len() {
                 l.shapes.remove(shape);
+            }
+        }
+        GraphOp::OrderShape { shape, front, .. } => {
+            let len = l.shapes.len();
+            if shape < len && ((front && shape + 1 < len) || (!front && shape > 0)) {
+                let value = l.shapes.remove(shape);
+                if front {
+                    l.shapes.push(value);
+                } else {
+                    l.shapes.insert(0, value);
+                }
             }
         }
         GraphOp::HideLayer { .. } => l.plots.iter_mut().for_each(|p| p.visible = false),

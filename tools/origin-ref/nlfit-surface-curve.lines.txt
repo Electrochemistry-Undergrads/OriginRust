@@ -1,0 +1,33 @@
+newbook;
+col(A) = data(1, 121, 1);
+col(B) = col(A);
+col(C) = col(A);
+col(A) = mod(col(A)-1,11)*0.5;
+col(B) = int((col(B)-1)/11)*0.5;
+col(C) = 1.5 + 0.8*col(A) - 0.6*col(B) + (0.03*sin(37*i) + 0.02*sin(101.3*i));
+nlbeginz iz:=(1,2,3) func:=Plane nltree:=tt ;
+nlfit;
+nlend output:=1;
+?page.nlayers
+$page.name$
+$page.longname$
+$layer.name$
+?wks.ncols
+page.active = 3;
+$layer.name$
+?wks.ncols
+?wks.nrows
+$wks.col1.lname$
+$wks.col2.lname$
+$wks.col3.lname$
+$wks.col1.type$
+?wks.col1.type
+?wks.col2.type
+?wks.col3.type
+$wks.col1.unit$
+?wcol(1)[1]
+?wcol(1)[2]
+?wcol(2)[1]
+?wcol(2)[2]
+?wcol(3)[1]
+#[Book1]FitSurfaceCurve1

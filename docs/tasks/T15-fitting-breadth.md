@@ -1,6 +1,6 @@
 # T15: Fitting breadth
 
-**Status:** items 1-3 done, merged 2026-11-13; items 4-6 done, merged (`e525575`) (item 5: Rank Models is Sheaf's AICc ranking, Origin's `funcRank` could not be scripted; item 6: Linear Fit with X Error is not compared with Origin, same reason); item 7 (surface fits) open. The NLFit window has Origin's tabs, lower panel and Fit/Done/Cancel since `nlfit-origin` (merged 2026-11-13; fitting.md section 9). **Size:** L. **Branch:** `fit-breadth`. **Model:** Sonnet.
+**Status:** items 1-3 done, merged 2026-11-13; items 4-6 done, merged (`e525575`) (item 5: Rank Models is Sheaf's AICc ranking, Origin's `funcRank` could not be scripted; item 6: Linear Fit with X Error is not compared with Origin, same reason); item 7 (surface fits): the XYZ column part is done on branch `surface-fit` (engine, 22 functions, NLFit window, Analysis > Fitting > Nonlinear Surface Fit..., `sheaf fit --z`; fitting.md sections 14 and 15), matrix input left (needs the matrix work). The NLFit window has Origin's tabs, lower panel and Fit/Done/Cancel since `nlfit-origin` (merged 2026-11-13; fitting.md section 9). **Size:** L. **Branch:** `fit-breadth`. **Model:** Sonnet.
 **Detail:** audit D "Missing", "Partial". **Spec:** `docs/spec/fitting.md`, `fit-function-catalog.md`,
 `fdf-format.md`, `fitting-linear.md`.
 
@@ -24,7 +24,7 @@
 4. Simplex algorithm (algorithm combo today shows only Levenberg Marquardt).
 5. Compare Models / Rank Models (AIC, BIC, F-test as in Origin's report).
 6. Multiple Linear Regression; Linear Fit with X Error.
-7. Surface fits and functions of 2-3 variables (needs matrices: after `originrust-3a`'s matrix work).
+7. Surface fits and functions of 2-3 variables. Done for surface fits on XYZ worksheet columns (`surface-fit`); left: surface fits on matrices (needs `originrust-3a`'s matrix work), the three multi-variable functions, Simulate Surface.
 
 ## Origin facts already measured
 

@@ -69,6 +69,8 @@ pub enum Cmd {
     OpenProject,
     SaveProject,
     SaveProjectAs,
+    /// File > Save Window As...: the active workbook or graph to a window file of its own (T54).
+    SaveWindowAs,
     /// File > Import > Single ASCII (Ctrl+K).
     Import,
     ImportMultiple,
@@ -279,7 +281,7 @@ pub enum Cmd {
     WindowSwitcher,
     /// File > Append...: bring the windows of another project into this one.
     AppendProject,
-    /// Clear Recent Projects / Clear Recent Imports.
+    /// Clear Recent Projects / Imports / Books / Graphs.
     ClearRecent(RecentKind),
     /// View > Project Explorer and the other panels.
     Panel(PanelId),
@@ -297,7 +299,8 @@ pub enum Entry {
     Submenu(Submenu),
     /// The numbered list of the windows of the project, with a tick on the active one.
     Windows,
-    /// The entries of File > Recent Projects or File > Import > Recent Imports, from the context.
+    /// The entries of File > Recent Projects, Recent Books, Recent Graphs or File > Import > Recent
+    /// Imports, from the context.
     Recent(RecentKind),
 }
 
@@ -351,9 +354,12 @@ pub struct MenuContext<'a> {
     /// A top-level menu to hold open (`--show menu:Plot`, for pictures of the menus); `File>Recent
     /// Projects` holds that submenu of File open too.
     pub open: Option<&'a str>,
-    /// The recent projects and imports, newest first (stored text; no file is touched to draw them).
+    /// The recent projects, imports, workbook files and graph files, newest first (stored text; no
+    /// file is touched to draw them).
     pub recent_projects: &'a [PathBuf],
     pub recent_imports: &'a [PathBuf],
+    pub recent_books: &'a [PathBuf],
+    pub recent_graphs: &'a [PathBuf],
     /// Which side panels are shown, in the order of `PanelId::ALL` (the ticks of the View menu).
     pub panels: [bool; 4],
     /// The AI link is on (the tick of Tools > AI Assistants (MCP)).
@@ -370,6 +376,18 @@ pub struct MenuContext<'a> {
     /// worksheet as `curve`, the active plot first, then the others in plot order. The tools that
     /// compare curves (Average Multiple Curves, Intersect) start from these.
     pub layer_curves: Vec<ColumnId>,
+}
+
+impl<'a> MenuContext<'a> {
+    /// The entries of one recent list.
+    pub fn recent(&self, kind: RecentKind) -> &'a [PathBuf] {
+        match kind {
+            RecentKind::Projects => self.recent_projects,
+            RecentKind::Imports => self.recent_imports,
+            RecentKind::Books => self.recent_books,
+            RecentKind::Graphs => self.recent_graphs,
+        }
+    }
 }
 
 // ----- the table ---------------------------------------------------------------------------
@@ -493,6 +511,11 @@ fn plain_key(key: Key) -> KeyboardShortcut {
     KeyboardShortcut::new(Modifiers::NONE, key)
 }
 
+/// A submenu of one recent list: the entries, a separator and Clear.
+fn recent_submenu(label: &str, kind: RecentKind) -> Entry {
+    sub(label, vec![Entry::Recent(kind), sep(), item(&format!("Clear {label}"), Cmd::ClearRecent(kind))])
+}
+
 fn file_menu(kind: WindowKind) -> Vec<Entry> {
     let mut v = vec![
         sub(
@@ -522,7 +545,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     }
     if kind != WindowKind::None {
         v.push(sep());
-        v.push(grey("Save Window As..."));
+        v.push(item("Save &Window As...", Cmd::SaveWindowAs));
         v.push(grey("Save Template As..."));
         if kind == WindowKind::Workbook {
             v.push(grey("Save Workbook As Analysis Template..."));
@@ -587,22 +610,11 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         ));
     }
     v.push(sep());
-    v.push(grey("Recent Books"));
+    v.push(recent_submenu("Recent Books", RecentKind::Books));
     if kind == WindowKind::Graph {
-        v.push(grey("Recent Graphs"));
+        v.push(recent_submenu("Recent Graphs", RecentKind::Graphs));
     }
-    v.extend([
-        sub(
-            "Recent Projects",
-            vec![
-                Entry::Recent(RecentKind::Projects),
-                sep(),
-                item("Clear Recent Projects", Cmd::ClearRecent(RecentKind::Projects)),
-            ],
-        ),
-        sep(),
-        item("Exi&t", Cmd::Exit),
-    ]);
+    v.extend([recent_submenu("Recent Projects", RecentKind::Projects), sep(), item("Exi&t", Cmd::Exit)]);
     v
 }
 
@@ -1134,7 +1146,7 @@ fn analysis_menu() -> Vec<Entry> {
                 sep(),
                 keyed("Nonlinear Curve Fit...", ctrl(Key::Y), Cmd::Fit(FitKind::BuiltIn)),
                 grey("Nonlinear Implicit Curve Fit..."),
-                grey("Nonlinear Surface Fit..."),
+                item("Nonlinear Surface Fit...", Cmd::Fit(FitKind::Surface)),
                 sep(),
                 item("Simulate Curve...", Cmd::SimulateCurve),
                 grey("Simulate Surface..."),
@@ -1789,8 +1801,8 @@ pub fn graph_shape_menu(layer: usize, shape: usize) -> Vec<Entry> {
         grey_keyed("Copy", ctrl(Key::C)),
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteShape { layer, shape })),
         sep(),
-        grey("Bring to the front"),
-        grey("Push to the back"),
+        item("Bring to the front", Cmd::GraphEdit(GraphOp::OrderShape { layer, shape, front: true })),
+        item("Push to the back", Cmd::GraphEdit(GraphOp::OrderShape { layer, shape, front: false })),
         sep(),
         item("Properties...", Cmd::EditShape { layer, shape }),
     ]
@@ -2067,6 +2079,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::OpenProject => Action::OpenProject,
         Cmd::SaveProject => Action::SaveProject,
         Cmd::SaveProjectAs => Action::SaveProjectAs,
+        Cmd::SaveWindowAs => Action::SaveWindowAs(c.active.ok_or(NEED_WINDOW)?),
         Cmd::Import => Action::ImportPick(ImportPick::Single),
         Cmd::ImportMultiple => Action::ImportPick(ImportPick::Multiple),
         Cmd::ImportCsv => Action::ImportPick(ImportPick::Csv),
@@ -2324,8 +2337,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::WindowSwitcher => Action::OpenSwitcher,
         Cmd::AppendProject => Action::AppendProject(None),
         Cmd::ClearRecent(kind) => {
-            let list = if *kind == RecentKind::Projects { c.recent_projects } else { c.recent_imports };
-            if list.is_empty() {
+            if c.recent(*kind).is_empty() {
                 return Err("The list is empty");
             }
             Action::ClearRecent(*kind)
@@ -2530,7 +2542,7 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
 /// without its extension shortened to 80 characters, the full path as the tooltip. An empty list
 /// shows a greyed "(none)".
 fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &mut Vec<Action>) {
-    let list = if kind == RecentKind::Projects { c.recent_projects } else { c.recent_imports };
+    let list = c.recent(kind);
     if list.is_empty() {
         ui.add_enabled(false, egui::Button::new(label_job(ui, "(none)", true)));
         return;
@@ -2544,7 +2556,7 @@ fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &m
         }
         if response.clicked() {
             actions.push(match kind {
-                RecentKind::Projects => Action::OpenRecent(path.clone()),
+                RecentKind::Projects | RecentKind::Books | RecentKind::Graphs => Action::OpenRecent(path.clone(), kind),
                 RecentKind::Imports => Action::ImportRecent(path.clone()),
             });
             ui.close();
@@ -2760,6 +2772,8 @@ mod tests {
             open: None,
             recent_projects: &[],
             recent_imports: &[],
+            recent_books: &[],
+            recent_graphs: &[],
             panels: [true; 4],
             ai_link: false,
             layer: 0,

@@ -239,7 +239,7 @@ It names exactly what `analyze` accepts: the 21 hand-mapped tools first, then ev
  "output": "next_to_input"}
 ```
 
-`analyze` reaches every tool of `sheaf analyze`: the CLI command has 57 subcommands and all of them
+`analyze` reaches every tool of `sheaf analyze`: the CLI command has 64 subcommands and all of them
 are tools here (`peaks` and `stats` are also accepted under their command-line names). Names are the
 command name with `_` for `-` (`fft_filter`, `reduce_dup`, `column_math`, `mannwhitney`, `anova2`,
 `signal_correlation`); a name with `-` is accepted too, and so is any case. Two kinds:
@@ -249,10 +249,11 @@ command name with `_` for `-` (`fft_filter`, `reduce_dup`, `column_math`, `mannw
   median_filter, decimate, translate, subtract_line, polygon_area, intersect). Their options are
   those `list_analysis_tools` gives; a column a tool reads besides the Y columns (a reference, a
   second signal) is an option holding a name.
-- **Bridged** (the other 36: convolution, signal_correlation, ifft, fft_filter, iir_filter, fir_filter, coherence,
-  trace_interp, average, reduce_dup, reduce_x, ttest, anova, power, anova2, mannwhitney, signrank,
-  rowstats, grubbs, dixon, sign, ks2, mediantest, friedman, kruskal, corr, histogram, crosstab,
-  discfreq, bin2d, normality, distfit, probplot, qqplot, sort, filter). Their options are generated
+- **Bridged** (the other 43: convolution, signal_correlation, ifft, fft_filter, iir_filter, fir_filter, coherence,
+  trace_interp, average, reduce_dup, reduce_x, ttest, vartest, proptest, anova, power, anova2, mannwhitney,
+  signrank, rowstats, grubbs, dixon, sign, ks2, mediantest, friedman, kruskal, corr, histogram, crosstab,
+  discfreq, bin2d, normality, distfit, probplot, qqplot, pca, roc, kmeans, kaplan_meier, graphsummary,
+  sort, filter). Their options are generated
   from the command line's own option definitions (`sheaf_ops::args`, clap), so a new option or
   a changed default of the CLI appears here without new code and the values are checked by the same
   rules. Each option key is the long option name with `_` for `-` (`--no-graph` is `no_graph`,
@@ -363,7 +364,7 @@ parameter.
 
 **`simulate_curve`** `{function?, params?, from?, to?, points?, log?, x_of?, book?, sheet?, plot?, image?, values?}`
 (`docs/spec/fitting.md` section 13). Writes the X and Y columns of a built-in fit function to a new sheet
-`Simulate<n>` of the workbook, at the X values `from` to `to` (defaults 1 to 10) in `points` steps (default 100),
+`Simulate<n>` of the workbook, at the X values `from` to `to` (defaults: the function's range in Origin's window, Gauss -1 to 5, see fitting.md 13.1) in `points` steps (default 200),
 linear or `log`, or at the values of the column `x_of` (which cannot be combined with `from`, `to`, `points` or `log`: the call is refused). `params` is `{NAME: number}`; the others keep their starting
 values. `plot` adds a graph; `image` also writes it as a picture (implies `plot`). One undo step. Result
 `{book, sheet, x_column, y_column, function, points, graph, image, notes, message, x?, y?}`; `x` and `y` are

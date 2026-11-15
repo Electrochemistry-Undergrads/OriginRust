@@ -259,7 +259,7 @@ fn clear_empties_one_list_and_leaves_the_other() {
     menu_entry(&h, "Clear Recent Projects").click();
     settle(&mut h);
     assert_eq!(listed(&h), (vec![], vec![csv.clone()]));
-    assert_eq!(file_lists(&file), RecentList { projects: vec![], imports: vec![csv] });
+    assert_eq!(file_lists(&file), RecentList { imports: vec![csv], ..RecentList::default() });
     open_recent_imports(&mut h);
     menu_entry(&h, "Clear Recent Imports").click();
     settle(&mut h);
@@ -281,22 +281,25 @@ fn an_empty_list_shows_a_greyed_none_and_a_greyed_clear() {
 }
 
 #[test]
-fn recent_books_graphs_and_exports_stay_grey() {
+fn recent_exports_stay_grey_and_recent_books_and_graphs_are_submenus() {
     let dir = scratch("grey");
     let mut h = start_with(vec![csv_in(&dir, "g.csv")], Some(dir.join("recent.json")));
     // The graph is active: its File menu lists Recent Graphs and Recent Exports on the top level.
     menu_entry(&h, "File").click();
     settle(&mut h);
-    for label in ["Recent Books", "Recent Graphs", "Recent Exports"] {
-        assert!(!entry_enabled(&h, label), "{label} stays grey");
+    assert!(!entry_enabled(&h, "Recent Exports"), "Recent Exports stays grey");
+    for label in ["Recent Books", "Recent Graphs", "Recent Projects"] {
+        assert!(entry_enabled(&h, label), "{label} is a submenu now");
     }
-    assert!(entry_enabled(&h, "Recent Projects"));
     close_menus(&mut h);
     // The workbook's File menu has Recent Exports inside Export.
     click(&mut h, "Title Book1 - g");
     menu_path(&mut h, &["File", "Export"]);
     assert!(!entry_enabled(&h, "Recent Exports"));
-    assert!(!entry_enabled(&h, "Recent Books"));
+    close_menus(&mut h);
+    menu_entry(&h, "File").click();
+    settle(&mut h);
+    assert!(entry_enabled(&h, "Recent Books"));
 }
 
 #[test]

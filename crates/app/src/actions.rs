@@ -109,6 +109,8 @@ pub enum GraphOp {
     DeleteLabel { layer: usize, label: usize },
     /// Delete on a drawn line, arrow, rectangle or ellipse.
     DeleteShape { layer: usize, shape: usize },
+    /// Move a drawn object to the top or bottom of its own layer's shape stack.
+    OrderShape { layer: usize, shape: usize, front: bool },
     /// Hide Layer (every plot of the layer is hidden).
     HideLayer { layer: usize },
     /// Hide Other Layers.
@@ -172,6 +174,9 @@ pub enum Action {
     OpenProject,
     SaveProject,
     SaveProjectAs,
+    /// File > Save Window As...: ask for a name and write this window (a workbook, or a graph with
+    /// the workbooks it reads) to a window file.
+    SaveWindowAs(WindowId),
     /// Ask for files and open the import dialog; with a path, skip the file chooser.
     Import(Option<PathBuf>),
     /// File > Import > Single ASCII, Multiple ASCII or Comma Delimited: the file chooser for that item.
@@ -508,11 +513,11 @@ pub enum Action {
     AppendProject(Option<std::path::PathBuf>),
     /// The File menu was opened: read the recent files again.
     ReloadRecent,
-    /// File > Recent Projects: open this entry the way Open does.
-    OpenRecent(std::path::PathBuf),
+    /// File > Recent Projects, Recent Books or Recent Graphs: open this entry the way Open does.
+    OpenRecent(std::path::PathBuf, crate::recent::RecentKind),
     /// File > Import > Recent Imports: import this entry again with the default settings.
     ImportRecent(std::path::PathBuf),
-    /// Clear Recent Projects / Clear Recent Imports.
+    /// Clear Recent Projects / Imports / Books / Graphs.
     ClearRecent(crate::recent::RecentKind),
     /// Remove a window from the project.
     DeleteWindow(WindowId),

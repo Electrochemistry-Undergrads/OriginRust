@@ -29,6 +29,13 @@ so the format version stays 1. The key tells Sheaf that it wrote the file itself
 is opened in place of the `.opj`, and only such a file is deleted when a later save to the `.opj`
 loses nothing. A project the user saved as `<name>.sheaf` never has the key and is never deleted.
 
+## Window files (optional manifest key)
+
+`manifest.json` may carry `"window": "workbook"` or `"graph"`. Sheaf sets it on the file that File > Save
+Window As writes (`.sheafbook`, `.sheafgraph`): the archive of a small project that holds one window (and,
+for a graph, the workbooks it reads). Such a file is never opened as a project (it is appended; see
+`window-files.md`). A reader that does not know the key ignores it, so the format version stays 1.
+
 ## Window places (optional key of `project.json`)
 
 `project.json` may carry `window_places`: a list, bottom of the stacking order first, of

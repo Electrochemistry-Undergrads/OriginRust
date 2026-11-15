@@ -444,21 +444,47 @@ Unit 0 inch (default), 1 cm, 2 pixel, 3 page ratio %. Rescaling 0 by width (defa
 ### 9.4 Raster options `tr2`
 | Format | DPI default (choices) | Colour depth default | Extras |
 |---|---|---|---|
-| PNG | 300 (72,100,150,300,600,1200) | 256 colours (mono, 16, 256, 24-bit, 8-bit grey) | |
-| TIF | 300 (+96) | 256 colours | colour space RGB (CMYK, YCbCr); compression none (PackBits, LZW) |
-| JPG | 300 (+96) | 24-bit (or 8-bit grey) | quality 0..255 default 0, higher = smaller/lower quality |
-| BMP | 300 (+96) | 256 (+16-bit) | |
-| GIF | 300 (+96) | 256 | |
-| PCX, PSD, TGA | 300 | 256 | |
+| PNG | 300 (72,100,150,300,600,1200) | 256 colours (Monochrome, 16 Colors, 256 Colors, 24-bit Color, 8-bit Gray Scale) | |
+| TIF | 300 (+96) | 256 colours (Monochrome, 16 Colors, 256 Colors, 24-bit Color, 8-bit Gray Scale) | colour space RGB (CMYK, YCbCr); compression none (PackBits, LZW) |
+| JPG | 300 (+96) | 24-bit (or 8-bit Gray Scale) | quality 0..255 default 0, higher = smaller/lower quality |
+| BMP | 300 (+96) | 256 colours (Monochrome, 16 Colors, 256 Colors, 16-bit Color, 24-bit Color, 8-bit Gray Scale) | |
+| GIF | 300 (+96) | 256 colours (Monochrome, 16 Colors, 256 Colors, 8-bit Gray Scale) | |
+| PCX | 300 (no 96) | 256 colours (Monochrome, 16 Colors, 256 Colors, 24-bit Color, 8-bit Gray Scale) | |
+| PSD | 300 (no 96) | 256 colours (Monochrome, 256 Colors, 24-bit Color, 8-bit Gray Scale) | |
+| TGA | 300 (no 96) | 256 colours (256 Colors, 16-bit Color, 24-bit Color, 8-bit Gray Scale) | |
+
+The Color Depth lists above were read from Origin 2016's Export Graphs dialog on 2026-11-14 (each format picked in
+Image Type, Image Settings expanded; `re-workspace/scratch/t05/d2`). Labels and order are Origin's.
+
+**Monochrome and 16 Colors (measured 2026-11-14, Origin 2016 PNG export through the dialog; scripted `expGraph` and
+`OIMG.INI` both ignore the depth, only the dialog sets it; `re-workspace/scratch/t05`, `o_mono.png`, `o_16.png`):**
+- Monochrome is a 1-bit indexed PNG with the palette black, white. It is an ordered dither, not a threshold: the
+  standard 8 x 8 Bayer matrix anchored at the top-left pixel. Inside a pure red line (grey 76) exactly the 19 cells with
+  the smallest matrix entries are white, so a pixel is white where `4 t + 2` is below its grey level (`t` the entry,
+  0..63; the `+ 2` places the boundary between entries 18 and 19, other levels unmeasured).
+- 16 Colors is a 4-bit indexed PNG with an adaptive palette built from the picture (all 16 entries on a 5-bit-per-
+  channel grid, for example white as 247, 247, 247 and red as 247, 0, 0); solid colours are not dithered (the red
+  line kept its pixel count). Origin's quantiser is a library one and is not reproduced.
+- 16-bit Color (BMP and TGA, measured the same way, `o16bit.bmp`, `o16bit.tga`): BMP is BI_RGB with a 40-byte header,
+  16 bits per pixel, no palette, rows bottom to top padded to 4 bytes; TGA is image type 2 (true colour), 16 bits,
+  descriptor 0 (no attribute bits, rows bottom to top). Pixels are `0RRRRRGGGGGBBBBB`; Origin sets the unused top bit
+  on the page background (0xFFFF) and not inside the layer (0x7FFF). The picture has the same 64 colours as the
+  256-colour export, so Origin draws in 15-bit colour first. Sheaf writes the same layout with the top bit always clear
+  and each channel reduced by dropping its low three bits (other formats given 16-bit write 24-bit).
+- 256 Colors (same probe) also has palette values on that 5-bit grid (levels 0, 57, 99, 140, 181, 214, 255): the
+  palette holds exactly the picture's own 64 colours. Sheaf likewise keeps the exact colours when a picture has at
+  most 256 (or at most 16 for 16 Colors) and uses NeuQuant only above that; it does not reduce colours to 15 bits
+  first, so its entries are the 24-bit colours.
+
 Trap: PNG and TIF default to 256 colours; use 24-bit for colour figures.
 
-Sheaf: `crates/plot/src/raster.rs` writes PNG (256 colours via a NeuQuant palette, 24-bit with alpha, 8-bit grey), TIFF (24-bit, grey or 256 colours; none, PackBits or LZW), JPEG (quality 1-100, 24-bit or grey), BMP (8-bit palette or 24-bit), GIF (256 colours), TGA, PCX and PSD (24-bit, 8-bit grey or 256 colours). The dialog defaults to 24-bit, not Origin's 256 colours. [W:details-of-treenodes-in-export-graph]
+Sheaf: `crates/plot/src/raster.rs` writes Monochrome (Origin's 8 x 8 ordered dither; 1 bit per pixel in PNG and BMP, 8-bit indices with a two-colour palette in TIFF, PCX, PSD and GIF) and 16 Colors (a 16-entry NeuQuant palette, nearest colour; 4 bits per pixel in PNG and BMP, 8-bit indices elsewhere) for the formats whose Origin list has them, and PNG (256 colours via a NeuQuant palette, 24-bit with alpha, 8-bit grey), TIFF (24-bit, grey or 256 colours; none, PackBits or LZW), JPEG (quality 1-100, 24-bit or grey), BMP (8-bit palette or 24-bit), GIF (256 colours), TGA, PCX and PSD (24-bit, 8-bit grey or 256 colours). The dialog defaults to 24-bit, not Origin's 256 colours. [W:details-of-treenodes-in-export-graph]
 
-**256-color TIFF:** Export Graphs supports **256 Colors** for TIFF, keeping the selected None, PackBits or LZW compression and the DPI metadata. It uses the shared quantizer on pixels composited onto white. The [TIFF 6.0 specification, section 5](https://www.itu.int/itudoc/itu-t/com16/tiff-fx/docs/tiff6.pdf) defines one 8-bit index per pixel, palette photometric interpretation (3), and ColorMap tag 320 with 256 red entries, then green and blue, each expanded to 16 bits by multiplying by 257. The existing TIFF encoder handles strip writing and compression; the indexed image supplies the palette tags through its public directory API. [Origin’s published TIFF settings](https://docs.originlab.com/origin-help/settings-in-expgraph-dailog/) list this depth and the same three compression choices. This addition uses the published settings, without a new installed-Origin comparison. Mono and 16-color TIFF modes remain open.
+**256-color TIFF:** Export Graphs supports **256 Colors** for TIFF, keeping the selected None, PackBits or LZW compression and the DPI metadata. It uses the shared quantizer on pixels composited onto white. The [TIFF 6.0 specification, section 5](https://www.itu.int/itudoc/itu-t/com16/tiff-fx/docs/tiff6.pdf) defines one 8-bit index per pixel, palette photometric interpretation (3), and ColorMap tag 320 with 256 red entries, then green and blue, each expanded to 16 bits by multiplying by 257. The existing TIFF encoder handles strip writing and compression; the indexed image supplies the palette tags through its public directory API. [Origin’s published TIFF settings](https://docs.originlab.com/origin-help/settings-in-expgraph-dailog/) list this depth and the same three compression choices. This addition uses the published settings, without a new installed-Origin comparison. Mono and 16-color TIFF are written since 2026-11-14 as 8-bit indices into a 2- or 16-entry table padded to 256 (Origin's TIFF bit depth for these modes was not measured).
 
 Validation (2026-11-14): a palette/strip regression checks an odd-width image with transparent pixels, comparing its palette and decompressed index plane with indexed PNG for all three compressions. A UI test selects TIFF, 256 Colors and each compression, then checks the written tags. Pillow independently opened actual graph exports (301 x 231 pixels, 150.5 DPI) with identical index bytes and RGB pixels to the matching PNG; macOS `sips` also decoded each compression at the correct size.
 
-**PSD export:** Export Graphs offers Photoshop Document (`.psd`) and the CLI/API use the same output-extension path. The [published Origin settings](https://docs.originlab.com/origin-help/settings-in-expgraph-dailog/) list PSD raster export and its color-depth choices. Sheaf's original writer follows the [Adobe PSD file-format specification](https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/): version 1, eight bits per channel, RGB/grayscale/indexed modes, raw planar composite pixels, planar 256-entry palettes, and a ResolutionInfo resource containing horizontal/vertical DPI. The graph is flattened onto white, with no layers, masks or alpha channels; the dialog states this. DPI is rounded to signed 16.16 precision and rejected if it rounds to zero or exceeds the positive signed range. The 30000-pixel side limit is checked before allocating a raster, together with the existing 400-million-pixel total limit. PSB, monochrome and editable graph layers are not implemented. Export size, margin and resolution settings apply as for other raster images. This implementation uses published references, without a new installed-Origin or Photoshop comparison.
+**PSD export:** Export Graphs offers Photoshop Document (`.psd`) and the CLI/API use the same output-extension path. The [published Origin settings](https://docs.originlab.com/origin-help/settings-in-expgraph-dailog/) list PSD raster export and its color-depth choices. Sheaf's original writer follows the [Adobe PSD file-format specification](https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/): version 1, eight bits per channel, RGB/grayscale/indexed modes, raw planar composite pixels, planar 256-entry palettes, and a ResolutionInfo resource containing horizontal/vertical DPI. The graph is flattened onto white, with no layers, masks or alpha channels; the dialog states this. DPI is rounded to signed 16.16 precision and rejected if it rounds to zero or exceeds the positive signed range. The 30000-pixel side limit is checked before allocating a raster, together with the existing 400-million-pixel total limit. PSB and editable graph layers are not implemented; Monochrome is written as an indexed image with a black and white palette (not Photoshop's bitmap mode). Export size, margin and resolution settings apply as for other raster images. This implementation uses published references, without a new installed-Origin or Photoshop comparison.
 
 Validation (2026-11-14): Pillow independently decoded synthetic graph exports in all three modes, with exact pixels matching same-depth PNG exports (RGBA PNG composited on white). Each was 301 x 231 pixels at 150.5 DPI in resource 1005. macOS `sips` also decoded all three to PNG at the correct size; it reported its default 72 DPI, so resolution validation uses the resource payload. UI tests select PSD and export each depth; CLI tests cover pixel sizing, fractional DPI, uppercase extensions, and oversized output refusal.
 
@@ -1899,13 +1925,38 @@ unchecked (`t13/open3/label.controls.txt`). Published controls:
 [Label tab](https://docs.originlab.com/origin-help/pd-dialog-label-tab/),
 [LabTalk label switches](https://docs.originlab.com/labtalk/ref/options_for_data_plot_labels/).
 Sheaf approximates the font box using the measured text advance plus 0.05 em on each side and a
-baseline band from -0.92 to +0.23 em. Exact padding for other fonts is unmeasured; label frames,
-editable margins and leader lines remain open.
+baseline band from -0.92 to +0.23 em. Exact padding for other fonts is unmeasured.
+
+**Label Frame and Margin (Origin 2016, 2026-11-14):** the Label tab offers None (default),
+Box and Shadow, with border/fill color controls enabled for Box/Shadow and a shared margin
+in percent of font height ([documented controls](https://docs.originlab.com/origin-help/pd-dialog-label2-tab/)).
+Synthetic Arial 30 labels "12345", Center, on a gray layer/red line were exported at 900 pixels:
+Box with margin 0 is a black rectangle about 98 x 40 pixels; the initial border and fill are
+both black. At margin 20 it grows to 117 x 59 pixels. White Out is painted **after** the frame,
+clearing only the smaller white text box, so the black margin remains around it. None/margin 20
+and Box/margin 0 with White Out produce byte-identical PNGs. Shadow adds a lower-right black
+rectangle, displaced about 6-7 pixels at both Arial 15 and 30. At 45 degrees the frame is an
+axis-aligned rectangle enclosing the rotated, padded text; the shadow stays to the page's
+lower right, while White Out and text rotate together. Raw GUI steps, control dumps and PNGs:
+`re-workspace/scratch/t13-label-frame-margin/` (`box0`, `box20`, `shadow0`, `shadow20white`,
+`box0white`, `none20white`, `shadow20rot45`, `smallshadow0`).
+
+Sheaf stores `DataLabels::frame`, `margin_percent`, `frame_border` and `frame_fill` with
+backward-compatible defaults None, 0, black and black, omitted when default. The Label tab
+supports these controls, group-dependent editing and the existing Apply/Cancel/history behavior.
+Frame colors use the existing alpha-capable picker. The shared scene draws shadow, frame,
+White Out, then text; clipping, empty text, row selection and Skip Points apply to the whole label.
+The existing approximate font box is retained: margin uses 4/3 of the font size as the font height,
+calibrated to the measured Arial case; shadow is approximated by a fixed 6 pt page offset and
+the border by 0.5 pt. Exact metrics for other fonts remain unmeasured. Negative/nonfinite margin
+uses zero for drawing; margin is limited to 500%. Native and companion saves preserve all frame
+settings, including disabled labels; `.opj` alone retains its existing data-label omission warning.
+Leader lines and automatic overlap avoidance remain open.
 
 The layer Background colour fills the frame behind the grid. Sheaf's own additions
 beyond what was measured (hatch and gradient fills, bar width, label column, rows, decimals and offsets,
 background gradient and border, X/Y axes switches, page border, layer icons, comments, subgroups) are in
-section 18.6. Not done: the other fill modes, label frames, custom forms and display formats
+section 18.6. Not done: the other fill modes, custom forms and display formats
 beyond decimals, leader lines, the No Line Break / Gap to Symbol interaction. The `.opj` writer
 does not store these settings; the save names them and the companion file keeps them.
 
@@ -2097,7 +2148,7 @@ project file only when they differ from the default (a file written before loads
 
 ### 18.7 Not done
 
-Speed mode and X:Y ratio of Size/Speed, No Line Break for Skipped Point(s) / Gap to Symbol, frame, margin, attach-to,
+Speed mode and X:Y ratio of Size/Speed, No Line Break for Skipped Point(s) / Gap to Symbol, attach-to,
 automatic overlap avoidance and leader lines of Label, the other fill modes and
 Origin's list of fill patterns, subgrouping By Column Label, Binned increments, several groups in one layer,
 writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).
@@ -2180,7 +2231,37 @@ The check is the ignored test `winprint::tests::prints_a_page_to_a_named_printer
 Not checked: a physical printer (the HP on this machine was not used), copies, collation, several
 pages, other paper sizes through the driver.
 
-### 19.6 Not done
+### 19.6 CLI printing (`sheaf print`, Sheaf's interface)
+
+```
+sheaf print experiment.sheaf --graph Graph1 --output print.pdf
+sheaf print experiment.opj --graph Graph1 --printer LabPrinter
+```
+
+The input is an existing project (`.sheaf`, `.opj` with its companion, or `.opju`); it must contain
+a graph. With one graph its name may be omitted; with several, `--graph` is required. The command
+uses the saved Page Setup: paper, orientation and margins. The graph is uniformly scaled and
+centred by `PageSetup::place` inside a paper-sized vector PDF. This differs from graph export,
+whose PDF has the graph's own page size. Non-finite dimensions/margins, negative margins and
+margins leaving no printable area are refused.
+
+`--output FILE.pdf` requires a `.pdf` extension and writes the print-ready PDF without submitting a job. Without it, macOS/Linux
+submit to the default destination, or the `--printer NAME` destination. The two flags are mutually
+exclusive. Windows currently requires `--output`; the desktop app retains its native Windows
+print dialog. This command does not modify the source project or its saved Page Setup.
+
+Submission invokes `lp` directly, with a unique temporary PDF, the paper and orientation, and
+`print-scaling=none` plus `fit-to-page=Off` to request the computed placement without fitting it again. The temporary copy is removed after submission succeeds
+or fails. Destination and title are process arguments, without shell interpretation. See the
+[CUPS lp manual](https://www.cups.org/doc/man-lp.html) for destination, job options and spool-copy
+semantics and the [OpenPrinting filter documentation](https://github.com/OpenPrinting/cups-filters)
+for scaling controls. Automated tests use a fake spooler: a physical printer, hardware printable edges and
+printer-specific option handling remain unverified. The output PDF assumes the whole paper is
+printable; a real printer may clip marks outside its hardware limits.
+
+This is Sheaf's own command; no Origin CLI or dialog behaviour is claimed.
+
+### 19.7 Not done
 
 Print and Print Preview of a workbook (a sheet as a table), View > Print View and the Standard
-toolbar's Print button, Origin's Source (tray), a `sheaf print` command, the macOS print panel.
+toolbar's Print button, Origin's Source (tray), native CLI printer submission on Windows, the macOS print panel.

@@ -23,6 +23,8 @@ png = "0.18"
 tiff = { version = "0.11", default-features = false, features = ["lzw"] }
 # JPEG and GIF export: the image crate and colour quantiser already in Cargo.lock.
 image = { version = "0.25", default-features = false, features = ["jpeg", "gif"] }
+# Exact-palette GIFs (mono, 16 colours, grey); already built as a dependency of `image`.
+gif = "0.14"
 color_quant = "1.1"
 
 [dev-dependencies]

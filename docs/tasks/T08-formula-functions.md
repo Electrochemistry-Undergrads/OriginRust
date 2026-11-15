@@ -21,8 +21,17 @@ Workbook-title lookup is measured in Origin; short-name precedence and ambiguous
 are explicit Sheaf rules. Final validation on integrated `d04e909` plus this change: formatting,
 strict workspace/all-target Clippy and all workspace tests pass (2,047 passed, three existing
 ignored; 17 new regressions: core 12, expression 4, I/O 1).
-**Left:** `%()` substitution,
-and Origin global/`@SD` formatting defaults. **Size:** M. **Branch:** `expr-funcs2`. **Model:** Sonnet.
+String-expression `%(...)` added on branch `codex/formula-string-substitution`: interpolation
+inside quoted strings, standalone numeric conversion, TAB/CRLF and literal `%%(`, with existing
+column/metadata dependencies, recalculation modes, undo and native/companion persistence.
+Scalar strings, numeric conversion and escaping measured in Origin 2016; per-row formulas
+and the narrower conversion-only data boundary are documented Sheaf choices.
+Validation on integrated `0666218` plus this change and the Windows XDG test-fixture repair:
+formatting, strict workspace/all-target Clippy and the full workspace suite pass
+(2,128 passed, three existing ignored; 12 new expression/core/I/O regressions).
+**Left:** legacy multi-argument worksheet/graph `%()` substitution, session/range-variable
+substitution and generated expression text; Origin global/`@SD` formatting defaults.
+**Size:** M. **Branch:** `expr-funcs2`. **Model:** Sonnet.
 **Detail:** audit E "Missing" (formula functions). **Spec:** `docs/spec/expression-language.md`.
 
 ## Where

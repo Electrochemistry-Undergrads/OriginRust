@@ -66,9 +66,18 @@ fn the_folders_follow_each_platforms_convention() {
     let support = PathBuf::from("/Users/a/Library/Application Support/Sheaf");
     assert_eq!(recovery_dir_for(Platform::Mac, &mac), Some(support.join("Recovery")));
     assert_eq!(settings_path_for(Platform::Mac, &mac), Some(support.join("autosave.json")));
-    let xdg = env(&[("HOME", "/home/a"), ("XDG_DATA_HOME", "/data"), ("XDG_CONFIG_HOME", "/conf")]);
-    assert_eq!(recovery_dir_for(Platform::Other, &xdg), Some(PathBuf::from("/data/sheaf/recovery")));
-    assert_eq!(settings_path_for(Platform::Other, &xdg), Some(PathBuf::from("/conf/sheaf/autosave.json")));
+    // XDG paths must pass the host platform's Path::is_absolute, even when simulating Linux.
+    let root = std::env::current_dir().unwrap();
+    let data = root.join("xdg-data");
+    let config = root.join("xdg-config");
+    let xdg = |name: &str| match name {
+        "HOME" => Some(OsString::from("/home/a")),
+        "XDG_DATA_HOME" => Some(data.as_os_str().to_os_string()),
+        "XDG_CONFIG_HOME" => Some(config.as_os_str().to_os_string()),
+        _ => None,
+    };
+    assert_eq!(recovery_dir_for(Platform::Other, &xdg), Some(data.join("sheaf").join("recovery")));
+    assert_eq!(settings_path_for(Platform::Other, &xdg), Some(config.join("sheaf").join("autosave.json")));
 }
 
 #[test]

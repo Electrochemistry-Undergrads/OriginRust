@@ -1425,6 +1425,30 @@ pub enum LabelPosition {
     Below,
 }
 
+/// Frame around a plot's data labels (Origin's Label tab).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelFrame {
+    #[default]
+    None,
+    Box,
+    Shadow,
+}
+
+impl LabelFrame {
+    pub fn is_none(&self) -> bool {
+        *self == Self::None
+    }
+}
+
+fn label_frame_black() -> Color {
+    Color::BLACK
+}
+
+fn is_label_frame_black(color: &Color) -> bool {
+    *color == Color::BLACK
+}
+
 /// The data labels of a plot (Origin's Label tab: off, Arial 22 black, form Y, position Right).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DataLabels {
@@ -1432,6 +1456,16 @@ pub struct DataLabels {
     /// Origin's White Out: an opaque white background behind each displayed label.
     #[serde(default, skip_serializing_if = "is_false")]
     pub white_out: bool,
+    #[serde(default, skip_serializing_if = "LabelFrame::is_none")]
+    pub frame: LabelFrame,
+    /// Frame padding on all sides, as a percentage of the font height.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub margin_percent: f64,
+    /// Origin 2016 initializes the frame's border and fill to black.
+    #[serde(default = "label_frame_black", skip_serializing_if = "is_label_frame_black")]
+    pub frame_border: Color,
+    #[serde(default = "label_frame_black", skip_serializing_if = "is_label_frame_black")]
+    pub frame_fill: Color,
     #[serde(default)]
     pub form: LabelForm,
     #[serde(default)]
@@ -1461,6 +1495,10 @@ impl Default for DataLabels {
         DataLabels {
             enable: false,
             white_out: false,
+            frame: LabelFrame::None,
+            margin_percent: 0.0,
+            frame_border: Color::BLACK,
+            frame_fill: Color::BLACK,
             form: LabelForm::Y,
             position: LabelPosition::Right,
             font: Font::new("Arial", 22.0),

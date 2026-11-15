@@ -254,8 +254,14 @@ command name with `_` for `-` (`fft_filter`, `reduce_dup`, `column_math`, `mannw
   under a root. `power` needs no data; its table goes into a new workbook of the project, named in
   the reply. `sort` and `filter` are also available as `sort_sheet` and `filter_sheet` (below).
 
-`output` accepts only `next_to_input`: results go next to the input and tools that write a table
-use a new sheet by themselves (ADR 0005); `new_sheet` is refused with a message. The result is the
+`output` defaults to `next_to_input` (results next to their source columns, ADR 0005).
+`new_sheet` uses the core analysis Output setting: results go into a new worksheet in the same
+workbook, with the X columns needed to plot them. The original worksheet is unchanged. Tools
+that intrinsically create tables or result worksheets keep their own output layout; power analysis
+keeps creating its result workbook. Both hand-mapped and CLI-bridged analysis tools use the same
+core implementation. `new_sheet` is refused for sort and filter jobs before they change anything;
+use `filter_sheet` with `in_place: false` to create a filtered copy. A failed call is rolled back.
+The result names the new sheet and fully qualified result columns. The result is the
 `Report`, for every tool:
 
 ```json

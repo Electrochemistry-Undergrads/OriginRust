@@ -71,6 +71,9 @@ cargo run --release -p sheaf-cli -- plot run1.txt -o figure.png --dpi 300
 cargo run --release -p sheaf-cli -- analyze integrate run1.txt
 cargo run --release -p sheaf-cli -- fit run1.txt --model linear
 
+# Make a paper-sized PDF using the project's Page Setup
+cargo run --release -p sheaf-cli -- print experiment.sheaf --output print.pdf
+
 # Explore the available commands
 cargo run --release -p sheaf-cli -- --help
 ```

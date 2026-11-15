@@ -11,6 +11,7 @@ use sheaf_plot::scene::ObjectKind;
 
 mod autosave;
 mod excel;
+mod label_frames;
 mod label_whiteout;
 mod offset_multipliers;
 mod skip_points;
@@ -1405,7 +1406,7 @@ fn export_graphs_psd_picker_writes_rgb_grey_and_indexed_images() {
     h.state_mut().export.as_mut().unwrap().set_path(&dir);
     let mut current = "24-bit Color";
     for (name, depth, mode) in
-        [("rgb", "24-bit Color", 3), ("grey", "8-bit Grayscale", 1), ("indexed", "256 Colors", 2)]
+        [("rgb", "24-bit Color", 3), ("grey", "8-bit Gray Scale", 1), ("indexed", "256 Colors", 2)]
     {
         if depth != current {
             h.get_by_value(current).click();

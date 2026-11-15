@@ -77,7 +77,9 @@ fn content(project: &Project) -> Project {
 
 /// A project from the test data file, written by a crashed run, and the project itself.
 fn planted(dir: &Path, original: Option<&Path>) -> Project {
-    let h = start(vec![data_file("autosave-source")]);
+    // Each recovery case runs in parallel; data_file recreates its folder on every call.
+    let tag = format!("autosave-source-{}", dir.file_name().unwrap().to_string_lossy());
+    let h = start(vec![data_file(&tag)]);
     let project = h.state().doc.project().clone();
     plant_orphan(dir, &project, original);
     project

@@ -102,7 +102,40 @@ How a bare column read decides between number and text: the result of the whole 
 
 Sheaf uses literal, case-sensitive, non-overlapping matches, preserving Unicode text. An absent occurrence leaves the text unchanged. An empty search or an invalid occurrence (negative, fractional, missing or nonfinite) also leaves it unchanged; these are Sheaf's guard choices for cases the reference does not specify. The first three arguments accept text columns or numbers written as text; the occurrence is numeric, so formulas can read it from another column. Text-returning function calls accept an optional `$` suffix (`upper(substitute(col(A)$,"clean","raw")$)$`); numeric functions do not. Unsuffixed calls remain accepted. Set Column Values lists `substitute` under Function > Text, and Auto recalculation tracks every source column.
 
-Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a column formula set from a script); Sheaf accepts text branches. `%()` substitution and Origin global/`@SD` format settings are not done. For a number cell `col(A)$` is Origin's displayed text (a `-1e3` typed into a cell reads back as typed); Sheaf has no per-cell typed text, so it writes the number as `text(x)` does.
+Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a column formula set from a script); Sheaf accepts text branches. String-expression `%()` substitution is described below; Origin global/`@SD` format settings remain open. For a number cell `col(A)$` is Origin's displayed text (a `-1e3` typed into a cell reads back as typed); Sheaf has no per-cell typed text, so it writes the number as `text(x)` does.
+
+### Percent string-expression substitution
+
+T08 (2026-11-14, `codex/formula-string-substitution`) supports `%(expression)` inside a quoted
+formula string, for example `"name=%(col(A)[L]$), unit=%(col(A)[U]$)"` or
+`"run:%([Book1]Sheet1!col(A)[i]$)"`. Existing text expressions, including nested function
+calls with quoted arguments, can supply the text. Numeric results use ordinary string
+conversion. `%()` outside a quoted string converts the result to a number as `value(...)`
+does: `%(col(A)[Scale]$)*i`. It retains the existing empty-text and nonnumeric-text rules.
+The infix `%` remainder operator is unchanged.
+
+Within quoted strings, `%(TAB)` inserts a tab, `%(CRLF)` inserts carriage return and line feed,
+and `%%(` leaves a literal `%(`. Keyword matching ignores ASCII case and surrounding whitespace.
+These are based on Origin's [string substitution reference](https://docs.originlab.com/labtalk/guide/string-substitution/)
+and the installed Origin 2016 probe `scratch/formula-string-substitution/strings.lines.txt`.
+Measured scalar results: `value:12.5`, `name=Voltage, unit=mV`, `VOLTAGE`, and numeric 13.5
+from a substituted `12.5` plus 1. Control characters and the literal escape are also measured.
+The row-by-row worksheet behavior is Sheaf's extension: the scripted Origin column assignment
+did not populate its target, so no direct formula/recalculation parity is claimed.
+
+Substitution uses the existing parsed expression tree. Cell and header dependencies, user
+parameters, cross-sheet references, Auto/Manual/None, cycles, explicit recalculation and undo
+follow the existing formula rules. Native saves and `.opj` companions preserve the formula
+and its links. Original UTF-8 byte offsets remain in diagnostics. Empty or malformed `%()`
+and unsupported multi-argument forms are errors; nested substitutions are bounded along with
+the existing expression depth limits.
+
+Cell/metadata text is copied as data and never reparsed. In Origin the substituted string
+`2+3` can become executable expression text and produce 5; Sheaf's standalone conversion
+returns missing for that text. Dynamic reference-name construction, session string variables,
+range-variable names, `%([Book]Sheet,column,row[,format])`, graph/legend `@` forms, script macros
+and general LabTalk statement substitution remain unsupported. Regressions in the expression,
+core and I/O `string_substitution` tests cover the supported subset and this data boundary.
 
 ### Format compatibility name
 
@@ -216,7 +249,7 @@ short name is `Book1` and display title is `Probe`.
 The direct qualified-`col()` expression used here is Sheaf's extension of range notation;
 direct-formula syntax, recalculation, structural edits and quoted-name details are not claimed
 as measured Origin 2016 behavior. No range-variable declarations, spreadsheet `A1` shorthand,
-multi-sheet ranges or `%()` substitution are added.
+multi-sheet ranges are added. The supported subset of `%()` substitution is described above.
 
 Native saves retain these formulas. The `.opj` writer stores text and values but cannot write
 their cross-sheet recalculation records: its existing warning says the external file uses mode
@@ -240,7 +273,7 @@ has no project scope and continues to reject qualified references.
 
 ## 6. Differences from Origin's LabTalk
 
-- Only a single expression; no `before formula` scripts, assignments, string variables, `%()` substitution or user-defined functions. Those are separate features and are not part of this crate.
+- Only a single expression; no `before formula` scripts, assignments, session string variables, legacy multi-argument `%()` substitution, generated expression text or user-defined functions. The supported string-expression substitution subset is described above.
 - No spreadsheet cell notation (`A1`, bare cross-sheet `Sheet!A`), range-variable declarations, or `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). Explicit cross-sheet `col()` references are described above. The `[a:b]` range is accepted only inside statistics. Parameter-row ordering and the supported parameter-name syntax are described above.
 - A single `=` is not a comparison here; use `==`.
 - `e` is the constant 2.718...; a parameter literally named `e` in a fit function cannot be used (rename it).

@@ -18,6 +18,8 @@ pub enum Command {
     Import(ImportArgs),
     /// Make a figure from a data file or a project and write it as PNG, TIFF, JPEG, BMP, GIF, TGA, PCX, SVG, PDF, EPS or EMF.
     Plot(Box<PlotArgs>),
+    /// Print a graph using the saved Page Setup, or write a paper-sized vector PDF.
+    Print(PrintArgs),
     /// Write a graph of a project as PNG, TIFF, JPEG, BMP, GIF, TGA, PCX, SVG, PDF, EPS or EMF, or
     /// the project (or a data file) as an Origin .opj project or an Excel .xlsx workbook.
     Export(ExportArgs),
@@ -29,6 +31,21 @@ pub enum Command {
     /// Fit a model to a column: straight line, polynomial, a built-in function, a formula or an
     /// Origin .FDF function. Prints the parameters, statistics and ANOVA table.
     Fit(FitArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct PrintArgs {
+    /// A .sheaf, .opj or .opju project containing a graph.
+    pub project: PathBuf,
+    /// The graph to print (default: the only graph).
+    #[arg(long)]
+    pub graph: Option<String>,
+    /// Submit to this printer (default: the system default printer).
+    #[arg(long, conflicts_with = "output")]
+    pub printer: Option<String>,
+    /// Write a paper-sized vector PDF to this .pdf path instead of submitting a print job.
+    #[arg(long, conflicts_with = "printer")]
+    pub output: Option<PathBuf>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]

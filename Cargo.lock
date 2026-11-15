@@ -3256,11 +3256,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "flate2",
  "serde_json",
  "sheaf-core",
  "sheaf-io",
  "sheaf-ops",
  "sheaf-plot",
+ "tempfile",
 ]
 
 [[package]]
@@ -3344,6 +3346,7 @@ version = "0.1.0"
 dependencies = [
  "color_quant",
  "fontdb",
+ "gif 0.14.2",
  "image",
  "png 0.18.1",
  "resvg",

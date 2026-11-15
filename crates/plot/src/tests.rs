@@ -3957,3 +3957,32 @@ fn the_display_tab_hides_data_unclips_it_and_puts_the_grid_on_top() {
     assert!(scene.layers[0].plots.is_empty());
     assert!(!scene.layers[0].overlay.is_empty());
 }
+
+#[test]
+fn print_svg_uses_saved_asymmetric_margins_and_rejects_invalid_setup() {
+    use sheaf_core::page_setup::{Margins, Orientation, Paper};
+    let (mut p, g) = project(Template::Line, vec![0., 1.], vec![vec![0., 1.]]);
+    let page = &mut p.graph_mut(g).unwrap().page;
+    page.width_pt = 400.;
+    page.height_pt = 200.;
+    p.page_setup.paper = Paper::Letter;
+    p.page_setup.orientation = Orientation::Auto;
+    p.page_setup.margins = Margins { left: 36., right: 72., top: 100., bottom: 80. };
+    // 792x612 landscape; available 684x432; the 2:1 graph is 684x342 at (36,145).
+    let svg = print_svg(&p, g).unwrap();
+    let d = doc(&svg);
+    let root = d.root_element();
+    assert_eq!(root.attribute("viewBox"), Some("0 0 792 612"));
+    let placement = root.descendants().find(|n| n.has_tag_name("g") && n.attribute("transform").is_some()).unwrap();
+    assert_eq!(placement.attribute("transform"), Some("translate(36 145) scale(1.71)"));
+    assert!(render_print_pdf(&p, g).unwrap().starts_with(b"%PDF-"));
+    for m in [Margins::all(-1.), Margins::all(f64::NAN), Margins::all(f64::INFINITY), Margins::all(1000.)] {
+        p.page_setup.margins = m;
+        assert!(render_print_pdf(&p, g).is_err(), "{m:?}");
+    }
+    p.page_setup.margins = Margins::all(72.);
+    for width in [0., -1., f64::NAN, f64::INFINITY] {
+        p.graph_mut(g).unwrap().page.width_pt = width;
+        assert!(render_print_pdf(&p, g).is_err(), "{width}");
+    }
+}

@@ -34,7 +34,13 @@ formats use the measured fresh `@SD=14` precision, distinct from omitted/`"*"` f
 source column formatting still governs omitted direct-column Text. Precision, dynamic format
 arguments, recalculation and Undo are covered; expression-language.md section 3 records the
 Origin probes and limits.
-**Left:** legacy multi-argument worksheet/graph `%()` substitution, session/range-variable
+Static worksheet-cell follow-up (`codex/formula-worksheet-substitution`):
+`%([Book]Sheet,column,row[,format])` supports fixed qualified selectors and numeric row
+expressions, with measured 15-digit defaults, column-display `W`, explicit formats and text
+preservation. Expression/core/I/O regressions cover selectors, dependencies, recalculation,
+cycles, Undo and native/companion reopen; expression-language.md section 3 records the
+Origin scalar probes and the existing no-generated-code boundary.
+**Left:** active-sheet/book-only and graph/dataset `%()` substitution, session/range-variable
 substitution and generated expression text; user-configurable global/`@SD` formatting settings.
 **Size:** M. **Branch:** `expr-funcs2`. **Model:** Sonnet.
 **Detail:** audit E "Missing" (formula functions). **Spec:** `docs/spec/expression-language.md`.

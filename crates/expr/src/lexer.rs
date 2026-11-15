@@ -12,6 +12,8 @@ pub(crate) enum Tok {
     Star,
     Slash,
     Percent,
+    /// A substitution inside a quoted string retains its text result.
+    QuotedSubstitution,
     Caret,
     LParen,
     RParen,
@@ -45,6 +47,7 @@ impl Tok {
             Tok::Star => "'*'".into(),
             Tok::Slash => "'/'".into(),
             Tok::Percent => "'%'".into(),
+            Tok::QuotedSubstitution => "a string substitution".into(),
             Tok::Caret => "'^'".into(),
             Tok::LParen => "'('".into(),
             Tok::RParen => "')'".into(),
@@ -254,6 +257,7 @@ fn quoted_tokens(src: &str, start: usize, base: usize, depth: usize) -> Result<(
             }
             out.push(Token { tok: Tok::Str(std::mem::take(&mut literal)), pos: base + start });
             out.push(Token { tok: Tok::Plus, pos: base + at });
+            out.push(Token { tok: Tok::QuotedSubstitution, pos: base + at });
             out.push(Token { tok: Tok::LParen, pos: base + at });
             let inner = &src[at + 2..close];
             let keyword = match inner.trim().to_ascii_uppercase().as_str() {

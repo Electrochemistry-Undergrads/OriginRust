@@ -93,6 +93,25 @@ pub(crate) struct PlotData<'a> {
     pub treemap: Option<Box<crate::treemap::TreemapData>>,
     /// What a sunburst plot draws; `None` for other kinds.
     pub sunburst: Option<Box<crate::sunburst::SunburstData>>,
+    /// The colour mapping of a waterfall curve; `None` when the layer has none.
+    pub wf: Option<WaterfallColors>,
+}
+
+/// How one curve of a colour mapped waterfall is coloured: `lo` and `hi` are the ends of the colour scale (over
+/// the whole layer) and `z` the curve's own value for Z mapping.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub(crate) struct WaterfallColors {
+    pub mode: sheaf_core::graph::WaterfallColor,
+    pub lo: f64,
+    pub hi: f64,
+    pub z: f64,
+}
+
+impl WaterfallColors {
+    /// Where `v` is on the scale, 0..1 (0.5 when the scale has no width).
+    pub fn fraction(&self, v: f64) -> f64 {
+        if self.hi > self.lo { ((v - self.lo) / (self.hi - self.lo)).clamp(0.0, 1.0) } else { 0.5 }
+    }
 }
 
 /// The numbers of one box of a box chart (Origin's defaults: the box runs from the 25th to the
@@ -236,6 +255,11 @@ impl PlotData<'_> {
         if self.transposed() { self.cat_at(i) } else { self.val_at(i) }
     }
 
+    /// The original Y value of row `i`, before display scaling and offsets (NaN past the end).
+    pub fn source_y_at(&self, i: usize) -> f64 {
+        self.y.get(i).copied().unwrap_or(f64::NAN)
+    }
+
     /// The original X value (or row number), before display scaling and offsets.
     pub fn source_x_at(&self, i: usize) -> f64 {
         match &self.x {
@@ -328,6 +352,35 @@ pub(crate) fn collect_graph<'a>(project: &'a Project, g: &'a sheaf_core::graph::
     all
 }
 
+/// Gives the curves of a colour mapped waterfall layer (graphing spec 13.17) the ends of the colour scale and their
+/// Z value. The Y scale runs over the shown, finite Y values of every curve in the layer; the Z scale over the Z
+/// values of the curves.
+fn attach_waterfall_colors(project: &Project, layer: &Layer, plots: &mut [PlotData]) {
+    use sheaf_core::graph::{Stack, WaterfallColor};
+    let mode = layer.waterfall_color;
+    if mode == WaterfallColor::None || !matches!(layer.stack, Stack::Waterfall { .. }) {
+        return;
+    }
+    let zs: Vec<f64> =
+        plots.iter().map(|pd| sheaf_core::stack::waterfall_z(project, pd.plot, pd.member.unwrap_or(0))).collect();
+    let values: Vec<f64> = match mode {
+        WaterfallColor::Z => zs.clone(),
+        _ => plots
+            .iter()
+            .filter(|pd| pd.plot.kind.has_line())
+            .flat_map(|pd| pd.rows().map(|r| pd.y[r]).collect::<Vec<_>>())
+            .filter(|v| v.is_finite())
+            .collect(),
+    };
+    let (lo, hi) = values.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(*v), b.max(*v)));
+    if !(lo.is_finite() && hi.is_finite()) {
+        return;
+    }
+    for (pd, z) in plots.iter_mut().zip(zs) {
+        pd.wf = Some(WaterfallColors { mode, lo, hi, z });
+    }
+}
+
 /// The drawable plots of a layer, in plot order, with their stack offsets. A plot that is hidden
 /// or whose Y column is missing or not numeric is skipped (a hidden plot still keeps its place in
 /// the stack).
@@ -395,6 +448,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             parallel: None,
             treemap: None,
             sunburst: None,
+            wf: None,
             label_texts: match plot.decor.labels.form {
                 LabelForm::Column { column } if plot.decor.labels.enable => project.column(column).map(cell_texts),
                 _ => None,
@@ -537,6 +591,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
     crate::ridgeline::set_scales(&mut plots);
     stack_bars(&mut plots);
     place_bars(&mut plots, &layer.bars);
+    attach_waterfall_colors(project, layer, &mut plots);
     LayerData { plots, members, bracket_step: std::cell::Cell::new(0.0) }
 }
 

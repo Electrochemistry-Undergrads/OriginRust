@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **453 greyed items: 312 in the menu bar, 47 on the toolbars, 94 in context menus.**
+original inventory baseline. This is not a new runtime audit. **451 greyed items: 310 in the menu bar, 47 on the toolbars, 94 in context menus.**
 
 ## How to read and keep this file
 
@@ -39,7 +39,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T59` | 2 |
 | `T60` | 7 |
 | `T61` | 20 |
-| `T62` | 2 |
+| `T62` | 0 |
 | `T63` | 31 |
 | `B1` | 27 |
 | `B2` | 51 |
@@ -60,7 +60,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 19 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 80 items, backlog packages (`B`) 354, not planned (`N`) 19.
+Briefs (`T`) hold 78 items, backlog packages (`B`) 354, not planned (`N`) 19.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -117,7 +117,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B4` Line + Symbol: Line Series · 2 Point Segment · 3 Point Segment
 - `B4` Column/Bar/Pie: Column + Label · Grouped Columns (indexed data)
 - `T61` Multi-Y: 3Ys Y-YY · 3Ys Y-Y-Y · 4Ys Y-YYY · 4Ys YY-YY · Multiple Y Axes...
-- `T62` Y-offset/Waterfall: Waterfall Y:Color Mapping · Waterfall Z:Color Mapping
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface

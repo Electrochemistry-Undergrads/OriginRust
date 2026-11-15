@@ -137,6 +137,15 @@ fn a_cumulative_stack_is_written_as_plain_curves_with_a_warning() {
     assert_eq!(imp.graphs[0].layers[0].stack, Stack::None);
 }
 
+#[test]
+fn a_colour_mapped_waterfall_warns_that_the_mapping_was_not_written() {
+    let mut p = stacked(Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 });
+    let id = p.graphs().next().unwrap().id;
+    p.graph_mut(id).unwrap().layers[0].waterfall_color = sheaf_core::graph::WaterfallColor::Y;
+    let (_, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("colour mapping")), "{:?}", out.warnings);
+}
+
 fn double_y() -> Project {
     let mut p = source();
     let c = ids(&p);

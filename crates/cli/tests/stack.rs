@@ -178,3 +178,22 @@ fn export_applies_the_stack_options_to_a_saved_project() {
     assert!(ok, "{e}");
     assert_eq!(std::fs::read_to_string(&out).unwrap(), plain);
 }
+
+#[test]
+fn waterfall_colour_mapping_templates_set_the_mapping_and_survive_a_save() {
+    use sheaf_core::graph::WaterfallColor;
+    let dir = scratch("wfcolor");
+    let data = data_file(&dir);
+    for (name, want) in [("waterfall-y", WaterfallColor::Y), ("waterfall-z", WaterfallColor::Z)] {
+        let p = plot_and_load(&dir, &data, &["-t", name]);
+        let l = layer(&p);
+        assert_eq!(l.waterfall_color, want, "{name}");
+        assert!(matches!(l.stack, Stack::Waterfall { .. }) && !l.legend.visible);
+        let text = std::fs::read_to_string(dir.join("o.svg")).unwrap();
+        assert!(text.contains(">Y<") || text.contains(">Z<"), "{name}: the colour scale is titled");
+    }
+    let p = plot_and_load(&dir, &data, &["-t", "waterfall"]);
+    assert_eq!(layer(&p).waterfall_color, WaterfallColor::None);
+    let stderr = plot_error(&dir, &data, &["-t", "waterfall-y", "--y2", "C"]);
+    assert!(stderr.contains("right Y axis"), "{stderr}");
+}

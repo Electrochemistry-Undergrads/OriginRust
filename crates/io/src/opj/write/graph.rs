@@ -1122,6 +1122,12 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
                 .into(),
         );
     }
+    if layer.waterfall_color != sheaf_core::graph::WaterfallColor::None {
+        notes.push(
+            "the waterfall colour mapping (Y or Z) was not written: the curves went out in their plot colours without a colour scale (the .opj.sheaf companion keeps the mapping)"
+                .into(),
+        );
+    }
     if layer.stack == Stack::Cumulative {
         notes.push(
             "a cumulative stack was written as plain curves (the cumulative offset mode is not written; the .opj.sheaf companion keeps it)"

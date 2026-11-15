@@ -95,7 +95,7 @@ pub(crate) fn draw_plot(
     let line_in_front =
         plot.kind == PlotKind::LineSymbol && decor.symbol_line.draw_in_front && !decor.symbol_line.gap_to_symbol;
     if plot.kind.has_line() && plot.line.width_pt > 0.0 && !line_in_front {
-        draw_line(out, pd, geom);
+        draw_line_or_mapped(out, pd, geom);
     }
     if plot.kind == PlotKind::Box {
         draw_box(out, pd, geom);
@@ -115,7 +115,7 @@ pub(crate) fn draw_plot(
         draw_symbols(out, pd, geom);
     }
     if line_in_front && plot.line.width_pt > 0.0 {
-        draw_line(out, pd, geom);
+        draw_line_or_mapped(out, pd, geom);
     }
     if pd.mask.is_some() && !plot.kind.is_bar() {
         draw_masked(out, pd, geom);
@@ -589,8 +589,58 @@ fn symbol_line_gaps(pd: &PlotData, geom: &LayerGeometry, stroke: &Stroke) -> Opt
     crate::symbol_gaps::Gaps::new(rows.filter_map(|i| geom.checked_data_to_page(pd.x_at(i), pd.y_at(i))), radius)
 }
 
+/// The line of a plot: along its points in the colours of Y mapping on a colour mapped waterfall, else the
+/// ordinary line (in the curve's Z colour with Z mapping).
+fn draw_line_or_mapped(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    match pd.wf {
+        Some(wf) if wf.mode == sheaf_core::graph::WaterfallColor::Y => draw_line_y_mapped(out, pd, geom, &wf),
+        _ => draw_line(out, pd, geom),
+    }
+}
+
+/// Waterfall Y:Color Mapping (graphing spec 13.17): every straight segment between two shown, finite points is
+/// coloured by the mean Y value of its ends through the shared ramp; runs of one colour are one path.
+fn draw_line_y_mapped(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, wf: &crate::data::WaterfallColors) {
+    let base = line_stroke(&pd.plot.line);
+    let mut run: Option<(sheaf_core::Color, String)> = None;
+    let mut last: Option<(f64, f64, f64)> = None;
+    let flush = |run: &mut Option<(sheaf_core::Color, String)>, out: &mut Vec<Item>| {
+        if let Some((color, d)) = run.take() {
+            out.push(Item::Path { d, fill: None, stroke: Some(Stroke { color, ..base.clone() }) });
+        }
+    };
+    for i in pd.line_rows() {
+        let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)).filter(|_| pd.source_y_at(i).is_finite())
+        else {
+            flush(&mut run, out);
+            last = None;
+            continue;
+        };
+        let y = pd.source_y_at(i);
+        if let Some((px, py, py_value)) = last {
+            let color = map_color(wf.fraction((y + py_value) / 2.0));
+            match &mut run {
+                Some((c, d)) if *c == color => line_to(d, p.0, p.1),
+                _ => {
+                    flush(&mut run, out);
+                    let mut d = String::new();
+                    move_to(&mut d, px, py);
+                    line_to(&mut d, p.0, p.1);
+                    run = Some((color, d));
+                }
+            }
+        }
+        last = Some((p.0, p.1, y));
+    }
+    flush(&mut run, out);
+}
+
 fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
-    let stroke = line_stroke(&pd.plot.line);
+    let mut style = pd.plot.line.clone();
+    if let Some(wf) = pd.wf.filter(|w| w.mode == sheaf_core::graph::WaterfallColor::Z) {
+        style.color = map_color(wf.fraction(wf.z));
+    }
+    let stroke = line_stroke(&style);
     let gaps = symbol_line_gaps(pd, geom, &stroke);
     let inclusive = pd.plot.decor.fill_under.is_some()
         && !pd.plot.kind.is_area()

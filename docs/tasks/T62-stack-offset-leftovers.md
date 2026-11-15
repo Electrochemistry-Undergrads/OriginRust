@@ -1,6 +1,6 @@
 # T62: Remaining stack and offset commands
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `stack-leftovers`, all three slices. **Size:** M, three independent slices.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `stack-leftovers`, all three slices; all eight inventory locations enabled. Slice 1: Graph > Offset Grouped Data in Layer (history step, tick, no-op, in sync with Plot Details) and `Stack::Cumulative` (graphing 13.15; CLI `--stack cumulative`; `.opj` warns). Slice 2: Stacked Histograms with shared union bins (13.16; `-t stacked-histograms`). Slice 3: `waterfall-y`/`waterfall-z` colour mapping with colour scale (13.17; `.opj` warns). All rules are Sheaf's, unmeasured. Left: Integrate gadget shading under Cumulative, Incremental mode, native Cumulative/colour mapping in `.opj`, Origin measurements of the unmeasured items above. **Size:** M, three independent slices.
 **Branch:** `stack-leftovers`. **Priority:** P0, wave 2.
 **Spec:** [graphing](../spec/graphing.md) 13 (especially measured Stack tab 13.14), 14.12;
 ADR 0010. **Inventory:** 8 locations tagged `T62`.

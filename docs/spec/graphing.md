@@ -1296,6 +1296,31 @@ Sheaf (`Project::plot_stacked_histograms`; GUI Plot > Statistics > Stacked Histo
 - `--panels` is refused with this template; the legend of each panel names its column.
 
 
+### 13.17 Waterfall Y:Color Mapping and Z:Color Mapping (T62 slice 3)
+
+Origin: Plot > Y-offset/Waterfall has Waterfall Y:Color Mapping and Waterfall Z:Color Mapping (3D waterfall is B15).
+**Not measured** (all Sheaf's choices): palettes, levels, scale layout, where Z comes from.
+
+Sheaf (`Layer::waterfall_color` None/Y/Z, `Template::WaterfallY` = `waterfall-y`, `WaterfallZ` = `waterfall-z`;
+GUI Plot > Y-offset/Waterfall; CLI `sheaf plot -t waterfall-y|waterfall-z`): the 2D waterfall of 13.6 (placement
+unchanged), the legend hidden, and:
+
+- **Colours** come from the shared ramp (`plots::map_color`: blue, cyan, green, yellow, red) also used by colour
+  mapped symbols, parallel plots and sunburst plots.
+- **Y mapping:** each straight segment between two shown, finite points is coloured by the mean Y of its two ends
+  (a segment colour, not a gradient inside a segment; runs of one colour are drawn as one path). One scale for the
+  whole layer: the smallest and largest shown Y of all curves. Connection styles other than straight, symbol gaps
+  and fill under the curve are not applied to the mapped line; symbols of line + symbol plots keep the plot colour.
+- **Z mapping:** each curve is one colour, from its Z value on a scale from the smallest to the largest Z of the
+  layer. Z is the number in the long name of the curve's Y column; else the number in its comments; else the curve's
+  place in the stack counted from 1 (`core::stack::waterfall_z`).
+- **Colour scale:** `hexbin::draw_color_bar` beside the layer's whole frame (the right end of the back curve),
+  titled Y or Z, ticks at nice values; an equal-valued scale puts one tick in the middle.
+- The mapping is stored in the layer (`waterfall_color`), so it round-trips in `.sheaf`. The `.opj` writer writes
+  the curves in their plot colours, without a scale, and warns (the companion keeps the mapping).
+- A mapping on a layer that is not drawn as a waterfall (linked layers, other stack modes) is ignored.
+
+
 ---
 
 ## 14. Text tick labels and column charts (P0, GP-COL-01)

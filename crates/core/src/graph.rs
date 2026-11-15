@@ -334,6 +334,9 @@ pub struct Layer {
     /// waterfall). Only the drawing moves; the data stay as they are.
     #[serde(default, skip_serializing_if = "Stack::is_none")]
     pub stack: Stack,
+    /// Colour mapping of the curves of a [`Stack::Waterfall`] layer (graphing spec 13.17).
+    #[serde(default, skip_serializing_if = "WaterfallColor::is_none")]
+    pub waterfall_color: WaterfallColor,
     /// Settings of single curves for [`Layer::stack`], found by the curve's Y column: the offsets
     /// of [`Stack::Individual`] mode and which curve a fitted curve moves with.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -657,6 +660,26 @@ pub enum Stack {
     /// up by `k * dy_percent` percent of the front frame, which shrinks to make room. Drawn only
     /// for a layer that is not linked to another and has no linked layers.
     Waterfall { dx_percent: f64, dy_percent: f64 },
+}
+
+/// How the curves of a waterfall layer are coloured (Origin's Waterfall Y:Color Mapping and Waterfall Z:Color
+/// Mapping). Sheaf's rules are in graphing spec 13.17.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WaterfallColor {
+    /// Each curve has the colour of its plot.
+    #[default]
+    None,
+    /// Each curve is coloured along its points by their Y values through the colour ramp.
+    Y,
+    /// Each curve is coloured as a whole by its Z value (see [`crate::stack::waterfall_z`]).
+    Z,
+}
+
+impl WaterfallColor {
+    pub fn is_none(&self) -> bool {
+        *self == WaterfallColor::None
+    }
 }
 
 impl Stack {
@@ -2491,6 +2514,17 @@ mod tests {
         assert!(layer.plot_offsets.is_empty());
         let json = serde_json::to_string(&layer).unwrap();
         assert!(!json.contains("\"stack\"") && !json.contains("plot_offsets"), "{json}");
+    }
+
+    #[test]
+    fn waterfall_colour_mapping_is_saved_with_the_layer_and_defaults_to_none() {
+        let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
+        assert_eq!(layer.waterfall_color, WaterfallColor::None);
+        assert!(!serde_json::to_string(&layer).unwrap().contains("waterfall_color"));
+        layer.waterfall_color = WaterfallColor::Z;
+        let json = serde_json::to_string(&layer).unwrap();
+        assert!(json.contains(r#""waterfall_color":"z""#), "{json}");
+        assert_eq!(serde_json::from_str::<Layer>(&json).unwrap().waterfall_color, WaterfallColor::Z);
     }
 
     #[test]

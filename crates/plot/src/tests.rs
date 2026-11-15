@@ -4391,3 +4391,65 @@ fn golden_cumulative_lines() {
     p.graph_mut(g).unwrap().layers[0].stack = Stack::Cumulative;
     compare_golden("cumulative-lines", &svg_of(&p, g));
 }
+
+// ----- waterfall colour mapping (graphing spec 13.17) ---------------------------
+
+fn mapped_waterfall(mode: sheaf_core::graph::WaterfallColor) -> (Project, WindowId) {
+    let fs: [Of; 3] = [&|x| x, &|x| 2.0 * x, &|x| 4.0 * x];
+    let (mut p, g) = stacked(Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 }, &fs);
+    p.graph_mut(g).unwrap().layers[0].waterfall_color = mode;
+    (p, g)
+}
+
+/// The stroke colours of the paths of the first layer's plots.
+fn plot_stroke_colors(p: &Project, g: WindowId) -> Vec<sheaf_core::Color> {
+    let scene = layout::build_scene(p, g, &FixedMetrics).unwrap();
+    let mut out = Vec::new();
+    for l in &scene.layers {
+        for item in &l.plots {
+            if let scene::Item::Path { stroke: Some(s), .. } = item {
+                out.push(s.color);
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn z_mapping_colours_each_curve_as_a_whole_by_its_z_and_draws_a_colour_scale() {
+    use sheaf_core::graph::WaterfallColor;
+    let (mut p, g) = mapped_waterfall(WaterfallColor::Z);
+    // Z from a numeric long name; the other curves use their place in the stack (1 and 3).
+    let c = plot_column(&p, g, 1);
+    p.column_mut(c).unwrap().long_name = "10".into();
+    let layer = &p.graph(g).unwrap().layers[0];
+    let d = data::collect(&p, layer);
+    let zs: Vec<f64> = d.plots.iter().map(|pd| pd.wf.unwrap().z).collect();
+    assert_eq!(zs, vec![1.0, 10.0, 3.0]);
+    assert_eq!((d.plots[0].wf.unwrap().lo, d.plots[0].wf.unwrap().hi), (1.0, 10.0));
+    let colors = plot_stroke_colors(&p, g);
+    let lowest = plots::map_color(0.0);
+    let top = plots::map_color(1.0);
+    assert!(colors.contains(&lowest) && colors.contains(&top), "{colors:?}");
+    let svg = svg_of(&p, g);
+    assert!(texts(&doc(&svg)).iter().any(|t| t == "Z"), "the scale is titled Z");
+    // Without mapping, no scale and the plot colours.
+    let (q, h) = mapped_waterfall(WaterfallColor::None);
+    assert!(!texts(&doc(&svg_of(&q, h))).iter().any(|t| t == "Z"));
+}
+
+#[test]
+fn y_mapping_colours_segments_by_the_mean_y_of_their_ends_over_one_scale() {
+    use sheaf_core::graph::WaterfallColor;
+    let (p, g) = mapped_waterfall(WaterfallColor::Y);
+    let layer = &p.graph(g).unwrap().layers[0];
+    let d = data::collect(&p, layer);
+    let wf = d.plots[0].wf.unwrap();
+    // Y runs from 0 to 80 over every curve.
+    assert_eq!((wf.lo, wf.hi), (0.0, 80.0));
+    assert!(near(wf.fraction(40.0), 0.5));
+    let colors = plot_stroke_colors(&p, g);
+    let distinct: std::collections::BTreeSet<_> = colors.iter().map(|c| (c.r, c.g, c.b)).collect();
+    assert!(distinct.len() > 10, "a gradient of many colours, got {}", distinct.len());
+    assert!(texts(&doc(&svg_of(&p, g))).iter().any(|t| t == "Y"));
+}

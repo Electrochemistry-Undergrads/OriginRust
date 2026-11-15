@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **453 listed item locations** at the planning
-  baseline (312 menu bar, 47 toolbar, 94 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **451 listed item locations** at the planning
+  baseline (310 menu bar, 47 toolbar, 94 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -109,7 +109,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
 | `merge-graphs` | Claude Windows, session fe4b37eb | T60 Merge Graph Windows and Layer Management (all four steps: core merge.rs + panels.rs arrange helpers, merge/layer-management dialogs, Fit Layer to Graph / Fit Page to Layers, CLI `merge-graphs`, Origin merge_graph/layarrange measurements, graphing 15) | claimed 2026-11-15; own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no adding/deleting layers or insets (T61), no Offset/stack items (T62), no text formatting (T58) or other sessions' scopes |
 | `layers-multi-y` | Claude Windows, "continue all tasks" | T61 layers, insets and 3/4 Y axes (all slices): core graph.rs layer add/delete + axis offset (local edits), template.rs 3Ys/4Ys, plot offset axes, app Add Layer buttons/layer icon/Layer Properties/Multiple Y Axes, ops template names, opj/companion | claimed 2026-11-15; no T60 merge/arrange (panels.rs, merge.rs), T58/T59 formatting, T62 stack/offset |
-| `stack-leftovers` | Claude macOS, "mac-multipdf" | T62 all three slices: Offset Grouped Data in Layer menu (None/Cumulative/Constant/Auto/Individual, new Cumulative mode), Stacked Histograms, waterfall Y/Z colour mapping with colour scale | claimed 2026-11-15; core graph.rs Stack + core/stack.rs + autorange, plot/stack.rs, menus offset submenu, template stacked histograms, waterfall colour mapping; no merge/layer management (T60/T61), text formatting (T58) or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

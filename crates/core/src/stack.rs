@@ -100,6 +100,15 @@ pub fn places(project: &Project, layer: &Layer) -> (Vec<Place>, usize) {
     (places, members.len())
 }
 
+/// The Z value of a waterfall curve for Z colour mapping (graphing spec 13.17): the number in the long name of
+/// its Y column, else the number in the column's comments, else the curve's place in the stack counted from 1.
+/// Sheaf's choice; Origin takes Z from the plot's own Z settings (unmeasured).
+pub fn waterfall_z(project: &Project, plot: &Plot, member: usize) -> f64 {
+    let column = project.column(plot.y);
+    let number = |text: &str| text.trim().parse::<f64>().ok().filter(|v| v.is_finite());
+    column.and_then(|c| number(&c.long_name).or_else(|| number(&c.comments))).unwrap_or((member + 1) as f64)
+}
+
 /// True for the plot types that [`Stack::Cumulative`] adds up: lines, scatter and line + symbol.
 fn cumulates(plot: &Plot) -> bool {
     matches!(plot.kind, PlotKind::Line | PlotKind::Scatter | PlotKind::LineSymbol)

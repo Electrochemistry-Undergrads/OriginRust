@@ -64,6 +64,10 @@ pub enum Template {
     /// stacked vertically from the top in selection order, all on one X scale and one set of bins (graphing 13.16).
     /// An empty graph of this template is one histogram layer; [`crate::Project::plot_columns`] builds the panels.
     StackedHistograms,
+    /// Waterfall Y:Color Mapping: a waterfall whose curves are coloured along their points by Y, with a colour scale.
+    WaterfallY,
+    /// Waterfall Z:Color Mapping: a waterfall whose curves are coloured one by one by a Z value, with a colour scale.
+    WaterfallZ,
     /// Box chart (Origin's "Box Chart"): one box per Y column.
     BoxChart,
     /// Bubble plot (Origin's "Bubble"): open circles whose size follows the Z column.
@@ -127,7 +131,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 46] = [
+    pub const ALL: [Template; 48] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -145,6 +149,8 @@ impl Template {
         Template::FillArea,
         Template::Histogram,
         Template::StackedHistograms,
+        Template::WaterfallY,
+        Template::WaterfallZ,
         Template::BoxChart,
         Template::Violin,
         Template::ViolinBox,
@@ -200,6 +206,8 @@ impl Template {
             Template::FillArea => "fill-area",
             Template::Histogram => "histogram",
             Template::StackedHistograms => "stacked-histograms",
+            Template::WaterfallY => "waterfall-y",
+            Template::WaterfallZ => "waterfall-z",
             Template::BoxChart => "box",
             Template::Bubble => "bubble",
             Template::ColorMapped => "color-mapped",
@@ -251,6 +259,8 @@ impl Template {
             Template::FillArea => "Fill Area",
             Template::Histogram => "Histogram",
             Template::StackedHistograms => "Stacked Histograms",
+            Template::WaterfallY => "Waterfall Y:Color Mapping",
+            Template::WaterfallZ => "Waterfall Z:Color Mapping",
             Template::BoxChart => "Box Chart",
             Template::Bubble => "Bubble",
             Template::ColorMapped => "Color Mapped",
@@ -312,6 +322,16 @@ impl Template {
             Template::DoubleY => double_y(id, name),
             Template::StackedLines => stacked_lines(id, name),
             Template::Waterfall => waterfall(id, name),
+            Template::WaterfallY | Template::WaterfallZ => {
+                // The colour scale beside the layer names the colours: no legend.
+                let mut g = waterfall(id, name);
+                for l in &mut g.layers {
+                    l.waterfall_color =
+                        if *self == Template::WaterfallY { WaterfallColor::Y } else { WaterfallColor::Z };
+                    l.legend.visible = false;
+                }
+                g
+            }
             Template::Column => from_red(column(id, name, PlotKind::Column)),
             Template::StackedColumn => themed(column(id, name, PlotKind::StackedColumn)),
             Template::Stacked100Column => themed(column(id, name, PlotKind::Stacked100Column)),
@@ -602,6 +622,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             default_kind: kind,
             link: None,
             stack: Stack::None,
+            waterfall_color: WaterfallColor::None,
             plot_offsets: Vec::new(),
             bars: BarSpacing::default(),
             coords: Coords::Cartesian,
@@ -932,7 +953,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 45);
+        assert_eq!(Template::ALL.len(), 48);
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
         assert_eq!(Template::from_name("violin"), Some(Template::Violin));
         assert_eq!(Template::from_name("violin-box"), Some(Template::ViolinBox));

@@ -833,8 +833,10 @@ fn plot_menu() -> Vec<Entry> {
                 vec![
                     item("&Stacked Lines by Y Offsets", Cmd::Plot(Template::StackedLines)),
                     item("&Waterfall", Cmd::Plot(Template::Waterfall)),
+                    item("Waterfall Y:Color Mapping", Cmd::Plot(Template::WaterfallY)),
+                    item("Waterfall Z:Color Mapping", Cmd::Plot(Template::WaterfallZ)),
                 ],
-                &["Waterfall Y:Color Mapping", "Waterfall Z:Color Mapping", "3D Waterfall"],
+                &["3D Waterfall"],
             ),
         ),
         sub(

@@ -6237,6 +6237,22 @@ fn stacked_histograms_item_makes_one_shared_bin_panel_per_selected_column() {
 }
 
 #[test]
+fn waterfall_colour_mapping_items_make_colour_mapped_waterfalls() {
+    use sheaf_core::graph::WaterfallColor;
+    for (item, want) in
+        [("Waterfall Y:Color Mapping", WaterfallColor::Y), ("Waterfall Z:Color Mapping", WaterfallColor::Z)]
+    {
+        let mut h = start(vec![data_file("wfmap")]);
+        select_b_and_c(&mut h);
+        menu_path(&mut h, &["Plot", "Y-offset/Waterfall", item]);
+        let g = project(&h).graphs().last().unwrap();
+        assert_eq!(g.layers[0].waterfall_color, want, "{item}");
+        assert_eq!(g.layers[0].plots.len(), 2);
+        assert!(matches!(g.layers[0].stack, Stack::Waterfall { .. }));
+    }
+}
+
+#[test]
 fn y_error_plots_a_scatter_with_the_error_bars_of_the_error_column() {
     let mut h = start(vec![data_file("yerr")]);
     let book = project(&h).workbooks().next().unwrap().id;

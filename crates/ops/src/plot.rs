@@ -226,7 +226,12 @@ impl PlotSpec {
         if self.group.is_some() && (self.graph.is_some() || self.panels.is_some()) {
             bail!("--group cannot be combined with --graph or --panels");
         }
-        if !self.y2.is_empty() && self.template.as_deref().and_then(Template::from_name) == Some(Template::Waterfall) {
+        if !self.y2.is_empty()
+            && matches!(
+                self.template.as_deref().and_then(Template::from_name),
+                Some(Template::Waterfall | Template::WaterfallY | Template::WaterfallZ)
+            )
+        {
             bail!("a waterfall cannot have a right Y axis; leave out --y2 or choose another template");
         }
         Ok(())
@@ -1026,7 +1031,15 @@ fn panel_layout(shape: PanelShape, panels: usize, template: Template, p: &Panels
 /// One graph with several panels (`--panels`), graphing spec section 15.6.
 fn panel_graph(project: &mut Project, template: Template, p: &PanelsSpec, a: &PlotSpec) -> Result<WindowId> {
     let shape = parse_panels(&p.shape)?;
-    if matches!(template, Template::DoubleY | Template::Waterfall | Template::Lollipop | Template::StackedHistograms) {
+    if matches!(
+        template,
+        Template::DoubleY
+            | Template::Waterfall
+            | Template::WaterfallY
+            | Template::WaterfallZ
+            | Template::Lollipop
+            | Template::StackedHistograms
+    ) {
         bail!("the {} template cannot be used with --panels; choose another template", template.name());
     }
     let (groups, labels) = panel_groups(project, template, p, a)?;

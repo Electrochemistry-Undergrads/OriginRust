@@ -2213,7 +2213,10 @@ mod tests {
             Ok(o) => o.value,
             Err(e) => panic!("{}", e.message),
         };
-        assert_eq!(out["comparison_plot"]["file"], json!(path.display().to_string()));
+        // canonicalize gives Windows' verbatim form (\\?\C:\...); the tool reports the plain path
+        let shown = path.display().to_string();
+        let shown = shown.strip_prefix(r"\\?\").unwrap_or(&shown);
+        assert_eq!(out["comparison_plot"]["file"], json!(shown));
         assert!(std::fs::read_to_string(&path).unwrap().contains("p &lt; 0.0001"));
         let _ = std::fs::remove_dir_all(dir);
     }

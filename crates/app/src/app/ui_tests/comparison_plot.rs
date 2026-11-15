@@ -20,7 +20,7 @@ fn anova_report(h: &mut Harness<'static, SheafApp>) -> sheaf_core::WindowId {
         .new_sheet
         .unwrap();
     h.state_mut().doc.adjust_view(|p| p.workbook_mut(book).unwrap().active_sheet = sheet);
-    show_window(h, "Title Book1 - sample");
+    show_window(h, "Title Book1 - sample.csv");
     settle(h);
     book
 }
@@ -55,7 +55,7 @@ fn the_report_sheet_offers_the_plot_and_ok_makes_one_graph_in_one_undo_step() {
 fn the_statistics_menu_entry_needs_a_report_sheet() {
     let mut h = start(vec![data_file("comparison-menu")]);
     // On the plain data sheet there is nothing to plot: a message, no dialog.
-    show_window(&mut h, "Title Book1 - sample");
+    show_window(&mut h, "Title Book1 - sample.csv");
     menu_path(&mut h, &["Statistics", "Multiple Comparisons Plot..."]);
     assert!(h.state().status.contains("report sheet"), "{}", h.state().status);
     assert!(h.query_by_label("Plot Type").is_none());

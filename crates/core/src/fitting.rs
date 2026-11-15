@@ -36,7 +36,7 @@ mod surface;
 pub use more::{CompareOutcome, MultiRegOutcome, MultiRegRequest, RankOutcome};
 pub use sheaf_fit::nlsf::Algorithm;
 use sheaf_fit::{Bands, FitError, FitReport};
-pub use surface::{surface_columns, surface_functions};
+pub use surface::{SURFACE_CATEGORY, surface_columns, surface_functions};
 
 /// Which kind of model is fitted. It decides the name of the report sheet
 /// and which engine of `sheaf-fit` runs.

@@ -16,7 +16,7 @@ use sheaf_core::analysis::RowRange;
 use sheaf_core::fitting::Algorithm;
 use sheaf_core::fitting::{
     BandChoice, FitModel, FitOutcome, FitRequest, FitRequestError, FitWeighting, FunctionInfo, MultiFitOutcome,
-    ParamSetting, builtin_functions, model_parameters,
+    ParamSetting, SurfaceColumns, builtin_functions, model_parameters, surface_columns, surface_functions,
 };
 use sheaf_core::{ColumnId, Designation, Document, Project, WindowId};
 use std::path::PathBuf;
@@ -37,6 +37,9 @@ pub enum FitKind {
     Sigmoidal,
     /// Single Peak Fit: NLFit limited to Gauss and Lorentz.
     SinglePeak,
+    /// Analysis > Fitting > Nonlinear Surface Fit: NLFit on an X, a Y and a Z column, starting in
+    /// the category Surface Fitting.
+    Surface,
 }
 
 impl FitKind {
@@ -73,6 +76,7 @@ impl FitKind {
             FitKind::Exponential => "Exponential",
             FitKind::Sigmoidal => "Sigmoidal",
             FitKind::SinglePeak => "Single peak",
+            FitKind::Surface => "Surface",
         }
     }
 
@@ -88,6 +92,7 @@ impl FitKind {
             "exponential" | "exp" => FitKind::Exponential,
             "sigmoidal" => FitKind::Sigmoidal,
             "peak" | "singlepeak" => FitKind::SinglePeak,
+            "surface" => FitKind::Surface,
             _ => return None,
         })
     }
@@ -167,6 +172,12 @@ pub struct FitDialog {
     /// The numeric Y columns of the sheet: id and "B: Current" style label.
     choices: Vec<(ColumnId, String)>,
     y: ColumnId,
+    /// Surface fit: the X and Y columns of `z = f(x, y)` (`y` above is the Z column).
+    x_col: Option<ColumnId>,
+    y2_col: Option<ColumnId>,
+    /// Opened by Analysis > Fitting > Nonlinear Surface Fit: the category stays Surface Fitting
+    /// (Origin greys the Category box there).
+    surface_menu: bool,
     kind: FitKind,
     order: usize,
     functions: Vec<FunctionInfo>,
@@ -249,12 +260,29 @@ impl FitDialog {
         let choices: Vec<(ColumnId, String)> = sheet
             .columns
             .iter()
-            .filter(|c| c.designation == Designation::Y && c.data.is_numeric())
+            .filter(|c| matches!(c.designation, Designation::Y | Designation::Z) && c.data.is_numeric())
             .map(|c| (c.id, format!("{}: {}", c.short_name, c.axis_title())))
             .collect();
+        let y = if kind == FitKind::Surface {
+            y.filter(|id| sheet.column(*id).is_some_and(|c| c.designation == Designation::Z))
+        } else {
+            y
+        };
         let y = match y {
             Some(id) if choices.iter().any(|(c, _)| *c == id) => id,
             Some(_) => return None,
+            None if kind == FitKind::Surface => sheet
+                .columns
+                .iter()
+                .find(|c| c.designation == Designation::Z && c.data.is_numeric())
+                .or_else(|| {
+                    sheet
+                        .columns
+                        .iter()
+                        .rev()
+                        .find(|c| c.designation == Designation::Y && c.data.is_numeric() && !c.fit_result)
+                })
+                .map(|c| c.id)?,
             None => sheet
                 .columns
                 .iter()
@@ -263,10 +291,11 @@ impl FitDialog {
                 .or_else(|| choices.first().map(|c| c.0))?,
         };
         let rows_in_sheet = sheet.row_count().max(1);
-        let functions = builtin_functions();
+        let mut functions = builtin_functions();
+        functions.extend(surface_functions());
         let quick = kind.quick();
-        let kind = if quick.is_some() { FitKind::BuiltIn } else { kind };
-        let wanted = quick.map_or("Gauss", |q| q.2[0]);
+        let wanted = if kind == FitKind::Surface { "Gauss2D" } else { quick.map_or("Gauss", |q| q.2[0]) };
+        let kind = if quick.is_some() || kind == FitKind::Surface { FitKind::BuiltIn } else { kind };
         let function = functions.iter().find(|f| f.name == wanted).or(functions.first()).map(|f| f.name.clone())?;
         let weight_choices: Vec<(ColumnId, String)> = sheet
             .columns
@@ -296,6 +325,9 @@ impl FitDialog {
             book,
             choices,
             y,
+            x_col: None,
+            y2_col: None,
+            surface_menu: kind == FitKind::Surface,
             kind,
             order: 2,
             functions,
@@ -348,6 +380,7 @@ impl FitDialog {
         };
         d.column_changed(project);
         d.refresh_params();
+        d.sync_surface_columns(project, true);
         Some(d)
     }
 
@@ -361,6 +394,7 @@ impl FitDialog {
         if !self.has_error_column && self.weighting == FitWeighting::Instrumental {
             self.weighting = FitWeighting::None;
         }
+        self.sync_surface_columns(project, true);
         let x = sheet.x_for(index).and_then(|c| c.numeric());
         let (lo, hi) = match x {
             Some(v) => v
@@ -377,12 +411,37 @@ impl FitDialog {
         }
     }
 
+    /// Whether the chosen function is a surface function `z = f(x, y)` (category Surface Fitting).
+    fn surface(&self) -> bool {
+        self.kind == FitKind::BuiltIn
+            && self.functions.iter().any(|f| f.name == self.function && f.category == SURFACE_CATEGORY)
+    }
+
+    /// For a surface function, takes the X and Y columns of the Z column from the sheet's
+    /// designations (the X column to its left and the nearest Y column before it) when they are
+    /// not chosen yet or the Z column changed; falls back to the first other numeric columns.
+    fn sync_surface_columns(&mut self, project: &Project, force: bool) {
+        if !self.surface() || (!force && self.x_col.is_some() && self.y2_col.is_some()) {
+            return;
+        }
+        if let Some((x, y)) = surface_columns(project, self.y) {
+            (self.x_col, self.y2_col) = (Some(x), Some(y));
+            return;
+        }
+        let others: Vec<ColumnId> = self.weight_choices.iter().map(|c| c.0).filter(|c| *c != self.y).collect();
+        self.x_col = self.x_col.filter(|c| *c != self.y).or(others.first().copied());
+        self.y2_col = self
+            .y2_col
+            .filter(|c| *c != self.y && Some(*c) != self.x_col)
+            .or(others.iter().copied().find(|c| Some(*c) != self.x_col));
+    }
+
     fn model(&self) -> Option<FitModel> {
         Some(match self.kind {
             FitKind::Linear => FitModel::Linear,
             FitKind::LinearXError => FitModel::LinearXError,
             FitKind::Polynomial => FitModel::Polynomial { order: self.order },
-            FitKind::BuiltIn | FitKind::Exponential | FitKind::Sigmoidal | FitKind::SinglePeak => {
+            FitKind::BuiltIn | FitKind::Exponential | FitKind::Sigmoidal | FitKind::SinglePeak | FitKind::Surface => {
                 FitModel::BuiltIn(self.function.clone())
             }
             FitKind::Formula => FitModel::Formula {
@@ -609,6 +668,11 @@ impl FitDialog {
         r.add_to_graphs = self.plot_on_graph;
         r.update_legend = self.update_legend;
         r.tolerance = 10f64.powi(-(self.tolerance_digits as i32));
+        if self.surface() {
+            r.surface = Some(SurfaceColumns { x: self.x_col, y: self.y2_col });
+            r.bands = BandChoice::None;
+            r.add_to_graphs = false;
+        }
         r.rows = match self.row_mode {
             RowMode::All => RowRange::All,
             RowMode::Rows => RowRange::Rows(self.from, self.to),
@@ -619,7 +683,7 @@ impl FitDialog {
 
     /// Whether the window fits several columns at once.
     fn multi(&self) -> bool {
-        !self.extra.is_empty() && self.iterative_or_global()
+        !self.surface() && !self.extra.is_empty() && self.iterative_or_global()
     }
 
     fn iterative_or_global(&self) -> bool {
@@ -670,7 +734,7 @@ impl FitDialog {
             FitKind::Polynomial => CAT_POLY.to_string(),
             FitKind::Formula => CAT_FORMULA.to_string(),
             FitKind::Fdf => CAT_FDF.to_string(),
-            FitKind::BuiltIn | FitKind::Exponential | FitKind::Sigmoidal | FitKind::SinglePeak => {
+            FitKind::BuiltIn | FitKind::Exponential | FitKind::Sigmoidal | FitKind::SinglePeak | FitKind::Surface => {
                 self.functions.iter().find(|f| f.name == self.function).map(|f| f.category.clone()).unwrap_or_default()
             }
         }
@@ -713,10 +777,13 @@ impl FitDialog {
             FitKind::Linear => "y = Intercept + Slope*x".to_string(),
             FitKind::LinearXError => "y = Intercept + Slope*x  (errors in x and y)".to_string(),
             FitKind::Polynomial => "y = Intercept + B1*x + B2*x^2 + ...".to_string(),
-            FitKind::BuiltIn | FitKind::Exponential | FitKind::Sigmoidal | FitKind::SinglePeak => {
+            FitKind::BuiltIn | FitKind::Exponential | FitKind::Sigmoidal | FitKind::SinglePeak | FitKind::Surface => {
                 match self.functions.iter().find(|f| f.name == self.function) {
                     Some(f) => {
-                        f.formula.as_deref().map_or_else(|| "(computed in code)".to_string(), |s| format!("y = {s}"))
+                        let lhs = if f.category == SURFACE_CATEGORY { "z" } else { "y" };
+                        f.formula
+                            .as_deref()
+                            .map_or_else(|| "(computed in code)".to_string(), |s| format!("{lhs} = {s}"))
                     }
                     None => String::new(),
                 }
@@ -733,7 +800,7 @@ impl FitDialog {
         ui.horizontal(|ui| {
             ui.label("Category");
             let current = self.category();
-            let locked = self.quick.is_some();
+            let locked = self.quick.is_some() || self.surface_menu;
             ui.add_enabled_ui(!locked, |ui| {
                 egui::ComboBox::from_id_salt("fit_category")
                     .selected_text(&current)
@@ -910,8 +977,30 @@ impl FitDialog {
         }
         ui.add_space(4.0);
         ui.strong("Input Data");
+        if self.surface() {
+            let combo = |ui: &mut egui::Ui,
+                         label: &str,
+                         salt: &str,
+                         value: &mut Option<ColumnId>,
+                         list: &[(ColumnId, String)]| {
+                ui.horizontal(|ui| {
+                    ui.label(label);
+                    let text = value
+                        .and_then(|v| list.iter().find(|(c, _)| *c == v))
+                        .map(|(_, l)| l.clone())
+                        .unwrap_or_else(|| "(choose)".to_string());
+                    egui::ComboBox::from_id_salt(salt).selected_text(text).width(300.0).show_ui(ui, |ui| {
+                        for (id, l) in list {
+                            ui.selectable_value(value, Some(*id), l);
+                        }
+                    });
+                });
+            };
+            combo(ui, "X", "fit_surface_x", &mut self.x_col, &self.weight_choices);
+            combo(ui, "Y", "fit_surface_y", &mut self.y2_col, &self.weight_choices);
+        }
         ui.horizontal(|ui| {
-            ui.label("Column");
+            ui.label(if self.surface() { "Z" } else { "Column" });
             let label = self.choices.iter().find(|(c, _)| *c == self.y).map(|(_, l)| l.clone()).unwrap_or_default();
             egui::ComboBox::from_id_salt("fit_column").selected_text(label).width(300.0).show_ui(ui, |ui| {
                 for (id, l) in &self.choices {
@@ -919,8 +1008,11 @@ impl FitDialog {
                 }
             });
         });
-        let others: Vec<(ColumnId, String)> =
-            self.dataset_choices.iter().filter(|(c, _)| *c != self.y).cloned().collect();
+        let others: Vec<(ColumnId, String)> = if self.surface() {
+            Vec::new()
+        } else {
+            self.dataset_choices.iter().filter(|(c, _)| *c != self.y).cloned().collect()
+        };
         if !others.is_empty() {
             ui.horizontal_wrapped(|ui| {
                 ui.label("Also fit");
@@ -973,6 +1065,12 @@ impl FitDialog {
     }
 
     fn fitted_curves_ui(&mut self, ui: &mut egui::Ui) {
+        if self.surface() {
+            ui.strong("Fitted Surface");
+            ui.label("The fitted surface is written to a FitSurfaceCurve sheet (X, Y, Z on a 50 by 50 grid over the data range).");
+            ui.weak("A surface fit has no bands and no curve to draw.");
+            return;
+        }
         ui.strong("Fitted Curves Plot");
         ui.horizontal(|ui| {
             ui.label("Bands");
@@ -1151,6 +1249,14 @@ impl FitDialog {
             self.preview = None;
             return;
         };
+        if key.surface.is_some() {
+            let preview = Preview {
+                error: Some("A surface fit has no curve to preview; Fit writes the fitted surface to a sheet.".into()),
+                ..Preview::default()
+            };
+            self.preview = Some((key, preview));
+            return;
+        }
         let mut r = key.clone();
         r.max_iterations = 0;
         r.curve_points = r.curve_points.min(400);
@@ -1300,7 +1406,12 @@ impl FitDialog {
                             ui.vertical(|ui| {
                                 ui.set_width(150.0);
                                 for page in FitPage::ALL {
-                                    if ui.selectable_label(self.page == page, page.label()).clicked() {
+                                    let label = if page == FitPage::FindXY && self.surface() {
+                                        "Find Z"
+                                    } else {
+                                        page.label()
+                                    };
+                                    if ui.selectable_label(self.page == page, label).clicked() {
                                         self.page = page;
                                     }
                                 }
@@ -1371,6 +1482,7 @@ impl FitDialog {
         if column_changed {
             self.column_changed(doc.project());
         }
+        self.sync_surface_columns(doc.project(), false);
 
         if revert {
             self.revert();
@@ -1415,7 +1527,7 @@ impl FitDialog {
             }
             let result = doc.edit("Fit", |p| -> Result<(FitOutcome, Option<WindowId>), FitRequestError> {
                 let outcome = p.fit(&request)?;
-                let graph = if outcome.graphs.is_empty() {
+                let graph = if outcome.graphs.is_empty() && !outcome.surface {
                     Some(p.plot_fit(&outcome, y).map_err(|e| FitRequestError::BadOption(e.to_string()))?)
                 } else {
                     None
@@ -1502,6 +1614,7 @@ pub(super) fn draw_xy(
     }
 }
 
+const SURFACE_CATEGORY: &str = sheaf_core::fitting::SURFACE_CATEGORY;
 const CAT_LINEAR: &str = "Linear Fit";
 const CAT_LINEAR_X: &str = "Linear Fit with X Error";
 const CAT_POLY: &str = "Polynomial Fit";

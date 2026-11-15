@@ -321,14 +321,7 @@ impl Project {
         );
         let curve_x = sheet_column(self, &mut grid_ws, Designation::X, "FitX", &x_units, ColumnData::numeric(grid_x));
         sheet_column(self, &mut grid_ws, Designation::Y, "FitY", &y_units, ColumnData::numeric(grid_y));
-        let curve_y = sheet_column(
-            self,
-            &mut grid_ws,
-            Designation::Z,
-            "FitZ",
-            &z_units,
-            ColumnData::numeric(grid_z),
-        );
+        let curve_y = sheet_column(self, &mut grid_ws, Designation::Z, "FitZ", &z_units, ColumnData::numeric(grid_z));
         if let Some(c) = grid_ws.column_mut(curve_y) {
             c.comments = report.model.clone();
         }

@@ -43,6 +43,16 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T02 Column Browser row ranges (2026-11-15, Windows, feature `d9b4af7`): the lower Rows
+  control opens Range with Entire Column(s), From and To. Each added range keeps its own
+  bounds, including after removal of a preceding range. Native integer-prefix conversion,
+  reversed/single-row intervals, empty columns and block endpoint references are preserved;
+  Go To still uses the original sheet's column end. Eighteen valid Origin cases and ten new
+  UI regressions cover transfer, validation, reset, Cancel/Escape and keyboard focus. All 39
+  Go To tests pass; formatting, strict workspace all-target Clippy and 3,316 workspace tests
+  pass (eight existing ignored), with MCP teardown/ROC/filters/formula formatting integrated.
+  Exclude and saved preferences remain (gui-look section 5).
+
 - T25 proxy disconnect cleanup (2026-11-15, Windows, feature `ef98bf7`): disposing of the
   active link signals its reader and polls cancellation every 250 ms, releasing its socket
   clone even when shutdown does not wake the receive. Live partial frames survive polls;
@@ -71,7 +81,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   regressions cover eligibility, grouping, reference transfer and original-sheet navigation.
   All 29 Go To tests pass; formatting, strict workspace all-target Clippy and 3,032 tests
   pass (eight existing ignored), with Parallel Plot and Windows MCP privacy integrated.
-  Exclude, lower row-range editing and saved preferences remain (gui-look section 5).
+  Row-range editing is covered by the later follow-up; Exclude and saved preferences remain.
 
 - T25 Windows endpoint acceptance (2026-11-15): inherited profile grants exposed token-file
   read access to other local accounts. The owned runtime folder/lock now have protected DACLs;
@@ -90,7 +100,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   position mapping for other books, and the multiple-range last-column rule. Five UI regressions
   and one folder-scope fixture cover it; all 24 Go To tests pass. Formatting, strict workspace/
   all-target Clippy and 2974 workspace tests pass (eight ignored). Selection/block add is
-  covered by the later follow-up; Exclude, row-range editing and saved preferences remain.
+  covered by later follow-ups; Exclude and saved preferences remain.
 
 - T21 thin-width dashes (2026-11-15, Windows): the shared stroke conversion uses
   verified 0.5/1 pt visible-pattern samples, interpolating into the unchanged normal-width
@@ -219,7 +229,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   choose the first column. Escape closes the flyout before the dialog. Origin 2016 UI
   probes, four new UI regressions and a parser fixture cover these rules. Formatting,
   strict all-target Clippy and 2276 workspace tests pass (three existing ignored). The
-  project-wide Column Browser was added in `c941fb0`; Exclude, row-range editing and saved
+  project-wide Column Browser was added in `c941fb0`; Exclude and saved
   preferences remain (gui-look section 5).
 - T13 Draw Line in Front/Behind (2026-11-15, Windows): the Line + Symbol choice controls
   both plotted curves and legend samples, defaulting to Behind. Gap to Symbol disables the
@@ -336,7 +346,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `codex/formula-worksheet-substitution` | Codex Windows, formula-worksheet-substitution | T08 static worksheet-cell %([Book]Sheet,column,row[,format]) substitution; expr lowering/evaluation, isolated core/IO formula regressions | claimed 2026-11-15; no graph/legend/session/generated-expression substitution, global Options/model fields, UI, MCP, imports, statistics or other owner scopes |
 | `t19-fntrim` | Claude Windows, session fe4b37eb | T19 file-name trimming on ASCII import (Origin's FNameToSht/Bk From/To rules) and the book long name keeping the file extension (owner's decision 2026-11-15); crates/io ascii naming, app import window, cli flags, import-ascii.md, title tests | claimed 2026-11-15 |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
-| `codex/t02-browser-rows` | Codex Windows, t02-browser-rows | T02 Column Browser lower row-range editor: native defaults/validation/Cancel/reference transfer and focused UI tests/docs | claimed 2026-11-15; only go_to/browser and own go_to_browser tests/docs; no Exclude/preferences, original-sheet navigation changes without published refinement, app/MRU/grid/core/history/MCP/plots/stats/fit/formula/labels or other owner work |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `cell-notes` | Claude macOS, "mac-multipdf" | T36 worksheet cell notes (Origin 2022): core per-sheet notes kept through row/column ops and sort, grid corner tab + hover popup, cell menu Add/Edit/Delete Note, note editor | claimed 2026-11-15; core worksheet + sheetops note upkeep, grid.rs body_cell, menus/app/dialogs; no cond-format/frozen/filter/Go To, plot, stats or other sessions' scopes |
 | `slope-annotation` | Claude macOS, "mac-multipdf" | T52 slope annotation (Origin 2026b): layer SlopeAnnotation linked to two data rows, segment + rise/run legs + slope label (per decade on log axes), toolbar Slope tool with point picking, delete/undo, CLI/MCP | claimed 2026-11-15; core graph.rs layer field, new plot module, app toolbar/graph_view tool mode, small dialog; no drawn-shape ordering, Data Reader changes or other sessions' scopes |

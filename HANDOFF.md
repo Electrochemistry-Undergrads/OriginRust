@@ -36,6 +36,16 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T21 thin-width dashes (2026-11-15, Windows): the shared stroke conversion uses
+  verified 0.5/1 pt visible-pattern samples, interpolating into the unchanged normal-width
+  ratios at 1.5 pt. Four regressions cover seven styles at two raster resolutions,
+  data/legend consistency, normal-width/continuity and SVG/EPS/EMF units. The two
+  reviewed goldens, shapes/ternary, change only dash arrays. Origin's rounded caps and
+  backend width rounding remain explicit limits (graphing 2.1). Feature `ebcf467`;
+  separate one-tag theme TEST isolation repair `3d2da51` fixes a reproduced parallel
+  fixture collision without product changes. Formatting, strict workspace all-target
+  Clippy and 2,968 tests pass (eight existing ignored); 20 parallel theme runs pass too.
+
 - T21 stock legend defaults (2026-11-15, Windows): new Line/Scatter/Line+Symbol/Column graphs
   use the measured upper-left anchor (0.8223, -0.1044) of the layer and an opaque white
   background. Twelve verified Origin exports include resize/content cases, reopening the
@@ -247,7 +257,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t21-thin-dashes` | Codex Windows, t21-thin-dashes | T21 thin-width dash lengths: measured 0.5/1 pt visible-pattern samples interpolated to existing 1.5 pt pattern in shared stroke conversion, focused render/vector/raster tests/docs; separate one-tag themes unreadable-file TEST isolation repair | claimed 2026-11-15; no plot-kind dispatch/data/geometry, legend placement/styles, axis/mask or shape geometry/ordering/selection, UI, new model/history API, MCP, stats or other sessions |
 | `codex/t02-column-browser` | Codex Windows, t02-column-browser | T02 Go To Select Columns / Column Browser: Origin scope and Add/Remove measurements, dedicated Go To browser, navigation outcome and focused UI tests/docs | claimed 2026-11-15; only go_to.rs/internal browser module, open_go_to/GoToOutcome and existing navigation calls; no grid/model/Find, MRU/window-switcher implementation, Undo AI/other menus, MCP, formulas/labels, recent-file hooks, graph/axis/shape or statistics changes |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |

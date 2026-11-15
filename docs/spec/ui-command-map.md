@@ -259,7 +259,7 @@ Labels by folder (paraphrased lists of the English labels, P-tags in brackets):
   unmeasured); the others of this folder not named in their own task stay grey.
 - **Signal Processing**: Smooth [P0], FFT Filters, FFT (submenu FFT: FFT, IFFT, 2D FFT, 2D IFFT),
   Convolution, Deconvolution, Correlation, 2D Correlation, Coherence, Decimation, Envelope,
-  Hilbert Transform, IIR Filter, STFT, Wavelet submenu (Decompose, Reconstruction, Denoise,
+  Hilbert Transform, IIR Filter (live, T55; Sheaf adds FIR Filter after it, the FIR app's own menu place unknown), STFT, Wavelet submenu (Decompose, Reconstruction, Denoise,
   Smooth, Continuous Wavelet, Multi-Scale DWT, 2D Decompose/Reconstruction, Wavelet
   Functions). [Smooth P0, rest P1/P2]
 - **Fitting**: Linear Fit, Polynomial Fit, Multiple Linear Regression, Exponential Fit,

@@ -55,12 +55,13 @@ fn output_new_sheet_matches_core_for_hand_mapped_and_bridged_tools() {
         ("differentiate", Tool::Differentiate(analysis::DiffOptions::default())),
         ("median_filter", Tool::MedianFilter(analysis::MedianFilterSpec::default())),
         ("fft_filter", Tool::FftFilter(analysis::FftFilterSpec::default())),
+        ("iir_filter", Tool::IirFilter(analysis::IirSpec::default())),
     ];
     for (name, tool) in cases {
         let dir = Dir::new(name);
         let mut direct = fixture(&dir);
         let book = direct.workbooks().next().unwrap().id;
-        if name == "fft_filter" {
+        if matches!(name, "fft_filter" | "iir_filter") {
             // FFT rejects missing signal values; keep a masked source X column to check preservation.
             let ids: Vec<_> = direct.workbook(book).unwrap().sheets[0].columns.iter().map(|c| c.id).collect();
             direct.column_mut(ids[1]).unwrap().mask.clear();

@@ -25,10 +25,12 @@ pub mod distfit;
 pub mod dunnett;
 pub mod envelope;
 pub mod fft;
+pub mod fir;
 pub mod freq;
 pub mod graph_summary;
 pub mod hexbin;
 pub mod hypothesis;
+pub mod iir;
 pub mod integrate;
 pub mod interp;
 pub mod kde;
@@ -85,9 +87,17 @@ pub use fft::{
     FftFilterOptions, FftFilterType, FftOptions, FftResult, FftWindow, IfftOptions, IfftResult, PowerNorm,
     WindowCorrection, fft_filter, fft_spectrum, fft_window, ifft_spectrum,
 };
+pub use fir::{
+    FirFilter, FirMethod, FirSpec, FirWindow, MAX_FIR_ORDER, MagnitudeUnit, firls, firwin, kaiser_beta, kaiserord,
+    window as fir_window,
+};
 pub use freq::{BinSize, Freq, FreqOptions, FreqRow, auto_bin_range, auto_bin_size, freq_counts};
 pub use graph_summary::{SampleSummary, graph_summary, median_confidence_limits, sd_confidence_limits};
 pub use hypothesis::{SampleStats, TTest, Tail, ttest_one, ttest_paired, ttest_two};
+pub use iir::{
+    FilterError, FilterResponse, FreqUnit, IirFilter, IirMethod, IirSpec, MAX_ORDER as IIR_MAX_ORDER, iir_filter,
+    iir_order, sosfilt, sosfiltfilt,
+};
 pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};
 pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, automatic_smoothing, interp1, interp1xy};
 pub use kde::{Bandwidth, Density, GRID_POINTS, bandwidth, density_at, kernel_density};

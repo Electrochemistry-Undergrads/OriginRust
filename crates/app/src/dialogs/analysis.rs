@@ -64,6 +64,10 @@ pub enum AnalysisKind {
     Ifft,
     /// Signal Processing > FFT Filters (Origin's `fft_filters`).
     FftFilter,
+    /// Signal Processing > IIR Filter (Origin's `dfilter`, OriginPro).
+    IirFilter,
+    /// Signal Processing > FIR Filter (Origin 2027's FIR Filter app).
+    FirFilter,
     /// Signal Processing > Envelope (Origin's `envelope`).
     Envelope,
     /// Signal Processing > Coherence (Origin's `cohere`).
@@ -143,7 +147,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 24] = [
+    pub const ALL: [AnalysisKind; 26] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -160,6 +164,8 @@ impl AnalysisKind {
         AnalysisKind::Fft,
         AnalysisKind::Ifft,
         AnalysisKind::FftFilter,
+        AnalysisKind::IirFilter,
+        AnalysisKind::FirFilter,
         AnalysisKind::Envelope,
         AnalysisKind::Coherence,
         AnalysisKind::Decimate,
@@ -189,6 +195,8 @@ impl AnalysisKind {
             AnalysisKind::Fft => "FFT...",
             AnalysisKind::Ifft => "IFFT...",
             AnalysisKind::FftFilter => "FFT Filters...",
+            AnalysisKind::IirFilter => "IIR Filter...",
+            AnalysisKind::FirFilter => "FIR Filter...",
             AnalysisKind::Envelope => "Envelope...",
             AnalysisKind::Coherence => "Coherence...",
             AnalysisKind::Decimate => "Decimation...",
@@ -264,6 +272,8 @@ impl AnalysisKind {
             "fft" => AnalysisKind::Fft,
             "ifft" => AnalysisKind::Ifft,
             "fft-filter" => AnalysisKind::FftFilter,
+            "iir-filter" => AnalysisKind::IirFilter,
+            "fir-filter" => AnalysisKind::FirFilter,
             "envelope" => AnalysisKind::Envelope,
             "coherence" => AnalysisKind::Coherence,
             "decimate" => AnalysisKind::Decimate,
@@ -726,6 +736,8 @@ pub struct AnalysisDialog {
     fft: FftSpec,
     ifft: IfftSpec,
     fft_filter: FftFilterSpec,
+    /// IIR Filter and FIR Filter (options in `filter_options.rs`).
+    filters: super::filter_options::FilterOptions,
     envelope: EnvelopeSpec,
     /// Coherence: window, lengths, overlap and interval of Origin's `cohere`.
     coherence: CoherenceOptions,
@@ -1185,6 +1197,7 @@ impl AnalysisDialog {
                 options: FftFilterOptions { keep_offset: true, ..Default::default() },
                 interval: None,
             },
+            filters: super::filter_options::FilterOptions::default(),
             envelope: EnvelopeSpec::default(),
             coherence: CoherenceOptions::default(),
             decimate: DecimateSpec::default(),
@@ -1516,6 +1529,8 @@ impl AnalysisDialog {
             AnalysisKind::Hilbert => Tool::Hilbert,
             AnalysisKind::Fft => Tool::Fft(self.fft),
             AnalysisKind::FftFilter => Tool::FftFilter(self.fft_filter),
+            AnalysisKind::IirFilter => self.filters.iir_tool(),
+            AnalysisKind::FirFilter => self.filters.fir_tool(),
             AnalysisKind::Envelope => Tool::Envelope(self.envelope),
             AnalysisKind::Coherence => {
                 let other = self
@@ -1866,7 +1881,7 @@ impl AnalysisDialog {
         );
     }
 
-    fn options(&mut self, ui: &mut egui::Ui) {
+    fn options(&mut self, ui: &mut egui::Ui, filter_fs: Option<f64>) {
         match self.kind {
             AnalysisKind::IntegrateRanges => {
                 let mut remove = None;
@@ -1905,6 +1920,8 @@ impl AnalysisDialog {
             }
             AnalysisKind::Fft => fft_options(ui, &mut self.fft),
             AnalysisKind::FftFilter => fft_filter_options(ui, &mut self.fft_filter),
+            AnalysisKind::IirFilter => super::filter_options::iir_options(ui, &mut self.filters.iir, filter_fs),
+            AnalysisKind::FirFilter => super::filter_options::fir_options(ui, &mut self.filters.fir, filter_fs),
             AnalysisKind::Envelope => envelope_options(ui, &mut self.envelope),
             AnalysisKind::Coherence => {
                 self.reference_options(ui);
@@ -2801,6 +2818,8 @@ impl AnalysisDialog {
             AnalysisKind::Hilbert => "hilbert",
             AnalysisKind::Fft => "fft1",
             AnalysisKind::FftFilter => "fft_filters",
+            AnalysisKind::IirFilter => "dfilter",
+            AnalysisKind::FirFilter => "",
             AnalysisKind::Envelope => "envelope",
             AnalysisKind::Coherence => "cohere",
             AnalysisKind::Decimate => "decimate",
@@ -2882,6 +2901,8 @@ impl AnalysisDialog {
             AnalysisKind::Hilbert => "The Hilbert transform of the input signals",
             AnalysisKind::Fft => "The frequency spectrum of the input signals",
             AnalysisKind::FftFilter => "Remove frequencies from the input signals",
+            AnalysisKind::IirFilter => "Design an IIR filter and apply it to the input signals",
+            AnalysisKind::FirFilter => "Design an FIR filter and apply it to the input signals",
             AnalysisKind::Envelope => "The upper and lower envelope of the input curves",
             AnalysisKind::Coherence => "The magnitude-squared coherence of the input signals with a second signal",
             AnalysisKind::Decimate => "Keep every n-th point of the input signals",
@@ -2958,7 +2979,9 @@ impl AnalysisDialog {
             | AnalysisKind::CurveMath
             | AnalysisKind::ColumnMath
             | AnalysisKind::Hilbert
-            | AnalysisKind::FftFilter => "New columns beside the input",
+            | AnalysisKind::FftFilter
+            | AnalysisKind::IirFilter
+            | AnalysisKind::FirFilter => "New columns beside the input",
             AnalysisKind::Envelope => "The envelopes of each input, each with its X, in a new sheet",
             AnalysisKind::Convolution => "The convolution of each input, with its X, in a new sheet",
             AnalysisKind::Decimate => "The kept points of each input, with their X, in a new sheet",
@@ -3117,6 +3140,8 @@ impl AnalysisDialog {
                 | AnalysisKind::ColumnMath
                 | AnalysisKind::Hilbert
                 | AnalysisKind::FftFilter
+                | AnalysisKind::IirFilter
+                | AnalysisKind::FirFilter
                 | AnalysisKind::SubtractLine
                 | AnalysisKind::TranslateY
                 | AnalysisKind::MedianFilter
@@ -3238,6 +3263,22 @@ impl AnalysisDialog {
                 Err(e.to_string())
             }
         }
+    }
+
+    /// The sample frequency Auto gives the IIR and FIR filters for the first input: 1 / the mean X step (the
+    /// row number is the X without an X column), as the tools take it when they run.
+    fn auto_sample_frequency(&self, project: &Project) -> Option<f64> {
+        if !matches!(self.kind, AnalysisKind::IirFilter | AnalysisKind::FirFilter) {
+            return None;
+        }
+        let (_, sheet, first) = self.columns.first().and_then(|c| project.locate(*c))?;
+        let Some(x) = sheet.column_index(first.id).and_then(|i| sheet.x_for(i)).and_then(|x| x.numeric()) else {
+            return Some(1.0);
+        };
+        let a = x.iter().position(|v| v.is_finite())?;
+        let b = x.iter().rposition(|v| v.is_finite())?;
+        let step = (x[b] - x[a]) / (b.checked_sub(a).filter(|n| *n > 0)? as f64);
+        (step.is_finite() && step > 0.0).then(|| 1.0 / step).or(Some(1.0))
     }
 
     /// The range of the input in Origin's text form: `[Book1]Sheet1!(A"t",B"up")`.
@@ -3393,6 +3434,7 @@ impl AnalysisDialog {
         let width = if with_pane { 800.0 } else { 520.0 };
         let pos = (avail.center() - egui::vec2(width, 520.0) / 2.0).max(avail.min);
         let title = self.window_title();
+        let filter_fs = self.auto_sample_frequency(doc.project());
         egui::Window::new(title)
             .id(egui::Id::new("analysis"))
             .open(&mut open)
@@ -3438,7 +3480,7 @@ impl AnalysisDialog {
                                     tree_node(ui, "analysis_input", "Input", |ui| self.input_node(ui, doc.project()));
                                 }
                                 let title = self.kind.title();
-                                tree_node(ui, "analysis_options", title, |ui| self.options(ui));
+                                tree_node(ui, "analysis_options", title, |ui| self.options(ui, filter_fs));
                                 tree_node(ui, "analysis_output", "Output", |ui| self.output_node(ui));
                             });
                     });
@@ -3720,5 +3762,24 @@ impl FilterDialog {
             }
         }
         if open && !cancel { FilterOutcome::Open } else { FilterOutcome::Closed }
+    }
+}
+
+#[cfg(test)]
+mod filter_fs_tests {
+    use super::*;
+    use sheaf_core::{ColumnData, Designation};
+
+    #[test]
+    fn auto_sample_frequency_is_one_over_the_x_step() {
+        let mut p = Project::new();
+        let book = p.add_workbook("Book1");
+        let x: Vec<f64> = (0..50).map(|i| f64::from(i) * 0.01).collect();
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 50])).unwrap();
+        let d = AnalysisDialog::new(&p, AnalysisKind::IirFilter, vec![y]).unwrap();
+        assert!((d.auto_sample_frequency(&p).unwrap() - 100.0).abs() < 1e-9);
+        let other = AnalysisDialog::new(&p, AnalysisKind::Smooth, vec![y]).unwrap();
+        assert_eq!(other.auto_sample_frequency(&p), None);
     }
 }

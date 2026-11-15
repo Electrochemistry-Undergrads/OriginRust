@@ -417,7 +417,7 @@ How to read the table: Origin groups the folders as Data Exploration, Data Manip
 | corr2 | Signal Processing | System, scripting or housekeeping utility | P2 |
 | decimate | Signal Processing | Lower the sampling rate | P2 |
 | deconv | Signal Processing | Deconvolution | P2 |
-| dfilter | Signal Processing | Design/apply IIR filter | P2 |
+| dfilter | Signal Processing | Design/apply IIR filter (live: IIR Filter window, `analyze iir-filter`; analysis-tools 17.1) | P2 |
 | dfilterapply | Signal Processing | Apply IIR coefficients | P2 |
 | dfilterfcf | Signal Processing | Import/export IIR coefficient files | P2 |
 | envelope | Signal Processing | Upper/lower envelope of a signal | P2 |

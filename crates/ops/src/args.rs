@@ -1117,6 +1117,69 @@ pub enum FftFilterArg {
     Parabolic,
 }
 
+/// Filter response type (Origin's Response Type of the IIR and FIR filters).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FilterTypeArg {
+    LowPass,
+    HighPass,
+    BandPass,
+    BandStop,
+}
+
+/// IIR design method (Origin's Method).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum IirMethodArg {
+    Butterworth,
+    Chebyshev1,
+    Chebyshev2,
+    Elliptic,
+}
+
+/// Unit of the frequency specification.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FreqUnitArg {
+    /// Hz; the sample frequency comes from the X column unless `--fs` is given.
+    Hz,
+    /// 1 is the Nyquist frequency.
+    Normalized,
+}
+
+/// FIR design method (Origin's Method).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FirMethodArg {
+    LeastSquares,
+    Window,
+}
+
+/// FIR window (Origin's list).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FirWindowArg {
+    Bartlett,
+    BartlettHanning,
+    Blackman,
+    BlackmanHarris,
+    Bohman,
+    Chebyshev,
+    FlatTop,
+    Gaussian,
+    Hamming,
+    Hanning,
+    Kaiser,
+    Nuttall,
+    Parzen,
+    Rectangle,
+    Taylor,
+    Triangular,
+    Tukey,
+}
+
+/// Unit of the FIR magnitude specification.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum MagnitudeUnitArg {
+    Db,
+    Linear,
+}
+
 /// Envelope type (Origin's names).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum EnvelopeArg {
@@ -1456,6 +1519,114 @@ pub enum AnalyzeTool {
         /// Sampling interval; by default the X step of the column.
         #[arg(long)]
         interval: Option<f64>,
+    },
+    /// Design an IIR filter and apply it (Origin's Signal Processing > IIR Filter, OriginPro), the
+    /// result beside each column. Frequencies left out take Sheaf's defaults (a quarter of the Nyquist
+    /// frequency; documented, not measured). `--minimum` takes the order from the pass and stop
+    /// frequencies and the ripple and attenuation.
+    #[command(alias = "iir")]
+    IirFilter {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long = "type", value_enum, default_value_t = FilterTypeArg::LowPass)]
+        kind: FilterTypeArg,
+        #[arg(long, value_enum, default_value_t = IirMethodArg::Butterworth)]
+        method: IirMethodArg,
+        /// Filter order.
+        #[arg(long, default_value_t = 10)]
+        order: usize,
+        /// The smallest order that meets the pass and stop frequencies (`--order` is ignored).
+        #[arg(long)]
+        minimum: bool,
+        #[arg(long, value_enum, default_value_t = FreqUnitArg::Hz)]
+        unit: FreqUnitArg,
+        /// Sample frequency in Hz; by default 1 / the X step of the column.
+        #[arg(long)]
+        fs: Option<f64>,
+        /// Cutoff frequency (low and high pass) or the first cutoff (band pass and band stop). Butterworth: the
+        /// -3 dB point; Chebyshev I and elliptic: the passband edge (gain down by --ripple); Chebyshev II: the
+        /// stopband edge (gain down by --attenuation).
+        #[arg(long)]
+        cutoff: Option<f64>,
+        /// The second cutoff of band pass and band stop.
+        #[arg(long)]
+        cutoff2: Option<f64>,
+        /// Minimum order: pass and stop frequencies (the first of two for the band responses).
+        #[arg(long)]
+        pass: Option<f64>,
+        #[arg(long)]
+        pass2: Option<f64>,
+        #[arg(long)]
+        stop: Option<f64>,
+        #[arg(long)]
+        stop2: Option<f64>,
+        /// Passband ripple in dB (Chebyshev I, elliptic, minimum order).
+        #[arg(long, default_value_t = 1.0)]
+        ripple: f64,
+        /// Stopband attenuation in dB (Chebyshev II, elliptic, minimum order).
+        #[arg(long, default_value_t = 80.0)]
+        attenuation: f64,
+        /// Filter forward and backward: zero phase.
+        #[arg(long)]
+        forward_backward: bool,
+    },
+    /// Design an FIR filter and apply it (Origin 2027's FIR Filter app), the result beside each column,
+    /// aligned with the input. The Window method takes `--cutoff` (or the pass and stop frequencies
+    /// with `--minimum`), Least Squares the pass and stop frequencies.
+    #[command(alias = "fir")]
+    FirFilter {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long = "type", value_enum, default_value_t = FilterTypeArg::LowPass)]
+        kind: FilterTypeArg,
+        #[arg(long, value_enum, default_value_t = FirMethodArg::Window)]
+        method: FirMethodArg,
+        /// Filter order (one less than the number of coefficients); high pass and band stop need an even one.
+        #[arg(long, default_value_t = 20)]
+        order: usize,
+        /// Window method: the order from the Kaiser formula for the pass and stop frequencies.
+        #[arg(long)]
+        minimum: bool,
+        #[arg(long, value_enum, default_value_t = FirWindowArg::Hamming)]
+        window: FirWindowArg,
+        /// Parameter of the Chebyshev, Gaussian, Kaiser, Taylor and Tukey windows.
+        #[arg(long)]
+        window_param: Option<f64>,
+        /// Do not scale the passband centre to gain 1.
+        #[arg(long)]
+        no_scale: bool,
+        #[arg(long, value_enum, default_value_t = FreqUnitArg::Hz)]
+        unit: FreqUnitArg,
+        /// Sample frequency in Hz; by default 1 / the X step of the column.
+        #[arg(long)]
+        fs: Option<f64>,
+        #[arg(long)]
+        cutoff: Option<f64>,
+        #[arg(long)]
+        cutoff2: Option<f64>,
+        #[arg(long)]
+        pass: Option<f64>,
+        #[arg(long)]
+        pass2: Option<f64>,
+        #[arg(long)]
+        stop: Option<f64>,
+        #[arg(long)]
+        stop2: Option<f64>,
+        /// Least Squares weights of the passbands and the stopbands.
+        #[arg(long, default_value_t = 1.0)]
+        pass_weight: f64,
+        #[arg(long, default_value_t = 1.0)]
+        stop_weight: f64,
+        /// Unit of `--ripple` and `--attenuation` (minimum order).
+        #[arg(long, value_enum, default_value_t = MagnitudeUnitArg::Db)]
+        magnitude_unit: MagnitudeUnitArg,
+        #[arg(long, default_value_t = 1.0)]
+        ripple: f64,
+        #[arg(long, default_value_t = 60.0)]
+        attenuation: f64,
+        /// Filter forward and backward: zero phase.
+        #[arg(long)]
+        forward_backward: bool,
     },
     /// The upper and/or lower envelope of each column (Origin's Signal Processing > Envelope): the
     /// natural cubic spline through the extreme points, each envelope with its X in a new sheet.

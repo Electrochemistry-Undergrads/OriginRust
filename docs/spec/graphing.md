@@ -567,6 +567,18 @@ Ctrl+J copies page (OLE), Ctrl+Alt+J copy as image, Ctrl+C copies as image by de
 
 Sheaf (Edit > Copy Page, Ctrl+J, `copy_page` in `crates/app/src/app.rs`): size factor 40 % (`COPY_PAGE_SIZE_FACTOR`), margin Auto (= Border, see 9.2), 300 dpi bitmap. On Windows the bitmap (`CF_DIB`) and an enhanced metafile of the same picture (`CF_ENHMETAFILE`, from the EMF writer, same size factor and margin) go on the clipboard in one session (`crates/app/src/winclip.rs`, through the `clipboard-win` crate that eframe's clipboard already brings, plus two Win32 calls). Not done: the WMF (`AddWMFInCopyPage`), the OLE object of Ctrl+J, and "copy as image" variants. Where the metafile cannot be put (not Windows, clipboard busy) the picture goes alone through egui's image copy.
 
+
+### 9.7 Multi-page PDF (T32)
+Origin 2018b added an "Option to export multiple graphs as a single multi-page PDF file" [W:originlab.com/2018b]. It is the `multipage` variable of `expGraph` (int, default `0`): set, the graph pages chosen by `export` go "to one PDF file with multi-pages" [W:x-function/ref/expgraph]. File names index in the order of the Graph Page list.
+
+Not measured (no Origin on the macOS machine; measure on Windows with `tools/origin-ref/`): the dialog label and place of the check box, the name of the combined file, whether pages keep each graph's size or share one paper size, page order, whether `tr`/`tr1` settings apply to every page.
+
+Sheaf (`sheaf_plot::render_multipage_pdf`, `crates/plot/src/multipage.rs`):
+- One page per graph, in the order given (project order for "all graphs"). Each page is the one-page PDF export of that graph with the same size and margin settings (9.2, 9.3): its media box is the exported area, vector, text kept as text. svg2pdf converts each page to its own chunk (`to_chunk`), placed as a form XObject filling the page; fonts are embedded once per page.
+- Paper variant (`render_print_multipage_pdf`, `sheaf print`): each sheet placed by Page Setup as in 19.4, one sheet per graph.
+- Export Graphs dialog: with PDF and more than one graph, the check box "Export as multi-page PDF file" (Sheaf's label), off by default as Origin's `multipage`. One file, named from the file-name template of the first graph; the overwrite rule applies to it.
+- CLI: repeated `--graph NAME` or `--all-graphs` on `sheaf export` (output must be `.pdf` for several graphs) and `sheaf print` (`--output` writes one paper-sized PDF; submission to `lp` sends one job per graph). MCP: `export_graph` with `graphs` or `all_graphs` (docs/spec/mcp.md).
+
 ---
 
 ## 10. Themes and templates
@@ -2269,6 +2281,44 @@ Speed mode and X:Y ratio of Size/Speed, attach-to,
 automatic overlap avoidance and leader lines of Label, the other fill modes and
 Origin's list of fill patterns, subgrouping By Column Label, Binned increments, several groups in one layer,
 writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).
+
+### 18.8 Lollipop plot (T33)
+
+Origin's documented facts (from its help, not measured; [W:origin-help/lollipop-plot],
+[W:origin-help/pd-dialog-dropline-tab]):
+
+- Plot > Basic 2D : Lollipop Plot (template `Lollipop.OTPU`, Origin 2021). It needs two or more Y
+  columns (or a range spanning two); X comes from the associated X column, else the row number or
+  sampling interval.
+- It is a variation of the vertical drop-line scatter with X and Y exchanged, with drop lines set to
+  "Next Data Plot": each plot's drop line goes to the next plot at the same X, one by one, and the
+  last Y connects back to the first.
+- Plot Details > Drop Lines tab: "Drop To" offers "Next Data Plot" (selected by default for Lollipop
+  in the Vertical group). The colour list has "Auto" (the symbol colour) and "Y Value: Plus-Minus"
+  (only for Lollipop), which colours drop lines by the sign of the Y value.
+
+Sheaf's own choices, all unmeasured (no Origin at hand):
+
+- `Template::Lollipop` ("lollipop" on the command line and in MCP, menu Plot > Symbol > Lollipop
+  Plot): scatter with the standard scatter symbol and size, vertical drop lines on, Drop To = Next
+  Data Plot. Fewer than two Y columns are refused in `Project::plot_columns` (menu message, CLI and
+  MCP error "a lollipop plot needs two or more Y columns"). `--panels` and `--y2` refuse it (a lollipop has no right Y axis; the app and MCP refuse it too).
+- Exchange X-Y: each plot's X and Y columns and the layer's two axes trade places (as Graph > Exchange
+  X-Y Axes does), so the drop lines run sideways along the value axis. Plots without an X column
+  (row number) cannot be exchanged in the model; they stay upright. Each plot keeps its Y column's
+  name in the legend; the axis titles follow the traded columns (the first plot's name on the value axis).
+- Drop To has two settings, Axis (default, the older behaviour) and Next Data Plot, one per group
+  (Horizontal, Vertical); both groups use the same segment rule when set to Next Data Plot.
+- Next Data Plot: plot k draws from each of its points to the point of plot k+1 of the layer at the same
+  row; the last plot draws back to the first. With exactly two plots only the first draws (no segment twice);
+  one plot draws none. A row where either end is missing, NaN, masked or outside the axis range gives no segment.
+- "Y Value: Plus-Minus": two fixed colours, blue (0, 114, 178) for zero and above and vermilion (213, 94, 0)
+  for negative, per segment, only when the colour is Auto. For a drop to the axis the sign is that of the plotted Y;
+  for a drop to the next plot it is the sign of the start point's value along the direction the segment runs
+  (the horizontal value in an exchanged lollipop). The list offers it when Drop To is Next Data Plot or it is set.
+- Stroke width and style are the Drop Lines defaults (0.5 pt, solid). `.opj` cannot hold either new setting; a save
+  warning names them and the `.opj.sheaf` companion keeps them. Files without the new fields load as Axis / Auto and
+  are written back without them.
 
 ## 19. Printing (File > Print, Print Preview, Page Setup; T27)
 

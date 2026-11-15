@@ -146,7 +146,7 @@ the default project format.
         Set Column Values layout and controls (T09); Column Properties formats and ASCII import
         options in Origin's layout (T19 items 1 and 3)
   - [x] Export Graphs layout, preview, filename substitution, Apply and image settings (T05);
-        worksheet export dialog (T07)
+        worksheet export dialog (T07); several graphs in one multi-page PDF (T32)
   - [x] Window/worksheet commands and shortcuts (T01/T02): multi-panel and Y-error plotting,
         Add Error Bars, legend update, Refresh/recalculation, Go to and Explorer rename/delete
   - [x] Edit > Find in Sheets (Ctrl+F), Replace (Ctrl+H), Worksheet > Clear Worksheet,
@@ -195,7 +195,7 @@ the default project format.
   - [x] The Integrate gadget on graphs (Gadgets > Integrate): drag a range, see the shaded area
         and its value live, write it to a sheet; same rows and rule as Analysis > Integrate
   - [x] Peak analysis chain: baseline, find peaks (four methods, filters), integrate each peak,
-        multi-peak Gauss or Lorentz fit (Analysis > Analyze Peaks, `sheaf analyze peaks`); the
+        multi-peak Gauss, Lorentz or Voigt fit (Analysis > Analyze Peaks, `sheaf analyze peaks`); the
         limit rules and the multi-peak fit are not yet compared with Origin's Peak Analyzer
   - [x] Curve mathematics (T22, `734a1ff`): Average Multiple Curves (X-grid/range and interpolation
         choices, optional SD/count), Intersect and Polygon Area; app dialogs, CLI and Manual/Auto

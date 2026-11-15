@@ -98,6 +98,7 @@ pub(crate) fn read_settings(r: &ReadOptions) -> ReadSettings {
         blocks_as_sheets: r.blocks_as_sheets,
         sheets: r.sheets.clone(),
         hidden_sheets: r.hidden_sheets,
+        skip_hidden_sheets: r.skip_hidden_sheets,
     }
 }
 
@@ -283,8 +284,8 @@ fn is_opj(path: &Path) -> bool {
 
 /// Writes the whole project (or the data file as a one-workbook project) as an Origin project.
 fn export_opj(a: &ExportArgs) -> Result<()> {
-    if a.graph.is_some() {
-        bail!("--graph is for figures; an .opj output holds the whole project");
+    if !a.graph.is_empty() || a.all_graphs {
+        bail!("--graph and --all-graphs are for figures; an .opj output holds the whole project");
     }
     if let (Ok(input), Ok(output)) = (std::fs::canonicalize(&a.project), std::fs::canonicalize(&a.output))
         && input == output
@@ -329,8 +330,8 @@ fn write_xlsx(project: &Project, book: Option<&str>, sheet: Option<&str>, x: &Xl
 
 /// Writes one workbook of the project (or the data file as a one-workbook project) as `.xlsx`.
 fn export_xlsx(a: &ExportArgs) -> Result<()> {
-    if a.graph.is_some() {
-        bail!("--graph is for figures; an .xlsx output holds a workbook (see --book and --sheet)");
+    if !a.graph.is_empty() || a.all_graphs {
+        bail!("--graph and --all-graphs are for figures; an .xlsx output holds a workbook (see --book and --sheet)");
     }
     if let (Ok(input), Ok(output)) = (std::fs::canonicalize(&a.project), std::fs::canonicalize(&a.output))
         && input == output
@@ -352,13 +353,17 @@ fn print(a: PrintArgs) -> Result<()> {
         bail!("'{}' is not a project; print needs a .sheaf, .opj or .opju project with a graph", a.project.display());
     }
     let project = load_project(&a.project)?;
-    let graph = sheaf_ops::pick::pick_graph(&project, a.graph.as_deref())?;
-    let pdf = sheaf_plot::render_print_pdf(&project, graph)?;
+    let graphs = pick_graphs(&project, &a.graph, a.all_graphs)?;
     if let Some(path) = &a.output {
         use std::io::Write;
-        if !path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pdf")) {
+        if !is_pdf(path) {
             bail!("the print output must have a .pdf extension");
         }
+        // One graph keeps the one-page writer; several give one sheet each, in order.
+        let pdf = match graphs.as_slice() {
+            [graph] => sheaf_plot::render_print_pdf(&project, *graph)?,
+            _ => sheaf_plot::render_print_multipage_pdf(&project, &graphs)?,
+        };
         if sheaf_ops::session::same_file(&a.project, path) {
             bail!("the PDF output cannot overwrite the input project");
         }
@@ -371,9 +376,34 @@ fn print(a: PrintArgs) -> Result<()> {
         temp.persist(path).map_err(|e| anyhow::anyhow!("cannot write '{}': {}", path.display(), e.error))?;
         println!("wrote {}", path.display());
     } else {
-        submit_print(&pdf, &project, graph, a.printer.as_deref())?;
+        // One print job per graph, each with its own paper orientation (Sheaf's choice). Every
+        // graph is rendered first so a render error submits nothing.
+        let pdfs = graphs.iter().map(|&g| sheaf_plot::render_print_pdf(&project, g)).collect::<Result<Vec<_>, _>>()?;
+        for (pdf, &graph) in pdfs.iter().zip(&graphs) {
+            submit_print(pdf, &project, graph, a.printer.as_deref())?;
+        }
     }
     Ok(())
+}
+
+fn is_pdf(path: &Path) -> bool {
+    path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pdf"))
+}
+
+/// The graphs named by `--graph` (repeatable, in the order given, repeats kept) or every graph
+/// in project order with `--all-graphs`; with neither, the only graph of the project.
+fn pick_graphs(project: &Project, names: &[String], all: bool) -> Result<Vec<WindowId>> {
+    if all {
+        let graphs: Vec<WindowId> = project.graphs().map(|g| g.id).collect();
+        if graphs.is_empty() {
+            bail!("the project has no graph");
+        }
+        return Ok(graphs);
+    }
+    if names.is_empty() {
+        return Ok(vec![sheaf_ops::pick::pick_graph(project, None)?]);
+    }
+    names.iter().map(|n| sheaf_ops::pick::pick_graph(project, Some(n))).collect()
 }
 
 #[cfg(not(windows))]
@@ -445,13 +475,43 @@ fn export(a: ExportArgs) -> Result<()> {
             a.project.display()
         );
     }
+    if a.graph.len() > 1 && !is_pdf(&a.output) {
+        bail!(multipage_needs_pdf(a.graph.len(), &a.output));
+    }
     let mut project = load_project(&a.project)?;
-    let graph: WindowId = sheaf_ops::pick::pick_graph(&project, a.graph.as_deref())?;
-    sheaf_ops::plot::apply_style(&mut project, graph, &style_spec(&a.style), false)?;
+    let graphs = pick_graphs(&project, &a.graph, a.all_graphs)?;
+    if graphs.len() > 1 && !is_pdf(&a.output) {
+        bail!(multipage_needs_pdf(graphs.len(), &a.output));
+    }
+    let style = style_spec(&a.style);
+    let mut styled: Vec<WindowId> = Vec::new();
+    for &graph in &graphs {
+        // A graph named twice is styled once, so --label and --draw are not added twice.
+        if !styled.contains(&graph) {
+            sheaf_ops::plot::apply_style(&mut project, graph, &style, false)?;
+            styled.push(graph);
+        }
+    }
     let settings = export_settings(a.dpi, &a.image_width, &a.image_height, &a.margin);
-    sheaf_ops::render::write_graph(&project, graph, &a.output, &settings)?;
-    println!("wrote {}", a.output.display());
+    match graphs.as_slice() {
+        [graph] => {
+            sheaf_ops::render::write_graph(&project, *graph, &a.output, &settings)?;
+            println!("wrote {}", a.output.display());
+        }
+        _ => {
+            sheaf_ops::render::write_graphs_pdf(&project, &graphs, &a.output, &settings)?;
+            println!("wrote {} ({} pages)", a.output.display(), graphs.len());
+        }
+    }
     Ok(())
+}
+
+/// The refusal for several graphs with an output that cannot hold pages.
+fn multipage_needs_pdf(count: usize, output: &Path) -> String {
+    format!(
+        "{count} graphs go into one multi-page PDF, but '{}' is not a .pdf file; use a .pdf output (for example out.pdf) or export one --graph at a time",
+        output.display()
+    )
 }
 
 fn export_data(a: ExportDataArgs) -> Result<()> {

@@ -78,10 +78,13 @@ pub struct ReadSettings {
     pub no_rename_sheet: bool,
     pub no_rename_book: bool,
     pub blocks_as_sheets: bool,
-    /// Excel: the sheets to read, as names or 1-based positions (empty: every visible sheet).
+    /// Excel: the sheets to read, as names or 1-based positions (empty: every sheet).
     pub sheets: Vec<String>,
-    /// Excel: also read hidden sheets when `sheets` is empty.
+    /// Excel: read hidden sheets when `sheets` is empty (also the default, unless
+    /// `skip_hidden_sheets` is set).
     pub hidden_sheets: bool,
+    /// Excel: leave hidden sheets out when `sheets` is empty and `hidden_sheets` is off.
+    pub skip_hidden_sheets: bool,
 }
 
 impl Default for ReadSettings {
@@ -122,6 +125,7 @@ impl Default for ReadSettings {
             blocks_as_sheets: false,
             sheets: Vec::new(),
             hidden_sheets: false,
+            skip_hidden_sheets: false,
         }
     }
 }
@@ -213,7 +217,7 @@ impl ReadSettings {
         let r = self;
         let mut o = ExcelOptions {
             sheets: r.sheets.iter().map(|s| SheetRef::parse(s)).collect(),
-            include_hidden: r.hidden_sheets,
+            include_hidden: r.hidden_sheets || !r.skip_hidden_sheets,
             ..ExcelOptions::default()
         };
         o.header_lines = r.header_lines;

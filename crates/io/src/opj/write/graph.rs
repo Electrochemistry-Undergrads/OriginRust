@@ -382,6 +382,13 @@ impl Writer {
                         .into(),
                 );
             }
+            let drops = &p.decor.drop;
+            if [&drops.horizontal, &drops.vertical].iter().any(|d| {
+                d.on && (d.target != sheaf_core::graph::DropTarget::Axis
+                    || d.color_mode != sheaf_core::graph::DropColorMode::Auto)
+            }) {
+                notes.push("drop lines to the next data plot and the Y Value: Plus-Minus colour (lollipop plots) were not written; the companion file keeps them".into());
+            }
             let place = places[plot_index];
             plots.push(Resolved { plot: p, y, x, err, place });
         }

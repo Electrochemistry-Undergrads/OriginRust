@@ -47,15 +47,33 @@ pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
+pub use multivariate::{KmeansSpec, PcaSpec};
+pub use roc::RocSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
+pub use survival::KaplanMeierSpec;
 
-/// The multi-peak fit of [`PeakChainSpec`]: a sum of `shape` peaks on `baseline`, one peak for
-/// every peak the search found, started at the found centre, width and height.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// The multi-peak fit of [`PeakChainSpec`]: a sum of peaks on `baseline`, one peak for every peak
+/// the search found, started at the found centre, width and height. Peak `k` (0-based) has the
+/// shape `shapes[k]`; peaks beyond the list have the shape `shape`.
+#[derive(Debug, Clone, PartialEq)]
 pub struct PeakFitSpec {
     pub shape: PeakShape,
     pub baseline: FitBaseline,
+    /// A function per peak, in the order found (empty: every peak is `shape`).
+    pub shapes: Vec<PeakShape>,
+}
+
+impl PeakFitSpec {
+    /// Every peak of one shape.
+    pub fn of(shape: PeakShape, baseline: FitBaseline) -> PeakFitSpec {
+        PeakFitSpec { shape, baseline, shapes: Vec::new() }
+    }
+
+    /// The shape of each of `n` peaks.
+    pub fn shapes_for(&self, n: usize) -> Vec<PeakShape> {
+        (0..n).map(|k| self.shapes.get(k).copied().unwrap_or(self.shape)).collect()
+    }
 }
 
 /// What [`Tool::PeakChain`] does: baseline, peak search, per-peak integration and (optionally)
@@ -339,6 +357,84 @@ pub struct TTestSpec {
 impl Default for TTestSpec {
     fn default() -> Self {
         TTestSpec { kind: TTestKind::OneSample { mean: 0.0 }, tail: Tail::Two, alpha: 0.05 }
+    }
+}
+
+/// Which test of variance [`VarTestSpec`] runs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VarTestKind {
+    /// Each chosen column is tested on its own against a hypothesized variance (chi-square test).
+    OneSample { variance: f64 },
+    /// Exactly two chosen columns; the ratio of their variances (first over second) against `ratio` (F test).
+    TwoSample { ratio: f64 },
+}
+
+/// What [`Tool::VarTest`] does (Origin's One-Sample and Two-Sample Test for Variance).
+#[derive(Debug, Clone, PartialEq)]
+pub struct VarTestSpec {
+    pub kind: VarTestKind,
+    pub tail: Tail,
+    /// Significance level, 0 to 1 (default 0.05).
+    pub alpha: f64,
+    /// Report the confidence intervals of `levels` (Origin's "Confidence Interval(s)", off by default).
+    pub intervals: bool,
+    /// Confidence levels in percent (Origin's default "90 95 99").
+    pub levels: Vec<f64>,
+}
+
+impl Default for VarTestSpec {
+    fn default() -> Self {
+        VarTestSpec {
+            kind: VarTestKind::OneSample { variance: 1.0 },
+            tail: Tail::Two,
+            alpha: 0.05,
+            intervals: false,
+            levels: vec![90.0, 95.0, 99.0],
+        }
+    }
+}
+
+/// Which test of proportions [`PropTestSpec`] runs. The counts are typed in (Origin's "Summarized" input).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PropTestKind {
+    /// `successes` of `size` against the proportion `proportion`.
+    OneSample { successes: u64, size: u64, proportion: f64 },
+    /// `(successes, size)` of each sample; the difference of the proportions (first minus second) against
+    /// `difference`.
+    TwoSample { first: (u64, u64), second: (u64, u64), difference: f64 },
+}
+
+/// What [`Tool::PropTest`] does (Origin's One-Sample and Two-Sample Proportion Test). It reads no data: the
+/// chosen column only says which workbook the result sheet goes to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropTestSpec {
+    pub kind: PropTestKind,
+    pub tail: Tail,
+    pub alpha: f64,
+    /// Report confidence intervals of `levels` percent.
+    pub intervals: bool,
+    pub levels: Vec<f64>,
+    /// Normal approximation (default on).
+    pub normal: bool,
+    /// Exact (binomial; Fisher for two samples) test (default off).
+    pub exact: bool,
+    /// Two samples: the standard error of the z statistic from the pooled proportion (when the hypothesized
+    /// difference is 0).
+    pub pooled: bool,
+}
+
+impl Default for PropTestSpec {
+    fn default() -> Self {
+        PropTestSpec {
+            kind: PropTestKind::OneSample { successes: 0, size: 0, proportion: 0.5 },
+            tail: Tail::Two,
+            alpha: 0.05,
+            intervals: false,
+            levels: vec![90.0, 95.0, 99.0],
+            normal: true,
+            exact: false,
+            pooled: true,
+        }
     }
 }
 
@@ -724,6 +820,8 @@ pub enum Tool {
     PeakChain(PeakChainSpec),
     Statistics(StatisticsSpec),
     TTest(TTestSpec),
+    VarTest(VarTestSpec),
+    PropTest(PropTestSpec),
     Anova(AnovaSpec),
     Histogram(HistogramSpec),
     /// Statistics > Descriptive Statistics > 2D Frequency Counts/Binning (Origin's `twoDBinning`): the
@@ -750,6 +848,15 @@ pub enum Tool {
     DistFit(DistFitSpec),
     /// Probability plot and Q-Q plot against a distribution family; makes a graph.
     ProbPlot(ProbPlotSpec),
+    /// Statistics > Multivariate Analysis > Principal Component Analysis (T29, `docs/spec/statistics.md` section 17).
+    Pca(PcaSpec),
+    /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (T29, `docs/spec/statistics.md` section 18).
+    Kmeans(KmeansSpec),
+    /// Statistics > ROC Curve (T29, `docs/spec/statistics.md` section 19): test variables, then the state column.
+    Roc(RocSpec),
+    /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
+    /// censor and, optionally, group columns.
+    KaplanMeier(KaplanMeierSpec),
     AverageCurves(AverageSpec),
     Intersect(IntersectSpec),
     PolygonArea,
@@ -819,11 +926,23 @@ impl Tool {
             Tool::Friedman(_) => "Friedman ANOVA",
             Tool::Grubbs(_) => "Grubbs test",
             Tool::Dixon(_) => "Dixon's Q test",
+            Tool::VarTest(spec) => match spec.kind {
+                VarTestKind::OneSample { .. } => "One-sample test for variance",
+                VarTestKind::TwoSample { .. } => "Two-sample test for variance",
+            },
+            Tool::PropTest(spec) => match spec.kind {
+                PropTestKind::OneSample { .. } => "One-sample proportion test",
+                PropTestKind::TwoSample { .. } => "Two-sample proportion test",
+            },
             Tool::DistFit(_) => "Distribution fit",
             Tool::ProbPlot(spec) => match spec.kind {
                 ProbPlotKind::Probability => "Probability plot",
                 ProbPlotKind::QQ => "Q-Q plot",
             },
+            Tool::Pca(_) => "Principal component analysis",
+            Tool::Kmeans(_) => "K-means cluster analysis",
+            Tool::Roc(_) => "ROC curve",
+            Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::AverageCurves(_) => "Average multiple curves",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "Polygon area",
@@ -853,6 +972,8 @@ impl Tool {
             Tool::PeakChain(_) => "PeakAnalysis",
             Tool::Statistics(_) => "Statistics",
             Tool::TTest(_) => "TTest",
+            Tool::VarTest(_) => "VarTest",
+            Tool::PropTest(_) => "PropTest",
             Tool::Anova(_) => "ANOVA",
             Tool::Histogram(_) => "Histogram",
             Tool::Binning2D(_) => "Binning2D",
@@ -875,6 +996,10 @@ impl Tool {
                 ProbPlotKind::Probability => "ProbPlot",
                 ProbPlotKind::QQ => "QQPlot",
             },
+            Tool::Pca(_) => "PCA",
+            Tool::Kmeans(_) => "KMeans",
+            Tool::Roc(_) => "ROC",
+            Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::AverageCurves(_) => "AverageResult",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "PolygonArea",
@@ -1345,7 +1470,7 @@ fn run_peak_chain(
         }
         // The multi-peak fit, started at the found peaks.
         let mut fitted_peaks: Vec<[f64; 5]> = Vec::new();
-        if let Some(fs) = spec.fit {
+        if let Some(fs) = &spec.fit {
             let n = xs.len();
             let (y0, m) = match (fs.baseline, &spec.chain.baseline) {
                 (_, ChainBaseline::None) => {
@@ -1375,8 +1500,9 @@ fn run_peak_chain(
                     height: ys[p.index] - (y0 + m * p.center),
                 })
                 .collect();
+            let shapes = fs.shapes_for(starts.len());
             let mut func =
-                sheaf_fit::multipeak::multi_peak_function(fs.shape, fs.baseline, &starts).with_initial("y0", y0);
+                sheaf_fit::multipeak::multi_peak_function_of(&shapes, fs.baseline, &starts).with_initial("y0", y0);
             if fs.baseline == FitBaseline::Linear {
                 func = func.with_initial("m", m);
             }
@@ -1385,10 +1511,11 @@ fn run_peak_chain(
             })?;
             let get = |name: String| report.param(&name).map_or(f64::NAN, |p| p.value);
             let mut total = 0.0;
-            for k in 1..=starts.len() {
-                let (xc, w, a) = (get(format!("xc{k}")), get(format!("w{k}")), get(format!("A{k}")));
-                total += a;
-                fitted_peaks.push([xc, fs.shape.height(w, a), fs.shape.fwhm(w), a, 0.0]);
+            for (k, shape) in shapes.iter().enumerate() {
+                let p: Vec<f64> = shape.param_names(k + 1).into_iter().map(get).collect();
+                let peak = shape.summary(&p);
+                total += peak.area;
+                fitted_peaks.push([peak.center, peak.height, peak.fwhm, peak.area, 0.0]);
             }
             for p in fitted_peaks.iter_mut() {
                 p[4] = if total != 0.0 { 100.0 * p[3] / total } else { f64::NAN };
@@ -1396,7 +1523,7 @@ fn run_peak_chain(
             notes.push(format!(
                 "{}: {} fit of {} peaks, R^2 = {:.6}, reduced chi-square = {:.6e}, {} iterations{}",
                 inp.label,
-                fs.shape.name(),
+                sheaf_fit::multipeak::shapes_name(&shapes, "+"),
                 starts.len(),
                 report.stats.r_squared,
                 report.stats.reduced_chi_sqr,
@@ -1407,7 +1534,12 @@ fn run_peak_chain(
                 after: inp.id,
                 long_name: format!("Peak fit of {}", inp.name),
                 units: inp.units.clone(),
-                comments: format!("{} multi-peak fit of {}{}", fs.shape.name(), inp.short, inp.range_note()),
+                comments: format!(
+                    "{} multi-peak fit of {}{}",
+                    sheaf_fit::multipeak::shapes_name(&shapes, "+"),
+                    inp.short,
+                    inp.range_note()
+                ),
                 data: inp.aligned(&report.fitted),
             });
         }
@@ -1434,8 +1566,11 @@ mod categorical;
 mod curves;
 mod dist;
 mod manip;
+mod multivariate;
 mod power;
+mod roc;
 mod statistics;
+mod survival;
 pub use manip::{
     MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
 };
@@ -1526,7 +1661,15 @@ impl Project {
 
         let mut inputs = Vec::with_capacity(request.columns.len());
         // The two-way ANOVA reads its columns itself: the factor columns may hold text.
-        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_) | Tool::Crosstab(_) | Tool::DiscreteFrequency(_));
+        let own_columns = matches!(
+            request.tool,
+            Tool::TwoWayAnova(_)
+                | Tool::Crosstab(_)
+                | Tool::DiscreteFrequency(_)
+                | Tool::PropTest(_)
+                | Tool::Roc(_)
+                | Tool::KaplanMeier(_)
+        );
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
                 if self.column(*id).is_some() {
@@ -1589,7 +1732,14 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
             }
+            Tool::PropTest(spec) => {
+                let out = statistics::prop_test(spec)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
             Tool::TTest(_)
+            | Tool::VarTest(_)
             | Tool::Anova(_)
             | Tool::Histogram(_)
             | Tool::Binning2D(_)
@@ -1612,6 +1762,27 @@ impl Project {
             }
             Tool::DistFit(_) | Tool::ProbPlot(_) => {
                 let out = dist::run(&request.tool, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::Roc(spec) => {
+                let out = roc::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::KaplanMeier(spec) => {
+                let out = survival::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::Pca(_) | Tool::Kmeans(_) => {
+                let out = multivariate::run(&request.tool, &inputs)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;
@@ -3883,7 +4054,7 @@ mod tests {
     #[test]
     fn peak_chain_fit_reports_each_peak() {
         let (mut p, _, y) = two_peaks();
-        let fit = PeakFitSpec { shape: PeakShape::Gauss, baseline: FitBaseline::Linear };
+        let fit = PeakFitSpec::of(PeakShape::Gauss, FitBaseline::Linear);
         let r = p.analyze(&request(&[y], chain(true, Some(fit)))).unwrap();
         let t = r.table.unwrap();
         let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
@@ -3895,6 +4066,42 @@ mod tests {
         assert!((t.rows[0].1[h("Fit area %")] + t.rows[1].1[h("Fit area %")] - 100.0).abs() < 1e-9);
         assert_eq!(r.notes.len(), 1);
         assert!(r.notes[0].contains("R^2"));
+    }
+
+    #[test]
+    fn peak_chain_voigt_fit_of_gauss_peaks_gives_their_center_width_and_area() {
+        // Gaussian peaks: the Voigt's Lorentzian width goes to its bound 0 and the Voigt FWHM
+        // (0.5346 wL + sqrt(0.2166 wL^2 + wG^2)) is the Gaussian one.
+        let (mut p, _, y) = two_peaks();
+        let fit = PeakFitSpec::of(PeakShape::Voigt, FitBaseline::Linear);
+        let r = p.analyze(&request(&[y], chain(true, Some(fit)))).unwrap();
+        let t = r.table.unwrap();
+        let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
+        assert!((t.rows[0].1[h("Fit center")] - 6.0).abs() < 1e-4);
+        assert!((t.rows[1].1[h("Fit center")] - 13.0).abs() < 1e-4);
+        assert!((t.rows[0].1[h("Fit FWHM")] - 0.4 * 2.354_820).abs() < 1e-3, "{}", t.rows[0].1[h("Fit FWHM")]);
+        let exact = 0.4 * (2.0 * std::f64::consts::PI).sqrt();
+        assert!((t.rows[0].1[h("Fit area")] - exact).abs() < 1e-3);
+        assert!((t.rows[0].1[h("Fit height")] - 1.0).abs() < 1e-3, "{}", t.rows[0].1[h("Fit height")]);
+        assert!(r.notes[0].contains("Voigt fit of 2 peaks"), "{}", r.notes[0]);
+    }
+
+    #[test]
+    fn peak_chain_fit_takes_a_function_per_peak() {
+        // Peak 1 Gauss, peak 2 (beyond the list) the spec's Voigt: the note and the parameters
+        // follow each peak's function, and both Gaussian peaks keep their centre and area.
+        let (mut p, _, y) = two_peaks();
+        let fit =
+            PeakFitSpec { shape: PeakShape::Voigt, baseline: FitBaseline::Linear, shapes: vec![PeakShape::Gauss] };
+        assert_eq!(fit.shapes_for(3), [PeakShape::Gauss, PeakShape::Voigt, PeakShape::Voigt]);
+        let r = p.analyze(&request(&[y], chain(true, Some(fit)))).unwrap();
+        let t = r.table.unwrap();
+        let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
+        assert!(r.notes[0].contains("Gauss+Voigt fit of 2 peaks"), "{}", r.notes[0]);
+        assert!((t.rows[0].1[h("Fit center")] - 6.0).abs() < 1e-4);
+        assert!((t.rows[1].1[h("Fit center")] - 13.0).abs() < 1e-4);
+        let exact = 0.6 * 0.5 * (2.0 * std::f64::consts::PI).sqrt();
+        assert!((t.rows[1].1[h("Fit area")] - exact).abs() < 1e-3, "{}", t.rows[1].1[h("Fit area")]);
     }
 
     #[test]
@@ -3936,7 +4143,7 @@ mod tests {
                 ..ChainOptions::default()
             },
             integrate: true,
-            fit: Some(PeakFitSpec { shape: PeakShape::Gauss, baseline: FitBaseline::Linear }),
+            fit: Some(PeakFitSpec::of(PeakShape::Gauss, FitBaseline::Linear)),
         });
         let t = p.analyze(&request(&[y], end.clone())).unwrap().table.unwrap();
         assert_eq!(t.rows.len(), 2);

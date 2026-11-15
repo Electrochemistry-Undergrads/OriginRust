@@ -109,6 +109,12 @@ pub enum Cmd {
     RowFilterDialog,
     ToggleRowFilter,
     ReapplyRowFilter,
+    /// View > Freeze/Unfreeze Panes.
+    FreezePanes,
+    /// Worksheet > Conditional Formatting > Highlight Min Max / Highlight Top Bottom.
+    CondFormat(crate::dialogs::cond_format::CondKind),
+    /// Worksheet > Conditional Formatting > Remove Conditional Format.
+    RemoveCondFormat,
     /// Insert rows or columns at the selection (Edit > Insert and the cell menus).
     InsertCells,
     /// Delete the selected rows or columns (Edit > Delete and the cell menus).
@@ -621,7 +627,11 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
     v.push(keyed("Messages Log", alt(Key::Num6), Cmd::Panel(PanelId::Messages)));
     v.push(grey_keyed("Smart Hint Log", alt(Key::Num7)));
     match kind {
-        WindowKind::Workbook => v.extend(greys(&["-", "Actively Update Plots", "Page Break Preview Lines"])),
+        WindowKind::Workbook => {
+            v.push(sep());
+            v.push(keyed("&Freeze/Unfreeze Panes", ctrl_shift(Key::F), Cmd::FreezePanes));
+            v.extend(greys(&["Actively Update Plots", "Page Break Preview Lines"]));
+        }
         WindowKind::Graph => {
             v.push(sep());
             v.push(grey_keyed("Print View", ctrl(Key::Num2)));
@@ -673,6 +683,7 @@ fn plot_menu() -> Vec<Entry> {
                 vec![item("&Scatter", Cmd::Plot(Template::Scatter)), grey("Scatter Central"), grey("Column Scatter")],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
                 greys(&["Vertical Drop Line"]),
+                vec![item("Lollipop Plot", Cmd::Plot(Template::Lollipop))],
                 vec![
                     item("Bubble", Cmd::Plot(Template::Bubble)),
                     item("Color Mapped", Cmd::Plot(Template::ColorMapped)),
@@ -889,6 +900,26 @@ fn mask_menu(grey_items: &[&str]) -> Entry {
     sub("Mask", entries)
 }
 
+/// Worksheet > Conditional Formatting (also in the right-click menu of selected cells). The other
+/// items of Origin's submenu are greyed.
+fn cond_format_menu() -> Entry {
+    use crate::dialogs::cond_format::CondKind;
+    let mut entries = vec![
+        item("Highlight Min Max...", Cmd::CondFormat(CondKind::MinMax)),
+        item("Highlight Top Bottom...", Cmd::CondFormat(CondKind::TopBottom)),
+    ];
+    entries.extend(greys(&[
+        "Conditional Highlight...",
+        "Conditional Heatmap...",
+        "Conditional Pareto...",
+        "Conditional Outliers...",
+        "-",
+    ]));
+    entries.push(item("Remove Conditional Format", Cmd::RemoveCondFormat));
+    entries.push(grey("Conditional Format Manager..."));
+    sub("Conditional Formatting", entries)
+}
+
 fn filter_menu() -> Entry {
     sub(
         "Filter",
@@ -934,6 +965,7 @@ fn worksheet_menu() -> Vec<Entry> {
         ),
         item("Sort Columns by Label...", Cmd::SortByLabel),
         sep(),
+        cond_format_menu(),
         item("Clear Worksheet...", Cmd::ClearWorksheet),
         item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
         grey("Pivot Table..."),
@@ -1092,8 +1124,13 @@ fn statistics_menu() -> Vec<Entry> {
             "&Hypothesis Testing",
             vec![
                 item("One-Sample t-Test...", Cmd::Analyze(AnalysisKind::TTest)),
+                item("Pair-Sample t-Test...", Cmd::Analyze(AnalysisKind::TTest)),
                 item("Two-Sample t-Test...", Cmd::Analyze(AnalysisKind::TTest)),
-                item("Paired Sample t-Test...", Cmd::Analyze(AnalysisKind::TTest)),
+                item("One-Sample Test for Variance...", Cmd::Analyze(AnalysisKind::VarTestOne)),
+                item("Two-Sample Test for Variance...", Cmd::Analyze(AnalysisKind::VarTestTwo)),
+                sep(),
+                item("One-Sample Proportion Test...", Cmd::Analyze(AnalysisKind::PropTestOne)),
+                item("Two-Sample Proportion Test...", Cmd::Analyze(AnalysisKind::PropTestTwo)),
             ],
         ),
         sub(
@@ -1118,8 +1155,14 @@ fn statistics_menu() -> Vec<Entry> {
                 item("Paired Sample Sign Test...", Cmd::Analyze(AnalysisKind::SignTest)),
             ],
         ),
-        grey_sub("&Survival Analysis", &["Kaplan-Meier Estimator..."]),
-        grey_sub("&Multivariate Analysis", &["Principal Component Analysis...", "K-Means Cluster Analysis..."]),
+        sub("&Survival Analysis", vec![item("Kaplan-Meier Estimator...", Cmd::Analyze(AnalysisKind::KaplanMeier))]),
+        sub(
+            "&Multivariate Analysis",
+            vec![
+                item("Principal Component Analysis...", Cmd::Analyze(AnalysisKind::Pca)),
+                item("K-Means Cluster Analysis...", Cmd::Analyze(AnalysisKind::Kmeans)),
+            ],
+        ),
         sub(
             "&Power and Sample Size",
             vec![
@@ -1130,7 +1173,7 @@ fn statistics_menu() -> Vec<Entry> {
             ],
         ),
         sep(),
-        grey("&ROC Curve..."),
+        item("&ROC Curve...", Cmd::Analyze(AnalysisKind::Roc)),
         sep(),
         grey("Most Recently Used Items"),
     ]
@@ -1484,6 +1527,7 @@ pub fn cell_menu() -> Vec<Entry> {
         "Format Cells...",
     ]));
     v.push(mask_menu(&[]));
+    v.push(cond_format_menu());
     v.push(grey_sub("Set Data Style", &["Default"]));
     v
 }
@@ -2006,6 +2050,15 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::RowFilterDialog => Action::RowFilterDialog { book: book?, column: c.selected.first().copied() },
         Cmd::ToggleRowFilter => Action::ToggleRowFilter(book?),
         Cmd::ReapplyRowFilter => Action::ReapplyRowFilter(book?),
+        Cmd::FreezePanes => Action::FreezePanes(book?),
+        Cmd::CondFormat(kind) => {
+            c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            Action::CondFormatDialog { book: book?, kind: *kind }
+        }
+        Cmd::RemoveCondFormat => {
+            c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            Action::RemoveCondFormat(book?)
+        }
         // On a graph the tools take the active data plot, as Origin's Analysis menu does; the
         // results go to its workbook (ADR 0005), and a fit draws its curve on the graph (ADR 0006).
         Cmd::Analyze(kind) => match (c.book, c.curve) {

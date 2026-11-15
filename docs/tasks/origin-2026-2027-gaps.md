@@ -20,12 +20,12 @@ outputs or UI behavior.
 | Cell formulas and Formula Bar | 2019 / 2021 | Calculate individual cells and edit their expressions in a formula bar, alongside column-wide calculations. | [2019][o19] · [2021][o21] |
 | Named cells and ranges | 2022 | Assign a reusable name to a cell or selected range and reference it in calculations. | [2022][o22] |
 | Cell notes | 2022 | Attach a comment to an individual data cell, show an indicator and read the note in place. | [2022][o22] |
-| Worksheet frozen panes | 2023 | Keep selected data rows or columns visible while scrolling the data area. | [2023][o23] |
+| Worksheet frozen panes | 2023 | Done (T34). Keep selected data rows or columns visible while scrolling the data area. | [2023][o23] |
 | Time Series Pivot | 2025 | Aggregate timestamped records by calendar intervals and a second period grouping, including fiscal calendars and custom intervals. | [2025][o25] |
 | Project Browser | 2025b | Search a project-wide list of sheets, columns, graphs and folders, preview matches and apply metadata edits to multiple selections. | [2025b][o25b] |
 | Window Switcher | 2025b | Cycle through open child windows with keyboard shortcuts and previews. | [2025b][o25b] |
 | Interactive formula references | 2025b | Insert a cell, column or range into the formula being edited by clicking or dragging in the sheet. | [2025b][o25b] |
-| Conditional highlight of extrema | 2025b | Mark the minimum or maximum within each row or each column as its values change. | [2025b][o25b] |
+| Conditional highlight of extrema | 2025b | Done (T35). Mark the minimum or maximum within each row or each column as its values change. | [2025b][o25b] |
 | Flash Fill and Smart Formula | 2026 | Infer a text extraction or combination rule from an example. Preview it and either fill static values or keep a calculation that updates. | [2026][o26] |
 | Find in Project Files | 2026 / 2026b | Search a collection of saved projects for text in metadata, graph labels, notes and data cells, then open the matching project. | [2026][o26] · [2026b][o26b] |
 | Repeat Last Action and Duplicate Operation | 2026 | Repeat the last plotting action on another selection, reopen the last tool dialog and apply a configured analysis to other sheets. | [2026][o26] |
@@ -38,7 +38,7 @@ outputs or UI behavior.
 
 | Feature | Release | Functionality to add | Source |
 |---|---|---|---|
-| Multi-page PDF figure export | 2018b | Select several graphs and export them as separate pages in one PDF. | [2018b][o18b] |
+| Multi-page PDF figure export | 2018b | Done (T32): select several graphs and export them as separate pages in one PDF. | [2018b][o18b] |
 | Data Connectors and periodic refresh | 2019b / 2026 | Keep a linked source and its selected data subset in the workbook. Reload the link on a configurable, pausable timer and optionally keep linked data out of the saved project. | [2019b][o19b] · [2026][o26] |
 | Linked HTML/Markdown analysis reports | 2019b | Build a report embedding live links to result values, metadata and figures. Reuse the report with batch analysis and export it as a web page. | [2019b][o19b] |
 | Import PDF Tables | 2021 App | Extract table cells from a PDF into worksheets. | [2021][o21] |
@@ -54,7 +54,7 @@ outputs or UI behavior.
 | Rug plot | 2019b | Add a mark along an axis for each observation to reveal its distribution. | [2019b][o19b] |
 | Sankey and alluvial diagrams | 2020 | Show quantities as flows whose widths reflect their values, including transitions between categories across stages. | [2020][o20] |
 | Browser Graph | 2020b / 2024 | Browse similarly structured datasets inside a graph and switch the displayed series, including datasets on different sheets. | [2020b][browser] · [2024][o24] |
-| Chord and lollipop plots | 2021 | Draw relationships as chords between categories. Draw values as stems ending in markers. | [2021][o21] |
+| Chord and lollipop plots | 2021 | Lollipop done (T33). Draw relationships as chords between categories. Draw values as stems ending in markers. | [2021][o21] |
 | Network and grouped marginal plots | 2021b | Draw connections among nodes. Pair grouped scatter data with distributions along the margins. | [2021b][o21b] |
 | Sunburst and ridgeline plots | 2022 | Draw a hierarchy as concentric rings or compare distributions as vertically offset density curves. | [2022][o22] |
 | Plot-only X sorting | 2023 | Sort points by X for line connections while preserving worksheet row order. | [2023][o23] |

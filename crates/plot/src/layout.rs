@@ -591,9 +591,16 @@ fn layer_scene(
     let drawn: &[PlotData] = if layer.display.show_data { pds } else { &[] };
     match waterfall {
         None => {
-            for pd in drawn {
+            for (k, pd) in drawn.iter().enumerate() {
+                // Drop To = Next Data Plot: the next plot, the first after the last; with two
+                // plots only the first draws the segments (the last would repeat them).
+                let next = match drawn.len() {
+                    0 | 1 => None,
+                    2 if k == 1 => None,
+                    n => Some(&drawn[(k + 1) % n]),
+                };
                 let start = scene.plots.len();
-                draw_plot(&mut scene.plots, pd, geom, m);
+                draw_plot(&mut scene.plots, pd, geom, next, m);
                 let kind = ObjectKind::Plot(plot_index(pd));
                 hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
             }
@@ -606,7 +613,7 @@ fn layer_scene(
                 moved.frame.x += k * sx * geom.frame.w;
                 moved.frame.y -= k * sy * geom.frame.h;
                 let start = scene.plots.len();
-                draw_plot(&mut scene.plots, pd, &moved, m);
+                draw_plot(&mut scene.plots, pd, &moved, None, m);
                 let kind = ObjectKind::Plot(plot_index(pd));
                 hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
             }

@@ -105,7 +105,9 @@ acts like the next odd number (observed for 6 with averaging and Savitzky-Golay)
   `m p / 100` is a whole number (unknown which one Origin uses).
 * Boundary `none`: averaging and percentile shrink the window symmetrically (the first and last point
   stay as they are); Savitzky-Golay fits the first (or last) full window and evaluates it at the edge
-  point. `reflect`: mirror including the end point (`y[-1] = y[0]`). `repeat`: the end value.
+  point. `reflect`: mirror including the end point (`y[-1] = y[0]`), except for the percentile
+  filter, which mirrors without the first point at the start (`y[-1] = y[1]`) and with the last point
+  at the end (`y[n] = y[n-1]`; measured at 50 %, 12.3). `repeat`: the end value.
   `periodic`: wrap around. `extrapolate`: the straight line through the two end points. For the
   padded modes the window is full everywhere. All observed.
 * FFT filter (`method:=fft`; `npts` is not a window length but sets the cutoff). All rules were
@@ -495,10 +497,11 @@ Steps, in order:
    not sorted" and changes nothing. The area of a positive peak is positive whichever way X runs
    (Origin's `integ1` gives a negative area for falling X, section 1; the table here follows the
    fit columns instead, so the two sets of columns have one sign).
-5. Multi-peak fit (own model, Origin's functions): a sum of Gauss or Lorentz peaks plus a constant or
-   sloped baseline, parameters `y0`, `m`, then `xc`, `w`, `A` per peak, in Origin's parameterisation
-   (Gauss `A/(w sqrt(pi/2)) exp(-2((x-xc)/w)^2)`, FWHM `w sqrt(ln 4)`; Lorentz
-   `2A/pi * w/(4(x-xc)^2+w^2)`, FWHM `w`). Starting values come from the found peaks (centre, FWHM,
+5. Multi-peak fit (own model, Origin's functions): a sum of Gauss, Lorentz or Voigt peaks plus a
+   constant or sloped baseline, parameters `y0`, `m`, then `xc`, `w`, `A` per peak (Voigt: `xc`, `A`,
+   `wG`, `wL`, Origin's order), in Origin's parameterisation (Gauss `A/(w sqrt(pi/2))
+   exp(-2((x-xc)/w)^2)`, FWHM `w sqrt(ln 4)`; Lorentz `2A/pi * w/(4(x-xc)^2+w^2)`, FWHM `w`; Voigt
+   section 11.2). Starting values come from the found peaks (centre, FWHM,
    height above the baseline), with widths bounded to stay positive. The fit uses the nonlinear engine
    of `crates/fit`. The report has centre, height, FWHM, area and area percent per peak, plus a line of
    R squared, reduced chi-square and iterations. The fit uses the data, not the corrected curve, so
@@ -528,7 +531,8 @@ other than the request's range.
 
 Command line: `sheaf analyze peaks FILE [--method local-max|window|first-derivative|second-derivative]
 [--smooth N] [--min-width W] [--baseline none|end-points|minima|anchors] [--baseline-points N]
-[--anchors X1:Y1,X2:Y2] [--limits baseline|half-height] [--integrate] [--fit gauss|lorentz]
+[--anchors X1:Y1,X2:Y2] [--limits baseline|half-height] [--integrate] [--fit gauss|lorentz|voigt]
+[--fit-shapes F1,F2,...]
 [--fit-baseline constant|linear]`, together with the existing `--points`, `--min-height`, `--count`,
 `--direction`. Without any chain option the plain peak finder of section 7 runs. Window: Analysis >
 Analyze Peaks... (command line `--show analysis:peak-chain`).
@@ -594,7 +598,44 @@ Center, Row, Height and FWHM match Origin to 1e-9 on the data above, Area % foll
 and the limit between two peaks (the valley, 6.8) matches; the outer limits do not (Sheaf integrates to
 where the corrected curve meets the baseline or the end of the data: 0 and 20 here, Origin 0.3 and 14.15).
 
-## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1)
+### 11.2 Voigt peaks (measured 2026-11-15)
+
+The Fit Peaks page (`sheaf analyze peaks --fit voigt`) offers Origin's `Voigt` besides Gauss and
+Lorentz: a Gauss of FWHM `wG` convolved with a Lorentz of FWHM `wL`, area `A`. Sheaf evaluates it
+exactly through the Faddeeva function (`sheaf_fit::library::voigt`; scipy's `wofz` gives the same
+digits). Origin's function record (`VOIGT5.FDF`, `docs/spec/data/fit-functions.json`) gives the
+parameter order `y0 xc A wG wL` and the derived FWHM `0.5346 wL + sqrt(0.2166 wL^2 + wG^2)`, which
+Sheaf reports as the peak's FWHM; the height is the value at the centre. A peak starts at the found
+centre with `wG = wL` (as Origin's initialisation, which gave `wG = wL = 1.421` on the probe below)
+chosen so that the start has the found FWHM and height; `wL` is bounded below by 0 (a Gauss) and `wG`
+by 1e-4 of its start.
+
+Measured in Origin 2016 (`re-workspace/scratch/t04v/v1` and `v2`, `tools/origin-ref/run-labtalk-lines.ps1`):
+
+- `nlf_Voigt` is a numerical approximation: at six points (0.2 + Voigt(xc 5, A 4, wG 1.2, wL 0.8) at x
+  = 0, 2, 4.5, 5; a nearly Lorentzian and a nearly Gaussian peak) it differs from the exact value by at
+  most 1.7e-6 of the peak height (2.042942100 against 2.042945314 at the centre).
+- `nlbegin func:=Voigt; nlfit` on 201 points made by `nlf_Voigt` plus a fixed ripple (x = 0 to 10,
+  kept as `crates/fit/tests/data/origin_voigt_probe.tsv`) gave y0 0.199772863732606, xc
+  4.99999967995525, A 4.00225088185448, wG 1.19892425718239, wL 0.801615491802901, reduced
+  chi-square 7.8673486183435684e-05 in 8 iterations. Sheaf's multi-peak fit of the same points with
+  one Voigt peak agrees to 6e-6 relative (xc to 2.3e-9) and the reduced chi-square to 2e-7, the size of
+  the difference between Origin's approximate and Sheaf's exact function. The standard errors of xc
+  and A are 3.4e-4 and 5.3e-3 relative apart (Origin's derivatives of its approximate function would
+  explain it; not measured further). Test: `crates/fit/tests/multipeak_voigt.rs`.
+
+**A function per peak** (Sheaf's own layout; Origin's Fit Control window, where the Pro version sets a
+function per peak, was not opened): the Fit Peaks page's "Function per peak" list (Add Peak Function,
+one entry per peak in the order found, "Same as above" or Gauss, Lorentz, Voigt) and
+`sheaf analyze peaks --fit F --fit-shapes F1,F2,...` give peak *k* its own function; peaks beyond the
+list take the Function (`--fit`). Each peak keeps its own parameters (`xc1 w1 A1 xc2 A2 wG2 wL2` for a
+Gauss and a Voigt), the note names them in order ("Gauss+Voigt fit of 2 peaks") and the fitted
+column's comment says the same. `--fit-shapes` needs `--fit`.
+
+Not done: constraints between peaks, and Origin's own Peak Analyzer Fit Peaks (Pro) page, which was
+not opened (11.1).
+
+## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1 to 12.3)
 
 Analysis > Data Manipulation has Subtract Straight Line, Reduce Duplicate X Data (12.1), Reduce to Evenly Spaced X and Curve
 Translate X; Analysis > Mathematics has Median Filter. Nothing in this section was run in Origin:
@@ -633,10 +674,10 @@ link mechanism):
   (Sheaf's own item, next to X): adds a constant to Y, or shifts so that the curve's value at X = `at`
   (between data points by straight lines) becomes `to`; the result is a new Y column behind each
   input named "<name> shifted". A point outside the X range is refused.
-- Median Filter: the window has an odd number of points (at least 1; the default is 5), centred on
-  each point. Edge choices: shrink (default), repeat the end value, reflect including the end point.
-  Even windows are refused. The result is a new Y column behind each input named "Median filtered
-  <name>".
+- Median Filter: Origin's percentile filter at 50 % (12.3). The window has `2 (npts / 2) + 1`
+  points (an even `npts` acts like the next odd one; at least 1; the default is 5), centred on each
+  point. Edge choices: shrink (default), repeat the end value, reflect as Origin's percentile filter.
+  The result is a new Y column behind each input named "Median filtered <name>".
 
 Not measured (to be measured in Origin; nothing here may be quoted as Origin's behaviour):
 
@@ -654,9 +695,8 @@ Not measured (to be measured in Origin; nothing here may be quoted as Origin's b
 4. Curve Translate: whether Origin moves data in place or writes a copy, how its "move a point to
    a value" mode reads a Y at an X between data points, and whether it works on the graph
    interactively. Curve Translate Y is not an Origin item as far as we know; its numbers are Sheaf's.
-5. Median Filter: whether Origin's window must be odd, what an even window does, its boundary
-   rule at the ends (we assume the percentile filter's), the handling of missing values (we assume
-   the smoothing rule), and the default window size.
+5. Median Filter: measured, see 12.3 (missing values follow the smoothing rule measured in
+   section 3; the default window of 5 is Sheaf's, Origin has no median item for curves).
 6. The Recalculate behaviour of these items in Origin (which of None, Manual, Auto they offer),
    the long names, units and comments of the output columns, and the row-range handling.
 
@@ -724,6 +764,28 @@ Command line: `sheaf analyze subtract-line FILE --y B --x1 X --x2 X [--y1 V] [--
 `sheaf analyze reduce-x` (12.2), `sheaf analyze translate FILE --y B [--axis x|y] (--by D | --at X --to V)`
 and `sheaf analyze median-filter FILE --y B [--points N] [--edge shrink|repeat|reflect]`. Windows:
 `--show analysis:subtract-line`, `reduce-x`, `translate-x`, `translate-y`, `median-filter`.
+
+### 12.3 Median Filter (measured in Origin)
+
+Origin 2016 has no median filter for curves; its median of a curve is Smooth's percentile filter at
+50 % (`smooth method:=pf percent:=50`). Measured on 2026-11-15 with
+`tools/origin-ref/run-labtalk-lines.ps1` (`re-workspace/scratch/t23m/m1`): 40 points with ties and
+outliers, windows 1, 4, 5, 7 and 8, boundaries none, reflect and repeat; the sheet is
+`crates/calc/tests/fixtures/origin_median.tsv`.
+
+- An even `npts` acts like the next odd one: 4 gives the result of 5, 8 that of 9 (as section 3 found
+  for averaging). `npts:=1` returns the data.
+- `none`: the window shrinks symmetrically at the ends, so the first and last point keep their value.
+- `repeat`: the end value fills the window.
+- `reflect` is not symmetric: before the start the data are mirrored without the first point
+  (`y[-1] = y[1]`, `y[-2] = y[2]`), past the end with the last point repeated (`y[n] = y[n-1]`). The
+  second row of the probe tells the two rules apart at the start (the mirror with `y[-1] = y[0]` gives
+  7.8108 where Origin gives 7.0353) and the next-to-last row at the end. Sheaf's Smooth followed the
+  symmetric rule for the percentile filter too, and was corrected; its averaging and Savitzky-Golay
+  reflection, measured in section 3, is unchanged.
+
+Sheaf's Median Filter (`calc::median_filter`) and Smooth's percentile filter reproduce all eight
+Origin columns exactly (a median is one of the values): `crates/calc/tests/origin_median.rs`.
 
 ## 13. Convolution and Correlation (`conv`, `corr1`)
 

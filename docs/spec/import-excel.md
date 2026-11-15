@@ -1,10 +1,12 @@
 # Excel import and export (xls, xlsx, xlsm)
 
-Status: first implementation (task T30, 2026-11-14), written on a machine without Origin. **Nothing
-in this file about Origin's Excel behaviour has been measured.** Source tags: **[W]** public OriginLab
-documentation, paraphrased; **[S]** a choice made by Sheaf, Origin unmeasured; **[?]** unknown, to be
-measured on the Windows machine (section 10). Where the brief says "measure", Sheaf uses the text
-import's defaults ([`import-ascii.md`](import-ascii.md), sections 3, 9, 10 and 13) and says so here.
+Status: implemented (task T30, 2026-11-14, macOS); Origin's import measured on Windows on 2026-11-14
+and 2026-11-15 (section 2). Source tags: **[F]** measured in Origin 2016 (black-box runs of the
+`impExcel` X-Function through `tools/origin-ref/run-labtalk-lines.ps1`; probe files, scripts and
+outputs named in each entry are kept in `re-workspace/scratch/t30/`, local only); **[W]** public
+OriginLab documentation, paraphrased; **[S]** a choice made by Sheaf; **[?]** not measured (section
+10). Where Origin was not measured, Sheaf uses the text import's defaults
+([`import-ascii.md`](import-ascii.md), sections 3, 9, 10 and 13) and says so here.
 
 Decisions on libraries are in [ADR 0012](../adr/0012-excel-import-export.md).
 
@@ -25,37 +27,102 @@ Decisions on libraries are in [ADR 0012](../adr/0012-excel-import-export.md).
   `sheaf_io::import_file_with_excel` and `sheaf_io::batch::import_batch_with_excel` carry the options
   through the existing import and batch entry points.
 
-## 2. Origin facts (unmeasured) [W]
+## 2. What Origin does (measured) [F]
 
-From Origin's public documentation, paraphrased; none of it checked against a running Origin:
+Recent Origin versions import Excel through a data connector [W]; Origin 2016, the version on the
+measuring machine, has the `impExcel` X-Function, which File > Import > Excel runs. The probes are
+synthetic workbooks written by Python `openpyxl` (generators `gen.py`, `genfix.py` and `gen9.py`),
+imported with `impExcel` one Origin at a time; each script is `p<n>.lines.txt` with its output
+`p<n>.out.txt`. The probes p1 to p8 were run by session 5a83f9b6 on 2026-11-14 for its own Excel
+branch (`excel-io`, not merged; `main` took the macOS implementation), p9 and p10 on 2026-11-15.
 
-- File > Import > Excel uses the Excel data connector in recent versions; older versions and scripts
-  use the `impExcel` X-Function.
-- One book per Excel file, one sheet per Excel sheet. All sheets by default, or a chosen set.
-- Header lines are chosen as main header and subheader rows, which map to Long Name, Units and
-  Comments, as in the text import.
-- A formula cell imports its cached value (the value Excel stored with it).
-- A date cell becomes a Date column.
-- A partial import selects rows and columns.
-- Export to Excel is `expXLS` or the connector's save.
+The X-Function lists these variables (name, default): `excel` (use the Excel COM component, 1),
+`cellfmts` (import cell formats, 1), `emptycols` (0), `excludeempty` (exclude empty sheets, 1),
+`mainheader` (0), `subheader` (-1), `sname`, `lname`, `unit`, `cmt1`, `cmt2`, `para1`, `para2`,
+`udp1`, `udp2` (all 0), `removerow` (1), `desig`, `allsheets` (0), `sheet`, `firstmode` (0),
+`impmode` (3). Its menu text says it reads Excel 97-2003 files directly and Excel 2007 and later
+files through Excel's COM component (`impExcel.OXF` of the installation).
 
-## 3. Sheaf's choices [S]
+| Fact | Origin | Probe | Sheaf |
+|---|---|---|---|
+| Reading `.xlsx` | needs Excel: with `excel:=0` an `.xlsx` gives no sheet at all; with the default it works because Excel is installed | `p3` (`v5`) | reads every format itself (ADR 0012) |
+| Book names | long name is the file name with its extension (`a1_c.xlsx`); short name is the file name without the characters that are not letters or digits (`a1c`); the book comment is the full path | `p2`, `p8` (`m4`) | long name as Origin; the short name follows the project's naming (`Book1`, ...) and the path is kept in `workbook.source`, not in a comment |
+| Sheets | one worksheet per Excel sheet, named like it, in file order | `p2` | same |
+| Hidden sheet | imported | `p4` (`a3`) | same (`--skip-hidden-sheets` leaves them out) |
+| Empty sheet, and a sheet that holds only a chart | not imported (`excludeempty` 1) | `p4` (`a3`) | same, with a warning |
+| Leading empty rows and columns | kept: a table that starts in C4 comes in with empty columns A and B and three empty rows above it | `p4` (`a2`) | columns kept; the rows above the first used row are not data (section 5) |
+| Merged cells | the value is in the first cell, the others are empty | `p4` (`a2`) | same |
+| Designation | first column X, all others Y, a column of text too | `p2`, `p4` | first column X; a column without numbers is Label, as in the text import |
+| Column format | every column Text & Numeric (`wks.col.format` 7), date columns too | `p4`, `p9` | numeric, Text & Numeric, text, or a date or time column (section 4) |
+| Short names | `A`, `B`, ... for the first 26, then Origin's own scheme (column 1200 of a 1200-column sheet is `F1195`); all 1200 columns imported | `p6` (`a4`) | the text import's names (`AA`, `AB`, ...); all columns imported |
+| Numbers | cell values as written (`0.30002999999999996` shows every digit of the double) | `p3` | same, bit for bit |
+| Text in a numeric column | stays a text cell (`n.d.`) in a Text & Numeric column | `p3` | same |
+| Booleans | numbers: TRUE is 1, FALSE is 0 | `p9`, `p10` (`b1`) | same |
+| Error cells (`#N/A`, `#DIV/0!`) | missing values (`-1.23456789E-300`, shown empty) | `p9`, `p10` (`b1`) | same, with a warning that counts them |
+| Dates | numbers in Origin's date system (`2461041` for 2026-01-01, `2461100.5210069446` for 2026-03-01 12:30:15), shown as `01/01/2026 00:00:00`, month first, in a Text & Numeric column | `p9`, `p10` (`b1`) | the same numbers, in a Date or Date-Time column |
+| The 1900 leap-year bug | ignored: Excel's 1900-01-01 becomes 2415019, shown 12/31/1899, one day early (Origin adds a fixed offset to Excel's serial, which is right only from 1900-03-01 on) | `p9`, `p10` (`b1`) | Excel's date: 2415020, 1900-01-01 (section 7) |
+| 1904 date system | applied: 1904-01-02 is 2416481 | `p9`, `p10` (`b2`) | same |
+| Time of day | the fraction of a day as a plain number (`0.25` for 06:00:00) | `p9`, `p10` (`b1`) | the same number in a Time column |
+| Duration (`[h]:mm:ss`) | the count of days (`1.5`) | `p9`, `p10` (`b1`) | same, in a Time column |
+| Formula cells | the value Excel computes when Origin opens the file through it: the stored results of the probe file (10.5, 21, ...) were replaced by the recalculated sums; a formula that gives an error is an empty cell | `p3` (`v1`) | the stored value; nothing is recalculated (section 4) |
+| `cellfmts:=0` | no difference in the values read back | `p3` | - |
+| `sheet:="Second"` or `sheet:="2"` | did not restrict the import from LabTalk: both sheets were imported | `p3` (`v3`, `v4`) | `--sheets` restricts the import |
+| Header rows | none by default: the first rows are data and the labels stay empty (2.1) | `p3`, `p4`, `p6`, `p7`, `p8` | detected, as in the text import (section 5) |
 
-Each of these is a choice, not a measurement. The section number says where the detail is.
+`crates/io/tests/fixtures/excel/origin-kinds.xlsx` holds the cells of `b1`; the test
+`booleans_errors_dates_and_times_give_the_numbers_origin_gives` compares Sheaf's numbers with
+Origin's.
 
-| Topic | Sheaf's choice, Origin unmeasured | Section |
+### 2.1 Header rows
+
+Without any header setting the first rows are data: a row of names is a row of text cells, and the
+long name, units and comments stay empty (`p3`, `v1`). With the settings:
+
+- The header is `mainheader` rows followed by `subheader` rows; both are left out of the data.
+  `subheader` -1 (the default) is "as many as the highest label row needs" (`p6`: main 3, sub
+  automatic, long name row 1 to 3 gives 6 header rows and the data start on row 7; `p7` `k5`).
+- `sname`, `lname`, `unit`, `cmt1` and `cmt2` are 1-based positions among the sub-header rows,
+  counted after the main header rows (`p7`: main 2, sub 4, long name 1, units 2, comments 3 gives
+  rows 3, 4 and 5 of the sheet; main 0 gives rows 1, 2 and 3).
+- Several comment rows (`cmt1` to `cmt2`) are joined with line breaks (`p7` `k6`, `k7`).
+- A position beyond the sub-header rows is ignored, and with `subheader:=0` no label is read at all
+  (`p7`, `p8`).
+- `sname` makes the cell the short name of the column (`p8` `m1`).
+- Parameter rows (`para1`, `para2`, `udp1`, `udp2`): the import ran, but reading the user parameters
+  back from LabTalk gave nothing [?].
+
+Sheaf's header options are the text import's absolute Excel row numbers (`header_lines`,
+`long_name_line`, `units_line`, `comments_line`, `short_name_line`): Origin's `mainheader` *m* with
+`lname` *k* is Sheaf's long-name line *m* + *k*, and *m* + `subheader` header rows are
+`header_lines`. Sheaf detects the header rows unless told (Origin reads none); several comment rows
+are not joined [S].
+
+### 2.2 Export, not measurable from LabTalk
+
+Origin 2016's worksheet export to Excel is not an X-Function of the installation: `expWks` is the
+image export (its menu text says so), and the only Excel-related `.OXF` is `impExcel`. `save -i`
+wrote an Origin window file (`o_i.xlsx.ogw`), and the variants `save -x`, `-xb`, `-xs`, `-e` and
+`-w` stopped the run on a dialog (`p5`), so the export's sheet names, header rows and missing values
+are not measured [?]. Sheaf writes the label rows of the text export (section 9).
+
+## 3. Sheaf's choices
+
+Each row says whether it copies a measurement of section 2 **[F]** or is Sheaf's own choice **[S]**.
+The section number says where the detail is.
+
+| Topic | Sheaf's choice | Section |
 |---|---|---|
-| Header rows | The text import's detection and defaults, run on the sheet's rows (padded to equal width, as the lines of a CSV file saved by Excel are). Excel row numbers are the line numbers. | 5 |
-| Which sheets | All visible worksheets, in file order. Hidden sheets are skipped with a warning unless asked for (a flag, or a sheet named in the list). Chart sheets and sheets without cells are skipped with a warning. A typed whole number is a sheet name if a sheet has that name, otherwise a position. | 6 |
-| Book and sheet names | Book long name is the file name without extension (`rename_book`, as for text); sheets keep their Excel names. | 6 |
-| Leading empty rows and columns | Empty leading rows are not imported but row numbers stay Excel's; empty leading columns are dropped, so the first used column becomes column `A` and the column selection counts from it. | 5 |
+| Header rows | [S] The text import's detection and defaults, run on the sheet's rows (padded to equal width, as the lines of a CSV file saved by Excel are); Origin reads no header rows unless told (2.1). Excel row numbers are the line numbers. | 5 |
+| Which sheets | [F] Every worksheet, hidden ones too, in file order (`--skip-hidden-sheets` or unticking leaves hidden ones out). Chart sheets and sheets without cells are skipped with a warning. [S] A typed whole number is a sheet name if a sheet has that name, otherwise a position. | 6 |
+| Book and sheet names | [F] Book long name is the file name with its extension (`rename_book`; the text import uses the name without it); sheets keep their Excel names. | 6 |
+| Leading empty rows and columns | [F] Empty leading columns are kept, so the column letters are Excel's and the column selection counts from column A. [S] Empty leading rows are not imported (Origin keeps them as rows, since it reads no header), but row numbers stay Excel's. | 5 |
 | Blank rows inside the data | Kept as rows of missing values, so a row keeps its place against the other columns and sheets. Rows above the first data row and below the last used row are not data (an export of a sheet that starts or ends with blank rows warns). | 5 |
 | Top title row | A single cell in the first column of the top row of a multi-column sheet (a merged title) is a title and never a label row. | 5 |
-| Booleans | Numbers, TRUE is 1 and FALSE is 0. | 4 |
-| Error cells | Missing values, counted in a warning. | 4 |
+| Booleans | [F] Numbers, TRUE is 1 and FALSE is 0. | 4 |
+| Error cells | [F] Missing values, counted in a warning. | 4 |
 | Text among numbers | As the text import (Text & Numeric column). | 4 |
 | Dates | Date, Time and Date-Time columns; patterns from the Excel number format when the file is `.xlsx`, ISO date and `HH:mm:ss` otherwise. The number format (or, without one, the values) decides per column whether a cell below one day is a time of day or a moment on day 0. | 7 |
-| 1900 leap-year bug | Followed: Excel day 60 does not exist and is read as 1900-02-28, with a warning. | 7 |
+| 1900 leap-year bug | [S] Followed: Excel day 60 does not exist and is read as 1900-02-28, with a warning; dates before 1900-03-01 are the dates Excel shows (Origin's are one day early, section 2). | 7 |
 | Export labels | Long Name, Units and Comments rows when some column has that label, with an empty placeholder row for a label that comes before one that is written; a Short Name row only on request. | 9 |
 | Export numeric formats | Date, time and a few number formats become Excel number formats; the rest is General. | 9 |
 | Text named `.xls` | A file named `.xls`, `.xlsx` or `.xlsm` whose first bytes are neither a zip nor a compound file is read as text, with a warning. | 6 |
@@ -70,10 +137,10 @@ What a cell holds in the file decides its type; the column type follows from its
 |---|---|---|
 | Number (floating point) | Number, bit for bit | Every digit survives (`0.1 + 0.2`, `5e-324`, `1.8e308`). |
 | Integer (an `.xls` RK number, or an `.xlsx` cell with an integer text) | Number | Exact up to 2^53; above that a warning says the last digits are lost (Sheaf numbers are 64-bit floats). |
-| Boolean | Number 1 or 0 | [S] A column of booleans is a numeric column. |
+| Boolean | Number 1 or 0 | As Origin [F]. A column of booleans is a numeric column. |
 | Text | Text | Blanks at both ends are trimmed (as the text import trims fields); a text of only blanks is an empty cell. |
 | Empty cell | Missing value | A numeric cell is NaN; a text cell is an empty string. |
-| Error (`#DIV/0!`, `#N/A`, `#REF!`, ...) | Missing value | A warning counts them per sheet. [S] The text import keeps such strings as text in a numeric column; a file cannot tell an error from text there, Excel can. |
+| Error (`#DIV/0!`, `#N/A`, `#REF!`, ...) | Missing value | As Origin [F]. A warning counts them per sheet. The text import keeps such strings as text in a numeric column; a file cannot tell an error from text there, Excel can. |
 | Formula | The value Excel stored with it | When the file holds no stored value (a file written by a program that does not calculate), the cell is missing and a warning gives the number of such cells and the first one (`B2`). |
 | Date, time, duration | Date, Time or Date-Time column | Section 7. |
 | ISO text date in a `t="d"` cell | Date | Read like a date cell. |
@@ -83,8 +150,11 @@ What a cell holds in the file decides its type; the column type follows from its
 column with at least one number is a Text & Numeric column, so a text cell (`n.d.`, `<LOD`) stays a
 text cell and numeric views see it as missing; a column with no number is a text column. This is the
 rule of the text import ("a cell that is not a number stays a text cell"; no ratio of text to
-numbers). **A column that mixes dates or times with other values is imported as text** (the dates
-as `yyyy-mm-dd` or `yyyy-mm-dd HH:mm:ss`), with a warning [S]. Designations follow the text import:
+numbers). **Dates among text** (a date column with an `n.d.` cell) make a Text & Numeric column with
+the date display: the dates keep their numbers and the text cells stay text, as Origin keeps them
+(probe `p11`) [F]. **Dates among plain numbers are imported as text** (the dates as `yyyy-mm-dd` or
+`yyyy-mm-dd HH:mm:ss`), with a warning [S]: Origin keeps both as numbers with a display format per
+cell, which a Sheaf column does not have. Designations follow the text import:
 the first column is X (`first_column_x`), numeric columns are Y, text columns Label.
 
 A column that has a name in a label row but no value in any data row (formulas without a stored
@@ -108,14 +178,18 @@ parameter rows. These are the same functions the text import uses; its tests run
   the data; a lone `Name (unit)` label split into name and unit when no units line exists;
   `rename_columns` on; first column X). Origin's own defaults for the Excel connector are [?].
 - **Title row** [S]. A merged title over the header rows is common in lab sheets. The top row of the
-  used range, when it holds a single cell in the first column and the sheet has several columns, is a
-  title: it is not a label row (a warning says one header line was not imported) and the label lines
+  used range, when it holds a single cell in the first used column and the sheet has several used
+  columns, is a title: it is not a label row (a warning says one header line was not imported) and the label lines
   below it are found as if it were not there. Anywhere else a single filled cell is an ordinary row.
   A one-column sheet has no title row.
-- **Leading empty rows and columns** [S]. The first used cell sets the corner: rows above it are not
-  imported (their numbers still count) and columns left of it are dropped, so data in `C4:D9` become
-  columns `A` and `B`. The sheet's report gives `first_column` (3 here) so a dialog can say where the
-  columns came from. Column selection (`columns`) counts from the first used column.
+- **Leading empty rows and columns.** Columns left of the first used cell are kept as empty columns,
+  as Origin keeps them [F], so data in `C4:D9` stay columns `C` and `D` behind empty `A` and `B`, and
+  Sheaf's column letters are Excel's. Column selection (`columns`) counts from column A, and the
+  sheet's report gives `first_column` (the first imported column, 1 unless a selection starts later).
+  Rows above the first used row are not imported (their numbers still count) [S]: Origin keeps them,
+  but it also reads no header rows by default. Since the grid is counted from column A, a sheet whose
+  rows times columns from A1 are above the 40 million cell limit of section 8 is refused, with the
+  sheet's name.
 - **Blank rows in the data** [S]. A row with no value in any column, between the first data row and the
   last used row, is a data row of missing values (the text import drops blank lines; a sheet cannot,
   because a row number is a position that other columns and sheets share). Rows above the first data
@@ -123,7 +197,7 @@ parameter rows. These are the same functions the text import uses; its tests run
   such rows says so, since they do not come back.
 - **Partial import** [S]. `skip_rows`, `max_rows`, `rows` (first, last, read, skip) and `columns` work
   as in the text import ([`import-ascii.md`](import-ascii.md) section 9), except that the rows counted
-  are all rows from the first data row to the last used row, blank ones included; columns are discovered before the rows are selected, so a column does not
+  are all rows from the first data row to the last used row, blank ones included, and columns are counted from column A; columns are discovered before the rows are selected, so a column does not
   disappear because the chosen rows are empty in it. The first file of a batch can be read in full
   (`ExcelOptions::without_partial_import`).
 - **Not offered** for Excel because they are about characters: delimiter, quote, decimal and thousands
@@ -132,7 +206,7 @@ parameter rows. These are the same functions the text import uses; its tests run
 ## 6. Sheets and books
 
 - One Sheaf book per Excel file, one sheet per imported Excel sheet, in the order of `sheets` (or of
-  the file). Book long name: the file name without extension. Sheet names are the Excel names (at most
+  the file). Book long name: the file name with its extension, as Origin [F]. Sheet names are the Excel names (at most
   31 characters, the same limit as Sheaf's). `workbook.source` records the path and the importer
   `excel`.
 - **Selection.** `ExcelOptions::sheets` lists sheets by name (case-insensitive) or 1-based position
@@ -141,8 +215,9 @@ parameter rows. These are the same functions the text import uses; its tests run
   are common) and the sheet at that position otherwise; `SheetRef::Index` is always a position (the
   desktop window uses it). An unknown name or position is an error that lists the sheets. Empty means
   all.
-- **Hidden sheets** (hidden and "very hidden") are skipped with a warning unless `include_hidden` is
-  set; a hidden sheet named in `sheets` is read [S].
+- **Hidden sheets** (hidden and "very hidden") are read, as Origin reads them [F]
+  (`include_hidden`, on by default); with it off they are skipped with a warning, and a hidden sheet
+  named in `sheets` is still read.
 - **Chart sheets and dialog or macro sheets** are skipped with a warning. A worksheet that holds only
   a chart has no cells and is skipped with a warning.
 - It is an error (`NoData`) when no sheet gives data; the message gives the reasons.
@@ -182,14 +257,16 @@ right.
   text. A format that shows only a time (`h:mm:ss`) makes a time column: its cells are counts of days,
   also over one day (0.25 and 1.5 stay 0.25 and 1.5) and below zero. Without a format (`.xls`, or a
   code the table does not know) the column is a date column when some cell is a date from day 1 on,
-  otherwise a time column. A length of time among dates, or a text date among times, still makes a
+  otherwise a time column. A length of time among dates, or a date among times, still makes a
   text column with a warning.
 - **1900 and 1904 systems.** The file's date-system flag (`date1904`, or the BIFF record in `.xls`)
   is applied by the reader. The same moment in either system gives the same Sheaf number.
 - **The 1900 leap-year bug.** Excel counts 1900 as a leap year, so day 60 is a 1900-02-29 that never
   existed.
   Sheaf follows Excel's display: day 1 is 1900-01-01, day 59 is 1900-02-28, day 61 is 1900-03-01. Day
-  60 has no date; it is read as 1900-02-28 with a warning [S]. On export, dates from 1900-01-01 on are
+  60 has no date; it is read as 1900-02-28 with a warning [S]. Origin does not follow it: it adds a
+  fixed offset to the serial, so its dates before 1900-03-01 are one day early (1900-01-01 is
+  12/31/1899, section 2) [F]; from 1900-03-01 on Sheaf's and Origin's numbers are the same. On export, dates from 1900-01-01 on are
   written with the same rule; earlier dates cannot be Excel dates and are written as plain numbers with
   a warning.
 - **Precision.** Date cells are cut to the millisecond, which is all Excel shows.
@@ -263,43 +340,36 @@ All of this is Sheaf's choice [S]; Origin's Excel export is [?].
   before the first or after the last row with a value (a warning says how many), and the display
   patterns Excel cannot tell apart (a weekday letter reads back as the short weekday).
 
-## 10. Measurements to do on the Windows machine
+## 10. Measurements: done and left
 
-Run on `tools/origin-ref` (one Origin at a time, global lock), on synthetic `.xlsx` files written by
-`write_xlsx` or by `tools/make-excel-fixtures.py` into `re-workspace/scratch/t26/`, with `impExcel` (or
-the connector's LabTalk equivalent) and `expXLS`. Record each result here with the run's output file
-name, and change section 3 where Origin differs. The owner's workbooks are not on the machine that
-wrote this file, so the local check of step 6 of the brief was not done; run it where they are.
+Done on Windows (Origin 2016, section 2): header rows with and without settings (1), leading empty
+rows and columns (2), merged cells (3), text in a numeric column (4), booleans and error cells (5),
+dates, times, durations, the 1904 system, the 1900 leap-year cells and a date column with a text cell
+(6), formulas (7: Origin opens the file through Excel, so even a formula without a stored value gets
+Excel's result), hidden and chart-only sheets (8), several sheets and the book's names (9), a sheet of
+1200 columns (10). Left [?]:
 
-1. **Header rows.** A sheet with one, two and three label rows (names; names and units; names, units,
-   comments) and with none. Which rows does the connector take as Long Name, Units, Comments by
-   default; is a header row count asked or detected; what does it do with a title row above the labels
-   (plain and merged).
-2. **Empty leading rows and columns.** Data starting at C4. Does the book keep A and B as empty
-   columns or start at the first used column; do row numbers in the header options count from the sheet
-   or from the first used row?
-3. **Merged cells.** A merged title; a merged block in the data (is the value repeated, or only in the
-   top-left cell).
-4. **Text in a numeric column.** `n.d.`, `<LOD`, a word, a blank string: text cell, missing value, or
-   the column becomes text? Compare with section 4.
-5. **Booleans and error cells.** TRUE/FALSE as 1/0 or as text; `#DIV/0!` and `#N/A` as missing values
-   or as text.
-6. **Dates and times.** Date, date-time, time-of-day and `[h]:mm:ss` columns: the column format Origin
-   gives (display pattern per Excel format code), 1900 and 1904 workbooks, the 1900-02-29 cell, a date
-   before 1900-03-01, a date column that contains one text cell. Compare the numbers with Sheaf's
-   (section 7).
-7. **Formulas.** A formula with a stored value, and one without (written by a program that does not calculate,
-   such as `openpyxl`): value, missing, or an error.
-8. **Hidden sheets, chart-only sheets.** Are hidden sheets imported by default; what does a chart sheet
-   or a worksheet with only a chart give (an empty sheet, no sheet, an error).
-9. **Several sheets.** Default sheet selection, sheet names in the book, long name of the book.
-10. **Wide sheets.** More than 1000 columns: any limit, column names beyond `Z`.
-11. **Partial import** of rows and columns in the connector: counts, 1-based or 0-based, and whether
-    they count from the sheet or from the used range.
-12. **Export.** The sheet names Origin writes for a book and for a sheet, the header rows (Long Name,
-    Units, Comments; their labels in the first column or not), how missing values and text are
-    written, how Date columns are written (serial number and number format), and what it does when
-    the target file exists.
+1. **Origin's import window.** File > Import > Excel's dialog (its pages, defaults and the sheet
+   list) was not opened; only the X-Function was run from LabTalk. `tools/origin-ref/origin-dialog.ps1
+   -MenuClicks` can open it.
+2. **A title row under Origin's header settings** (a merged title above the label rows with
+   `mainheader` 1), and Origin's handling of a `sheet` restriction from its dialog (from LabTalk it
+   did not restrict the import).
+3. **Display of Excel's number formats.** Origin showed every date as `MM/dd/yyyy HH:mm:ss` whatever
+   the cell's format code (`yyyy-mm-dd`, `dd/mm/yyyy`); whether `cellfmts` or the dialog change that is
+   not known. Sheaf takes the pattern from the code (section 7).
+4. **Partial import.** `impExcel` of Origin 2016 has no row or column range variables; the dialog's
+   partial import, if any, is not measured. Sheaf's rows and columns follow the text import (section 5).
+5. **User parameter rows** (`para1`, `udp1`): the readback gave nothing (2.1).
+6. **Export** (2.2): needs the GUI (File > Export > Excel in a recent Origin, or Excel itself); the
+   sheet names, label rows, missing values and Date columns Origin writes are unknown.
+
+**The owner's workbooks** (step 6 of the brief, 2026-11-15, local only, no values kept): three
+workbooks found on the Windows machine (five sheets, up to 36 000 rows and 24 columns) were imported
+with `--header-lines 0`, written back as CSV and compared cell by cell with `openpyxl`
+(`data_only=True`): all 307 707 number cells agree to 1e-9 relative, all 124 text
+cells and every empty cell agree, and the 39 `#DIV/0!` cells are missing values with the warning that
+counts them, as specified (section 4). The files hold no dates, booleans or hidden sheets.
 
 ## 11. Command line and MCP
 
@@ -315,8 +385,10 @@ files, and `~$` lock files are skipped.
 - `--sheets LIST`: sheet names or 1-based positions counted over all sheets, comma-separated, read in
   the order given (`--sheets "Results,3"`). A number is the sheet of that name if there is one
   (`--sheets 2023` for a sheet called 2023) and the sheet at that position otherwise; a sheet name that
-  contains a comma cannot be given. A sheet named here is read even when hidden. `--hidden-sheets`:
-  also read the hidden sheets when no list is given. Both are ignored for text files.
+  contains a comma cannot be given. A sheet named here is read even when hidden. Without a list
+  hidden sheets are read, as in Origin; `--skip-hidden-sheets` leaves them out (`--hidden-sheets`, the
+  default, is kept for older scripts and cannot be combined with it). All three are ignored for text
+  files.
 - The header and selection flags of the text import apply to Excel with Excel's own row numbers:
   `--header-lines`, `--long-name-line`, `--units-line`, `--comments-line`, `--short-name-line`,
   `--param-lines`, `--no-rename-columns`, `--no-rename-book`, `--first-row`, `--last-row`,
@@ -333,7 +405,8 @@ files, and `~$` lock files are skipped.
   or text file converts to `.xlsx`). Renamed sheets and values Excel cannot hold are printed as
   warnings. A target that is not an `.xlsx` workbook is never replaced; the command fails and the
   file is untouched.
-- MCP: `import_files` takes `excel: {sheets: [...], include_hidden}` next to `ascii` (its header
+- MCP: `import_files` takes `excel: {sheets: [...], include_hidden}` next to `ascii` (hidden sheets
+  are read whether `include_hidden` is given or not; MCP has no switch to leave them out yet; its header
   and row settings apply to Excel too); `export_data` writes `.xlsx` for a path ending in `.xlsx` or
   `format: "xlsx"`, with `all_sheets`. The `plot`, `fit` and `analyze` tools work on the project, so
   they read Excel data after `import_files`.
@@ -352,12 +425,13 @@ has not been seen (section 10).
   separated text named `.xls` goes to the ASCII window) dropped on the window, chosen in
   any Import item's file chooser, or given on the command line goes to Excel, never to the ASCII window.
   Dropped or chosen files open the Excel import window; files given on the command line import at once
-  with default options (every visible sheet, detected header rows). A drop of Excel and text files
+  with default options (every sheet, hidden ones too, detected header rows). A drop of Excel and text files
   together opens both windows. Excel imports do not make a graph by default (the checkbox on the Import
   Mode page turns it on), whereas text files from the command line are plotted as before.
 - **Import window** (`crates/app/src/dialogs/import_excel.rs`), laid out like the ASCII window: a file
   list at the left top, a tree of pages and, below, a preview. Pages: *Sheets* (a checkbox per sheet,
-  Select all, Clear; visible worksheets are on, hidden sheets are marked "(hidden)" and off, chart and
+  Select all, Clear; every worksheet is on, hidden sheets too (marked "(hidden)"), as Origin imports
+  them; chart and
   macro sheets are marked and cannot be ticked), *Import Mode* (the ASCII modes: new books, new sheets,
   replace sheet, new columns, new rows; the target is the active sheet), *Header Rows*, *Column
   Designation*, *Partial Import* and *Miscellaneous* (dates as text, rename the book from the file name).
@@ -381,7 +455,7 @@ has not been seen (section 10).
 - **Screenshots.** `--show import-excel:FILE` (with `import-excel-page:mode|header|columns|partial|misc`)
   and `--show export-excel`.
 - **Not done in the app.** Multi-file preview of the sheets of every file at once (the sheet list is per
-  file), an "Import hidden sheets" shortcut, and re-import.
+  file) and re-import.
 
 Tests: `crates/app/src/app/ui_tests/excel.rs`.
 
@@ -396,10 +470,15 @@ Tests: `crates/app/src/app/ui_tests/excel.rs`.
 - `the_1904_date_system_gives_the_same_dates_as_the_1900_system` (`date1904.xlsx`),
   `excels_1900_leap_year_bug_is_followed_and_the_missing_day_is_reported` (`leap1900.xlsx`)
 - `merged_cells_keep_their_top_left_value_and_a_merged_title_is_not_a_label_row` (`merged.xlsx`)
-- `hidden_sheets_are_skipped_unless_asked_for` (`hidden.xlsx`),
+- `hidden_sheets_are_read_as_origin_reads_them_unless_left_out` (`hidden.xlsx`),
   `sheets_that_hold_only_a_chart_are_skipped_with_a_warning` (`charts.xlsx`)
 - `text_among_numbers_stays_text_and_booleans_errors_and_big_integers_are_mapped` (`mixed.xlsx`),
-  `data_that_starts_below_and_right_of_the_corner_drops_the_empty_rows_and_columns` (`leading.xlsx`)
+  `data_that_starts_below_and_right_of_the_corner_keeps_the_empty_columns_as_origin` (`leading.xlsx`),
+  `a_merged_title_over_data_right_of_column_a_is_still_a_title`,
+  `a_sheet_counted_from_column_a_above_the_cell_limit_is_refused`,
+  `dates_among_plain_numbers_become_text_with_a_warning`
+- Origin's numbers: `booleans_errors_dates_and_times_give_the_numbers_origin_gives`
+  (`origin-kinds.xlsx`, the cells of Origin's probe `b1`)
 - options: `sheets_can_be_chosen_by_name_and_by_position_and_a_wrong_name_is_an_error`,
   `header_rows_follow_the_options_as_in_a_text_import`, `rows_and_columns_can_be_imported_in_part`,
   `dates_can_be_kept_as_text`, `a_text_import_and_an_excel_import_of_the_same_table_agree`,

@@ -20,6 +20,7 @@ mod layout;
 mod legend;
 mod margin;
 pub mod markup;
+mod multipage;
 mod pie;
 mod plots;
 mod polar;
@@ -47,7 +48,11 @@ mod label_whiteout_tests;
 #[cfg(test)]
 mod legend_tests;
 #[cfg(test)]
+mod lollipop_tests;
+#[cfg(test)]
 mod margin_tests;
+#[cfg(test)]
+mod multipage_tests;
 #[cfg(test)]
 mod offset_multiplier_tests;
 #[cfg(test)]
@@ -424,6 +429,37 @@ pub fn render_print_pdf(project: &Project, graph: WindowId) -> Result<Vec<u8>, P
     raster::to_pdf(&svg, SystemFonts::shared())
 }
 
+/// Renders several graphs into one PDF, one page per graph in the order given (Origin's
+/// Export Graphs `multipage`, graphing.md 9.7). Each page is what [`export_bytes_with`] writes
+/// as a one-page PDF of that graph with the same size and margin settings: the page is the
+/// exported area of the graph, vector, with text kept as text. A graph may appear twice.
+pub fn render_multipage_pdf(
+    project: &Project,
+    graphs: &[WindowId],
+    size: ExportSize,
+    layout: ExportLayout,
+) -> Result<Vec<u8>, PlotError> {
+    multipage::svgs_to_pdf(graphs.iter().map(|&g| export_svg(project, g, size, layout)), SystemFonts::shared())
+}
+
+/// [`render_multipage_pdf`] written to `path`.
+pub fn export_multipage_pdf_file(
+    project: &Project,
+    graphs: &[WindowId],
+    path: &Path,
+    size: ExportSize,
+    layout: ExportLayout,
+) -> Result<(), PlotError> {
+    let bytes = render_multipage_pdf(project, graphs, size, layout)?;
+    std::fs::write(path, bytes).map_err(|source| PlotError::Io { path: path.to_path_buf(), source })
+}
+
+/// Several graphs on the project's paper, one sheet per graph, each placed by the saved Page
+/// Setup as [`render_print_pdf`] places one graph.
+pub fn render_print_multipage_pdf(project: &Project, graphs: &[WindowId]) -> Result<Vec<u8>, PlotError> {
+    multipage::svgs_to_pdf(graphs.iter().map(|&g| print_svg(project, g)), SystemFonts::shared())
+}
+
 fn print_svg(project: &Project, graph: WindowId) -> Result<String, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
     let (w, h) = (g.page.width_pt, g.page.height_pt);
@@ -620,4 +656,13 @@ pub fn export_bytes_opts(
         "pdf" => raster::to_pdf(&svg, fonts),
         _ => Err(PlotError::UnknownFormat(ext.to_string())),
     }
+}
+
+/// The SVG a vector export of `graph` draws (what `.svg` and `.pdf` export write).
+fn export_svg(project: &Project, graph: WindowId, size: ExportSize, layout: ExportLayout) -> Result<String, PlotError> {
+    let fonts = SystemFonts::shared();
+    let scene = layout::build_scene(project, graph, fonts)?;
+    let view = layout.view(&scene, fonts, None);
+    let scale = size.scale(view.w, view.h)?;
+    Ok(svg::write_svg_view(&scene, view, scale))
 }

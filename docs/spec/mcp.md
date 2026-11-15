@@ -106,12 +106,15 @@ companion and the reason, and `structuredContent` has `{companion, refusal}`.
            "skip_rows": 0, "max_rows": 0, "dates": "detect|text", "date_order": "mdy|dmy"},
  "chi": {"split_scans": true, "split_segments": true, "add_milliamp": true,
          "add_charge": true, "invert_current": false, "exact_time": true},
+ "excel": {"sheets": ["Name or 1-based position"], "include_hidden": false},
  "plot": false}
 ```
 
 `files` takes files, folders and wildcards. `layout` defaults to `books` (one workbook per file);
 `sheets` puts each file in a sheet of one workbook. `format` and the option defaults are those of
-`sheaf import`. `plot` adds a default graph per book. Result
+`sheaf import`. An Excel file (`.xls`, `.xlsx`, `.xlsm`) becomes one workbook with a sheet per Excel
+sheet; `excel.sheets` picks sheets, `excel.include_hidden` adds hidden ones, and the header and row
+settings of `ascii` apply too (see `docs/spec/import-excel.md`). `plot` adds a default graph per book. Result
 `{imported:[{file, book, format, suggested_template, warnings}], errors:[string], graphs:[string]}`.
 A file that fails is listed in `errors` and the others are imported; the call is a tool error only
 when no file was imported.
@@ -197,8 +200,10 @@ as the CLI's `--image-width`. `return_image` (default true when `path` is absent
 adds the PNG as an image content block, scaled to at most 1600 pixels on the long side; the file
 keeps its full size. Result `{graph, path?, format, width_px, height_px, bytes}`.
 
-**`export_data`** `{book?, sheet?, path, format?: "csv|tsv"}` writes the sheet as delimited text
-(tabs for `.tsv` and `.txt`). Result `{path, rows, columns}`.
+**`export_data`** `{book?, sheet?, path, format?: "csv|tsv|xlsx", all_sheets?}` writes the sheet as
+delimited text (tabs for `.tsv` and `.txt`), or as an Excel workbook for a path ending in `.xlsx` or
+`format: "xlsx"` (`all_sheets` writes every sheet of the book). Result `{path, rows, columns}`; for
+xlsx also `{sheets, warnings}`.
 
 ### 5.3 Analysis
 

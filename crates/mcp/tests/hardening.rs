@@ -391,3 +391,21 @@ fn cli_plot_and_fit_specs_match_protocol_results() {
         assert!((actual["value"].as_f64().unwrap() - expected.value).abs() < 1e-12);
     }
 }
+
+#[test]
+fn an_excel_file_is_imported_and_a_sheet_is_exported_to_xlsx() {
+    let d = Dirs::new("excel");
+    let mut s = d.server();
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../io/tests/fixtures/excel/legacy.xls");
+    std::fs::copy(&fixture, d.root.join("legacy.xls")).unwrap();
+    let r = ok(&call(&mut s, "import_files", json!({"files": ["legacy.xls"], "excel": {"sheets": ["Second"]}})));
+    assert_eq!(r["imported"][0]["format"], "excel", "{r}");
+    let contents = ok(&call(&mut s, "list_contents", json!({})));
+    assert_eq!(contents["workbooks"][0]["sheets"].as_array().unwrap().len(), 1, "{contents}");
+
+    let out = ok(&call(&mut s, "export_data", json!({"path": "second.xlsx"})));
+    assert_eq!(out["sheets"][0], "Second", "{out}");
+    ok(&call(&mut s, "import_files", json!({"files": ["second.xlsx"]})));
+    let contents = ok(&call(&mut s, "list_contents", json!({})));
+    assert_eq!(contents["workbooks"].as_array().unwrap().len(), 2, "{contents}");
+}

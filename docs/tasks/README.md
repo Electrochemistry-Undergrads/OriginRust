@@ -76,7 +76,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | [T27](T27-print.md) | Print, Print Preview, Page Setup (vector EMF/PDF path) | M | Windows half done, merged 2026-11-14 (graphing 19); left: workbook printing, macOS panel, `sheaf print`, Origin's Print/Preview windows unmeasured |
 | [T28](T28-autosave-recovery.md) | Autosave to a recovery folder and crash recovery at start-up | M | done, merged 2026-11-14 (`docs/spec/autosave.md`); left: Origin's defaults unmeasured, backup-before-save switch, Tools > Options home |
 | [T29](T29-multivariate-roc-survival.md) | PCA, k-means, ROC curve, Kaplan-Meier | L | open; Origin measurements on Windows |
-| [T30](T30-excel-import-export.md) | Excel import (xls, xlsx, xlsm) and xlsx export | L | claimed 2026-11-14 night (branch `excel-io`, macOS) |
+| [T30](T30-excel-import-export.md) | Excel import (xls, xlsx, xlsm) and xlsx export | L | done, merged 2026-11-14 (ADR 0012, `docs/spec/import-excel.md`); left: Origin measurements on Windows, the owner's workbooks check, `.xlsb`/`.ods` tests |
 | [T31](T31-windows-executable-icon.md) | Embed the existing app icon in Windows executable resources | S | done; all seven built-PE icon frames match the source and Windows extracts both sizes |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of

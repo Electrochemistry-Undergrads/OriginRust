@@ -69,6 +69,8 @@ pub enum Cmd {
     ImportMultiple,
     ImportCsv,
     ImportWizard,
+    /// File > Import > Excel (XLS, XLSX, XLSM)...
+    ImportExcel,
     /// Edit > Go to... (Ctrl+G, in a workbook; in a graph the same keys export).
     GoToCell,
     /// Statistics > Power and Sample Size > one of the tests.
@@ -79,6 +81,8 @@ pub enum Cmd {
     ReplaceInSheets,
     ExportGraph,
     ExportWorksheet,
+    /// File > Export > Worksheet as Excel...
+    ExportExcel,
     /// File > Print... (Ctrl+P): the active graph page.
     Print,
     /// File > Print Preview.
@@ -489,8 +493,9 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                     keyed("Single &ASCII...", ctrl(Key::K), Cmd::Import),
                     item("&Multiple ASCII...", Cmd::ImportMultiple),
                     item("Comma &Delimited (CSV)...", Cmd::ImportCsv),
+                    item("&Excel (XLS, XLSX, XLSM)...", Cmd::ImportExcel),
                 ],
-                greys(&["Excel (XLS, XLSX, XLSM)...", "Image...", "Binary 2D Array..."]),
+                greys(&["Image...", "Binary 2D Array..."]),
                 // Origin's graph File menu has no Re-Import items.
                 if kind == WindowKind::Graph {
                     Vec::new()
@@ -510,7 +515,11 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(sub(
             "E&xport",
             [
-                vec![item("&Graphs...", Cmd::ExportGraph), item("&Worksheet as ASCII...", Cmd::ExportWorksheet)],
+                vec![
+                    item("&Graphs...", Cmd::ExportGraph),
+                    item("&Worksheet as ASCII...", Cmd::ExportWorksheet),
+                    item("Worksheet as E&xcel...", Cmd::ExportExcel),
+                ],
                 greys(&["Graph as Image...", "Worksheet as Image...", "Multi-Page PDF...", "Recent Exports"]),
             ]
             .concat(),
@@ -1883,12 +1892,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ImportMultiple => Action::ImportPick(ImportPick::Multiple),
         Cmd::ImportCsv => Action::ImportPick(ImportPick::Csv),
         Cmd::ImportWizard => Action::ImportWizard,
+        Cmd::ImportExcel => Action::ImportPick(ImportPick::Excel),
         Cmd::GoToCell => Action::GoToCell(book?),
         Cmd::Power(kind) => Action::Power(*kind),
         Cmd::FindInSheets => Action::FindInSheets(book?),
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
+        Cmd::ExportExcel => Action::ExportExcel(book?),
         Cmd::Print => Action::Print(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::PrintPreview => Action::PrintPreview(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::PageSetup => Action::PageSetup,
@@ -2131,6 +2142,7 @@ pub fn works_while_typing(cmd: &Cmd) -> bool {
             | Cmd::ImportMultiple
             | Cmd::ImportCsv
             | Cmd::ImportWizard
+            | Cmd::ImportExcel
             | Cmd::Exit
     )
 }

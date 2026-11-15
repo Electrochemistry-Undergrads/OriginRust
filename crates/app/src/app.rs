@@ -9,6 +9,7 @@ use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
+use crate::dialogs::export_excel::ExcelExportDialog;
 use crate::dialogs::export_sheet::SheetExportDialog;
 use crate::dialogs::find::{FindDialog, FindOutcome};
 use crate::dialogs::fit::{FitDialog, FitDialogOutcome, FitKind};
@@ -16,6 +17,7 @@ use crate::dialogs::fit_more::{FitMoreDialog, FitMoreKind, FitMoreOutcome};
 use crate::dialogs::go_to::{GoToDialog, GoToOutcome};
 use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome, ImportRequest};
+use crate::dialogs::import_excel::{ExcelImportDialog, split_excel};
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::label_panels::{LabelPanelsDialog, Outcome as LabelPanelsOutcome};
 use crate::dialogs::power::{PowerDialog, PowerOutcome};
@@ -112,6 +114,7 @@ pub struct SheafApp {
     books: HashMap<WindowId, BookUi>,
     graphs: HashMap<WindowId, GraphUi>,
     import: Option<ImportDialog>,
+    import_excel: Option<ExcelImportDialog>,
     import_wizard: Option<ImportWizard>,
     graph_props: Option<GraphPropsDialog>,
     layer_contents: Option<crate::dialogs::layer_contents::LayerContentsDialog>,
@@ -131,6 +134,7 @@ pub struct SheafApp {
     reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
+    export_excel: Option<ExcelExportDialog>,
     page_setup: Option<PageSetupDialog>,
     print_preview: Option<PrintPreview>,
     rename: Option<RenameDialog>,
@@ -191,6 +195,7 @@ impl SheafApp {
             books: HashMap::new(),
             graphs: HashMap::new(),
             import: None,
+            import_excel: None,
             import_wizard: None,
             graph_props: None,
             layer_contents: None,
@@ -210,6 +215,7 @@ impl SheafApp {
             reshape: None,
             export: None,
             export_sheet: None,
+            export_excel: None,
             page_setup: None,
             print_preview: None,
             rename: None,
@@ -422,27 +428,39 @@ impl SheafApp {
             }
             return;
         }
+        // Excel workbooks have their own import window and are not graphed on their own.
+        let (workbooks, paths) = split_excel(paths);
         if ask {
-            self.import = Some(ImportDialog::new(paths));
+            if !workbooks.is_empty() {
+                self.import_excel = Some(ExcelImportDialog::new(workbooks));
+            }
+            if !paths.is_empty() {
+                self.import = Some(ImportDialog::new(paths));
+            }
             return;
         }
-        let (chi, ascii) = (sheaf_io::chi::ChiOptions::default(), sheaf_io::ascii::AsciiOptions::default());
-        let mut items = Vec::new();
-        let mut errors = Vec::new();
-        for p in &paths {
-            match sheaf_io::import_file(p, sheaf_io::ImportKind::Auto, &chi, &ascii) {
-                Ok(i) => items.push(i),
-                Err(e) => errors.push(e.to_string()),
+        for (files, plot) in [(paths, true), (workbooks, false)] {
+            if files.is_empty() {
+                continue;
             }
+            let (chi, ascii) = (sheaf_io::chi::ChiOptions::default(), sheaf_io::ascii::AsciiOptions::default());
+            let mut items = Vec::new();
+            let mut errors = Vec::new();
+            for p in &files {
+                match sheaf_io::import_file(p, sheaf_io::ImportKind::Auto, &chi, &ascii) {
+                    Ok(i) => items.push(i),
+                    Err(e) => errors.push(e.to_string()),
+                }
+            }
+            self.finish_import(ImportRequest {
+                items,
+                errors,
+                plot,
+                template: None,
+                mode: ImportMode::NewBook,
+                place: PlaceOptions::default(),
+            });
         }
-        self.finish_import(ImportRequest {
-            items,
-            errors,
-            plot: true,
-            template: None,
-            mode: ImportMode::NewBook,
-            place: PlaceOptions::default(),
-        });
     }
 
     /// Opens a `.sheaf` project or imports an Origin `.opj` project, replacing the current one.
@@ -524,6 +542,7 @@ impl SheafApp {
         self.set_values = None;
         self.export = None;
         self.export_sheet = None;
+        self.export_excel = None;
         self.page_setup = None;
         self.print_preview = None;
         self.rename = None;
@@ -534,6 +553,7 @@ impl SheafApp {
         self.sort = None;
         self.sheet_name = None;
         self.import = None;
+        self.import_excel = None;
         self.import_wizard = None;
     }
 
@@ -651,6 +671,7 @@ impl SheafApp {
     fn finish_import(&mut self, request: ImportRequest) {
         let ImportRequest { items, errors, plot, template, mode, place } = request;
         let count = items.len();
+        let excel_sheets: usize = items.iter().filter(|i| i.format == "excel").map(|i| i.workbook.sheets.len()).sum();
         let mut notes: Vec<String> = errors;
         for i in &items {
             for w in &i.warnings {
@@ -680,7 +701,11 @@ impl SheafApp {
                 placement_notes
             });
             notes.extend(placement_notes);
-            self.say(format!("Imported {count} file(s)"));
+            let sheets = if excel_sheets > 0 { format!(", {excel_sheets} Excel sheet(s)") } else { String::new() };
+            self.say(format!("Imported {count} file(s){sheets}"));
+        }
+        for note in &notes {
+            self.logs.warn(note.clone());
         }
         if !notes.is_empty() {
             self.message = Some(("Import notes".to_string(), notes.join("\n\n")));
@@ -1342,6 +1367,11 @@ impl SheafApp {
                 self.export = Some(ExportDialog::new(graph, self.folder()));
             }
             Action::ExportData(book) => self.export_data(book),
+            Action::ExportExcel(book) => {
+                if let Some(b) = self.doc.project().workbook(book) {
+                    self.export_excel = Some(ExcelExportDialog::new(book, b.sheets.len(), self.folder()));
+                }
+            }
             Action::Print(graph) => self.print_graph(graph),
             Action::PrintPreview(graph) => self.print_preview = Some(PrintPreview::new(graph)),
             Action::PageSetup => self.page_setup = Some(PageSetupDialog::new(self.doc.project().page_setup)),
@@ -2213,6 +2243,7 @@ impl SheafApp {
     /// True while a dialog or a message box is open.
     fn dialog_open(&self) -> bool {
         self.import.is_some()
+            || self.import_excel.is_some()
             || self.import_wizard.is_some()
             || self.graph_props.is_some()
             || self.layer_contents.is_some()
@@ -2231,6 +2262,7 @@ impl SheafApp {
             || self.reshape.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
+            || self.export_excel.is_some()
             || self.page_setup.is_some()
             || self.print_preview.is_some()
             || self.rename.is_some()
@@ -2319,24 +2351,34 @@ impl SheafApp {
     /// Opens the import dialog on `files`, or on what the user picks when there are none.
     fn start_import(&mut self, files: Option<Vec<PathBuf>>, pick: ImportPick) {
         let files = files.or_else(|| {
-            let mut chooser = rfd::FileDialog::new()
-                .set_title("Import data files")
-                .add_filter("Data files", &["txt", "csv", "tsv", "dat", "asc", "prn", "bin"])
-                .add_filter("All files", &["*"]);
+            let mut chooser = rfd::FileDialog::new().set_title("Import data files");
+            chooser = if pick == ImportPick::Excel {
+                chooser.set_title("Import Excel workbooks").add_filter("Excel workbooks", &sheaf_io::excel::EXTENSIONS)
+            } else {
+                chooser.add_filter("Data files", &["txt", "csv", "tsv", "dat", "asc", "prn", "bin"])
+            };
+            chooser = chooser.add_filter("All files", &["*"]);
             if let Some(dir) = self.folder() {
                 chooser = chooser.set_directory(dir);
             }
             match pick {
                 ImportPick::Single => chooser.pick_file().map(|f| vec![f]),
-                ImportPick::Multiple | ImportPick::Csv => chooser.pick_files(),
+                ImportPick::Multiple | ImportPick::Csv | ImportPick::Excel => chooser.pick_files(),
             }
         });
         if let Some(files) = files {
-            let mut dialog = ImportDialog::new(files);
-            if pick == ImportPick::Csv {
-                dialog.preset_comma();
+            // An Excel workbook chosen with an ASCII item still goes to the Excel window.
+            let (workbooks, files) = split_excel(files);
+            if !workbooks.is_empty() {
+                self.import_excel = Some(ExcelImportDialog::new(workbooks));
             }
-            self.import = Some(dialog);
+            if !files.is_empty() {
+                let mut dialog = ImportDialog::new(files);
+                if pick == ImportPick::Csv {
+                    dialog.preset_comma();
+                }
+                self.import = Some(dialog);
+            }
         }
     }
 
@@ -2377,6 +2419,16 @@ impl SheafApp {
                 ImportOutcome::Cancelled => self.import = None,
                 ImportOutcome::Done(request) => {
                     self.import = None;
+                    self.finish_import(request);
+                }
+            }
+        }
+        if let Some(d) = &mut self.import_excel {
+            match d.show(ctx, import_target.as_ref().map(|t| t.1.as_str())) {
+                ImportOutcome::Open => {}
+                ImportOutcome::Cancelled => self.import_excel = None,
+                ImportOutcome::Done(request) => {
+                    self.import_excel = None;
                     self.finish_import(request);
                 }
             }
@@ -2606,6 +2658,10 @@ impl SheafApp {
                     self.say(format!("Wrote {}", path.display()));
                     self.export = None;
                 }
+                ExportOutcome::SavedWithNotes(path, _) => {
+                    self.say(format!("Wrote {}", path.display()));
+                    self.export = None;
+                }
                 ExportOutcome::Applied(text) => self.say(text),
                 ExportOutcome::Failed(e) => self.message = Some(("Could not export the graph".to_string(), e)),
             }
@@ -2642,8 +2698,33 @@ impl SheafApp {
                     self.say(format!("Wrote {}", path.display()));
                     self.export_sheet = None;
                 }
+                ExportOutcome::SavedWithNotes(path, _) => {
+                    self.say(format!("Wrote {}", path.display()));
+                    self.export_sheet = None;
+                }
                 ExportOutcome::Applied(_) => {}
                 ExportOutcome::Failed(e) => self.message = Some(("Could not export the worksheet".to_string(), e)),
+            }
+        }
+        if let Some(d) = &mut self.export_excel {
+            match d.show(ctx, &self.doc) {
+                ExportOutcome::Open | ExportOutcome::Applied(_) => {}
+                ExportOutcome::Closed => self.export_excel = None,
+                ExportOutcome::Saved(path) => {
+                    self.say(format!("Wrote {}", path.display()));
+                    self.export_excel = None;
+                }
+                ExportOutcome::SavedWithNotes(path, notes) => {
+                    self.say(format!("Wrote {}", path.display()));
+                    self.export_excel = None;
+                    for note in &notes {
+                        self.logs.warn(format!("Excel export: {note}"));
+                    }
+                    if !notes.is_empty() {
+                        self.message = Some(("Export notes".to_string(), notes.join("\n\n")));
+                    }
+                }
+                ExportOutcome::Failed(e) => self.message = Some(("Could not export to Excel".to_string(), e)),
             }
         }
         if let Some(d) = &mut self.power {
@@ -3160,6 +3241,22 @@ impl SheafApp {
                     };
                     if let Some(w) = &mut self.import_wizard {
                         w.show_page(page);
+                    }
+                }
+                "import-excel" => {
+                    if !arg.is_empty() {
+                        self.import_excel = Some(ExcelImportDialog::new(vec![PathBuf::from(arg)]));
+                    }
+                }
+                // import-excel-page:mode, header, columns, partial or misc (after import-excel).
+                "import-excel-page" => {
+                    if let Some(d) = &mut self.import_excel {
+                        d.show_page(arg);
+                    }
+                }
+                "export-excel" => {
+                    if let Some(book) = project.workbooks().next().map(|b| (b.id, b.sheets.len())) {
+                        self.export_excel = Some(ExcelExportDialog::new(book.0, book.1, None));
                     }
                 }
                 "import" | "import-data-options" => {

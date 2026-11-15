@@ -98,6 +98,18 @@ pub enum IoError {
     #[error("'{}' already exists and is not a companion file written by Sheaf, so it was not replaced; move or rename it and save again", path.display())]
     CompanionExists { path: PathBuf },
 
+    /// An Excel workbook (xls, xlsx, xlsm) that cannot be read.
+    #[error("'{}' is not a readable Excel workbook: {reason}", path.display())]
+    ExcelRead { path: PathBuf, reason: String },
+
+    /// An Excel workbook (xlsx) that cannot be written.
+    #[error("cannot write the Excel workbook '{}': {reason}", path.display())]
+    ExcelWrite { path: PathBuf, reason: String },
+
+    /// An Excel export would replace a file that is not an Excel workbook.
+    #[error("'{}' already exists and is not an Excel (.xlsx) workbook, so it was not replaced; choose another name", path.display())]
+    ExportExists { path: PathBuf },
+
     /// Two columns of a project share one identifier, so their data would collide.
     #[error("'{}' cannot be saved: column id {id} is used by more than one column", path.display())]
     DuplicateColumnId { path: PathBuf, id: u64 },

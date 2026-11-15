@@ -95,6 +95,8 @@ pub(crate) fn read_settings(r: &ReadOptions) -> ReadSettings {
         no_rename_sheet: r.no_rename_sheet,
         no_rename_book: r.no_rename_book,
         blocks_as_sheets: r.blocks_as_sheets,
+        sheets: r.sheets.clone(),
+        hidden_sheets: r.hidden_sheets,
     }
 }
 
@@ -298,9 +300,58 @@ fn export_opj(a: &ExportArgs) -> Result<()> {
     save_project(&project, &a.output)
 }
 
+fn xlsx_request(x: &XlsxArgs) -> sheaf_ops::tabular::XlsxRequest {
+    sheaf_ops::tabular::XlsxRequest {
+        all_sheets: x.all_sheets,
+        no_long_names: x.no_long_names,
+        no_units: x.no_units,
+        no_comments: x.no_comments,
+        short_names: x.short_names,
+    }
+}
+
+/// Writes a workbook of the project as an Excel file and says so.
+fn write_xlsx(project: &Project, book: Option<&str>, sheet: Option<&str>, x: &XlsxArgs, output: &Path) -> Result<()> {
+    let book = pick_book(project, book)?;
+    let outcome = sheaf_ops::tabular::write_xlsx(project, book, sheet, &xlsx_request(x), output)?;
+    for w in &outcome.warnings {
+        eprintln!("warning: {w}");
+    }
+    println!(
+        "wrote {} ({} sheet(s): {})",
+        outcome.path.display(),
+        outcome.sheet_names.len(),
+        outcome.sheet_names.join(", ")
+    );
+    Ok(())
+}
+
+/// Writes one workbook of the project (or the data file as a one-workbook project) as `.xlsx`.
+fn export_xlsx(a: &ExportArgs) -> Result<()> {
+    if a.graph.is_some() {
+        bail!("--graph is for figures; an .xlsx output holds a workbook (see --book and --sheet)");
+    }
+    if let (Ok(input), Ok(output)) = (std::fs::canonicalize(&a.project), std::fs::canonicalize(&a.output))
+        && input == output
+    {
+        bail!("the output '{}' is also the input", a.output.display());
+    }
+    let project = if is_project(&a.project) {
+        load_project(&a.project)?
+    } else {
+        let mut p = Project::new();
+        p.adopt_workbook(read_data_file(&a.project, &read_settings(&a.read))?.workbook);
+        p
+    };
+    write_xlsx(&project, a.book.as_deref(), a.sheet.as_deref(), &a.xlsx, &a.output)
+}
+
 fn export(a: ExportArgs) -> Result<()> {
     if is_opj(&a.output) {
         return export_opj(&a);
+    }
+    if sheaf_ops::tabular::is_xlsx_path(&a.output) {
+        return export_xlsx(&a);
     }
     require_positive("--dpi", Some(a.dpi))?;
     if !is_project(&a.project) {
@@ -321,6 +372,9 @@ fn export(a: ExportArgs) -> Result<()> {
 fn export_data(a: ExportDataArgs) -> Result<()> {
     let project = load_project(&a.project)?;
     let book = pick_book(&project, a.book.as_deref())?;
+    if sheaf_ops::tabular::is_xlsx_path(&a.output) {
+        return write_xlsx(&project, a.book.as_deref(), a.sheet.as_deref(), &a.xlsx, &a.output);
+    }
     let sheet = pick_sheet(&project, book, a.sheet.as_deref())?;
     let ws = &project.workbook(book).expect("picked above").sheets[sheet];
     write_sheet(ws, &a.output)

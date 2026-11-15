@@ -223,6 +223,8 @@ pub enum ExportOutcome {
     Closed,
     /// A file was written and the window closes.
     Saved(PathBuf),
+    /// A file was written, with notes about what the format could not hold; the window closes.
+    SavedWithNotes(PathBuf, Vec<String>),
     /// Apply: files were written (or skipped) and the window stays; the text is for the status bar.
     Applied(String),
     Failed(String),

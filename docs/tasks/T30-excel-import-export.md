@@ -1,7 +1,14 @@
 # T30: Excel import and export (xls, xlsx, xlsm)
 
-**Status:** open (brief written 2026-11-14 from T18's "Importers" row and parity rows "Excel import",
-"Write xlsx", "Open Excel").
+**Status:** done, merged 2026-11-14 night (macOS session "mac-excel", no Origin; ADR 0012, spec
+`docs/spec/import-excel.md`). `sheaf_io::excel` reads xls/xlsx/xlsm through `calamine` (ASCII header-row
+logic shared, not copied; cached formula values; 1900/1904 dates; size and zip guards; damaged files are
+errors, not panics) and writes xlsx through `rust_xlsxwriter`; File > Import > Excel and Export >
+Worksheet as Excel, drag-and-drop, `sheaf import/info/export/export-data`, MCP `import_files`. Synthetic
+fixtures from `tools/make-excel-fixtures.py`. Reviewed by three agents with each finding checked; 12 fixed.
+Left: every Origin measurement in import-excel.md (Windows, `tools/origin-ref`); step 6 (the owner's
+workbooks were not on the macOS machine); `.xlsb`/`.ods` untested; MCP `import_files` offers only the
+books/sheets layouts for Excel; Open Excel stays grey (out of scope).
 **Size:** L (import M, export S, Open Excel window out of scope). **Branch:** `excel-io`. **Model:** Sonnet.
 **Detail:** audit A (File menu greyed items) and E (import/export); parity rows "Excel import" (P1),
 "Write xlsx" (P1), "Open Excel, sample project, Close" (P1).

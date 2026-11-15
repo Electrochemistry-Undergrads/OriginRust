@@ -34,7 +34,7 @@
   <tr>
     <td width="50%" valign="top">
       <h3>Bring your data</h3>
-      Import CH Instruments text and binary files, CSV, and other delimited text into workbooks.
+      Import CH Instruments text and binary files, CSV, other delimited text and Excel workbooks (.xls, .xlsx, .xlsm) into workbooks.
     </td>
     <td width="50%" valign="top">
       <h3>Make your figures</h3>

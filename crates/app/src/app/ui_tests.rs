@@ -10,6 +10,7 @@ use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
 mod autosave;
+mod excel;
 mod label_whiteout;
 mod offset_multipliers;
 mod skip_points;
@@ -2279,7 +2280,9 @@ fn every_command_of_a_workbook_is_reachable_from_its_origin_menu() {
         &["File", "Import", "Single ASCII..."],
         &["File", "Import", "Multiple ASCII..."],
         &["File", "Import", "Comma Delimited (CSV)..."],
+        &["File", "Import", "Excel (XLS, XLSX, XLSM)..."],
         &["File", "Export", "Worksheet as ASCII..."],
+        &["File", "Export", "Worksheet as Excel..."],
         &["File", "Exit"],
         &["Edit", "Undo"],
         &["Edit", "Delete"],

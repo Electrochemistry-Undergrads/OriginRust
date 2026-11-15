@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 48 | 138 | 52 | 238 |
+| All rows | 48 | 140 | 50 | 238 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 16 | 69 | 52 | 137 |
+| P1 and P2 together | 16 | 71 | 50 | 137 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
@@ -89,7 +89,7 @@ Cross-cutting findings:
 | Encoding | none in Origin | BOMs, UTF-8, Windows-1252 | ✓ | no manual choice | P1 |
 | Import filters and saved settings | .oif, Import Filters Manager | none | ✗ | | P1 |
 | Import wizard, re-import | Ctrl+3, Ctrl+4 | the Import Wizard (File > Import > Import Wizard, Ctrl+3) with the pages Source, Header Lines, Column Names, File Name Options, Data Columns and Save Filters (grey) and Cancel, Back, Next, Finish; the options of the import window as a tree of option groups with a preview; source path recorded; the wizard lists the files (preview one, remove, add) and shows the header entries on the Header Lines page | ◐ | Binary, User Defined and Clipboard sources are grey; no saved import filters (page greyed); the File Name Options page has two ticks only; no re-import command (Ctrl+4), no remembered settings | P1 |
-| Excel import | File > Import > Excel | none | ✗ | no spreadsheet crate | P1 |
+| Excel import | File > Import > Excel | File > Import > Excel (XLS, XLSX, XLSM)... (sheet choice, hidden sheets, header rows, import modes, partial import, preview), drag-and-drop and command-line files, `sheaf import`/`info` with `--sheets`/`--hidden-sheets`, MCP `import_files`; `calamine` (ADR 0012); cached formula values, Excel dates (1900/1904), one book per file and one sheet per Excel sheet (import-excel.md) | ◐ | Origin's Excel import unmeasured (header defaults, merged cells, empty leading rows); `.xlsb`/`.ods` read but untested; no live Open Excel window | P1 |
 | Drag and drop | drop on window | projects open, data goes to dialog | ✓ | | P1 |
 | Other importers, image, database | HDF5, NetCDF, JCAMP-DX, SPC, WAV, ODBC and more | none | ✗ | | P2 |
 | Sparklines, auto width, write protection on import | ASCII options | none | ✗ | | P2 |
@@ -141,7 +141,7 @@ Cross-cutting findings:
 | Command-line control | Origin automation | `info`, `import`, `plot` (templates, panels, stacks, double-Y; `--save` writes .opj), `export`, `export-data`, `analyze` (integrate, subtract-ref, math, differentiate, smooth, normalize, baseline, interpolate, peaks, stats, ttest, anova, histogram, normality, sort), `fit` | ✓ | commands are independent; `export-data` reads .sheaf only | P1 |
 | Batch plotting | Duplicate (Batch Plotting) | one overlay figure per CLI call | ◐ | no graph per book or sheet, no app command | P1 |
 | Export worksheet as text | File > Export > Worksheet | `write_delimited`; CSV or TSV by extension | ◐ | no options dialog; no semicolon, label rows, selected range, full-precision switch | P1 |
-| Write xlsx | export worksheets | none | ✗ | | P1 |
+| Write xlsx | export worksheets | Export > Worksheet as Excel..., `sheaf export`/`export-data` to `.xlsx` (`rust_xlsxwriter`): one Excel sheet per sheet, Long Name/Units/Comments rows, missing values empty, dates as Excel dates; refuses to overwrite a file that is not an xlsx (import-excel.md) | ◐ | Origin's Excel export layout unmeasured | P1 |
 | Dependents and linked results | Window Properties > Dependents | none | ✗ | results unlinked from sources | P1 |
 | Summary table across sheets | batch summary | none | ✗ | | P1 |
 | LabTalk, Origin C, Python, MATLAB, R consoles | scripting windows | none | ✗ | only the formula language exists | P2 |

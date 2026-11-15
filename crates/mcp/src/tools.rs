@@ -499,6 +499,14 @@ struct AsciiArgs {
     date_order: Option<String>,
 }
 
+/// Which sheets of an Excel file to read. The header and row settings are those of `ascii`.
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields, default)]
+struct ExcelArgs {
+    sheets: Vec<String>,
+    include_hidden: bool,
+}
+
 #[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields, default)]
 struct ChiArgs {
@@ -520,6 +528,7 @@ struct ImportArgs {
     file_name_in_comments: bool,
     ascii: AsciiArgs,
     chi: ChiArgs,
+    excel: ExcelArgs,
     plot: bool,
 }
 
@@ -574,6 +583,8 @@ fn read_settings(a: &ImportArgs) -> Result<ReadSettings, ToolError> {
     }
     r.dates_as_text = one_of("dates", x.dates.as_deref().unwrap_or("detect"), &["detect", "text"])? == "text";
     r.day_first = one_of("date_order", x.date_order.as_deref().unwrap_or("mdy"), &["mdy", "dmy"])? == "dmy";
+    r.sheets = a.excel.sheets.iter().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
+    r.hidden_sheets = a.excel.include_hidden;
     Ok(r)
 }
 
@@ -1314,6 +1325,8 @@ struct ExportDataArgs {
     sheet: Option<String>,
     path: String,
     format: Option<String>,
+    #[serde(default)]
+    all_sheets: bool,
 }
 
 fn export_data(s: &mut Server, a: &Value) -> Res {
@@ -1321,11 +1334,18 @@ fn export_data(s: &mut Server, a: &Value) -> Res {
     let path = s.roots.check(&a.path)?;
     let (book, sheet) = locate_sheet(&s.project, a.book.as_deref(), a.sheet.as_deref())?;
     let ws = &s.project.workbook(book).ok_or_else(|| anyhow!("workbook not found"))?.sheets[sheet];
-    let format = match a.format.as_deref() {
-        Some(f) => match one_of("format", f, &["csv", "tsv"])?.as_str() {
-            "tsv" => SheetFormat::Tsv,
-            _ => SheetFormat::Csv,
-        },
+    let chosen = a.format.as_deref().map(|f| one_of("format", f, &["csv", "tsv", "xlsx"])).transpose()?;
+    if chosen.as_deref() == Some("xlsx") || (chosen.is_none() && sheaf_ops::tabular::is_xlsx_path(&path)) {
+        let request = sheaf_ops::tabular::XlsxRequest { all_sheets: a.all_sheets, ..Default::default() };
+        let out = sheaf_ops::tabular::write_xlsx(&s.project, book, a.sheet.as_deref(), &request, &path)?;
+        return Ok(ToolOut::json(json!({
+            "path": out.path, "sheets": out.sheet_names, "warnings": out.warnings,
+            "rows": ws.row_count(), "columns": ws.columns.len(),
+        })));
+    }
+    let format = match chosen.as_deref() {
+        Some("tsv") => SheetFormat::Tsv,
+        Some(_) => SheetFormat::Csv,
         None => SheetFormat::from_path(&path),
     };
     let bytes = sheaf_ops::tabular::sheet_to_bytes(ws, format)?;

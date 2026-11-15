@@ -108,6 +108,18 @@ pub fn defs() -> Vec<Def> {
         ],
         &[],
     );
+    let excel = obj(
+        vec![
+            (
+                "sheets",
+                strs(
+                    "Excel files: sheets to read, as names or 1-based positions (a number is a sheet's name if one has it, otherwise a position; default: every visible sheet). The header and row settings of ascii apply to Excel too.",
+                ),
+            ),
+            ("include_hidden", b("Excel files: also read hidden sheets when sheets is not given.")),
+        ],
+        &[],
+    );
     let chi = obj(
         vec![
             ("split_scans", b("One sheet per scan of a multi-scan file (default true).")),
@@ -170,7 +182,7 @@ pub fn defs() -> Vec<Def> {
         },
         Def {
             name: "import_files",
-            description: "Import data files, folders or wildcards (CH Instruments text and .bin, CSV, other text) into the project. A file that fails is listed in errors; the others are imported.",
+            description: "Import data files, folders or wildcards (CH Instruments text and .bin, CSV, other text, Excel .xls/.xlsx/.xlsm with one sheet per Excel sheet) into the project. A file that fails is listed in errors; the others are imported.",
             read_only: false,
             schema: obj(
                 vec![
@@ -187,6 +199,7 @@ pub fn defs() -> Vec<Def> {
                     ("file_name_in_comments", b("Put the file name in the column comments.")),
                     ("ascii", ascii),
                     ("chi", chi),
+                    ("excel", excel),
                     ("plot", b("Also make a default graph of each book.")),
                 ],
                 &["files"],
@@ -321,14 +334,21 @@ pub fn defs() -> Vec<Def> {
         },
         Def {
             name: "export_data",
-            description: "Write a sheet as delimited text (comma for csv, tab for tsv).",
+            description: "Write a sheet as delimited text (comma for csv, tab for tsv) or as an Excel .xlsx workbook.",
             read_only: false,
             schema: obj(
                 vec![
                     ("book", s(BOOK)),
                     ("sheet", s(SHEET)),
                     ("path", s("File to write.")),
-                    ("format", en(&["csv", "tsv"], "Default: tabs for .tsv and .txt, commas otherwise.")),
+                    (
+                        "format",
+                        en(
+                            &["csv", "tsv", "xlsx"],
+                            "Default: xlsx for .xlsx, tabs for .tsv and .txt, commas otherwise.",
+                        ),
+                    ),
+                    ("all_sheets", b("xlsx only: write every sheet of the workbook (default: one sheet).")),
                 ],
                 &["path"],
             ),

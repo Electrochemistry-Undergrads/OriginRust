@@ -135,6 +135,8 @@ pub enum ImportPick {
     Multiple,
     /// Several files, with the comma preset as the delimiter.
     Csv,
+    /// Excel workbooks (File > Import > Excel).
+    Excel,
 }
 
 #[derive(Debug, Clone)]
@@ -416,6 +418,8 @@ pub enum Action {
     },
     ExportGraph(WindowId),
     ExportData(WindowId),
+    /// File > Export > Worksheet as Excel...: the sheets of this book as an `.xlsx` file.
+    ExportExcel(WindowId),
     /// File > Print...: the graph page through the system print dialog.
     Print(WindowId),
     PrintPreview(WindowId),

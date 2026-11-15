@@ -2200,7 +2200,7 @@ Check values [COM]: 3 panels gave (14.99, 63.33, 75, 26.68) for layer 1 and tops
 
 **Arrange Layers** (`layarrange`): 2016 defaults are gaps of 5 and margins of 15 on every side. Width = (100 - left - right - (cols - 1) x h_gap) / cols and height likewise; layers fill the grid row by row from the top left. Check: 4 layers in 4 x 1 gave tops 15, 33.76, 52.51 and 71.26, height 13.75, width 69.99 [COM].
 
-**Merge Graph** (`merge_graph`): 2016 defaults are gaps 5 and 5 and margins 15 (left), 10 (right), 10 (top) and 15 (bottom). 2 graphs gave 2 x 1, 3 gave 2 x 2 with one empty cell and no layer in it, 4 gave 2 x 2 and 5 gave 3 x 2 (fits rows = ceil(sqrt(n)) and cols = ceil(n / rows) [INF]). The rectangles follow the Arrange Layers formula exactly; merged layers are not linked and text is scaled (0.46 for 2 x 2, 0.36 for 3 x 2) [COM].
+**Merge Graph** (`merge_graph`): 2016 defaults are gaps 5 and 5 and margins 15 (left), 10 (right), 10 (top) and 15 (bottom). 2 graphs gave 2 x 1, 3 gave 2 x 2 with one empty cell and no layer in it, 4 gave 2 x 2 and 5 gave 3 x 2 (fits rows = ceil(sqrt(n)) and cols = ceil(n / rows) [INF]). The rectangles follow the Arrange Layers formula exactly; merged layers are not linked and text is scaled (0.46 for 2 x 2, 0.36 for 3 x 2) [COM]. Measured in full in 15.7c.
 
 ### 15.2 Model
 
@@ -2410,6 +2410,96 @@ disabled. UI tests cover the measured grouping/frames, source immutability, para
 comments, selected rows, Column/Scatter, manual dimensions/spacing, invalid geometry, Cancel/Escape
 and one-step Undo/Redo; grid regression cases include the measured 1/2/3/5-group arrangements.
 
+### 15.7c Merge Graph Windows (T60, measured 2026-11-15)
+
+Graph > Merge Graph Windows copies finished graphs into the cells of one new graph. Measured in
+Origin 2016 through `merge_graph` (its interface names and defaults, then 40 scripted merges of stock
+Line graphs and its dialog; probes and outputs in the ignored `re-workspace/scratch/t60/`):
+
+- **Page:** 11.41 x 7.973 in (6846 x 4784 dots at 600 dpi), landscape whatever the sources' pages;
+  Portrait turns it; Width/Height/Unit set another size (a 30 x 20 in page kept every percentage
+  and factor).
+- **Cells:** the Arrange Layers formula (15.1) with gaps 5 and 5 and margins 15 (left), 10 (right),
+  10 (top), 15 (bottom), filled row by row from the top left. 3 x 1 gave (15, 9.992, 75.01, 21.68),
+  tops 36.66 and 63.34; 1 x 3 lefts 15, 41.67, 68.33 (21.66 x 75); ygap 0 heights 25. Rows and
+  columns default to `ceil(sqrt(n))` x `ceil(n / rows)` (2: 2 x 1, 3 and 4: 2 x 2, 5: 3 x 2); an
+  empty cell gets no layer ("Add Extra Layer(s) for Grid" off).
+- **Layers:** a source's layers stay together in its cell; a double-Y source kept its right Y
+  layer linked to its left one (link index remapped, `x.link` 1, frame 100 % of the parent).
+  Merged layers are not linked. The sources are kept ("Keep Source Graphs" on); off deletes them.
+  "Rearrange Layout" off leaves every layer at its source frame (they overlap) with factor 1.
+- **Link Source Graphs:** layers 2 and up get `layer.link` 1 in "% of Linked Layer" units (layer 2
+  of a 3 x 1 at (0, 123, 100, 100)) with `x.link` and `y.link` 0: position only.
+- **Show Axes Frame** (with ygap 0): the panels with a panel below them get no X tick labels
+  (`x.showlabels` 0) and no ticks (`x.ticks` 0); the bottom panel keeps both. The dialog notes
+  "Overlapping axes/ticks are hidden".
+- **Keep Layer Aspect Ratio:** the layer keeps its width-to-height ratio in percent of each page,
+  as large as fits, at the top left of its cell (3 x 1: 20.57 x 21.68 for a 68.16 x 71.83 source).
+- **Text factor** (`layer.factor`; Scale Mode Auto and "Scale with Layer Frame" gave the same in
+  every case; Fixed Factor sets it): 1 when the cell is at least 68.16 % wide or 71.83 % tall (the
+  stock template layer's size), otherwise `sqrt(w h) / 75.6` (w, h the cell in percent), shown to two
+  decimals: 2 x 2 0.46, 3 x 2 and 2 x 3 0.36, 3 x 3 0.29, 4 x 4 0.20, no gaps and margins 0.66,
+  margins 30 0.23, a 65 x 21.68 cell 0.50 but 70 x 21.68 gives 1, 21.66 x 70 gives 0.52 but 21.66
+  x 74 gives 1. Neither the page nor the source's own layer size (30 x 30, 50 x 50, 80 x 40 %)
+  changed it. 75.6 is fitted (between 75.4 and 75.9); Origin's own formula is not known.
+- **Dialog** (our description): Merge (Active Page, All in Active Folder, ... (Open) by default,
+  All in Project, Specified), Graphs list, Keep Source Graphs, Rearrange Layout, then collapsible
+  Arrange Settings (rows, columns, Add Extra Layer(s) for Grid, Keep Layer Aspect Ratio, Treat Each
+  Source Graph as a Unit (on), Link Source Graphs, Set Layer Width/Height by Common Scale, Show
+  Axes Frame), Spacing (in % of Page Dimension), Page Setup (Orientation, Original Size, Width,
+  Height, Unit), Scale Elements (Scale Mode, Fixed Factor), Add Label (None, A, a, Custom; Top
+  Left/Right Outside/Inside), a preview, OK and Cancel.
+
+**Sheaf** (`sheaf_core::merge`): `MergeOptions` holds these settings with Origin's defaults and
+`Project::merge_graphs` makes the graph (fresh name `Graph<n>`, first source's page style, the
+measured page and cells; `auto_text_factor` multiplies the fonts of axis titles, tick labels,
+legends and text labels). A source whose layers stand side by side on its page is fitted into its
+cell by the box round its unlinked layers (Sheaf's choice: Origin's placement of several unlinked
+layers of one source was not measured); validly linked layers keep their frames, so double-Y and
+stacked sources stay intact. With Link Source Graphs, an unlinked layer that other layers follow (the
+left layer of a double-Y source) stays unlinked, because a linked layer cannot be a parent. Sheaf
+adds **Share X** (`share_x`, `--share-x`): the linked layers also follow the first one's X scale one
+to one, the vertical shared-X figure of the brief. "Show Axes Frame" also hides the Y axis of a cell
+with a filled cell on its left when the horizontal gap is 0 (Origin measured for rows only).
+Duplicate, missing or non-graph sources, fewer than two graphs, too few cells, a factor outside 0.05
+to 20 and a page side outside 0.5 to 200 in are refused without changing the project. Not built:
+Add Extra Layer(s) for Grid, Set Layer Width/Height by Common Scale, panel labels, the folder
+choices of Merge (Sheaf has no active folder), "Treat Each Source Graph as a Unit" off.
+
+**Command line:** `sheaf merge-graphs PROJECT (--graph NAME ... | --all-graphs) [--rows N]
+[--cols N] [--gap H,V] [--margins L,R,T,B] [--portrait] [--page-size W,H] [--keep-aspect]
+[--link] [--share-x] [--hide-inner] [--text-scale auto|keep|FACTOR] [--remove-sources] [-o FIGURE]
+[--dpi N] [--save PROJECT]`; at least one of `-o` and `--save`.
+
+### 15.7d Layer Management and fitting the page (T60, measured 2026-11-15)
+
+**Origin's Layer Management window** (opened by `laymanage`; our description): a "Layer Selection"
+grid (#, Name, Link to) on the left; tabs Add, Arrange, Size/Position, Link, Axes and Display; a
+preview on the right; the note "Use the Apply buttons on each tab to update your preview graph. Use
+the OK button to apply the changes in preview graph to source graph."; Undo, OK and Cancel.
+- Arrange: Arrange Order (Layer Index Order, Current Position Order), Number of Rows and Columns
+  (1, 1), Add Extra Layer(s) for Grid (on), Keep Layer Aspect Ratio, Treat Linked Layers as a
+  group, Link Layers, Set Layer Width/Height by Common Scale, Show Axes Frame; spacing gaps 5 and
+  5, margins 15, 10, 10, 15 (the merge values, not `layarrange`'s 15 on every side).
+- Size/Position: Option Resize, Move, Swap, Align. Resize and Move take Units (% of Page, inch, cm,
+  mm, pixel, point, % of Reference Layer (default)), a Reference Layer and Width/Height (100, 100)
+  or Left/Top (0, 0); Swap takes two layers and a Reorder tick; Align a Reference Layer and a
+  Direction (Left, Top, Right, Bottom).
+- Link: Link To (None or a layer), X and Y Axis Link (None, Straight(1 to 1) default for X of a
+  linked layer, Align, Custom with X1/X2 or Y1/Y2), Units (% of Linked Layer default) and "When
+  dragged to reposition, also reposition parent layer".
+- Axes (scales; per side Axis, Tick In & Out/In/Out/None, Title, Tick Label, Formula) and Display
+  (Drawing Order; Color, Border Dimensions (% of Layer: 16.6, 10, 12.4, 15.2), Scale Elements:
+  Scale with Layer Frame or Fixed Factor).
+
+**Fit Page to Layers** (`pfit2l`; Margin Control Border (default) or Tight, Border Width 5, Adjust
+Direction Height and Width (default), Height Only, Width Only), measured on the stock page: the
+layers keep their size and distance from each other in dots; the page becomes the box round the
+content plus, with Border, the border width in percent of the **old** page on each side (5: 321 of
+6432 and 246 of 4923 dots; 10 twice that); Tight adds about 13 dots. Height Only keeps the page width
+and every left; Width Only the reverse. An empty stock layer counted as its frame plus 370 dots
+above it (what this space is was not settled).
+
 ### 15.8 Origin project files
 
 The `.opj` reader reads the layers of a panel graph as independent layers with the limits stored in the file, so the owner's panel graphs already draw at Origin's ranges without links (only the second layer of a double-Y graph is linked, by the rule of section 12.7). Where Origin stores `layer.link`, `x.link` and `y.link` was not found in the layer header (section 12.7 lists bytes that differ for the linked layer of a double-Y graph); reading panel links, and writing panel graphs, needs that first.
@@ -2431,7 +2521,8 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 - The `.opj` bytes of layer links (15.8).
 - Owner choices: the page size of stacks with many panels (Origin keeps the page; a 6-panel stack on the upright Line page has panels of about 61 pt), one Y title by default instead of one per panel, panel labels such as (a) and (b) (Merge Graph can add them; not measured), and one colour per panel across the graph instead of Origin's colours per layer (with the cyclic voltammetry palette, every one-curve panel gets the first light blue).
 - Merge Graph's automatic rows and columns were seen only for 2 to 5 graphs.
-- Not tested in Origin: the column assignment of PAN2VERT and PAN4 with several X columns, horizontal stacks, and the defaults of the Layer Management dialog's Arrange tab.
+- Not tested in Origin: the column assignment of PAN2VERT and PAN4 with several X columns and horizontal stacks. The Layer Management Arrange defaults were measured on 2026-11-15 (15.7d).
+- Merge Graph Windows: Origin's own text-factor formula (15.7c fits it), where it places several unlinked layers of one source, what "Treat Each Source Graph as a Unit" off and the Common Scale options change, and its panel labels.
 
 ## 16. Free text labels (P0, GP-TXT-01)
 

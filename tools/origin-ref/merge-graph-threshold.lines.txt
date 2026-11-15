@@ -1,0 +1,80 @@
+newbook;
+string bk$ = %H;
+col(1) = data(1,10);
+col(2) = col(1)^2;
+wks.addcol(); col(3) = col(1)*3;
+wks.addcol(); col(4) = 100-col(1)^2;
+?wks.ncols
+?col(2)[3]
+plotxy iy:=[Book1]1!(1,2) plot:=200 ogl:=[<new name:=GA>];
+$page.name$
+?layer.nplots
+win -a Book1;
+plotxy iy:=[Book1]1!(1,3) plot:=200 ogl:=[<new name:=GB>];
+$page.name$
+win -a Book1;
+plotxy iy:=[Book1]1!(1,4) plot:=200 ogl:=[<new name:=GC>];
+$page.name$
+type -a "CASE 3x1 rm10.5";
+merge_graph option:=project row:=3 col:=1 rightmg:=10.5;
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE 3x1 rm11";
+merge_graph option:=project row:=3 col:=1 rightmg:=11;
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE 3x1 rm12";
+merge_graph option:=project row:=3 col:=1 rightmg:=12;
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE 3x1 rm15";
+merge_graph option:=project row:=3 col:=1 rightmg:=15;
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE 3x1 rm20";
+merge_graph option:=project row:=3 col:=1 rightmg:=20;
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE 1x3 bm16";
+merge_graph option:=project row:=1 col:=3 bottommg:=16;
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE 1x3 bm20";
+merge_graph option:=project row:=1 col:=3 bottommg:=20;
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE 1x3 bm25";
+merge_graph option:=project row:=1 col:=3 bottommg:=25;
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE 3x1 g0 t0 b0 rm11";
+merge_graph option:=project row:=3 col:=1 ygap:=0 topmg:=0 bottommg:=0 rightmg:=11;
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;

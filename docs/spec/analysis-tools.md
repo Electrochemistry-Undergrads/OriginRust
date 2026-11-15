@@ -297,6 +297,20 @@ oright` and the `_x`, `_y` outputs of each). Runs of 2026-11-13 (scripts `pkfind
   `second` 40 and `residue` exactly the four gaussians; on the clean curve `first` finds 15 including shoulders, `win`
   7); their rules were not worked out, Sheaf's Peak Analyzer methods (section 11) are not calibrated against them.
   An explicit `option:=r height:=10 width:=5` call returned an error for both curves.
+* (observed 2026-11-14, `re-workspace/scratch/pkm`, probes 1 and 2: 15 data sets, 360 calls; rules still not found,
+  these facts narrow them down) `npts` changes nothing for `first`, `second`, `residue` and `win` (1, 2, 3 and 5 give
+  the same rows), and neither does the X spacing (0.5 and 1.0 give the same rows). On a single unit impulse in the
+  middle of N points, `first` reports the impulse and the points `floor(N/10)` rows on either side (N = 21, 41, 81,
+  101: offsets 2, 4, 8, 10), so its derivative window grows with the length of the data; `second` reports offsets
+  2, 4, 6 on both sides for N = 41 (and an uneven set for N = 81, 101); `residue` reports every second row within
+  4 rows for N = 41; `win` reports only the impulse. The rows reported by `first` and `second` include points whose
+  value is 0 or tiny (gaussian tails), so no sign or height test applies, and on a gaussian the side points lie 10
+  rows away for N = 41, not `floor(N/10)`. `win` behaves like the local maximum with a fixed window of about two
+  points, but finds nothing on a gaussian raised by 5 (it measures height from a baseline). `residue` on a cubic
+  returned row 1 repeated for every row (a degenerate result). Tried and failed against all 15 sets: zero crossings
+  of a Savitzky-Golay derivative (windows 3 to 41, orders 1 to 5, five edge modes, three picking rules) and of a
+  slope or span derivative with half window `floor(N/10)` (three edge rules, five picking rules). Origin's own
+  `smooth` (FFT, adjacent averaging, Savitzky-Golay defaults) does not give these rows either.
 Sheaf: `PeakOptions { smooth_points, foot_height, max_half_width }`, `PeakResult { left, right }`; the Find Peaks
 window has Smoothing points, Foot height and a limit for the distance of the feet; the result sheet has Left foot and
 Right foot columns (X values). `sheaf analyze peaks` keeps its own smoothing of the peak chain.

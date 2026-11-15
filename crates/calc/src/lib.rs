@@ -126,6 +126,7 @@ pub use survival::{
 };
 pub use trace::{TraceMethod, trace_interp, trace_points};
 pub use vartest::{
-    OneProportion, TwoProportions, VarTest, exact_interval, proportion_one, proportion_two, ratio_interval,
-    variance_interval, vartest_one, vartest_two, wald_difference_interval, wald_interval,
+    OneProportion, TwoProportions, VarTest, exact_interval, power_one_proportion, power_two_proportions,
+    proportion_one, proportion_two, ratio_interval, two_sample_normal_doubtful, variance_interval, vartest_one,
+    vartest_two, wald_difference_interval, wald_interval,
 };

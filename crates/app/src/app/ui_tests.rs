@@ -34,6 +34,7 @@ mod simulate;
 mod skip_points;
 mod sort_x;
 mod sunburst;
+mod surface_fit;
 mod switcher;
 mod symbol_line_gaps;
 mod symbol_line_order;

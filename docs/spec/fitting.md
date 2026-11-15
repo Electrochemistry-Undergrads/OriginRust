@@ -278,3 +278,152 @@ noise), Recalculate None/Manual (Sheaf links Auto or Manual), the numbering of a
    none), Apply, Recalculate Manual, user-defined functions, and the X range of the functions of the
    other 24 categories.
 
+1. The window: category and function lists, the parameter grid, the X range controls, the output controls and the graph tick; the default function, X range, number of points and parameter values (and whether the initial values are those of the function file or computed).
+2. Output: workbook and sheet names, column names, long names, comments and units of the X and Y columns, whether parameters are recorded, what "create a graph" draws.
+3. The numbers: simulated values of Gauss, ExpDec1 and Boltzmann (and Voigt and a branch function such as Bigaussian) against `simcurve` for typed parameters, linear and logarithmic X, compared to 1e-12; store as a fixture in `crates/fit/tests/data/` and add a test.
+4. Whether `simcurve` offers a logarithmic spacing and how it names it; behaviour for a function with no value at some X (missing value or error); whether parameter bounds are enforced; whether it applies to user-defined functions; whether the curve is live on a preview graph.
+
+## 14. Surface fits on XYZ worksheet columns (T15 item 7, engine and library)
+
+Scope: `z = f(x, y)` fitted to three worksheet columns. Matrices and 3D plotting are not part of this. The engine pieces are
+`nlsf::FitFunction::from_formula_xy` and `x2_name`, `nlsf::fit_xyz` / `Fitter::new_xyz`, the table in `crates/fit/src/surface.rs`
+(22 functions; `library::get` also finds them, `library::list` does not list them) and the FDF import of files with two
+independent variables (`fdf::FdfFunction::to_fit_function`; three or more are still refused). A one-variable fit of a surface
+function, and the reverse, is an error. Points with a missing x, y or z (or weight) are dropped, as for curves. The fitting
+algorithm, statistics and report numbers are the ones of section 3 and 4 with no change.
+
+### Measured in Origin 2016 (`tools/origin-ref/nlfit-surface-suite.lines.txt`, made by `nlfit-surface-gen.py`)
+
+* Command: `nlbeginz iz:=(1,2,3) func:=<name> nltree:=tt`, then `nlfit`, `nlend output:=1` (the plain `nlbegin` refuses
+  XYZ ranges). The tree holds the parameters (`tt.<name>`, read before `nlfit` they are the initial values) and `tt.niter`.
+  The report is the sheet `FitSurface1` (layout as the curve report: parameter table in columns 7 to 11, statistics column 12,
+  ANOVA from column 21 or later; `tools/origin-ref/nlfit-surface-make-fixture.py` reads it). It also makes `FitSurfaceCurve1`.
+  The statistics are the curve ones: n, DOF, reduced chi-square, RSS, R-square, adjusted R-square, ANOVA, `Succeeded(100)`.
+* Data: 11 x 11 grids (9 x 9 for the last case) of `z` plus a fixed sine noise term, made inside Origin; fits of Plane,
+  Parabola2D, Poly2D, Gauss2D (also with 5 missing z), Lorentz2D, Voigt2D, Gaussian2D (rotated), Exponential2D, Rational2D and
+  Plane with 3 missing x or z values. A missing cell is made with the assignment of `-1.23456789E-300`; the constant `NANUM`
+  does nothing in a cell assignment.
+* Origin's iterations on these were 3 to 11 (Plane 4, Parabola2D 3, Poly2D 3, Gauss2D 6, Lorentz2D 5, Voigt2D 6, Gaussian2D 7,
+  Exponential2D 11, Rational2D 8).
+* The 22 functions in Origin's FDF files (category Surface Fitting) and their formulas, parameter names and bounds are in
+  `surface.rs`: Plane, Parabola2D, Poly2D, Polynomial2D, Gauss2D, Gaussian2D, Lorentz2D, Voigt2D, Voigt2DMod, Exponential2D,
+  Extreme2D, LogNormal2D, Power2D, Rational2D, RationalTaylor, DoseResp, GaussCum, LogisticCum, ExtremeCum, Chebyshev2D, Cosine,
+  Fourier2D (our names carry a `2D` suffix for DoseResp, GaussCum, LogisticCum, ExtremeCum and Cosine, which in Origin share the
+  name of a one-variable function). Bounds on by default: widths `w1`, `w2` (and `C`, `E` of DoseResp) above 0, `mu` of Voigt in [0, 1].
+  A parameter named `E` is a parameter here, not Euler's number (internally written `E__` in the formula).
+
+### Starting values
+
+Origin's rules (from the function files): Plane, Parabola2D, Poly2D start from polynomial fits of z against x and of z against y
+(after sort and smoothing; Poly2D has `f = 0`); the peak surfaces take position, width, base and height from two slice curves
+interpolated from the data, `w1`, `w2` are the slice widths times 0.85 (Gauss2D, Gaussian2D, Voigt2D) or divided by 2 (Lorentz2D),
+`mu = 0`, `theta = 0`; Exponential2D uses the extremes of z and the x and y extent. The slices come from a native
+scattered-data interpolation that is not reproduced: ours are the grid lines through the highest point. Measured Origin
+starts against ours (Gauss2D: Origin `z0 0.683, A 2.673, xc 2.653, w1 1.637, yc 2.245, w2 1.320`; ours `0.577, 2.76, 2.5, 2.10,
+2.0, 1.79`) agree to a few percent for the polynomial surfaces and are rougher for the peak surfaces. From our starts every measured
+case reaches Origin's result (test `surface_fits_from_own_starting_values_reach_origin_results`).
+
+### Test and tolerances (`crates/fit/tests/origin_surface.rs`, data `tests/data/origin_surface.json`)
+
+From Origin's starting values our engine takes the same number of iterations in every case but Rational2D and agrees in
+parameters, standard errors, t, dependency, statistics and ANOVA to 1e-7 (relative). Rational2D (dependencies near 1) stops at
+a slightly different point of its flat valley: values agree to 1e-2, standard errors to 1e-1 relative. From our own starting
+values the tolerance is 1e-4 (values) and 1e-3 (statistics).
+
+### Unmeasured
+
+Origin's fits of Polynomial2D, Voigt2DMod, Extreme2D, LogNormal2D, Power2D, RationalTaylor, DoseResp, GaussCum, LogisticCum,
+ExtremeCum, Chebyshev2D, Cosine and Fourier2D (our formulas are copied from the files, no run); the starting values of those and of
+Exponential2D beyond the case above; the scaling applied by Chebyshev2D and Cosine (the files say x and y are scaled to -1..1 and
+0..pi, we apply none); weighted surface fits; fits with fixed parameters, user-set bounds or the simplex algorithm; whether
+`nlbeginz` accepts a worksheet range with a column of errors; the dialog and the report sheet layout in the application
+(part 2).
+
+## 15. Surface fits (XYZ) in the application, command line and project
+
+Section 14 holds the engine, the 22 functions and what was compared with Origin's `nlbeginz` runs. This section is what
+the application does with three worksheet columns. Scope is as there: `z = f(x, y)` on XYZ columns; matrices and 3D
+plotting are not part of it.
+
+### Measured in Origin 2016 (raw output in `re-workspace/scratch/t15-surface/`, local only)
+
+Run with `tools/origin-ref/run-labtalk-lines.ps1` on a new book with X, Y, Z columns (an 11 x 11 grid of 121 rows, the
+Plane function, `nlbeginz iz:=(1,2,3)`, `nlfit`, `nlend output:=1`):
+
+* The book then holds three sheets: the data sheet (still three columns: no fitted or residual column is added to it),
+  `FitSurface1` (the report; layout and statistics in section 14) and `FitSurfaceCurve1`.
+* `FitSurfaceCurve1` has 2500 rows and 8 columns. The first three have the long names `FitX`, `FitY`, `FitZ` and the
+  designations X, Y, Z (`wks.col.type` 4, 1 and 6). They are the fitted surface on a regular 50 x 50 grid over the data
+  range of x and y (for x from 0 to 5: 0, 5/49, 2 x 5/49, ...), x changing fastest and y once per 50 rows; `FitZ` is the
+  function at those points. Columns 4 to 8 start with the data x and y, the function at the data points (twice) and a
+  column of zeros in the first rows; what the last five columns are exactly was not worked out, and Sheaf does not
+  write them.
+* The report sheet of a surface fit has the title "Nonlinear Surface Fit", the three input ranges (`[Book1]Sheet1!A`, `B`,
+  `C`, as the cell range text `[1*:121*]`), the equation as `z=z0+a*x+b*y;` and otherwise the layout of the curve report
+  (section 3 and 4; section 14 lists its statistics).
+* `nlfit -d` (open the dialog) after `nlbeginz` does not open a window: Origin's command returned false. The window is
+  reached through the menu: `tools/origin-ref/origin-dialog.ps1 -MenuClicks "300,300;K:^a;K:%a;K:F;K:{DOWN} x 6;K:{ENTER}"`
+  on a book whose third column is set to Z (Alt+A, F, six Down, Enter lands on Analysis > Fitting > Nonlinear Surface
+  Fit...; pictures and control lists in `dlg2` and `dlg3`). What it shows: title "NLFit ()" and the NLFit layout of
+  section 9 (Dialog Theme, tabs Settings, Code, Parameters, Bounds, the lower panel with Fit Curve, Residual, Formula,
+  Sample Curve, Messages, Function File, Hints, and Fit, Done, Cancel). Function Selection: the Category box holds
+  "Surface Fitting" and is grey, the Function box is empty, so the window says "Function is empty. Please specify it to
+  continue." and the preview says "No Preview"; Iteration Algorithm (Levenberg Marquardt; the list has a second entry
+  "Orthogonal Distance Regression (Pro)"), Description and File Name(.FDF). The Function list holds, in this order,
+  Chebyshev2D, Cosine, DoseResp2D, Exponential2D, Extreme2D, ExtremeCum, Fourier2D, Gauss2D, Gaussian2D, GaussCum, LogisticCum,
+  LogNormal2D, Lorentz2D, Parabola2D, Plane, Poly2D, Polynomial2D, Power2D, Rational2D, RationalTaylor, Voigt2D, Voigt2DMod
+  (so Origin's names have no `2D` suffix for Cosine, ExtremeCum, GaussCum and LogisticCum), then `<New...>` and `<Add...>`. The pages
+  of the Settings list are Function Selection, Data Selection, Fitted Curves, Find Z, Advanced, Output (the curve window's
+  "Find X/Y" is "Find Z"). Data Selection shows "Multi-Data Fit Mode" (Independent Fit - Consolidated Report, grey) and an
+  "Input Data" node whose range text is `[Book1]Sheet1!(A,B,C)`: one X, Y, Z triple. Find Z holds one node "Find Z from XY"
+  with a check box. The Fitted Curves, Advanced and Output pages were not read (the clicks did not change the page).
+
+### What Sheaf does
+
+* Request: `FitRequest.surface = Some(SurfaceColumns { x, y })` and `FitRequest.y` is then the Z column. `x` and `y` left
+  `None` are the sheet's own: the X column to the left of the Z column (as for curve fits) and the nearest column to its left
+  designated Y that is not a fit result (`surface_columns`). Model: a surface function by name (`FitModel::BuiltIn`), a
+  formula in `x` and `y` (`FitModel::Formula`, parameters named by the caller) or an `.FDF` file with two independent
+  variables. A curve model, a one-variable function, equal X, Y and Z columns, or bands are
+  refused, and nothing in the project changes. Rows (all, a range of rows, an X range), the start values, fixed values and
+  bounds, weighting (error column or direct weights), scale errors, algorithm, iteration limit, tolerance and the
+  confidence level are those of a curve fit; a missing x, y, z or weight leaves the row out. Masked and filtered cells count
+  as missing. The exception is the X range: X cycles in XYZ data, so a surface fit keeps every row whose X lies in the range
+  (not only the first unbroken run as a curve fit does); none is an error. Origin's choice for XYZ data is unmeasured.
+* Results (`Project::fit` returns a `FitOutcome` with `surface = true`): sheet `FitSurface1` (the first free number of
+  `FitSurface1` and `FitSurface1Stats`) with the parameter table and `FitSurface1Stats` with model, equation, data, rows,
+  statistics, ANOVA and derived quantities (FWHM and volume of the peak surfaces), laid out as `FitNL1`; two columns after the Z column
+  (fitted Z and residual, marked as fit results, so they are not offered as Y columns); and `FitSurfaceCurve1`, the 50 x 50
+  grid above with the columns `FitX`, `FitY`, `FitZ` (X, Y, Z designations). Sheaf adds the fitted and residual columns,
+  which Origin's `nlend output:=1` run did not. There is no graph and `FitOutcome::curve_x` and `curve_y` are the grid's X and
+  Z columns.
+* Saving: the results are ordinary sheets and columns, so the `.sheaf` file holds them (test
+  `a_plane_is_fitted_and_the_results_are_placed`). `FitRequest` itself is not stored in a project, and there is no
+  recalculation link for any fit result in Sheaf (feature-parity: "analysis and fit results are not linked"), so
+  the surface results are static as the curve results are. The `.opj` writer does not write fit result sheets of either
+  kind (feature-parity), so the `.opj.sheaf` companion has nothing of its own for them.
+* Window: Analysis > Fitting > Nonlinear Surface Fit... (an item of Origin's own menu, measured earlier in
+  `gui-look.md`, grey until now) opens the NLFit window with the category "Surface Fitting" (grey, as in Origin) and the function Gauss2D (Origin
+  starts with an empty function; Sheaf starts on Gauss2D so that the window can fit at once). With a surface function chosen, Data Selection shows three boxes X, Y and Z
+  (the Z box is the column that is fitted; choosing it takes X and Y from the sheet's designations again), the Fitted
+  Curves page says where the surface goes instead of the curve options, there are no bands and no other-dataset check
+  boxes, and the lower panel's preview says there is nothing to preview. 1 Iteration, Fit until converged, Revert, Fit,
+  Done and Cancel work as for curves (section 9) and Fit writes everything above in one undo step ("Fit"). The category and
+  function boxes list the 22 functions with their formulas written `z = ...`. The Settings list calls the fourth page "Find Z" as Origin does. Sheaf's single Input Data node is three boxes X, Y and Z;
+  the rest is the NLFit layout of section 9 with these differences. Sheaf's function names follow section 14 (`Cosine2D`,
+  `GaussCum2D`, `LogisticCum2D`, `ExtremeCum2D`), not Origin's list order or names.
+* Command line: `sheaf fit FILE --z COLUMN [--x COLUMN] [--y COLUMN] --model Gauss2D` (also `--formula` in x and y with
+  `--params`, `--fdf`, `--init`, `--fix`, `--bounds`, `--weight`, `--rows`, `--x-range`, `--confidence`, `--max-iterations`,
+  `--tolerance`, `--save`, `--export`); `--y` is then the Y column, not the fitted one. `--global`, `--regress`, `--compare`,
+  `--rank`, `--xerr`, `--bands` and `--plot` are refused with a surface fit; `--list` shows the category "Surface Fitting".
+  Tests: `crates/core/tests/surface_fit.rs`, `crates/cli/tests/fit.rs` (`a_surface_fit_takes_z_and_a_surface_function`) and
+  the window test `crates/app/src/app/ui_tests/surface_fit.rs`.
+
+### Unmeasured
+
+The Fitted Curves, Advanced and Output pages of Origin's window with a surface function chosen, its Parameters and Bounds tabs, and
+what a chosen function changes in the Data Selection page (the function was empty in the run); the "Find Z from XY" tool; what columns 4 to 8 of `FitSurfaceCurve1` hold; whether the grid
+size of 50 is a default that the window changes; weighted surface fits and surface fits with fixed or bounded
+parameters in Origin; Origin's response to a Z column that is not designated Z; the report sheet's layout in the
+application (Sheaf writes its own parameter and statistics sheets, as for curves); the three-variable functions,
+Simulate Surface, and matrices.

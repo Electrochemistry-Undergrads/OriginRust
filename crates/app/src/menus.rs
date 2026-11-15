@@ -1134,7 +1134,7 @@ fn analysis_menu() -> Vec<Entry> {
                 sep(),
                 keyed("Nonlinear Curve Fit...", ctrl(Key::Y), Cmd::Fit(FitKind::BuiltIn)),
                 grey("Nonlinear Implicit Curve Fit..."),
-                grey("Nonlinear Surface Fit..."),
+                item("Nonlinear Surface Fit...", Cmd::Fit(FitKind::Surface)),
                 sep(),
                 item("Simulate Curve...", Cmd::SimulateCurve),
                 grey("Simulate Surface..."),

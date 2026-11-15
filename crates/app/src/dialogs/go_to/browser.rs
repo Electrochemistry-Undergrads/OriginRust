@@ -6,6 +6,41 @@ use egui_extras::{Column as TableColumn, TableBuilder};
 use sheaf_core::format::NumberFormat;
 use sheaf_core::{Column, ColumnId, Project, WindowId, Workbook, Worksheet};
 
+mod rows;
+
+struct AddedRange {
+    columns: Vec<Choice>,
+    rows: Option<(usize, usize)>,
+}
+
+impl AddedRange {
+    fn rows_label(&self) -> String {
+        self.rows.map_or_else(|| "[1:end]".into(), |(first, last)| format!("[{first}:{last}]"))
+    }
+
+    fn suffix(&self) -> String {
+        if self.rows.is_some() { self.rows_label() } else { String::new() }
+    }
+
+    fn reference(&self, project: &Project) -> Option<String> {
+        let entries = ColumnBrowser::range(&self.columns, project)?;
+        Some(format!("{}{}", entries.first()?.prefix(), self.local_reference(&entries)?))
+    }
+
+    fn local_reference(&self, entries: &[Entry<'_>]) -> Option<String> {
+        let start = super::column_reference(entries.first()?.column);
+        Some(if entries.len() == 1 {
+            format!("{start}{}", self.suffix())
+        } else {
+            let end = super::column_reference(entries.last()?.column);
+            match self.rows {
+                Some((first, last)) => format!("{start}[{first}]:{end}[{last}]"),
+                None => format!("{start}:{end}"),
+            }
+        })
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Scope {
     Project,
@@ -58,10 +93,6 @@ impl Entry<'_> {
         format!("[{}]{}!", self.book.name, self.sheet.name)
     }
 
-    fn reference(&self) -> String {
-        format!("{}{}", self.prefix(), super::column_reference(self.column))
-    }
-
     fn row_label(&self) -> String {
         format!(
             "{} / {} / {}({}): {}",
@@ -92,7 +123,8 @@ pub(super) struct ColumnBrowser {
     anchor: Option<Choice>,
     cursor: Option<Choice>,
     table_focus: Option<egui::Id>,
-    added: Vec<Vec<Choice>>,
+    added: Vec<AddedRange>,
+    row_editor: Option<(usize, rows::RowsDialog)>,
     selected_range: Option<usize>,
     expanded: bool,
     first_frame: bool,
@@ -109,6 +141,7 @@ impl ColumnBrowser {
             cursor: None,
             table_focus: None,
             added: Vec::new(),
+            row_editor: None,
             selected_range: None,
             expanded: true,
             first_frame: true,
@@ -176,34 +209,11 @@ impl ColumnBrowser {
         choices.iter().map(|choice| choice.resolve(project)).collect()
     }
 
-    fn local_reference(entries: &[Entry<'_>]) -> Option<String> {
-        let first = entries.first()?;
-        let start = super::column_reference(first.column);
-        Some(if entries.len() == 1 {
-            start
-        } else {
-            format!("{start}:{}", super::column_reference(entries.last()?.column))
-        })
-    }
-
-    fn range_reference(choices: &[Choice], project: &Project) -> Option<String> {
-        let entries = Self::range(choices, project)?;
-        let first = entries.first()?;
-        Some(if entries.len() == 1 {
-            first.reference()
-        } else {
-            format!("{}{}", first.prefix(), Self::local_reference(&entries)?)
-        })
-    }
-
     fn selection(&self, project: &Project) -> Option<(String, usize)> {
-        let ranges = self.added.iter().map(|choices| Self::range(choices, project)).collect::<Option<Vec<_>>>()?;
+        let ranges = self.added.iter().map(|range| Self::range(&range.columns, project)).collect::<Option<Vec<_>>>()?;
         let first = ranges.first()?.first()?;
         if ranges.len() == 1 {
-            return Some((
-                Self::range_reference(&self.added[0], project)?,
-                if ranges[0].len() == 1 { first.index + 1 } else { 0 },
-            ));
+            return Some((self.added[0].reference(project)?, if ranges[0].len() == 1 { first.index + 1 } else { 0 }));
         }
         let reference = if ranges
             .iter()
@@ -213,16 +223,17 @@ impl ColumnBrowser {
             format!(
                 "{}({})",
                 first.prefix(),
-                ranges.iter().map(|entries| Self::local_reference(entries)).collect::<Option<Vec<_>>>()?.join(",")
+                ranges
+                    .iter()
+                    .zip(&self.added)
+                    .map(|(entries, range)| range.local_reference(entries))
+                    .collect::<Option<Vec<_>>>()?
+                    .join(",")
             )
         } else {
             format!(
                 "({})",
-                self.added
-                    .iter()
-                    .map(|choices| Self::range_reference(choices, project))
-                    .collect::<Option<Vec<_>>>()?
-                    .join(",")
+                self.added.iter().map(|range| range.reference(project)).collect::<Option<Vec<_>>>()?.join(",")
             )
         };
         Some((reference, 0))
@@ -231,8 +242,10 @@ impl ColumnBrowser {
     pub fn show(&mut self, ctx: &egui::Context, project: &Project) -> BrowserOutcome {
         let mut open = true;
         let mut outcome = BrowserOutcome::Open;
+        let editing_rows = self.row_editor.is_some();
         let popup_was_open = egui::Popup::is_any_open(ctx);
-        egui::Window::new("Column Browser").open(&mut open).collapsible(false).default_width(700.0).show(ctx, |ui| {
+        let window = egui::Window::new("Column Browser").enabled(!editing_rows);
+        window.open(&mut open).collapsible(false).default_width(700.0).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 let label = ui.label("List Columns");
                 let previous = self.scope;
@@ -260,7 +273,8 @@ impl ColumnBrowser {
             });
             let entries = self.entries(project);
             let mut reveal = None;
-            if !popup_was_open
+            if !editing_rows
+                && !popup_was_open
                 && !egui::Popup::is_any_open(ctx)
                 && self.table_focus.is_some_and(|id| ctx.memory(|memory| memory.has_focus(id)))
             {
@@ -373,11 +387,13 @@ impl ColumnBrowser {
                             && pair[0].index + 1 == pair[1].index
                     });
                 if ui.add_enabled(block, egui::Button::new("Add as One Block")).clicked() {
-                    self.added.push(selected.iter().map(|entry| entry.choice).collect());
+                    self.added
+                        .push(AddedRange { columns: selected.iter().map(|entry| entry.choice).collect(), rows: None });
                 }
                 let add_response = ui.add_enabled(!selected.is_empty(), egui::Button::new("Add"));
                 if add_response.clicked() {
-                    self.added.extend(selected.iter().map(|entry| vec![entry.choice]));
+                    self.added
+                        .extend(selected.iter().map(|entry| AddedRange { columns: vec![entry.choice], rows: None }));
                 }
                 if ui.add_enabled(self.selected_range.is_some(), egui::Button::new("Remove")).clicked()
                     && let Some(index) = self.selected_range.take().filter(|index| *index < self.added.len())
@@ -411,19 +427,35 @@ impl ColumnBrowser {
                             ui.strong("Range");
                             ui.strong("Rows");
                             ui.end_row();
-                            for (index, choices) in self.added.iter().enumerate() {
-                                let reference = Self::range_reference(choices, project)
-                                    .unwrap_or_else(|| "Unavailable column".into());
-                                if ui.selectable_label(self.selected_range == Some(index), reference).clicked() {
+                            for (index, range) in self.added.iter().enumerate() {
+                                let reference = range.reference(project).unwrap_or_else(|| "Unavailable column".into());
+                                if ui.selectable_label(self.selected_range == Some(index), &reference).clicked() {
                                     self.selected_range = Some(index);
                                 }
-                                ui.label("[1:end]");
+                                ui.horizontal(|ui| {
+                                    ui.label(range.rows_label());
+                                    let maximum =
+                                        range.columns.first().and_then(|choice| choice.resolve(project)).map(|entry| {
+                                            entry.sheet.columns.iter().map(Column::len).max().unwrap_or(0)
+                                        });
+                                    let edit = ui.add_enabled(maximum.is_some(), egui::Button::new("…"));
+                                    let _ = ctx.accesskit_node_builder(edit.id, |node| {
+                                        node.set_label(format!("Edit rows for {reference}"))
+                                    });
+                                    if edit.clicked()
+                                        && let Some(maximum) = maximum
+                                    {
+                                        self.row_editor = Some((index, rows::RowsDialog::new(range.rows, maximum)));
+                                    }
+                                });
                                 ui.end_row();
                             }
                         });
                     });
             }
             if matches!(outcome, BrowserOutcome::Open)
+                && !editing_rows
+                && self.row_editor.is_none()
                 && !popup_was_open
                 && !egui::Popup::is_any_open(ctx)
                 && ctx.input(|input| input.key_pressed(egui::Key::Enter))
@@ -432,7 +464,20 @@ impl ColumnBrowser {
                 outcome = BrowserOutcome::Selected { reference, ordinal };
             }
         });
-        if !open || (!popup_was_open && ctx.input(|input| input.key_pressed(egui::Key::Escape))) {
+        if let Some((index, editor)) = &mut self.row_editor {
+            match editor.show(ctx) {
+                rows::Outcome::Open => {}
+                rows::Outcome::Closed => self.row_editor = None,
+                rows::Outcome::Selected(rows) => {
+                    if let Some(range) = self.added.get_mut(*index) {
+                        range.rows = rows;
+                    }
+                    self.row_editor = None;
+                }
+            }
+            return BrowserOutcome::Open;
+        }
+        if !editing_rows && (!open || (!popup_was_open && ctx.input(|input| input.key_pressed(egui::Key::Escape)))) {
             BrowserOutcome::Closed
         } else {
             outcome

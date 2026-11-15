@@ -124,5 +124,9 @@ regressions and a folder-scope fixture cover it. A second follow-up adds top-tab
 Shift and keyboard selection plus Add as One Block, enabled only for consecutive columns in one
 sheet. Nine valid native cases establish individual versus grouped Add, disabled noncontiguous/
 mixed-book blocks, whole-block Remove and the original-sheet last-column navigation rule.
-Five more UI regressions cover those workflows and grouped reference transfer. Exclude,
-lower row-range editing and saved preferences remain (gui-look section 5).
+Five more UI regressions cover those workflows and grouped reference transfer. The lower row-range
+follow-up adds the Range child with Entire Column(s), From and To, per-added-range row subsets,
+reopening/reset and unchanged original-sheet navigation. Eighteen valid Origin cases establish
+sheet bounds, leading-integer conversion, literal reversed/single-row intervals, refusal and
+block endpoint references. Ten UI regressions cover these workflows and unchanged data/history.
+Exclude and saved preferences remain (gui-look section 5).

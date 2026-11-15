@@ -4491,7 +4491,10 @@ fn y_mapped_geometry_matches_plain(setup: impl Fn(&mut Project, WindowId)) -> Ve
     let mapped = merged_line_pieces(&p, g);
     same_pieces(&plain, &mapped);
     let colors = plot_stroke_colors(&p, g);
-    assert!(colors.iter().map(|c| (c.r, c.g, c.b)).collect::<std::collections::BTreeSet<_>>().len() > 3, "still coloured");
+    assert!(
+        colors.iter().map(|c| (c.r, c.g, c.b)).collect::<std::collections::BTreeSet<_>>().len() > 3,
+        "still coloured"
+    );
     mapped
 }
 

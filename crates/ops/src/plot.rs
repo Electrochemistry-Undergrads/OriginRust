@@ -234,7 +234,8 @@ impl PlotSpec {
         {
             bail!("a waterfall cannot have a right Y axis; leave out --y2 or choose another template");
         }
-        if !self.y2.is_empty() && self.template.as_deref().and_then(Template::from_name) == Some(Template::StackedHistograms)
+        if !self.y2.is_empty()
+            && self.template.as_deref().and_then(Template::from_name) == Some(Template::StackedHistograms)
         {
             bail!("stacked histograms cannot have a right Y axis; leave out --y2 or choose another template");
         }

@@ -627,7 +627,11 @@ fn push_y_mapped(
             let mut d = String::new();
             move_to(&mut d, single.0, single.1);
             line_to(&mut d, single.0, single.1);
-            out.push(Item::Path { d, fill: None, stroke: Some(Stroke { color: map_color(wf.fraction(value(*single))), ..base.clone() }) });
+            out.push(Item::Path {
+                d,
+                fill: None,
+                stroke: Some(Stroke { color: map_color(wf.fraction(value(*single))), ..base.clone() }),
+            });
             continue;
         }
         for w in sub.windows(2) {

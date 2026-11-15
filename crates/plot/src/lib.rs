@@ -36,6 +36,7 @@ pub mod scene;
 mod shapes;
 mod sheet;
 mod slope;
+pub use slope::{NOT_USABLE as SLOPE_NOT_USABLE, check_point as slope_check_point};
 mod stack;
 mod sunburst;
 mod svg;

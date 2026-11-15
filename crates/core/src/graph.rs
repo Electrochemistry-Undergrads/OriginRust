@@ -82,6 +82,7 @@ impl Graph {
             }
             for sl in &mut layer.slopes {
                 sl.plot = f(sl.plot);
+                sl.x = sl.x.map(f);
             }
             for o in &mut layer.plot_offsets {
                 o.column = f(o.column);
@@ -1749,6 +1750,11 @@ pub struct Trendline {
 pub struct SlopeAnnotation {
     /// The Y column of the plot the two points belong to.
     pub plot: ColumnId,
+    /// The X column of that plot, which tells apart plots of one layer that share a Y column. `None`
+    /// (annotations saved without it, or a plot without an X column) matches any X. When several plots
+    /// still match, the first one is used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x: Option<ColumnId>,
     /// The two rows, counted from 0 (the worksheet shows them from 1).
     pub row_a: usize,
     pub row_b: usize,
@@ -1772,7 +1778,26 @@ impl SlopeAnnotation {
 
     /// A slope between two rows (from 0) of the plot with Y column `plot`: legs shown, plot colour, 1 pt.
     pub fn new(plot: ColumnId, row_a: usize, row_b: usize) -> Self {
-        SlopeAnnotation { plot, row_a, row_b, show_legs: true, label_offset_pt: (0.0, 0.0), color: None, width_pt: 1.0 }
+        SlopeAnnotation {
+            plot,
+            x: None,
+            row_a,
+            row_b,
+            show_legs: true,
+            label_offset_pt: (0.0, 0.0),
+            color: None,
+            width_pt: 1.0,
+        }
+    }
+
+    /// A slope between two rows of `plot`, tied to both its Y and its X column.
+    pub fn for_plot(plot: &Plot, row_a: usize, row_b: usize) -> Self {
+        SlopeAnnotation { x: plot.x, ..SlopeAnnotation::new(plot.y, row_a, row_b) }
+    }
+
+    /// Whether this annotation belongs to `plot` (same Y column, and the same X column when one is stored).
+    pub fn matches(&self, plot: &Plot) -> bool {
+        self.plot == plot.y && self.x.is_none_or(|x| plot.x == Some(x))
     }
 }
 

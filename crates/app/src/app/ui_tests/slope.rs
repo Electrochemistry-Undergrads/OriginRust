@@ -92,3 +92,40 @@ fn graph_mut_layer(h: &mut Harness<'static, SheafApp>) {
     });
     settle(h);
 }
+
+#[test]
+fn the_slope_tool_ignores_unusable_plots_and_refuses_a_masked_second_point() {
+    let mut h = start(vec![data_file("slope-refuse")]);
+    let y = graph(&h).layers[0].plots[0].y;
+    let g = graph(&h).id;
+    // A plot without one point per row: the click is ignored and the status bar says why.
+    h.state_mut().doc.apply("Histogram", |p| {
+        p.graph_mut(g).unwrap().layers[0].plots[0].kind = sheaf_core::graph::PlotKind::Histogram;
+    });
+    settle(&mut h);
+    h.get_by_label("Tools toolbar: Slope").click();
+    settle(&mut h);
+    let at = data_point(&h, 1.0, 2.5);
+    click_at(&mut h, at);
+    assert!(graph_ui(&h).slope_first.is_none(), "no first point on a histogram");
+    assert!(h.state().status.contains("Slopes need a plot with one point per row"), "{}", h.state().status);
+    assert!(slopes(&h).is_empty());
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    // A masked second point is refused; the first point stays picked.
+    h.state_mut().doc.apply("Scatter", |p| {
+        p.graph_mut(g).unwrap().layers[0].plots[0].kind = sheaf_core::graph::PlotKind::Scatter;
+        p.column_mut(y).unwrap().mask.insert(3);
+    });
+    settle(&mut h);
+    h.get_by_label("Tools toolbar: Slope").click();
+    settle(&mut h);
+    let a = data_point(&h, 1.0, 2.5);
+    click_at(&mut h, a);
+    assert_eq!(graph_ui(&h).slope_first.map(|p| p.row), Some(0));
+    let b = data_point(&h, 4.0, 8.5);
+    click_at(&mut h, b);
+    assert!(slopes(&h).is_empty(), "a masked point cannot end a slope");
+    assert!(graph_ui(&h).slope_tool && graph_ui(&h).slope_first.is_some());
+    assert!(h.state().status.contains("Row 4"), "{}", h.state().status);
+}

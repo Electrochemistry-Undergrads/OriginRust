@@ -1,7 +1,7 @@
 //! Slope annotations (T52, graphing spec 17.6).
 
 use super::*;
-use sheaf_core::graph::{ScaleKind, SlopeAnnotation};
+use sheaf_core::graph::{PlotKind, ScaleKind, SlopeAnnotation};
 use sheaf_core::template::Template;
 use sheaf_core::{Color, ColumnData, ColumnId, Designation};
 
@@ -265,4 +265,99 @@ fn a_colour_of_none_is_the_plot_colour_and_the_width_is_used() {
             .iter()
             .any(|i| matches!(i, scene::Item::Text(t) if t.text.starts_with("slope") && t.color == plot_color))
     );
+}
+
+#[test]
+fn plots_sharing_a_y_column_are_told_apart_by_their_x_column() {
+    let mut p = Project::new();
+    let b = p.add_workbook("data");
+    let x1 = p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0])).unwrap();
+    let x2 = p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![0.0, 2.0])).unwrap();
+    let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![0.0, 4.0])).unwrap();
+    let g = p.add_graph(Template::Scatter);
+    p.add_plot_xy(g, 0, Some(x1), y, None).unwrap();
+    p.add_plot_xy(g, 0, Some(x2), y, None).unwrap();
+    for (plot, want) in [(0, "slope = 4"), (1, "slope = 2")] {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        l.slopes.clear();
+        let mut s = SlopeAnnotation::for_plot(&l.plots[plot], 0, 1);
+        s.color = Some(INK);
+        l.slopes.push(s);
+        assert_eq!(text(&p, g), want, "plot {plot}");
+    }
+    // Without a stored X the first plot of that Y is used.
+    let l = &mut p.graph_mut(g).unwrap().layers[0];
+    l.slopes[0].x = None;
+    assert_eq!(text(&p, g), "slope = 4");
+}
+
+#[test]
+fn a_slope_moves_with_its_plot_to_the_right_y_layer() {
+    let (mut p, g, y) = graph(&[1.0, 2.0, 3.0], &[1.0, 3.0, 5.0], ("", ""));
+    annotate(&mut p, g, y, 0, 2);
+    assert_eq!(text(&p, g), "slope = 2");
+    let (layer, _) = p.graph_mut(g).unwrap().set_plot_y_axis(0, 0, true).unwrap();
+    assert_eq!(layer, 1);
+    let gr = p.graph(g).unwrap();
+    assert!(gr.layers[0].slopes.is_empty());
+    assert_eq!(gr.layers[1].slopes.len(), 1);
+    let drawn: Vec<String> = scene(&p, g).layers[1]
+        .overlay
+        .iter()
+        .filter_map(|i| match i {
+            scene::Item::Text(t) if t.color == INK => Some(t.text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(drawn, vec!["slope = 2".to_string()]);
+}
+
+#[test]
+fn horizontal_bars_use_the_units_of_the_columns_on_the_drawn_axes() {
+    // Bars: the drawn X axis shows the Y column (seconds), the drawn Y axis the X column (millimetres).
+    let (mut p, g, y) = graph(&[1.0, 2.0, 3.0], &[10.0, 20.0, 40.0], ("mm", "s"));
+    p.graph_mut(g).unwrap().layers[0].plots[0].kind = PlotKind::Bar;
+    annotate(&mut p, g, y, 0, 1);
+    // dy (drawn Y: rows 1 to 2) over dx (drawn X: 10 to 20 s).
+    assert_eq!(text(&p, g), "slope = 0.1 mm/s");
+}
+
+#[test]
+fn the_label_of_a_steep_segment_does_not_cover_it() {
+    // Nearly vertical, up and down, and a diagonal.
+    for ys in [[0.0, 100.0], [100.0, 0.0], [0.0, 1.0]] {
+        let (mut p, g, y) = graph(&[0.0, 1.0], &ys, ("", ""));
+        annotate(&mut p, g, y, 0, 1);
+        let s = scene(&p, g);
+        let o = &s.layers[0].overlay;
+        let seg = o
+            .iter()
+            .find_map(|i| match i {
+                scene::Item::Path { d, stroke: Some(st), .. } if st.color == INK && st.dash.is_empty() => {
+                    Some(hit::path_points(d))
+                }
+                _ => None,
+            })
+            .unwrap();
+        let t = o
+            .iter()
+            .find_map(|i| match i {
+                scene::Item::Text(t) if t.color == INK => Some(t.clone()),
+                _ => None,
+            })
+            .unwrap();
+        let w = t.text.chars().count() as f64 * 0.55 * t.size;
+        let x0 = match t.anchor {
+            scene::Anchor::Start => t.x,
+            scene::Anchor::End => t.x - w,
+            scene::Anchor::Middle => t.x - w / 2.0,
+        };
+        let (y0, y1) = (t.y - t.size, t.y);
+        // Sample the segment: no sample lies inside the label's box.
+        for k in 0..=200 {
+            let f = k as f64 / 200.0;
+            let (px, py) = (seg[0].0 + (seg[1].0 - seg[0].0) * f, seg[0].1 + (seg[1].1 - seg[0].1) * f);
+            assert!(!(px >= x0 && px <= x0 + w && py >= y0 && py <= y1), "{ys:?}: the label covers the segment");
+        }
+    }
 }

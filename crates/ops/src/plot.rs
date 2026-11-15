@@ -518,13 +518,18 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
     let labels: Vec<(String, f64, f64)> = s.label.iter().map(|v| parse_label(v)).collect::<Result<_>>()?;
     let shapes: Vec<sheaf_core::shape::Shape> = s.draw.iter().map(|v| parse_draw(v)).collect::<Result<_>>()?;
     let slopes: Vec<(usize, usize)> = s.slope.iter().map(|v| parse_slope(v)).collect::<Result<_>>()?;
-    let slope_plot = project.graph(graph).and_then(|g| g.layers.first()).and_then(|l| l.plots.first()).map(|p| p.y);
+    let slope_plot = project.graph(graph).and_then(|g| g.layers.first()).and_then(|l| l.plots.first()).cloned();
     if !slopes.is_empty() {
-        let Some(y) = slope_plot else { bail!("--slope needs a plot in the first layer to mark the slope on") };
-        let rows = project.column(y).map_or(0, |c| c.len());
+        let Some(plot) = &slope_plot else { bail!("--slope needs a plot in the first layer to mark the slope on") };
+        let rows = project.column(plot.y).map_or(0, |c| c.len());
         for (v, &(a, b)) in s.slope.iter().zip(&slopes) {
             if a >= rows || b >= rows {
                 bail!("--slope \"{v}\": the first plot has only {rows} rows");
+            }
+            for row in [a, b] {
+                if let Err(why) = sheaf_plot::slope_check_point(project, graph, 0, 0, Some(row)) {
+                    bail!("--slope \"{v}\": {why}");
+                }
             }
         }
     }
@@ -618,8 +623,8 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
     }
     if let Some(layer) = g.layers.first_mut() {
         layer.shapes.extend(shapes);
-        if let Some(y) = slope_plot {
-            layer.slopes.extend(slopes.iter().map(|&(a, b)| sheaf_core::graph::SlopeAnnotation::new(y, a, b)));
+        if let Some(plot) = &slope_plot {
+            layer.slopes.extend(slopes.iter().map(|&(a, b)| sheaf_core::graph::SlopeAnnotation::for_plot(plot, a, b)));
         }
         for (text, x, y) in labels {
             let font = layer.new_label_font();

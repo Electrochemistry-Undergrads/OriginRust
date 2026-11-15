@@ -382,7 +382,13 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             }
         }
         if response.clicked() {
+            // A plot without one point per row, or a masked or missing row, cannot take a slope.
+            let refused = hover
+                .and_then(|h| sheaf_plot::slope_check_point(doc.project(), graph_id, h.layer, h.plot, Some(h.row)).err());
             match (state.slope_first, hover) {
+                (_, Some(_)) if refused.is_some() => {
+                    actions.push(Action::Hint(refused.unwrap_or_default()));
+                }
                 (None, Some(h)) => {
                     state.slope_first = Some(h);
                     actions.push(Action::Hint("Slope: click a second point of the same plot; Esc cancels".to_string()));
@@ -390,7 +396,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                 (Some(first), Some(h)) if h.row != first.row => {
                     let plot = graph.layers.get(first.layer).and_then(|l| l.plots.get(first.plot));
                     if let Some(plot) = plot {
-                        let slope = sheaf_core::graph::SlopeAnnotation::new(plot.y, first.row, h.row);
+                        let slope = sheaf_core::graph::SlopeAnnotation::for_plot(plot, first.row, h.row);
                         let index = graph.layers[first.layer].slopes.len();
                         state.slope_tool = false;
                         state.slope_first = None;

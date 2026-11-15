@@ -16,8 +16,12 @@ use sheaf_calc::trend::sig_str;
 use sheaf_core::graph::{Dash, Font, Layer, LineStyle, ScaleKind};
 use sheaf_core::{Color, Project};
 
+
 /// Gap between the middle of the segment and the label, in points.
 const LABEL_GAP: f64 = 8.0;
+
+/// Past this much of the normal pointing sideways, the label is anchored beside the segment, not over it.
+const STEEP: f64 = 0.1;
 
 /// A value on an axis in the axis' own units: itself on a linear axis, its logarithm on a log axis.
 /// Scales that have no such unit (probability, reciprocal, ...) use the data values.
@@ -63,13 +67,51 @@ fn usable(pd: &PlotData) -> bool {
 }
 
 /// The point at `row`: shown, unmasked and finite (and placeable on the axes).
-fn point(pd: &PlotData, row: usize, geom: &LayerGeometry) -> Option<(f64, f64)> {
+fn point(pd: &PlotData, row: usize, geom: Option<&LayerGeometry>) -> Option<(f64, f64)> {
     if !pd.rows().any(|r| r == row) || pd.mask.is_some_and(|m| m.contains(&row)) {
         return None;
     }
     let (x, y) = (pd.x_at(row), pd.y_at(row));
-    let (tx, ty) = (axis_value(geom.x.scale, x), axis_value(geom.y.scale, y));
-    (x.is_finite() && y.is_finite() && tx.is_finite() && ty.is_finite()).then_some((x, y))
+    if !(x.is_finite() && y.is_finite()) {
+        return None;
+    }
+    if let Some(geom) = geom
+        && !(axis_value(geom.x.scale, x).is_finite() && axis_value(geom.y.scale, y).is_finite())
+    {
+        return None;
+    }
+    Some((x, y))
+}
+
+/// Why a slope cannot be marked on a plot or at a row (the Slope tool, `--slope` and MCP use it).
+pub const NOT_USABLE: &str = "Slopes need a plot with one point per row";
+
+/// Whether a slope can be marked on plot `plot` of layer `layer` of `graph`, and, when `row` is given,
+/// at that row (counted from 0): the plot must have one point per row, and the row must be shown,
+/// unmasked and a finite point. The error is a message for the person.
+pub fn check_point(
+    project: &Project,
+    graph: sheaf_core::WindowId,
+    layer: usize,
+    plot: usize,
+    row: Option<usize>,
+) -> Result<(), String> {
+    let g = project.graph(graph).ok_or("The graph no longer exists")?;
+    let l = g.layers.get(layer).ok_or("The layer no longer exists")?;
+    let p = l.plots.get(plot).ok_or("The plot no longer exists")?;
+    let data = crate::data::collect(project, l);
+    let Some(pd) = data.plots.iter().find(|pd| std::ptr::eq(pd.plot, p)) else {
+        return Err(NOT_USABLE.to_string());
+    };
+    if !usable(pd) {
+        return Err(NOT_USABLE.to_string());
+    }
+    if let Some(row) = row
+        && point(pd, row, None).is_none()
+    {
+        return Err(format!("Row {} is masked, filtered out or not a number", row + 1));
+    }
+    Ok(())
 }
 
 /// The slope between rows `row_a` and `row_b` of `pd`; `None` when a row is missing, masked, filtered
@@ -78,8 +120,8 @@ pub(crate) fn compute(pd: &PlotData, row_a: usize, row_b: usize, geom: &LayerGeo
     if !usable(pd) {
         return None;
     }
-    let a = point(pd, row_a, geom)?;
-    let b = point(pd, row_b, geom)?;
+    let a = point(pd, row_a, Some(geom))?;
+    let b = point(pd, row_b, Some(geom))?;
     let dx = axis_value(geom.x.scale, b.0) - axis_value(geom.x.scale, a.0);
     let dy = axis_value(geom.y.scale, b.1) - axis_value(geom.y.scale, a.1);
     if dx == 0.0 {
@@ -95,12 +137,14 @@ pub(crate) fn label(value: f64, project: &Project, pd: &PlotData, geom: &LayerGe
     let column_unit = |id: Option<sheaf_core::ColumnId>| {
         id.and_then(|id| project.column(id)).map(|c| c.units.trim().to_string()).filter(|u| !u.is_empty())
     };
-    let num = log_unit(geom.y.scale).map(str::to_string).or_else(|| column_unit(Some(pd.plot.y)));
-    let den = log_unit(geom.x.scale).map(str::to_string).or_else(|| column_unit(pd.plot.x));
+    // Horizontal bars swap the axes: the drawn X axis shows the Y column and the drawn Y axis the X column.
+    let (on_y, on_x) = if pd.transposed() { (pd.plot.x, Some(pd.plot.y)) } else { (Some(pd.plot.y), pd.plot.x) };
+    let num = log_unit(geom.y.scale).map(str::to_string).or_else(|| column_unit(on_y));
+    let den = log_unit(geom.x.scale).map(str::to_string).or_else(|| column_unit(on_x));
     let mut text = format!("slope = {}", sig_str(value, 4));
     // A unit needs a known numerator; with a log X axis its denominator is the decade (spec 17.6).
     if let (Some(n), Some(d)) = (num, den)
-        && (column_unit(pd.plot.x).is_some() || log_unit(geom.x.scale).is_some())
+        && (column_unit(on_x).is_some() || log_unit(geom.x.scale).is_some())
     {
         text.push_str(&format!(" {n}/{d}"));
     }
@@ -135,7 +179,7 @@ pub(crate) fn draw(
         return;
     }
     for (k, s) in layer.slopes.iter().enumerate() {
-        let Some(pd) = pds.iter().find(|pd| pd.plot.y == s.plot && usable(pd)) else { continue };
+        let Some(pd) = pds.iter().find(|pd| s.matches(pd.plot) && usable(pd)) else { continue };
         let Some(sl) = compute(pd, s.row_a, s.row_b, geom) else { continue };
         let (Some(pa), Some(pb)) =
             (geom.checked_data_to_page(sl.a.0, sl.a.1), geom.checked_data_to_page(sl.b.0, sl.b.1))
@@ -160,20 +204,28 @@ pub(crate) fn draw(
             let style = LineStyle::solid(color, width);
             out.push(Item::Path { d: path(&[pa, pb]), fill: None, stroke: Some(line_stroke(&style)) });
         }
-        // The label sits at the middle of the segment, on the upper side of it.
+        // The label sits at the middle of the segment, on the upper side of it. A steep segment gets the label
+        // beside it: starting to the right of the segment, or ending to its left, so the text never covers it.
         let (dx, dy) = (pb.0 - pa.0, pb.1 - pa.1);
         let len = dx.hypot(dy).max(1e-9);
         let (mut nx, mut ny) = (-dy / len, dx / len);
         if ny > 0.0 || (ny == 0.0 && nx < 0.0) {
             (nx, ny) = (-nx, -ny);
         }
+        let anchor = if nx > STEEP {
+            Anchor::Start
+        } else if nx < -STEEP {
+            Anchor::End
+        } else {
+            Anchor::Middle
+        };
         let size = layer.legend.font.size_pt;
         let font = Font { color, ..layer.legend.font.clone() };
         let at = (
             (pa.0 + pb.0) / 2.0 + nx * LABEL_GAP + s.label_offset_pt.0,
-            (pa.1 + pb.1) / 2.0 + ny * LABEL_GAP + s.label_offset_pt.1 + if ny > 0.5 { size } else { 0.0 },
+            (pa.1 + pb.1) / 2.0 + ny * LABEL_GAP + s.label_offset_pt.1,
         );
-        crate::text::place(out, m, &label(sl.value, project, pd, geom), &font, size, at, Anchor::Middle, 0.0);
+        crate::text::place(out, m, &label(sl.value, project, pd, geom), &font, size, at, anchor, 0.0);
         hit::record(objects, out, start, ObjectKind::Slope(k), index, ItemList::Overlay, &[], m);
     }
 }

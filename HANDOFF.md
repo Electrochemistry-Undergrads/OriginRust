@@ -41,16 +41,16 @@ open. History of what was merged when is in `git log` (not repeated here).
   avoids Winsock reset errors caused by unread hello data, while retaining connection limits
   and bounded refusal time. The original regression failed on baseline timing attempt 4;
   the fixed binary passed all 30 attempts plus a 32-refusal/silent-peer integration fixture.
-  Separate repair 50b5ecb; no resource/context/proxy or admission policy changes. Checkpoint
-  combined formatting, strict all-target Clippy and 2656 workspace tests passed (seven ignored);
-  verification with the latest app-resource merge is pending.
+  Separate repair 50b5ecb; no resource/context/proxy or admission policy changes. Combined
+  formatting, strict all-target Clippy and 2662 workspace tests pass (seven existing ignored),
+  including the latest app-resource merge.
 - T02 Find/Replace (2026-11-15, Windows): one tabbed window, selected-display query seed,
   Numeric initial mode with measured comparisons/relative tolerance/missing/sign flags,
   String wildcards and reverse search. `!=` is strict, independently of tolerant equality.
   Replacement remains one undo action; tabs have distinct accessibility roles from actions.
   Origin 2016 GUI fixtures, four new UI tests and four matching fixtures cover these rules.
-  Feature e5e0b5a passed checkpoint formatting, strict all-target Clippy and 2656 workspace
-  tests (seven ignored), with both native previews inspected. Latest combined checks pending.
+  Feature e5e0b5a passes combined formatting, strict all-target Clippy and 2662 workspace
+  tests (seven existing ignored), with both native previews inspected.
   Active-sheet data only; wider scopes, label rows, cell links and saved dialog history remain
   (gui-look section 5).
 - T25 current app context (2026-11-15, Windows): attached `sheaf://app` reports the active

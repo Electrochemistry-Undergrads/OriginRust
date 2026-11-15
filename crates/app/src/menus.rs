@@ -1099,7 +1099,7 @@ fn statistics_menu() -> Vec<Entry> {
                 item("Paired Sample Sign Test...", Cmd::Analyze(AnalysisKind::SignTest)),
             ],
         ),
-        grey_sub("&Survival Analysis", &["Kaplan-Meier Estimator..."]),
+        sub("&Survival Analysis", vec![item("Kaplan-Meier Estimator...", Cmd::Analyze(AnalysisKind::KaplanMeier))]),
         sub(
             "&Multivariate Analysis",
             vec![

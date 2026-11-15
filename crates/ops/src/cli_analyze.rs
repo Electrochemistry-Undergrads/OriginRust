@@ -753,6 +753,31 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
+        AnalyzeTool::KaplanMeier {
+            target,
+            censor,
+            confidence,
+            no_quartiles,
+            no_mean,
+            log_rank,
+            breslow,
+            tarone_ware,
+            band,
+            no_graph,
+        } => (
+            target,
+            Job::Tool(Tool::KaplanMeier(analysis::KaplanMeierSpec {
+                censor,
+                confidence,
+                quartiles: !no_quartiles,
+                mean: !no_mean,
+                log_rank,
+                breslow,
+                tarone_ware,
+                curve: !no_graph,
+                band,
+            })),
+        ),
         AnalyzeTool::Sort { target, by, descending } => {
             whole_sheet_only(&target, "sort")?;
             (target, Job::Sort { by, descending })

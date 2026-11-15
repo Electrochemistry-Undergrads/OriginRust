@@ -3,13 +3,14 @@
 
 use super::analysis::AnalysisKind;
 use eframe::egui;
-use sheaf_core::analysis::{PcaSpec, RocSpec, Tool};
+use sheaf_core::analysis::{KaplanMeierSpec, PcaSpec, RocSpec, Tool};
 
 /// What the windows keep between frames.
 #[derive(Default)]
 pub struct MultiOptions {
     pca: PcaSpec,
     roc: RocSpec,
+    km: KaplanMeierSpec,
 }
 
 impl MultiOptions {
@@ -27,6 +28,12 @@ impl MultiOptions {
                     return Err("give the value of the state column that is the positive state".to_string());
                 }
                 Ok(Tool::Roc(self.roc.clone()))
+            }
+            AnalysisKind::KaplanMeier => {
+                if self.km.censor.trim().is_empty() {
+                    return Err("give the censoring value".to_string());
+                }
+                Ok(Tool::KaplanMeier(self.km.clone()))
             }
             _ => unreachable!("only the multivariate tools come here"),
         }
@@ -78,6 +85,29 @@ impl MultiOptions {
                 ui.checkbox(&mut s.curve, "ROC curve (new graph, with the diagonal)");
                 ui.weak(
                     "The area under the curve with its standard error (DeLong's method) and confidence interval, the                      curve points with their cut-offs, and the cut-off with the largest sensitivity + specificity - 1.",
+                );
+            }
+            AnalysisKind::KaplanMeier => {
+                let s = &mut self.km;
+                ui.label("The chosen columns are the time, the censor column and, optionally, a grouping column.");
+                ui.horizontal(|ui| {
+                    ui.label("Censoring value");
+                    ui.add(egui::TextEdit::singleline(&mut s.censor).desired_width(80.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Confidence level (%)");
+                    ui.add(egui::DragValue::new(&mut s.confidence).speed(0.1).range(1.0..=99.99));
+                });
+                ui.checkbox(&mut s.quartiles, "Quartile estimates");
+                ui.checkbox(&mut s.mean, "Mean estimate");
+                ui.label("Tests of groups");
+                ui.checkbox(&mut s.log_rank, "Log-rank");
+                ui.checkbox(&mut s.breslow, "Breslow");
+                ui.checkbox(&mut s.tarone_ware, "Tarone-Ware");
+                ui.checkbox(&mut s.curve, "Survival curves (new graph, censored cases marked)");
+                ui.add_enabled(s.curve, egui::Checkbox::new(&mut s.band, "Add confidence limits to the graph"));
+                ui.weak(
+                    "Product-limit estimate with Greenwood standard errors. Quartile limits come from the linear                      limits of the curve; the mean is cut off at the largest time.",
                 );
             }
             _ => unreachable!("only the multivariate tools come here"),

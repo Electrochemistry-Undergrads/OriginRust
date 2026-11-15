@@ -2043,6 +2043,39 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Kaplan-Meier estimator: the --y columns are time, censor and, optionally, group. Survival table, quartile
+    /// and mean survival times, tests of groups; makes a graph of the curves.
+    KaplanMeier {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The value of the censor column that marks a censored case (a number or a text).
+        #[arg(long, default_value = "1")]
+        censor: String,
+        /// Confidence level of the quartile and mean limits, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
+        /// Leave out the quartile estimates.
+        #[arg(long)]
+        no_quartiles: bool,
+        /// Leave out the mean estimate.
+        #[arg(long)]
+        no_mean: bool,
+        /// Log-rank test of the groups.
+        #[arg(long)]
+        log_rank: bool,
+        /// Breslow test of the groups.
+        #[arg(long)]
+        breslow: bool,
+        /// Tarone-Ware test of the groups.
+        #[arg(long)]
+        tarone_ware: bool,
+        /// Add the confidence limits of the curves to the graph.
+        #[arg(long)]
+        band: bool,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Sort the rows of the sheet by one column.
     Sort {
         #[command(flatten)]

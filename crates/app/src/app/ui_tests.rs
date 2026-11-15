@@ -7979,3 +7979,39 @@ fn the_size_tab_edits_the_layer_area_and_a_linked_layer_shows_fractions_of_its_p
 fn has_label_containing(h: &Harness<'static, SheafApp>, text: &str) -> bool {
     h.query_all_by_label_contains(text).next().is_some()
 }
+
+/// Statistics > Survival Analysis > Kaplan-Meier Estimator...: time, censor and group columns give the survival
+/// table and a graph with the curves; one undo removes both.
+#[test]
+fn the_survival_menu_runs_the_kaplan_meier_estimator() {
+    // Two, 3+, 4, 4, 6+ in group 1: S(4) = 4/15 (hand worked in `calc::survival`).
+    let data = csv_file(
+        "km",
+        "survival",
+        "id,time,censor,group
+1,2,0,1
+2,3,1,1
+3,4,0,1
+4,4,0,1
+5,6,1,1
+6,1,0,2
+7,5,0,2
+8,7,1,2
+9,8,0,2
+10,9,0,2
+",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - survival");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Survival Analysis", "Kaplan-Meier Estimator..."]);
+    assert!(h.state().analysis.is_some(), "the Kaplan-Meier window is open");
+    assert!(has_label(&h, "Censoring value"), "the censoring value box is missing");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, events) = result_column(&h, "Events");
+    assert!(sheet.starts_with("KaplanMeier"), "{sheet}");
+    assert_eq!(events.first().copied(), Some(3.0), "{events:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Kaplan-Meier estimator"));
+}

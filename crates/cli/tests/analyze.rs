@@ -1269,3 +1269,26 @@ fn roc_curve_runs_from_the_command_line() {
     let (ok, _, err) = sheaf(&["analyze", "roc", file, "--y", "score"]);
     assert!(!ok && err.contains("at least two columns"), "{err}");
 }
+
+/// Kaplan-Meier estimator (spec `statistics.md` section 20): time, censor and group columns.
+#[test]
+fn kaplan_meier_runs_from_the_command_line() {
+    let dir = scratch("kaplan");
+    let path = dir.join("surv.csv");
+    // Origin's measured example, `tools/origin-ref/kaplan-suite1.lines.txt`: 14 cases, 4 censored (1), two groups.
+    std::fs::write(
+        &path,
+        "time,censor,group\n3,0,1\n5,0,2\n5,1,1\n6,0,2\n8,0,1\n8,0,2\n9,1,2\n12,0,1\n12,0,2\n15,1,1\n17,0,2\n20,0,1\n22,1,2\n25,0,1\n",
+    )
+    .unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "kaplan-meier", file, "--y", "time,censor"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("KaplanMeier1") && out.contains("14.10"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "kaplan-meier", file, "--y", "time,censor,group", "--log-rank", "--breslow", "--no-graph"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Log-rank test: chi-square 0.2542") && out.contains("Breslow test"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "kaplan-meier", file, "--y", "time"]);
+    assert!(!ok && err.contains("two or three columns"), "{err}");
+}

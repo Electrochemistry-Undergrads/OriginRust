@@ -51,7 +51,7 @@ fn number_column(name: &str, comments: &str, designation: Designation, values: V
 }
 
 /// Whether a cell of the state column is the positive value; `None` for a missing cell.
-fn is_positive(c: &Column, row: usize, positive: &str, positive_number: Option<f64>) -> Option<bool> {
+pub(super) fn is_positive(c: &Column, row: usize, positive: &str, positive_number: Option<f64>) -> Option<bool> {
     if let Some(t) = c.data.text_cell(row) {
         let t = t.trim();
         if t == positive {

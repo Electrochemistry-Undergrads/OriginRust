@@ -49,6 +49,7 @@ pub use curves::{AverageSpec, IntersectSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use multivariate::PcaSpec;
 pub use roc::RocSpec;
+pub use survival::KaplanMeierSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
 
@@ -756,6 +757,9 @@ pub enum Tool {
     Pca(PcaSpec),
     /// Statistics > ROC Curve (T29, `docs/spec/statistics.md` section 19): test variables, then the state column.
     Roc(RocSpec),
+    /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
+    /// censor and, optionally, group columns.
+    KaplanMeier(KaplanMeierSpec),
     AverageCurves(AverageSpec),
     Intersect(IntersectSpec),
     PolygonArea,
@@ -832,6 +836,7 @@ impl Tool {
             },
             Tool::Pca(_) => "Principal component analysis",
             Tool::Roc(_) => "ROC curve",
+            Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::AverageCurves(_) => "Average multiple curves",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "Polygon area",
@@ -885,6 +890,7 @@ impl Tool {
             },
             Tool::Pca(_) => "PCA",
             Tool::Roc(_) => "ROC",
+            Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::AverageCurves(_) => "AverageResult",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "PolygonArea",
@@ -1448,6 +1454,7 @@ mod multivariate;
 mod power;
 mod roc;
 mod statistics;
+mod survival;
 pub use manip::{
     MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
 };
@@ -1540,7 +1547,7 @@ impl Project {
         // The two-way ANOVA reads its columns itself: the factor columns may hold text.
         let own_columns = matches!(
             request.tool,
-            Tool::TwoWayAnova(_) | Tool::Crosstab(_) | Tool::DiscreteFrequency(_) | Tool::Roc(_)
+            Tool::TwoWayAnova(_) | Tool::Crosstab(_) | Tool::DiscreteFrequency(_) | Tool::Roc(_) | Tool::KaplanMeier(_)
         );
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
@@ -1634,6 +1641,13 @@ impl Project {
             }
             Tool::Roc(spec) => {
                 let out = roc::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::KaplanMeier(spec) => {
+                let out = survival::run(spec, sheet, &request.columns, request.rows)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

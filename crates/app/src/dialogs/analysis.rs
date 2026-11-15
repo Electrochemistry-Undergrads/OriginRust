@@ -112,6 +112,8 @@ pub enum AnalysisKind {
     /// Statistics > Multivariate Analysis and ROC Curve (options in `multivariate_options.rs`).
     Pca,
     Roc,
+    /// Statistics > Survival Analysis > Kaplan-Meier Estimator (options in `multivariate_options.rs`).
+    KaplanMeier,
     /// Statistics > Descriptive Statistics > Cross Tabulation.
     Crosstab,
     /// Analysis > Mathematics: Average Multiple Curves, Intersect and Polygon Area.
@@ -206,6 +208,7 @@ impl AnalysisKind {
             AnalysisKind::QQPlot => "Q-Q Plot...",
             AnalysisKind::Pca => "Principal Component Analysis...",
             AnalysisKind::Roc => "ROC Curve...",
+            AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
             AnalysisKind::AverageCurves => "Average Multiple Curves...",
             AnalysisKind::Intersect => "Intersect...",
@@ -274,6 +277,7 @@ impl AnalysisKind {
             "qqplot" => AnalysisKind::QQPlot,
             "pca" => AnalysisKind::Pca,
             "roc" => AnalysisKind::Roc,
+            "kaplanmeier" => AnalysisKind::KaplanMeier,
             "crosstab" => AnalysisKind::Crosstab,
             "average-curves" => AnalysisKind::AverageCurves,
             "intersect" => AnalysisKind::Intersect,
@@ -1435,7 +1439,7 @@ impl AnalysisDialog {
             | AnalysisKind::MedianFilter => self.manip.tool(self.kind),
             AnalysisKind::Differentiate => Tool::Differentiate(self.diff),
             AnalysisKind::DistFit | AnalysisKind::ProbPlot | AnalysisKind::QQPlot => self.dist.tool(self.kind)?,
-            AnalysisKind::Pca | AnalysisKind::Roc => self.multi.tool(self.kind)?,
+            AnalysisKind::Pca | AnalysisKind::Roc | AnalysisKind::KaplanMeier => self.multi.tool(self.kind)?,
             AnalysisKind::AverageCurves => self.curves.average_tool(),
             AnalysisKind::Intersect => self.curves.intersect_tool(),
             AnalysisKind::PolygonArea => Tool::PolygonArea,
@@ -2359,7 +2363,7 @@ impl AnalysisDialog {
                 ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
             }
             AnalysisKind::DistFit | AnalysisKind::ProbPlot | AnalysisKind::QQPlot => self.dist.options(ui, self.kind),
-            AnalysisKind::Pca | AnalysisKind::Roc => self.multi.options(ui, self.kind),
+            AnalysisKind::Pca | AnalysisKind::Roc | AnalysisKind::KaplanMeier => self.multi.options(ui, self.kind),
             AnalysisKind::DiscreteFreq => {
                 let d = &mut self.discfreq;
                 egui::CollapsingHeader::new("Quantities to Compute").default_open(true).show(ui, |ui| {
@@ -2484,6 +2488,7 @@ impl AnalysisDialog {
             AnalysisKind::KsTwoSample => "kstest2",
             AnalysisKind::MedianTest => "mediantest",
             AnalysisKind::Friedman => "friedman",
+            AnalysisKind::KaplanMeier => "kaplanmeier",
             AnalysisKind::AverageCurves => "avecurves",
             AnalysisKind::Intersect => "intersect",
             AnalysisKind::PolygonArea => "polyarea",
@@ -2563,6 +2568,9 @@ impl AnalysisDialog {
             AnalysisKind::DistFit => "Fit distributions to the input columns by maximum likelihood and test the fit",
             AnalysisKind::ProbPlot => "Plot the data against the plotting positions on a probability axis",
             AnalysisKind::QQPlot => "Plot the quantiles of a distribution against the ordered data",
+            AnalysisKind::KaplanMeier => {
+                "Estimate the survival function of censored times, with quartiles, the mean and tests of groups"
+            }
             AnalysisKind::Roc => "Judge how well a test variable separates the two states of a state column",
             AnalysisKind::Pca => "Describe the variation of several columns by uncorrelated components",
             AnalysisKind::Crosstab => {
@@ -2643,6 +2651,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::ProbPlot | AnalysisKind::QQPlot => {
                 "The plotted points and the reference line in a new sheet, and a graph"
+            }
+            AnalysisKind::KaplanMeier => {
+                "The survival table, quartile and mean survival times and tests of groups in a new sheet, and a graph of the curves"
             }
             AnalysisKind::Roc => {
                 "Area under the curve with its standard error, the curve points and the best cut-off in a new sheet, and a graph"

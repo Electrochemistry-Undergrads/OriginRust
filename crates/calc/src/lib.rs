@@ -41,6 +41,7 @@ pub mod peakchain;
 pub mod peaks;
 pub mod power;
 pub mod roc;
+pub mod survival;
 pub mod signal;
 pub mod smooth;
 pub mod stats;
@@ -110,6 +111,9 @@ pub use power::{
     t_sample_sizes,
 };
 pub use roc::{Roc, RocError, RocOptions, RocPoint, roc};
+pub use survival::{
+    KaplanMeier, Quartile, RankResult, RankTest, SurvivalError, SurvivalRow, SurvivalStep, kaplan_meier, rank_test,
+};
 pub use signal::{convolve, correlate, hilbert};
 pub use smooth::{Boundary, LocalSpan, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{RowStats, Stats, mean_confidence_limits, quantile_origin, row_stats, stats};

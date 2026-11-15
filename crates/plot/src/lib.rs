@@ -10,6 +10,7 @@
 //! [`render_pdf`], [`export_file`] and, for an interactive view,
 //! [`render_raster`] together with [`layout_geometry`].
 
+mod break_cut;
 mod data;
 mod emf;
 mod eps;
@@ -268,6 +269,12 @@ pub struct LayerGeometry {
     /// The triangle of a ternary layer. Then the data are the normalised X and Y fractions of the
     /// rows (graphing spec section 14.20).
     pub ternary: Option<ternary::TernaryMap>,
+    /// The page's "Connect line across Axis Break": lines are drawn through the bands of axis breaks
+    /// instead of being cut there (graphing spec 3.6).
+    pub connect_across_breaks: bool,
+    /// The page's "Connect line across Missing Data": rows with a missing X or Y value do not break a
+    /// connecting line (graphing spec 18.7b).
+    pub connect_across_missing: bool,
 }
 
 impl LayerGeometry {

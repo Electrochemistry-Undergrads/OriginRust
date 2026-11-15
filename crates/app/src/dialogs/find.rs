@@ -4,6 +4,7 @@
 
 use eframe::egui;
 use sheaf_core::{Column, WindowId, Worksheet};
+use std::ops::Range;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DataType {
@@ -57,6 +58,9 @@ pub struct FindDialog {
     whole_cell: bool,
     wildcards: bool,
     search_up: bool,
+    /// Keep the opening range even after a search moves the worksheet cursor.
+    selection: Option<(Vec<usize>, Range<usize>)>,
+    selection_only: bool,
     /// What the last search found or not.
     note: Option<String>,
     /// True until the first frame, to put the keyboard in the text field.
@@ -92,6 +96,8 @@ impl FindDialog {
             whole_cell: false,
             wildcards: false,
             search_up: false,
+            selection: None,
+            selection_only: true,
             note: None,
             first_frame: true,
         }
@@ -106,6 +112,17 @@ impl FindDialog {
     pub fn initial_text(mut self, text: String) -> Self {
         self.what = text;
         self
+    }
+
+    /// Offers the opening worksheet selection as a fixed search and replacement scope.
+    pub fn in_selection(mut self, columns: Vec<usize>, rows: Range<usize>) -> Self {
+        self.selection = Some((columns, rows));
+        self
+    }
+
+    fn includes(&self, cell: (usize, usize)) -> bool {
+        !self.selection_only
+            || self.selection.as_ref().is_none_or(|(columns, rows)| columns.contains(&cell.0) && rows.contains(&cell.1))
     }
 
     pub fn show(&mut self, ctx: &egui::Context) -> FindOutcome {
@@ -167,6 +184,9 @@ impl FindDialog {
             egui::CollapsingHeader::new("Options").default_open(true).show(ui, |ui| {
                 // Sheaf has no individual cell links. Formula columns remain protected by the caller.
                 ui.add_enabled(false, egui::Checkbox::new(&mut true, "Skip linked cells"));
+                if self.selection.is_some() {
+                    ui.checkbox(&mut self.selection_only, "Find/Replace in selected range");
+                }
                 if self.data_type == DataType::String {
                     ui.checkbox(&mut self.match_case, "Match case");
                     ui.add_enabled(
@@ -254,21 +274,29 @@ impl FindDialog {
             self.note = Some(error);
             return None;
         }
-        let hit = if self.data_type == DataType::String && !self.wildcards && !self.search_up {
+        let hit = if self.data_type == DataType::String
+            && !self.wildcards
+            && !self.search_up
+            && (!self.selection_only || self.selection.is_none())
+        {
             find_next(sheet, &self.what, self.match_case, self.whole_cell, from)
         } else {
-            find_with(sheet, from, self.search_up, |column, row| self.matches(column, row))
+            find_with(sheet, from, self.search_up, |c, r| self.includes((c, r)) && self.matches(&sheet.columns[c], r))
         };
         self.note = match hit {
             Some((c, r)) => Some(format!("Found in column {}, row {}", sheet.columns[c].short_name, r + 1)),
             None => Some(format!("\"{}\" was not found", self.what)),
         };
+        if hit.is_some() && !self.selection_only {
+            // An unrestricted hit collapses Origin's range and removes this option.
+            self.selection = None;
+        }
         hit
     }
 
     /// The replacement for a cell, including clearing Numeric nonmatches when requested.
     pub fn replaced(&self, sheet: &Worksheet, cell: (usize, usize)) -> Option<String> {
-        if !self.replacing {
+        if !self.replacing || !self.includes(cell) {
             return None;
         }
         let column = sheet.columns.get(cell.0)?;
@@ -419,7 +447,7 @@ fn find_with(
     sheet: &Worksheet,
     from: Option<(usize, usize)>,
     up: bool,
-    matches: impl Fn(&Column, usize) -> bool,
+    matches: impl Fn(usize, usize) -> bool,
 ) -> Option<(usize, usize)> {
     let cells: Vec<(usize, usize)> =
         sheet.columns.iter().enumerate().flat_map(|(c, column)| (0..column.len()).map(move |r| (c, r))).collect();
@@ -432,7 +460,7 @@ fn find_with(
         .map_or(if up { count - 1 } else { 0 }, |i| if up { (i + count - 1) % count } else { (i + 1) % count });
     (0..count)
         .map(|i| cells[if up { (start + count - i) % count } else { (start + i) % count }])
-        .find(|&(c, r)| matches(&sheet.columns[c], r))
+        .find(|&(c, r)| matches(c, r))
 }
 
 /// `text` with every occurrence of `what` replaced by `with` (the whole text when `whole_cell`),
@@ -596,5 +624,35 @@ mod tests {
             let actual = [0, 1, 2, 3].map(|row| dialog.matches(&sheet.columns[0], row));
             assert_eq!(actual, expected, "{}", condition.label());
         }
+    }
+
+    #[test]
+    fn selected_columns_bound_backward_wildcard_and_conditional_missing_operations() {
+        let mut project = Project::default();
+        let book = project.add_workbook("");
+        for _ in 0..3 {
+            project.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 5.0, 2.0, 8.0])).unwrap();
+        }
+        let sheet = project.workbook(book).unwrap().sheet();
+        let mut dialog = FindDialog::replace(book).initial_text("2".into()).in_selection(vec![0, 2], 1..3);
+        dialog.search_up = true;
+        assert_eq!(dialog.search(sheet, Some((2, 2))), Some((0, 2)), "skip the unselected middle column");
+        assert_eq!(dialog.search(sheet, Some((0, 2))), Some((2, 2)), "wrap inside selected rows");
+        dialog.data_type = DataType::String;
+        dialog.wildcards = true;
+        dialog.what = "?".into();
+        assert_eq!(dialog.search(sheet, Some((2, 1))), Some((0, 2)));
+        dialog.data_type = DataType::Numeric;
+        dialog.what = "3".into();
+        dialog.with = "9".into();
+        dialog.condition = Condition::Greater;
+        dialog.set_missing = true;
+        assert_eq!(
+            dialog.replace_all(sheet),
+            [(0, 1, "9".into()), (0, 2, "--".into()), (2, 1, "9".into()), (2, 2, "--".into())],
+            "clearing nonmatches must leave every unselected cell alone"
+        );
+        assert_eq!(dialog.replaced(sheet, (1, 1)), None);
+        assert_eq!(dialog.replaced(sheet, (0, 0)), None);
     }
 }

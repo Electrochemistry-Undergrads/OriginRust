@@ -334,11 +334,30 @@ pub struct PageStyle {
     /// Free notes about the graph; the Object Manager shows them as the page's hover text.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub comments: String,
+    /// Origin's page Display tab "Connect line across Axis Break" (off by default, graphing spec 3.6): off
+    /// leaves a line out where it crosses the band of an axis break, on draws it through.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub connect_across_breaks: bool,
+    /// Origin's page Display tab "Connect line across Missing Data" (off by default, graphing spec 18.7b): on
+    /// joins the points before and after rows with a missing X or Y value instead of breaking the line.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub connect_across_missing: bool,
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 impl Default for PageStyle {
     fn default() -> Self {
-        PageStyle { border: None, layer_icons: true, title_display: TitleDisplay::Both, comments: String::new() }
+        PageStyle {
+            border: None,
+            layer_icons: true,
+            title_display: TitleDisplay::Both,
+            comments: String::new(),
+            connect_across_breaks: false,
+            connect_across_missing: false,
+        }
     }
 }
 
@@ -378,6 +397,8 @@ mod tests {
             layer_icons: false,
             title_display: TitleDisplay::LongName,
             comments: "notes".into(),
+            connect_across_breaks: true,
+            connect_across_missing: true,
         };
         let json = serde_json::to_string(&page).unwrap();
         assert_eq!(serde_json::from_str::<PageStyle>(&json).unwrap(), page);

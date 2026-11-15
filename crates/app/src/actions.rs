@@ -163,6 +163,8 @@ pub enum Action {
     ReplaceInSheets(WindowId),
     Undo,
     Redo,
+    /// Owner-only: undo consecutive completed AI calls, stopping at a manual history entry.
+    UndoAiChanges,
     NewWorkbook,
     AddColumn(WindowId),
     DeleteColumns(Vec<ColumnId>),

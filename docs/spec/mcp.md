@@ -995,3 +995,21 @@ explain why mutating calls may be waiting; reads remain available under either c
 leaves project data, revision, modified state, selection and undo history untouched. UI-only focus
 changes can change this resource without changing `document_revision`. There is no subscription
 or cached context; clients request it again for a fresh view.
+
+### 11.19 Owner Undo AI Changes (2026-11-15)
+
+Edit > Undo AI Changes is beside ordinary Undo/Redo. The no-window menu keeps it beside File >
+Undo/Redo instead. It is enabled only when the latest retained history entry starts with `AI: `
+and no cell/label editor or dialog is active. Dispatch checks these conditions again.
+
+One activation undoes consecutive completed AI calls from the top, stopping at the first manual
+history entry or the retained-history limit. Each step uses ordinary Undo, including its cleanup
+hooks and saved-state tracking. Ordinary Redo restores one call at a time. An older AI call below
+manual work is left in place; an evicted call cannot be restored. With no undoable AI entry the
+command is disabled. After a batch the status bar reports the number of AI changes undone.
+
+The command leaves exported files on disk and keeps assistant connections open. It does not
+cancel queued calls; use Tools > AI Assistants (MCP) to stop further calls. It adds no MCP tool,
+selective-undo mechanism or history format. Real-proxy/UI tests cover a complete import/plot/
+formula batch, exported-file preservation, clean saved-state restoration, per-call redo, manual
+boundaries, stale dispatch, cell/label editors, dialogs and history eviction.

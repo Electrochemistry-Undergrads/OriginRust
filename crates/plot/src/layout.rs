@@ -326,6 +326,8 @@ fn group_geometry(
                 y: y.clone(),
                 polar: None,
                 ternary: Some(ternary::TernaryMap::new(f, percent)),
+                connect_across_breaks: false,
+                connect_across_missing: false,
             };
             let (l, t, r, b) = ternary::draw_axes(&mut Vec::new(), project, &g.layers[i], &pds[i].plots, &geom, m);
             edges.left = edges.left.min(l);
@@ -370,7 +372,9 @@ fn group_geometry(
                 }
                 _ => clip,
             };
-            (i, LayerGeometry { frame, clip, x, y, polar, ternary })
+            let connect_across_breaks = g.page.style.connect_across_breaks;
+            let connect_across_missing = g.page.style.connect_across_missing;
+            (i, LayerGeometry { frame, clip, x, y, polar, ternary, connect_across_breaks, connect_across_missing })
         })
         .collect()
 }
@@ -413,6 +417,8 @@ fn label_edges(
             y: y.clone(),
             polar: Some(polar::PolarMap::new(f, p)),
             ternary: None,
+            connect_across_breaks: false,
+            connect_across_missing: false,
         };
         let paint = AxisPaint::new(xa, None);
         let (l, t, r, b) = polar::draw_angle_axis(&mut scratch, xa, &paint, &geom, m);

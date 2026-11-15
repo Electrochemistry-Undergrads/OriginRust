@@ -58,7 +58,7 @@ Observed hint: the commented-out keys `defpagewidth=6400`, `defpageheight=4800`,
 | clip data to frame (+ margin %) | hide data outside frame | UNKNOWN | [W:pd-dialog-display-speed-tab] |
 | data on top of axes | draw data over axes | off | same |
 | grid on top of data; reference lines on top | draw order | off [INF] | same |
-| speed mode (max points per curve) | draw decimated data only; "Speed Mode is On" watermark never exported | off | same |
+| speed mode (max points per curve) | draw decimated data only; "Speed Mode is On" watermark never exported | worksheet data ticked, 3000 points per curve; matrix data unticked, 32 x 32 (measured in Origin 2016's Size/Speed tab, 18.7a) | same |
 | show axes / labels / data / frame | visibility toggles | on | same |
 | layer links | X and/or Y scale linked 1:1 to another layer | off | [F:laylink.OXF] |
 
@@ -235,6 +235,16 @@ are left out. Ticks inside a break go; `step_after` gives the part after a break
 Values inside a break cannot be placed. The dialog's Enable starts with one break (the middle half), Number of
 Breaks adds rows by the one-at-a-time rule above and removes rows from the end, Delete removes a row, and one "Gap
 (% of axis)" value stands for Origin's Break Half Length. The mark is drawn as measured, 8 pt to either side.
+
+**Lines across a break (measured 2026-11-15, `re-workspace/scratch/break-lines`):** the page Display tab of Origin
+2016's Plot Details has "Connect line across Axis Break" and "Connect line across Missing Data", both unticked.
+With the default, a line+symbol plot of 0, 0.5, ..., 2 then 18, ..., 20.5 on a Y axis broken at 3.75..16.25 drew the
+segment from (4, 2) to (5, 18) straight between the two points on the page but left it out over exactly the
+rows of the axis line's gap (574 to 588 px in a 1600 px export, the same rows as the cut in the axis line).
+Sheaf: line pieces are cut over the band of every X or Y break (`break_cut::cut_at_breaks`) unless the page's
+"Connect line across Axis Break" (`PageStyle::connect_across_breaks`) is ticked; then they are drawn through.
+Not measured: the ticked case (saving the probe project failed, so it could not be reopened), closed outlines
+of filled runs (Sheaf leaves those whole) and Origin's behaviour with spline connections.
 
 ### 3.7 Special ticks and reference lines (P1/P2)
 Custom tick positions and labels per tick. Reference lines are not documented for 2016; emulate with `addline` objects.
@@ -2443,6 +2453,16 @@ frame's left, top and width and sets its height to `width x span_y / (span_x x r
 page-fitting that otherwise keeps labels on the page. Not offered for a layer that follows another, polar
 and ternary layers, or while an axis has breaks (then the link is ignored). Undo restores both. `.opj`
 saves name it among the settings not written.
+
+### 18.7b Connect line across Missing Data (measured)
+
+Origin 2016's page Display tab has "Connect line across Missing Data", unticked by default. Measured 2026-11-15
+(`re-workspace/scratch/missing-lines`, a line + symbol plot of 2x for x = 0..10 with rows 5, 6 and 9 (x = 4, 5, 8)
+set missing): unticked, the line stops at x = 3 and 7 and restarts at 6 and 9 (three pieces); ticked, it runs
+straight from the point at 3 to the one at 6 and from 7 to 9 (one line). Symbols are the same either way.
+Sheaf: `PageStyle::connect_across_missing` (page Display tab check box); `draw_line` skips rows whose X or Y
+value is missing instead of ending the piece. A value that cannot be placed (zero or negative on a log
+axis, inside an axis break) still breaks the line; fill areas under the curve are unchanged (unmeasured).
 
 ### 18.7 Not done
 

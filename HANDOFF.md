@@ -36,13 +36,21 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T25 busy greeting repair (2026-11-15, Windows): an over-limit TCP connection receives its
+  busy reason before closing, using a send-half-close and a bounded receive drain. This
+  avoids Winsock reset errors caused by unread hello data, while retaining connection limits
+  and bounded refusal time. The original regression failed on baseline timing attempt 4;
+  the fixed binary passed all 30 attempts plus a 32-refusal/silent-peer integration fixture.
+  Separate repair 50b5ecb; no resource/context/proxy or admission policy changes. Combined
+  formatting, strict all-target Clippy and 2656 workspace tests pass (seven existing ignored).
 - T02 Find/Replace (2026-11-15, Windows): one tabbed window, selected-display query seed,
   Numeric initial mode with measured comparisons/relative tolerance/missing/sign flags,
   String wildcards and reverse search. `!=` is strict, independently of tolerant equality.
   Replacement remains one undo action; tabs have distinct accessibility roles from actions.
   Origin 2016 GUI fixtures, four new UI tests and four matching fixtures cover these rules.
-  Checkpoint e5e0b5a passed formatting, strict all-target Clippy and 2393 workspace tests
-  (three existing ignored); latest combined checks are pending. Active-sheet data only;
+  Feature e5e0b5a and the latest main integration pass formatting, strict all-target Clippy
+  and 2656 workspace tests (seven existing ignored). Both native previews were inspected.
+  Active-sheet data only;
   wider scopes, label rows, cell links and saved dialog history remain (gui-look section 5).
 - T13 Inclusive fill mode (2026-11-15, Windows): finite runs fill and outline to their own
   endpoint chords; missing rows separate polygons, and isolated points keep round stroke caps.
@@ -156,7 +164,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/mcp-busy-greeting-claim` | Codex Windows, t02-find-replace | T25 connection-admission repair ONLY: host.rs::refuse graceful busy greeting, transport Stream send-half-close helper and focused TCP regression; code will be on codex/t02-find-replace | claimed 2026-11-15; separate commit; no app-resource/proxy/Op/request dispatch, roots/files/exports, history, UI selection or other sessions' scope |
 | `codex/t25-app-resource` | Codex Windows, t25-app-resource | T25 read-only sheaf://app current-window/selection resource: MCP resources/proxy, narrow link request path, app live-link context extraction and focused tests/docs | claimed 2026-11-15; same private t13 tree/target; reads selections only; no history/Undo AI, filesystem/export policy, grid/selection interactions, recent-files/open/save/import/startup hooks, plot/axes or other sessions scope |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `axis-breaks` | Claude Windows, "axis-breaks" | T11 more than one axis break (Origin's 1-7 breaks, per-break position), measured Origin break layout; core Axis break list, plot axis/tick drawing, graph_axis.rs Breaks tab, persistence and focused tests | claimed 2026-11-15; Axis fields only, no PLOT/plots.rs draw_plot, graph_details, navigation, stats or other sessions' scopes |

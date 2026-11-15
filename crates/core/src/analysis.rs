@@ -1684,7 +1684,7 @@ pub use sheaf_calc::{
 impl Project {
     /// A new graph with a column plot of each (bin centre, count) pair of columns.
     fn histogram_graph(&mut self, ids: &[ColumnId], plots: &[(usize, usize)]) -> WindowId {
-        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.long_name.clone());
+        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(crate::template::Template::Scatter);
         for &(x, y) in plots {
             self.add_plot_xy(graph, 0, Some(ids[x]), ids[y], None).expect("the graph and the new columns exist");
@@ -1710,7 +1710,7 @@ impl Project {
     /// A new graph with the scatter and line plots of a probability plot; the plan names columns of the
     /// new result sheet by position.
     fn xy_graph(&mut self, ids: &[ColumnId], plan: &dist::XyGraph) -> WindowId {
-        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.long_name.clone());
+        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(crate::template::Template::Scatter);
         for p in &plan.plots {
             self.add_plot_xy(graph, 0, Some(ids[p.x]), ids[p.y], None).expect("the graph and the new columns exist");

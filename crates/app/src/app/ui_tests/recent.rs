@@ -293,7 +293,7 @@ fn recent_exports_stay_grey_and_recent_books_and_graphs_are_submenus() {
     }
     close_menus(&mut h);
     // The workbook's File menu has Recent Exports inside Export.
-    click(&mut h, "Title Book1 - g");
+    click(&mut h, "Title Book1 - g.csv");
     menu_path(&mut h, &["File", "Export"]);
     assert!(!entry_enabled(&h, "Recent Exports"));
     close_menus(&mut h);

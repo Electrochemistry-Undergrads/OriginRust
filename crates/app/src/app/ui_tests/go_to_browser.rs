@@ -27,7 +27,7 @@ fn fixture(tag: &str) -> (Harness<'static, SheafApp>, WindowId) {
         }
     });
     settle(&mut h);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let source = sheet(&h).clone();
     h.state_mut().books.get_mut(&book).unwrap().select_cells(&source, (2, 6), (2, 6));
     settle(&mut h);

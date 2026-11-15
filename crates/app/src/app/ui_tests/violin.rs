@@ -12,7 +12,7 @@ fn the_statistics_menu_has_live_violin_items_that_make_one_violin_per_y_column()
         ("Half Violin", PlotKind::HalfViolin),
     ] {
         let mut h = start(vec![data_file("violin-menu")]);
-        show_window(&mut h, "Book1 - sample");
+        show_window(&mut h, "Book1 - sample.csv");
         let before = project(&h).graphs().count();
         select_b_and_c(&mut h);
         menu_path(&mut h, &["Plot"]);
@@ -34,7 +34,7 @@ fn the_statistics_menu_has_live_violin_items_that_make_one_violin_per_y_column()
 }
 
 fn make_ridgeline(h: &mut Harness<'static, SheafApp>) -> sheaf_core::WindowId {
-    show_window(h, "Book1 - sample");
+    show_window(h, "Book1 - sample.csv");
     let before = project(h).graphs().count();
     select_b_and_c(h);
     menu_path(h, &["Plot"]);

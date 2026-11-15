@@ -236,6 +236,16 @@ Values inside a break cannot be placed. The dialog's Enable starts with one brea
 Breaks adds rows by the one-at-a-time rule above and removes rows from the end, Delete removes a row, and one "Gap
 (% of axis)" value stands for Origin's Break Half Length. The mark is drawn as measured, 8 pt to either side.
 
+**Lines across a break (measured 2026-11-15, `re-workspace/scratch/break-lines`):** the page Display tab of Origin
+2016's Plot Details has "Connect line across Axis Break" and "Connect line across Missing Data", both unticked.
+With the default, a line+symbol plot of 0, 0.5, ..., 2 then 18, ..., 20.5 on a Y axis broken at 3.75..16.25 drew the
+segment from (4, 2) to (5, 18) straight between the two points on the page but left it out over exactly the
+rows of the axis line's gap (574 to 588 px in a 1600 px export, the same rows as the cut in the axis line).
+Sheaf: line pieces are cut over the band of every X or Y break (`break_cut::cut_at_breaks`) unless the page's
+"Connect line across Axis Break" (`PageStyle::connect_across_breaks`) is ticked; then they are drawn through.
+Not measured: the ticked case (saving the probe project failed, so it could not be reopened), closed outlines
+of filled runs (Sheaf leaves those whole) and Origin's behaviour with spline connections.
+
 ### 3.7 Special ticks and reference lines (P1/P2)
 Custom tick positions and labels per tick. Reference lines are not documented for 2016; emulate with `addline` objects.
 

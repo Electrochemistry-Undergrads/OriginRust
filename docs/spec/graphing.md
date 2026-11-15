@@ -1518,6 +1518,90 @@ X gives a one-entry legend named after it instead.
 - Goldens: `pie-3d.svg`, `pie-bw.svg` (values 3, 5, 2, 7, 4).
 - Not done: changing the 3D view (tilt, thickness, rotation), exploded slices, label positions inside, the toolbar button "Pie" (still greyed), hatch pattern choice per slice, Plot Details shows the kinds by name.
 
+### 14.22 Violin plot (T37)
+
+Origin's documented facts (from its help, not measured; no Origin was at hand; [W:origin-help/violin-plot],
+[W:origin-help/create-violin-plot], [W:origin-help/pd-dialog-distribution-tab], [W:origin-help/pd-dialog-box-tab],
+[W:origin-help/pd-dialog-data-tab], [W:origin-help/pd-dialog-spacing-tab], [W:labtalk/ref/ksdensity-func],
+[W:labtalk/ref/kernelwidth-func], [W:origin-help/groupedviolin-indexeddata]):
+
+- Origin 2019. A violin plot is "a fancy variation of box chart" that adds a kernel density curve of the observations.
+  Menu: "Plot > Statistical: [variant]" in the newer help, "Plot: 2D > Violin Plot" in the older; the two pages disagree.
+  Seven variants, with templates: Violin Plot (`Violin.otpu`), Violin with Box (`ViolinBox`), Violin with Point
+  (`ViolinData`), Violin with Quartile (`ViolinQuartile`), Violin with Stick (`ViolinStick`), Split Violin
+  (`ViolinSplit`), Half Violin (`HalfViolin`). The help never describes the variants one by one; the 2019 announcement
+  speaks of a median and summary box, two subgroups split into the halves of one violin, one half with each observation
+  in bins, and observation lines inside the violin.
+- Data: one or more Y columns, each its own violin; column names or labels are the X tick labels. Split Violin needs two
+  or more columns whose last column holds only two categories. Grouped violins (indexed data) and "Inner Split by" a
+  two-level column exist on grouped data.
+- There is no tab of its own: the curve is on the Plot Details Distribution tab (Curve Type Kernel Smooth by default
+  for violins), the box and the data points on the Box and Data tabs, then Percentile, Pattern, Spacing and Lines.
+- Kernel: normal, `K(x) = exp(-x^2/2)/sqrt(2 pi)`; `f(x) = 1/(n w) sum K((x - x_i)/w)` (LabTalk `ksdensity`).
+  Bandwidth options: Scott `0.9 A n^-1/5`, Silverman `1.059 A n^-1/5` with `A = min(SD, IQR/1.349)` (Scott is
+  Origin's `kernelwidth` function), `k x SD`, or a number. The default rule is not stated (Scott is assumed).
+- "Extend (% bandwidth)": the curve runs from `min - Extend/100 w` to `max + Extend/100 w`, so it is not cut at the data
+  (the help's examples use 300). "Scale": Count (widths by sample size), Width (all violins the same width) or Area
+  (the same area); "Scale to Maximum (%)" sets the amplitude. Defaults of these are not stated.
+- Curve colour Auto is a darker shade of the fill; the fill transparency Auto follows the Pattern tab. Spacing tab: gap
+  between boxes 20 %. Box tab Type options include Box, Data, Box + Data Overlap, Box(Right) + Data(Left), Half Box + Data;
+  Half Violin uses Half Box [Left] + Data [Right] with "Distribution Curve Next to Box". Box Range and Whisker Range
+  have Origin's usual options.
+- Not documented at all: number of grid points, default scale mode, default extend, maximum violin width against the
+  spacing, default colours, fill and outline, inner box width, the look of median, quartile and stick marks.
+
+**What Sheaf does** (every item not marked "documented" is Sheaf's choice, unmeasured):
+
+- Kinds `PlotKind::{Violin, ViolinBox, ViolinPoint, ViolinQuartile, ViolinStick, HalfViolin}` (one kind per variant,
+  so no new field of `Plot` and old files load unchanged; `PlotKind::violin_inner()` says what is drawn inside) and the
+  templates of the same names, in Plot > Statistics after the grey Grouped Box Charts / Interval Plot: "Violin Plot"
+  (`violin`), "Violin with Box" (`violin-box`), "Violin with Point" (`violin-point`), "Violin with Quartile"
+  (`violin-quartile`), "Violin with Stick" (`violin-stick`), "Half Violin" (`half-violin`). They are box chart
+  templates: page, axes and the colours starting at red are the box chart's (the box chart is measured, 14.15).
+  Each Y column is one violin standing at 1, 2, 3, ... in plot order with its name as the tick label, as boxes do.
+  The box chart's own drawing and goldens are untouched. `plot_columns_double_y`, `--y2` and MCP refuse a violin
+  (no right Y axis, like the lollipop). Origin's help has a "Violin with Box" button on the 2D Graphs toolbar ([W:origin-help/violin-plot]); Sheaf has not added it yet (see not done below).
+- Density (`crates/calc/src/kde.rs`, documented formulas): Gaussian kernel and the Scott bandwidth `0.9 A n^-1/5`,
+  `A = min(SD, IQR/1.349)`; Silverman, `k x SD` and a fixed width are in the library but not reachable from the
+  interface yet. Sheaf's choices: the IQR uses the quartiles of the box chart; with IQR 0 (many equal values) `A`
+  is the SD; missing and non-finite values are left out; the curve is evaluated on 128 even grid points, plus more points wherever those are more than a quarter of a bandwidth apart (far outliers stretch the range while the Scott bandwidth follows the bulk): within 3 bandwidths of every value the step is at most a quarter of a bandwidth, with at most 8192 added points, so the bulk of the data is always sampled and the widest point is at the mode (the density peak is within 1 % of the sampled maximum); the curve
+  extends 200 % of a bandwidth past the smallest and largest value (documented as a setting, default unknown). Fewer than
+  two values or no spread give no bandwidth: no silhouette is drawn, the marks inside still are.
+  Tested against scipy (`tools/kde-ref.py`, `crates/calc/tests/scipy_kde.rs`: `scipy.stats.gaussian_kde` with the factor
+  `w/SD`, 1e-12 relative; scipy's own Scott and Silverman factors as `k x SD`). None of the numbers is from Origin.
+- Scale: every violin is scaled to the same maximum width of 0.8 of the spacing (Origin's "Width" mode and the box
+  width; Area and Count scaling and Scale to Maximum are not done).
+- Drawing (`crates/plot/src/violin.rs`, constants `VIOLIN_*`): the silhouette is a closed polygon mirrored about the
+  position, filled and outlined in the plot's colour (outline width = the line width, at least 0.5 pt). While the Fill
+  settings are plain the fill is the plot colour 60 % toward white; once the plot has a transparency, pattern or
+  gradient it is the plot colour with those settings (`fill::fill_polygon`). The legend sample is a small box in the
+  same fill and outline. Marks inside, in the plot colour:
+  - Violin Plot: a white dot with a coloured ring at the median (Origin's text mentions a median).
+  - Violin with Box: a box 0.12 wide from the first to the third quartile, filled, a white median line, a whisker line
+    to the box chart's whisker ends (Origin's 1.5 IQR rule, as 14.15; no outliers).
+  - Violin with Quartile: dashed lines at the quartiles and a solid line twice as thick at the median, each across the
+    local width of the silhouette.
+  - Violin with Point: every value a 3 pt filled dot at its height, spread across 0.8 of the local width by a golden
+    ratio sequence (the same picture every time), and the median dot.
+  - Violin with Stick: every value a 0.5 pt line across the local width.
+  - Half Violin: only the right half of the silhouette; a half box 0.12 wide to the left of the middle line (gap 0.04)
+    with whisker and median. (Origin's half violin shows binned data beside the curve; not done.)
+  The automatic ranges cover the curve: Y from the first to the last grid point, X from 0.6 to 1.4 for one violin. The Y range also covers the data and the box marks, so that a log axis, which cannot show the curve ends at or below zero, still gets a range around the data. On a log axis the silhouette stops at the lowest grid point above zero and is closed by a flat edge there (no taper; the kernel density is not computed in log space).
+  The box chart's X title rule applies (none).
+- Rows: filtered rows are left out like the box chart's; unlike the box chart, masked rows are left out too (Origin
+  excludes masked points from a plot; the box chart ignoring masks is old behaviour that was not changed).
+- `.opj`: written as plain columns like box and pie plots; the save warns ("violin plots were written as plain columns of
+  their data"); the `.sheaf` companion keeps the kind.
+- Tests: `violin_tests.rs` (silhouette symmetric and widest at the mode, extent, positions and labels, inner box equals
+  the box chart's statistics, marks per variant, half violin side, missing/filtered/masked data, degenerate columns,
+  legend, fill transparency, centring on the tick, outliers far from the bulk, log axis), `kde.rs` tests for the grid with far outliers, golden `violin.svg`, core template and serde tests, UI menu test, CLI test, `.opj` warning
+  test.
+- Not done: the "Violin with Box" button of the 2D Graphs toolbar (and the buttons of the other variants, if Origin has them), Split Violin (needs the last-column-with-two-categories data layout and Inner Split by), grouped violins
+  from indexed data, Plot Details settings for the violin (bandwidth rule, extend, scale mode, scale to maximum, fill,
+  distribution curve types other than kernel smooth, curve next to box), binned data (Data tab bins), a violin tab, and
+  everything about Origin's real defaults. Measuring Origin's defaults (grid, extend, scale, width, colours, inner box)
+  is left for a session with Origin.
+
 ### 14.11 Unknowns
 
 - The overlap geometry: whether Origin keeps the group width (1 - g) s while the overlap changes (assumed here) or each bar's width. Needs one click test (Plot Details > Spacing) or an `.opj` saved with an overlap.

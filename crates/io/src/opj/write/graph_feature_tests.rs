@@ -650,6 +650,21 @@ fn lollipop_drop_settings_are_named_in_the_save_warnings() {
 }
 
 #[test]
+fn violin_plots_are_written_as_plain_columns_with_a_save_warning() {
+    for kind in [sheaf_core::graph::PlotKind::Violin, sheaf_core::graph::PlotKind::HalfViolin] {
+        let mut p = source();
+        line_graph(&mut p, |l| l.plots[0].kind = kind);
+        let (_, out) = round_trip(&p);
+        assert!(
+            out.warnings.iter().any(|w| w.contains("violin plots were written as plain columns")),
+            "{:?}",
+            out.warnings
+        );
+        assert!(!out.warnings.iter().any(|w| w.contains("histogram, box and pie")), "{:?}", out.warnings);
+    }
+}
+
+#[test]
 fn the_plot_details_settings_the_file_cannot_hold_are_named_in_the_save_warnings() {
     let mut p = one_layer(|l| {
         l.bars.width_pct = Some(70.0);

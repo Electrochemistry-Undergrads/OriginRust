@@ -18,7 +18,8 @@
 //!   are `None` when never reached, which was not measured).
 //! - The mean is the area under the curve up to the **largest time, censored or not**; its standard error is
 //!   `sqrt(D / (D - 1) sum A_i^2 d_i / (n_i (n_i - d_i)))` with `A_i` the area after the i-th event time and `D` the
-//!   number of events (the factor is left out for one event), and its limits
+//!   number of events; the factor `D / (D - 1)` is applied only when the curve reaches 0 (the largest time is an
+//!   event), not when the largest time is censored (measured in six runs; one event: not measured), and its limits
 //!   are `mean -/+ z se`.
 //! - Rank tests of groups use weights 1 (log-rank), `n_i` (Breslow, generalized Wilcoxon) and `sqrt(n_i)`
 //!   (Tarone-Ware); the statistic is chi-square with `groups - 1` degrees of freedom. Two groups measured; for
@@ -215,8 +216,11 @@ pub fn kaplan_meier(time: &[f64], censored: &[bool], confidence: f64) -> Result<
         .filter(|(st, _)| st.at_risk > st.events)
         .map(|(st, a)| a * a * st.events as f64 / (st.at_risk as f64 * (st.at_risk - st.events) as f64))
         .sum();
-    // Origin multiplies the variance by D / (D - 1), D the number of events (10/9 and 5/4 in the fixtures).
-    let correction = if events > 1 { events as f64 / (events - 1) as f64 } else { 1.0 };
+    // Origin multiplies the variance by D / (D - 1), D the number of events, when the curve reaches 0 (the largest
+    // time is an event); with a censored largest time (restricted mean) it leaves the factor out. Measured: 10/9,
+    // 5/4 and 10/9 with the curve at 0, 1 in the two runs ending on a censored case.
+    let reaches_zero = steps.last().is_some_and(|st| st.survival <= 0.0);
+    let correction = if reaches_zero && events > 1 { events as f64 / (events - 1) as f64 } else { 1.0 };
     let mean_se = (var * correction).sqrt();
     Ok(KaplanMeier {
         n,

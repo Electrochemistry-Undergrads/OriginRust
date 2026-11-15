@@ -98,6 +98,59 @@ fn two_groups_quartiles_means_and_rank_tests() {
         let r = rank_test(&groups, test).unwrap();
         assert_eq!(r.df, 1);
         close(r.chi_square, chi, 1e-12, test.name());
-        close(r.p, p, 1e-8, test.name());
+        close(r.p, p, 1e-6, test.name()); // Origin's own chi-square tail differs from the exact one by about 4e-8
+    }
+}
+
+/// Second run (`kaplan-suite2.lines.txt`, raw output `km3.out`): the largest time censored or an event, and
+/// three groups (one with a single case) in the rank tests.
+#[test]
+fn censored_largest_time_and_three_groups() {
+    let t: Vec<f64> = vec![2.0, 4.0, 4.0, 7.0, 9.0, 11.0, 11.0, 14.0, 16.0, 19.0, 23.0, 23.0];
+    let q = |k: &sheaf_calc::KaplanMeier, i: usize| (k.quartiles[i].estimate, k.quartiles[i].lower, k.quartiles[i].upper);
+    // Last two cases censored: the mean is cut off at 23, the variance has no D / (D - 1).
+    let c: Vec<bool> = [0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1].iter().map(|&x| x == 1).collect();
+    let a = kaplan_meier(&t, &c, 95.0).unwrap();
+    assert_eq!((a.n, a.events, a.censored), (12, 8, 4));
+    assert_eq!(q(&a, 0), (Some(4.0), Some(4.0), Some(16.0)));
+    assert_eq!(q(&a, 1), (Some(14.0), Some(9.0), Some(19.0)));
+    assert_eq!(q(&a, 2), (Some(19.0), Some(14.0), Some(19.0)));
+    close(a.mean, 13.395833333333334, 1e-12, "mean a");
+    close(a.mean_se, 2.179882736344541, 1e-12, "se a");
+    close(a.mean_lower, 9.1233416795774112, 1e-12, "lcl a");
+    close(a.mean_upper, 17.668324987089257, 1e-12, "ucl a");
+    // Last two cases events: the curve reaches 0 and the factor 10/9 applies.
+    let c: Vec<bool> = [0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0].iter().map(|&x| x == 1).collect();
+    let b = kaplan_meier(&t, &c, 95.0).unwrap();
+    assert_eq!(q(&b, 2), (Some(19.0), Some(14.0), Some(23.0)));
+    close(b.mean_se, 2.29779815964302, 1e-12, "se b");
+    close(b.mean_lower, 8.8922316966905974, 1e-12, "lcl b");
+    close(b.mean_upper, 17.89943496997607, 1e-12, "ucl b");
+
+    // Three groups; the third has one case.
+    let t: Vec<f64> = vec![2.0, 4.0, 4.0, 7.0, 9.0, 11.0, 11.0, 14.0, 16.0, 19.0, 23.0, 23.0, 5.0, 6.0, 10.0, 12.0, 12.0, 18.0, 21.0];
+    let c: Vec<bool> = [0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0].iter().map(|&x| x == 1).collect();
+    let g: [usize; 19] = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3];
+    let groups: Vec<(Vec<f64>, Vec<bool>)> = (1..=3)
+        .map(|k| {
+            let idx: Vec<usize> = (0..19).filter(|&i| g[i] == k).collect();
+            (idx.iter().map(|&i| t[i]).collect(), idx.iter().map(|&i| c[i]).collect())
+        })
+        .collect();
+    let g2 = kaplan_meier(&groups[1].0, &groups[1].1, 95.0).unwrap();
+        close(g2.mean, 11.5, 1e-12, "mean g2");
+    close(g2.mean_se, 2.3533368744071566, 1e-12, "se g2");
+    close(g2.mean_lower, 6.8875444826719141, 1e-12, "lcl g2");
+    close(g2.mean_upper, 16.112455517328087, 1e-12, "ucl g2");
+    let expect = [
+        (RankTest::LogRank, 1.2370946449099147, 0.53872648624554631),
+        (RankTest::Breslow, 0.99190554042815171, 0.60899046137046531),
+        (RankTest::TaroneWare, 1.1083149132282886, 0.57455628078914545),
+    ];
+    for (test, chi, p) in expect {
+        let r = rank_test(&groups, test).unwrap();
+        assert_eq!(r.df, 2);
+        close(r.chi_square, chi, 1e-12, test.name());
+        close(r.p, p, 1e-6, test.name()); // Origin's own chi-square tail differs from the exact one by about 4e-8
     }
 }

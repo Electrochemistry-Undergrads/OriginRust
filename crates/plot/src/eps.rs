@@ -52,14 +52,16 @@ pub fn write_eps_view(scene: &Scene, scale: f64, view: crate::Rect) -> EpsOutput
         w.item(&Item::Rect { rect: view, fill: Some(scene.background), stroke: None });
     }
     for layer in &scene.layers {
+        let (underlay, overlay) = layer.split_overlay();
         layer.grid.iter().for_each(|it| w.item(it));
+        underlay.iter().for_each(|it| w.item(it));
         let c = layer.clip;
         w.body.push_str("q ");
         w.nums(&[c.x, scene.height - c.y - c.h, c.w, c.h]);
         w.body.push_str("rectclip\n");
         layer.plots.iter().for_each(|it| w.item(it));
         w.body.push_str("Q\n");
-        layer.overlay.iter().for_each(|it| w.item(it));
+        overlay.iter().for_each(|it| w.item(it));
     }
 
     let (pw, ph) = (view.w * scale, view.h * scale);

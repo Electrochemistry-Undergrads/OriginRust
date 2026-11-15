@@ -37,10 +37,16 @@ pub fn write_svg_view(scene: &Scene, view: crate::Rect, scale: f64) -> String {
 }
 
 fn write_layer(s: &mut String, index: usize, layer: &LayerScene) {
+    let (underlay, overlay) = layer.split_overlay();
     let _ = writeln!(s, "<g id=\"layer{index}\">");
     if !layer.grid.is_empty() {
         s.push_str("<g class=\"grid\">\n");
         layer.grid.iter().for_each(|it| write_item(s, it));
+        s.push_str("</g>\n");
+    }
+    if !underlay.is_empty() {
+        s.push_str("<g class=\"underlay\">\n");
+        underlay.iter().for_each(|it| write_item(s, it));
         s.push_str("</g>\n");
     }
     let c = layer.clip;
@@ -56,7 +62,7 @@ fn write_layer(s: &mut String, index: usize, layer: &LayerScene) {
     let _ = writeln!(s, "<g class=\"plots\" clip-path=\"url(#clip{index})\">");
     layer.plots.iter().for_each(|it| write_item(s, it));
     s.push_str("</g>\n<g class=\"overlay\">\n");
-    layer.overlay.iter().for_each(|it| write_item(s, it));
+    overlay.iter().for_each(|it| write_item(s, it));
     s.push_str("</g>\n</g>\n");
 }
 

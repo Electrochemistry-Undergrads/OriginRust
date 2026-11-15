@@ -329,14 +329,14 @@ pub fn defs() -> Vec<Def> {
         },
         Def {
             name: "list_analysis_tools",
-            description: "The analysis tools analyze accepts, with their options and defaults.",
+            description: "Every analysis tool analyze accepts (all the tools of `sheaf analyze`), with their options, types and defaults. Tools marked bridged also carry a JSON Schema.",
             read_only: true,
             schema: obj(vec![], &[]),
             example: json!({}),
         },
         Def {
             name: "analyze",
-            description: "Run an analysis tool on Y columns. Results go to new columns next to the input or to a new sheet; the reply says where and carries any table.",
+            description: "Run an analysis tool on Y columns: any tool of `sheaf analyze` (integrate, smooth, fft_filter, ttest, anova, mannwhitney, histogram, normality, corr, ...). Results go to new columns next to the input or to a new sheet; the reply says where and carries any table. Names are snake_case; options are keys of list_analysis_tools (snake_case or kebab-case).",
             read_only: false,
             schema: obj(
                 vec![

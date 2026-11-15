@@ -2,7 +2,7 @@
 
 use crate::schemas::{self, Def};
 use crate::server::Server;
-use crate::{analysis_tools, b64};
+use crate::{analysis_tools, b64, bridge};
 use anyhow::{Context, anyhow};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -12,6 +12,8 @@ use sheaf_core::project::Window;
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Project, WindowId};
 use sheaf_ops::analyze::{Job, Outcome, Target};
+use sheaf_ops::args::AnalyzeTool;
+use sheaf_ops::cli_analyze::{job_from, power_spec};
 use sheaf_ops::fit::{BandKind, FitRun, FitSpec, WeightKind};
 use sheaf_ops::import::{ImportLayout, ImportRequest};
 use sheaf_ops::pick::{named_columns, pick_book, pick_graph, pick_sheet};
@@ -186,21 +188,51 @@ struct Empty {}
 
 // ----- names and values --------------------------------------------------------------
 
-/// A workbook name as the project knows it: a long name is turned into the short name.
-fn book_name(project: &Project, name: Option<&str>) -> Option<String> {
-    let n = name?;
+/// A workbook name as the project knows it: a long name is turned into the short name. A long
+/// name that two workbooks share is refused, not resolved to the first.
+fn book_name(project: &Project, name: Option<&str>) -> Result<Option<String>, ToolError> {
+    let Some(n) = name else { return Ok(None) };
     if project.window_by_name(n).is_some() {
-        return Some(n.to_string());
+        return Ok(Some(n.to_string()));
     }
-    project
+    let same: Vec<&str> = project
         .workbooks()
-        .find(|b| !b.long_name.is_empty() && b.long_name.eq_ignore_ascii_case(n))
-        .map(|b| b.name.clone())
-        .or_else(|| Some(n.to_string()))
+        .filter(|b| !b.long_name.is_empty() && b.long_name.eq_ignore_ascii_case(n))
+        .map(|b| b.name.as_str())
+        .collect();
+    match same.as_slice() {
+        [] => Ok(Some(n.to_string())),
+        [one] => Ok(Some((*one).to_string())),
+        many => Err(ToolError::new(format!(
+            "the workbook name \"{n}\" is the long name of several workbooks ({}); use a short name",
+            many.join(", ")
+        ))),
+    }
+}
+
+/// Refuses a column name that is no short name of the sheet and the long name of several columns
+/// (the shared code would take the first one).
+fn check_names(project: &Project, book: Option<&str>, sheet: Option<&str>, names: &[String]) -> Result<(), ToolError> {
+    let Ok((b, i)) = locate_sheet(project, book, sheet) else { return Ok(()) };
+    let Some(ws) = project.workbook(b).and_then(|b| b.sheets.get(i)) else { return Ok(()) };
+    for n in names {
+        let n = n.trim();
+        if ws.columns.iter().any(|c| c.short_name.eq_ignore_ascii_case(n)) {
+            continue;
+        }
+        let same: Vec<&str> = ws.columns.iter().filter(|c| c.long_name == n).map(|c| c.short_name.as_str()).collect();
+        if same.len() > 1 {
+            return Err(ToolError::new(format!(
+                "the column name \"{n}\" is the long name of several columns ({}); use a short name",
+                same.join(", ")
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn locate_sheet(project: &Project, book: Option<&str>, sheet: Option<&str>) -> Result<(WindowId, usize), ToolError> {
-    let name = book_name(project, book);
+    let name = book_name(project, book)?;
     let b = pick_book(project, name.as_deref())?;
     let s = pick_sheet(project, b, sheet)?;
     Ok((b, s))
@@ -368,7 +400,10 @@ impl Server {
     }
 
     fn suggested_for(&self, book: Option<&str>) -> Template {
-        let name = book_name(&self.project, book).or_else(|| self.project.workbooks().next().map(|b| b.name.clone()));
+        let name = book_name(&self.project, book)
+            .ok()
+            .flatten()
+            .or_else(|| self.project.workbooks().next().map(|b| b.name.clone()));
         name.and_then(|n| self.suggested.get(&n.to_ascii_lowercase()).copied()).unwrap_or(Template::Line)
     }
 }
@@ -634,7 +669,7 @@ fn list_contents(s: &mut Server, a: &Value) -> Res {
     let only = match &a.book {
         None => None,
         Some(_) => {
-            let name = book_name(&s.project, a.book.as_deref());
+            let name = book_name(&s.project, a.book.as_deref())?;
             Some(pick_book(&s.project, name.as_deref())?)
         }
     };
@@ -655,6 +690,7 @@ struct ReadArgs {
 fn read_columns(s: &mut Server, a: &Value) -> Res {
     let a: ReadArgs = args(a)?;
     let (book, sheet) = locate_sheet(&s.project, a.book.as_deref(), a.sheet.as_deref())?;
+    check_names(&s.project, a.book.as_deref(), a.sheet.as_deref(), a.columns.as_deref().unwrap_or_default())?;
     let wb = s.project.workbook(book).ok_or_else(|| anyhow!("workbook not found"))?;
     let ws = &wb.sheets[sheet];
     let ids: Vec<ColumnId> = match &a.columns {
@@ -739,7 +775,22 @@ fn set_column_values(s: &mut Server, a: &Value) -> Res {
     if rows_in_sheet.max(range.as_ref().map_or(0, |r| r.end)) > ROW_CAP {
         return Err(ToolError::new(format!("set_column_values works on at most {ROW_CAP} rows")));
     }
-    let existing = s.project.workbook(book).and_then(|b| b.sheets[sheet].column_by_name(a.column.trim())).map(|c| c.id);
+    let ws = &s.project.workbook(book).ok_or_else(|| ToolError::new("workbook not found"))?.sheets[sheet];
+    let wanted = a.column.trim();
+    // With `create` the name is a new short name: a long name of a column (the X column's, say) must
+    // not make the call overwrite that column.
+    if a.create.is_some() && !ws.columns.iter().any(|c| c.short_name.eq_ignore_ascii_case(wanted)) {
+        let owners: Vec<&str> =
+            ws.columns.iter().filter(|c| c.long_name == wanted).map(|c| c.short_name.as_str()).collect();
+        if !owners.is_empty() {
+            return Err(ToolError::new(format!(
+                "\"{wanted}\" is the long name of column {}; give its short name to change it, or choose another name for the new column",
+                owners.join(", ")
+            )));
+        }
+    }
+    check_names(&s.project, a.book.as_deref(), a.sheet.as_deref(), std::slice::from_ref(&a.column))?;
+    let existing = s.project.workbook(book).and_then(|b| b.sheets[sheet].column_by_name(wanted)).map(|c| c.id);
     let (column, created) = match (existing, &a.create) {
         (Some(id), _) => (id, false),
         (None, Some(c)) => {
@@ -925,7 +976,7 @@ fn plot(s: &mut Server, a: &Value) -> Res {
         template: a.template.clone(),
         y: a.y.clone(),
         y2: a.y2.clone(),
-        book: book_name(&s.project, a.book.as_deref()),
+        book: book_name(&s.project, a.book.as_deref())?,
         sheet: a.sheet.clone(),
         graph: a.graph.clone(),
         panels: a.panels.map(panels_from).transpose()?,
@@ -933,6 +984,9 @@ fn plot(s: &mut Server, a: &Value) -> Res {
         overlay_books: Vec::new(),
         style: style_from(a.style, a.size.as_ref())?,
     };
+    let mut ys = a.y.clone();
+    ys.extend(a.y2.iter().cloned());
+    check_names(&s.project, spec.book.as_deref(), spec.sheet.as_deref(), &ys)?;
     spec.validate()?;
     let overlay_files = a.overlay_files;
     let made = s.transact(|s| {
@@ -1151,20 +1205,104 @@ fn analyze(s: &mut Server, a: &Value) -> Res {
         }
         Some(o) => return Err(ToolError::new(format!("output must be next_to_input (got \"{o}\")"))),
     }
-    let job = analysis_tools::build(&a.tool, &a.options.unwrap_or_default())?;
+    let options = a.options.clone().unwrap_or_default();
+    let columns = a.columns.clone().unwrap_or_default();
+    match analysis_tools::resolve(&a.tool)? {
+        analysis_tools::Which::Hand(name) => {
+            let job = analysis_tools::build(name, &options)?;
+            check_names(&s.project, a.book.as_deref(), a.sheet.as_deref(), &columns)?;
+            let target = Target {
+                y: columns,
+                book: book_name(&s.project, a.book.as_deref())?,
+                sheet: a.sheet,
+                rows: a.rows,
+                x_range: a.x_range,
+                read: ReadSettings::default(),
+            };
+            let run = s.transact(|s| Ok(sheaf_ops::analyze::run_job(&mut s.project, &target, job)?))?;
+            match run.outcome {
+                Outcome::Report(r) => Ok(ToolOut::json(report_json(&s.project, &r))),
+                _ => Err(ToolError::new("the tool gave no report")),
+            }
+        }
+        analysis_tools::Which::Bridged(tool) => {
+            check_names(&s.project, a.book.as_deref(), a.sheet.as_deref(), &columns)?;
+            analyze_bridged(s, &tool, &options, &columns, &a)
+        }
+    }
+}
+
+/// Runs a tool whose options are those of its command-line definition: the JSON becomes an argv
+/// for the CLI's own clap types, `sheaf_ops::cli_analyze::job_from` makes the job, and the shared
+/// `run_job` runs it, as `sheaf analyze` does.
+fn analyze_bridged(
+    s: &mut Server,
+    tool: &analysis_tools::Bridged,
+    options: &Map<String, Value>,
+    columns: &[String],
+    a: &AnalyzeArgs,
+) -> Res {
+    let selection = bridge::Selection {
+        columns,
+        book: a.book.as_deref(),
+        sheet: a.sheet.as_deref(),
+        rows: a.rows.as_deref(),
+        x_range: a.x_range.as_deref(),
+    };
+    let roots = s.roots.clone();
+    let mut resolve = |text: &str| -> anyhow::Result<String> {
+        roots.check(text).map(|p| p.display().to_string()).map_err(|e| anyhow!("{e}"))
+    };
+    let cli = bridge::parse(
+        &["analyze", &tool.command],
+        &analysis_tools::bridge_filter(),
+        &selection,
+        options,
+        &mut resolve,
+    )?;
+    let sheaf_ops::args::Command::Analyze(parsed) = cli.command else {
+        return Err(ToolError::new("internal error: the options did not parse as an analysis"));
+    };
+    if matches!(parsed.tool, AnalyzeTool::Power { .. }) {
+        let (spec, _) = power_spec(parsed.tool)?;
+        return s.transact(|s| {
+            let (made, mut report) = sheaf_ops::analyze::run_power(&spec)?;
+            let wb = made.workbook(report.book).ok_or_else(|| ToolError::new("the power table is missing"))?.clone();
+            report.book = s.project.adopt_workbook(wb);
+            // The message named the workbook of the temporary project; name the adopted one.
+            if let Some((head, _)) = report.message.rsplit_once(" in workbook ") {
+                report.message = format!("{head} in workbook {}", book_title(&s.project, report.book));
+            }
+            Ok(ToolOut::json(report_json(&s.project, &report)))
+        });
+    }
+    let (target_args, job) = job_from(parsed.tool)?;
     let target = Target {
-        y: a.columns.unwrap_or_default(),
-        book: book_name(&s.project, a.book.as_deref()),
-        sheet: a.sheet,
-        rows: a.rows,
-        x_range: a.x_range,
+        y: target_args.y,
+        book: book_name(&s.project, target_args.book.as_deref())?,
+        sheet: target_args.sheet,
+        rows: target_args.rows,
+        x_range: target_args.x_range,
         read: ReadSettings::default(),
     };
     let run = s.transact(|s| Ok(sheaf_ops::analyze::run_job(&mut s.project, &target, job)?))?;
-    match run.outcome {
-        Outcome::Report(r) => Ok(ToolOut::json(report_json(&s.project, &r))),
-        _ => Err(ToolError::new("the tool gave no report")),
+    for f in &run.foreign_inputs {
+        if !s.foreign.contains(f) {
+            s.foreign.push(f.clone());
+        }
     }
+    let mut out = match &run.outcome {
+        Outcome::Report(r) => report_json(&s.project, r),
+        Outcome::Sorted { by } => {
+            let rows = s.project.workbook(run.book).map_or(0, |b| b.sheets[run.sheet].row_count());
+            json!({"sheet": sheet_name(&s.project, run.book, run.sheet), "sorted_by": by, "rows": rows})
+        }
+        Outcome::Filtered { kept, before, sheet_name } => json!({"sheet": sheet_name, "rows": kept, "before": before}),
+    };
+    if !run.load_warnings.is_empty() {
+        out["warnings"] = json!(run.load_warnings);
+    }
+    Ok(ToolOut::json(out))
 }
 
 #[derive(Deserialize)]
@@ -1178,7 +1316,8 @@ struct SortArgs {
 
 fn sort_sheet(s: &mut Server, a: &Value) -> Res {
     let a: SortArgs = args(a)?;
-    let target = Target { book: book_name(&s.project, a.book.as_deref()), sheet: a.sheet, ..Target::default() };
+    check_names(&s.project, a.book.as_deref(), a.sheet.as_deref(), std::slice::from_ref(&a.key))?;
+    let target = Target { book: book_name(&s.project, a.book.as_deref())?, sheet: a.sheet, ..Target::default() };
     let job = Job::Sort { by: a.key, descending: a.descending.unwrap_or(false) };
     let run = s.transact(|s| Ok(sheaf_ops::analyze::run_job(&mut s.project, &target, job)?))?;
     let rows = s.project.workbook(run.book).map_or(0, |b| b.sheets[run.sheet].row_count());
@@ -1196,7 +1335,7 @@ struct FilterArgs {
 
 fn filter_sheet(s: &mut Server, a: &Value) -> Res {
     let a: FilterArgs = args(a)?;
-    let target = Target { book: book_name(&s.project, a.book.as_deref()), sheet: a.sheet, ..Target::default() };
+    let target = Target { book: book_name(&s.project, a.book.as_deref())?, sheet: a.sheet, ..Target::default() };
     let job = Job::Filter { condition: a.condition, in_place: a.in_place.unwrap_or(false) };
     let run = s.transact(|s| Ok(sheaf_ops::analyze::run_job(&mut s.project, &target, job)?))?;
     match run.outcome {
@@ -1326,7 +1465,8 @@ fn fit_spec(a: &FitArgs, project: &Project, fdf: Option<PathBuf>) -> Result<FitS
         spec.tolerance = t;
     }
     spec.y = a.y.clone();
-    spec.book = book_name(project, a.book.as_deref());
+    spec.book = book_name(project, a.book.as_deref())?;
+    check_names(project, spec.book.as_deref(), a.sheet.as_deref(), &a.y)?;
     spec.sheet = a.sheet.clone();
     spec.rows = a.rows.clone();
     spec.x_range = a.x_range.clone();

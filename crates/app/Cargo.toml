@@ -24,6 +24,17 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 [target.'cfg(windows)'.dependencies]
 # Already in the lock file through eframe's clipboard; Copy Page puts a metafile next to the bitmap.
 clipboard-win = "5.4"
+# Printing (File > Print): the printer dialog, the device context and the metafile playback. Version
+# 0.61 is the one eframe already pulls in.
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Printing",
+    "Win32_Storage_Xps",
+    "Win32_System_Memory",
+    "Win32_UI_Controls_Dialogs",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [lints]
 workspace = true
@@ -31,3 +42,7 @@ workspace = true
 [dev-dependencies]
 egui_kittest = { version = "0.33", features = ["eframe"] }
 sheaf-expr.workspace = true
+
+[build-dependencies]
+# Released 2026-10-06; compile/link the existing icon only for the Windows app binary.
+embed-resource = "=3.0.12"

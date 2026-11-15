@@ -113,7 +113,7 @@ pub fn save_project(project: &Project, path: &Path) -> Result<SaveOutcome, IoErr
     }
     let companion = companion_path(&path);
     let name = path.file_stem().and_then(|s| s.to_str()).filter(|s| !s.is_empty()).unwrap_or("Project");
-    let written = match opj::write_named(project, name, opj::julian_day_now()) {
+    let mut written = match opj::write_named(project, name, opj::julian_day_now()) {
         Ok(w) => w,
         Err(IoError::OpjWrite { reason }) => {
             ensure_companion_free(&companion)?;
@@ -125,6 +125,9 @@ pub fn save_project(project: &Project, path: &Path) -> Result<SaveOutcome, IoErr
         }
         Err(e) => return Err(e),
     };
+    if project.page_setup != sheaf_core::page_setup::PageSetup::default() {
+        written.warnings.push("Page Setup (paper, orientation and margins) is not stored in an .opj file.".to_string());
+    }
     if !written.warnings.is_empty() {
         // Checked before anything is written, so a refusal leaves every file as it was.
         ensure_companion_free(&companion)?;
@@ -163,10 +166,36 @@ pub fn backup_original(path: &Path) -> Result<Option<PathBuf>, IoError> {
     let mut name = path.file_name().map(|n| n.to_os_string()).unwrap_or_default();
     name.push(".bak");
     let backup = path.with_file_name(name);
-    if backup.exists() {
-        return Ok(None);
+    // Copying through a symlink (even a dangling one) would write wherever it points.
+    match backup.symlink_metadata() {
+        // A link to an existing file counts as a backup that is already there, as it always has.
+        Ok(m) if m.file_type().is_symlink() && !backup.exists() => {
+            let e = std::io::Error::other("the backup path is a symbolic link; remove it first");
+            return Err(IoError::io(&backup, e));
+        }
+        Ok(_) => return Ok(None),
+        Err(_) => {}
     }
-    std::fs::copy(path, &backup).map_err(|e| IoError::io(&backup, e))?;
+    let copy = std::fs::read(path).map_err(|e| IoError::io(path, e)).and_then(|bytes| {
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&backup)
+            .map_err(|e| IoError::io(&backup, e))?;
+        f.write_all(&bytes).map_err(|e| IoError::io(&backup, e))?;
+        // fs::copy kept the permissions of the original; so does the backup.
+        if let Ok(m) = std::fs::metadata(path) {
+            let _ = std::fs::set_permissions(&backup, m.permissions());
+        }
+        Ok(())
+    });
+    if let Err(e) = copy {
+        if matches!(&e, IoError::Io { source, .. } if source.kind() == std::io::ErrorKind::AlreadyExists) {
+            return Ok(None);
+        }
+        return Err(e);
+    }
     Ok(Some(backup))
 }
 

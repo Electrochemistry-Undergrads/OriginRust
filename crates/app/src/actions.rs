@@ -305,8 +305,16 @@ pub enum Action {
         rows: usize,
         cols: usize,
     },
-    /// Graph > Add Error Bars: the plots of the layer that have none take the Y error column
-    /// of their sheet.
+    /// Plot > Multi-Panel > Stack: choose grouping and layout before making the graph.
+    StackPanels {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    LabelPanels {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    /// Graph > Add Error Bars: choose an existing Y-error column for one plot of the layer.
     AddErrorBars {
         graph: WindowId,
         layer: usize,
@@ -408,6 +416,10 @@ pub enum Action {
     },
     ExportGraph(WindowId),
     ExportData(WindowId),
+    /// File > Print...: the graph page through the system print dialog.
+    Print(WindowId),
+    PrintPreview(WindowId),
+    PageSetup,
     /// Bring a window's tab to the front, reopening it if it was closed.
     Focus(WindowId),
     /// Close a window: it leaves the workspace, its data stays (Hide in the project explorer).

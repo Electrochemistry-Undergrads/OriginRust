@@ -9,6 +9,10 @@ use egui_kittest::kittest::{By, NodeT, Queryable};
 use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
+mod label_whiteout;
+mod offset_multipliers;
+mod skip_points;
+
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-{tag}-{}", std::process::id()));
@@ -512,6 +516,33 @@ fn the_layer_size_speed_and_display_tabs_show_origins_controls() {
     click(&mut h, "Grid on Top of Data");
     click(&mut h, "OK");
     assert!(graph(&h).layers[0].display.grid_on_top);
+}
+
+#[test]
+fn data_on_top_of_axes_can_be_cancelled_applied_and_undone() {
+    let mut h = start(vec![data_file("data-on-top")]);
+    let open_display = |h: &mut Harness<'static, SheafApp>| {
+        open_props(h, 0, PropsTab::Plots, None);
+        click(h, "Layer 1");
+        click(h, "Display");
+    };
+    open_display(&mut h);
+    assert!(!graph(&h).layers[0].display.data_on_top);
+    click(&mut h, "Data on Top of Axes");
+    assert!(graph(&h).layers[0].display.data_on_top);
+    click(&mut h, "Cancel");
+    assert!(!graph(&h).layers[0].display.data_on_top);
+
+    open_display(&mut h);
+    click(&mut h, "Data on Top of Axes");
+    click(&mut h, "Apply");
+    click(&mut h, "Data on Top of Axes");
+    click(&mut h, "Cancel");
+    assert!(graph(&h).layers[0].display.data_on_top, "Cancel keeps the applied value");
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert!(!graph(&h).layers[0].display.data_on_top);
+    menu(&mut h, "Edit", "Redo Change graph settings");
+    assert!(graph(&h).layers[0].display.data_on_top);
 }
 
 /// Origin's Link Axes Scales tab: only for a layer after the first; Straight on the Y side links the
@@ -1232,6 +1263,50 @@ fn file_export_graphs_opens_the_export_window_and_close_closes_it() {
     assert!(h.query_by_label("Apply").is_some());
     click(&mut h, "Cancel");
     assert!(h.state().export.is_none());
+}
+
+#[test]
+fn file_page_setup_changes_the_project_setup_as_an_undo_step() {
+    use sheaf_core::page_setup::Orientation;
+    let mut h = start(vec![data_file("page-setup")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Page Setup..."]);
+    assert!(h.state().page_setup.is_some(), "Page Setup is open");
+    for label in ["Paper", "Size:", "Orientation", "Portrait", "Landscape", "Margins (inches)", "OK", "Cancel"] {
+        assert!(h.query_by_label(label).is_some(), "{label}");
+    }
+    assert_eq!(project(&h).page_setup, sheaf_core::page_setup::PageSetup::default());
+    click(&mut h, "Landscape");
+    click(&mut h, "OK");
+    assert!(h.state().page_setup.is_none());
+    assert_eq!(project(&h).page_setup.orientation, Orientation::Landscape);
+    assert_eq!(h.state().doc.undo_label(), Some("Page Setup"));
+    // Cancel changes nothing.
+    menu_path(&mut h, &["File", "Page Setup..."]);
+    click(&mut h, "Portrait");
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h).page_setup.orientation, Orientation::Landscape);
+}
+
+#[test]
+fn file_print_preview_opens_for_the_active_graph_and_ctrl_p_does_not_reach_a_printer() {
+    let mut h = start(vec![data_file("print-preview")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Print Preview"]);
+    assert!(h.state().print_preview.is_some(), "Print Preview is open");
+    for label in ["Print Preview", "Print...", "Page Setup...", "Close"] {
+        assert!(h.query_by_label(label).is_some(), "{label}");
+    }
+    // Its Page Setup button opens Page Setup.
+    click(&mut h, "Page Setup...");
+    assert!(h.state().page_setup.is_some());
+    click(&mut h, "Cancel");
+    click(&mut h, "Close");
+    assert!(h.state().print_preview.is_none());
+    // Ctrl+P runs the print command; under test it stops before the system dialog.
+    ctrl(&mut h, egui::Key::P);
+    assert!(h.state().message.is_none(), "no error box");
+    assert!(h.state().status.contains("Printing is skipped"), "{}", h.state().status);
 }
 
 #[test]
@@ -5773,7 +5848,7 @@ fn y_error_without_an_error_column_still_plots_but_says_so() {
 }
 
 #[test]
-fn add_error_bars_gives_the_plots_the_error_column_of_their_sheet() {
+fn add_error_bars_chooses_one_plot_and_commits_only_on_ok() {
     let mut h = start(vec![data_file("adderr")]);
     let (book, graph) = window_ids(&h);
     let err = h
@@ -5784,18 +5859,43 @@ fn add_error_bars_gives_the_plots_the_error_column_of_their_sheet() {
         })
         .unwrap();
     settle(&mut h);
-    // Column C is the last Y column, so only its plot has an error column after it.
+    // The selected C curve starts with the adjacent error column as a suggestion.
+    h.state_mut().graphs.get_mut(&graph).unwrap().selected = Some((0, ObjectKind::Plot(1)));
     assert!(project(&h).graph(graph).unwrap().layers[0].plots.iter().all(|p| p.y_error.is_none()));
+    let revision = h.state().doc.revision();
     menu_path(&mut h, &["Graph", "Add Error Bars..."]);
+    assert!(h.state().error_bars.is_some());
+    assert_eq!(h.state().doc.revision(), revision, "opening does not change the project");
+    click(&mut h, "OK");
     let plots = &project(&h).graph(graph).unwrap().layers[0].plots;
     assert_eq!(plots[0].y_error, None, "B has no error column");
     assert_eq!(plots[1].y_error, Some(err));
     assert_eq!(h.state().doc.undo_label(), Some("Add error bars"));
-    // Nothing left to add: no new undo step, and a message.
+    assert!(h.state().error_bars.is_none());
+    let revision = h.state().doc.revision();
+    // Confirming the same column is a no-op, rather than another undo step.
     menu_path(&mut h, &["Graph", "Add Error Bars..."]);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.revision(), revision);
+    menu(&mut h, "Edit", "Undo Add error bars");
+    assert!(project(&h).graph(graph).unwrap().layers[0].plots.iter().all(|p| p.y_error.is_none()));
+    menu(&mut h, "Edit", "Redo Add error bars");
+    assert_eq!(project(&h).graph(graph).unwrap().layers[0].plots[1].y_error, Some(err));
     assert_eq!(h.state().doc.undo_label(), Some("Add error bars"));
-    assert!(h.state().status.contains("No error bars added"));
 }
+
+#[path = "ui_tests/error_bars.rs"]
+mod error_bars;
+
+#[path = "ui_tests/clipboard_origin.rs"]
+mod clipboard_origin;
+
+#[path = "ui_tests/clipboard_formats.rs"]
+mod clipboard_formats;
+
+mod label_panels;
+#[path = "ui_tests/stack_panels.rs"]
+mod stack_panels;
 
 #[test]
 fn update_legend_keeps_custom_text_and_adds_the_plots_it_lacks() {

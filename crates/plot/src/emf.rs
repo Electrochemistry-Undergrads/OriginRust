@@ -115,7 +115,9 @@ pub fn write_emf_view(scene: &Scene, scale: f64, measurer: &dyn TextMeasurer, vi
         e.item(&Item::Rect { rect: view, fill: Some(scene.background), stroke: None });
     }
     for layer in &scene.layers {
+        let (underlay, overlay) = layer.split_overlay();
         layer.grid.iter().for_each(|it| e.item(it));
+        underlay.iter().for_each(|it| e.item(it));
         let c = layer.clip;
         e.rec(EMR_SAVEDC, &[]);
         e.saved.push(e.state);
@@ -124,7 +126,7 @@ pub fn write_emf_view(scene: &Scene, scale: f64, measurer: &dyn TextMeasurer, vi
         layer.plots.iter().for_each(|it| e.item(it));
         e.rec(EMR_RESTOREDC, &le_i(&[-1]));
         e.state = e.saved.pop().unwrap_or_default();
-        layer.overlay.iter().for_each(|it| e.item(it));
+        overlay.iter().for_each(|it| e.item(it));
     }
     // Release the GDI objects: select stock ones first so that none is still selected.
     e.rec(EMR_SELECTOBJECT, &le(&[NULL_PEN]));

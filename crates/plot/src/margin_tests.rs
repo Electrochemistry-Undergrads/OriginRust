@@ -24,6 +24,7 @@ fn scene(plots: Vec<Item>, overlay: Vec<Item>) -> Scene {
             grid: vec![],
             plots,
             overlay,
+            underlay_len: 0,
             objects: vec![],
         }],
     }

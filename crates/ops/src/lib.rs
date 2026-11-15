@@ -3,6 +3,8 @@
 //! what to show.
 
 pub mod analyze;
+pub mod args;
+pub mod cli_analyze;
 pub mod fit;
 pub mod import;
 pub mod info;

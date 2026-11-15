@@ -4,6 +4,7 @@ use crate::LayerGeometry;
 use crate::Rect;
 use crate::data::PlotData;
 use crate::fill::{fill_polygon, fill_rect};
+use crate::fonts::TextMeasurer;
 use crate::scene::{Anchor, Cap, Item, Join, Stroke, TextItem, line_to, move_to, push_num};
 use sheaf_core::graph::{
     Connect, DropLine, ErrorDirection, LabelForm, LabelPosition, LineStyle, PlotKind, ScaleKind, SymbolShape,
@@ -38,7 +39,7 @@ pub(crate) fn line_stroke(line: &LineStyle) -> Stroke {
 }
 
 /// Appends the items of one plot to `out`.
-pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m: &dyn TextMeasurer) {
     let plot = pd.plot;
     if plot.kind == PlotKind::Pie {
         draw_pie(out, pd, geom);
@@ -87,7 +88,7 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
         draw_masked(out, pd, geom);
     }
     if decor.labels.enable && plot.kind != PlotKind::Box {
-        draw_data_labels(out, pd, geom);
+        draw_data_labels(out, pd, geom, m);
     }
 }
 
@@ -144,7 +145,7 @@ fn draw_drop_lines(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     };
     let drops = &pd.plot.decor.drop;
     let (mut h, mut v) = (String::new(), String::new());
-    for i in pd.rows() {
+    for i in pd.point_rows() {
         if let Some((x, y)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
             if drops.horizontal.on {
                 move_to(&mut h, f.x, y);
@@ -172,16 +173,15 @@ fn label_number(v: f64) -> String {
 
 /// Data labels (Origin's Label tab): the label form's text next to each point, a quarter of the
 /// font size away on the chosen side.
-fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m: &dyn TextMeasurer) {
     let labels = &pd.plot.decor.labels;
     let size = labels.font.size_pt;
     let gap = size * 0.25;
     // From the baseline to the middle of a line of digits.
     let mid = size * 0.35;
-    let last = if pd.closing.is_some() { pd.end.saturating_sub(1) } else { pd.end };
-    for i in pd.rows().take_while(|&i| i < last) {
+    for i in pd.point_rows() {
         let Some((px, py)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
-        let (xv, yv) = (pd.cat_at(i) - pd.ox, pd.y.get(i).copied().unwrap_or(f64::NAN));
+        let (xv, yv) = (pd.source_x_at(i), pd.y.get(i).copied().unwrap_or(f64::NAN));
         if !labels.labels_row(i) {
             continue;
         }
@@ -206,7 +206,7 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
             LabelPosition::Below => (px, py + gap + 2.0 * mid, Anchor::Middle),
             LabelPosition::Center => (px, py + mid, Anchor::Middle),
         };
-        out.push(Item::Text(TextItem {
+        let item = TextItem {
             x: x + labels.dx_pt,
             y: y + labels.dy_pt,
             text,
@@ -217,8 +217,39 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
             color: labels.font.color,
             anchor,
             rotate_ccw: labels.rotate_deg,
-        }));
+        };
+        if labels.white_out {
+            draw_label_background(out, &item, m.width(&item.text, &labels.font, size));
+        }
+        out.push(Item::Text(item));
     }
+}
+
+/// White Out follows the text's anchor and rotation. The font box approximates Origin 2016's
+/// Arial background (30 pt "12345": 100 x 40 pixels in a 900-pixel-wide page export).
+fn draw_label_background(out: &mut Vec<Item>, text: &TextItem, width: f64) {
+    if !(width.is_finite() && width > 0.0 && text.size.is_finite() && text.size > 0.0 && text.rotate_ccw.is_finite()) {
+        return;
+    }
+    let left = match text.anchor {
+        Anchor::Start => 0.0,
+        Anchor::Middle => -width / 2.0,
+        Anchor::End => -width,
+    };
+    let pad = 0.05 * text.size;
+    let (x0, x1, y0, y1) = (left - pad, left + width + pad, -0.92 * text.size, 0.23 * text.size);
+    let (sin, cos) = text.rotate_ccw.to_radians().sin_cos();
+    let mut d = String::new();
+    for (i, (dx, dy)) in [(x0, y0), (x1, y0), (x1, y1), (x0, y1)].into_iter().enumerate() {
+        let (x, y) = (text.x + dx * cos + dy * sin, text.y - dx * sin + dy * cos);
+        if i == 0 {
+            move_to(&mut d, x, y);
+        } else {
+            line_to(&mut d, x, y);
+        }
+    }
+    d.push('Z');
+    out.push(Item::Path { d, fill: Some(sheaf_core::Color::WHITE), stroke: None });
 }
 
 /// Origin draws a masked point red: its symbol, and the two line segments that meet at it
@@ -226,6 +257,8 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
 fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     use sheaf_core::Color;
     let Some(mask) = pd.mask else { return };
+    let sampled_masks = (pd.plot.kind.has_symbols() && pd.point_interval() > 1)
+        .then(|| pd.point_rows().filter(|i| mask.contains(i)).collect::<std::collections::BTreeSet<_>>());
     let page = |i: usize| -> Option<(f64, f64)> {
         if i < pd.start || i >= pd.end || !pd.row_shown(i) {
             return None;
@@ -248,7 +281,7 @@ fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
                 }
             }
         }
-        if pd.plot.kind.has_symbols() {
+        if pd.plot.kind.has_symbols() && sampled_masks.as_ref().is_none_or(|rows| rows.contains(&i)) {
             symbol_path(&mut symbols, pd.plot.symbol.shape, p.0, p.1, pd.plot.symbol.size_pt);
         }
     }
@@ -772,7 +805,7 @@ fn draw_box(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let Some(b) = &pd.boxed else { return };
     let color = pd.plot.symbol.color;
     let width = pd.plot.line.width_pt.max(0.5);
-    let at = |x: f64, y: f64| geom.checked_data_to_page(x, y);
+    let at = |x: f64, y: f64| geom.checked_data_to_page(pd.display_x(x), pd.display_y(y));
     let (l, r) = (b.pos - crate::data::BOX_WIDTH / 2.0, b.pos + crate::data::BOX_WIDTH / 2.0);
     if let (Some(a), Some(c)) = (at(l, b.q1), at(r, b.q3)) {
         out.push(Item::Rect {
@@ -849,7 +882,7 @@ fn draw_error_bars(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     };
     let cap_low = dir != ErrorDirection::Plus;
     let cap_high = dir != ErrorDirection::Minus;
-    for i in pd.rows() {
+    for i in pd.point_rows() {
         if let Some((below, above)) = pd.reach(pd.err_at(i), dir) {
             let (cat, val) = (pd.cat_at(i) + shift, pd.val_at(i));
             let place = |v: f64| {
@@ -915,7 +948,7 @@ fn draw_varied_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry)
     let sym = &pd.plot.symbol;
     let size_range = pd.size_z.map(|z| z_range(z, pd));
     let color_range = pd.color_z.map(|z| z_range(z, pd));
-    for i in pd.rows() {
+    for i in pd.point_rows() {
         let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
         let mut style = sym.clone();
         if let (Some(z), Some(range)) = (pd.size_z, size_range) {
@@ -946,14 +979,14 @@ fn draw_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         return draw_varied_symbols(out, pd, geom);
     }
     let sym = &pd.plot.symbol;
-    let every = sym.every.max(1) as usize;
+    let every = pd.point_interval();
     let mut d = String::new();
     // With very many points, symbols that would sit on top of an already drawn
     // one (same small cell of the page) are left out; the picture is the same.
     let end = pd.end - usize::from(pd.closing.is_some());
     let thin = (end - pd.start) / every > SYMBOL_THIN_ABOVE;
     let mut taken: std::collections::HashSet<(i64, i64)> = std::collections::HashSet::new();
-    for i in pd.rows().take_while(|&i| i < end).step_by(every) {
+    for i in pd.point_rows() {
         let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
         if !near_frame(geom, p, sym.size_pt + sym.edge_width_pt) {
             continue;

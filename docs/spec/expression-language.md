@@ -19,6 +19,7 @@ Summary. One small expression language serves two jobs: worksheet column formula
 - The conditional `c ? a : b` evaluates only the branch it takes.
 - Text strings `"abc"` (no escape sequences; cannot contain a double quote) and `col(A)$` / `col(A)[i]$` (the text of a cell) are text values; see the text section below. `col("Long Name")` also takes a quoted name.
 - `col(A)[L]$` reads a column header rather than a data row; built-in header codes `G`, `L`, `U`, `C`, `O` are supported (see below).
+- `col(A)[Temperature]$` reads a user parameter row. Use `value(col(A)[Temperature]$)` for a numeric calculation; `D1`, `D2`, ... refer to the displayed user parameter rows.
 
 ## 2. Operators, tightest first
 
@@ -129,9 +130,50 @@ The built-in header reads follow Origin's [Col reference](https://docs.originlab
 | `C` | Comments | `col(A)[C]$` |
 | `O` | F(x)= formula text | `col(A)[O]$` |
 
-The result is a scalar repeated across the requested output rows. Column short names, quoted long names, column numbers and `wcol(1)` work as for data reads. `$` returns the header text; without `$`, the header is parsed as a number (missing for empty or nonnumeric text). An empty Long Name stays empty rather than falling back to the short name. A standalone built-in label code takes precedence over a variable with that name; an expression such as `col(A)[L+0]$` still indexes data rows using the variable `L`. Parameter rows, sampling intervals, categories and filter headers are not implemented.
+The result is a scalar repeated across the requested output rows. Column short names, quoted long names, column numbers and `wcol(1)` work as for data reads. `$` returns the header text; without `$`, a built-in header is parsed as a number (missing for empty or nonnumeric text). An empty Long Name stays empty rather than falling back to the short name. A standalone built-in label code takes precedence over a variable with that name; an expression such as `col(A)[L+0]$` still indexes data rows using the variable `L`. Sampling intervals, categories and filter headers are not implemented.
 
 `Host::column_label` supplies the metadata; its default is empty. An unknown column is still an error. `Expr::columns()` lists all sources; `data_columns()` and `label_columns()` separate reads of cells and headers. Only cell reads create calculation-order or cycle edges, so formulas reading their own headers remain Auto, and mutual header reads do not form a false cycle. Header edits (including units, comments and formula text) invalidate dependent Auto or Manual results within the same undo step. Header-only formulas use the current worksheet row count when recalculated; headers do not extend a formula's data-input range.
+
+### User parameter label rows
+
+Measured in installed Origin on 2026-11-14 through the shared reference lock (local probes
+`re-workspace/scratch/formula-parameter-labels/labels.out.txt` and `scalars.out.txt`), following
+Origin's [metadata guide](https://docs.originlab.com/labtalk/guide/accessing-metadata) and
+[column label row reference](https://docs.originlab.com/labtalk/ref/column-label-row-characters/):
+
+- `col(A)[Temperature]$`, lowercase `temperature`, and `col(A)[Bath Temp]$` return the named
+  parameter text. Missing and empty labels return empty text. A parameter wins over a variable
+  of the same name; a known variable without a matching parameter still indexes a data row
+  (`j=2`, `col(A)[j]$` returned `2` in the synthetic column 1, 2, 3).
+- With Temperature = `2.5`, `value(col(A)[Temperature]$)` returned 2.5 and multiplying it by
+  row 3 returned 7.5. Direct `col(A)[Temperature]` was missing: user parameters are text, and
+  callers must use `value(...$)` to convert. Nonnumeric parameter text converted to missing;
+  empty text converted to zero. Sheaf's `value("")` now follows that measured zero result.
+- `D1` and `D2` select the first and second displayed user parameter rows. Origin's probe used
+  creation order (Temperature, Sample). **Existing Sheaf model difference:** its worksheet
+  displays the union of parameter names alphabetically; aliases follow that same displayed
+  order, including rows empty in the referenced column. Use names when matching an Origin
+  sheet whose parameter rows have a different order. No new row-order field is introduced.
+
+`Host::column_parameter` provides parameter text and distinguishes an existing empty row from
+an unknown row. `Expr::resolve_parameters(host)` resolves label-versus-variable precedence
+before inspecting `variables()`, `data_columns()` or `label_columns()`; evaluation resolves it
+automatically. Worksheet dependencies use that resolved form, so self/mutual parameter reads
+do not create false data cycles. Parameter edits update Auto results and mark Manual results
+pending within the same undo step; None remains a one-time calculation. Adding/removing a row,
+even by deleting the only column containing it, refreshes aliases on other columns without
+marking unrelated data-only formulas pending.
+
+The current parser supports identifier names and names containing spaces and numbers, such as
+`[Bath Temp]` and `[Group 1]`. Names containing operator punctuation and names parsed as expression
+constants (`e`, `pi`) require a `Dn` alias. Quotes around a parameter name are not supported
+(the Origin probe also returned empty text for `["Temperature"]$`). An empty text assigned to
+a numeric worksheet column is stored as a missing cell under the existing column rules.
+Native saves and `.opj.sheaf` companions retain parameters and their formula links; the `.opj`
+writer still warns that user parameter rows themselves require the companion.
+
+Regressions: `crates/expr/tests/parameter_labels.rs`, `crates/core/tests/parameter_labels.rs`
+and `crates/io/tests/parameter_labels.rs`. These use only generated metadata and cell values.
 
 ## 4. Calling it from the program
 
@@ -149,7 +191,7 @@ The result is a scalar repeated across the requested output rows. Column short n
 ## 6. Differences from Origin's LabTalk
 
 - Only a single expression; no `before formula` scripts, assignments, string variables, `%()` substitution or user-defined functions. Those are separate features and are not part of this crate.
-- No parameter label rows or cross-sheet references `[Book]Sheet!col(A)` (the cells of other sheets are not visible to the evaluator), `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). The `[a:b]` range is accepted only inside statistics.
+- No cross-sheet references `[Book]Sheet!col(A)` (the cells of other sheets are not visible to the evaluator), `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). The `[a:b]` range is accepted only inside statistics. Parameter-row ordering and the supported parameter-name syntax are described above.
 - A single `=` is not a comparison here; use `==`.
 - `e` is the constant 2.718...; a parameter literally named `e` in a fit function cannot be used (rename it).
 - `i` is read-only and always the 1-based row number of the output row.

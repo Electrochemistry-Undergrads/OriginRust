@@ -1,6 +1,6 @@
 # T27: Print, Print Preview, Page Setup
 
-**Status:** open (brief written 2026-11-14 from T18's "Print" row and parity row "Print, Print Preview,
+**Status:** Windows half built on branch `print` (2026-11-14): Page Setup model and window, Print, Print Preview, headless print check, graphing 19. Left: workbook printing, macOS panel, `sheaf print`, Origin's Print/Print Preview windows (unmeasured). (Brief written 2026-11-14 from T18's "Print" row and parity row "Print, Print Preview,
 Page Setup", P1).
 **Size:** M. **Branch:** `print`. **Model:** Sonnet. Needs a Windows session for the Windows path and a
 macOS session for the macOS path; each half can merge on its own.

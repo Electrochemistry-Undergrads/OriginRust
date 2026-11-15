@@ -25,17 +25,19 @@ None of the three changes a message used here, except that `structuredContent` i
 
 | Method | Behaviour |
 | --- | --- |
-| `initialize` | Result: `protocolVersion`, `capabilities` = `{"tools":{"listChanged":false},"resources":{"subscribe":false,"listChanged":false}}`, `serverInfo` = `{"name":"sheaf-mcp","version":<crate version>}`, `instructions` (short text on names as handles and on the roots). |
+| `initialize` | Result: `protocolVersion`, `capabilities` = `{"tools":{"listChanged":false},"resources":{"subscribe":false,"listChanged":false},"prompts":{"listChanged":false}}`, `serverInfo` = `{"name":"sheaf-mcp","version":<crate version>}`, `instructions` (short text on names as handles and on the roots). |
 | `notifications/initialized` | Accepted, no reply. |
 | `ping` | Result `{}`. |
 | `tools/list` | `{"tools":[{name, description, inputSchema, annotations}]}`. No paging. `annotations.readOnlyHint` is true for tools that change neither the project nor any file. |
 | `tools/call` | Params `{name, arguments}`. Result `{content:[...], structuredContent?, isError}`. |
 | `resources/list` | The resources of section 6. |
 | `resources/templates/list` | The templates of section 6. |
+| `prompts/list` | `{"prompts":[{name, title, description, arguments:[{name, description, required}]}]}`: the prompts of section 5.5. |
+| `prompts/get` | Params `{name, arguments}`. Result `{description, messages:[{role:"user", content:{type:"text", text}}]}`. An unknown prompt, a missing required argument or non-object `arguments` is `-32602`. |
 | `resources/read` | Params `{uri}`. Result `{contents:[{uri, mimeType, text}]}`, or `blob` (base64) for PNG. |
 | anything else | Error `-32601`. Unknown notifications are ignored. |
 
-Prompts are not offered in phase 1 (the capability is not advertised).
+Prompts are offered: section 5.5. A message that has no `id` (a notification) is never answered, whatever is wrong with it.
 
 Protocol errors: `-32700` parse error, `-32600` invalid request, `-32601` unknown method, `-32602`
 invalid params (also an unknown tool name), `-32002` resource not found. Errors of the work itself
@@ -59,6 +61,10 @@ case-insensitive; omitted means the active sheet. A column: short name or long n
 `Worksheet::column_by_name`). A graph: name (`Graph1`). Row numbers count from 1. A tool that needs a
 book defaults to the first workbook. A tool that needs a graph defaults to the only graph and fails
 with the list of names when there are several (as the CLI does).
+
+A long name that two workbooks, or two columns of a sheet, share is refused with the short names to
+use (a short name always wins over a long name). Analysis tool names are the command's names in
+snake_case (section 5.3).
 
 Notation: `string`, `number`, `integer`, `boolean`, `[T]` array, `?` optional.
 
@@ -196,13 +202,14 @@ keeps its full size. Result `{graph, path?, format, width_px, height_px, bytes}`
 ### 5.3 Analysis
 
 **`list_analysis_tools`** `{}`. Result
-`{tools:[{name, summary, options:[{name, type, default, description, required}], second_column}]}`.
-This is the registry of ADR 0011 item 5; it names exactly what `analyze` accepts.
+`{tools:[{name, summary, options:[{name, type, default, description, required, choices?}], second_column, bridged?, input_schema?}]}`.
+It names exactly what `analyze` accepts: the 21 hand-mapped tools first, then every other tool of
+`sheaf analyze` with `bridged: true` and the JSON Schema of its options in `input_schema`.
 
 **`analyze`**
 
 ```json
-{"tool": "integrate|smooth|differentiate|find_peaks|statistics|normalize|...",
+{"tool": "integrate|smooth|fft_filter|ttest|anova|mannwhitney|histogram|normality|corr|...",
  "options": {},
  "book": "string?", "sheet": "string?",
  "columns": ["string"],
@@ -210,12 +217,40 @@ This is the registry of ADR 0011 item 5; it names exactly what `analyze` accepts
  "output": "next_to_input"}
 ```
 
-`options` are those `list_analysis_tools` gives for the tool. A column a tool reads besides the Y
-columns (a reference, a second signal) is an option holding a name. `output` accepts only `next_to_input`: results go next to the input and
-tools that write a table use a new sheet by themselves (ADR 0005); `new_sheet` is refused with a
-message. `list_analysis_tools` lists what is registered; analysis tools of the command line that it
-does not list (tests, ANOVA, peak chains, FFT filter, coherence, averaging, ...) are not yet
-available here. The result is the `Report`:
+`analyze` reaches every tool of `sheaf analyze`: the CLI command has 55 subcommands and all of them
+are tools here (`peaks` and `stats` are also accepted under their command-line names). Names are the
+command name with `_` for `-` (`fft_filter`, `reduce_dup`, `column_math`, `mannwhitney`, `anova2`,
+`signal_correlation`); a name with `-` is accepted too, and so is any case. Two kinds:
+
+- **Hand-mapped** (21: integrate, math, column_math, subtract_ref, smooth, differentiate, normalize,
+  baseline, interpolate, find_peaks, statistics, fft, hilbert, envelope, level_crossing,
+  median_filter, decimate, translate, subtract_line, polygon_area, intersect). Their options are
+  those `list_analysis_tools` gives; a column a tool reads besides the Y columns (a reference, a
+  second signal) is an option holding a name.
+- **Bridged** (the other 34: convolution, signal_correlation, ifft, fft_filter, coherence,
+  trace_interp, average, reduce_dup, reduce_x, ttest, anova, power, anova2, mannwhitney, signrank,
+  rowstats, grubbs, dixon, sign, ks2, mediantest, friedman, kruskal, corr, histogram, crosstab,
+  discfreq, bin2d, normality, distfit, probplot, qqplot, sort, filter). Their options are generated
+  from the command line's own option definitions (`sheaf_ops::args`, clap), so a new option or
+  a changed default of the CLI appears here without new code and the values are checked by the same
+  rules. Each option key is the long option name with `_` for `-` (`--no-graph` is `no_graph`,
+  `--row-ranges` is `row_ranges`); the kebab form is accepted. A flag is a boolean (`false` is the same as
+  leaving it out), an option that repeats or takes a comma list is an array (each element is one
+  value, so a column named `Current, mA` stays whole; a plain text is split on the comma as on the
+  command line), a choice is a string among `choices`, numbers are numbers (a whole float such as
+  `7.0` is accepted for an integer; an integer option is at most 10 000 000 in size). An unknown key
+  is an error that lists the valid ones. The input file, `export`, `save` and the read options
+  (delimiter, header lines, ...) are not options here: the data is the project, and
+  `export_data` and `save_project` write files. `book`, `sheet`, `columns`, `rows` and
+  `x_range` of the call are the CLI's `--book`, `--sheet`, `--y`, `--rows` and `--x-range` (with the
+  same rule that `rows` and `x_range` exclude each other, and that `sort`, `filter`, the factor tests
+  and `power` refuse the selections that make no sense for them). A path option (`ref_file`) must lie
+  under a root. `power` needs no data; its table goes into a new workbook of the project, named in
+  the reply. `sort` and `filter` are also available as `sort_sheet` and `filter_sheet` (below).
+
+`output` accepts only `next_to_input`: results go next to the input and tools that write a table
+use a new sheet by themselves (ADR 0005); `new_sheet` is refused with a message. The result is the
+`Report`, for every tool:
 
 ```json
 {"book":"","sheet":"","new_columns":["Book1:Sheet1:D"],"new_sheet":"Integrate1","new_graph":null,
@@ -225,7 +260,9 @@ available here. The result is the `Report`:
 
 `table` is null when a tool writes columns only; the values are then in the new columns (read them
 with `read_columns`). Missing values are `null`. The numbers equal those of `sheaf analyze` for the
-same file and options.
+same file and options. Bridged `sort` answers `{sheet, sorted_by, rows}` and `filter` answers
+`{sheet, rows, before}`. A long name that two workbooks or two columns share is refused with the
+short names to use instead of being resolved to the first.
 
 **`sort_sheet`** `{book?, sheet?, key, descending?}` and **`filter_sheet`**
 `{book?, sheet?, condition, in_place?}` are separate tools because they are not analysis tools.
@@ -267,6 +304,18 @@ each. `plot` renders the first fit as an image at that path. Result for a fit:
 ```
 
 Comparison and ranking results carry the tables of `CompareOutcome` and `RankOutcome`. NaN is `null`.
+
+### 5.5 Prompts
+
+Three prompts, each a single user message that tells the assistant which tools to call:
+
+| Prompt | Arguments | What it asks for |
+| --- | --- | --- |
+| `plot_cv_files` | `files` (required) | `plot` with `overlay_files`, `list_contents`, a look at the figure, `export_graph`. |
+| `integrate_peak` | `column`, `from`, `to` (required) | `analyze` `integrate` with `x_range` `from:to` and `end_point_baseline`, then the area, peak position, height and width from the table. |
+| `fit_curve` | `column`, `model` (required) | `fit` with `model` and `y`, then parameters with errors, R-square and a verdict. |
+
+The text names only tools and options of this server.
 
 ## 6. Resources
 
@@ -344,7 +393,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol
 `tools/call` chain import, plot, analyze, fit, export, save on synthetic files (`gen_chi.js` or the
 fixtures). It compares the numbers with `sheaf-ops` called directly, which the CLI also calls. Unit
 tests cover the root check (`..`, links, companion and backup paths), paging of `read_columns`, and
-that every tool's schema accepts its documented example.
+that every tool's schema accepts its documented example. `tests/analyze_bridge.rs` enumerates the subcommands of `sheaf analyze` from clap and checks that each is reachable by name through `analyze` and survives empty options, and compares the numbers of ten bridged tools with the CLI code run in-process. `tests/hardening.rs` covers links inside a root that point outside, shared long names and notifications.
 
 ## 11. Phase 2 (not specified here)
 

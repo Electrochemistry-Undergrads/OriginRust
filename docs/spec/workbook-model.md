@@ -379,11 +379,91 @@ remain plain table rows when pasted into data cells. Direct label-cell copy/past
 
 Paste accepts tab-separated or comma-separated external text, choosing tabs outside quoted fields
 first. Quoted single fields and multiline fields are supported; quotes within ordinary text or
-without a complete quoted field stay literal. Numeric precision, missing-value handling and type
-inference are unchanged. Core round-trip tests and UI tests on both new and imported tables cover
+without a complete quoted field stay literal. Core round-trip tests and UI tests on both new and imported tables cover
 field boundaries, Unicode, Copy/Cut, Paste, and Undo/Redo. These are Sheaf data-preservation rules;
-Origin's clipboard quoting and precision defaults have not been measured, and cross-application
-clipboard behavior remains unverified.
+The Origin 2016 measurements and remaining transport differences are recorded below.
+
+### 13.4a Origin 2016 clipboard defaults (T07 follow-up, 2026-11-14)
+
+Measured through COM under `Global\SheafOriginReference`, using synthetic columns and the real
+Copy menu commands (57634, full precision 38798, including labels 38799, labels only 38801,
+formula only 38800). Raw scripts, `.tsv` clipboard text and JSON are local-only in
+`re-workspace/scratch/t07-origin-copy-defaults/`; `probe3.log` includes a formula created by
+`csetvalue`, not merely assigned data. Only text owned by the temporary Origin process was
+recorded. Clipboard data was retained in memory for restoration, and no project was saved.
+
+- **Copy:** displayed digits. With default General and a Decimal column (`format=1`,
+  `subformat=1`, `digitMode=1`, `digits=2`), 1.2345678901234567 copied as `1.23457` and
+  2.345678901234567 as `2.35`. Numeric missing cells copied as `--`, while empty cells of a
+  Text column copied as empty fields. Cell-range and whole-column copies produced the same text.
+- **Full precision:** 15 significant digits, including `1.23456789012346`, `123456789.123457`,
+  `1.23456789012346E-8` and `0.3` for the stored input 0.30000000000000004. Missing numeric
+  values still copied as `--`. The existing export formatter matches these measured values.
+- **Including labels:** Long Name, Units, Comments, **F(x)**, user parameters, then data. The
+  F(x) row was present even when empty; with the real formula `i*2`, its fourth-row cell
+  contained that formula. Parameters Temperature then Sample followed creation order. Label-only
+  and formula-only menu commands independently confirmed those rows.
+- **Transport:** tabs separate columns; CRLF separates rows; there is no final line terminator.
+  A comma within a Text cell was unquoted. `@CWACC` and `@PLO` both started at 0 in this
+  instance; changing `@PLO` to 1 did not change the tested 2016 output. No rule for other
+  versions or configurations is inferred.
+
+**Sheaf fixes:** Copy/Cut now represent stored missing Numeric and Text & Numeric cells with
+`--` (empty text remains empty), and Copy including label rows retains the empty F(x) row.
+Core Origin regressions and UI tests on both new/imported worksheets cover these changes and
+numeric paste/Undo. Parameter rows retain Sheaf's displayed alphabetical order (the existing
+model decision); missing cells beyond the stored column length retain their existing empty-field
+behavior because that case was not measured independently.
+
+**Transport:** Windows now has separate external text and private lossless data (13.4b).
+Other platforms retain the existing lossless text fallback; parameter order and quoting remain
+explicit differences. The published
+[Origin precision reference](https://docs.originlab.com/quick-help/full-precision-copy/)
+describes full-precision worksheet-to-worksheet copying even when external text uses displayed
+digits. The current
+[copying reference](https://docs.originlab.com/origin-help/copypaste-wks-data/)
+describes a newer label-selection default, which is not substituted for the measured 2016 result.
+
+### 13.4b Windows worksheet clipboard formats (T07)
+
+On Windows, worksheet Copy/Cut publish Unicode text using the current displayed number format;
+Copy Full Precision publishes 15 significant digits. Both use tabs and CRLF without a final
+newline. Copy including label rows uses displayed data and the rows measured above. Ctrl+Alt+C
+and Ctrl+Shift+C keep their precision/label behavior when the native window bridge sends a Copy
+event instead of a key event. Origin's `@CWACC` preference is not imported.
+
+The same clipboard transaction publishes `OriginRust.Sheaf.Worksheet.v1`, a private lossless
+table. A receiving Sheaf instance reads both forms under one clipboard lock, verifies that the
+private external text exactly matches the actual Unicode clipboard contents, and uses the full
+data for worksheet paste. The incoming paste event may contain the raw text or the window
+bridge's one-pass CRLF-to-LF normalization. Literal CR-CR-LF sequences and final-newline differences
+are preserved/checked. A changed clipboard, absent/private-invalid data or an external text-only
+copy uses the incoming text. The format is independent of project/column identifiers and remains
+readable after the writing process exits. Label-cell and text-editor copies remain plain text.
+
+The private bytes are `SHEAFWK1`, two little-endian u64 UTF-8 byte lengths (external then full
+table), and those UTF-8 strings. Length arithmetic, version and UTF-8 are checked; padding after
+the declared data is ignored. The total private payload is capped at 128 MiB. If native writing
+or payload allocation fails, or on non-Windows systems, Copy keeps the existing lossless text
+fallback. Graph Copy Page continues using its bitmap/metafile adapter.
+
+An empty external text cell uses one LF so that the window bridge emits a paste event; its
+private data contains an explicitly quoted empty cell, so pasting clears a destination cell.
+Trailing empty single-column text rows are likewise quoted internally. Copy remains a read-only
+project action; paste and cut retain their existing Undo/Redo boundaries.
+
+Validation: Origin fixtures cover displayed and 15-digit text; core tests cover empty text rows;
+pure payload tests cover versions, lengths, Unicode and event normalization; UI tests cover both
+new/imported tables, exact numeric bits, modifiers, labels, empty cells, Cut/Paste and Undo.
+The manual example `cargo run -p sheaf-app --example worksheet_clipboard_probe` verifies the real
+Windows formats. A second `read` process recovered exact data after the writer exited, and an
+`external` process verified that replacing the clipboard with the same Unicode-only text removes
+the private data. The local scratch wrapper preserved/restored the prior clipboard data object.
+
+Remaining differences: other platforms use the fallback; quoting protects separators rather than
+matching Origin's unquoted commas; parameter rows follow the current alphabetical display order;
+number display details remain those of the column formatter. Formatted/OLE tables, links and
+automatic label detection on paste are separate features.
 
 ## 14. Suggested Rust data model (P0)
 

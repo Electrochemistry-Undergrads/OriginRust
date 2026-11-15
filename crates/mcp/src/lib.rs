@@ -3,6 +3,8 @@
 
 pub mod analysis_tools;
 pub mod b64;
+pub mod bridge;
+pub mod prompts;
 pub mod resources;
 pub mod roots;
 pub mod schemas;

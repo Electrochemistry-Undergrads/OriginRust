@@ -79,6 +79,12 @@ pub enum Cmd {
     ReplaceInSheets,
     ExportGraph,
     ExportWorksheet,
+    /// File > Print... (Ctrl+P): the active graph page.
+    Print,
+    /// File > Print Preview.
+    PrintPreview,
+    /// File > Page Setup...
+    PageSetup,
     Exit,
     Undo,
     Redo,
@@ -121,6 +127,8 @@ pub enum Cmd {
         rows: usize,
         cols: usize,
     },
+    StackPanels,
+    LabelPanels,
     /// Graph > Add Error Bars... on the active layer.
     AddErrorBars,
     /// Window > Refresh (F5).
@@ -467,9 +475,9 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         grey("Save Project without Data..."),
         grey("Duplicate Project without Data"),
         sep(),
-        grey_keyed("&Print...", ctrl(Key::P)),
-        grey("Print Pre&view"),
-        grey("Page Setup..."),
+        keyed("&Print...", ctrl(Key::P), Cmd::Print),
+        item("Print Pre&view", Cmd::PrintPreview),
+        item("Page Setup...", Cmd::PageSetup),
         sep(),
         sub(
             "&Import",
@@ -714,7 +722,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("4 Panel", Cmd::PlotPanels { rows: 2, cols: 2 }),
                     item("9 Panel", Cmd::PlotPanels { rows: 3, cols: 3 }),
                 ],
-                greys(&["Stack...", "Multiple Panels by Label..."]),
+                vec![item("Stack...", Cmd::StackPanels), item("Multiple Panels by Label...", Cmd::LabelPanels)],
             ]
             .concat(),
         ),
@@ -1878,6 +1886,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
+        Cmd::Print => Action::Print(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::PrintPreview => Action::PrintPreview(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::PageSetup => Action::PageSetup,
         Cmd::Exit => Action::Quit,
         Cmd::Undo => {
             c.undo.ok_or(NO_UNDO)?;
@@ -1970,6 +1981,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::PlotPanels { rows, cols } => {
             Action::PlotPanels { book: book?, columns: c.selected.to_vec(), rows: *rows, cols: *cols }
         }
+        Cmd::StackPanels => Action::StackPanels { book: book?, columns: c.selected.to_vec() },
+        Cmd::LabelPanels => Action::LabelPanels { book: book?, columns: c.selected.to_vec() },
         Cmd::AddErrorBars => Action::AddErrorBars { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::Refresh => Action::Refresh(c.active),
         Cmd::UpdateLegend => {

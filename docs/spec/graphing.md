@@ -827,6 +827,8 @@ pub struct PlotOffset {
     pub column: ColumnId,          // the Y column of the curve
     pub x: f64,                    // default 0; not written when 0
     pub y: f64,                    // default 0; not written when 0
+    pub x_multiplier: f64,         // default 1; not written when 1
+    pub y_multiplier: f64,         // default 1; not written when 1
     pub follows: Option<ColumnId>, // default None; not written when None
 }
 ```
@@ -867,6 +869,10 @@ The offsets are computed again at every drawing, so they follow the data.
 13.4.2 **Constant.** Member k gets (0, k × step).
 
 13.4.3 **Individual.** Each member gets the `x` and `y` of the layer's entry for its Y column, or (0, 0) when there is none.
+It also gets `x_multiplier` and `y_multiplier` (default 1). Positive finite factors scale the
+original values before adding the offsets; zero, negative and nonfinite factors draw as 1
+(Origin 2016 measurements in 18.1). Other stack modes ignore these stored factors. Followers
+inherit the leader's complete placement, including multipliers.
 
 13.4.4 **None and Waterfall.** Every member gets (0, 0).
 
@@ -876,14 +882,17 @@ The offsets are computed again at every drawing, so they follow the data.
 
 ### 13.5 Drawing
 
-- Every use of a data point (x, y) uses (x + ox, y + oy) instead:
+- Every use of a data point (x, y) uses (mx * x + ox, my * y + oy) instead (multipliers are 1 outside Individual):
   - lines and symbols;
-  - error bars, from y + oy - e to y + oy + e;
-  - column bars, from oy to y + oy;
+  - error bars, from my * y + oy - e to my * y + oy + e (error magnitudes stay unscaled);
+  - column bars, from oy to my * y + oy;
   - the data range for automatic axis limits (figure-rendering.md section 2, step 1).
 - When an offset is 0 the value is used exactly as stored, so a layer with `stack` None is drawn exactly as before, with byte-identical SVG.
 - Worksheets, analysis tools and fits always use the stored values.
-- Limits, ticks and tick labels follow figure-rendering.md section 2, applied to the moved values. Tick labels show axis coordinates; no curve is labelled with its own values. Read-outs in the app show axis coordinates.
+- Limits, ticks and tick labels follow figure-rendering.md section 2, applied to the moved values.
+  Tick labels show axis coordinates. Data labels and the Data Reader show source values; the
+  reader snaps to the transformed point. The Integrate gadget maps its range and shading through
+  the placement and converts pointer X back to source units; its area uses source data.
 - The legend is unchanged (plot order).
 
 Check: the SVG of an Auto-stacked graph is byte-identical to the SVG of an unstacked graph whose Y columns were shifted beforehand by the offsets of 13.4.
@@ -1242,6 +1251,36 @@ Measured with Origin on a scatter plot of 5 points with a Y error column (`p6`, 
 - **Range.** The automatic axis range reaches the ends of the error bars (data 2..5 with ends 1.5 and 6 gave Y 1..6.5).
 - **Sheaf.** `Plot::x_error` (X error column after the Y column, found like the Y error), `Plot::error` with direction (both, positive, negative) and cap width (default 8 pt, 0 = no cap); Plot Details > Error Bar edits direction and cap width; Plot > Symbol > XY Error plots with both columns. X error bars are not drawn for bar plots. Positive and negative directions draw the bar from the point to that end only, with one cap; the range widens only on that side. Not stored in `.opj` (save warning).
 
+### 14.13a Graph > Add Error Bars: existing-column chooser (T01 follow-up)
+
+Measured in Origin 2016 on 2026-11-14 through `tools/origin-ref/origin-dialog.ps1`, under the
+global Origin lock. Synthetic data: X = 1..4, B = 2,4,3,5, C = 5,3,4,2, D = 0.1..0.4,
+E = 0.5..0.8; B and C plotted as scatter curves. Setup and raw control list are local-only at
+`re-workspace/scratch/t01-error-bars-dialog/setup.labtalk.txt` and `dialog/first.controls.txt`.
+
+`worksheet -e err;` opens **Error Bars**. **Add Error Bars to** names `[Graph1]1!1"Signal B"`;
+**Source of Errors** contains **Percent of Data (%)** (selected), **Standard Deviation of Data**,
+**Square Root of Data**, two numeric edits, and **Scaling Factor**, with OK and Cancel. The edits
+were empty in this capture. No numeric defaults or generated values were measured. The screenshot
+was obscured by another foreground window and is not visual evidence. The earlier T01 assumption
+that this dialog simply asks for an error column was incorrect.
+
+**Sheaf's existing-column chooser** is deliberately a smaller scope using `Plot::y_error`: Graph >
+Add Error Bars opens **Error Bars**, with **Add Error Bars to** choosing one curve of the active
+layer and **Y Error Column** choosing any numeric or Text & Numeric column across all workbooks
+and sheets. Fully qualified names and long names identify columns. The selected graph curve is
+the initial target, otherwise the first curve; its current Y-error column, or the adjacent
+designated Y-error column, is suggested. Otherwise the source starts unselected and OK is disabled.
+
+Opening or changing choices does not edit the project. OK assigns/replaces only the chosen
+curve's Y-error column, leaving its row range, X errors, direction, cap width and other curves
+unchanged, in one Undo/Redo step. Confirming the current source creates no undo step. Cancel,
+Escape and the close button discard choices. Changed/reordered plots and missing/non-numeric
+sources cannot be applied; switching projects closes the chooser. No data or designation is
+changed. Pure-text columns are excluded. Short, missing or negative error values retain the
+renderer’s existing handling. Origin's percentage/standard-deviation/square-root generation and
+its layout remain separate work; this chooser is not claimed as matching that dialog.
+
 ### 14.14 Colour lists of column and area templates; stacked area and fill area (T12)
 
 Measured with `plotxy` and `expGraph` through COM on synthetic data (scripts and PNGs in `re-workspace/scratch/T12/`, local only), legends read pixel by pixel. The same twelve Y columns plotted from each template:
@@ -1590,6 +1629,84 @@ sheaf plot xrd.csv --panels 2x2 -o grid.svg
 - Graph > Arrange Layers... calls `Graph::arrange` with `PanelLayout::arrange` as the starting values.
 - A layer selector in the graph settings; a change to the scale of a linked axis is written to its root. A double-click picks the panel under the pointer (`layout_geometry` gives each panel's frame).
 
+### 15.7a Stack dialog (2026-11-14)
+
+Origin 2016's `plotstack -d;` opens **Stack: plotstack**. Its measured defaults are Line,
+Portrait, Vertical, Bottom to Top, Legend for Each Layer, Link Layers checked and X Axis Link
+Straight (1 to 1). Plot Type offers Line, Scatter, Line+Symbol, Column, Use Template and Custom;
+this installed version has no Histogram entry. Plot Assignment contains an automatic Number of
+Layers and Number of Plots in Each Layer. Spacing contains Vertical Gap and four margins. The
+control dumps are in `re-workspace/scratch/t01-stack-panels/dialog/`; the captured screen pictures
+were obscured by another window and are not visual evidence.
+
+Headless Origin measurements on five Y columns sharing one X (`assignment4.lines.txt` and
+`assignment4.out.txt` in the same scratch folder) used `plotstack`'s `number` argument and counted
+plots with `layer -c;`. The final requested count repeats and the final layer clips to the remaining
+columns: `1` gives `1,1,1,1,1`, `2` gives `2,2,1`, and `1 2` gives `1,2,2`. Earlier diagnostic logs
+used unsupported count properties; only the `assignment4` counts are fixtures.
+
+The desktop **Plot > Multi-Panel > Stack...** dialog now calls the existing `plot_panels` builder.
+It starts from the measured defaults and section 15.2's stack geometry (margins 15/10/10/10,
+zero gap). Users can choose the four built-in plot types, layer order, portrait/landscape page,
+per-layer/no legend, automatic layer assignment, page-percent vertical gap and margins. Every
+layer starts its own palette. Link Layers with Straight shares X scales; with None it links only
+positions; unchecked produces independent layers. Selected worksheet row bounds are retained.
+Units display the existing model's linked-layer/page convention; spacing always uses page percent.
+Layer legends are framed at the top left and ticks point inward. Existing template typography,
+page size and section 15.9's deliberate layout differences remain.
+
+OK creates one graph in one undo step; opening, Cancel and Escape do not edit the project.
+Positive whole assignment counts, the 64-layer bound, current numeric source columns and usable
+geometry are validated before OK. Horizontal stacks, external/custom templates, a whole-page
+legend, manual layer count, other units and live preview remain disabled. Multiple Panels by Label
+is still disabled. UI regressions cover defaults, source order, grouping, Scatter, legends, layer
+order, independent axes, row bounds, orientation, spacing, invalid values, Cancel/Escape and undo/redo;
+parser regressions use the three measured assignment cases.
+
+### 15.7b Multiple Panels by Label (2026-11-14)
+
+Origin 2016's `plotbylabel -d;` shows **Multiple Panels by Label: plotbylabel**, Group Identifier
+(Long Name by default, Units, Comments), Plot Type (Line by default, Scatter, Line+symbol, Column),
+Number of Rows and Columns (both Auto), Spacing, Preview and Auto Preview. This version has no graph
+template or X-column/group-count selector. The controls and synthetic probes are in
+`re-workspace/scratch/t01-label-panels/`. The current
+[Origin reference](https://docs.originlab.com/x-function/ref/plotbylabel/) documents user header
+identifiers and dates external template selection to 2021b; those newer controls are not inferred
+from this installed dialog.
+
+Measured with X in A and Y in B:F (`grouping.lines.txt` / `grouping.out.txt`): Long Names
+`Beta, Alpha, Beta, empty, alpha` produce three groups, in first-appearance order: B/D, C/F, E.
+The corresponding Y titles are `Beta`, `Alpha`, empty. Units `mA,mA,uA,uA,uA` produce B/C and
+D/E/F. Five empty Comments produce one five-plot layer. Thus group matching ignores ASCII case,
+keeps source order within each group and retains the first label's spelling. A second probe
+(`grouping2`) shows `Beta`, ` beta ` and `beta` combine, and empty and one-space labels combine.
+Only ASCII case and these whitespace cases were measured; Unicode case folding is not implemented.
+
+The page stays landscape. Origin's automatic grids for 1/2/3/5 groups are 1x1, 2x1, 2x2, 3x2
+(rows x columns), filling row by row from the top left, with no layers in unused cells. Defaults
+are gaps 5/5 and margins left/right/top/bottom 12/10/10/12 percent. Three groups give frames at
+(12,9.992), (53.5,9.992), (12,51.51), width 36.51 and height 36.5 percent. Five groups give a
+3x2 grid with height 22.66 percent. Explicit rows=2, cols=3, gaps=8/7 give width 20.66 and height
+35.49 percent. These agree with `PanelLayout::arrange` after applying the measured margins/gaps
+within 0.02 percentage points (Origin's page-unit rounding).
+
+The desktop dialog now reads selected columns' Long Name, Units, full Comments or existing named
+parameters, trims surrounding whitespace and groups with ASCII-insensitive matching. It uses the
+existing `plot_panels` builder with four built-in types, source row bounds and group identifiers as
+Y titles (including an empty title for an empty group). Parameter names are listed alphabetically
+from the existing model; their grouping uses the same rule, but was not measured separately in
+Origin. Parameters, formulas and worksheet data are never edited by this dialog. Axis scales are
+independent. The automatic grid has ceil(sqrt(groups)) rows and enough columns; either dimension
+can be made manual, or both, provided all groups fit in at most 64 cells. Gap/margin validation
+uses the existing panel model. Too many groups are refused before building an unbounded list.
+
+Opening, Cancel and Escape do not edit the document; OK creates one graph in one undo step and
+focuses it. Missing/nonnumeric sources or an unusable grid disable OK. Sheaf retains its built-in
+template's page size, typefaces and legends instead of Origin's MGROUPS template. Live preview is
+disabled. UI tests cover the measured grouping/frames, source immutability, parameters/full
+comments, selected rows, Column/Scatter, manual dimensions/spacing, invalid geometry, Cancel/Escape
+and one-step Undo/Redo; grid regression cases include the measured 1/2/3/5-group arrangements.
+
 ### 15.8 Origin project files
 
 The `.opj` reader reads the layers of a panel graph as independent layers with the limits stored in the file, so the owner's panel graphs already draw at Origin's ranges without links (only the second layer of a double-Y graph is linked, by the rule of section 12.7). Where Origin stores `layer.link`, `x.link` and `y.link` was not found in the layer header (section 12.7 lists bytes that differ for the linked layer of a double-Y graph); reading panel links, and writing panel graphs, needs that first.
@@ -1726,7 +1843,7 @@ a double-click on the graph; pictures and control lists in `re-workspace/scratch
   -1 up to 3 and back on a -2 to 4 axis was filled down to -2). The fill starts in the line's colour,
   "Follow line transparency" is ticked, and the legend sample becomes a filled box.
 - Drop Lines tab: Horizontal and Vertical check boxes (both off), each with Style (Solid), Width (0.5)
-  and Color (Auto, the plot's colour); Skip Points.
+  and Color (Auto, the plot's colour); Skip Points (the display frequency described below).
 - Label tab: Enable (off), Font "Default: Arial", Size 22, Color Black, White Out, bold/italic/
   underline, Frame (None, Box, Shadow), Margin, Rotate 0, Horizontal and Vertical Offset 0, Position
   Right (Center, Left, Right, Above, Below), Label Form Y (X, Y, Row Indices, (X,Y), Custom, a
@@ -1740,15 +1857,57 @@ Sheaf (`Plot::decor`, `Layer::background`, drawn in `crates/plot/src/plots.rs` a
 Fill Area Under Curve in the Normal mode only, with its own colour (Origin puts the colour on the
 Pattern tab; Sheaf shows it under the check box) and the alpha of that colour as transparency; the
 line's Transparency slider sets the alpha of the line colour; both drop lines with style, width and
-an Auto or chosen colour, drawn from each point to the left edge and to the bottom edge of the frame;
-data labels with font, size, colour, rotation, position and the forms X, Y, Row Indices and (X,Y),
-written a quarter of the font size from the point, numbers as the worksheet shows them (up to 15
-significant digits); the layer Background colour fills the frame behind the grid. Sheaf's own additions
+an Auto or chosen colour, drawn from each point to the left edge and to the bottom edge of the frame.
+
+Data Points Display Control on Drop Lines now offers Skip Points and a frequency. This uses the
+existing `SymbolStyle::every` (the former Symbol tab's Show every field), so old projects keep their
+stored frequency. It selects the first of every n points for drop lines, symbols (including
+bubbles/colour mapped symbols), X/Y error bars and data labels. Source row indices remain intact;
+the plotted row range anchors the phase. Mask overlays do not restore skipped symbols. Zero and
+one mean no skipping; an empty range draws nothing. Bars and areas do not offer the control and
+keep every point. The full-resolution connecting line, underlying data and automatic axes are
+unchanged. Worksheet filters retain the existing compacted display order; their interaction with
+the frequency has not been measured in Origin.
+
+Measured in Origin 2016 on 2026-11-14 through `set %C -skip n` and PNG exports of an eleven-point
+scatter plot: n=0 and 1 show all eleven points, n=2 shows rows 1,3,5,7,9,11, n=3 shows 1,4,7,10,
+and n=20 shows only row 1. A plot limited to rows 3..10 with n=3 shows rows 3,6,9. A missing Y at
+row 4 does not shift the phase: n=3 shows rows 1,7,10 (`missing.lines.txt`, `missing4_verified.png`). Origin 2016
+does **not** force the last point to appear, unlike newer versions described in the
+[current display-control documentation](https://docs.originlab.com/origin-help/pd-dialog-plotlevel-display-tab/).
+Raw inputs/outputs and exported pictures are in `re-workspace/scratch/t13-skip-points/png2.*` and
+`skip*.png`; the original dialog controls (unchecked Skip Points and No Line Break for Skipped
+Point(s)) are in `re-workspace/scratch/t13/open3/droplines.controls.txt`. Native and `.opj` companion files
+preserve the frequency. `.opj` alone warns and shows every point, including for line plots with
+skipped errors but no symbols. The No Line Break / Gap to Symbol interaction remains unimplemented;
+Sheaf keeps its existing continuous full-data line. Smart Skip is not offered.
+
+Data labels have font, size, colour, rotation, position and the forms X, Y, Row Indices and (X,Y).
+They are written a quarter of the font size from the point, numbers as the worksheet shows them (up to 15
+significant digits). White Out on the Label tab draws an opaque white rectangle immediately behind
+each displayed nonempty label, independent of page/layer colour. It follows the label's anchor,
+offsets and rotation and uses the same clipping and row/Skip Points selection as the text. Older
+projects omit `DataLabels::white_out` and load with it off. Native/companion saves preserve it;
+the `.opj` writer names the unsupported data labels in its save warning.
+
+White Out reference (2026-11-14): Origin 2016, `set %C -q 1; set %C -qw 1;`, Arial 30,
+label "12345", Center, gray layer behind a red line. The 900-pixel PNG has
+three 100 x 40 pixel opaque white label boxes; off has none. Rotation 45 degrees rotates the boxes
+with the text. Raw commands, outputs, pictures and region bounds are in
+`re-workspace/scratch/t13-label-whiteout/`. The existing Label control capture also has White Out
+unchecked (`t13/open3/label.controls.txt`). Published controls:
+[Label tab](https://docs.originlab.com/origin-help/pd-dialog-label-tab/),
+[LabTalk label switches](https://docs.originlab.com/labtalk/ref/options_for_data_plot_labels/).
+Sheaf approximates the font box using the measured text advance plus 0.05 em on each side and a
+baseline band from -0.92 to +0.23 em. Exact padding for other fonts is unmeasured; label frames,
+editable margins and leader lines remain open.
+
+The layer Background colour fills the frame behind the grid. Sheaf's own additions
 beyond what was measured (hatch and gradient fills, bar width, label column, rows, decimals and offsets,
 background gradient and border, X/Y axes switches, page border, layer icons, comments, subgroups) are in
-section 18.6. Not done: the other fill modes, label frames, white out, custom forms and display formats
-beyond decimals, leader lines, skip points. The `.opj` writer does not store any of these; the save names
-them and the companion file keeps them.
+section 18.6. Not done: the other fill modes, label frames, custom forms and display formats
+beyond decimals, leader lines, the No Line Break / Gap to Symbol interaction. The `.opj` writer
+does not store these settings; the save names them and the companion file keeps them.
 
 ### 18.1 Group tab (measured 2026-11-13)
 
@@ -1768,17 +1927,51 @@ Type and Symbol Interior with None and By One, running on from the first plot (`
 Symbol Interior alternates filled and open); Group Members lists the plots. Not done: Binned, several
 groups in one layer, subgrouping by column label. Subgrouping by size is Sheaf's own (section 18.6).
 
-Offset tab (measured): rows X and Y with Multiplier and Offset boxes, and a note that offsets take effect
-when the layer's Stack tab is set to Individual with X and/or Y enabled. Sheaf shows the tab on each
-plot of a layer with several plots: the X and Y offsets of that curve (`Layer::plot_offsets`), greyed
-unless the layer stacks Individually; Multiplier is not offered.
+Offset tab: rows X and Y with Multiplier and Offset boxes. Origin requires Individual on the
+layer's Stack tab with the corresponding axes enabled. Sheaf shows these fields on each plot
+of a layer with several plots, enabled in Individual mode; both axes apply, as with the existing
+offsets (the Stack tab's separate X/Y switches remain unavailable).
+
+**Multiplier reference (Origin 2016, 2026-11-14):** synthetic X = [1, 2, 3], Y = [2, 4, 6],
+`layer -b s 4 1 1`, X/Y offsets 5/7 and factors 2/3 (`set ... -sxs`, `-sys`) export symbols at
+(7, 13), (9, 19), (11, 25). This matches the
+[documented affine transform](https://docs.originlab.com/origin-help/pd-offset-tab/), applied
+in data units before axis scaling. Factors 0.5 give (5.5, 8), (6, 9), (6.5, 10).
+Factors -2/-3 and 0/0 are retained by `get ... -sxs/-sys`, but both render with factor 1 at
+(6, 9), (7, 11), (8, 13); those exported PNGs are byte-identical. None mode returns to
+(1, 2), (2, 4), (3, 6). Y labels still read 2, 4, 6. With error columns 0.5 (X) and 1 (Y),
+the first scaled point has endpoints X = 6.5/7.5 and Y = 12/14: error magnitudes are not
+multiplied. Worksheet values remain unchanged. Raw scripts and PNGs are local in
+`scratch/t13-offset-multipliers/probe4*` and `probe5*`; earlier probes used an incorrect layer
+command or error-plot assignment and are not evidence for these rules.
+
+Sheaf stores factors on `PlotOffset` with a backward-compatible default of 1, omitted when 1.
+Nonfinite factors also use 1 for drawing. Native and `.opj.sheaf` saves preserve the settings;
+the `.opj` writer leaves the data unchanged, writes its existing offsets and explicitly warns
+that multipliers are omitted. Screen and all exports share the transformed scene. Specialized
+plot/coordinate combinations beyond Cartesian line/scatter are not Origin-measured here.
 
 Display tab (measured, section 18 list): Sheaf offers Labels (the tick labels of both axes), Data
 (`LayerDisplay::show_data`), Frame (the opposite-edge lines of both axes), Clip Data to Frame (off: the
 data may run over the whole page), Grid on Top of Data (the grid lines are drawn after the plots), and
 X Axes and Y Axes (off hides that axis: line, ticks, tick labels and title; the grid stays; what Origin
-hides is not measured); Data on Top of Axes is shown greyed, and Scale Elements and Clipping Margins are
-not offered. The `.opj` writer names a changed Display tab in its save warnings.
+hides is not measured). Data on Top of Axes (`LayerDisplay::data_on_top`, default off) draws the
+axes, ticks and axis text before the data; legends, free labels and drawn annotations remain above
+the data. The axes remain unclipped; Clip Data to Frame still applies only to the plots. Grid on
+Top of Data remains independent. Picking a data/axis overlap follows the chosen order. The same
+scene order is used on screen and in SVG, raster, PDF, EPS and EMF exports.
+
+Reference for Data on Top of Axes (2026-11-14): Origin 2016's Display tab starts unchecked.
+Clicking the control changes its state from 0 to 1 and back to 0, without changing Grid on Top of
+Data (0 throughout). Setup, steps, screenshots and control lists are in
+`re-workspace/scratch/t13-data-on-top/dialog/{display,enabled,disabled}.controls.txt`.
+Origin's [Display/Speed documentation](https://docs.originlab.com/origin-help/pd-dialog-display-speed-tab/)
+describes data and symbols superimposed on the axes; its
+[axis/grid overlap example](https://docs.originlab.com/quick-help/axis-ontop/) explains the independent
+grid switch. Its general default statement differs from the captured template; Sheaf keeps the
+measured template's unchecked default. Scale Elements and Clipping Margins are not offered.
+The `.opj` writer names a changed Display tab in its save warnings; the companion preserves the
+setting. Older projects that omit the new field load with data behind the axes.
 
 Size/Speed tab (measured): Layer Area Left, Top, Width, Height with Units % of Page (default), inch, cm,
 mm, pixel and point; Link Axis Length to Scale with X:Y Ratio; Graphic Image Caching None or Raster;
@@ -1904,7 +2097,90 @@ project file only when they differ from the default (a file written before loads
 
 ### 18.7 Not done
 
-Speed mode and X:Y ratio of Size/Speed, Skip Points of Drop Lines, "White Out", frame, margin, attach-to,
-automatic overlap avoidance and leader lines of Label, X and Y multiplier of Offset, the other fill modes and
+Speed mode and X:Y ratio of Size/Speed, No Line Break for Skipped Point(s) / Gap to Symbol, frame, margin, attach-to,
+automatic overlap avoidance and leader lines of Label, the other fill modes and
 Origin's list of fill patterns, subgrouping By Column Label, Binned increments, several groups in one layer,
-print margins, writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).
+writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).
+
+## 19. Printing (File > Print, Print Preview, Page Setup; T27)
+
+Measured in OriginPro 2016 (64-bit) through `tools/origin-ref/origin-screenshot.ps1 -FullScreen`
+with clicks (pictures in the local scratch folder `re-workspace/scratch/t27/s4/`, not committed), one
+line graph active. Everything not listed here is unmeasured.
+
+### 19.1 Menu and toolbar (measured)
+
+- Origin's File menu is collapsible (a short list with a double-chevron at the bottom); the full
+  list has, after Save Project without Data and Duplicate Project without Data, a separator and then
+  three items in this order: **Print...** (Ctrl+P), **Print Preview**, **Page Setup...**, a
+  separator, then Import. Sheaf's menu has the same three in the same place.
+- The Standard toolbar has a Print button (tooltip "Print the active window"). The icon next to
+  it opened Slide Show of Graphs, not a preview; no Print Preview toolbar button was measured
+  (unmeasured). Clicking the Print button by script only showed the tooltip, so the system dialog
+  behind it was not captured.
+
+### 19.2 Page Setup (measured, window captured)
+
+A small modal window titled "Page Setup", about 360 x 415 px:
+
+- a picture of one sheet with a dashed rectangle for the margins and a drop shadow, at the top;
+- group **Paper**: **Size** (a drop-down, "Letter" on the measuring machine) and **Source** (a
+  drop-down, "Printer auto select");
+- group **Orientation**: radio buttons **Portrait** and **Landscape**; Landscape was selected for the
+  graph (a page wider than tall; only this one landscape graph was captured, so whether the orientation
+  follows the page is unmeasured);
+- group **Margins (inches)**: Left, Right, Top, Bottom fields, shown as 1, 1, 1, 1 and greyed out
+  while the graph was active (so Origin does not let the user change them there; whether Origin
+  applies 1 inch is unmeasured);
+- buttons **Help**, **OK**, **Cancel**.
+
+Sheaf follows this: Paper Size (Letter, Legal, Tabloid, A3, A4, A5), Orientation with a third choice
+**Automatic** that is the default (landscape for a page wider than tall: Sheaf's own rule,
+inferred from the single landscape sample, not measured), Margins in inches (editable, default 1 inch: Origin's displayed value), OK and Cancel. There is
+no Source (the tray belongs to the printer's own dialog) and no Help button. Defaults: Letter,
+Automatic, 1 inch. The setting belongs to the project (`Project::page_setup`), saved in `.sheaf` and,
+because an `.opj` has no place for it, in the `.opj.sheaf` companion (the save warns when it is not
+the default). Changing it is an undo step "Page Setup".
+
+### 19.3 Print and Print Preview dialogs (unmeasured)
+
+The system print dialog, Origin's own Print dialog (if it has one: copies, range, scaling, "Print
+to file") and the Print Preview window were not captured: the menu clicks that open them did not
+produce a dialog or a window in the screenshots after several tries (the first menu path of the
+captured Page Setup worked once; the same keystroke path and the toolbar buttons did not). The
+brief's statement that Origin prints a graph as vector output scaled to the paper and page-centred
+is therefore taken as given, not measured. Do not read the layout of Sheaf's Print Preview as
+Origin's; it is Sheaf's own (paper with drop shadow, dashed margin rectangle, the page drawn where it
+prints, a line naming paper, orientation and margins, buttons Print..., Page Setup..., Close).
+
+### 19.4 Placement (Sheaf's rule)
+
+The graph page is scaled uniformly (up as well as down, aspect ratio kept) to the largest size that
+fits inside the paper minus the margins and inside what the printer can reach, and is centred in that
+area (`sheaf_core::page_setup::placement`; Print Preview and the printer path call the same
+function). The paper is Letter etc. turned landscape or not by the orientation. Under Windows the
+page's enhanced metafile (`sheaf_plot::render_emf`) is played into the printer device context
+rectangle computed from `GetDeviceCaps` (`PHYSICALOFFSETX/Y`, `HORZRES/VERTRES`), so the driver
+receives vector drawing, not a bitmap. Elsewhere the page's PDF goes to `lp` (paper and orientation as
+options, `fit-to-page`; not tested on this machine).
+
+### 19.5 Check with "Microsoft Print to PDF" (measured on Sheaf's side)
+
+A synthetic 5-point line graph (`sheaf plot data.csv`, page 600.06 x 500.79 pt) printed with the
+headless function (`print_to_printer`, `DOCINFOW.lpszOutput` set, no dialog; the driver wrote the
+file without asking where to save it, in about one second): the PDF has one page of 792 x 612 pt
+(Letter landscape, from Automatic). The page background rectangle in the content stream is
+560.9 x 468.0 pt at x = 115.6 pt, y = 72 pt: the height limits (612 - 2 x 72 = 468), the width is
+468 x 600.06 / 500.79 = 560.8, the left edge is 72 + (648 - 560.8) / 2 = 115.6. That equals the
+placement function's result, so the printer got the page centred inside the 1 inch margins. The
+page of `sheaf plot ... -o x.pdf` is the page size itself (600.06 x 500.79 pt, drawn at scale 1);
+printing differs from it by the paper and the scale 0.935. The driver reported no unprintable edge.
+The check is the ignored test `winprint::tests::prints_a_page_to_a_named_printer_without_a_dialog`
+(environment variables `SHEAF_PRINT_EMF`, `SHEAF_PRINT_OUT`, `SHEAF_PRINTER`, `SHEAF_PRINT_PAGE`).
+Not checked: a physical printer (the HP on this machine was not used), copies, collation, several
+pages, other paper sizes through the driver.
+
+### 19.6 Not done
+
+Print and Print Preview of a workbook (a sheet as a table), View > Print View and the Standard
+toolbar's Print button, Origin's Source (tray), a `sheaf print` command, the macOS print panel.

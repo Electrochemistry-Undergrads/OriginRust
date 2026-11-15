@@ -253,7 +253,7 @@ fn pca(spec: &PcaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
         let (xc, yc) = (spec.x_component.wrapping_sub(1), spec.y_component.wrapping_sub(1));
         if xc >= keep || yc >= keep || xc == yc {
             notes.push(format!(
-                "The loading plot, score plot and biplot need two different components among the {keep} extracted                  (asked for {} and {}); they were not drawn.",
+                "The loading plot, score plot and biplot need two different components among the {keep} extracted (asked for {} and {}); they were not drawn.",
                 spec.x_component, spec.y_component
             ));
         } else {
@@ -802,7 +802,11 @@ mod tests {
         let bad = PcaSpec { scree: false, x_component: 1, y_component: 3, components: 2, ..Default::default() };
         let r = p.analyze(&Request { columns: ids, rows: RowRange::All, tool: Tool::Pca(bad) }).unwrap();
         assert!(r.new_graph.is_none() && r.more_graphs.is_empty());
-        assert!(r.notes.iter().any(|n| n.contains("were not drawn")), "{:?}", r.notes);
+        assert!(
+            r.notes.iter().any(|n| n.contains("extracted (asked for") && n.contains("were not drawn")),
+            "{:?}",
+            r.notes
+        );
     }
 
     #[test]

@@ -744,7 +744,7 @@ eigen-decomposition), the tool `crates/core/src/analysis/multivariate.rs`, the c
   of the scores: for example -2 to 4 and -2 to 2), the loading vectors against the **top and right axes, drawn in
   blue**, whose limits are those of the bottom and left axes **times `max |loading| / min(|smallest score|, |largest
   score|)`** of the component on that axis, so that zero lies on the same line in both and the longest loading reaches
-  the nearer end of the scores. Fits all 14 axes of the seven runs to the six digits Origin shows (limits such as
+  the nearer end of the scores. Fits 13 of the 14 axes of the seven runs to the six digits Origin shows (the one miss is in 17.4; limits such as
   -0.71618 to 1.43236 and -1.202706 to 1.202706 from scores -1.628..2.967 and -1.421..1.623 and loadings up to 0.583
   and 0.854); the scores are the standardized ones when `std` is on, and those of the rows without missing values
   with listwise exclusion.

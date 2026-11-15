@@ -213,8 +213,9 @@ pub(super) fn run(
         y_scale: ScaleKind::Linear,
         x_title: "1 - Specificity".into(),
         y_title: "Sensitivity".into(),
+        look: Default::default(),
     });
-    Ok(Output { table: Some(table), on_sheet, notes, graph })
+    Ok(Output { table: Some(table), on_sheet, notes, graph, more_graphs: Vec::new() })
 }
 
 #[cfg(test)]

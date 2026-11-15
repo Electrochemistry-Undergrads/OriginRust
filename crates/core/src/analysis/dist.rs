@@ -13,6 +13,8 @@ pub(super) struct Output {
     pub on_sheet: Vec<SheetColumn>,
     pub notes: Vec<String>,
     pub graph: Option<XyGraph>,
+    /// Graphs after the first (the loading plot and biplot of a principal component analysis).
+    pub more_graphs: Vec<XyGraph>,
 }
 
 /// The graph of a probability plot: plots of columns of the result sheet (by position), axis scales and titles.
@@ -22,6 +24,47 @@ pub(super) struct XyGraph {
     pub y_scale: ScaleKind,
     pub x_title: String,
     pub y_title: String,
+    /// Looks beyond the plain scatter and line graph (the principal component graphs); all off by default.
+    pub look: Look,
+}
+
+/// How a graph differs from the plain one: fixed limits, lines through zero, colours, labels from a column and a
+/// second layer with axes of its own.
+#[derive(Default)]
+pub(super) struct Look {
+    /// Lines through zero on both axes (the cross of a loading plot).
+    pub cross_lines: bool,
+    pub x_range: Option<(f64, f64)>,
+    pub y_range: Option<(f64, f64)>,
+    /// Only a lower limit of the vertical axis (the upper one stays automatic).
+    pub y_min: Option<f64>,
+    pub x_step: Option<f64>,
+    pub y_step: Option<f64>,
+    /// Draw the axes on all four sides (a closed box).
+    pub box_frame: bool,
+    /// The line and symbol colour of a plot, by index in `plots`.
+    pub colors: Vec<(usize, crate::color::Color)>,
+    /// Data labels of a plot (index in `plots`) from a column of the result sheet (position), in a colour.
+    pub labels: Vec<(usize, usize, crate::color::Color)>,
+    /// Symbol shape, size and colour (`None` keeps the plot's colour) of a plot, by index in `plots`.
+    pub symbols: Vec<(usize, crate::graph::SymbolShape, f64, Option<crate::color::Color>)>,
+    /// Plots drawn with a dotted line, by index in `plots`.
+    pub dotted: Vec<usize>,
+    /// The long name of the graph window (Origin: "Scree Plot", "Loading Plot", "Biplot", "Scores Plot").
+    pub title: Option<String>,
+    /// Draw no legend (Origin's principal component graphs have none).
+    pub no_legend: bool,
+    pub overlay: Option<Overlay>,
+}
+
+/// A second layer over the first, with its own scales and its axes on the top and right edges.
+pub(super) struct Overlay {
+    pub plots: Vec<GraphPlot>,
+    pub x_range: (f64, f64),
+    pub y_range: (f64, f64),
+    pub color: crate::color::Color,
+    /// Data labels of a plot (index in `plots`) from a column of the result sheet.
+    pub labels: Vec<(usize, usize)>,
 }
 
 pub(super) struct GraphPlot {
@@ -182,7 +225,7 @@ fn dist_fit(spec: &DistFitSpec, inputs: &[Input<'_>]) -> Result<Output, Analysis
     for (i, h) in table.headers.iter().enumerate().skip(3) {
         on_sheet.push(number_column(h, "", Designation::Y, col(i)));
     }
-    Ok(Output { table: Some(table), on_sheet, notes, graph: None })
+    Ok(Output { table: Some(table), on_sheet, notes, graph: None, more_graphs: Vec::new() })
 }
 
 // ----- probability plot and Q-Q plot -----------------------------------------------------------------------
@@ -351,6 +394,7 @@ fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Output, Analys
             y_scale: percent_scale(family),
             x_title: data_title,
             y_title: "Cumulative probability (%)".to_string(),
+            look: Look::default(),
         },
         ProbPlotKind::QQ => XyGraph {
             plots,
@@ -358,9 +402,10 @@ fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Output, Analys
             y_scale: ScaleKind::Linear,
             x_title: format!("{} quantile", family.name()),
             y_title: data_title,
+            look: Look::default(),
         },
     });
-    Ok(Output { table: Some(table), on_sheet, notes, graph })
+    Ok(Output { table: Some(table), on_sheet, notes, graph, more_graphs: Vec::new() })
 }
 
 #[cfg(test)]

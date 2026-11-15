@@ -1,0 +1,61 @@
+newbook;
+col(1) = {1.0, 1.5, 2.0, 8.0, 8.5, 9.0, 15.0, 15.5, 16.0, 3.0, 9.5, 14.5};
+wks.addcol(); col(2) = {2.0, 1.0, 1.5, 7.0, 8.5, 8.0, 15.0, 14.0, 16.5, 2.5, 7.5, 15.5};
+kmeans ir:=(1:2) num:=3 anova:=1 distance:=1 member:=1 rt:=<new name:=RepKM> rd:=<new name:=MemKM> rdplot:=<new name:=PlotKM>;
+#[Book1]MemKM
+#[Book1]PlotKM
+win -a Book1;
+page.active$ = MemKM;
+?wks.ncols
+string a$ = wks.col1.lname$;
+$a$
+string c$ = wks.col1.comment$;
+$c$
+?wks.col1.type
+string a$ = wks.col2.lname$;
+$a$
+string c$ = wks.col2.comment$;
+$c$
+?wks.col2.type
+string a$ = wks.col3.lname$;
+$a$
+string c$ = wks.col3.comment$;
+$c$
+?wks.col3.type
+page.active$ = PlotKM;
+?wks.ncols
+string a$ = wks.col1.lname$;
+$a$
+string c$ = wks.col1.comment$;
+$c$
+?wks.col1.type
+string a$ = wks.col2.lname$;
+$a$
+string c$ = wks.col2.comment$;
+$c$
+?wks.col2.type
+string a$ = wks.col3.lname$;
+$a$
+string c$ = wks.col3.comment$;
+$c$
+?wks.col3.type
+string a$ = wks.col4.lname$;
+$a$
+string c$ = wks.col4.comment$;
+$c$
+?wks.col4.type
+string a$ = wks.col5.lname$;
+$a$
+string c$ = wks.col5.comment$;
+$c$
+?wks.col5.type
+string a$ = wks.col6.lname$;
+$a$
+string c$ = wks.col6.comment$;
+$c$
+?wks.col6.type
+string a$ = wks.col7.lname$;
+$a$
+string c$ = wks.col7.comment$;
+$c$
+?wks.col7.type

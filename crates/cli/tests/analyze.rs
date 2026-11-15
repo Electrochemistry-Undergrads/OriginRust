@@ -1287,7 +1287,34 @@ fn principal_component_analysis_runs_from_the_command_line() {
     assert!(!out.contains("Chi-square"), "{out}");
     let (ok, info, err) = sheaf(&["info", project.to_str().unwrap()]);
     assert!(ok, "{err}");
-    assert!(info.contains("Score PC1") && info.contains("Loading PC2"), "{info}");
+    assert!(info.contains("Principal Component 1") && info.contains("Coefficients of PC2"), "{info}");
+    // Origin's pca draws a scree plot, a loading plot and a biplot; a score plot is a switch.
+    for graph in ["Scree Plot", "Loading Plot", "Biplot"] {
+        assert!(info.contains(graph), "{graph}: {info}");
+    }
+    assert!(!info.contains("Scores Plot"), "{info}");
+    let more = dir.join("pca-more.sheaf");
+    let (ok, _, err) = sheaf(&[
+        "analyze",
+        "pca",
+        file,
+        "--y",
+        "a,b,c",
+        "--components",
+        "3",
+        "--score-plot",
+        "--x-component",
+        "2",
+        "--y-component",
+        "3",
+        "--no-biplot",
+        "--save",
+        more.to_str().unwrap(),
+    ]);
+    assert!(ok, "{err}");
+    let (ok, info, err) = sheaf(&["info", more.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(info.contains("Scores Plot") && info.contains("Loading Plot") && !info.contains("Biplot"), "{info}");
     let (ok, out, err) =
         sheaf(&["analyze", "pca", file, "--y", "a,b,c", "--covariance", "--components", "3", "--no-graph"]);
     assert!(ok, "{err}");

@@ -87,6 +87,8 @@ pub(crate) fn draw_plot(
     }
     if plot.kind == PlotKind::Box {
         draw_box(out, pd, geom);
+    } else if plot.kind.is_violin() {
+        crate::violin::draw_violin(out, pd, geom);
     } else if plot.kind.is_bar() {
         draw_columns(out, pd, geom);
     }
@@ -102,7 +104,7 @@ pub(crate) fn draw_plot(
     if pd.mask.is_some() && !plot.kind.is_bar() {
         draw_masked(out, pd, geom);
     }
-    if decor.labels.enable && plot.kind != PlotKind::Box {
+    if decor.labels.enable && !plot.kind.is_distribution() {
         draw_data_labels(out, pd, geom, m);
     }
 }

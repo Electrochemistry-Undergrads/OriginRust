@@ -679,6 +679,64 @@ against scipy's exact algorithm).
 - Not built: fitting a threshold, censored data, other families, a probability plot of several families on one
   graph.
 
+## 17 Principal component analysis (measured against Origin 2016)
+
+Statistics > Multivariate Analysis > Principal Component Analysis. Origin's X-Function is `pca`
+(`irng` input columns, `mtype` 0 correlation / 1 covariance, `npc` number of components, `missing` 0 listwise /
+1 pairwise, `std` standardize scores, `stat` descriptive statistics; outputs `rt` report sheet and `rd` score sheet).
+Runs: `tools/origin-ref/pca-suite1.lines.txt` (10 rows, 4 complete columns: correlation, covariance, standardized
+scores, descriptive statistics) and `pca-suite2.lines.txt` (12 rows, 5 columns with 3 missing numbers: the four
+combinations of correlation or covariance and listwise or pairwise). Raw outputs are local
+(`re-workspace/scratch/t29/pca*.out.txt`). The numerics are `crates/calc/src/pca.rs` (`nalgebra`'s symmetric
+eigen-decomposition), the tool `crates/core/src/analysis/multivariate.rs`, the command line
+`sheaf analyze pca`, the window Statistics > Multivariate Analysis > Principal Component Analysis...
+(`dialogs/multivariate_options.rs`).
+
+### 17.1 What Origin does (measured)
+
+- **Matrix.** Correlation matrix (default) or covariance matrix with divisor n - 1. Eigenvalues in descending
+  order, percent of variance `100 lambda / sum(lambda)` (Origin prints two decimals), cumulative percent.
+- **Missing values.** Listwise: a row with a missing number in any column is left out entirely; N, mean and SD of
+  every column are over the complete rows (the "missing" count is still per column). Pairwise: N, mean and SD are per
+  column over all its numbers, and each matrix entry uses the rows where both columns have a number, with the means
+  of those rows. The scores of a row that is not used are empty (listwise); with pairwise exclusion rows with a gap
+  also have empty scores (the run shows scores only for complete rows).
+- **Loadings are the eigenvectors** (unit length), not eigenvectors times sqrt of the eigenvalue.
+- **Sign.** Origin makes the components of each eigenvector add up to a positive number (checked on 8 data sets,
+  4 or 5 variables, both matrices); Sheaf does the same. A component whose sum is zero up to rounding would be
+  ambiguous; none occurred.
+- **Scores** are `(x - mean)` (covariance) or `(x - mean) / SD` (correlation) times the eigenvectors; `std` divides
+  each score column by `sqrt(eigenvalue)`, giving unit variance.
+- **Equality of eigenvalues, covariance analysis only.** For each k, the test that the last `p - k + 1` eigenvalues
+  are equal: Bartlett's chi-square `(n - 1 - (2p + 5)/6) (q ln(mean) - sum ln lambda)` over the `q` eigenvalues
+  left, `(q + 2)(q - 1)/2` degrees of freedom; the last row is 0, 0, 0. `n` is the largest column count (also with
+  pairwise exclusion).
+- **Origin also draws** three graphs (scree plot, loading plot, biplot) with the report.
+
+### 17.2 What Sheaf does
+
+The chosen columns are the variables (at least two), the chosen rows the cases. Options: correlation or covariance,
+listwise or pairwise, number of components (default 2, at most the number of columns), standardize scores, write
+scores, scree plot. Result sheet `PCA1` (one row per variable, the rows beyond that only for the scores): Variable,
+N, Missing, Mean, SD, Component, Component number, Eigenvalue, Percent of variance, Cumulative percent (and
+Chi-square, DF, Prob>Chi-square for a covariance analysis), Loading PC1..PCk, Correlation with each variable, Score
+PC1..PCk (the scores are in the rows of the input). The table printed on the command line is the eigenvalue
+table; the loadings are in the notes. The scree plot (eigenvalue against component number) is a new graph; one
+undo removes sheet and graph. A column without spread, fewer than two columns or fewer than two usable rows is refused.
+
+### 17.3 Fixtures and tolerances
+
+`crates/calc/tests/origin_pca.rs`: N, missing, mean and SD to 1e-12 relative; eigenvalues, loadings, scores and
+the equality tests to 1e-5 relative (Origin prints the eigenvalues and test statistics with six digits); percent of
+variance to 0.005 (two decimals printed). Hand-worked tests in `pca.rs` (two columns: eigenvalues `1 +- r`).
+
+### 17.4 Not measured
+
+- Origin's report sheet layout (Sheaf's is its own), the loading plot and biplot (not built: only the scree plot),
+  the dialog's labels and defaults, other output options (the component-number selection by Kaiser or percent
+  rule, the "Quantities to Compute" ticks), the behaviour of Origin on a column without spread or with fewer
+  rows than columns, and a sign rule for a component whose sum is exactly zero.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

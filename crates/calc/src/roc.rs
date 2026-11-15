@@ -168,7 +168,11 @@ pub fn roc(values: &[f64], positive: &[bool], options: &RocOptions) -> Result<Ro
     while i < cases.len() {
         let v = cases[i].0;
         while i < cases.len() && cases[i].0 == v {
-            if cases[i].1 { tp += 1 } else { fp += 1 }
+            if cases[i].1 {
+                tp += 1
+            } else {
+                fp += 1
+            }
             i += 1;
         }
         points.push(RocPoint { cutoff: sign * v, sensitivity: tp as f64 / mf, specificity: 1.0 - fp as f64 / nf });
@@ -207,7 +211,8 @@ mod tests {
         near(r.z, (5.0 / 6.0 - 0.5) / (1.0f64 / 27.0).sqrt(), 1e-12);
         // Curve: cut-offs inf, 5, 4, 3, 2, 1.
         let pts: Vec<(f64, f64)> = r.points.iter().map(|p| (1.0 - p.specificity, p.sensitivity)).collect();
-        let want = [(0.0, 0.0), (0.0, 1.0 / 3.0), (1.0 / 3.0, 2.0 / 3.0), (1.0 / 3.0, 1.0), (2.0 / 3.0, 1.0), (1.0, 1.0)];
+        let want =
+            [(0.0, 0.0), (0.0, 1.0 / 3.0), (1.0 / 3.0, 2.0 / 3.0), (1.0 / 3.0, 1.0), (2.0 / 3.0, 1.0), (1.0, 1.0)];
         assert_eq!(pts.len(), want.len());
         for (g, w) in pts.iter().zip(want) {
             near(g.0, w.0, 1e-15);
@@ -241,6 +246,9 @@ mod tests {
         assert_eq!((r.n_positive, r.n_negative), (1, 2));
         assert_eq!(roc(&[1.0, 2.0], &[true, true], &RocOptions::default()), Err(RocError::OneState));
         assert_eq!(roc(&[f64::NAN], &[true], &RocOptions::default()), Err(RocError::NoCases));
-        assert_eq!(roc(&[1.0, 2.0], &[true, false], &RocOptions { alpha: 0.0, ..Default::default() }), Err(RocError::BadAlpha));
+        assert_eq!(
+            roc(&[1.0, 2.0], &[true, false], &RocOptions { alpha: 0.0, ..Default::default() }),
+            Err(RocError::BadAlpha)
+        );
     }
 }

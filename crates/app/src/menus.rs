@@ -1100,7 +1100,13 @@ fn statistics_menu() -> Vec<Entry> {
             ],
         ),
         grey_sub("&Survival Analysis", &["Kaplan-Meier Estimator..."]),
-        grey_sub("&Multivariate Analysis", &["Principal Component Analysis...", "K-Means Cluster Analysis..."]),
+        sub(
+            "&Multivariate Analysis",
+            vec![
+                item("Principal Component Analysis...", Cmd::Analyze(AnalysisKind::Pca)),
+                grey("K-Means Cluster Analysis..."),
+            ],
+        ),
         sub(
             "&Power and Sample Size",
             vec![

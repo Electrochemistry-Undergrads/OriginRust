@@ -47,6 +47,7 @@ pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
+pub use multivariate::PcaSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
 
@@ -750,6 +751,8 @@ pub enum Tool {
     DistFit(DistFitSpec),
     /// Probability plot and Q-Q plot against a distribution family; makes a graph.
     ProbPlot(ProbPlotSpec),
+    /// Statistics > Multivariate Analysis > Principal Component Analysis (T29, `docs/spec/statistics.md` section 17).
+    Pca(PcaSpec),
     AverageCurves(AverageSpec),
     Intersect(IntersectSpec),
     PolygonArea,
@@ -824,6 +827,7 @@ impl Tool {
                 ProbPlotKind::Probability => "Probability plot",
                 ProbPlotKind::QQ => "Q-Q plot",
             },
+            Tool::Pca(_) => "Principal component analysis",
             Tool::AverageCurves(_) => "Average multiple curves",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "Polygon area",
@@ -875,6 +879,7 @@ impl Tool {
                 ProbPlotKind::Probability => "ProbPlot",
                 ProbPlotKind::QQ => "QQPlot",
             },
+            Tool::Pca(_) => "PCA",
             Tool::AverageCurves(_) => "AverageResult",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "PolygonArea",
@@ -1434,6 +1439,7 @@ mod categorical;
 mod curves;
 mod dist;
 mod manip;
+mod multivariate;
 mod power;
 mod statistics;
 pub use manip::{
@@ -1612,6 +1618,13 @@ impl Project {
             }
             Tool::DistFit(_) | Tool::ProbPlot(_) => {
                 let out = dist::run(&request.tool, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::Pca(_) => {
+                let out = multivariate::run(&request.tool, &inputs)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

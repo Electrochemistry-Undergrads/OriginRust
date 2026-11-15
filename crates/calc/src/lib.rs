@@ -56,8 +56,6 @@ pub use baseline::{BaselineMethod, subtract_baseline, subtract_constant, subtrac
 pub use bin2d::{AxisBins, AxisLayout, Bin, Bin2d, Bin2dOptions, Bin2dStat, axis_layout, bin2d};
 pub use coherence::{CoherenceOptions, CoherenceResult, CoherenceWindow, coherence, coherence_window};
 pub use correlation::{Corr, CorrKind, CorrMatrix, correlation, correlation_matrix};
-pub use pca::{EigenTest, Pca, PcaError, PcaOptions, pca};
-pub use roc::{Roc, RocError, RocOptions, RocPoint, roc};
 pub use crosstab::{ChiSquareTest, Crosstab, CrosstabError, Fisher};
 pub use curvemath::{CurveMathResult, CurveOp, column_math, curve_math_const, curve_math_ref};
 pub use curves::{
@@ -101,6 +99,7 @@ pub use nptests::{
     SIGN_EXACT_MAX_N, SignTest, friedman, ks_two_sample, median_test, sign_test,
 };
 pub use outlier::{DixonQ, Grubbs, OutlierError, OutlierSide, dixon_q, grubbs};
+pub use pca::{EigenTest, Pca, PcaError, PcaOptions, pca};
 pub use peakchain::{
     BaselineStat, ChainBaseline, ChainError, ChainOptions, ChainResult, FindMethod, FindOptions, LimitMode, PeakInfo,
     analyze_peaks, auto_minima_anchors, find_peak_indices, integrate_peaks,
@@ -110,6 +109,7 @@ pub use power::{
     PowerError, PowerTest, SampleSizes, anova_power, anova_powers, anova_sample_sizes, pnf, pnt, t_power, t_powers,
     t_sample_sizes,
 };
+pub use roc::{Roc, RocError, RocOptions, RocPoint, roc};
 pub use signal::{convolve, correlate, hilbert};
 pub use smooth::{Boundary, LocalSpan, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{RowStats, Stats, mean_confidence_limits, quantile_origin, row_stats, stats};

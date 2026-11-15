@@ -109,6 +109,8 @@ pub enum AnalysisKind {
     DistFit,
     ProbPlot,
     QQPlot,
+    /// Statistics > Multivariate Analysis and ROC Curve (options in `multivariate_options.rs`).
+    Pca,
     /// Statistics > Descriptive Statistics > Cross Tabulation.
     Crosstab,
     /// Analysis > Mathematics: Average Multiple Curves, Intersect and Polygon Area.
@@ -201,6 +203,7 @@ impl AnalysisKind {
             AnalysisKind::DistFit => "Distribution Fit...",
             AnalysisKind::ProbPlot => "Probability Plot...",
             AnalysisKind::QQPlot => "Q-Q Plot...",
+            AnalysisKind::Pca => "Principal Component Analysis...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
             AnalysisKind::AverageCurves => "Average Multiple Curves...",
             AnalysisKind::Intersect => "Intersect...",
@@ -267,6 +270,7 @@ impl AnalysisKind {
             "distfit" => AnalysisKind::DistFit,
             "probplot" => AnalysisKind::ProbPlot,
             "qqplot" => AnalysisKind::QQPlot,
+            "pca" => AnalysisKind::Pca,
             "crosstab" => AnalysisKind::Crosstab,
             "average-curves" => AnalysisKind::AverageCurves,
             "intersect" => AnalysisKind::Intersect,
@@ -614,6 +618,7 @@ pub struct AnalysisDialog {
     trace_interp: TraceInterpSpec,
     stats: StatsOptions,
     dist: super::dist_options::DistOptions,
+    multi: super::multivariate_options::MultiOptions,
     curves: super::math_curves::CurveOptions,
     bin2d: super::bin2d_options::Bin2dState,
     discfreq: DiscreteFreqSpec,
@@ -1110,6 +1115,7 @@ impl AnalysisDialog {
             chain_fit_linear: true,
             stats,
             dist: Default::default(),
+            multi: Default::default(),
             curves: Default::default(),
             bin2d: Default::default(),
             discfreq: Default::default(),
@@ -1426,6 +1432,7 @@ impl AnalysisDialog {
             | AnalysisKind::MedianFilter => self.manip.tool(self.kind),
             AnalysisKind::Differentiate => Tool::Differentiate(self.diff),
             AnalysisKind::DistFit | AnalysisKind::ProbPlot | AnalysisKind::QQPlot => self.dist.tool(self.kind)?,
+            AnalysisKind::Pca => self.multi.tool(self.kind)?,
             AnalysisKind::AverageCurves => self.curves.average_tool(),
             AnalysisKind::Intersect => self.curves.intersect_tool(),
             AnalysisKind::PolygonArea => Tool::PolygonArea,
@@ -2349,6 +2356,7 @@ impl AnalysisDialog {
                 ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
             }
             AnalysisKind::DistFit | AnalysisKind::ProbPlot | AnalysisKind::QQPlot => self.dist.options(ui, self.kind),
+            AnalysisKind::Pca => self.multi.options(ui, self.kind),
             AnalysisKind::DiscreteFreq => {
                 let d = &mut self.discfreq;
                 egui::CollapsingHeader::new("Quantities to Compute").default_open(true).show(ui, |ui| {
@@ -2479,6 +2487,7 @@ impl AnalysisDialog {
             AnalysisKind::ReduceDup => "reducedup",
             // Origin's X-Function names for these were not looked up; the title shows the tool alone.
             AnalysisKind::Crosstab
+            | AnalysisKind::Pca
             | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
@@ -2550,6 +2559,7 @@ impl AnalysisDialog {
             AnalysisKind::DistFit => "Fit distributions to the input columns by maximum likelihood and test the fit",
             AnalysisKind::ProbPlot => "Plot the data against the plotting positions on a probability axis",
             AnalysisKind::QQPlot => "Plot the quantiles of a distribution against the ordered data",
+            AnalysisKind::Pca => "Describe the variation of several columns by uncorrelated components",
             AnalysisKind::Crosstab => {
                 "Count the cases of every combination of two categorical variables and test their independence"
             }
@@ -2628,6 +2638,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::ProbPlot | AnalysisKind::QQPlot => {
                 "The plotted points and the reference line in a new sheet, and a graph"
+            }
+            AnalysisKind::Pca => {
+                "Eigenvalues, percent of variance, loadings and scores in a new sheet, and a scree plot"
             }
             AnalysisKind::Crosstab => {
                 "Counts, percentages, expected counts and the chi-square and Fisher tests in a new sheet"

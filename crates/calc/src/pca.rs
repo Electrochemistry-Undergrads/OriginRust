@@ -148,7 +148,10 @@ pub fn pca(columns: &[Vec<f64>], options: &PcaOptions) -> Result<Pca, PcaError> 
     for i in 0..p {
         for j in 0..=i {
             let (a, b): (Vec<f64>, Vec<f64>) = if options.pairwise {
-                (0..rows).filter(|&r| at(i, r).is_finite() && at(j, r).is_finite()).map(|r| (at(i, r), at(j, r))).unzip()
+                (0..rows)
+                    .filter(|&r| at(i, r).is_finite() && at(j, r).is_finite())
+                    .map(|r| (at(i, r), at(j, r)))
+                    .unzip()
             } else {
                 complete.iter().map(|&r| (at(i, r), at(j, r))).unzip()
             };
@@ -228,13 +231,29 @@ pub fn pca(columns: &[Vec<f64>], options: &PcaOptions) -> Result<Pca, PcaError> 
                 let logs: f64 = rest.iter().map(|l| l.ln()).sum();
                 let chi = (n - 1.0 - (2.0 * p as f64 + 5.0) / 6.0) * (q * (rest.iter().sum::<f64>() / q).ln() - logs);
                 let df = (q + 2.0) * (q - 1.0) / 2.0;
-                let pv =
-                    if chi.is_finite() { ChiSquared::new(df).map_or(f64::NAN, |d| d.sf(chi.max(0.0))) } else { f64::NAN };
+                let pv = if chi.is_finite() {
+                    ChiSquared::new(df).map_or(f64::NAN, |d| d.sf(chi.max(0.0)))
+                } else {
+                    f64::NAN
+                };
                 EigenTest { chi_square: chi, df, p: pv }
             })
             .collect()
     });
-    Ok(Pca { count, missing, mean, sd, correlation: cor, matrix, eigenvalues, percent, cumulative, loadings, scores, tests })
+    Ok(Pca {
+        count,
+        missing,
+        mean,
+        sd,
+        correlation: cor,
+        matrix,
+        eigenvalues,
+        percent,
+        cumulative,
+        loadings,
+        scores,
+        tests,
+    })
 }
 
 #[cfg(test)]

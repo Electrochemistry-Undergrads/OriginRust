@@ -733,6 +733,17 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 graph: !no_graph,
             })),
         ),
+        AnalyzeTool::Pca { target, covariance, pairwise, components, standardize_scores, no_scores, no_graph } => (
+            target,
+            Job::Tool(Tool::Pca(analysis::PcaSpec {
+                correlation: !covariance,
+                pairwise,
+                components,
+                standardize_scores,
+                scores: !no_scores,
+                scree: !no_graph,
+            })),
+        ),
         AnalyzeTool::Sort { target, by, descending } => {
             whole_sheet_only(&target, "sort")?;
             (target, Job::Sort { by, descending })

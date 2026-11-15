@@ -1213,3 +1213,30 @@ fn discfreq_counts_the_distinct_values() {
     let (ok, _, err) = sheaf(&["analyze", "discfreq", file, "--y", "kind", "--no-count"]);
     assert!(!ok && err.contains("at least one"), "{err}");
 }
+
+/// Principal component analysis (spec `statistics.md` section 17). The numbers are checked against Origin in
+/// `crates/calc/tests/origin_pca.rs`; here the wiring.
+#[test]
+fn principal_component_analysis_runs_from_the_command_line() {
+    let dir = scratch("pca");
+    let path = dir.join("table.csv");
+    std::fs::write(&path, "a,b,c\n1,2.3,3\n2,3.9,1\n3,6.4,4\n4,7.8,1\n5,10.4,5\n6,11.9,9\n7,14.2,2\n8,15.8,6\n")
+        .unwrap();
+    let file = path.to_str().unwrap();
+    let project = dir.join("pca.sheaf");
+    let (ok, out, err) = sheaf(&["analyze", "pca", file, "--y", "a,b,c", "--save", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    for name in ["Eigenvalue", "Percent of variance", "PC1", "PC3", "PCA1", "Loadings of PC1"] {
+        assert!(out.contains(name), "{name}: {out}");
+    }
+    assert!(!out.contains("Chi-square"), "{out}");
+    let (ok, info, err) = sheaf(&["info", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(info.contains("Score PC1") && info.contains("Loading PC2"), "{info}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "pca", file, "--y", "a,b,c", "--covariance", "--components", "3", "--no-graph"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Chi-square") && out.contains("covariance"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "pca", file, "--y", "a"]);
+    assert!(!ok && err.contains("at least two columns"), "{err}");
+}

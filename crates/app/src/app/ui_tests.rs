@@ -4637,6 +4637,28 @@ fn the_descriptive_menu_fits_distributions() {
     assert_eq!(h.state().doc.undo_label(), Some("Distribution fit"));
 }
 
+/// Statistics > Multivariate Analysis > Principal Component Analysis...: eigenvalues and loadings in a result
+/// sheet, a scree plot as a graph; one undo removes both.
+#[test]
+fn the_multivariate_menu_runs_a_principal_component_analysis() {
+    let mut h = start(vec![data_file("pca")]);
+    show_window(&mut h, "Book1 - sample");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Multivariate Analysis", "Principal Component Analysis..."]);
+    assert!(h.state().analysis.is_some(), "the PCA window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, eigen) = result_column(&h, "Eigenvalue");
+    assert!(sheet.starts_with("PCA"), "{sheet}");
+    // Two columns that are perfectly anti-correlated: eigenvalues 2 and 0, loadings of equal size.
+    assert_eq!(eigen.len(), 2);
+    assert!((eigen[0] - 2.0).abs() < 1e-9 && eigen[1].abs() < 1e-9, "{eigen:?}");
+    let (_, l1) = result_column(&h, "Loading PC1");
+    assert!((l1[0].abs() - 0.5f64.sqrt()).abs() < 1e-9 && (l1[0].abs() - l1[1].abs()).abs() < 1e-9, "{l1:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Principal component analysis"));
+}
+
 /// Statistics > Descriptive Statistics > Probability Plot... and Q-Q Plot...: a result sheet and a graph with
 /// points and a reference line; one undo removes both.
 #[test]

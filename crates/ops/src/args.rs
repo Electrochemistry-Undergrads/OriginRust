@@ -2001,6 +2001,30 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Principal component analysis of the --y columns (the variables): eigenvalues, percent of variance,
+    /// loadings and scores; makes a scree plot as a graph.
+    Pca {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Analyze the covariance matrix instead of the correlation matrix.
+        #[arg(long)]
+        covariance: bool,
+        /// Leave missing values out pairwise instead of dropping the whole row.
+        #[arg(long)]
+        pairwise: bool,
+        /// Number of components whose loadings and scores are written.
+        #[arg(long, default_value_t = 2)]
+        components: usize,
+        /// Divide each column of scores by the square root of its eigenvalue.
+        #[arg(long)]
+        standardize_scores: bool,
+        /// Do not write the scores.
+        #[arg(long)]
+        no_scores: bool,
+        /// Do not make the scree plot.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Sort the rows of the sheet by one column.
     Sort {
         #[command(flatten)]

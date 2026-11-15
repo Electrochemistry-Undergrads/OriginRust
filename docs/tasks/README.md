@@ -108,7 +108,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T55](T55-iir-fir-filters.md) | IIR Filter (Butterworth, Chebyshev I/II, elliptic) and FIR Filter (window, least squares) design and application | L | done, merged 2026-11-15 (analysis-tools 17, `iir-filter`/`fir-filter`, macOS); left: Origin measurements, SOS/ZPK/state-space/coefficient output sheets, preview panels, custom FIR window, `dfilterapply`; Bessel is not an Origin method |
 | [T57](T57-deconvolution-stft.md) | Deconvolution and STFT (Signal Processing) | M | claimed 2026-11-15 (`deconv-stft`, Claude macOS "violin") |
 | [T56](T56-user-graph-templates.md) | Save Template As and Plot > User Templates (a graph's look without data, applied to new columns; CLI `--template`) | M | open; stopped 2026-11-15: unverified core/io start on remote branch `user-templates` (`449ef7b`), free to continue or restart |
-| [T58](T58-significance-plot.md) | Multiple comparisons plot with significance brackets | M | claimed 2026-11-15 (`significance-plot`, macOS) |
+| [T58](T58-significance-plot.md) | Multiple comparisons plot with significance brackets | M | done 2026-11-15 (statistics 23, `significance-plot`, macOS); left: two-way ANOVA, paired and one-sample, Origin measurements, editable brackets |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

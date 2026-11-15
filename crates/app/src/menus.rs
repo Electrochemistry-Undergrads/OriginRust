@@ -159,6 +159,8 @@ pub enum Cmd {
     },
     StackPanels,
     LabelPanels,
+    /// Statistics > Multiple Comparisons Plot... (T58).
+    ComparisonPlot,
     /// Add / Edit Trendline... on a plot of the active layer.
     Trendline {
         layer: usize,
@@ -1262,6 +1264,7 @@ fn statistics_menu() -> Vec<Entry> {
                 grey("Repeated Measures ANOVA..."),
             ],
         ),
+        item("Multiple Comparisons Plot...", Cmd::ComparisonPlot),
         sub(
             "&Nonparametric Tests",
             vec![
@@ -2224,6 +2227,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::PlotPanels { book: book?, columns: c.selected.to_vec(), rows: *rows, cols: *cols }
         }
         Cmd::StackPanels => Action::StackPanels { book: book?, columns: c.selected.to_vec() },
+        Cmd::ComparisonPlot => Action::ComparisonPlot { book: book?, sheet: None },
         Cmd::LabelPanels => Action::LabelPanels { book: book?, columns: c.selected.to_vec() },
         Cmd::Trendline { layer, plot, edit } => {
             Action::Trendline { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, plot: *plot, edit: *edit }

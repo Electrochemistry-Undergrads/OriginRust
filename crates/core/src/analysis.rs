@@ -1417,6 +1417,29 @@ pub(crate) fn resolve_rows(rows: RowRange, short: &str, x: &[f64], n: usize) -> 
     }
 }
 
+/// The groups behind the report of a one-way ANOVA with a means comparison and of a two-sample t-test, kept on the
+/// report sheet for the Multiple Comparisons Plot (T58).
+fn comparison_source(tool: &Tool, inputs: &[Input<'_>]) -> Option<crate::compplot::ComparisonSource> {
+    use crate::compplot::{ComparisonGroup, ComparisonKind, ComparisonSource};
+    let kind = match tool {
+        Tool::Anova(spec) if spec.comparison.is_some() => ComparisonKind::OneWayAnova,
+        Tool::TTest(TTestSpec { kind: TTestKind::TwoSample { .. }, .. }) => ComparisonKind::TwoSampleTTest,
+        _ => return None,
+    };
+    let units = match inputs.first() {
+        Some(f) if inputs.iter().all(|i| i.units == f.units) => f.units.clone(),
+        _ => String::new(),
+    };
+    let groups = inputs
+        .iter()
+        .map(|i| ComparisonGroup {
+            name: i.name.clone(),
+            values: i.ys().iter().copied().filter(|v| v.is_finite()).collect(),
+        })
+        .collect();
+    Some(ComparisonSource { kind, groups, units })
+}
+
 /// A sheet name that the workbook does not use yet: `prefix` followed by the smallest free number.
 pub(crate) fn free_sheet_name(sheets: &[Worksheet], prefix: &str) -> String {
     (1..)
@@ -2950,6 +2973,7 @@ impl Project {
 
         // Everything was computed; now change the project.
         let count = request.columns.len();
+        let comparison_source = comparison_source(&request.tool, &inputs);
         drop(inputs);
         let mut new_columns = Vec::with_capacity(beside.len());
         let mut added_names: Vec<String> = Vec::new();
@@ -3010,6 +3034,7 @@ impl Project {
                 sheet_column_ids.push(id);
             }
             sheet_name = ws.name.clone();
+            ws.comparison_source = comparison_source;
             let b = self.workbook_mut(book_id).expect("workbook exists");
             b.sheets.push(ws);
             new_sheet = Some(b.sheets.len() - 1);

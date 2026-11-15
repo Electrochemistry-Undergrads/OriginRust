@@ -142,9 +142,23 @@ fn graph_geometry_once(project: &Project, g: &Graph, pds: &[LayerData], m: &dyn 
 ///   that the end bars are not cut; a linear Y axis over column plots reaches down to their base.
 /// - An X axis over a date or time column gets date tick labels (see [`data::date_axis`]).
 /// - An axis with a label column shows that column's cells at whole-number ticks.
-fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotData]) -> ResolvedAxis {
+fn resolve_dim(
+    project: &Project,
+    axis: &Axis,
+    dim: Dim,
+    sources: &[&data::PlotData],
+    layer: &sheaf_core::graph::Layer,
+) -> ResolvedAxis {
     let first = sources.first().copied();
     let mut range = data::axis_range(sources.iter().copied(), dim, axis.scale);
+    // Significance brackets (T58) are above the data: the Y axis grows to hold them unless its top is fixed.
+    if dim == Dim::Y
+        && axis.max.is_none()
+        && axis.scale == sheaf_core::graph::ScaleKind::Linear
+        && let Some(top) = crate::brackets::needed_top(layer, sources)
+    {
+        range = range.map(|(lo, hi)| (lo, hi.max(top)));
+    }
     let boxes: Vec<&data::BoxStats> = sources.iter().filter_map(|pd| pd.boxed.as_ref()).collect();
     let ridges: Vec<&crate::ridgeline::RidgeData> = sources.iter().filter_map(|pd| pd.ridge.as_ref()).collect();
     let mut resolved = if dim == Dim::Y && !ridges.is_empty() && axis.scale == sheaf_core::graph::ScaleKind::Linear {
@@ -273,11 +287,11 @@ fn group_geometry(
     let shared = |dim: Dim, axis: &Axis| {
         let sources: Vec<&data::PlotData> =
             members.iter().filter(|&&i| shares(i, dim)).flat_map(|&i| pds[i].plots.iter()).collect();
-        resolve_dim(project, axis, dim, &sources)
+        resolve_dim(project, axis, dim, &sources, rl)
     };
     let own = |i: usize, dim: Dim, axis: &Axis| {
         let sources: Vec<&data::PlotData> = pds[i].plots.iter().collect();
-        resolve_dim(project, axis, dim, &sources)
+        resolve_dim(project, axis, dim, &sources, &g.layers[i])
     };
     let spoke_axis = |i: usize, axis: &Axis| match g.layers[i].coords.polar() {
         Some(p) if p.radar => {
@@ -867,6 +881,7 @@ fn layer_scene(
     }
     if waterfall.is_none() && layer.display.show_data {
         crate::slope::draw(out, objects, project, layer, index, pds, geom, m);
+        crate::brackets::draw(out, layer, pds, geom, m);
     }
     draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
     scene

@@ -58,6 +58,55 @@ fn freq_unit(unit: FreqUnitArg) -> analysis::FreqUnit {
     }
 }
 
+/// The multiple comparisons plot a `sheaf analyze anova` or `ttest` call asked for (`--comparison-plot`), checked.
+pub fn comparison_plot_request(tool: &AnalyzeTool) -> Result<Option<crate::analyze::ComparisonPlotRequest>> {
+    use sheaf_core::compplot::{BracketLabels, ComparisonErrorBar, ComparisonPlotOptions, ComparisonPlotType};
+    let (plot, what) = match tool {
+        AnalyzeTool::Anova { plot, comparison, .. } => {
+            if plot.comparison_plot.is_some() && comparison_of(*comparison).is_none() {
+                bail!("--comparison-plot needs a means comparison: choose --comparison other than none");
+            }
+            (plot, "anova")
+        }
+        AnalyzeTool::Ttest { plot, test, .. } => {
+            if plot.comparison_plot.is_some() && *test != TTestKindArg::TwoSample {
+                bail!("--comparison-plot is made for the two-sample t-test (--test two-sample)");
+            }
+            (plot, "t-test")
+        }
+        _ => return Ok(None),
+    };
+    let Some(path) = &plot.comparison_plot else { return Ok(None) };
+    if !(plot.threshold > 0.0 && plot.threshold <= 1.0) {
+        bail!("--threshold must lie between 0 and 1, not {}", plot.threshold);
+    }
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    if !matches!(ext.as_str(), "png" | "svg" | "pdf") {
+        bail!("--comparison-plot writes .png, .svg or .pdf, not '{}' (for the {what} plot)", path.display());
+    }
+    let options = ComparisonPlotOptions {
+        plot_type: match plot.plot_type {
+            ComparisonPlotTypeArg::Bar => ComparisonPlotType::Bar,
+            ComparisonPlotTypeArg::Box => ComparisonPlotType::Box,
+            ComparisonPlotTypeArg::Violin => ComparisonPlotType::Violin,
+            ComparisonPlotTypeArg::Scatter => ComparisonPlotType::Scatter,
+        },
+        error_bar: match plot.error_bar {
+            ErrorBarArg::Sd => ComparisonErrorBar::Sd,
+            ErrorBarArg::Sem => ComparisonErrorBar::Sem,
+            ErrorBarArg::Ci95 => ComparisonErrorBar::Ci95,
+        },
+        labels: match plot.labels {
+            BracketLabelsArg::Asterisks => BracketLabels::Asterisks,
+            BracketLabelsArg::PValues => BracketLabels::PValues,
+        },
+        significant_only: !plot.all_pairs,
+        threshold: plot.threshold,
+        pairs: Vec::new(),
+    };
+    Ok(Some(crate::analyze::ComparisonPlotRequest { path: path.clone(), options }))
+}
+
 pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
     Ok(match tool {
         AnalyzeTool::Integrate { target, baseline, absolute, no_cumulative, ranges, row_ranges } => {
@@ -653,7 +702,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             spec.level = level;
             (target, Job::Tool(Tool::Statistics(spec)))
         }
-        AnalyzeTool::Ttest { target, test, mean, difference, unequal, tail, alpha } => {
+        AnalyzeTool::Ttest { target, test, mean, difference, unequal, tail, alpha, .. } => {
             let kind = match test {
                 TTestKindArg::OneSample => analysis::TTestKind::OneSample { mean },
                 TTestKindArg::TwoSample => analysis::TTestKind::TwoSample { equal_variance: !unequal, difference },
@@ -720,7 +769,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::PropTest(spec)))
         }
-        AnalyzeTool::Anova { target, comparison, control, alpha } => {
+        AnalyzeTool::Anova { target, comparison, control, alpha, .. } => {
             if control == 0 {
                 bail!("--control counts the groups from 1");
             }

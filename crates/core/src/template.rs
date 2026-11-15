@@ -580,6 +580,8 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             labels: Vec::new(),
             shapes: Vec::new(),
             slopes: Vec::new(),
+            brackets: Vec::new(),
+            comparison: None,
             palette,
             default_line: LineStyle::solid(Color::BLACK, 0.5),
             default_symbol: SymbolStyle {
@@ -844,6 +846,8 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
     l.labels.clear();
     l.shapes.clear();
     l.slopes.clear();
+    l.brackets.clear();
+    l.comparison = None;
     l.plot_offsets.clear();
     // The right axis has curves of its own: they are not stacked, and its values are shown even
     // when the stacked parent hides its own (offset) Y values.

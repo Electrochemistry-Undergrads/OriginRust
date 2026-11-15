@@ -939,6 +939,61 @@ pub struct TargetArgs {
     pub read: ReadOptions,
 }
 
+/// What the groups of a multiple comparisons plot are drawn as.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ComparisonPlotTypeArg {
+    /// Columns of the group means.
+    Bar,
+    Box,
+    Violin,
+    /// The raw points with the mean and its error bar.
+    Scatter,
+}
+
+/// The error bar of a bar or scatter multiple comparisons plot.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ErrorBarArg {
+    /// One standard deviation.
+    Sd,
+    /// One standard error of the mean.
+    Sem,
+    /// Half the 95 % confidence interval of the mean.
+    Ci95,
+}
+
+/// How the brackets of a multiple comparisons plot are labelled.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum BracketLabelsArg {
+    /// `*` p < 0.05, `**` < 0.01, `***` < 0.001, `****` < 0.0001, `ns` otherwise.
+    Asterisks,
+    /// `p = 0.0123`, `p < 0.0001`.
+    PValues,
+}
+
+/// The multiple comparisons plot (T58) that a one-way ANOVA with a means comparison or a two-sample t-test can draw.
+#[derive(Args, Debug, Clone)]
+pub struct ComparisonPlotArgs {
+    /// Also draw the multiple comparisons plot of the report to this figure file (.png, .svg or .pdf): the groups
+    /// with significance brackets between the compared pairs. The graph stays in the project (--save).
+    #[arg(long, value_name = "OUT")]
+    pub comparison_plot: Option<PathBuf>,
+    /// The plot's groups: bar (means), box, violin or scatter (raw points).
+    #[arg(long, value_enum, default_value_t = ComparisonPlotTypeArg::Bar)]
+    pub plot_type: ComparisonPlotTypeArg,
+    /// Error bars of the bar and scatter plots.
+    #[arg(long, value_enum, default_value_t = ErrorBarArg::Sd)]
+    pub error_bar: ErrorBarArg,
+    /// Bracket labels.
+    #[arg(long, value_enum, default_value_t = BracketLabelsArg::Asterisks)]
+    pub labels: BracketLabelsArg,
+    /// Bracket every compared pair, not only those with p below --threshold.
+    #[arg(long)]
+    pub all_pairs: bool,
+    /// The p-value below which a pair counts as significant.
+    #[arg(long, default_value_t = 0.05)]
+    pub threshold: f64,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum TTestKindArg {
     /// Each column against --mean.
@@ -2042,6 +2097,8 @@ pub enum AnalyzeTool {
         /// Significance level.
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
+        #[command(flatten)]
+        plot: ComparisonPlotArgs,
     },
     /// Test of variance: each column against a hypothesized variance (chi-square, --variance) or two columns
     /// as a ratio of variances (F test, --ratio, first over second). Two --y columns, or --ratio, make the
@@ -2124,6 +2181,8 @@ pub enum AnalyzeTool {
         /// Significance level.
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
+        #[command(flatten)]
+        plot: ComparisonPlotArgs,
     },
     /// Power or sample size of a t test or the one-way ANOVA (Origin's Power and Sample Size tools). Needs no
     /// data file: give --sizes to get the power of those sample sizes, or --powers to get the smallest sample

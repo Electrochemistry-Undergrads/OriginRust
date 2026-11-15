@@ -262,6 +262,12 @@ open. History of what was merged when is in `git log` (not repeated here).
   long-name-and-unit title, per-axis or shared range, one line per row breaking at missing cells, coloured by a numeric
   column (hexbin's colour scale, now shared) or by group (legend), Plot Details Parallel tab (graphing.md 14.25). Parallel
   Sets, curvature and axis reordering not done.
+- T58 multiple comparisons plot (2026-11-15, macOS, no Origin): the report sheet of a one-way ANOVA with a means
+  comparison or a two-sample t-test (button in the sheet tab strip, Statistics > Multiple Comparisons Plot...) makes a graph
+  of the groups (bar, box, violin, scatter; SD, SEM or 95 % CI error bars) with significance brackets (asterisks or
+  p-values read from the report, significant only with a threshold), stacked by span with the Y axis growing;
+  `analyze anova|ttest --comparison-plot OUT`, MCP, not written to .opj (warning). Documents only, unmeasured;
+  two-way, paired and one-sample left (statistics.md 23).
 - T52 slope annotation (2026-11-15, macOS, no Origin): Tools toolbar "Slope" picks two points of one plot
   (Data Reader snapping); a segment, dashed rise/run legs and "slope = ..." linked to those rows and the plot's
   X/Y columns; per decade on log axes (Tafel), units from the drawn axes' columns; follows moved plots;
@@ -354,7 +360,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `cell-notes` | Claude macOS, "mac-multipdf" | T36 worksheet cell notes (Origin 2022): core per-sheet notes kept through row/column ops and sort, grid corner tab + hover popup, cell menu Add/Edit/Delete Note, note editor | claimed 2026-11-15; core worksheet + sheetops note upkeep, grid.rs body_cell, menus/app/dialogs; no cond-format/frozen/filter/Go To, plot, stats or other sessions' scopes |
 | `t48-origin` | Claude Windows, "continue all tasks" | T48 leftover: Origin 2016 measurements of the graph Data menu (Mask/Remove Bad/Move Data Points, graphing.md 20.4) and Sheaf following them; core graph_data.rs, app data_tools/reader/graph_view Data modes only | claimed 2026-11-15; no shape-resize, slope annotation, browser, stats, MCP or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
-| `significance-plot` | Claude macOS, "mac-multipdf" | T58 multiple comparisons plot (Origin 2027): graph from one-way ANOVA means comparison / two-sample t-test with error bars and significance brackets (asterisks or p-values), report-sheet entry + dialog, CLI/MCP | claimed 2026-11-15; reads statistics results only (no computation changes), new plot bracket module, app report-sheet action/dialog, ops; no T53-T57 or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

@@ -105,6 +105,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T52](T52-slope-annotation.md) | Slope annotation between two data points (per decade on log axes) | M | claimed 2026-11-15 (`slope-annotation`, macOS) |
 | [T53](T53-set-multiple-columns.md) | Set Multiple Columns Values (Ctrl+Shift+Q): one formula over the selected columns with `j` | M | done, merged 2026-11-15 (expression-language 7); left: Origin measurements of `j` |
 | [T54](T54-save-window-as.md) | Save Window As (`.sheafbook`/`.sheafgraph` window files opened by appending) and Recent Books / Recent Graphs | M | claimed 2026-11-15 (`save-window`, Claude macOS "mac-savewin") |
+| [T55](T55-iir-fir-filters.md) | IIR Filter (Butterworth, Chebyshev, elliptic, Bessel) and FIR Filter design and application | L | claimed 2026-11-15 (`digital-filters`, Claude macOS "violin") |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

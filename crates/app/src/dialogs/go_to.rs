@@ -2,7 +2,7 @@
 //! navigates to rows, columns or a cell without changing worksheet data.
 
 use eframe::egui;
-use sheaf_core::{WindowId, Worksheet};
+use sheaf_core::{Column, WindowId, Worksheet};
 
 /// The window that asks for the cell to go to.
 pub struct GoToDialog {
@@ -50,13 +50,14 @@ impl GoToDialog {
     pub fn show(&mut self, ctx: &egui::Context, sheet: &Worksheet) -> GoToOutcome {
         let mut open = true;
         let mut outcome = GoToOutcome::Open;
+        let picker_was_open = egui::Popup::is_any_open(ctx);
         egui::Window::new("Go To").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
             let current = self
                 .current
                 .and_then(|(c, r)| sheet.columns.get(c).map(|column| format!("{}[{}]", column.short_name, r + 1)))
                 .unwrap_or_else(|| "none".into());
             ui.label(format!("Size = {} × {}, Current = {current}", sheet.columns.len(), self.row_capacity));
-            ui.weak("Column short name or number. 0 selects the last column or last data row.");
+            ui.weak("Column name or number. 0 selects the last column or last data row.");
             egui::Grid::new("go_to_grid").num_columns(2).show(ui, |ui| {
                 let label = ui.label("Go to Column");
                 ui.horizontal(|ui| {
@@ -66,7 +67,33 @@ impl GoToDialog {
                         column.request_focus();
                         self.first_frame = false;
                     }
-                    ui.add_enabled(false, egui::Button::new("▶")).on_hover_text("Choose a column");
+                    ui.menu_button("▶", |ui| {
+                        egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
+                            for column in &sheet.columns {
+                                let label = format!(
+                                    "{}({}): {}",
+                                    column.short_name,
+                                    column.designation.tag(),
+                                    column.long_name
+                                );
+                                if ui.button(label).clicked() {
+                                    self.column = column_reference(column);
+                                    self.error = None;
+                                    ui.close();
+                                }
+                            }
+                        });
+                        ui.separator();
+                        if ui.button("Reset").clicked() {
+                            self.column.clear();
+                            self.error = None;
+                            ui.close();
+                        }
+                        ui.separator();
+                        ui.add_enabled(false, egui::Button::new("Select Columns..."));
+                    })
+                    .response
+                    .on_hover_text("Choose a column");
                 });
                 ui.end_row();
                 let label = ui.label("Go to Row");
@@ -77,7 +104,7 @@ impl GoToDialog {
             if let Some(e) = &self.error {
                 ui.colored_label(ui.visuals().error_fg_color, e);
             }
-            let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let enter = !picker_was_open && ui.input(|i| i.key_pressed(egui::Key::Enter));
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("Cancel").clicked() {
@@ -100,15 +127,24 @@ impl GoToDialog {
                 });
             });
         });
-        if !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+        if !open || (!picker_was_open && ctx.input(|i| i.key_pressed(egui::Key::Escape))) {
             return GoToOutcome::Closed;
         }
         outcome
     }
 }
 
-/// Parses optional one-based row/column inputs, returning zero-based positions. Short column
-/// names remain supported as a Sheaf convenience.
+/// The native picker includes the short name to distinguish repeated long names.
+fn column_reference(column: &Column) -> String {
+    if column.long_name.is_empty() {
+        column.short_name.clone()
+    } else {
+        format!("{}\"{}\"", column.short_name, column.long_name)
+    }
+}
+
+/// Parses optional one-based row/column inputs, returning zero-based positions. Column lookup
+/// accepts short names or picker references, then the first matching long name, ignoring ASCII case.
 pub fn parse_target(
     sheet: &Worksheet,
     row: &str,
@@ -132,7 +168,10 @@ pub fn parse_target(
             sheet
                 .columns
                 .iter()
-                .position(|c| c.short_name.eq_ignore_ascii_case(column))
+                .position(|c| {
+                    c.short_name.eq_ignore_ascii_case(column) || column_reference(c).eq_ignore_ascii_case(column)
+                })
+                .or_else(|| sheet.columns.iter().position(|c| c.long_name.eq_ignore_ascii_case(column)))
                 .ok_or_else(|| format!("There is no column named \"{column}\""))?,
         )
     };
@@ -191,5 +230,22 @@ mod tests {
         assert_eq!(parse_target(sheet, "0", "2", 100, 1), Ok((Some(1), Some(1))));
         assert_eq!(parse_target(sheet, "0", "0", 100, 1), Ok((Some(3), Some(2))));
         assert_eq!(parse_target(sheet, "0", "", 100, 1), Ok((None, Some(1))));
+    }
+
+    #[test]
+    fn names_ignore_ascii_case_and_duplicate_long_names_use_the_first_column() {
+        let mut project = Project::default();
+        let book = project.add_workbook("");
+        for label in ["Time", "Shared current", "Potential", "Shared current"] {
+            let id = project.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+            project.workbook_mut(book).unwrap().sheets[0].column_mut(id).unwrap().long_name = label.into();
+        }
+        let sheet = project.workbook(book).unwrap().sheet();
+        for (name, index) in
+            [("b", 1), ("Potential", 2), ("potential", 2), ("Shared current", 1), ("D\"Shared current\"", 3), ("4", 3)]
+        {
+            assert_eq!(parse_target(sheet, "10", name, 100, 0), Ok((Some(index), Some(9))), "{name}");
+        }
+        assert!(parse_target(sheet, "10", "missing name", 100, 0).is_err());
     }
 }

@@ -27,6 +27,13 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T02 Go To picker/name lookup (2026-11-15, Windows): the flyout lists short names,
+  designations and long names, fills an unambiguous short-name/quoted-long-name reference,
+  and Reset clears only the column. Typed names ignore ASCII case; repeated long names
+  choose the first column. Escape closes the flyout before the dialog. Origin 2016 UI
+  probes, four new UI regressions and a parser fixture cover these rules. Formatting,
+  strict all-target Clippy and 2276 workspace tests pass (three existing ignored). The
+  separate project-wide Column Browser remains unimplemented (gui-look section 5).
 - T13 Draw Line in Front/Behind (2026-11-15, Windows): the Line + Symbol choice controls
   both plotted curves and legend samples, defaulting to Behind. Gap to Symbol disables the
   radios and overrides the retained choice, as Origin 2016 controls/PNG exports confirm.
@@ -78,7 +85,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 |---|---|---|---|
 | `axis-breaks` | Claude Windows, "axis-breaks" | T11 more than one axis break (Origin's 1-7 breaks, per-break position), measured Origin break layout; core Axis break list, plot axis/tick drawing, graph_axis.rs Breaks tab, persistence and focused tests | claimed 2026-11-15; Axis fields only, no PLOT/plots.rs draw_plot, graph_details, navigation, stats or other sessions' scopes |
 | `codex/t13-fill-sidelines` | Codex Windows, t13-fill-sidelines | T13 Fill Area Sidelines only / Sidelines and Base; plot fill-mode/group copy, draw_fill_under, graph_details selector and focused tests | claimed 2026-11-15; no Axis/layout/PDF, mask policy/color, navigation, labels, stats or other sessions scopes |
-| `codex/t02-go-to-picker` | Codex Windows, t02-go-to-picker | T02 Go To column picker and typed/duplicate column-name behavior only; go_to dialog/resolver and focused tests | claimed 2026-11-15; no grid/filtered handlers, app lifecycle/history, core/model/formula, plot or other sessions' scopes |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `mac-print-panel` | Codex macOS, no Origin | T27 native macOS graph print panel via PDFKit; app print_graph/macprint, macOS dependencies and no-spool validation example | claimed 2026-11-14; no workbook printing, Windows CLI, Excel/imports or other sessions’ scope |
 | `saved-state-recovery` | Codex macOS, no Origin | T28 undo/redo saved-state checkpoints and recovery cleanup; core/history.rs, app save/recovery hooks, autosave and focused UI tests | claimed 2026-11-14; no Excel dialogs/imports, axis/labels, backup settings or other sessions’ scope |

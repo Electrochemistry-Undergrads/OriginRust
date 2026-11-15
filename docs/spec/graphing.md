@@ -3464,24 +3464,71 @@ designation and the row counted from 1 (`Document::mask_points`, `remove_bad_poi
 - `--show data-tool:mask|move|remove` and `--show mask-points:4,5` (rows from 1 of the first plot) put the
   first graph in a mode or mask rows, for screenshots (the Data Reader's `--show reader` does the same).
 
-### 20.4 To measure on Windows (`tools/origin-ref`)
+### 20.4 Measured in Origin 2016 (`tools/origin-ref`, 1024x768 window, `origin-dialog.ps1 -NoDialog`)
 
-1. Cursor shape while Data > Mask Data Points, Move Data Points and Remove Bad Data Points are on; whether the
-   menu item shows a check mark, and how the mode ends (Esc, double-click, right-click, another tool).
-2. Mask: rectangle or click or both; which plots (active plot, all plots of the layer, all layers); whether
-   the X cell is masked with the Y cell; the effect of Ctrl and Shift (add to, toggle); whether it can unmask
-   from the graph and how (Data > Mask Data Points again on a masked point, or Ctrl).
-3. Remove Bad: whether it sets the Y cell missing or deletes the row (read the worksheet afterwards with
-   LabTalk `wks.nRows` and the cell value), whether the X cell stays, and what happens in a formula column.
-4. Move: whether X and Y both change or only Y, the numbers written (exact or snapped, a rounding step?),
-   behaviour on log axes, with an offset or multiplier, in a column that a formula fills, and on a plot with
-   no X column; whether Shift or Ctrl constrains the direction; whether Esc during a drag cancels it.
-5. Whether each action is one Undo step in Origin (Edit > Undo's text), and whether the worksheet shows the
-   change at once.
-6. Whether the tools work on plots other than line, scatter and line + symbol (column, area, bubble), on
-   a graph with Hide Masked Points on, and on a worksheet with an active filter.
-7. The picking radius and whether a point under the pointer is highlighted first.
-8. Whether points clipped by the axis range, rows that Skip Points leaves without a symbol and the plots of a
-   layer with Show Elements Data off can be picked or masked; and, in a waterfall, whether the tools work on
-   the shifted curves at all.
-9. Move: whether the point follows the drag distance (Sheaf) or jumps to the pointer.
+Setup of every run: a workbook with X = 1..10 (A), Yb = 2X+1 (B), Yc = 20-X (C, plain numbers unless said),
+a Line + Symbol graph (or Scatter) of Yb and Yc against X in a 1024x768 Origin window, mouse and keys sent to
+it, the worksheet read afterwards by LabTalk (`stats` per cell with masking off gives n=0 for a masked or
+missing cell; the cell text with masking on gives `--` only for a missing cell; `wks.nRows`). Screenshots and raw
+runs are local (`re-workspace/scratch/t48`). Everything below is what Origin did; where Sheaf differs it is in 20.5.
+
+**Status of the nine items** (details in the numbered paragraphs): 1 measured; 2 measured; 3 measured; 4 see the
+paragraph (Move); 5 partly; 6 to 9 see the paragraphs.
+
+**M1. Menu, cursors, ending a mode.**
+- The graph's Data menu lists, under the three tools, one line per plot of the active layer ("1 g1 [Book1]Sheet1!
+  "X"(X), "Yb"(Y) [1*:10*]", numbered) with a check mark on the **active plot**. The three tool items show no check
+  mark while their mode is on. Origin has an active plot (the first one until another is picked; the Data Reader
+  click on a point of a plot makes that plot active, see M3).
+- Mask Data Points: a custom cursor (an arrow with a small icon at its lower right); the status bar reads that a
+  drag selects a region, Tab toggles the mode and Space toggles the shape; a yellow hint with the same words appears
+  the first time (it has a "do not show again" box). The green box in the toolbar row repeats the text.
+  The Tools toolbar has a mask button (own flyout, M2); the Pointer button is not pressed while Mask is on.
+- Remove Bad Data Points: the graph goes into the **Data Reader** (crosshair cursor, a Data Info window with
+  `[Book1]Sheet1[row]`, X and Y, a green readout `[Book1]Sheet1![5]: X = 5, Y = 11`, status text "Data Reader: Click
+  to read data value. Left/right keys go from point to point ..."); the Data Reader button of the Tools toolbar is
+  pressed. The point is then removed by pressing **Enter** (M3).
+- Move Data Points: the points of every plot are drawn as hollow squares (the Y plot black with a white centre, the
+  other with a cyan centre) while the mode is on; the Pointer button looks pressed. (See M4 for what a drag did.)
+- Ending: Esc ends the Mask mode; **right-click** ends it too and opens the graph's context menu (which has Mask,
+  Analysis Markers and Plot Details); a double-click does **not** end it (a drag after it still masks); a click on the
+  Pointer or the Data Reader button ends it (a drag after that changes nothing).
+- Opening the menu with the keyboard (Alt+D, Down, Enter) works as the mouse path.
+
+**M2. Mask Data Points.**
+- Default region mode: a **rectangle** drag. When the button is let go every point of **every plot of the layer**
+  inside the rectangle has its **Y cell masked** (Yb and Yc both, same rows); X cells are not masked. Masked points
+  are drawn in the mask colour (red).
+- **Tab** toggles between "all plots" and "active plot only" (a drag over points of both plots then masked only the
+  active plot's). **Space** toggles the shape between the rectangle and a **freehand closed path** (a drag that
+  traces a path; the points inside the path are masked; a triangle around one point masked just that point and a big
+  loop masked every point inside in both plots). The re-entry state after the menu is chosen again was not measured
+  (every run started fresh with all plots, rectangle).
+- A **click** (no drag) on an unmasked point **masks** it (the point must be within the hit radius, M7); a click on
+  a masked point leaves it masked; Ctrl, Shift or double-click make no difference to a drag or click.
+- The Tools toolbar mask button has a flyout of four modes: Mask Points on Active Plot, Mask Points on All Plots,
+  Unmask Points on Active Plot, Unmask Points on All Plots. A rectangle drag with an Unmask mode **unmasks** the
+  points inside (all plots or the active one). That is the only way to unmask from the graph: the Data menu's tool
+  masks only. The flyout choice reached by the menu path was not kept: choosing Data > Mask Data Points after the
+  flyout's Active Plot mode still masked both plots.
+- Esc, right click and the Pointer or Data Reader button end the mode before a drag, then the drag does nothing.
+
+**M3. Remove Bad Data Points** (Data Reader plus Enter).
+- A click on a point (the reader picks it, shows its Data Info) changes nothing by itself. **Enter** then removes
+  the point. The arrow keys Left/Right move the reader from point to point and Enter removes the one reached (after
+  menu choice, no click, two Right keys reached row 7 and Enter removed Yb row 7). Delete, Backspace, Ctrl+Delete,
+  double-click and Ctrl+click do nothing; Enter in the plain Data Reader (button of the toolbar, not via the menu)
+  removes nothing.
+- The system variable `@YPR` (default 1) decides what is removed: with 1 the plot's **Y cell becomes missing**
+  (the row stays: X cell, other columns and `wks.nRows` unchanged, the text `--`); with 0 the **whole worksheet row**
+  is deleted (every column below shifts up, the last row of the data becomes missing).
+- The mode stays on after a removal (a second click and Enter removed a second point; one of the other plot works).
+- One Undo (Ctrl+Z) restores all of it; Edit shows **"Undo Remove Data Point"** (for `@YPR` 1 and 0 and for a
+  formula column).
+- A column set by a Set Column Values formula with Auto recalculation (Yc = 20 - X): Enter on its point set the cell
+  missing as for any column (no refusal), and Undo restored it. [To re-verify that the column was in Auto mode, M3b.]
+
+**M7. Hit radius.** Clicking at a measured pixel distance from a plot's point (below, above, right or left)
+masked it at 2, 4, 6 and 8 pixels and not at 9 and more pixels for the default symbol size; for symbol size 24
+masked at 6, 10 and 14 and not at 15 or more, for symbol size 3 masked up to at least 9. So the radius is about
+the half symbol size plus a margin and not below 8 to 9 pixels. [Re-measured below if better pinned.]

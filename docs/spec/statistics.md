@@ -1192,8 +1192,13 @@ Documentation facts only, nothing measured: Origin 2026 is not available to the 
 - **Arrangement**: only Separate Graphs. The other three are in the enum (`GraphArrangement`) and the dialog (greyed,
   with a hover note) and are refused by the tool and by `--arrangement` with "not available yet".
 - **Groups**: any number of group columns (numbers or text); a group is one combination of their values. Rows with an
-  empty group cell are left out. Groups are ordered by value (numbers) or text, per column, in the order of the group
-  columns. Variable-group pairs with fewer than two numbers are left out with a note; at least one must remain.
+  empty group cell are left out. The group key is exact, not the 4-digit text of other tools: a numeric cell is kept
+  as its f64 value (so 2023.5 and 2024 are two groups, -0 equals 0) and labelled with its full round-trip number
+  (`2023.5`); a text cell is its trimmed text. Keys are ordered per column, in the order of the group columns, by a
+  total order: numeric cells first, by `f64::total_cmp`, then text cells by bytes; numeric-ness comes from the cell
+  type, never from parsing text, so "nan", "inf" or "1a" are plain text. Variable-group pairs with fewer than two numbers are left out with a note; at least one must remain.
+  A variable-group whose mean, SD or variance is not finite (values such as 1e300 and -1e300) keeps its table rows
+  but gets no graph, with a note, like the constant sample.
 - **Statistics** (the Descriptive Statistics tool's own `calc::stats`, not redefined): N, missing, mean, standard
   deviation (n - 1), SE of the mean, variance, bias-corrected skewness and kurtosis, minimum, Q1, median, Q3, maximum
   (Origin's quartile rule of `calc::quantile_origin`).

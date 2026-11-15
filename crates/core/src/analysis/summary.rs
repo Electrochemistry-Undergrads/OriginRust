@@ -10,7 +10,6 @@
 
 use super::dist::XyGraph;
 use super::statistics::num;
-use super::survival::group_cell;
 use super::*;
 use crate::graph::{AxisSide, DataLabels, Font, LabelForm, LabelPosition, PlotKind, ScaleKind, TextLabel};
 
@@ -129,18 +128,46 @@ fn numbers(c: &SheetColumn) -> Vec<f64> {
     }
 }
 
-/// Group keys compare by number when both are numbers, otherwise as text.
-fn compare_keys(a: &[String], b: &[String]) -> Ordering {
-    for (x, y) in a.iter().zip(b) {
-        let o = match (x.parse::<f64>(), y.parse::<f64>()) {
-            (Ok(p), Ok(q)) => p.total_cmp(&q),
-            _ => x.cmp(y),
-        };
-        if o != Ordering::Equal {
-            return o;
+/// One group-column value of the Graphical Summary: a number kept exactly, or text.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum GroupKey {
+    /// The f64 bits, with -0.0 folded into 0.0 (NaN cells never become keys).
+    Num(u64),
+    Text(String),
+}
+
+impl GroupKey {
+    fn of(c: &Column, row: usize) -> Option<GroupKey> {
+        if let Some(t) = c.data.text_cell(row) {
+            let t = t.trim();
+            return (!t.is_empty()).then(|| GroupKey::Text(t.to_string()));
+        }
+        let v = c.numeric()?.get(row).copied().filter(|v| !v.is_nan())?;
+        Some(GroupKey::Num((if v == 0.0 { 0.0 } else { v }).to_bits()))
+    }
+
+    /// Numbers print with full round-trip precision, so 2023.5 and 2024 stay apart.
+    fn label(&self) -> String {
+        match self {
+            GroupKey::Num(b) => format!("{}", f64::from_bits(*b)),
+            GroupKey::Text(t) => t.clone(),
         }
     }
-    Ordering::Equal
+
+    /// A total order: numbers first (by `f64::total_cmp`), then text (by bytes).
+    fn compare(&self, other: &GroupKey) -> Ordering {
+        match (self, other) {
+            (GroupKey::Num(a), GroupKey::Num(b)) => f64::from_bits(*a).total_cmp(&f64::from_bits(*b)),
+            (GroupKey::Num(_), GroupKey::Text(_)) => Ordering::Less,
+            (GroupKey::Text(_), GroupKey::Num(_)) => Ordering::Greater,
+            (GroupKey::Text(a), GroupKey::Text(b)) => a.cmp(b),
+        }
+    }
+}
+
+/// Group keys compare column by column with `GroupKey::compare`.
+fn compare_keys(a: &[GroupKey], b: &[GroupKey]) -> Ordering {
+    a.iter().zip(b).map(|(x, y)| x.compare(y)).find(|o| *o != Ordering::Equal).unwrap_or(Ordering::Equal)
 }
 
 /// "95" for 95.0, "99.9" for 99.9: the level in the table name.
@@ -230,10 +257,10 @@ pub(super) fn run(
         let (first, last) = resolve_rows(rows, &c.short_name, &[], y.len())?;
         let var_label = c.display_name().to_string();
         // Rows per group, in the order of the group keys.
-        let mut keys: Vec<(Vec<String>, Vec<f64>)> = Vec::new();
-        let mut index: std::collections::HashMap<Vec<String>, usize> = std::collections::HashMap::new();
+        let mut keys: Vec<(Vec<GroupKey>, Vec<f64>)> = Vec::new();
+        let mut index: std::collections::HashMap<Vec<GroupKey>, usize> = std::collections::HashMap::new();
         for row in first..=last {
-            let key: Option<Vec<String>> = group_cols.iter().map(|g| group_cell(g, row)).collect();
+            let key: Option<Vec<GroupKey>> = group_cols.iter().map(|g| GroupKey::of(g, row)).collect();
             let Some(key) = key else { continue };
             let v = y[row];
             match index.get(&key) {
@@ -251,7 +278,7 @@ pub(super) fn run(
         }
         keys.sort_by(|a, b| compare_keys(&a.0, &b.0));
         for (key, values) in keys {
-            let group = key.join(", ");
+            let group = key.iter().map(GroupKey::label).collect::<Vec<_>>().join(", ");
             let title = if group.is_empty() { var_label.clone() } else { format!("{var_label} {group}") };
             let s = calc::graph_summary(&values, level);
             if s.stats.n < 2 {
@@ -332,7 +359,13 @@ pub(super) fn run(
             if s.anderson_darling.is_none() {
                 notes.push(format!("{title}: the Anderson-Darling test needs at least 8 numbers with some spread."));
             }
-            if st.sd.is_nan() || st.sd <= 0.0 {
+            if !(st.sd.is_finite() && st.mean.is_finite() && st.variance.is_finite()) {
+                notes.push(format!(
+                    "{title}: the mean or spread is too large to compute (not finite), no graph was made."
+                ));
+                continue;
+            }
+            if st.sd <= 0.0 {
                 notes.push(format!("{title}: all numbers are equal, no graph was made."));
                 continue;
             }
@@ -709,5 +742,86 @@ mod tests {
         assert!(r.notes.iter().any(|n| n.contains("fewer than two")), "{:?}", r.notes);
         // Five numbers: no Anderson-Darling, noted, p is missing.
         assert!(r.notes.iter().any(|n| n.contains("Anderson-Darling test needs")));
+    }
+
+    fn two_columns(y: Vec<f64>, g: ColumnData) -> (Project, Vec<ColumnId>) {
+        let mut q = Project::new();
+        let book = q.add_workbook("g");
+        let y = q.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+        let g = q.add_column(book, 0, Designation::Y, g).unwrap();
+        (q, vec![y, g])
+    }
+
+    #[test]
+    fn close_numeric_groups_stay_apart_with_exact_labels() {
+        let y = vec![1.0, 2.0, 3.0, 5.0];
+        let (mut q, ids) = two_columns(y.clone(), ColumnData::numeric(vec![2023.5, 2023.5, 2024.0, 2024.0]));
+        let r =
+            run_summary(&mut q, &ids[..1], GraphSummarySpec { groups: vec![ids[1]], ..Default::default() }).unwrap();
+        let t = r.table.unwrap();
+        assert!(t.rows[0].0.ends_with(" 2023.5") && t.rows[1].0.ends_with(" 2024"), "{:?}", t.rows);
+        let n = t.headers.iter().position(|x| x == "N").unwrap();
+        assert_eq!((t.rows[0].1[n], t.rows[1].1[n]), (2.0, 2.0));
+        let (mut q, ids) =
+            two_columns(y, ColumnData::numeric(vec![0.1234567891, 0.1234567891, 0.1234567892, 0.1234567892]));
+        let r =
+            run_summary(&mut q, &ids[..1], GraphSummarySpec { groups: vec![ids[1]], ..Default::default() }).unwrap();
+        assert_eq!(r.table.unwrap().rows.len(), 2);
+    }
+
+    #[test]
+    fn mixed_group_keys_sort_totally_and_deterministically() {
+        use GroupKey::{Num, Text};
+        let mut keys: Vec<Vec<GroupKey>> = Vec::new();
+        for i in 0..40 {
+            keys.push(vec![if i % 3 == 0 {
+                Text(format!("{}a", i))
+            } else if i % 3 == 1 {
+                Num(f64::from(i * 7 % 13).to_bits())
+            } else {
+                Text(["nan", "inf", "x"][i as usize % 3].to_string())
+            }]);
+        }
+        keys.push(vec![Num(f64::INFINITY.to_bits())]);
+        keys.push(vec![Num(2.0f64.to_bits())]);
+        keys.push(vec![Num(10.0f64.to_bits())]);
+        keys.push(vec![Text("1a".into())]);
+        keys.dedup();
+        let mut a = keys.clone();
+        a.sort_by(|x, y| compare_keys(x, y));
+        let mut b = keys.clone();
+        b.reverse();
+        b.sort_by(|x, y| compare_keys(x, y));
+        assert_eq!(a, b);
+        let first_text = a.iter().position(|k| matches!(k[0], Text(_))).unwrap();
+        assert!(a[..first_text].iter().all(|k| matches!(k[0], Num(_))));
+        assert!(a[first_text..].iter().all(|k| matches!(k[0], Text(_))));
+        let nums: Vec<f64> =
+            a[..first_text].iter().map(|k| if let Num(b) = k[0] { f64::from_bits(b) } else { 0.0 }).collect();
+        assert!(nums.windows(2).all(|w| w[0].total_cmp(&w[1]).is_le()));
+        // A real run with a mixed text column does not panic and puts 2 before 10 before 1a.
+        let (mut q, ids) = two_columns(
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            ColumnData::text(["10", "10", "2", "2", "1a", "1a"].map(String::from).to_vec()),
+        );
+        let r =
+            run_summary(&mut q, &ids[..1], GraphSummarySpec { groups: vec![ids[1]], ..Default::default() }).unwrap();
+        let ends: Vec<String> =
+            r.table.unwrap().rows.iter().map(|r| r.0.rsplit(' ').next().unwrap().to_string()).collect();
+        assert_eq!(ends.len(), 3);
+        let mut sorted = ends.clone();
+        sorted.sort();
+        assert_eq!(ends, sorted);
+    }
+
+    #[test]
+    fn infinite_spread_keeps_the_table_but_skips_the_graph() {
+        let mut q = Project::new();
+        let book = q.add_workbook("big");
+        let y = q.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1e300, -1e300, 0.0])).unwrap();
+        let r = run_summary(&mut q, &[y], GraphSummarySpec::default()).unwrap();
+        assert_eq!(r.table.unwrap().rows.len(), 1);
+        assert!(r.new_graph.is_none() && r.more_graphs.is_empty());
+        assert!(r.notes.iter().any(|n| n.contains("not finite")), "{:?}", r.notes);
     }
 }

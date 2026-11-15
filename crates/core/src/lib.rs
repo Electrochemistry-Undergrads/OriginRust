@@ -10,6 +10,7 @@
 pub mod analysis;
 pub mod analysis_link;
 pub mod autorange;
+pub mod cellformat;
 pub mod clipboard;
 pub mod color;
 pub mod column;

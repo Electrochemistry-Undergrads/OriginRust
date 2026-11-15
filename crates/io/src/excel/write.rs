@@ -153,6 +153,14 @@ fn write_sheet(
     if cols.len() > MAX_COLUMNS {
         return Err(format!("it has {} columns and Excel holds {MAX_COLUMNS}", cols.len()));
     }
+    // Per-cell fonts and colours would have to be combined with each column's number format into
+    // one Excel format per cell style; that is left for later and said here.
+    if !sheet.cell_formats.is_empty() {
+        warnings.push(format!(
+            "Sheet '{}': cell formatting (font, size, bold, italic, underline, colours, alignment) is not written to the Excel file.",
+            sheet.name
+        ));
+    }
     // Long name, units and comments are told apart by their place: up to three rows right above
     // the data, in that order. A row that is written because a later one needs it, or that no
     // column fills, holds only the invisible `EMPTY_LABEL` in its first cell, so that the importer

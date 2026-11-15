@@ -1,6 +1,6 @@
 # T62: Remaining stack and offset commands
 
-**Status:** open; recovered and refined 2026-11-15. **Size:** M, three independent slices.
+**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `stack-leftovers`, all three slices. **Size:** M, three independent slices.
 **Branch:** `stack-leftovers`. **Priority:** P0, wave 2.
 **Spec:** [graphing](../spec/graphing.md) 13 (especially measured Stack tab 13.14), 14.12;
 ADR 0010. **Inventory:** 8 locations tagged `T62`.

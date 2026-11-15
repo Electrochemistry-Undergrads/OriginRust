@@ -6,6 +6,7 @@ use crate::actions::{Action, CellOp, CopyKind, DataEdit, DataTool, GraphOp, Grap
 use crate::autosave::{Autosave, Due};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
+use crate::dialogs::cell_format::CellFormatDialog;
 use crate::dialogs::cell_note::CellNoteDialog;
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::comparison_plot::{ComparisonPlotDialog, Outcome as ComparisonPlotOutcome};
@@ -163,6 +164,7 @@ pub struct SheafApp {
     mask_condition: Option<MaskConditionDialog>,
     cond_format: Option<CondFormatDialog>,
     pub(crate) cell_note: Option<CellNoteDialog>,
+    pub(crate) cell_format: Option<CellFormatDialog>,
     reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
@@ -263,6 +265,7 @@ impl SheafApp {
             mask_condition: None,
             cond_format: None,
             cell_note: None,
+            cell_format: None,
             reshape: None,
             export: None,
             export_sheet: None,
@@ -778,6 +781,7 @@ impl SheafApp {
         self.mask_condition = None;
         self.cond_format = None;
         self.cell_note = None;
+        self.cell_format = None;
         self.reshape = None;
         self.sort = None;
         self.sheet_name = None;
@@ -1800,6 +1804,10 @@ impl SheafApp {
                     Err(why) => self.warn(why),
                 }
             }
+            Action::FormatCellsDialog(book) => match self.format_target(book) {
+                Ok(target) => self.cell_format = CellFormatDialog::new(&self.doc, book, target),
+                Err(why) => self.warn(why),
+            },
             Action::NoteDialog(book) => match self.note_cell(book) {
                 Ok((column, row)) => self.cell_note = CellNoteDialog::new(&self.doc, book, column, row),
                 Err(why) => self.warn(why),
@@ -2467,6 +2475,7 @@ impl SheafApp {
                     }
                     copy.remap_cond_format_columns(&|c| renamed.get(&c).copied());
                     copy.remap_note_columns(&|c| renamed.get(&c).copied());
+                    copy.remap_format_columns(&|c| renamed.get(&c).copied());
                     if let Some(b) = p.workbook_mut(book) {
                         b.sheets.insert(active + 1, copy);
                         b.active_sheet = active + 1;
@@ -2776,6 +2785,12 @@ impl SheafApp {
         grid::cond_range(state, sheet)
     }
 
+    fn format_target(&self, book: WindowId) -> Result<sheaf_core::cellformat::FormatTarget, &'static str> {
+        let sheet = self.doc.project().workbook(book).map(|b| b.sheet()).ok_or("This workbook no longer exists")?;
+        let state = self.books.get(&book).ok_or("Select cells first")?;
+        grid::format_target(state, sheet)
+    }
+
     fn note_cell(&self, book: WindowId) -> Result<(ColumnId, usize), &'static str> {
         let sheet = self.doc.project().workbook(book).map(|b| b.sheet()).ok_or("This workbook no longer exists")?;
         let state = self.books.get(&book).ok_or("Select a cell first")?;
@@ -3004,6 +3019,7 @@ impl SheafApp {
             || self.mask_condition.is_some()
             || self.cond_format.is_some()
             || self.cell_note.is_some()
+            || self.cell_format.is_some()
             || self.reshape.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
@@ -3459,6 +3475,11 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.cell_note = None;
+        }
+        if let Some(d) = &mut self.cell_format
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.cell_format = None;
         }
         if let Some(d) = &mut self.row_filter
             && !d.show(ctx, &mut self.doc)
@@ -4269,6 +4290,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
                     s.columns.retain(|c| !columns.contains(&c.id));
                     s.remap_cond_format_columns(&|c| (!columns.contains(&c)).then_some(c));
                     s.remap_note_columns(&|c| (!columns.contains(&c)).then_some(c));
+                    s.remap_format_columns(&|c| (!columns.contains(&c)).then_some(c));
                 }
             }
             Window::Graph(g) => {

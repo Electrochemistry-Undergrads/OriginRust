@@ -43,6 +43,10 @@ pub use sheaf_calc::{
     FftWindow, IfftOptions, PowerNorm, TraceMethod, WindowCorrection,
 };
 pub use sheaf_calc::{EnvelopeOptions, EnvelopeType};
+pub use sheaf_calc::{
+    FilterError, FilterResponse, FirMethod, FirSpec, FirWindow, FreqUnit, IIR_MAX_ORDER, IirMethod, IirSpec,
+    MAX_FIR_ORDER as FIR_MAX_ORDER, MagnitudeUnit,
+};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
@@ -820,6 +824,10 @@ pub enum Tool {
     Fft(FftSpec),
     Ifft(IfftSpec),
     FftFilter(FftFilterSpec),
+    /// Signal Processing > IIR Filter (Origin's `dfilter`, OriginPro; documented, not measured; analysis-tools.md 17).
+    IirFilter(IirSpec),
+    /// Signal Processing > FIR Filter (Origin 2027's FIR Filter app; documented, not measured; analysis-tools.md 17).
+    FirFilter(FirSpec),
     Envelope(EnvelopeSpec),
     Coherence(CoherenceSpec),
     Decimate(DecimateSpec),
@@ -909,6 +917,8 @@ impl Tool {
             Tool::Fft(_) => "FFT",
             Tool::Ifft(_) => "IFFT",
             Tool::FftFilter(_) => "FFT filter",
+            Tool::IirFilter(_) => "IIR filter",
+            Tool::FirFilter(_) => "FIR filter",
             Tool::Envelope(_) => "Envelope",
             Tool::Coherence(_) => "Coherence",
             Tool::Decimate(_) => "Decimation",
@@ -991,6 +1001,8 @@ impl Tool {
             Tool::Fft(_) => "FFT",
             Tool::Ifft(_) => "IFFT",
             Tool::FftFilter(_) => "FFTFilter",
+            Tool::IirFilter(_) => "IIRFilter",
+            Tool::FirFilter(_) => "FIRFilter",
             Tool::Envelope(_) => "Envelope",
             Tool::Coherence(_) => "Coherence",
             Tool::Decimate(_) => "Decimate",
@@ -1665,6 +1677,7 @@ fn run_peak_chain(
 mod categorical;
 mod curves;
 mod dist;
+mod filters;
 mod manip;
 mod multivariate;
 mod power;
@@ -2296,6 +2309,8 @@ impl Project {
                     });
                 }
             }
+            Tool::IirFilter(spec) => filters::run_iir(spec, &inputs, &mut beside)?,
+            Tool::FirFilter(spec) => filters::run_fir(spec, &inputs, &mut beside)?,
             Tool::Envelope(spec) => {
                 for inp in &inputs {
                     // Rows without an X or a Y value drop out before the extremes are searched.
@@ -4015,6 +4030,77 @@ mod tests {
         let r = p.analyze(&request(&[flat], Tool::FftFilter(FftFilterSpec { options, interval: None }))).unwrap();
         assert!(p.numeric(r.new_columns[0]).unwrap().iter().all(|v| v.abs() < 1e-12));
         assert!(r.message.starts_with("FFT filter"), "{}", r.message);
+    }
+
+    #[test]
+    fn an_iir_filter_goes_beside_its_column() {
+        let (mut p, book, flat, ramp) = sample();
+        // X runs 0 to 10 in steps of 1: Fs = 1 Hz, Nyquist 0.5 Hz. A forward-backward low pass keeps a constant.
+        let spec = IirSpec { order: Some(2), cutoff: Some(0.2), forward_backward: true, ..IirSpec::default() };
+        let r = p.analyze(&request(&[flat, ramp], Tool::IirFilter(spec))).unwrap();
+        assert_eq!(r.new_columns.len(), 2);
+        let out = p.numeric(r.new_columns[0]).unwrap();
+        assert!(out.iter().all(|v| (v - 2.0).abs() < 1e-9), "{out:?}");
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!(
+            ws.columns[2].comments,
+            "Butterworth low pass IIR filter of B (order 2, Fc 0.2 Hz, forward-backward)"
+        );
+        assert_eq!(ws.columns[2].units, "A");
+        assert!(ws.columns[2].long_name.ends_with("IIR filtered"), "{}", ws.columns[2].long_name);
+        assert!(r.message.starts_with("IIR filter"), "{}", r.message);
+        // a ramp is a straight line for a zero-phase low pass with odd extension
+        let ramp_out = p.numeric(r.new_columns[1]).unwrap();
+        let ramp_in = p.numeric(ramp).unwrap();
+        for (a, b) in ramp_out.iter().zip(ramp_in.iter()) {
+            assert!((a - b).abs() < 1e-3, "{a} vs {b}");
+        }
+    }
+
+    #[test]
+    fn iir_and_fir_filters_refuse_what_cannot_be_designed_or_applied() {
+        let (mut p, _, flat, _) = sample();
+        // 0.7 Hz is above the Nyquist frequency of 0.5 Hz
+        let bad = IirSpec { cutoff: Some(0.7), ..IirSpec::default() };
+        let e = p.analyze(&request(&[flat], Tool::IirFilter(bad))).unwrap_err();
+        assert!(e.to_string().contains("Nyquist"), "{e}");
+        // 11 points are too few for forward-backward filtering at order 10
+        let short = IirSpec { forward_backward: true, cutoff: Some(0.1), ..IirSpec::default() };
+        let e = p.analyze(&request(&[flat], Tool::IirFilter(short))).unwrap_err();
+        assert!(e.to_string().contains("more than"), "{e}");
+        let odd =
+            FirSpec { response: FilterResponse::HighPass, order: Some(5), cutoff: Some(0.2), ..FirSpec::default() };
+        let e = p.analyze(&request(&[flat], Tool::FirFilter(odd))).unwrap_err();
+        assert!(e.to_string().contains("even order"), "{e}");
+    }
+
+    #[test]
+    fn a_fir_filter_goes_beside_its_column_and_keeps_a_constant() {
+        let (mut p, book, flat, _) = sample();
+        let spec = FirSpec { order: Some(4), cutoff: Some(0.2), ..FirSpec::default() };
+        let r = p.analyze(&request(&[flat], Tool::FirFilter(spec))).unwrap();
+        let out = p.numeric(r.new_columns[0]).unwrap();
+        assert!(out.iter().all(|v| (v - 2.0).abs() < 1e-9), "{out:?}");
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!(ws.columns[2].comments, "Hamming window low pass FIR filter of B (order 4, Fc 0.2 Hz)");
+        let ls = FirSpec {
+            method: FirMethod::LeastSquares,
+            order: Some(4),
+            pass: Some(0.1),
+            stop: Some(0.3),
+            ..FirSpec::default()
+        };
+        let r = p.analyze(&request(&[flat], Tool::FirFilter(ls))).unwrap();
+        let out = p.numeric(r.new_columns[0]).unwrap();
+        assert!(out.iter().all(|v| (v - 2.0).abs() < 1e-9), "{out:?}");
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert!(
+            ws.columns[2]
+                .comments
+                .starts_with("least squares low pass FIR filter of B (order 4, pass 0.1 Hz, stop 0.3 Hz"),
+            "{}",
+            ws.columns[2].comments
+        );
     }
 
     #[test]

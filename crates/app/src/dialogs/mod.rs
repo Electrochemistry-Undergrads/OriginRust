@@ -13,6 +13,7 @@ pub mod error_bars;
 pub mod export;
 pub mod export_excel;
 pub mod export_sheet;
+pub mod filter_options;
 pub mod find;
 pub mod fit;
 pub mod fit_more;

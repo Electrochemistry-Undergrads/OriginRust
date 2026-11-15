@@ -46,7 +46,7 @@ subcommands, recalculation links.
 - `crates/calc/src/` (look at how `distfit.rs` and `crosstab.rs` are laid out): `pca.rs`
   (symmetric eigen-decomposition; `nalgebra` is already a dependency of `crates/fit`, reuse it rather
   than adding a crate), `kmeans.rs` (deterministic initial centres so results are reproducible),
-  `roc.rs` (AUC by the trapezoid rule; DeLong or Hanley-McNeil standard error, whichever Origin uses),
+  `roc.rs` (AUC by the trapezoid rule; the standard error as Origin's, measured 2026-11-15, statistics.md 19.5),
   `survival.rs` (product-limit estimate, Greenwood variance, log-rank).
 - `crates/core/src/analysis/statistics.rs`: the `Tool` variants and their specs.
 - `crates/app/src/menus.rs` (Statistics menu items now grey) and `crates/app/src/dialogs/` (options).

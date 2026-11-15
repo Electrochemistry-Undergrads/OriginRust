@@ -313,6 +313,10 @@ struct Fields {
     from: String,
     to: String,
     mode: RecalcMode,
+    /// Multi-column window: the columns as sheet positions `j` (1-based), as typed; empty in the
+    /// single-column window. Origin's "Col (j): From .. To" row (expression-language 7.1).
+    j_from: String,
+    j_to: String,
 }
 
 pub struct SetValuesDialog {
@@ -365,8 +369,18 @@ impl SetValuesDialog {
         let fields = if reads.iter().all(|r| *r == reads[0]) {
             reads[0].clone()
         } else {
-            Fields { formula: String::new(), from: String::new(), to: String::new(), mode: RecalcMode::Manual }
+            Fields {
+                formula: String::new(),
+                from: String::new(),
+                to: String::new(),
+                mode: RecalcMode::Manual,
+                j_from: String::new(),
+                j_to: String::new(),
+            }
         };
+        let positions: Vec<usize> =
+            sheet.columns.iter().enumerate().filter(|(_, c)| columns.contains(&c.id)).map(|(k, _)| k + 1).collect();
+        let fields = Fields { j_from: positions.first()?.to_string(), j_to: positions.last()?.to_string(), ..fields };
         let mut d = Self::new(project, columns[0])?;
         d.columns = columns;
         d.saved = fields.clone();
@@ -390,7 +404,24 @@ impl SetValuesDialog {
             to,
             // Origin opens the dialog on Manual for a column that has no recalculating formula.
             mode: if c.is_locked() { c.recalc } else { RecalcMode::Manual },
+            j_from: String::new(),
+            j_to: String::new(),
         })
+    }
+
+    /// The columns the multi-column window sets: the selection while the "Col (j)" range still
+    /// spans it as opened, otherwise every column of the sheet at positions From to To (1-based,
+    /// as Origin's range of `j`). `ids` are the columns of the sheet in order.
+    fn targets(&self, ids: &[ColumnId]) -> Result<Vec<ColumnId>, String> {
+        if self.fields.j_from == self.saved.j_from && self.fields.j_to == self.saved.j_to {
+            return Ok(self.columns.clone());
+        }
+        let n = ids.len();
+        let parse = |t: &str| t.trim().parse::<usize>().ok().filter(|&j| (1..=n).contains(&j));
+        match (parse(&self.fields.j_from), parse(&self.fields.j_to)) {
+            (Some(a), Some(b)) if a <= b => Ok(ids[a - 1..b].to_vec()),
+            _ => Err(format!("Col (j) needs whole numbers from 1 to {n}, From not above To")),
+        }
     }
 
     /// Switches to another column of the sheet (the arrow buttons next to `Col(X)=`).
@@ -478,8 +509,8 @@ impl SetValuesDialog {
             .map(|(k, c)| (k, c.short_name.clone()))
             .collect();
         let title = if multiple {
-            // Sheaf's wording; Origin's title for this window is not measured.
-            format!("Set Multiple Columns Values - [{}]{}!Col({})", book.name, sheet.name, columns_text(&selected))
+            // Origin's title (expression-language 7.1); egui needs a unique one per sheet.
+            format!("Set Values - Multiple Columns - [{}]{}", book.name, sheet.name)
         } else {
             format!(
                 "Set Values - [{}]{}!Col(\"{}\")",
@@ -609,27 +640,44 @@ impl SetValuesDialog {
                             .id(egui::Id::new("set_values_to")),
                     );
                 });
+                if multiple {
+                    // Origin's second row: the columns as sheet positions j, editable.
+                    ui.horizontal(|ui| {
+                        ui.label("Col (j):  From");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.fields.j_from)
+                                .desired_width(60.0)
+                                .id(egui::Id::new("set_values_j_from")),
+                        );
+                        ui.label("To");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.fields.j_to)
+                                .desired_width(60.0)
+                                .id(egui::Id::new("set_values_j_to")),
+                        );
+                    });
+                }
                 ui.horizontal(|ui| {
-                    let name = if multiple { columns_text(&selected) } else { target.clone() };
-                    ui.label(RichText::new(format!("Col({name})=")).strong());
+                    let label = if multiple { "wcol(j) =".to_string() } else { format!("Col({target})=") };
+                    let shown = ui.label(RichText::new(label).strong());
+                    if multiple {
+                        shown.on_hover_text(format!("Sets the columns {}", columns_text(&selected)));
+                    }
                     ui.add_space(8.0);
                     if ui.button("Find...").on_hover_text("Search and insert a function").clicked() {
                         self.search = Some(FunctionSearch { focus: true, ..Default::default() });
                     }
                     // First, previous, next, last column of the sheet. The window of several columns
-                    // edits them together, so it has no navigation.
-                    let navigation: &[(&str, &str, Option<usize>)] = if multiple {
-                        &[]
-                    } else {
-                        &[
-                            ("|<", "First column", Some(0)),
-                            ("<", "Previous column", position.checked_sub(1)),
-                            (">", "Next column", (position + 1 < ids.len()).then_some(position + 1)),
-                            (">|", "Last column", Some(ids.len().saturating_sub(1))),
-                        ]
-                    };
+                    // edits them together: the buttons are there but greyed, as in Origin.
+                    let navigation: &[(&str, &str, Option<usize>)] = &[
+                        ("|<", "First column", Some(0)),
+                        ("<", "Previous column", position.checked_sub(1)),
+                        (">", "Next column", (position + 1 < ids.len()).then_some(position + 1)),
+                        (">|", "Last column", Some(ids.len().saturating_sub(1))),
+                    ];
                     for &(text, hint, to) in navigation {
-                        let b = ui.add_enabled(to.is_some_and(|t| t != position), egui::Button::new(text).small());
+                        let on = !multiple && to.is_some_and(|t| t != position);
+                        let b = ui.add_enabled(on, egui::Button::new(text).small());
                         if b.on_hover_text(hint).clicked() {
                             goto = to.map(|t| ids[t]);
                         }
@@ -755,10 +803,22 @@ impl SetValuesDialog {
                 }
                 Ok(rows) => {
                     let (id, formula, mode) = (self.column, self.fields.formula.clone(), self.fields.mode);
+                    let targets = if multiple { self.targets(&ids) } else { Ok(Vec::new()) };
                     let result = if multiple {
-                        doc.set_columns_values(&self.columns, &formula, rows, mode)
+                        match targets {
+                            Ok(targets) => {
+                                let r = doc.set_columns_values(&targets, &formula, rows, mode);
+                                if r.is_ok() {
+                                    self.column = targets[0];
+                                    self.columns = targets;
+                                }
+                                r.map_err(|e| e.to_string())
+                            }
+                            Err(e) => Err(e),
+                        }
                     } else {
                         doc.edit("Set column values", move |p| p.set_column_values_with(id, &formula, rows, mode))
+                            .map_err(|e| e.to_string())
                     };
                     match result {
                         Ok(()) => {

@@ -183,8 +183,8 @@ pub(super) fn run(
     }
     let direction = if spec.higher_is_positive { "higher" } else { "lower" };
     notes.push(format!(
-        "Positive state: {positive}; {direction} test values point to it. Standard error by DeLong's method; the best \
-         cut-off has the largest sensitivity + specificity - 1."
+        "Positive state: {positive}; {direction} test values point to it. Standard error, interval and p-value as Origin's; \
+         the best cut-off (Sheaf's own) has the largest sensitivity + specificity - 1."
     ));
 
     let mut on_sheet = vec![label_column("Data", table.rows.iter().map(|(l, _)| l.clone()).collect())];
@@ -249,8 +249,12 @@ mod tests {
         let v = &t.rows[0].1;
         assert_eq!((v[0], v[1]), (3.0, 3.0));
         assert!((v[2] - 5.0 / 6.0).abs() < 1e-12, "{}", v[2]);
-        assert!((v[3] - (1.0f64 / 27.0).sqrt()).abs() < 1e-12);
-        assert_eq!(v[8], 3.0, "best cut-off");
+        // Origin's standard error (statistics.md 19.5): Q1 = 61/81 and Q2 = 58/81 along the curve.
+        let (a, q1, q2) = (5.0 / 6.0, 61.0 / 81.0, 58.0 / 81.0);
+        let se = ((a * (1.0 - a) + 2.0 * (q1 - a * a) + 2.0 * (q2 - a * a)) / 9.0f64).sqrt();
+        assert!((v[3] - se).abs() < 1e-12, "{} against {se}", v[3]);
+        // Origin's interpolated cut-off: 3 and above positive is "above 2.5".
+        assert_eq!(v[8], 2.5, "best cut-off");
         let sheet = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
         let long: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
         assert!(

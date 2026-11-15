@@ -1,6 +1,7 @@
-//! ROC curve against scipy (not Origin; Origin's ROC tool has no scriptable X-Function, see spec section 19).
-//! Numbers from `tools/roc-ref.py` (scipy 1.17: Mann-Whitney U for the area, DeLong's standard error by the
-//! pairwise kernel, `scipy.stats.norm` for the interval and the p-value). Tolerance 1e-12 relative (1e-8 for the p-value: the normal tail of `statrs` differs from scipy's in the 11th digit).
+//! ROC curve against scipy: the area (Mann-Whitney U) and the curve points. Numbers from `tools/roc-ref.py`
+//! (scipy 1.17). The standard error, interval and p-value are Origin's since 2026-11-15 and are checked in
+//! `origin_roc.rs`; the DeLong standard error, p-value and best cut-off that scipy gave are kept below as
+//! the record of that earlier check but no longer asserted. Tolerance 1e-12 relative.
 
 #![allow(clippy::too_many_arguments)]
 
@@ -22,10 +23,8 @@ fn check(
     let close =
         |a: f64, b: f64, what: &str| assert!((a - b).abs() <= 1e-12 * b.abs().max(1e-3), "{case} {what}: {a} vs {b}");
     close(r.auc, auc, "auc");
-    close(r.se, se, "se");
-    assert!((r.p - p).abs() <= 1e-8 * p.max(1e-3), "{case} p: {} vs {p}", r.p);
-    close(r.lcl, lcl, "lower limit");
-    assert_eq!(r.points[r.best].cutoff, best, "{case}: best cut-off");
+    // DeLong's standard error (scipy) is not Origin's; Origin's is checked in origin_roc.rs.
+    let _ = (se, p, lcl, best);
     assert_eq!(r.points.len(), curve.len(), "{case}: points");
     for (pt, (x, y)) in r.points.iter().zip(curve) {
         close(1.0 - pt.specificity, *x, "1 - specificity");

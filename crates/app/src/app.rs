@@ -2043,7 +2043,16 @@ impl SheafApp {
                 workbook.sheets.get(workbook.active_sheet)?.columns.get(column).map(|column| column.shown_text(row))
             })
             .unwrap_or_default();
-        let dialog = if replacing { FindDialog::replace(book) } else { FindDialog::new(book) };
+        let mut dialog = if replacing { FindDialog::replace(book) } else { FindDialog::new(book) };
+        if let Some(selection) = self.books.get(&book).and_then(|state| {
+            if matches!(state.sel, Sel::Cells { anchor, end } if anchor == end) {
+                return None;
+            }
+            let workbook = self.doc.project().workbook(book)?;
+            state.target(workbook.sheets.get(workbook.active_sheet)?)
+        }) {
+            dialog = dialog.in_selection(selection.columns, selection.rows);
+        }
         self.find = Some(dialog.initial_text(text));
     }
 

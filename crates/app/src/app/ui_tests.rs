@@ -6184,6 +6184,7 @@ mod clipboard_origin;
 mod clipboard_formats;
 
 mod find_replace;
+mod find_selection;
 mod go_to;
 mod go_to_picker;
 mod label_panels;

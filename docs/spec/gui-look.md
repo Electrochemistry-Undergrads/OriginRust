@@ -835,8 +835,29 @@ substring UI regressions explicitly select String now that Numeric is the initia
 Four new UI regressions and four parser/matching fixtures cover these behaviors. `--show find` and
 `--show replace` support native screenshots.
 
+The selected-range follow-up uses `re-workspace/scratch/t02-find-selection/verified/` and
+`bounds/`: all eleven corrected GUI cases have successful setup/command results. The initial
+six cases had no workbook and are excluded. A B2:B3 selection shows **Find/Replace in selected
+range**, initially checked, immediately below Skip linked cells. Finding 6 and then 5 stays
+inside B2:B3; replacing 5 with 9 changes B2 and leaves the equal cells in C alone. Unchecking
+the option lets Find Next reach C1. After that unrestricted hit collapses the range, Origin
+hides the option. Unchecking and rechecking before searching retains the original range.
+Unchecked Replace All covers the sheet without collapsing the selection, and the option stays
+visible. Whole-column and row-header selections offer it, including a column with one populated
+value and a single whole row; a single selected data cell does not. The final fresh-range probe
+explicitly restores the checked setting; its control dump and action log confirm it.
+
+Sheaf snapshots the opening columns and rows, offering that checked scope for blocks, columns,
+rows and Select All. Numeric and String searches (including backward search and wildcards),
+single replacement and Replace All respect it. Clearing numeric nonmatches also stays inside
+the range. Finding a cell moves Sheaf's worksheet selection to that hit; the saved search range
+survives until a successful unchecked search, which hides the option. Origin instead retains
+the visible selected rectangle while showing a restricted hit. Four additional UI regressions
+and one matching fixture cover range retention, option visibility, both replacement paths,
+unchanged search history, undo, noncontiguous columns and conditional missing values.
+
 Remaining: searches still cover active-sheet data only. The wider Look in scopes, label rows,
-individual cell links, selected-range restriction, saved dialog history/settings and the query's
+individual cell links, saved dialog history/settings and the query's
 triangle menu are not implemented. Look in and Include label rows are disabled; Skip linked cells
 is fixed checked because individual links are not modeled. The worksheet's normal formula-column
 protection remains in force independently. These gaps keep the parity row partial.

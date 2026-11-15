@@ -492,6 +492,10 @@ fn label_edges(
     if layer.display.show_data && layer.plots.iter().any(|p| p.visible && p.kind.is_hexbin()) {
         e.right = e.right.max(f.x + f.w + crate::hexbin::scale_reserve(ya.tick_font.size_pt));
     }
+    // The colour scale of a sunburst plot beside the frame.
+    if layer.display.show_data && layer.plots.iter().any(|p| p.visible && p.kind == PlotKind::Sunburst) {
+        e.right = e.right.max(f.x + f.w + crate::hexbin::scale_reserve(ya.tick_font.size_pt));
+    }
     let y_size = ya.title_font.size_pt;
     match ya.side {
         AxisSide::Normal => {
@@ -859,6 +863,7 @@ fn layer_scene(
     }
     if layer.display.show_data {
         crate::hexbin::draw_scale(out, layer, pds, geom, m);
+        crate::sunburst::draw_scale(out, layer, pds, geom, m);
     }
     draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
     scene

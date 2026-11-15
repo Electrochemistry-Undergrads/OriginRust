@@ -180,6 +180,12 @@ pub enum ProjectError {
     TreemapNeedsValue,
     #[error("a treemap cannot have a right Y axis; use one Y axis or another template")]
     TreemapNoRightAxis,
+    #[error("a sunburst plot needs a category column (a column of text) and a numeric value column; select both")]
+    SunburstNeedsCategory,
+    #[error("a sunburst plot needs a numeric value column; select one")]
+    SunburstNeedsValue,
+    #[error("a sunburst plot cannot have a right Y axis; use one Y axis or another template")]
+    SunburstNoRightAxis,
 }
 
 impl Project {
@@ -602,6 +608,7 @@ impl Project {
             hexbin: Default::default(),
             parallel: Default::default(),
             treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -746,6 +753,21 @@ impl Project {
             }
             return self.plot_treemap(&categories, value);
         }
+        if template == Template::Sunburst {
+            // Like the treemap: the columns of text are the rings, in selection order (else those of the value
+            // column's sheet); the value is the last numeric column.
+            let value = ys
+                .iter()
+                .rev()
+                .copied()
+                .find(|y| self.numeric(*y).is_some())
+                .ok_or(ProjectError::SunburstNeedsValue)?;
+            let mut categories: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_none()).collect();
+            if categories.is_empty() {
+                categories = self.treemap_default_categories(value);
+            }
+            return self.plot_sunburst(&categories, value);
+        }
         // One hexbin plot per layer: the colour scale and the hexagons of a second plot would cover the first's.
         let ys = if template == Template::Hexbin { &ys[..ys.len().min(1)] } else { ys };
         let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
@@ -842,6 +864,41 @@ impl Project {
                 l.apply_palette();
                 for p in &mut l.plots {
                     p.treemap.categories = cats.clone();
+                }
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
+    /// Creates a sunburst plot of `value` (a numeric column; the angles) with a ring per `categories` column (the
+    /// first innermost) and returns its id. One plot, the value column's; the categories live in its style.
+    pub fn plot_sunburst(&mut self, categories: &[ColumnId], value: ColumnId) -> Result<WindowId, ProjectError> {
+        for c in categories.iter().chain([&value]) {
+            self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
+        }
+        if self.numeric(value).is_none() {
+            return Err(ProjectError::SunburstNeedsValue);
+        }
+        let mut cats: Vec<ColumnId> = Vec::new();
+        for c in categories {
+            if *c != value && !cats.contains(c) {
+                cats.push(*c);
+            }
+        }
+        if cats.is_empty() {
+            return Err(ProjectError::SunburstNeedsCategory);
+        }
+        let long_name = self.locate(value).map(|(b, _, _)| b.long_name.clone());
+        let graph = self.add_graph(Template::Sunburst);
+        self.add_plot(graph, 0, value)?;
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                l.apply_palette();
+                for p in &mut l.plots {
+                    p.sunburst.categories = cats.clone();
                 }
             }
             if let Some(name) = long_name {
@@ -953,6 +1010,9 @@ impl Project {
         }
         if template == Template::Treemap {
             return Err(ProjectError::TreemapNoRightAxis);
+        }
+        if template == Template::Sunburst {
+            return Err(ProjectError::SunburstNoRightAxis);
         }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
@@ -1684,6 +1744,7 @@ mod tests {
             plot.kind = PlotKind::Treemap;
             plot.treemap.categories = vec![cols[1], cols[2]];
             plot.treemap.order_column = Some(cols[3]);
+            plot.sunburst.categories = vec![cols[2], cols[1]];
             plot.parallel.color = Some(cols[3]);
         }
         {
@@ -1700,6 +1761,7 @@ mod tests {
         assert_eq!(data(plot.y), want(0));
         assert_eq!(plot.treemap.categories.iter().map(|&c| data(c)).collect::<Vec<_>>(), vec![want(1), want(2)]);
         assert_eq!(data(plot.treemap.order_column.unwrap()), want(3));
+        assert_eq!(plot.sunburst.categories.iter().map(|&c| data(c)).collect::<Vec<_>>(), vec![want(2), want(1)]);
         assert_eq!(data(plot.parallel.color.unwrap()), want(3));
         assert_eq!(data(l.x_axis.rug.plot.unwrap()), want(0));
         assert_eq!(data(l.y_axis.rug_opposite.plot.unwrap()), want(0));

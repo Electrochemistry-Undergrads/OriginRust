@@ -91,6 +91,8 @@ pub(crate) struct PlotData<'a> {
     pub parallel: Option<Box<crate::parallel::ParallelData>>,
     /// What a treemap plot draws; `None` for other kinds.
     pub treemap: Option<Box<crate::treemap::TreemapData>>,
+    /// What a sunburst plot draws; `None` for other kinds.
+    pub sunburst: Option<Box<crate::sunburst::SunburstData>>,
 }
 
 /// The numbers of one box of a box chart (Origin's defaults: the box runs from the 25th to the
@@ -383,6 +385,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             hex: None,
             parallel: None,
             treemap: None,
+            sunburst: None,
             label_texts: match plot.decor.labels.form {
                 LabelForm::Column { column } if plot.decor.labels.enable => project.column(column).map(cell_texts),
                 _ => None,
@@ -429,6 +432,15 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             PlotKind::Treemap => {
                 pd.treemap = crate::treemap::TreemapData::new(project, layer, &pd).map(Box::new);
                 // A treemap has no points on any axis.
+                pd.end = pd.start;
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
+            }
+            PlotKind::Sunburst => {
+                pd.sunburst = crate::sunburst::SunburstData::new(project, layer, &pd).map(Box::new);
+                // A sunburst has no points on any axis.
                 pd.end = pd.start;
                 pd.mask = None;
                 pd.err = None;

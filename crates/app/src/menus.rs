@@ -878,6 +878,7 @@ fn plot_menu() -> Vec<Entry> {
                 item("Parallel Plot", Cmd::Plot(Template::Parallel)),
                 item("Parallel Index", Cmd::Plot(Template::ParallelIndex)),
                 item("Treemap", Cmd::Plot(Template::Treemap)),
+                item("Sunburst Plot", Cmd::Plot(Template::Sunburst)),
             ],
         ),
         sub(

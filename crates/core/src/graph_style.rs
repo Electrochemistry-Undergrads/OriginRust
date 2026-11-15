@@ -696,3 +696,75 @@ impl TreemapStyle {
         TreemapLevel { layout: self.layout, order: self.order }
     }
 }
+
+/// How the wedges of a sunburst ring are ordered (Plot Details Order; graphing spec 14.27).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SunburstOrder {
+    /// The order the categories first appear in the worksheet (Sheaf's default).
+    #[default]
+    Worksheet,
+    /// Largest first.
+    BySize,
+}
+
+fn start_90() -> f64 {
+    90.0
+}
+
+fn hole_30() -> f64 {
+    0.3
+}
+
+fn border_half() -> f64 {
+    0.5
+}
+
+/// The settings of a sunburst plot (Origin 2022 Sunburst plot, graphing spec 14.27). The plot's own Y column is the
+/// value column; the category columns are named here, the first the innermost ring. Every field is skipped when
+/// written while it has its default, so older files load unchanged.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SunburstStyle {
+    /// The category columns, first = innermost ring.
+    pub categories: Vec<ColumnId>,
+    /// Where the first wedge starts, in degrees counter-clockwise from 3 o'clock like Origin's pie rotation (default
+    /// 90: 12 o'clock); the wedges follow clockwise.
+    #[serde(default = "start_90")]
+    pub start_angle_deg: f64,
+    /// The hole in the middle as a fraction of the outer radius (0 to 0.9; default 0.3).
+    #[serde(default = "hole_30")]
+    pub hole: f64,
+    /// The gap between rings, in pt (default 0).
+    pub ring_gap_pt: f64,
+    /// The width of the border round each wedge, in pt (white; default 0.5).
+    #[serde(default = "border_half")]
+    pub border_pt: f64,
+    /// Write the category names in the wedges that have room (default on).
+    #[serde(default = "yes")]
+    pub show_names: bool,
+    /// Write the values in the wedges that have room (default off).
+    pub show_values: bool,
+    pub order: SunburstOrder,
+}
+
+impl Default for SunburstStyle {
+    fn default() -> SunburstStyle {
+        SunburstStyle {
+            categories: Vec::new(),
+            start_angle_deg: 90.0,
+            hole: 0.3,
+            ring_gap_pt: 0.0,
+            border_pt: 0.5,
+            show_names: true,
+            show_values: false,
+            order: SunburstOrder::Worksheet,
+        }
+    }
+}
+
+impl SunburstStyle {
+    pub fn is_default(&self) -> bool {
+        *self == SunburstStyle::default()
+    }
+}

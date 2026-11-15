@@ -48,6 +48,7 @@ pub mod roc;
 pub mod signal;
 pub mod smooth;
 pub mod stats;
+pub mod sunburst;
 pub mod survival;
 pub mod trace;
 pub mod treemap;

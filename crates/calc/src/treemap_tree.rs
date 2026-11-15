@@ -60,6 +60,8 @@ pub struct Node {
     pub name: String,
     pub value: f64,
     pub key: Key,
+    /// True when the category cell was empty (the name is then `(blank)`); a sunburst draws it unfilled.
+    pub blank: bool,
     pub children: Vec<Node>,
 }
 
@@ -91,11 +93,11 @@ pub fn build(rows: &[Row], levels: usize) -> Tree {
             continue;
         }
         let mut nodes = &mut tree.roots;
-        for name in row.path.iter().take(levels).map(|s| blank(s)) {
+        for (raw, name) in row.path.iter().take(levels).map(|s| (s.is_empty(), blank(s))) {
             let at = match nodes.iter().position(|n| n.name == name) {
                 Some(i) => i,
                 None => {
-                    nodes.push(Node { name, value: 0.0, key: Key::Missing, children: Vec::new() });
+                    nodes.push(Node { name, value: 0.0, key: Key::Missing, blank: raw, children: Vec::new() });
                     nodes.len() - 1
                 }
             };

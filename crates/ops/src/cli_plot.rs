@@ -44,6 +44,11 @@ pub fn style_spec(s: &StyleArgs) -> Style {
         treemap_order: s.treemap_order.clone(),
         treemap_depth: s.treemap_depth,
         treemap_gap: s.treemap_gap,
+        sunburst_start: s.sunburst_start,
+        sunburst_hole: s.sunburst_hole,
+        sunburst_gap: s.sunburst_gap,
+        sunburst_labels: s.sunburst_labels.clone(),
+        sunburst_order: s.sunburst_order.clone(),
         label: s.label.clone(),
         draw: s.draw.clone(),
     }

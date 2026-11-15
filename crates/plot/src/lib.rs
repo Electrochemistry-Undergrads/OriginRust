@@ -36,6 +36,7 @@ pub mod scene;
 mod shapes;
 mod sheet;
 mod stack;
+mod sunburst;
 mod svg;
 mod symbol_gaps;
 mod ternary;
@@ -83,6 +84,8 @@ mod rug_tests;
 mod skip_tests;
 #[cfg(test)]
 mod sort_x_tests;
+#[cfg(test)]
+mod sunburst_tests;
 #[cfg(test)]
 mod symbol_gap_tests;
 #[cfg(test)]

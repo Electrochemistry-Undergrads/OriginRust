@@ -117,10 +117,13 @@ pub enum Template {
     /// Treemap (Origin's "Treemap", 2025b): nested rectangles, one level per category column, the areas
     /// proportional to a value column. No axes and no legend.
     Treemap,
+    /// Sunburst plot (Origin's "Sunburst Plot", 2022): the hierarchy of the category columns as concentric rings,
+    /// the angles proportional to a value column. No axes and no legend; a colour scale beside the layer.
+    Sunburst,
 }
 
 impl Template {
-    pub const ALL: [Template; 44] = [
+    pub const ALL: [Template; 45] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -149,6 +152,7 @@ impl Template {
         Template::Parallel,
         Template::ParallelIndex,
         Template::Treemap,
+        Template::Sunburst,
         Template::Bubble,
         Template::ColorMapped,
         Template::BubbleColorMapped,
@@ -214,6 +218,7 @@ impl Template {
             Template::Parallel => "parallel",
             Template::ParallelIndex => "parallel-index",
             Template::Treemap => "treemap",
+            Template::Sunburst => "sunburst",
         }
     }
 
@@ -263,6 +268,7 @@ impl Template {
             Template::Parallel => "Parallel Plot",
             Template::ParallelIndex => "Parallel Index",
             Template::Treemap => "Treemap",
+            Template::Sunburst => "Sunburst Plot",
         }
     }
 
@@ -349,6 +355,16 @@ impl Template {
             Template::Treemap => {
                 // The rectangles fill the layer's frame: no axes, no legend (the names are inside).
                 let mut g = general(id, name, PlotKind::Treemap);
+                for l in &mut g.layers {
+                    l.x_axis.side = AxisSide::Hidden;
+                    l.y_axis.side = AxisSide::Hidden;
+                    l.legend.visible = false;
+                }
+                g
+            }
+            Template::Sunburst => {
+                // The rings fill the layer's frame: no axes, no legend (the names are in the rings).
+                let mut g = general(id, name, PlotKind::Sunburst);
                 for l in &mut g.layers {
                     l.x_axis.side = AxisSide::Hidden;
                     l.y_axis.side = AxisSide::Hidden;
@@ -903,7 +919,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 44);
+        assert_eq!(Template::ALL.len(), 45);
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
         assert_eq!(Template::from_name("violin"), Some(Template::Violin));
         assert_eq!(Template::from_name("violin-box"), Some(Template::ViolinBox));
@@ -1360,6 +1376,58 @@ mod tests {
         let g2 = p.plot_columns(Template::Treemap, &[v]).unwrap();
         assert_eq!(p.graph(g2).unwrap().layers[0].plots[0].treemap.categories, vec![region, name]);
         assert_eq!(l.inherited_treemap().categories, vec![name, region]);
+    }
+
+    #[test]
+    fn the_sunburst_template_has_its_own_kind_settings_and_refusals() {
+        use crate::graph::{SunburstOrder, SunburstStyle};
+        use crate::{ColumnData, Designation, Project};
+        assert_eq!(Template::from_name("sunburst"), Some(Template::Sunburst));
+        assert_eq!(Template::Sunburst.label(), "Sunburst Plot");
+        assert_eq!(serde_json::to_string(&PlotKind::Sunburst).unwrap(), "\"sunburst\"");
+        let g = Template::Sunburst.new_graph(WindowId(1), "G");
+        assert_eq!(g.layers[0].default_kind, PlotKind::Sunburst);
+        assert!(!g.layers[0].legend.visible);
+        assert_eq!(g.layers[0].x_axis.side, crate::graph::AxisSide::Hidden);
+        let back: Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!(back, g);
+        let d = SunburstStyle::default();
+        assert_eq!(
+            (d.start_angle_deg, d.hole, d.ring_gap_pt, d.border_pt, d.show_names, d.show_values, d.order),
+            (90.0, 0.3, 0.0, 0.5, true, false, SunburstOrder::Worksheet)
+        );
+        assert!(serde_json::from_str::<SunburstStyle>("{}").unwrap().is_default());
+        let partial: SunburstStyle = serde_json::from_str(r#"{"hole":0.5,"show_values":true}"#).unwrap();
+        assert_eq!(
+            (partial.hole, partial.start_angle_deg, partial.show_names, partial.show_values),
+            (0.5, 90.0, true, true)
+        );
+
+        let mut p = Project::new();
+        let b = p.add_workbook("d");
+        let region =
+            p.add_column(b, 0, Designation::Y, ColumnData::text(vec!["a".into(), "a".into(), "b".into()])).unwrap();
+        let name =
+            p.add_column(b, 0, Designation::Y, ColumnData::text(vec!["x".into(), "y".into(), "z".into()])).unwrap();
+        let v = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        let w = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![4.0, 5.0, 6.0])).unwrap();
+        let err = p.plot_columns(Template::Sunburst, &[region, name]).unwrap_err();
+        assert!(err.to_string().contains("numeric value column"), "{err}");
+        let err = p.plot_sunburst(&[], v).unwrap_err();
+        assert!(err.to_string().contains("category column"), "{err}");
+        let err = p.plot_sunburst(&[v], region).unwrap_err();
+        assert!(err.to_string().contains("numeric value column"), "{err}");
+        let err = p.plot_columns_double_y(Template::Sunburst, &[v], &[w]).unwrap_err();
+        assert!(err.to_string().contains("right Y axis"), "{err}");
+        assert_eq!(p.graphs().count(), 0, "a refused plot leaves no graph behind");
+        let g = p.plot_columns(Template::Sunburst, &[name, region, v, w]).unwrap();
+        let l = p.graph(g).unwrap().layers[0].clone();
+        assert_eq!(l.plots.len(), 1);
+        assert_eq!((l.plots[0].y, l.plots[0].kind), (w, PlotKind::Sunburst));
+        assert_eq!(l.plots[0].sunburst.categories, vec![name, region]);
+        let g2 = p.plot_columns(Template::Sunburst, &[v]).unwrap();
+        assert_eq!(p.graph(g2).unwrap().layers[0].plots[0].sunburst.categories, vec![region, name]);
+        assert_eq!(l.inherited_sunburst().categories, vec![name, region]);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # T21: Graph defaults as Origin (colours, fonts, line widths, ticks, symbols, dashes)
 
-**Status:** done, merged (`b015f97`). Left: the 0.5 pt dash lengths are not linear in the width; legend default position (Origin overlaps the top frame edge) not copied; Column and Waterfall/Stacked/DoubleY follow the new defaults; writer does not store tick lengths. **Size:** M.
+**Status:** done, merged (`b015f97`). Left: the 0.5 pt dash lengths are not linear in the width; legend default position (Origin overlaps the top frame edge) not copied; Column and Waterfall/Stacked/DoubleY follow the new defaults; writer stores the major tick length since 2026-11-15 (opj-format 10.3; the reader reads it, minor = half), a chosen minor length is still not stored. **Size:** M.
 **Branch:** `graph-defaults2`. **Model:** Sonnet.
 **Detail:** audit C "Different, checked in Origin" and "Different, not verified"; open question U1 (colour
 order). **Spec:** `docs/spec/graphing.md` sections 1.5 (colour list), 2.1 (dash patterns), 3 (axis).

@@ -209,6 +209,8 @@ pub(super) struct AxisBlocks {
     pub line_width: u16,
     /// Direction codes of the major and minor ticks: 0 none, 1 in, 2 out, 3 both.
     pub major_ticks: u8,
+    /// Major tick length in tenths of a point (u16 at 0x4A of the axis line block).
+    pub major_len: u16,
     pub minor_ticks: u8,
     /// A line on the other edge too (closes the box).
     pub far_line: bool,
@@ -302,6 +304,7 @@ pub(super) fn axis_blocks(group: usize, a: &AxisBlocks) -> Vec<Vec<u8>> {
         let b = &mut blocks[own_line];
         put(b, 0x15, &a.line_width.to_le_bytes());
         b[0x25] = (a.major_ticks & 3) << 4 | (a.minor_ticks & 3) << 6;
+        put(b, 0x4A, &a.major_len.to_le_bytes());
         show(b, a.line_shown);
         if a.follows_plot {
             put_colour(b, Code::AUTO);

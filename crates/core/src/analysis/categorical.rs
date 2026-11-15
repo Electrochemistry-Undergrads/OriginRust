@@ -208,7 +208,7 @@ pub(super) fn crosstab(
     if left_out > 0 {
         notes.push(format!("{left_out} rows with a level in only one of the two columns were left out."));
     }
-    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 #[cfg(test)]

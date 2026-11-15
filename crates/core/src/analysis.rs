@@ -1417,6 +1417,42 @@ pub(crate) fn resolve_rows(rows: RowRange, short: &str, x: &[f64], n: usize) -> 
     }
 }
 
+/// The groups behind the report of a one-way ANOVA with a means comparison and of a two-sample t-test, kept on the
+/// report sheet for the Multiple Comparisons Plot (T64).
+fn comparison_source(
+    tool: &Tool,
+    inputs: &[Input<'_>],
+    pairs: Vec<(usize, usize)>,
+) -> Option<crate::compplot::ComparisonSource> {
+    use crate::compplot::{ComparisonGroup, ComparisonKind, ComparisonSource, StepDown};
+    let (kind, alpha, step_down) = match tool {
+        Tool::Anova(spec) if spec.comparison.is_some() => {
+            let step_down = match spec.comparison {
+                Some(MeansComparison::HolmBonferroni) => Some(StepDown::Bonferroni),
+                Some(MeansComparison::HolmSidak) => Some(StepDown::Sidak),
+                _ => None,
+            };
+            (ComparisonKind::OneWayAnova, spec.alpha, step_down)
+        }
+        Tool::TTest(TTestSpec { kind: TTestKind::TwoSample { .. }, alpha, .. }) => {
+            (ComparisonKind::TwoSampleTTest, *alpha, None)
+        }
+        _ => return None,
+    };
+    let units = match inputs.first() {
+        Some(f) if inputs.iter().all(|i| i.units == f.units) => f.units.clone(),
+        _ => String::new(),
+    };
+    let groups = inputs
+        .iter()
+        .map(|i| ComparisonGroup {
+            name: i.name.clone(),
+            values: i.ys().iter().copied().filter(|v| v.is_finite()).collect(),
+        })
+        .collect();
+    Some(ComparisonSource { kind, groups, units, pairs, alpha, step_down })
+}
+
 /// A sheet name that the workbook does not use yet: `prefix` followed by the smallest free number.
 pub(crate) fn free_sheet_name(sheets: &[Worksheet], prefix: &str) -> String {
     (1..)
@@ -1891,6 +1927,7 @@ impl Project {
         let mut notes: Vec<String> = Vec::new();
         // Plots of a new graph: indices into `on_sheet` of the X and the Y column.
         let mut graph_plots: Vec<(usize, usize)> = Vec::new();
+        let mut comparison_pairs: Vec<(usize, usize)> = Vec::new();
         // A graph of scatter and line plots (probability plots).
         let mut xy_graph: Option<dist::XyGraph> = None;
         // Further graphs of the same tool (loading plot, biplot).
@@ -1949,6 +1986,7 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 graph_plots = out.plots;
+                comparison_pairs = out.comparison_pairs;
             }
             Tool::DistFit(_) | Tool::ProbPlot(_) => {
                 let out = dist::run(&request.tool, &inputs)?;
@@ -2950,6 +2988,7 @@ impl Project {
 
         // Everything was computed; now change the project.
         let count = request.columns.len();
+        let comparison_source = comparison_source(&request.tool, &inputs, comparison_pairs);
         drop(inputs);
         let mut new_columns = Vec::with_capacity(beside.len());
         let mut added_names: Vec<String> = Vec::new();
@@ -3010,6 +3049,7 @@ impl Project {
                 sheet_column_ids.push(id);
             }
             sheet_name = ws.name.clone();
+            ws.comparison_source = comparison_source;
             let b = self.workbook_mut(book_id).expect("workbook exists");
             b.sheets.push(ws);
             new_sheet = Some(b.sheets.len() - 1);

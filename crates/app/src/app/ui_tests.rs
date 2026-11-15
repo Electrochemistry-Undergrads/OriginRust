@@ -11,6 +11,7 @@ use sheaf_plot::scene::ObjectKind;
 
 mod autosave;
 mod cell_notes;
+mod comparison_plot;
 mod cond_format;
 mod excel;
 mod fill_inclusive;

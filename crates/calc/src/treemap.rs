@@ -298,12 +298,22 @@ fn pivot_step(kind: Layout, items: &[(usize, f64)], r: Rect) -> Step {
     let sum1: f64 = items[..p].iter().map(|it| it.1).sum();
     let sp = items[p].1;
     let after = &items[p + 1..];
-    let w1 = if p == 0 { 0.0 } else { r.w * sum1 / (sum1 + sp + after.iter().map(|it| it.1).sum::<f64>()) };
+    // Prefix sums of the weights after the pivot: `pre[j]` is the weight of the first `j` of them, so
+    // every candidate split is O(1) and the step stays linear.
+    let mut pre = Vec::with_capacity(after.len() + 1);
+    let mut acc = 0.0;
+    pre.push(acc);
+    for it in after {
+        acc += it.1;
+        pre.push(acc);
+    }
+    let sum_after = acc;
+    let w1 = if p == 0 { 0.0 } else { r.w * sum1 / (sum1 + sp + sum_after) };
     let r1 = Rect::new(r.x, r.y, w1, r.h);
     let rest = Rect::new(r.x + w1, r.y, r.w - w1, r.h);
-    let total_rest = sp + after.iter().map(|it| it.1).sum::<f64>();
+    let total_rest = sp + sum_after;
     let place = |n2: usize| -> (Rect, Rect, Rect) {
-        let s2: f64 = after[..n2].iter().map(|it| it.1).sum();
+        let s2 = pre[n2];
         let top_h = if n2 == after.len() { rest.h } else { rest.h * (sp + s2) / total_rest };
         let wp = if n2 == 0 { rest.w } else { rest.w * sp / (sp + s2) };
         let rp = Rect::new(rest.x, rest.y, wp, top_h);
@@ -548,5 +558,72 @@ mod tests {
             assert_eq!(Layout::from_name(l.label()), Some(l), "{}", l.label());
         }
         assert_eq!(Layout::from_name("nope"), None);
+    }
+
+    /// The original quadratic step, kept as the oracle for the prefix-sum version.
+    #[cfg(test)]
+fn pivot_step_reference(kind: Layout, items: &[(usize, f64)], r: Rect) -> Step {
+        let p = pick_pivot(kind, items);
+        let sum1: f64 = items[..p].iter().map(|it| it.1).sum();
+        let sp = items[p].1;
+        let after = &items[p + 1..];
+        let w1 = if p == 0 { 0.0 } else { r.w * sum1 / (sum1 + sp + after.iter().map(|it| it.1).sum::<f64>()) };
+        let r1 = Rect::new(r.x, r.y, w1, r.h);
+        let rest = Rect::new(r.x + w1, r.y, r.w - w1, r.h);
+        let total_rest = sp + after.iter().map(|it| it.1).sum::<f64>();
+        let place = |n2: usize| -> (Rect, Rect, Rect) {
+            let s2: f64 = after[..n2].iter().map(|it| it.1).sum();
+            let top_h = if n2 == after.len() { rest.h } else { rest.h * (sp + s2) / total_rest };
+            let wp = if n2 == 0 { rest.w } else { rest.w * sp / (sp + s2) };
+            let rp = Rect::new(rest.x, rest.y, wp, top_h);
+            let r2 = Rect::new(rest.x + wp, rest.y, rest.w - wp, top_h);
+            let r3 = Rect::new(rest.x, rest.y + top_h, rest.w, rest.h - top_h);
+            (rp, r2, r3)
+        };
+        let aspect = |q: &Rect| if q.w > 0.0 && q.h > 0.0 { (q.w / q.h).max(q.h / q.w) } else { f64::INFINITY };
+        let (mut n2, mut best) = (0, f64::INFINITY);
+        for j in 0..=after.len() {
+            let a = aspect(&place(j).0);
+            if a < best - 1e-12 {
+                best = a;
+                n2 = j;
+            }
+        }
+        let (rp, r2, r3) = place(n2);
+        Step { pivot: p, n2, r1, rp, r2, r3 }
+    }
+
+    #[test]
+    fn prefix_sum_pivot_step_matches_the_reference_step() {
+        let mut rng = Rng(7);
+        for kind in [Layout::PivotSize, Layout::PivotMiddle, Layout::PivotSplitSize] {
+            for n in [2usize, 3, 5, 12, 40] {
+                for _ in 0..20 {
+                    let mut items: Vec<(usize, f64)> = (0..n).map(|i| (i, 0.1 + rng.next() * 10.0)).collect();
+                    if n % 2 == 0 {
+                        items.sort_by(|a, b| b.1.total_cmp(&a.1));
+                    }
+                    let r = Rect::new(1.0, 2.0, 30.0 + rng.next() * 50.0, 20.0 + rng.next() * 40.0);
+                    let (a, b) = (pivot_step(kind, &items, r), pivot_step_reference(kind, &items, r));
+                    assert_eq!((a.pivot, a.n2), (b.pivot, b.n2));
+                    for (x, y) in [(a.r1, b.r1), (a.rp, b.rp), (a.r2, b.r2), (a.r3, b.r3)] {
+                        for (u, v) in [(x.x, y.x), (x.y, y.y), (x.w, y.w), (x.h, y.h)] {
+                            assert!((u - v).abs() < 1e-9);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn pivot_layouts_handle_sorted_input_quickly() {
+        let weights: Vec<f64> = (0..30000).map(|i| (30000 - i) as f64).collect();
+        for kind in [Layout::PivotSize, Layout::PivotMiddle, Layout::PivotSplitSize] {
+            let t = std::time::Instant::now();
+            let out = layout(kind, &weights, Rect::new(0.0, 0.0, 1000.0, 700.0));
+            assert_eq!(out.len(), weights.len());
+            assert!(t.elapsed().as_secs_f64() < 2.0, "{kind:?} took {:?}", t.elapsed());
+        }
     }
 }

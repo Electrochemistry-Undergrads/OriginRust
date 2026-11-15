@@ -1986,7 +1986,7 @@ Origin's documented facts (Origin 2025b help, not measured; no Origin was at han
     (2002): pivot `P`, `L1` the items before it, then the items after it cut into `L2` and `L3`. In a rectangle at least as
     wide as high: `L1` a full-height column on the left, `P` at the top left of the rest with `L2` on its right, `L3` the
     band along the bottom; in a taller rectangle the axes are exchanged. The `L2`/`L3` cut is the one that brings `P`'s aspect
-    ratio nearest to 1 (the first on a tie); the lists are laid out again the same way. Pivot choice: the largest item (first
+    ratio nearest to 1 (the first on a tie; found with prefix sums, so one step is linear and 30000 sorted weights lay out in well under a second); the lists are laid out again the same way. Pivot choice: the largest item (first
     on a tie); the item at index `n / 2`; the item with the least difference between the total before and after it.
 - Hierarchy (`sheaf_calc::treemap_tree`): one level per category column, the first the top level. Rows with a missing, non-finite
   or non-positive value are skipped (not an error); rows with the same category path are one leaf with the summed value; an
@@ -2009,8 +2009,10 @@ Origin's documented facts (Origin 2025b help, not measured; no Origin was at han
   text, a right Y axis (`--y2`), panels, an overlay. A refused plot leaves no graph behind.
 - Drawing (`crates/plot/src/treemap.rs`): the rectangles fill the layer frame; no axes, no frame line, no legend. One colour
   of the layer's palette per top-level category (by first appearance, whatever the order); a node `L` levels deep is that
-  colour blended `1 - 0.7^L` of the way to white; every rectangle has a 0.5 pt white border. A top-level node with its
-  children shown has a header band 1.55 text heights high (and a padding) holding its name, in the colour of the band. A leaf (the
+  colour blended `1 - 0.7^L` of the way to white; every rectangle has a 0.5 pt white border. A node with its
+  children shown has a header band 1.55 text heights high (and a padding) holding its name, in the colour of the band; the
+  band and its text of level `L` are `0.85^L` of the top level's (Sheaf's choice), and a level-1+ node less than twice the
+  band high or wide has none and its name is not drawn (level 0: the height test only). A leaf (the
   last level shown) shows its name and below it its value (up to four significant digits, no exponent) at the top left, in
   the layer's X axis tick font at 0.45 of its size (9.9 pt for the 22 pt default), black or white as reads better on the fill.
   A label is drawn whole or not at all: the name is left out when it is wider than the rectangle (less a 0.3 text size padding
@@ -2031,6 +2033,9 @@ Origin's documented facts (Origin 2025b help, not measured; no Origin was at han
   `crates/plot/src/treemap_tests.rs` (nesting inside parents by the gap, colours per top level and tints, labels hidden when they do
   not fit, depth, every layout with every order, other kinds unchanged), core template/refusal/serde test, `.opj` warning test,
   `crates/cli/tests/treemap.rs` (SVG, defaults, every layout and option, refusals), UI menu and Layout tab tests with undo.
+- File > Append renumbers the appended graphs' columns through `Graph::remap_columns` (core `graph.rs`): the plots' X, Y, error,
+  base, size and colour columns, label columns, treemap `categories` and `order_column`, the parallel `color` column, plot
+  offsets, tick-label columns and the rug `plot` choice of each axis. A new field holding a column id goes there.
 - Not done: Origin's real defaults, colours and labels, hover read-out and picking of rectangles, drilling down, a colour-by-value
   option, a toolbar button, a label font setting, reading Origin's treemap from .opj, a size cap on very many rectangles.
 

@@ -55,6 +55,43 @@ impl Graph {
         out
     }
 
+    /// Renumbers every column id stored anywhere in this graph through `f`: the plots' X, Y, error,
+    /// base, size and colour columns, label columns, treemap categories and order column, the
+    /// parallel colour/group column, the plot offsets and their follows, the tick-label columns of
+    /// the axes and the plot choice of the rugs. Every path that renumbers columns (File > Append,
+    /// ...) goes through this; a new field that holds a [`ColumnId`] is added here.
+    pub fn remap_columns(&mut self, f: &dyn Fn(ColumnId) -> ColumnId) {
+        for layer in &mut self.layers {
+            for p in &mut layer.plots {
+                p.y = f(p.y);
+                for id in [&mut p.x, &mut p.y_error, &mut p.x_error, &mut p.y_base, &mut p.size_from, &mut p.color_from]
+                {
+                    *id = id.map(f);
+                }
+                if let LabelForm::Column { column } = &mut p.decor.labels.form {
+                    *column = f(*column);
+                }
+                p.parallel.color = p.parallel.color.map(f);
+                for c in &mut p.treemap.categories {
+                    *c = f(*c);
+                }
+                p.treemap.order_column = p.treemap.order_column.map(f);
+            }
+            for o in &mut layer.plot_offsets {
+                o.column = f(o.column);
+                o.follows = o.follows.map(f);
+            }
+            for axis in [&mut layer.x_axis, &mut layer.y_axis] {
+                if let TickLabelSource::Column { column } = &mut axis.tick_label_source {
+                    *column = f(*column);
+                }
+                for rug in [&mut axis.rug, &mut axis.rug_opposite] {
+                    rug.plot = rug.plot.map(f);
+                }
+            }
+        }
+    }
+
     /// The parent of layer `index` when the layer has a valid link: the parent comes earlier in
     /// the list and is not linked itself. A layer with an invalid link (to itself, to a later or
     /// missing layer, or to a linked layer) is drawn as an independent layer.

@@ -9,8 +9,10 @@
 //! - One colour of the layer's palette per top-level category (by first appearance, whatever the order); a node
 //!   `L` levels deep is that colour blended `1 - 0.7^L` of the way to white. Every rectangle has a white border of
 //!   0.5 pt.
-//! - A top-level category with its children shown has a header band of 1.55 text heights holding its name, drawn in
-//!   the band's colour. Other names, and the values, are written in the rectangle they name.
+//! - A category with its children shown has a header band of 1.55 text heights holding its name, drawn in the
+//!   band's colour; the band of each level below the first is 0.85 of the one above, with its text scaled the same,
+//!   and a level-1+ rectangle too small for its band (twice the band high or wide) has none and its name is not
+//!   drawn. Leaf names, and the values, are written in the rectangle they name.
 //! - A leaf (the deepest level shown) shows its name at the top left and, below it, its value, in the layer's X
 //!   axis tick font at 0.45 of its size; black or white, whichever reads better on the fill. The name is left out when it is wider than
 //!   the rectangle or the rectangle is not as high as the text; the value line is left out when it does not fit
@@ -160,14 +162,16 @@ pub(crate) fn draw_treemap(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeome
             let h = to_rect(h);
             let top = tm.colors.get(c.top).copied().unwrap_or(fill);
             font.color = text_color(top);
-            if text::width(m, &c.name, &font, size) + 2.0 * pad <= h.w {
+            let hs = size * treemap_tree::HEADER_SHRINK.powi(c.level as i32);
+            let (hpad, hline) = (PAD_EM * hs, (ASCENT + DESCENT) * hs);
+            if text::width(m, &c.name, &font, hs) + 2.0 * hpad <= h.w {
                 text::place(
                     out,
                     m,
                     &c.name,
                     &font,
-                    size,
-                    (h.x + pad, h.y + (h.h - line) / 2.0 + ASCENT * size),
+                    hs,
+                    (h.x + hpad, h.y + (h.h - hline) / 2.0 + ASCENT * hs),
                     Anchor::Start,
                     0.0,
                 );

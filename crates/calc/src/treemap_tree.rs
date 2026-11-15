@@ -127,6 +127,9 @@ pub struct Level {
     pub order: Order,
 }
 
+/// Each level below the first has a header band (and header text) this fraction of the one above it.
+pub const HEADER_SHRINK: f64 = 0.85;
+
 /// What [`nested`] needs besides the tree and the rectangle.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Params {
@@ -134,7 +137,7 @@ pub struct Params {
     pub depth: Option<usize>,
     /// The gap between rectangles, in the units of the rectangle.
     pub gap: f64,
-    /// The height of the header band of a top-level node (0: none).
+    /// The height of the header band of a top-level node (0: none); level `L` has `HEADER_SHRINK^L` of it.
     pub header: f64,
     /// The layout and order of each level; a level past the end takes the last entry.
     pub levels: Vec<Level>,
@@ -153,7 +156,8 @@ pub struct Cell {
     pub slot: Rect,
     /// The rectangle drawn: the slot shrunk by half the gap on each side.
     pub rect: Rect,
-    /// The band holding the name of a top-level node with children shown.
+    /// The band holding the name of a node with children shown, when the rectangle is tall (and, below
+    /// the top level, wide) enough for it.
     pub header: Option<Rect>,
     /// True when no children are laid out inside (the last shown level, or nothing below).
     pub leaf: bool,
@@ -206,9 +210,10 @@ fn place(nodes: &[Node], area: Rect, level: usize, top: Option<usize>, shown: us
         let leaf = node.children.is_empty() || level + 1 >= shown;
         let mut header = None;
         let mut inner = rect.inset(p.gap / 2.0);
-        if !leaf && level == 0 && shown > 1 && p.header > 0.0 && rect.h >= 2.0 * p.header {
-            header = Some(Rect::new(rect.x, rect.y, rect.w, p.header));
-            inner = Rect::new(inner.x, rect.y + p.header + p.gap / 2.0, inner.w, (rect.h - p.header - p.gap).max(0.0));
+        let band = p.header * HEADER_SHRINK.powi(level as i32);
+        if !leaf && band > 0.0 && rect.h >= 2.0 * band && (level == 0 || rect.w >= 2.0 * band) {
+            header = Some(Rect::new(rect.x, rect.y, rect.w, band));
+            inner = Rect::new(inner.x, rect.y + band + p.gap / 2.0, inner.w, (rect.h - band - p.gap).max(0.0));
         }
         out.push(Cell { level, top: top_index, name: node.name.clone(), value: node.value, slot, rect, header, leaf });
         if !leaf {

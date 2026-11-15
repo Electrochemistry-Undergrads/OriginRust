@@ -412,30 +412,7 @@ impl Project {
                 }
                 Window::Graph(graph) => {
                     graph.id = w(graph.id);
-                    for layer in &mut graph.layers {
-                        for p in &mut layer.plots {
-                            p.y = c(p.y);
-                            for id in [
-                                &mut p.x,
-                                &mut p.y_error,
-                                &mut p.x_error,
-                                &mut p.y_base,
-                                &mut p.size_from,
-                                &mut p.color_from,
-                            ] {
-                                *id = id.map(c);
-                            }
-                        }
-                        for o in &mut layer.plot_offsets {
-                            o.column = c(o.column);
-                            o.follows = o.follows.map(c);
-                        }
-                        for axis in [&mut layer.x_axis, &mut layer.y_axis] {
-                            if let crate::graph::TickLabelSource::Column { column } = &mut axis.tick_label_source {
-                                *column = c(*column);
-                            }
-                        }
-                    }
+                    graph.remap_columns(&c);
                 }
             }
         }
@@ -1683,5 +1660,49 @@ mod tests {
         let (new, _) = p.append(other, "f");
         let col = p.workbook(new[0]).unwrap().sheets[0].columns[0].id;
         assert_eq!(p.workbook(new[0]).unwrap().sheets[0].note(col, 0), Some("o"));
+    }
+
+    #[test]
+    fn append_remaps_the_column_ids_inside_plot_styles() {
+        use crate::graph::PlotKind;
+        let mut here = Project::new();
+        let hb = here.add_workbook("");
+        for i in 0..5 {
+            here.add_column(hb, 0, Designation::Y, ColumnData::numeric(vec![100.0 + i as f64])).unwrap();
+        }
+
+        let mut other = Project::new();
+        let ob = other.add_workbook("");
+        let mut cols = Vec::new();
+        for i in 0..4 {
+            let d = ColumnData::numeric(vec![i as f64, i as f64 + 0.5, i as f64 + 1.0]);
+            cols.push(other.add_column(ob, 0, Designation::Y, d).unwrap());
+        }
+        let g = other.plot_columns(Template::Line, &[cols[0]]).unwrap();
+        {
+            let plot = &mut other.graph_mut(g).unwrap().layers[0].plots[0];
+            plot.kind = PlotKind::Treemap;
+            plot.treemap.categories = vec![cols[1], cols[2]];
+            plot.treemap.order_column = Some(cols[3]);
+            plot.parallel.color = Some(cols[3]);
+        }
+        {
+            let l = &mut other.graph_mut(g).unwrap().layers[0];
+            l.x_axis.rug.plot = Some(cols[0]);
+            l.y_axis.rug_opposite.plot = Some(cols[0]);
+        }
+        let (new, _) = here.append(other, "f");
+        let graph = here.graph(new[1]).unwrap();
+        let l = &graph.layers[0];
+        let plot = &l.plots[0];
+        let data = |id: ColumnId| here.numeric(id).unwrap().to_vec();
+        let want = |i: usize| vec![i as f64, i as f64 + 0.5, i as f64 + 1.0];
+        assert_eq!(data(plot.y), want(0));
+        assert_eq!(plot.treemap.categories.iter().map(|&c| data(c)).collect::<Vec<_>>(), vec![want(1), want(2)]);
+        assert_eq!(data(plot.treemap.order_column.unwrap()), want(3));
+        assert_eq!(data(plot.parallel.color.unwrap()), want(3));
+        assert_eq!(data(l.x_axis.rug.plot.unwrap()), want(0));
+        assert_eq!(data(l.y_axis.rug_opposite.plot.unwrap()), want(0));
+        assert_eq!(l.x_axis.rug_opposite.plot, None, "an unset rug choice stays unset");
     }
 }

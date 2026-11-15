@@ -297,3 +297,60 @@ fn a_treemap_without_category_columns_draws_nothing_and_other_kinds_are_unchange
     assert_eq!(svg_of(&q, s), alone);
     assert_eq!(q.graph(s).unwrap().layers[0].default_kind, PlotKind::Scatter);
 }
+
+#[test]
+fn middle_levels_get_header_bands_and_names() {
+    let mut p = Project::new();
+    let b = p.add_workbook("data");
+    let rows = [
+        ("Asia", "China", "a", 400.0),
+        ("Asia", "China", "b", 300.0),
+        ("Asia", "India", "c", 500.0),
+        ("Asia", "India", "d", 300.0),
+        ("Europe", "France", "e", 450.0),
+        ("Europe", "France", "f", 350.0),
+        ("Europe", "Germany", "g", 700.0),
+    ];
+    let mut text = |f: &dyn Fn(&(&str, &str, &str, f64)) -> String| {
+        p.add_column(b, 0, Designation::Y, ColumnData::text(rows.iter().map(f).collect())).unwrap()
+    };
+    let (c1, c2, c3) = (text(&|r| r.0.to_string()), text(&|r| r.1.to_string()), text(&|r| r.2.to_string()));
+    let v = p.add_column(b, 0, Designation::Y, ColumnData::numeric(rows.iter().map(|r| r.3).collect())).unwrap();
+    let g = p.plot_treemap(&[c1, c2, c3], v).unwrap();
+    p.graph_mut(g).unwrap().page.width_pt = 800.0;
+    p.graph_mut(g).unwrap().page.height_pt = 600.0;
+    let (cs, _) = cells(&p, g);
+    for name in ["China", "India", "France", "Germany"] {
+        let c = cs.iter().find(|c| c.name == name).unwrap();
+        assert_eq!(c.level, 1);
+        assert!(c.header.is_some(), "{name} has a header band");
+    }
+    assert!(cs.iter().filter(|c| c.leaf).all(|c| c.header.is_none()));
+    let t = texts(&doc(&svg_of(&p, g)));
+    for name in ["Asia", "Europe", "China", "India", "France", "Germany", "a", "g"] {
+        assert!(t.iter().any(|x| x == name), "{name} is drawn: {t:?}");
+    }
+    // A shallower depth drops the lowest level's names, and the middle level becomes the leaf level.
+    set(&mut p, g, |t| t.depth = Some(2));
+    let t = texts(&doc(&svg_of(&p, g)));
+    assert!(t.iter().any(|x| x == "China") && !t.iter().any(|x| x == "a"));
+}
+
+#[test]
+fn an_appended_treemap_draws_the_same() {
+    let (mut p, g, _, _) = world();
+    let pop = p.graph(g).unwrap().layers[0].plots[0].y;
+    set(&mut p, g, |t| {
+        t.order = TreemapOrder::ByColumn;
+        t.order_column = Some(pop);
+    });
+    let before = svg_of(&p, g);
+    let mut host = Project::new();
+    let hb = host.add_workbook("host");
+    for i in 0..3 {
+        host.add_column(hb, 0, Designation::Y, ColumnData::numeric(vec![i as f64])).unwrap();
+    }
+    let (new, _) = host.append(p, "f");
+    let after = svg_of(&host, new[1]);
+    assert_eq!(before, after);
+}

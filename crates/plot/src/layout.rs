@@ -125,7 +125,20 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
     let first = sources.first().copied();
     let mut range = data::axis_range(sources.iter().copied(), dim, axis.scale);
     let boxes: Vec<&data::BoxStats> = sources.iter().filter_map(|pd| pd.boxed.as_ref()).collect();
-    let mut resolved = if dim == Dim::X && !boxes.is_empty() {
+    let ridges: Vec<&crate::ridgeline::RidgeData> = sources.iter().filter_map(|pd| pd.ridge.as_ref()).collect();
+    let mut resolved = if dim == Dim::Y && !ridges.is_empty() && axis.scale == sheaf_core::graph::ScaleKind::Linear {
+        // Ridgelines: one baseline per column at 1, 2, 3, ... named by its column; the axis reaches
+        // below the first baseline (and its rug) and above the highest peak (graphing spec 14.23).
+        let n = ridges.len() as f64;
+        let rug =
+            sources.iter().filter_map(|pd| pd.ridge.as_ref().map(|r| r.rug_reach(&pd.plot.ridge))).fold(0.0, f64::max);
+        let top = ridges.iter().map(|r| r.pos + r.peak() * r.scale).fold(n, f64::max);
+        let (lo, hi) = ((1.0 - rug - 0.1).min(0.5), top + 0.1);
+        let mut r = crate::ticks::resolve_category(axis, Some((lo + 0.5, hi - 0.5)));
+        let names: Vec<String> = ridges.iter().map(|r| r.label.clone()).collect();
+        crate::ticks::label_from_cells(&mut r, &names);
+        r
+    } else if dim == Dim::X && !boxes.is_empty() {
         // Box charts: one category per box, named by its column.
         let mut r = crate::ticks::resolve_category(axis, Some((1.0, boxes.len() as f64)));
         let names: Vec<String> = boxes.iter().map(|b| b.label.clone()).collect();
@@ -644,7 +657,17 @@ fn layer_scene(
     let drawn: &[PlotData] = if layer.display.show_data { pds } else { &[] };
     match waterfall {
         None => {
-            for (k, pd) in drawn.iter().enumerate() {
+            // Ridgelines are drawn back to front: the highest baseline first, so that nearer ridges
+            // overlap the farther ones.
+            let mut order: Vec<usize> = (0..drawn.len()).collect();
+            if drawn.iter().any(|pd| pd.ridge.is_some()) {
+                order.sort_by(|&a, &b| {
+                    let pos = |i: usize| drawn[i].ridge.as_ref().map_or(0.0, |r| r.pos);
+                    pos(b).total_cmp(&pos(a))
+                });
+            }
+            for k in order {
+                let pd = &drawn[k];
                 // Drop To = Next Data Plot: the next plot, the first after the last; with two
                 // plots only the first draws the segments (the last would repeat them).
                 let next = match drawn.len() {
@@ -1225,6 +1248,10 @@ fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -
     if pd.boxed.is_some() && !y_axis {
         return String::new();
     }
+    if pd.ridge.is_some() {
+        // The columns name the baselines; the values along X have no column of their own.
+        return if y_axis { String::new() } else { "Value".to_string() };
+    }
     // Horizontal bars show their values on the X axis and their positions on the Y axis.
     if y_axis != pd.transposed() {
         return project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default();
@@ -1512,6 +1539,18 @@ fn draw_legend(
                             Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
                             crate::violin::violin_fill_color(plot),
                             &plot.decor.fill,
+                            Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
+                        );
+                    } else if plot.kind.is_ridgeline() {
+                        // A small box in the ridge's fill and outline.
+                        fill::fill_rect(
+                            out,
+                            Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                            plot.symbol.color,
+                            &sheaf_core::graph::FillStyle {
+                                transparency_pct: plot.ridge.fill_transparency_pct.round().clamp(0.0, 100.0) as u8,
+                                ..plot.decor.fill
+                            },
                             Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
                         );
                     } else if plot.kind.is_bar() || plot.kind.is_area() {

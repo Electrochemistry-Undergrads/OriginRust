@@ -1657,6 +1657,64 @@ Origin's documented facts (from its help, not measured; no Origin was at hand; [
 
 ---
 
+### 14.23 Ridgeline chart (T44)
+
+Origin's documented facts (from its help, not measured; no Origin was at hand; [W:origin-help/ridgeline],
+[W:origin-help/pd-dialog-display-tab-ridgeline], [W:origin-help/pd-dialog-distribution-tab]):
+
+- Origin 2022. Menu "Plot > Statistical: Ridgeline Chart", template `ridgeline.OTPU`; select at least one Y column.
+- Plot Details Display tab, Type: Distribution Curve, Distribution Curve with Data Points, Distribution Curve with Rug,
+  Single Block Bar (histograms). Position: by default the column index arranges the ridgelines. Quantile Lines: check
+  box, values 0 to 100, line style. Rug: Color, Thickness, Size(%), Gap Between Curve.
+- Distribution tab: Curve Type Kernel Smooth by default for ridgelines; bandwidth Scott `0.9 A n^-1/5`, Silverman
+  `1.059 A n^-1/5` with `A = min(SD, IQR/1.349)`, k x SD, or Custom. The violin plot (14.22) names and computes them
+  the same way (`sheaf_calc::kde::Bandwidth::{Scott, Silverman, Sd, Fixed}`), so nothing differs to document.
+- Not documented: default bandwidth, evaluation grid, ridge height and overlap, fill colour and transparency, baseline
+  side, axis labels, histogram bins, what the rug percentages are of.
+
+**What Sheaf does** (everything not marked "documented" is Sheaf's choice, unmeasured):
+
+- `PlotKind::Ridgeline` and `Template::Ridgeline` (`ridgeline`, "Ridgeline Chart"), a box chart template (colours from
+  red). Per-plot settings `Plot::ridge` (`RidgelineStyle`, skipped when default so old files load): display
+  (`RidgeDisplay`: curve, with data points, with rug, single block bar), bandwidth (`RidgeBandwidth`: Scott default,
+  Silverman, k x SD, Custom), quantile lines (off; percentiles 25, 50, 75), rug (colour auto, 0.5 pt, size 10 %, gap
+  3 %), ridge height 1.5 and fill transparency 30 %. Plot Details edits are copied to every ridgeline plot of the layer.
+- One ridge per Y column, the baseline of column k at Y = k, the first column at the bottom. The Y axis ticks at 1, 2, 3, ...
+  are labelled with the column names (the plot label) and the axis has no title; the X axis is the data values, titled
+  "Value". The Y range runs from 0.5 (lower if a rug reaches below) to the highest peak plus 0.1.
+- Density: the shared Gaussian KDE (`density_at`) on a grid that starts as 200 even points from `min - 3 h` to
+  `max + 3 h` and, where that step is wider than `h / 4` (a narrow kernel and a far outlier), is refined like the violin's
+  (`sheaf_calc::kde::refined_grid`, shared with `kernel_density`, whose results are unchanged): steps of at most `h / 4`
+  within 3 h of every value, at most 8192 added points. The curve is smooth and its sampled peak is within 1 % of the true
+  one; the common peak scale uses the drawn curve, and a quantile line is as high as the smaller of the exact density and
+  the curve drawn at that X, so it never pokes above the curve (the violin uses 128 adaptive points and 2 h). One scale for
+  the layer: the tallest peak over all ridges is 1.5 baseline spacings high, so neighbouring ridges overlap. Fewer than two
+  values or no spread give no curve; points, rug and the baseline label still draw. Masked and filtered rows are left out.
+- Axis scales: the grid stays inside the X scale's domain. Where `min - 3 h` (or `max + 3 h`) cannot be placed (a log or
+  reciprocal axis needs X > 0, a percent scale 0 to 100) the curve starts (ends) a tenth of the way from the domain limit
+  to the data end (log: at `min / 10`); values the scale cannot place do not set the ends. The X range includes the data
+  min and max like the violin's, so it stays valid. The fill polygon closes on the baseline below the first and last
+  curve points that could be placed, never at a dropped end.
+- Output formats: EPS and EMF have no transparency, so there the overlapping ridge fills are flattened opaque (the 30 %
+  transparency is lost and a nearer ridge hides the part of a farther one it overlaps); SVG, PDF and PNG keep it.
+- New plots: a plot added to a layer that already has a ridgeline plot (Layer Contents, Plot Setup, Plot Details "add")
+  starts with that plot's ridge settings (`Layer::inherited_ridge`), so all ridges keep one bandwidth and display.
+- Drawing (`crates/plot/src/ridgeline.rs`): ridges are drawn from the highest baseline down, so nearer ridges overlap the
+  farther ones. Each ridge is a polygon from its baseline up to the curve, filled in the plot colour at 30 % transparency
+  (the plot's pattern and gradient still apply), and the curve line in the plot colour (line width, at least 0.5 pt).
+  Data Points: the plot's symbol on the baseline at every value (no jitter). Rug: ticks 10 % of a spacing long from 3 %
+  below the baseline. Quantile lines: 1 pt vertical segments from the baseline to the curve at the box chart's percentile
+  rule. Single Block Bar: a step outline of the histogram bins (the Histogram plot's rule, `Plot::hist` for custom bins),
+  heights `count / (n x bin size)`, scaled like the curve.
+- No right Y axis (`--y2`, MCP and `plot_columns_double_y` refuse). `.opj`: written as plain columns, the save warns
+  ("ridgeline charts were written as plain columns of their data"). CLI `-t ridgeline`; MCP template text.
+- Tests: `ridgeline_tests.rs` (bandwidth formulas by hand, curve equals the shared KDE, baselines, peak scaling,
+  back-to-front order, quantile line height, rug, block bars, degenerate data, outlier grid refinement and peak, log X
+  axis range and polygon, inherited ridge settings), core template and serde tests, CLI test,
+  UI menu and Plot Details tests, `.opj` warning test.
+- Not done: grouped and indexed-data ridgelines, ordering by something other than column index, jitter, quantile line
+  style and per-line colours, other curve types than Kernel Smooth, a ridgeline toolbar button, Origin's real defaults.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.

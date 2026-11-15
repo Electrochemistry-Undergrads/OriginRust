@@ -94,7 +94,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T41](T41-rug-plot.md) | Rug plots: Axis dialog Rug tab and Scatter + Rug template | M | done 2026-11-15 (graphing 18.10); left: Origin defaults unmeasured, rug hit-testing |
 | [T42](T42-window-switcher.md) | Window Switcher: Ctrl+Tab through child windows with previews | M | done 2026-11-15 (`window-switcher`, macOS) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
-| [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | claimed 2026-11-15 (`ridgeline`, macOS) |
+| [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

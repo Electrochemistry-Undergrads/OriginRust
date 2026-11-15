@@ -724,6 +724,12 @@ fn is_false(b: &bool) -> bool {
 }
 
 impl Layer {
+    /// The ridgeline settings a plot added to this layer starts with: those of its first ridgeline
+    /// plot (so all ridges share bandwidth, display and look), else the defaults.
+    pub fn inherited_ridge(&self) -> RidgelineStyle {
+        self.plots.iter().find(|p| p.kind == PlotKind::Ridgeline).map(|p| p.ridge.clone()).unwrap_or_default()
+    }
+
     /// Recolors the plots whose color still comes from the palette, in plot order, and leaves
     /// colors chosen by hand alone. Used when plots are added or removed: with a palette that
     /// spreads its colors over the number of plots, every automatic color moves along.
@@ -1370,6 +1376,9 @@ pub enum PlotKind {
     /// Origin's "Half Violin" (HalfViolin.otpu): one half of the silhouette, with a half box on
     /// the other side.
     HalfViolin,
+    /// Origin's ridgeline chart (2022, ridgeline.OTPU): the plot's Y column as a density curve on
+    /// a baseline at its column index (graphing spec 14.23).
+    Ridgeline,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,
@@ -1403,7 +1412,12 @@ impl PlotKind {
 
     /// True for the kinds drawn as a distribution per plot at 1, 2, 3, ...: box chart and violins.
     pub fn is_distribution(&self) -> bool {
-        *self == PlotKind::Box || self.is_violin()
+        *self == PlotKind::Box || self.is_violin() || self.is_ridgeline()
+    }
+
+    /// True for [`PlotKind::Ridgeline`].
+    pub fn is_ridgeline(&self) -> bool {
+        *self == PlotKind::Ridgeline
     }
 
     /// What a violin kind draws inside its silhouette; `None` for other kinds.
@@ -1554,6 +1568,9 @@ pub struct Plot {
     /// The bins of a histogram plot.
     #[serde(default, skip_serializing_if = "HistogramStyle::is_default")]
     pub hist: HistogramStyle,
+    /// The settings of a ridgeline plot (graphing spec 14.23).
+    #[serde(default, skip_serializing_if = "RidgelineStyle::is_default")]
+    pub ridge: RidgelineStyle,
     /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's
     /// Z column of a Bubble plot).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2404,6 +2421,7 @@ mod tests {
             y_base: None,
             error: ErrorStyle::default(),
             hist: Default::default(),
+            ridge: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2444,6 +2462,7 @@ mod tests {
             y_base: None,
             error: ErrorStyle::default(),
             hist: Default::default(),
+            ridge: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2561,6 +2580,7 @@ mod tests {
             y_base: None,
             error: ErrorStyle::default(),
             hist: Default::default(),
+            ridge: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2751,6 +2771,7 @@ mod style_tests {
             y_base: None,
             error: ErrorStyle::default(),
             hist: Default::default(),
+            ridge: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),

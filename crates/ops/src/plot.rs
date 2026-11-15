@@ -142,6 +142,9 @@ impl PlotSpec {
         {
             bail!("a violin plot cannot have a right Y axis; leave out --y2 or choose another template");
         }
+        if !self.y2.is_empty() && self.template.as_deref().and_then(Template::from_name) == Some(Template::Ridgeline) {
+            bail!("a ridgeline chart cannot have a right Y axis; leave out --y2 or choose another template");
+        }
         if !self.y2.is_empty() && self.template.as_deref().and_then(Template::from_name) == Some(Template::Waterfall) {
             bail!("a waterfall cannot have a right Y axis; leave out --y2 or choose another template");
         }

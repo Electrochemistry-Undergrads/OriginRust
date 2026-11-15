@@ -587,7 +587,8 @@ pub struct PlotArgs {
     /// to the next column's at the same row with drop lines, X and Y exchanged; scatter-rug is a scatter
     /// with a rug (one short line per point) beside the bottom and left axes; violin draws each
     /// Y column as a mirrored kernel density silhouette, like box (also violin-box, violin-point,
-    /// violin-quartile, violin-stick and half-violin, which differ in the marks inside).
+    /// violin-quartile, violin-stick and half-violin, which differ in the marks inside); ridgeline draws
+    /// each Y column as a density curve on its own baseline, the columns stacked up the page.
     #[arg(short, long)]
     pub template: Option<String>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).

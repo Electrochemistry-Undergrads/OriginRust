@@ -143,7 +143,7 @@ exist; deliberately not studied.)
 | 3D XYY | XYY 3D Bars, 3D Ribbons, 3D Walls, 3D Waterfall (+2 colour variants) | |
 | 3D Surface | Color Fill Surface, X Constant with Base, Y Constant with Base, Color Map Surface, Colormap Surface with Projection, Wire Frame, Wire Surface, 3D Ternary Colormap Surface | |
 | 3D Symbol/Bar/Vector | 3D Bars, 3D Scatter, 3D Trajectory, 3D Scatter + Error Bar, 3D Vector XYZ XYZ, 3D Vector XYZ dXdYdZ | |
-| Statistics | Box Chart, Grouped Box Charts (indexed or raw), Interval Plot, Violin Plot and its variants (Violin with Box, Point, Quartile, Stick, Split Violin, Half Violin; Sheaf has all but Split Violin), Histogram, Histogram + Probabilities, Stacked Histograms, Marginal Histograms, Marginal Box Charts, 2D Kernel Density, QC (X bar R) Chart, Pareto (binned or raw), Scatter Matrix, Probability Plot, Q-Q Plot | |
+| Statistics | Box Chart, Grouped Box Charts (indexed or raw), Interval Plot, Violin Plot and its variants (Violin with Box, Point, Quartile, Stick, Split Violin, Half Violin; Sheaf has all but Split Violin), Ridgeline Chart, Histogram, Histogram + Probabilities, Stacked Histograms, Marginal Histograms, Marginal Box Charts, 2D Kernel Density, QC (X bar R) Chart, Pareto (binned or raw), Scatter Matrix, Probability Plot, Q-Q Plot | |
 | Area | Area, Stacked Area, Fill Area | |
 | Contour/Heat Map | Color Fill, B/W Lines + Labels, Gray Scale Map, Heat Map, Polar Contour theta(X)r(Y), Polar Contour r(X)theta(Y), Ternary Contour | |
 | Profile | Contour Profiles, Image Profiles | |

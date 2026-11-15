@@ -869,6 +869,7 @@ fn read_curve(
         y_base: None,
         error: ErrorStyle::default(),
         hist: Default::default(),
+        ridge: Default::default(),
         size_from: None,
         color_from: None,
         decor: Default::default(),

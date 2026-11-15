@@ -37,6 +37,9 @@ pub enum DetailTab {
     DropLines,
     Label,
     Offset,
+    /// A ridgeline plot's Display and Distribution tabs (Origin's names; graphing spec 14.23).
+    RidgeDisplay,
+    RidgeDistribution,
     Display,
     PageDisplay,
     LegendsTitles,
@@ -86,6 +89,10 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             if plot.kind.has_symbols() {
                 tabs.push((DetailTab::Symbol, "Symbol", true));
             }
+            if plot.kind.is_ridgeline() {
+                tabs.push((DetailTab::RidgeDisplay, "Display", true));
+                tabs.push((DetailTab::RidgeDistribution, "Distribution", true));
+            }
             let curve = plot.kind.has_line() || plot.kind.has_symbols();
             if curve && !plot.kind.is_bar() && !plot.kind.is_area() {
                 tabs.push((DetailTab::DropLines, "Drop Lines", true));
@@ -113,7 +120,7 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
 
 /// The tab to show when the one that was shown does not exist for the new node.
 fn first_tab(tabs: &[(DetailTab, &str, bool)]) -> DetailTab {
-    let preferred = [DetailTab::Line, DetailTab::Pattern, DetailTab::Symbol];
+    let preferred = [DetailTab::RidgeDisplay, DetailTab::Line, DetailTab::Pattern, DetailTab::Symbol];
     preferred.into_iter().find(|t| tabs.iter().any(|(x, _, on)| x == t && *on)).unwrap_or(tabs[0].0)
 }
 
@@ -141,6 +148,7 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::ViolinQuartile => "Violin with Quartile",
         PlotKind::ViolinStick => "Violin with Stick",
         PlotKind::HalfViolin => "Half Violin",
+        PlotKind::Ridgeline => "Ridgeline Chart",
         PlotKind::Pie => "Pie",
         PlotKind::Pie3D => "3D Color Pie",
         PlotKind::PieBw => "2D B&W Pie",
@@ -227,6 +235,7 @@ pub fn dialog_body(
                                 PlotKind::ViolinQuartile,
                                 PlotKind::ViolinStick,
                                 PlotKind::HalfViolin,
+                                PlotKind::Ridgeline,
                                 PlotKind::Pie,
                                 PlotKind::Pie3D,
                                 PlotKind::PieBw,
@@ -344,6 +353,17 @@ fn plot_tab(
     // In Origin's Dependent edit mode a change to one plot's look is made to the whole group.
     let before = graph.layers[l].plots[p].clone();
     plot_tab_body(ui, tab, graph, l, p, labels, columns, node);
+    // The ridgeline settings are shared by the ridgeline plots of the layer: one chart, one look
+    // (each plot keeps its own colour).
+    if matches!(tab, DetailTab::RidgeDisplay | DetailTab::RidgeDistribution)
+        && let Some(now) = graph.layers[l].plots.get(p).map(|pl| (pl.ridge.clone(), pl.line.width_pt))
+        && now != (before.ridge.clone(), before.line.width_pt)
+    {
+        for q in graph.layers[l].plots.iter_mut().filter(|q| q.kind.is_ridgeline()) {
+            q.ridge = now.0.clone();
+            q.line.width_pt = now.1;
+        }
+    }
     let follows = matches!(tab, DetailTab::Line | DetailTab::Symbol | DetailTab::DropLines | DetailTab::Label);
     if let Node::Plot(l2, p2) = *node
         && (l2, p2) == (l, p)
@@ -706,6 +726,8 @@ fn plot_tab_body(
                 look::fill_controls(ui, "plot_fill_style", &mut plot.decor.fill);
             });
         }
+        DetailTab::RidgeDisplay => ridge_display_tab(ui, &mut graph.layers[l].plots[p]),
+        DetailTab::RidgeDistribution => ridge_distribution_tab(ui, &mut graph.layers[l].plots[p].ridge),
         DetailTab::Spacing => {
             let bars = &mut graph.layers[l].bars;
             grid(ui, "plot_spacing", |ui| {
@@ -1156,6 +1178,7 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
     }
     if !add.is_empty() {
         for a in add {
+            let ridge = layer.inherited_ridge();
             layer.plots.push(Plot {
                 x: a.x,
                 y: a.y,
@@ -1172,6 +1195,7 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 y_base: None,
                 error: ErrorStyle::default(),
                 hist: Default::default(),
+                ridge,
                 size_from: None,
                 color_from: None,
                 decor: Default::default(),
@@ -1512,4 +1536,141 @@ fn text_tab(ui: &mut egui::Ui, graph: &mut Graph) {
             }
         }
     });
+}
+
+/// Origin's Plot Details Display tab of a ridgeline plot: Type, quantile lines, rug; with Sheaf's colour,
+/// line width, ridge height and fill transparency (graphing spec 14.23). The ridgeline plots of the layer
+/// share these settings.
+fn ridge_display_tab(ui: &mut egui::Ui, plot: &mut Plot) {
+    let r = &mut plot.ridge;
+    grid(ui, "ridge_display", |ui| {
+        ui.label("Type");
+        egui::ComboBox::from_id_salt("ridge_type").selected_text(ridge_display_name(r.display)).show_ui(ui, |ui| {
+            for d in RIDGE_DISPLAYS {
+                ui.selectable_value(&mut r.display, d, ridge_display_name(d));
+            }
+        });
+        ui.end_row();
+        ui.label("Color");
+        let before = plot.symbol.color;
+        color_button(ui, &mut plot.symbol.color);
+        if plot.symbol.color != before {
+            plot.auto_color = false;
+            plot.line.color = plot.symbol.color;
+        }
+        ui.end_row();
+        ui.label("Line Width");
+        ui.add(DragValue::new(&mut plot.line.width_pt).range(0.0..=20.0).speed(0.05).suffix(" pt"));
+        ui.end_row();
+        ui.label("Ridge Height");
+        ui.add(DragValue::new(&mut r.height).range(0.1..=20.0).speed(0.05).suffix(" x spacing"));
+        ui.end_row();
+        ui.label("Fill Transparency (%)");
+        ui.add(DragValue::new(&mut r.fill_transparency_pct).range(0.0..=100.0).speed(0.5));
+        ui.end_row();
+    });
+    ui.checkbox(&mut r.quantile_lines, "Quantile Lines");
+    ui.add_enabled_ui(r.quantile_lines, |ui| {
+        let mut text = r.quantiles.iter().map(|q| format!("{q}")).collect::<Vec<_>>().join(", ");
+        grid(ui, "ridge_quantiles", |ui| {
+            ui.label("Percentiles (0-100)");
+            if ui.text_edit_singleline(&mut text).changed() {
+                r.quantiles = text
+                    .split([',', ';', ' '])
+                    .filter_map(|t| t.trim().parse::<f64>().ok())
+                    .filter(|q| (0.0..=100.0).contains(q))
+                    .collect();
+            }
+            ui.end_row();
+        });
+    });
+    ui.add_enabled_ui(r.display == RidgeDisplay::WithRug, |ui| {
+        group_box(ui, "Rug", |ui| {
+            grid(ui, "ridge_rug", |ui| {
+                ui.label("Color");
+                ui.horizontal(|ui| {
+                    let mut auto = r.rug.color.is_none();
+                    if ui.checkbox(&mut auto, "Auto").changed() {
+                        r.rug.color = if auto { None } else { Some(Color::BLACK) };
+                    }
+                    if let Some(c) = &mut r.rug.color {
+                        color_button(ui, c);
+                    }
+                });
+                ui.end_row();
+                ui.label("Thickness");
+                ui.add(DragValue::new(&mut r.rug.thickness_pt).range(0.0..=20.0).speed(0.05).suffix(" pt"));
+                ui.end_row();
+                ui.label("Size(%)");
+                ui.add(DragValue::new(&mut r.rug.size_pct).range(0.0..=100.0).speed(0.5));
+                ui.end_row();
+                ui.label("Gap Between Curve(%)");
+                ui.add(DragValue::new(&mut r.rug.gap_pct).range(0.0..=100.0).speed(0.5));
+                ui.end_row();
+            });
+        });
+    });
+}
+
+pub(crate) const RIDGE_DISPLAYS: [RidgeDisplay; 4] = [
+    RidgeDisplay::DistributionCurve,
+    RidgeDisplay::WithDataPoints,
+    RidgeDisplay::WithRug,
+    RidgeDisplay::SingleBlockBar,
+];
+
+pub(crate) fn ridge_display_name(d: RidgeDisplay) -> &'static str {
+    match d {
+        RidgeDisplay::DistributionCurve => "Distribution Curve",
+        RidgeDisplay::WithDataPoints => "Distribution Curve with Data Points",
+        RidgeDisplay::WithRug => "Distribution Curve with Rug",
+        RidgeDisplay::SingleBlockBar => "Single Block Bar",
+    }
+}
+
+fn ridge_bandwidth_name(b: RidgeBandwidth) -> &'static str {
+    match b {
+        RidgeBandwidth::Scott => "Scott",
+        RidgeBandwidth::Silverman => "Silverman",
+        RidgeBandwidth::KSd(_) => "k*SD",
+        RidgeBandwidth::Custom(_) => "Custom",
+    }
+}
+
+/// Origin's Distribution tab of a ridgeline plot: the kernel bandwidth (Kernel Smooth is the only curve).
+fn ridge_distribution_tab(ui: &mut egui::Ui, r: &mut RidgelineStyle) {
+    grid(ui, "ridge_distribution", |ui| {
+        ui.label("Bandwidth");
+        egui::ComboBox::from_id_salt("ridge_bandwidth").selected_text(ridge_bandwidth_name(r.bandwidth)).show_ui(
+            ui,
+            |ui| {
+                for b in [
+                    RidgeBandwidth::Scott,
+                    RidgeBandwidth::Silverman,
+                    RidgeBandwidth::KSd(1.0),
+                    RidgeBandwidth::Custom(1.0),
+                ] {
+                    let same = std::mem::discriminant(&b) == std::mem::discriminant(&r.bandwidth);
+                    if ui.selectable_label(same, ridge_bandwidth_name(b)).clicked() && !same {
+                        r.bandwidth = b;
+                    }
+                }
+            },
+        );
+        ui.end_row();
+        match &mut r.bandwidth {
+            RidgeBandwidth::KSd(k) => {
+                ui.label("k");
+                ui.add(DragValue::new(k).range(1e-6..=1e6).speed(0.01));
+                ui.end_row();
+            }
+            RidgeBandwidth::Custom(h) => {
+                ui.label("Bandwidth");
+                ui.add(DragValue::new(h).range(1e-12..=1e12).speed(0.01));
+                ui.end_row();
+            }
+            _ => {}
+        }
+    });
+    ui.weak("Scott 0.9*A*n^(-1/5), Silverman 1.059*A*n^(-1/5), A = min(SD, IQR/1.349).");
 }

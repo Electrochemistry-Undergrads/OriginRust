@@ -43,6 +43,12 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T55 IIR and FIR filters (2026-11-15, macOS, no Origin): Analysis > Signal Processing > IIR Filter... (no longer
+  greyed; Butterworth, Chebyshev I/II, elliptic; low/high/band pass, band stop; fixed or minimum order; Hz or normalized;
+  forward-backward) and FIR Filter... (Window with 17 windows, Least Squares), `sheaf analyze iir-filter|fir-filter`, MCP
+  `iir_filter`/`fir_filter`, Recalculate and `.opj` warning. Designs and outputs match scipy.signal (zpk 1e-11, firwin 1e-10,
+  firls 1e-8). Left: Origin measurements, coefficient/SOS/ZPK sheets, preview panels (analysis-tools.md 17). Formatting,
+  strict all-target Clippy and 3,319 workspace tests pass (five ignored).
 - T24 drawn-shape ordering (2026-11-15, Codex): Bring to the front / Push to the back reorder
   shapes within their layer, preserving geometry and style. Selection follows the moved shape;
   changed shape stacks invalidate stale selections, menus and drags across Undo/Redo and Undo AI.
@@ -317,6 +323,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/formula-worksheet-substitution` | Codex Windows, formula-worksheet-substitution | T08 static worksheet-cell %([Book]Sheet,column,row[,format]) substitution; expr lowering/evaluation, isolated core/IO formula regressions | claimed 2026-11-15; no graph/legend/session/generated-expression substitution, global Options/model fields, UI, MCP, imports, statistics or other owner scopes |
 | `t19-fntrim` | Claude Windows, session fe4b37eb | T19 file-name trimming on ASCII import (Origin's FNameToSht/Bk From/To rules) and the book long name keeping the file extension (owner's decision 2026-11-15); crates/io ascii naming, app import window, cli flags, import-ascii.md, title tests | claimed 2026-11-15 |
 | `codex/mcp-disconnect-flake` | Codex Windows | T25 reproduced Windows proxy-exit disconnect race: narrow proxy/transport/host teardown repair and focused lifecycle regressions | claimed 2026-11-15; proxy returned0 yet both TCP endpoints remained ESTABLISHED >10s; no discovery/ACL/auth algorithm/schema/history/UI/model or other owner scopes |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
@@ -324,8 +331,8 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `cell-notes` | Claude macOS, "mac-multipdf" | T36 worksheet cell notes (Origin 2022): core per-sheet notes kept through row/column ops and sort, grid corner tab + hover popup, cell menu Add/Edit/Delete Note, note editor | claimed 2026-11-15; core worksheet + sheetops note upkeep, grid.rs body_cell, menus/app/dialogs; no cond-format/frozen/filter/Go To, plot, stats or other sessions' scopes |
 | `slope-annotation` | Claude macOS, "mac-multipdf" | T52 slope annotation (Origin 2026b): layer SlopeAnnotation linked to two data rows, segment + rise/run legs + slope label (per decade on log axes), toolbar Slope tool with point picking, delete/undo, CLI/MCP | claimed 2026-11-15; core graph.rs layer field, new plot module, app toolbar/graph_view tool mode, small dialog; no drawn-shape ordering, Data Reader changes or other sessions' scopes |
-| `digital-filters` | Claude macOS, "violin" | T55 IIR Filter and FIR Filter: new calc filter module, core AnalysisKind/requests, Signal Processing menu items and dialogs, CLI/MCP analyze, analysis-tools.md 17 | done 2026-11-15; review fixes applied and main merged 2026-11-15, ready to merge (analysis-tools 17); no FFT Filters/Smooth/Decimation changes, no plot, worksheet or other sessions' scopes |
 | `t48-origin` | Claude Windows, "continue all tasks" | T48 leftover: Origin 2016 measurements of the graph Data menu (Mask/Remove Bad/Move Data Points, graphing.md 20.4) and Sheaf following them; core graph_data.rs, app data_tools/reader/graph_view Data modes only | claimed 2026-11-15; no shape-resize, slope annotation, browser, stats, MCP or other sessions' scope |
+| `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same
@@ -551,6 +558,184 @@ the new briefs written from the T18 backlog on 2026-11-14: T30 (Excel import and
 the leftovers named in each brief's Status (T22-T24 leftovers: level crossing done 2026-11-14, analysis-tools 14, and cumulative sum dropped, Origin has none; drawn
 objects read from `.opj`, page/scale attachment, copy/paste, ordering, resize handles). All earlier "open
 questions" are assigned to briefs; none waits on the owner.
+
+## Not available in Sheaf yet (greyed menu items)
+
+Every Origin menu item Sheaf lacks is drawn greyed with the tooltip "Not available in Sheaf yet" (`NOT_YET`,
+`grey`/`greys`/`grey_sub` in `crates/app/src/menus.rs`, `g(...)` in `toolbar.rs`). Listed 2026-11-15 by a Haiku agent and
+cross-checked by a grep tally. Remove a line when its item is enabled; regenerate by grepping those helpers.
+
+463 greyed items: 319 in the menu bar, 47 on the toolbars, 97 in context menus.
+
+Source: crates/app/src/menus.rs, toolbar.rs and panels/explorer.rs at commit 23ac847 (main after T55; same menus as c0aa34c). Every item here is drawn greyed with the tooltip "Not available in Sheaf yet". Tags in brackets name the windows where the item is greyed when it is not on every bar: [Workbook], [Graph], [no window]. Items greyed only because of the current state (the current plot type under Change Plot to, Hide Other Layers with one layer, Go to Book with no workbook, "(none)" recent lists) are left out.
+
+#### File
+- New: Matrix... · Graph · Image · From Template · Excel · Layout · Notes · Function Plot
+- Open Excel...
+- Open Sample Projects
+- Save Template As... [Workbook, Graph]
+- Save Workbook As Analysis Template... [Workbook]
+- Add Word Bookmarks to Analysis Template... [Workbook]
+- Batch Processing... [Workbook, Graph]
+- Save Project without Data...
+- Duplicate Project without Data
+- Import: Image... · Binary 2D Array... · Re-Import Directly · Re-Import... [no window, Workbook]
+- Export: Graph as Image... · Worksheet as Image... · Multi-Page PDF... · Recent Exports [no window, Workbook]
+- Recent Exports [Graph]
+
+#### Edit
+- Copy: Copy formula · Copy label rows · Copy formula and label rows · Copy All [Workbook]
+- Paste Link · Paste Special [Workbook, Graph]
+- Paste Transpose · Paste Link Transpose · Select... [Workbook]
+- Remove Links · Set As Begin · Set As End · Reset to Full Range [Workbook]
+- Find in Project... [Workbook]
+- Button Edit Mode [Workbook, Graph]
+- Cut · Copy · Paste · Clear · Insert New Object · Links · Update Client [Graph]
+- Copy Format: All · All Style Formats · Colors · Fonts · Background · Symbol/Line/Fill · Dimensions · Scales · Text [Graph]
+- Paste Format... [Graph]
+- Find in Project [Graph]
+
+#### View
+- Menu
+- Command Window · Code Builder · Quick Help · Smart Hint Log
+- View Windows: None · Windows in Active Folder · Active Folder and Subfolders
+- Actively Update Plots · Page Break Preview Lines [Workbook]
+- Print View · Page View · Window View · Draft View · Zoom In · Zoom Out · Whole Page · Zoom All [Graph]
+- Show: Layer Icons · Active Layer Indicator · Axis Layer Icons · Object Grid · Layer Grid · Frame · Labels · Data · Active Layer Only · Master Items on Screen [Graph]
+- Show Data Info [Graph]
+- Full Screen [Graph]
+
+#### Plot
+- Line: Horizontal Step · Vertical Step · Spline Connected
+- Symbol: Scatter Central · Column Scatter · Vertical Drop Line
+- Line + Symbol: Line Series · 2 Point Segment · 3 Point Segment
+- Column/Bar/Pie: Column + Label · Grouped Columns (indexed data)
+- Multi-Y: 3Ys Y-YY · 3Ys Y-Y-Y · 4Ys Y-YYY · 4Ys YY-YY · Multiple Y Axes...
+- Y-offset/Waterfall: Waterfall Y:Color Mapping · Waterfall Z:Color Mapping · 3D Waterfall
+- 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
+- 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
+- 3D Symbol/Bar/Vector: 3D Bars · 3D Scatter · 3D Trajectory · 3D Scatter + Error Bar · 3D Vector XYZ XYZ · 3D Vector XYZ dXdYdZ
+- Statistics: Grouped Box Charts · Interval Plot · Histogram + Probabilities · Stacked Histograms · Marginal Histograms · Marginal Box Charts · 2D Kernel Density · QC (X bar R) Chart · Pareto · Scatter Matrix · Probability Plot · Q-Q Plot
+- Contour/Heat Map: Color Fill · B/W Lines + Labels · Gray Scale Map · Heat Map · Polar Contour theta(X) r(Y) · Polar Contour r(X) theta(Y) · Ternary Contour
+- Profile: Contour Profiles · Image Profiles
+- Specialized: Wind Rose · Piper · Smith Chart · High-Low-Close · Vector XYAM · Vector XYXY · Zoom
+- Stock: High-Low-Close · Japanese Candlestick · OHLC Bar Chart · OHLC-Volume · Line
+- System Templates...
+- Most Recently Used
+
+#### Column
+- Fill Column With: Row Numbers · Uniform Random Numbers · Normal Random Numbers · A set of Numbers... · A set of Date/Time values... · Arbitrary set of Text&Numeric values...
+- Set Sampling Interval... · Show X Column...
+
+#### Worksheet
+- Conditional Formatting: Conditional Highlight... · Conditional Heatmap... · Conditional Pareto... · Conditional Outliers... · Conditional Format Manager...
+- Pivot Table...
+- Convert to Matrix: Direct · XYZ Gridding · Extract
+- Worksheet Script...
+- Most Recently Used Items
+
+#### Analysis
+- Mathematics: XYZ Surface Area... · Special Filter... · Inverse...
+- Fitting: Nonlinear Implicit Curve Fit... · Simulate Surface... · Compare Datasets...
+- Signal Processing > FFT: 2D FFT... · 2D IFFT...
+- Signal Processing: Deconvolution... · STFT...
+- Signal Processing > Wavelet: Decompose... · Reconstruction... · Denoise... · Smooth... · Continuous Wavelet...
+- Peaks and Baseline: Multiple Peak Fit · Batch Peak Analysis Using Theme...
+- Most Recently Used Items
+
+#### Statistics
+- Descriptive Statistics: Partial Correlation Coefficient...
+- ANOVA: Three-Way ANOVA... · Repeated Measures ANOVA...
+- Most Recently Used Items
+
+#### Image
+- Adjustments: Brightness... · Contrast... · Gamma... · Levels...
+- Arithmetic Transform: Math... · Subtract...
+- Conversion: To Binary... · Color to Gray... · RGB Split...
+- Geometric Transform: Crop... · Resize... · Rotate... · Flip...
+- Spatial Filters: Smooth... · Sharpen... · Edge Detection...
+
+#### Graph
+- Add Plot to Layer: Line... · Scatter... · Line + Symbol... · Column... · Area...
+- Layer Management... · Add Function Graph... · Add Straight Line... · Merge Graph Windows... · New Table · New Color Scale · Fit Layer to Graph · Fit Page to Layers... · Convert to Standard Font Size
+- New Layer(Axes): Horizontal Axis Layer... · Vertical Axis Layer...
+- Legend: Add Legend Title
+- Offset Grouped Data in Layer: None · Cumulative · Constant · Auto · Individual
+
+#### Data
+- Set Display Range · Reset to Full Range · Mark Data Range · Clear Data Markers
+- Analysis Markers: Hide · Show Partial Ranges · Show All · Tiny · Small · Medium · Large
+- Lock Position: Layer Icon · First Point · Last Point
+
+#### Gadgets
+- Statistics... · Quick Fit... · Quick Sigmoidal Fit... · Quick Peaks... · Differentiate... · Interpolate... · Intersect... · Rise Time... · Cluster... · FFT... · 2D Integrate... · Vertical Cursor... · Go To...
+
+#### Tools
+- Options...
+- System Variables... · 3D OpenGL Settings... · Apps on File Exchange...
+- Protection: Protect Project... · Audit Log
+- Fitting Function Builder... · Fitting Function Organizer... · Theme Organizer... · Import Filters Manager... · Package Manager... · Custom Menu Organizer... · Virtual Matrix Manager... · X-Function Builder... · X-Function Script Samples...
+- R Console... · Rserve Console... · Python Console...
+
+#### Format
+- Menu · Programming Control... · Object Properties...
+- Layer Properties... · Snap Layers to Grid · Snap Objects to Grid · Fit Page To Layers · Fit Page To Printer [Graph]
+- Axes: Z Axis... [Graph]
+- Axis Tick Labels: X Axis Tick Labels... · Y Axis Tick Labels... [Graph]
+- Axis Titles: X Axis Title... · Y Axis Title... [Graph]
+- Worksheet... · Cell... · Snap to Grid · Merge cells [Workbook]
+
+#### Window
+- Arrange Icons
+- Duplicate (Batch Plotting): With New Sheets/Books · With New Columns [Graph]
+- Split [Workbook]
+- Command Window · Script Window
+- Folders: Folders List
+
+#### Help
+- Use Online Help · Check for Updates...
+- Origin: Help · X-Functions · Programming
+- Programming: LabTalk · Origin C · Python · Automation Server
+- Open Sample Projects: Sample Projects
+- Online Resources: Web Links
+
+#### Toolbars
+- Standard: New Graph · New Matrix · New Layout · New Notes · Duplicate
+- Format: Font name box · Font size box · Bold · Italic · Underline · Superscript · Subscript · Greek · Increase Font Size · Decrease Font Size · Font Color · Fill Color · Line Color
+- Graph: Zoom In · Zoom Out · Whole Page · Add Layer (Bottom-X Left-Y) · Add Layer (Top-X Left-Y) · Add Layer (Bottom-X Right-Y) · Add Layer (Top-X Right-Y) · Add Inset Graph
+- 2D Graphs: Bar · Stacked Area · High-Low-Close · Box Chart · Histogram · Bubble
+- Tools: Zoom In · Zoom Out · Pan
+- Object Edit: Align Left · Align Right · Align Top · Align Bottom · Align Horizontal Center · Align Vertical Center · Make Same Width · Make Same Height · Bring to Front · Send to Back · Group · Ungroup
+
+#### Context menus
+- Worksheet column header: Copy Columns to... · Remove Links · Frequency Count... · Swap Columns... · Slide Show of Dependent Graphs · Add or Update Sparklines... · Format Cells... · Set Sampling Interval... · Show X Column...
+- Worksheet column header > Fill Column with: Row Numbers · Uniform Random Numbers · Normal Random Numbers · A set of Numbers... · A set of Date/Time values... · Arbitrary set of Text&Numeric values...
+- Worksheet data cell: Paste Transpose · Paste Link · Paste Link Transpose · Remove Links · Set as Begin · Set as End · Insert Graph... · Insert Images from Files... · Insert Sparklines... · Insert Variables... · Format Cells...
+- Worksheet data cell > Insert Arrow: Arrow · Double Arrow
+- Worksheet data cell > Set Data Style: Default
+- Worksheet row number: Insert Graph... · Format Cells...
+- Worksheet sheet tab: Add Graph as Sheet... · Add Notes as Sheet · Duplicate Without Data · Navigate...
+- Worksheet sheet tab > Sheet Name to Show: Short Name · Long Name · Both
+- Worksheet corner: Column Header · Row Header · Column Grid · Row Grid · Page Break Preview Lines
+- Worksheet corner > Row Labels for Column Label Rows: Long Name · Units · Comments · F(x)= · Sparklines · Parameters
+- Graph plot: Change X · Change Y · Ungroup
+- Graph axis: Center · Save Format as Theme...
+- Graph axis > Copy Format: All · All Style Formats · Axis
+- Graph axis title: Cut · Copy · Bring to the front · Push to the back
+- Graph text label: Cut · Copy · Bring to the front · Push to the back
+- Graph drawn shape: Cut · Copy
+- Graph legend: Add Color Scale · Add Bubble Scale · Cut · Copy · Bring to the front · Push to the back · Bring to front of data · Push to back of data · Programming Control... · Save Format as Theme...
+- Graph legend > Legend: Add Legend Title
+- Graph legend > Copy Format: All · All Style Formats · Text
+- Graph page: Layer Management... · Add Shortcut to Favorites · View Full Screen
+- Graph page > New Layer(Axes): Horizontal Axis Layer... · Vertical Axis Layer...
+- Graph page > Copy Format: All · All Style Formats
+- Graph page > Duplicate (Batch Plotting): Duplicate
+- Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Delete Layer · Double click to open Plot Setup · Layer Properties... · Layer Management...
+- Explorer folder: Properties...
+- Explorer window: Duplicate
+- Label cell: none found
+- Integrate gadget: none found
 
 ## Commands that verify the state
 

@@ -323,6 +323,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/formula-worksheet-substitution` | Codex Windows, formula-worksheet-substitution | T08 static worksheet-cell %([Book]Sheet,column,row[,format]) substitution; expr lowering/evaluation, isolated core/IO formula regressions | claimed 2026-11-15; no graph/legend/session/generated-expression substitution, global Options/model fields, UI, MCP, imports, statistics or other owner scopes |
 | `t19-fntrim` | Claude Windows, session fe4b37eb | T19 file-name trimming on ASCII import (Origin's FNameToSht/Bk From/To rules) and the book long name keeping the file extension (owner's decision 2026-11-15); crates/io ascii naming, app import window, cli flags, import-ascii.md, title tests | claimed 2026-11-15 |
 | `codex/mcp-disconnect-flake` | Codex Windows | T25 reproduced Windows proxy-exit disconnect race: narrow proxy/transport/host teardown repair and focused lifecycle regressions | claimed 2026-11-15; proxy returned0 yet both TCP endpoints remained ESTABLISHED >10s; no discovery/ACL/auth algorithm/schema/history/UI/model or other owner scopes |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |

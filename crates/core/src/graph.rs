@@ -742,6 +742,11 @@ impl Layer {
         self.plots.iter().find(|p| p.kind.is_parallel()).map(|p| p.parallel).unwrap_or_default()
     }
 
+    /// The treemap settings a plot added to this layer starts with: those of its first treemap plot, else the defaults.
+    pub fn inherited_treemap(&self) -> TreemapStyle {
+        self.plots.iter().find(|p| p.kind == PlotKind::Treemap).map(|p| p.treemap.clone()).unwrap_or_default()
+    }
+
     /// Recolors the plots whose color still comes from the palette, in plot order, and leaves
     /// colors chosen by hand alone. Used when plots are added or removed: with a palette that
     /// spreads its colors over the number of plots, every automatic color moves along.
@@ -1400,6 +1405,9 @@ pub enum PlotKind {
     /// Origin's Parallel Index: like [`PlotKind::Parallel`], with the lines coloured by the group (the text of a
     /// column) of their row, and a legend of the groups.
     ParallelIndex,
+    /// Origin's Treemap plot (2025b, treemap.otpu): the plot's Y column is the value, the category columns of its
+    /// [`TreemapStyle`] the nested levels (graphing spec 14.26).
+    Treemap,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,
@@ -1608,6 +1616,9 @@ pub struct Plot {
     /// The settings of a Parallel Plot or Parallel Index (graphing spec 14.25).
     #[serde(default, skip_serializing_if = "ParallelStyle::is_default")]
     pub parallel: ParallelStyle,
+    /// The settings of a treemap plot (graphing spec 14.26).
+    #[serde(default, skip_serializing_if = "TreemapStyle::is_default")]
+    pub treemap: TreemapStyle,
     /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's
     /// Z column of a Bubble plot).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2467,6 +2478,7 @@ mod tests {
             ridge: Default::default(),
             hexbin: Default::default(),
             parallel: Default::default(),
+            treemap: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2510,6 +2522,7 @@ mod tests {
             ridge: Default::default(),
             hexbin: Default::default(),
             parallel: Default::default(),
+            treemap: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2630,6 +2643,7 @@ mod tests {
             ridge: Default::default(),
             hexbin: Default::default(),
             parallel: Default::default(),
+            treemap: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2823,6 +2837,7 @@ mod style_tests {
             ridge: Default::default(),
             hexbin: Default::default(),
             parallel: Default::default(),
+            treemap: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),

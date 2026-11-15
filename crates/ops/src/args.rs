@@ -22,7 +22,7 @@ pub enum Command {
     Print(PrintArgs),
     /// Write a graph of a project as PNG, TIFF, JPEG, BMP, GIF, TGA, PCX, SVG, PDF, EPS or EMF, or
     /// the project (or a data file) as an Origin .opj project or an Excel .xlsx workbook.
-    Export(ExportArgs),
+    Export(Box<ExportArgs>),
     /// Write a worksheet of a project as delimited text, or as an Excel .xlsx workbook.
     ExportData(ExportDataArgs),
     /// Run an analysis tool on worksheet columns: integrate, differentiate, smooth, normalize,
@@ -30,7 +30,7 @@ pub enum Command {
     Analyze(AnalyzeArgs),
     /// Fit a model to a column: straight line, polynomial, a built-in function, a formula or an
     /// Origin .FDF function. Prints the parameters, statistics and ANOVA table.
-    Fit(FitArgs),
+    Fit(Box<FitArgs>),
     /// Simulate Curve: the values of a built-in fit function for typed parameters, at X values from a range
     /// or from a column. Writes X and Y as delimited text or an Excel workbook, or adds them to a project.
     Simulate(SimulateArgs),
@@ -609,6 +609,20 @@ pub struct StyleArgs {
     /// from it), from 2 to 1000 (default 20).
     #[arg(long, value_name = "N")]
     pub hex_bins: Option<usize>,
+    /// Treemaps (-t treemap): the layout of every level: squarified (default), squarified-plus, split, pivot-size,
+    /// pivot-middle or pivot-split-size.
+    #[arg(long, value_name = "LAYOUT")]
+    pub treemap_layout: Option<String>,
+    /// Treemaps: the order of the rectangles: categorical (default, the order of first appearance), alphabetical,
+    /// size or column:NAME (by a column, smallest first). The squarified layouts sort by size and ignore it.
+    #[arg(long, value_name = "ORDER")]
+    pub treemap_order: Option<String>,
+    /// Treemaps: the number of levels shown, 1 or more (default: every level).
+    #[arg(long, value_name = "N")]
+    pub treemap_depth: Option<usize>,
+    /// Treemaps: the gap between rectangles in pt, from 0 to 20 (default 1.5).
+    #[arg(long, value_name = "PT")]
+    pub treemap_gap: Option<f64>,
     /// Add a free text label to the first layer: "TEXT@X,Y", where X and Y are fractions of the
     /// layer frame (0,0 is its top left corner, 1,1 its bottom right; the label's text starts
     /// there). The text may use Origin's escapes, for example --label "\b(Zn-LMO)@0.85,0.1".
@@ -671,7 +685,8 @@ pub struct PlotArgs {
     /// the X column against the first Y column into hexagons coloured by their count (see --hex-bins);
     /// parallel (two or more Y columns) draws one vertical axis per column and one line per row, coloured by a
     /// column with a colour scale; parallel-index (three or more Y columns and a text group column, see --group)
-    /// colours the lines by group, with a legend.
+    /// colours the lines by group, with a legend; treemap nests rectangles by the category columns (--group; default:
+    /// the text columns) with areas proportional to the last numeric Y column (see the --treemap-* options).
     #[arg(short, long)]
     pub template: Option<String>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).
@@ -697,7 +712,8 @@ pub struct PlotArgs {
     /// Parallel plots (-t parallel, -t parallel-index): the column that colours the lines. For a parallel index the
     /// group column (text; default: the first text column of the sheet), one colour and legend entry per distinct
     /// text. For a parallel plot a numeric column (default: the last Y column) shown with a colour scale; `none`
-    /// draws every line in the plot colour.
+    /// draws every line in the plot colour. For a treemap the category columns, comma-separated, the first the top level
+    /// (default: the text columns among --y, else every text column of the sheet).
     #[arg(long, value_name = "COLUMN", conflicts_with_all = ["graph", "panels"])]
     pub group: Option<String>,
     /// Make a graph of several panels: stack (one column of panels that share the X axis, the

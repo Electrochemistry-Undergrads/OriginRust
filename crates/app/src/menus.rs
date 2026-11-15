@@ -877,6 +877,7 @@ fn plot_menu() -> Vec<Entry> {
             vec![
                 item("Parallel Plot", Cmd::Plot(Template::Parallel)),
                 item("Parallel Index", Cmd::Plot(Template::ParallelIndex)),
+                item("Treemap", Cmd::Plot(Template::Treemap)),
             ],
         ),
         sub(

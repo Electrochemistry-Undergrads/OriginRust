@@ -174,6 +174,12 @@ pub enum ProjectError {
     ParallelIndexNeedsGroup,
     #[error("a parallel plot cannot have a right Y axis; use one Y axis or another template")]
     ParallelNoRightAxis,
+    #[error("a treemap needs a category column (a column of text) and a numeric value column; select both")]
+    TreemapNeedsCategory,
+    #[error("a treemap needs a numeric value column; select one")]
+    TreemapNeedsValue,
+    #[error("a treemap cannot have a right Y axis; use one Y axis or another template")]
+    TreemapNoRightAxis,
 }
 
 impl Project {
@@ -618,6 +624,7 @@ impl Project {
             ridge: Default::default(),
             hexbin: Default::default(),
             parallel: Default::default(),
+            treemap: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -751,6 +758,17 @@ impl Project {
             };
             return self.plot_parallel(template, &axes, color);
         }
+        if template == Template::Treemap {
+            // The category columns are the columns of text, in selection order (else those of the value column's
+            // sheet); the value is the last numeric column.
+            let value =
+                ys.iter().rev().copied().find(|y| self.numeric(*y).is_some()).ok_or(ProjectError::TreemapNeedsValue)?;
+            let mut categories: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_none()).collect();
+            if categories.is_empty() {
+                categories = self.treemap_default_categories(value);
+            }
+            return self.plot_treemap(&categories, value);
+        }
         // One hexbin plot per layer: the colour scale and the hexagons of a second plot would cover the first's.
         let ys = if template == Template::Hexbin { &ys[..ys.len().min(1)] } else { ys };
         let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
@@ -806,6 +824,48 @@ impl Project {
             // A new graph has no colors chosen by the user, so spread the palette over all plots.
             if let Some(l) = g.layers.first_mut() {
                 l.apply_palette();
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
+    /// The category columns of a treemap of `value` when none are named: every column of text of its sheet, in
+    /// sheet order.
+    pub fn treemap_default_categories(&self, value: ColumnId) -> Vec<ColumnId> {
+        let Some((_, sheet, _)) = self.locate(value) else { return Vec::new() };
+        sheet.columns.iter().filter(|c| !c.data.is_numeric() && c.id != value).map(|c| c.id).collect()
+    }
+
+    /// Creates a treemap of `value` (a numeric column; the areas) nested by the `categories` columns (the first
+    /// the top level) and returns its id. One plot, the value column's; the categories live in its style.
+    pub fn plot_treemap(&mut self, categories: &[ColumnId], value: ColumnId) -> Result<WindowId, ProjectError> {
+        for c in categories.iter().chain([&value]) {
+            self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
+        }
+        if self.numeric(value).is_none() {
+            return Err(ProjectError::TreemapNeedsValue);
+        }
+        let mut cats: Vec<ColumnId> = Vec::new();
+        for c in categories {
+            if *c != value && !cats.contains(c) {
+                cats.push(*c);
+            }
+        }
+        if cats.is_empty() {
+            return Err(ProjectError::TreemapNeedsCategory);
+        }
+        let long_name = self.locate(value).map(|(b, _, _)| b.long_name.clone());
+        let graph = self.add_graph(Template::Treemap);
+        self.add_plot(graph, 0, value)?;
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                l.apply_palette();
+                for p in &mut l.plots {
+                    p.treemap.categories = cats.clone();
+                }
             }
             if let Some(name) = long_name {
                 g.long_name = name;
@@ -913,6 +973,9 @@ impl Project {
         }
         if template.is_parallel() {
             return Err(ProjectError::ParallelNoRightAxis);
+        }
+        if template == Template::Treemap {
+            return Err(ProjectError::TreemapNoRightAxis);
         }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;

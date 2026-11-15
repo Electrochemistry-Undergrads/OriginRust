@@ -2251,13 +2251,27 @@ impl SheafApp {
         } else {
             None
         };
+        // A Treemap nests by the selected columns of text (in selection order; else every text column of the
+        // sheet) and sizes by the last numeric one.
+        let categories: Vec<ColumnId> = if template == Template::Treemap {
+            let project = self.doc.project();
+            columns.iter().copied().filter(|id| project.column(*id).is_some_and(|c| !c.data.is_numeric())).collect()
+        } else {
+            Vec::new()
+        };
         let ys = self.plot_y_columns(book, columns, template);
         if ys.is_empty() {
-            self.warn("Nothing to plot: select one or more numeric Y columns".to_string());
+            let what = if template == Template::Treemap {
+                "Nothing to plot: select one or more text category columns and a numeric value column"
+            } else {
+                "Nothing to plot: select one or more numeric Y columns"
+            };
+            self.warn(what.to_string());
             return;
         }
         let made = self.doc.edit("Plot columns", |p| match group {
             Some(g) => p.plot_parallel(template, &ys, Some(g)),
+            None if template == Template::Treemap => p.plot_columns(template, &[categories.as_slice(), &ys].concat()),
             None => p.plot_columns(template, &ys),
         });
         match made {

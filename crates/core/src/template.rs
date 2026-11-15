@@ -114,10 +114,13 @@ pub enum Template {
     /// Parallel Index (Origin's "Parallel Index"): like [`Template::Parallel`], with the lines coloured by the
     /// group of their row and a legend of the groups.
     ParallelIndex,
+    /// Treemap (Origin's "Treemap", 2025b): nested rectangles, one level per category column, the areas
+    /// proportional to a value column. No axes and no legend.
+    Treemap,
 }
 
 impl Template {
-    pub const ALL: [Template; 43] = [
+    pub const ALL: [Template; 44] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -145,6 +148,7 @@ impl Template {
         Template::Hexbin,
         Template::Parallel,
         Template::ParallelIndex,
+        Template::Treemap,
         Template::Bubble,
         Template::ColorMapped,
         Template::BubbleColorMapped,
@@ -209,6 +213,7 @@ impl Template {
             Template::Hexbin => "hexbin",
             Template::Parallel => "parallel",
             Template::ParallelIndex => "parallel-index",
+            Template::Treemap => "treemap",
         }
     }
 
@@ -257,6 +262,7 @@ impl Template {
             Template::Hexbin => "Hexbin",
             Template::Parallel => "Parallel Plot",
             Template::ParallelIndex => "Parallel Index",
+            Template::Treemap => "Treemap",
         }
     }
 
@@ -336,6 +342,16 @@ impl Template {
             Template::Parallel => {
                 let mut g = from_red(general(id, name, PlotKind::Parallel));
                 for l in &mut g.layers {
+                    l.legend.visible = false;
+                }
+                g
+            }
+            Template::Treemap => {
+                // The rectangles fill the layer's frame: no axes, no legend (the names are inside).
+                let mut g = general(id, name, PlotKind::Treemap);
+                for l in &mut g.layers {
+                    l.x_axis.side = AxisSide::Hidden;
+                    l.y_axis.side = AxisSide::Hidden;
                     l.legend.visible = false;
                 }
                 g
@@ -887,7 +903,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 43);
+        assert_eq!(Template::ALL.len(), 44);
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
         assert_eq!(Template::from_name("violin"), Some(Template::Violin));
         assert_eq!(Template::from_name("violin-box"), Some(Template::ViolinBox));
@@ -1282,6 +1298,68 @@ mod tests {
         // A parallel plot colours by its last column by default.
         let g3 = p.plot_columns(Template::Parallel, &ys).unwrap();
         assert_eq!(p.graph(g3).unwrap().layers[0].plots[2].parallel.color, Some(ys[3]));
+    }
+
+    #[test]
+    fn the_treemap_template_has_its_own_kind_settings_and_refusals() {
+        use crate::graph::{TreemapLayout, TreemapLevel, TreemapOrder, TreemapStyle};
+        use crate::{ColumnData, Designation, Project};
+        assert_eq!(Template::from_name("treemap"), Some(Template::Treemap));
+        assert_eq!(Template::Treemap.label(), "Treemap");
+        assert_eq!(serde_json::to_string(&PlotKind::Treemap).unwrap(), "\"treemap\"");
+        let g = Template::Treemap.new_graph(WindowId(1), "G");
+        assert_eq!(g.layers[0].default_kind, PlotKind::Treemap);
+        assert!(!g.layers[0].legend.visible);
+        assert_eq!(g.layers[0].x_axis.side, crate::graph::AxisSide::Hidden);
+        let back: Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!(back, g);
+        // Defaults and partial styles.
+        let d = TreemapStyle::default();
+        assert_eq!(
+            (d.layout, d.order, d.depth, d.gap_pt, d.per_level_on),
+            (TreemapLayout::Squarified, TreemapOrder::Categorical, None, 1.5, false)
+        );
+        assert!(serde_json::from_str::<TreemapStyle>("{}").unwrap().is_default());
+        let partial: TreemapStyle = serde_json::from_str(r#"{"layout":"pivot_split_size","depth":2}"#).unwrap();
+        assert_eq!((partial.layout, partial.depth, partial.gap_pt), (TreemapLayout::PivotSplitSize, Some(2), 1.5));
+        // Per-level settings apply to the levels below the first, only while the box is checked.
+        let mut s = TreemapStyle {
+            per_level: vec![TreemapLevel { layout: TreemapLayout::Split, order: TreemapOrder::BySize }],
+            ..d
+        };
+        assert_eq!(s.level_setting(1).layout, TreemapLayout::Squarified);
+        s.per_level_on = true;
+        assert_eq!(s.level_setting(0).layout, TreemapLayout::Squarified);
+        assert_eq!((s.level_setting(1).layout, s.level_setting(1).order), (TreemapLayout::Split, TreemapOrder::BySize));
+        assert_eq!(s.level_setting(2).layout, TreemapLayout::Squarified, "no entry: the general setting");
+
+        let mut p = Project::new();
+        let b = p.add_workbook("d");
+        let region =
+            p.add_column(b, 0, Designation::Y, ColumnData::text(vec!["a".into(), "a".into(), "b".into()])).unwrap();
+        let name =
+            p.add_column(b, 0, Designation::Y, ColumnData::text(vec!["x".into(), "y".into(), "z".into()])).unwrap();
+        let v = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        let w = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![4.0, 5.0, 6.0])).unwrap();
+        let err = p.plot_columns(Template::Treemap, &[region, name]).unwrap_err();
+        assert!(err.to_string().contains("numeric value column"), "{err}");
+        let err = p.plot_treemap(&[], v).unwrap_err();
+        assert!(err.to_string().contains("category column"), "{err}");
+        let err = p.plot_treemap(&[v], region).unwrap_err();
+        assert!(err.to_string().contains("numeric value column"), "{err}");
+        let err = p.plot_columns_double_y(Template::Treemap, &[v], &[w]).unwrap_err();
+        assert!(err.to_string().contains("right Y axis"), "{err}");
+        assert_eq!(p.graphs().count(), 0, "a refused plot leaves no graph behind");
+        // Text columns among the selection are the categories in selection order; the last numeric is the value.
+        let g = p.plot_columns(Template::Treemap, &[name, region, v, w]).unwrap();
+        let l = p.graph(g).unwrap().layers[0].clone();
+        assert_eq!(l.plots.len(), 1);
+        assert_eq!((l.plots[0].y, l.plots[0].kind), (w, PlotKind::Treemap));
+        assert_eq!(l.plots[0].treemap.categories, vec![name, region]);
+        // Without text among the columns, every text column of the sheet, in sheet order.
+        let g2 = p.plot_columns(Template::Treemap, &[v]).unwrap();
+        assert_eq!(p.graph(g2).unwrap().layers[0].plots[0].treemap.categories, vec![region, name]);
+        assert_eq!(l.inherited_treemap().categories, vec![name, region]);
     }
 
     #[test]

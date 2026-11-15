@@ -83,6 +83,14 @@ pub struct Style {
     pub bar_overlap: Option<f64>,
     /// Hexbin plots: the number of bins along X (and, for Derive X from Y, along Y).
     pub hex_bins: Option<usize>,
+    /// Treemaps: the layout (squarified, squarified-plus, split, pivot-size, pivot-middle, pivot-split-size).
+    pub treemap_layout: Option<String>,
+    /// Treemaps: the order of the rectangles (categorical, alphabetical, size, or column:NAME).
+    pub treemap_order: Option<String>,
+    /// Treemaps: the levels shown (default: all).
+    pub treemap_depth: Option<usize>,
+    /// Treemaps: the gap between rectangles in pt (default 1.5).
+    pub treemap_gap: Option<f64>,
     /// Text labels, each "TEXT@X,Y".
     pub label: Vec<String>,
     /// Shapes, each "KIND@X1,Y1,X2,Y2".
@@ -166,6 +174,24 @@ impl PlotSpec {
                 bail!("a parallel plot cannot be made in panels; leave out --panels or choose another template");
             }
         }
+        let st = &self.style;
+        let treemap_option = st.treemap_layout.is_some()
+            || st.treemap_order.is_some()
+            || st.treemap_depth.is_some()
+            || st.treemap_gap.is_some();
+        let is_treemap = self.template.as_deref().and_then(Template::from_name) == Some(Template::Treemap);
+        if is_treemap {
+            if !self.y2.is_empty() {
+                bail!("a treemap cannot have a right Y axis; leave out --y2 or choose another template");
+            }
+            if self.panels.is_some() || self.graph.is_some() || self.overlay {
+                bail!(
+                    "a treemap cannot be made in panels, as an overlay or by styling a graph; leave those options out"
+                );
+            }
+        } else if treemap_option {
+            bail!("--treemap-layout, --treemap-order, --treemap-depth and --treemap-gap need -t treemap");
+        }
         if self.group.is_some() && (self.graph.is_some() || self.panels.is_some()) {
             bail!("--group cannot be combined with --graph or --panels");
         }
@@ -197,8 +223,10 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         }
         if template.is_parallel() {
             parallel_graph(project, book, sheet, template, &ys, a.group.as_deref())?
+        } else if template == Template::Treemap {
+            treemap_graph(project, book, sheet, &ys, a.group.as_deref(), &a.style)?
         } else if a.group.is_some() {
-            bail!("--group needs -t parallel or -t parallel-index");
+            bail!("--group needs -t parallel, -t parallel-index or -t treemap");
         } else if a.y2.is_empty() && template != Template::DoubleY {
             project.plot_columns(template, &ys)?
         } else {
@@ -237,6 +265,77 @@ fn parallel_graph(
         Some(id)
     };
     Ok(project.plot_parallel(template, &axes, color)?)
+}
+
+/// A treemap: the last numeric column among `ys` is the value, the category columns (first = top level) are those
+/// named by `group` (comma-separated), else the text columns among `ys`, else every text column of the sheet.
+fn treemap_graph(
+    project: &mut Project,
+    book: WindowId,
+    sheet: usize,
+    ys: &[ColumnId],
+    group: Option<&str>,
+    style: &Style,
+) -> Result<WindowId> {
+    use sheaf_core::graph::{TreemapLayout, TreemapOrder};
+    let value = ys.iter().rev().copied().find(|y| project.numeric(*y).is_some()).ok_or_else(|| {
+        anyhow!("a treemap needs a numeric value column (the last numeric --y column; default: the last Y column)")
+    })?;
+    let mut categories: Vec<ColumnId> = match group {
+        Some(g) => {
+            let names: Vec<String> = g.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect();
+            if names.is_empty() {
+                bail!("--group needs one or more category column names, comma-separated");
+            }
+            named_columns(project, book, sheet, &names)?
+        }
+        None => ys.iter().copied().filter(|y| project.numeric(*y).is_none()).collect(),
+    };
+    if categories.is_empty() {
+        categories = project.treemap_default_categories(value);
+    }
+    if categories.contains(&value) {
+        bail!("the value column of a treemap cannot also be a category column");
+    }
+    let layout = match &style.treemap_layout {
+        Some(name) => Some(TreemapLayout::from_name(name).ok_or_else(|| {
+            let all: Vec<&str> = TreemapLayout::ALL.iter().map(|l| l.name()).collect();
+            anyhow!("--treemap-layout {name}: not a layout (choose one of {})", all.join(", "))
+        })?),
+        None => None,
+    };
+    let (order, order_column) = match style.treemap_order.as_deref().map(str::trim) {
+        None => (None, None),
+        Some(o) if o.eq_ignore_ascii_case("categorical") => (Some(TreemapOrder::Categorical), None),
+        Some(o) if o.eq_ignore_ascii_case("alphabetical") => (Some(TreemapOrder::Alphabetical), None),
+        Some(o) if o.eq_ignore_ascii_case("size") => (Some(TreemapOrder::BySize), None),
+        Some(o) => match o.strip_prefix("column:") {
+            Some(name) => {
+                (Some(TreemapOrder::ByColumn), Some(named_columns(project, book, sheet, &[name.to_string()])?[0]))
+            }
+            None => bail!("--treemap-order {o}: choose categorical, alphabetical, size or column:NAME"),
+        },
+    };
+    if let Some(d) = style.treemap_depth
+        && d == 0
+    {
+        bail!("--treemap-depth must be 1 or more (leave it out to show every level)");
+    }
+    if let Some(g) = style.treemap_gap
+        && !(g.is_finite() && (0.0..=20.0).contains(&g))
+    {
+        bail!("--treemap-gap must be between 0 and 20 pt (got {g})");
+    }
+    let graph = project.plot_treemap(&categories, value)?;
+    if let Some(p) = project.graph_mut(graph).and_then(|g| g.layers.first_mut()).and_then(|l| l.plots.first_mut()) {
+        let t = &mut p.treemap;
+        t.layout = layout.unwrap_or(t.layout);
+        t.order = order.unwrap_or(t.order);
+        t.order_column = order_column.or(t.order_column);
+        t.depth = style.treemap_depth.map(|d| d as u32).or(t.depth);
+        t.gap_pt = style.treemap_gap.unwrap_or(t.gap_pt);
+    }
+    Ok(graph)
 }
 
 /// Smallest and largest page side the program accepts, in inches (0.1 in is 7.2 pt).

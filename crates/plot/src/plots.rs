@@ -55,6 +55,10 @@ pub(crate) fn draw_plot(
         crate::parallel::draw_parallel(out, pd, geom);
         return;
     }
+    if plot.kind == PlotKind::Treemap {
+        crate::treemap::draw_treemap(out, pd, geom, m);
+        return;
+    }
     if plot.kind == PlotKind::Pie {
         draw_pie(out, pd, geom);
         return;

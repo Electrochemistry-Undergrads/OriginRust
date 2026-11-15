@@ -89,6 +89,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T36](T36-cell-notes.md) | Worksheet cell notes (add, hover, edit, delete) | M | done 2026-11-15 (`cell-notes`, macOS) |
 | [T37](T37-violin-plot.md) | Violin plot (kernel density silhouettes per Y column, box/quartile/point variants) | M | done 2026-11-15 (graphing 14.22); left: Split Violin, grouped violins, violin settings (bandwidth, extend, scale), Origin's defaults unmeasured |
 | [T38](T38-recent-files.md) | Recent Projects and Recent Imports (File menu lists that survive a restart) | M | claimed 2026-11-15 (`recent-files`, Claude macOS "mac-recent") |
+| [T39](T39-plot-sort-x.md) | Line plots connected in X order without sorting the sheet | M | claimed 2026-11-15 (`plot-sort-x`, macOS) |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

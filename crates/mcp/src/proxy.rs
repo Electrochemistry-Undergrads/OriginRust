@@ -19,9 +19,13 @@ use crate::{prompts, resources, schemas, tools};
 use serde_json::{Value, json};
 use sheaf_io::recovery::run_dir_candidates;
 use std::collections::VecDeque;
-use std::io::{BufRead, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::{Duration, Instant};
 
 /// How the proxy runs. [`ProxyConfig::new`] gives the values of the spec.
@@ -83,6 +87,14 @@ enum Outcome {
 struct Active {
     epoch: u64,
     writer: Stream,
+    closing: Arc<AtomicBool>,
+}
+
+impl Drop for Active {
+    fn drop(&mut self) {
+        self.closing.store(true, Ordering::Release);
+        self.writer.shutdown();
+    }
 }
 
 struct Proxy<'a> {
@@ -192,6 +204,39 @@ fn write_counted(w: &mut Stream, line: &str) -> Result<(), usize> {
         }
     }
     w.flush().map_err(|_| sent)
+}
+
+/// Reader ownership is separate from the writer, so closing a link must also
+/// release this socket clone when shutdown cannot wake a blocking receive.
+const LINK_READ_POLL: Duration = Duration::from_millis(250);
+
+fn start_link_reader(
+    mut reader: BufReader<Stream>,
+    epoch: u64,
+    tx: Sender<Event>,
+    closing: Arc<AtomicBool>,
+) -> std::io::Result<std::thread::JoinHandle<()>> {
+    reader.get_ref().set_read_timeout(Some(LINK_READ_POLL))?;
+    std::thread::Builder::new().name("sheaf-mcp-link".into()).spawn(move || {
+        loop {
+            let line = frame::read_line(&mut reader, REPLY_CAP, &mut || !closing.load(Ordering::Acquire));
+            if closing.load(Ordering::Acquire) {
+                let _ = tx.send(Event::LinkEnd { epoch });
+                return;
+            }
+            match line {
+                Ok(Line::Text(line)) => {
+                    if tx.send(Event::Link { epoch, line }).is_err() {
+                        return;
+                    }
+                }
+                _ => {
+                    let _ = tx.send(Event::LinkEnd { epoch });
+                    return;
+                }
+            }
+        }
+    })
 }
 
 impl Proxy<'_> {
@@ -392,37 +437,19 @@ impl Proxy<'_> {
         let mut options = ClientOptions::new(self.client.clone(), self.cfg.roots.clone());
         options.info_wait = self.cfg.info_wait;
         options.hello_timeout = self.cfg.hello_timeout;
-        let mut link = client::connect(&self.cfg.candidates, &options)?;
+        let link = client::connect(&self.cfg.candidates, &options)?;
         self.epoch += 1;
         let epoch = self.epoch;
-        let tx = self.tx.clone();
-        std::thread::Builder::new()
-            .name("sheaf-mcp-link".into())
-            .spawn(move || {
-                loop {
-                    match frame::read_line(&mut link.reader, REPLY_CAP, &mut || true) {
-                        Ok(Line::Text(line)) => {
-                            if tx.send(Event::Link { epoch, line }).is_err() {
-                                return;
-                            }
-                        }
-                        _ => {
-                            let _ = tx.send(Event::LinkEnd { epoch });
-                            return;
-                        }
-                    }
-                }
-            })
+        let closing = Arc::new(AtomicBool::new(false));
+        let _reader = start_link_reader(link.reader, epoch, self.tx.clone(), closing.clone())
             .map_err(|e| format!("could not start the link thread: {e}"))?;
-        self.link = Some(Active { epoch, writer: link.writer });
+        self.link = Some(Active { epoch, writer: link.writer, closing });
         Ok(())
     }
 
     /// Closes the connection. Whatever still arrives on it is ignored.
     fn drop_link(&mut self) {
-        if let Some(link) = self.link.take() {
-            link.writer.shutdown();
-        }
+        drop(self.link.take());
     }
 
     fn current(&self) -> Option<u64> {
@@ -607,4 +634,53 @@ impl Proxy<'_> {
 fn notice_of(line: &str) -> Option<NoticeKind> {
     let v: Value = serde_json::from_str(line).ok()?;
     NoticeKind::parse(v.get("notice")?.get("kind")?.as_str()?)
+}
+
+#[cfg(test)]
+mod reader_tests {
+    use super::*;
+    use std::io::Read;
+    use std::net::{TcpListener, TcpStream};
+
+    #[test]
+    fn reader_cancellation_releases_the_socket_without_relying_on_shutdown() {
+        for partial in [false, true] {
+            let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+            let addr = listener.local_addr().unwrap();
+            let server = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+                stream.write_all(b"ready\n").unwrap();
+                if partial {
+                    stream.write_all(b"unfinished reply").unwrap();
+                }
+                let mut byte = [0];
+                stream.read(&mut byte)
+            });
+            let client = TcpStream::connect(addr).unwrap();
+            let writer = client.try_clone().unwrap();
+            let (tx, rx) = channel();
+            let closing = Arc::new(AtomicBool::new(false));
+            let reader = start_link_reader(BufReader::new(Stream::Tcp(client)), 7, tx, closing.clone()).unwrap();
+            assert!(
+                matches!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), Event::Link { epoch: 7, line } if line == "ready")
+            );
+            // Simulate a shutdown that is unavailable: drop only the writer. The
+            // reader still owns a socket clone, which must honour cancellation.
+            closing.store(true, Ordering::Release);
+            drop(writer);
+            let eof = server.join().unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !reader.is_finished() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(reader.is_finished(), "cancelled reader retained the connection");
+            reader.join().unwrap();
+            assert!(matches!(eof, Ok(0)), "peer did not see EOF after cancellation: {eof:?}");
+            assert!(
+                !rx.try_iter().any(|event| matches!(event, Event::Link { .. })),
+                "a cancelled partial reply was forwarded"
+            );
+        }
+    }
 }

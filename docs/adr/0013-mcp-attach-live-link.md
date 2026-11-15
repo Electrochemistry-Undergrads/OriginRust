@@ -189,6 +189,14 @@ itself.
 
 ### 10. Lifecycle
 
+The proxy's active link owns a reader-cancellation flag. On disposal it signals that flag as
+well as attempting socket shutdown. Its reader polls cancellation on a 250 ms socket timeout,
+retaining partial frames while the link is live and discarding them after cancellation.
+This releases the reader's socket clone without relying solely on shutdown waking a blocking
+receive. It adds no call retry or new request deadline. A TCP regression deliberately omits
+writer shutdown and requires peer EOF for idle and partial replies; the original integration
+disconnect assertion still waits at most ten seconds.
+
 Unticking Tools > AI Assistants (MCP), or exit, sets a closing flag, wakes the accept loop with a
 connection to itself, replies to every queued job with "the owner turned the link off" (QUEUED to
 CANCELLED), shuts down every connection, joins the threads with a bounded wait (the UI thread never

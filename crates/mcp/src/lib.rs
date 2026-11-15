@@ -4,7 +4,11 @@
 pub mod analysis_tools;
 pub mod b64;
 pub mod bridge;
+pub mod exec;
+pub mod files;
+pub mod link;
 pub mod prompts;
+pub mod proxy;
 pub mod resources;
 pub mod roots;
 pub mod schemas;

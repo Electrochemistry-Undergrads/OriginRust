@@ -15,6 +15,7 @@ mod excel;
 mod frozen_panes;
 mod label_frames;
 mod label_whiteout;
+mod live;
 mod lollipop;
 mod offset_multipliers;
 mod skip_points;

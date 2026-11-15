@@ -23,6 +23,9 @@ pub struct Document {
     state: u64,
     next_state: u64,
     saved_state: Option<u64>,
+    /// Counts the times [`Document::replace`] ran, so a holder can tell that the whole project was
+    /// swapped for another one.
+    generation: u64,
 }
 
 #[derive(Debug)]
@@ -54,6 +57,7 @@ impl Document {
             state: 0,
             next_state: 1,
             saved_state: Some(0),
+            generation: 0,
         }
     }
 
@@ -64,6 +68,19 @@ impl Document {
     /// A number that changes whenever the project changes.
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// A number that grows each time the project is replaced as a whole (see [`Document::replace`]).
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// Keeps at most `limit` undo steps from now on (0 keeps none) and drops the oldest ones that
+    /// are over it. The redo steps are not limited by it.
+    pub fn set_limit(&mut self, limit: usize) {
+        self.limit = limit;
+        let extra = self.undo.len().saturating_sub(limit);
+        self.undo.drain(..extra);
     }
 
     /// Records that the current content was successfully saved. A subsequent live-dialog change
@@ -106,13 +123,28 @@ impl Document {
         change: impl FnOnce(&mut Project) -> Result<T, E>,
     ) -> Result<T, E> {
         let before = self.project.clone();
-        match change(&mut self.project) {
-            Ok(value) => {
+        // A panic in the change or in the recalculation that follows puts the project back and goes on
+        // unwinding: no half-made change stays, and no undo step or dirty flag is left out of step with it.
+        let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let result = change(&mut self.project);
+            if result.is_ok() {
                 // Recalculating columns follow their inputs inside the same undo step, so Undo
                 // restores the source and everything computed from it together.
                 self.project.recalculate_since(&before);
                 self.project.update_analysis_links(&before);
                 self.project.apply_mask_switch();
+            }
+            result
+        }));
+        let result = match done {
+            Ok(result) => result,
+            Err(panic) => {
+                self.project = before;
+                std::panic::resume_unwind(panic);
+            }
+        };
+        match result {
+            Ok(value) => {
                 if self.project != before {
                     let merge = token != 0 && self.undo.last().is_some_and(|s| s.merge_token == token);
                     if !merge {
@@ -198,6 +230,7 @@ impl Document {
         self.saved_state = Some(self.state);
         self.dirty = false;
         self.revision += 1;
+        self.generation += 1;
     }
 }
 
@@ -361,5 +394,42 @@ mod tests {
         doc.replace(Project::new());
         assert!(!doc.dirty);
         assert!(doc.undo().is_none());
+    }
+
+    #[test]
+    fn a_limit_of_zero_keeps_no_steps_and_replace_counts_generations() {
+        let mut doc = Document::new(Project::new());
+        doc.set_limit(0);
+        doc.apply("One", |p| p.add_workbook(""));
+        assert_eq!(doc.project().windows.len(), 1);
+        assert!(doc.undo_label().is_none());
+        assert_eq!(doc.generation(), 0);
+        doc.replace(Project::new());
+        doc.replace(Project::new());
+        assert_eq!(doc.generation(), 2);
+        doc.set_limit(2);
+        for i in 0..4 {
+            doc.apply(&format!("Step {i}"), |p| p.add_workbook(""));
+        }
+        doc.set_limit(1);
+        assert_eq!(doc.undo_label(), Some("Step 3"));
+        assert!(doc.undo().is_some());
+        assert!(doc.undo().is_none());
+    }
+
+    #[test]
+    fn a_panic_in_an_edit_puts_the_project_back_and_leaves_no_step() {
+        let mut doc = Document::new(Project::new());
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            doc.apply("Boom", |p| {
+                p.add_workbook("");
+                panic!("boom");
+            })
+        }));
+        assert!(result.is_err());
+        assert!(doc.project().windows.is_empty(), "the half-made change is gone");
+        assert!(doc.undo_label().is_none());
+        assert!(!doc.dirty);
+        assert_eq!(doc.revision(), 0);
     }
 }

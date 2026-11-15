@@ -386,7 +386,12 @@ impl Writer {
             {
                 notes.push("Sort X for line connection (the line joins the points in increasing X order) was not written; the companion file keeps it".into());
             }
-            if !p.decor.is_default() {
+            if !p.decor.trendlines.is_empty() {
+                notes.push("trendlines (fitted curves and moving averages with their equation and R-squared labels) were not written; the companion file keeps them".into());
+            }
+            let mut other_decor = p.decor.clone();
+            other_decor.trendlines.clear();
+            if !other_decor.is_default() {
                 notes.push(
                     "drop lines, symbol/line gaps and draw order, fills under curves (with their pattern, transparency and gradient) and data labels were not written (the companion file keeps them)"
                         .into(),

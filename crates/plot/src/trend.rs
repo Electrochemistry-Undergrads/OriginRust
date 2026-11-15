@@ -10,10 +10,10 @@ use crate::LayerGeometry;
 use crate::data::PlotData;
 use crate::fonts::TextMeasurer;
 use crate::plots::line_stroke;
-use crate::scene::{Anchor, Item, TextItem, line_to, move_to};
+use crate::scene::{Anchor, Item, line_to, move_to};
 use sheaf_calc::trend::{self, TrendKind};
 use sheaf_core::Color;
-use sheaf_core::graph::{Layer, LineStyle, Trendline};
+use sheaf_core::graph::{Font, Layer, LineStyle, Trendline};
 
 /// Number of places a fitted curve is evaluated at.
 const SAMPLES: usize = 200;
@@ -75,7 +75,7 @@ fn clamp(p: (f64, f64)) -> (f64, f64) {
 
 /// Draws the trendlines of every plot of a layer after the data, and their labels one line per
 /// trendline from the top left corner of the frame down.
-pub(crate) fn draw(out: &mut Vec<Item>, layer: &Layer, pds: &[PlotData], geom: &LayerGeometry, _m: &dyn TextMeasurer) {
+pub(crate) fn draw(out: &mut Vec<Item>, layer: &Layer, pds: &[PlotData], geom: &LayerGeometry, m: &dyn TextMeasurer) {
     if geom.polar.is_some() || geom.ternary.is_some() {
         return;
     }
@@ -117,18 +117,12 @@ pub(crate) fn draw(out: &mut Vec<Item>, layer: &Layer, pds: &[PlotData], geom: &
             if !text.is_empty() {
                 let size = font.size_pt;
                 let f = geom.frame;
-                out.push(Item::Text(TextItem {
-                    x: f.x + LABEL_MARGIN + t.label_offset_pt.0,
-                    y: f.y + LABEL_MARGIN + size + line as f64 * size * 1.3 + t.label_offset_pt.1,
-                    text,
-                    family: font.family.clone(),
-                    size,
-                    bold: font.bold,
-                    italic: font.italic,
-                    color,
-                    anchor: Anchor::Start,
-                    rotate_ccw: 0.0,
-                }));
+                let font = Font { color, ..font.clone() };
+                let at = (
+                    f.x + LABEL_MARGIN + t.label_offset_pt.0,
+                    f.y + LABEL_MARGIN + size + line as f64 * size * 1.3 + t.label_offset_pt.1,
+                );
+                crate::text::place(out, m, &text, &font, size, at, Anchor::Start, 0.0);
                 line += 1;
             }
         }

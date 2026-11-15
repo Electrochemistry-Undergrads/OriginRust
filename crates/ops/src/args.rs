@@ -468,6 +468,14 @@ pub struct StyleArgs {
     /// error bars stay on their points.
     #[arg(long)]
     pub sort_x: bool,
+    /// Add a trendline to each curve: linear, poly:N (order 2 to 10), power, log, exp or ma:N
+    /// (moving average, window 2 to 10). Repeatable. Replaces the trendlines the curve has. A
+    /// fitted trendline writes its equation and R-squared at the top left of the layer.
+    #[arg(long, value_name = "KIND")]
+    pub trendline: Vec<String>,
+    /// Draw the trendlines without the equation and R-squared label.
+    #[arg(long)]
+    pub no_trendline_label: bool,
     /// Curve colors in legend order (left axis first, then right axis), comma-separated, as
     /// #RRGGBB or basic names.
     #[arg(long, value_delimiter = ',', value_name = "COLORS")]

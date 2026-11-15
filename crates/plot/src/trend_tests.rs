@@ -44,15 +44,24 @@ fn curves(s: &Scene) -> Vec<Vec<(f64, f64)>> {
         .collect()
 }
 
+/// The labels in the curve colour: text without markup, x and y of the first run. A label is a
+/// row of runs (superscripts are runs of their own) that advance to the right.
 fn texts(s: &Scene) -> Vec<(String, f64, f64)> {
-    s.layers[0]
-        .plots
-        .iter()
-        .filter_map(|i| match i {
-            Item::Text(t) if t.color == CURVE => Some((t.text.clone(), t.x, t.y)),
-            _ => None,
-        })
-        .collect()
+    let mut out: Vec<(String, f64, f64)> = Vec::new();
+    let mut last_x = f64::INFINITY;
+    for i in &s.layers[0].plots {
+        if let Item::Text(t) = i
+            && t.color == CURVE
+        {
+            if t.x > last_x {
+                out.last_mut().unwrap().0.push_str(&t.text);
+            } else {
+                out.push((t.text.clone(), t.x, t.y));
+            }
+            last_x = t.x;
+        }
+    }
+    out
 }
 
 #[test]
@@ -72,7 +81,8 @@ fn linear_curve_matches_the_fit_across_the_data_range_with_a_label() {
     }
     let t = texts(&s);
     assert_eq!(t.len(), 1);
-    assert_eq!(t[0].0, format!("{}, R\\+(2) = {}", fit.equation(4), trend::sig_str(fit.r2.unwrap(), 4)));
+    let want = format!("{}, R\\+(2) = {}", fit.equation(4), trend::sig_str(fit.r2.unwrap(), 4));
+    assert_eq!(t[0].0, crate::markup::plain(&want));
     assert!(t[0].0.starts_with("y = 2.02x"), "{}", t[0].0);
     // Top left inside the frame.
     assert!(t[0].1 > geom.frame.x && t[0].1 < geom.frame.x + 20.0);
@@ -86,8 +96,8 @@ fn label_options_offset_and_one_line_per_trendline() {
     add(&mut p, g, TrendKind::Exponential).show_equation = false;
     let t = texts(&scene(&p, g));
     assert_eq!(t.len(), 2);
-    assert!(t[0].0.starts_with("y = ") && !t[0].0.contains("R\\+"));
-    assert!(t[1].0.starts_with("R\\+(2) = ") && !t[1].0.contains("y ="));
+    assert!(t[0].0.starts_with("y = ") && !t[0].0.contains("R"));
+    assert!(t[1].0.starts_with("R2 = ") && !t[1].0.contains("y ="));
     assert!(t[1].2 > t[0].2 + 5.0, "second line below the first");
     let before = t[0].clone();
     add(&mut p, g, TrendKind::Power).label_offset_pt = (10.0, 7.0);
@@ -181,7 +191,7 @@ fn style_and_hidden_kinds() {
     plot.decor.trendlines[0].color = None;
     plot.symbol.color = plot_color;
     let s = scene(&p, g);
-    assert!(s.layers[0].plots.iter().any(|i| matches!(i, Item::Text(t) if t.color == plot_color && t.text.starts_with("y ="))));
+    assert!(s.layers[0].plots.iter().any(|i| matches!(i, Item::Text(t) if t.color == plot_color && t.text.starts_with("y"))));
 }
 
 #[test]

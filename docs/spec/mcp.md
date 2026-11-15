@@ -357,6 +357,18 @@ supported; it is not an option flag here. Allowed path options (including `fit.o
 checked against `--root`. CLI enum values use their clap spellings, for example
 `options.panel_order: "bottom-up"`; the structured `panels.order` keeps `"bottom_up"`.
 
+**`list_simulate_functions`** `{category?}`. Result `{functions:[{name, category,
+parameters:[{name, start}]}]}`: the built-in functions that `simulate_curve` draws, with the starting value of each
+parameter.
+
+**`simulate_curve`** `{function?, params?, from?, to?, points?, log?, x_of?, book?, sheet?, plot?, image?, values?}`
+(`docs/spec/fitting.md` section 13). Writes the X and Y columns of a built-in fit function to a new sheet
+`Simulate<n>` of the workbook, at the X values `from` to `to` (defaults 1 to 10) in `points` steps (default 100),
+linear or `log`, or at the values of the column `x_of` (which cannot be combined with `from`, `to`, `points` or `log`: the call is refused). `params` is `{NAME: number}`; the others keep their starting
+values. `plot` adds a graph; `image` also writes it as a picture (implies `plot`). One undo step. Result
+`{book, sheet, x_column, y_column, function, points, graph, image, notes, message, x?, y?}`; `x` and `y` are
+present up to 1000 points, or when `values` is true.
+
 ### 5.5 Prompts
 
 Three prompts, each a single user message that tells the assistant which tools to call:
@@ -573,7 +585,7 @@ The app can also write a line that answers no request, then closes the connectio
 ### 11.5 What the proxy answers by itself
 
 `initialize`, `ping`, `tools/list`, `prompts/list`, `prompts/get`, `resources/templates/list` and
-notifications are answered in `sheaf-mcp` with no app. `tools/list` shows 13 tools: the 16 of section 5
+notifications are answered in `sheaf-mcp` with no app. `tools/list` shows 15 tools: the 18 of section 5
 minus the three with `headless_only` (`new_project`, `open_project`, `save_project`). A call to one of
 the three is answered by the proxy with the tool error `not available while attached: the person using
 Sheaf opens and saves projects` (the app refuses it too, whatever the client). The `instructions` text of
@@ -618,8 +630,8 @@ The proxy has a reader thread on stdin and one on the link, feeding one event qu
 | Tool | In the app |
 | --- | --- |
 | `list_contents`, `read_columns`, `export_graph`, `export_data` | Run on a copy of the live project. No undo step. `export_*` write only under the roots, never replace a file, and never touch the protected set (section 11.11). |
-| `list_analysis_tools`, `list_fit_models` | Run at once, even while a dialog is open. They do not read the project. |
-| `import_files`, `set_column_values`, `plot`, `analyze`, `sort_sheet`, `filter_sheet`, `fit` | `mutates`: run inside `Document::edit`. One undo step, named as in section 11.8. |
+| `list_analysis_tools`, `list_fit_models`, `list_simulate_functions` | Run at once, even while a dialog is open. They do not read the project. |
+| `import_files`, `set_column_values`, `plot`, `analyze`, `sort_sheet`, `filter_sheet`, `fit`, `simulate_curve` | `mutates`: run inside `Document::edit`. One undo step, named as in section 11.8. |
 | `new_project`, `open_project`, `save_project` | `headless_only`: refused (section 11.5). |
 
 Resource operations run on a copy of the live project, like the reads.
@@ -638,7 +650,7 @@ The name is built before the call, from the tool name, the arguments and the liv
 `AI: ` + tool, then the book name, then the columns as `B(Y)` (short name and designation as the project
 says; at most 3, then `+N`), then a model or analysis tool name, the formula for `set_column_values`, and
 the first file name with `+N` for `import_files`. If nothing useful is found the name is `AI: <tool>`.
-Examples: `AI: plot Book1 B(Y)`, `AI: fit Gauss Book1 B(Y)`, `AI: set_column_values Book1 C = A*2`,
+Examples: `AI: plot Book1 B(Y)`, `AI: fit Gauss Book1 B(Y)`, `AI: simulate_curve Gauss Book1`, `AI: set_column_values Book1 C = A*2`,
 `AI: import_files run1.csv +2`.
 
 **One sanitizer** (`sheaf_mcp::link::sanitize(text, max_chars)`) cleans every string that came over the
@@ -672,7 +684,7 @@ per connection. They do socket work and queueing only; they never touch the proj
 2. Each frame the UI thread, in `SheafApp::live_step` (`crates/app/src/live.rs`, `Live::step`), pops the
    whole queue into a local pending list. It runs after the actions of the frame and before `sync_windows`. While a connection is open or a job is
    pending, the app asks for a repaint every 250 ms, so a lost wake-up cannot stall.
-   `list_analysis_tools` and `list_fit_models` never reach the UI thread: the connection's reader thread
+   `list_analysis_tools`, `list_fit_models` and `list_simulate_functions` never reach the UI thread: the connection's reader thread
    answers them itself.
 3. **Non-mutating jobs run at once**, in arrival order, whatever else is deferred. A job that is not
    mutating sees the project as drawn, including the live preview of an open dialog.

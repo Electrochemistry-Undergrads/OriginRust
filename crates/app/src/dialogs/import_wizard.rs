@@ -8,7 +8,8 @@
 
 use super::frame::read_only_box;
 use super::graph_props::group_box;
-use super::import::{ImportDialog, ImportOutcome, ImportPage, optional_line};
+use super::import::{ImportDialog, ImportOutcome, ImportPage, optional_line, usable_mode};
+use super::import_theme::{ThemeRow, Themed};
 use eframe::egui::{self, Color32, RichText};
 use sheaf_core::template::Template;
 use sheaf_io::ImportKind;
@@ -84,8 +85,10 @@ impl ImportWizard {
     /// A wizard on its Source page, with the files already chosen when there are any.
     pub fn new(files: Vec<PathBuf>) -> Self {
         let path_text = files.first().map(|f| f.display().to_string()).unwrap_or_default();
+        let mut dlg = ImportDialog::new(files);
+        dlg.themes = ThemeRow::new("import_wizard");
         ImportWizard {
-            dlg: ImportDialog::new(files),
+            dlg,
             page: WizardPage::Source,
             path_text,
             path_error: false,
@@ -96,6 +99,28 @@ impl ImportWizard {
         }
     }
 
+    /// Points the wizard at the theme folder; it starts from `<last used>` when there is one.
+    pub fn attach_themes(&mut self, dir: Option<PathBuf>) {
+        self.dlg.attach_themes(dir);
+    }
+
+    /// The failure of the last Finish to record `<last used>`, once.
+    pub fn take_theme_warning(&mut self) -> Option<String> {
+        self.dlg.take_theme_warning()
+    }
+
+    /// The entry shown in the Dialog Theme list (for tests).
+    #[cfg(test)]
+    pub fn theme_entry(&self) -> &str {
+        self.dlg.theme_entry()
+    }
+
+    /// The import window the wizard holds (for tests).
+    #[cfg(test)]
+    pub fn dialog(&self) -> &ImportDialog {
+        &self.dlg
+    }
+
     /// The page the wizard is on (for tests).
     #[cfg(test)]
     pub fn page(&self) -> WizardPage {
@@ -103,6 +128,9 @@ impl ImportWizard {
     }
 
     pub fn show_page(&mut self, page: WizardPage) {
+        if page != self.page {
+            self.dlg.themes.close_prompt();
+        }
         self.page = page;
     }
 
@@ -131,7 +159,8 @@ impl ImportWizard {
     }
 
     /// Reads every file with the chosen options and applies the File Name Options.
-    fn finish(&self) -> ImportOutcome {
+    fn finish(&mut self) -> ImportOutcome {
+        self.dlg.confirm_themes();
         let mut items = Vec::new();
         let mut errors = Vec::new();
         for (i, path) in self.dlg.files.iter().enumerate() {
@@ -157,9 +186,6 @@ impl ImportWizard {
 
     pub fn show(&mut self, ctx: &egui::Context, target: Option<&str>) -> ImportOutcome {
         self.dlg.target = target.map(str::to_string);
-        if self.dlg.target.is_none() {
-            self.dlg.mode = ImportMode::NewBook;
-        }
         if self.has_file() {
             self.dlg.current = self.dlg.current.min(self.dlg.files.len() - 1);
             if self.dlg.preview.is_none() {
@@ -174,6 +200,7 @@ impl ImportWizard {
             self.dlg.partial_except_first,
         );
 
+        let page_before = self.page;
         let avail = ctx.available_rect();
         let size = egui::vec2(620.0, 595.0);
         let pos = (avail.center() - size / 2.0).max(avail.min);
@@ -234,6 +261,10 @@ impl ImportWizard {
             self.dlg.preview = None;
             ctx.request_repaint();
         }
+        // The Save As window belongs to the Source page, the only one that draws it.
+        if self.page != page_before {
+            self.dlg.themes.close_prompt();
+        }
         if !open {
             outcome = ImportOutcome::Cancelled;
         }
@@ -243,6 +274,9 @@ impl ImportWizard {
     // ----- pages ----------------------------------------------------------------------------
 
     fn source_page(&mut self, ui: &mut egui::Ui) {
+        if let Some(command) = self.dlg.themes.ui(ui) {
+            self.dlg.run_theme_command(command);
+        }
         group_box(ui, "Data Type", |ui| {
             ui.horizontal(|ui| {
                 let _ = ui.radio(true, "ASCII");
@@ -322,7 +356,7 @@ impl ImportWizard {
             ui.horizontal(|ui| {
                 ui.label("Import Mode");
                 egui::ComboBox::from_id_salt("wizard_import_mode")
-                    .selected_text(self.dlg.mode.label())
+                    .selected_text(usable_mode(self.dlg.mode, self.dlg.target.is_some()).label())
                     .width(200.0)
                     .show_ui(ui, |ui| {
                         for m in ImportMode::ALL {

@@ -783,7 +783,7 @@ fn serve(shared: &Arc<Shared>, stream: Stream, id: u64, tx: Sender<Out>) {
 /// True for the tools that read nothing of the project: the reader thread answers them at once, so that a
 /// dialog or a cell being edited never holds them back.
 fn is_pure(name: &str) -> bool {
-    matches!(name, "list_analysis_tools" | "list_fit_models")
+    matches!(name, "list_analysis_tools" | "list_fit_models" | "list_simulate_functions")
 }
 
 fn handle_request(shared: &Arc<Shared>, conn: &Arc<Conn>, line: &str) {
@@ -864,7 +864,7 @@ mod tests {
 
     #[test]
     fn the_tools_answered_by_the_reader_thread_read_no_project() {
-        for name in ["list_analysis_tools", "list_fit_models"] {
+        for name in ["list_analysis_tools", "list_fit_models", "list_simulate_functions"] {
             let def = schemas::defs().into_iter().find(|d| d.name == name).unwrap();
             assert!(def.read_only && !def.mutates && is_pure(name), "{name}");
         }

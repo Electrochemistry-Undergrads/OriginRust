@@ -188,6 +188,8 @@ pub fn call(server: &mut Ctx, name: &str, a: &Value) -> Res {
         "filter_sheet" => filter_sheet(server, a),
         "list_fit_models" => list_fit_models(a),
         "fit" => fit(server, a),
+        "list_simulate_functions" => list_simulate_functions(a),
+        "simulate_curve" => simulate_curve(server, a),
         other => Err(ToolError::new(format!("unknown tool: {other}"))),
     }
 }
@@ -1896,6 +1898,96 @@ fn fit(s: &mut Ctx, a_raw: &Value) -> Res {
         }),
     };
     Ok(ToolOut::json(value))
+}
+
+// ----- simulate curve ----------------------------------------------------------------
+
+fn list_simulate_functions(a: &Value) -> Res {
+    let a: CategoryArgs = args(a)?;
+    let functions: Vec<Value> = sheaf_ops::simulate::list_functions()
+        .into_iter()
+        .filter(|f| a.category.as_deref().is_none_or(|c| f.category.eq_ignore_ascii_case(c)))
+        .map(|f| {
+            let parameters: Vec<Value> = f.parameters.iter().map(|(n, v)| json!({"name": n, "start": v})).collect();
+            json!({"name": f.name, "category": f.category, "parameters": parameters})
+        })
+        .collect();
+    Ok(ToolOut::json(json!({"functions": functions})))
+}
+
+/// Most points whose values the reply carries unless `values` asks for them.
+const SIMULATE_VALUES: usize = 1000;
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields, default)]
+struct SimulateArgs {
+    function: Option<String>,
+    params: BTreeMap<String, f64>,
+    from: Option<f64>,
+    to: Option<f64>,
+    points: Option<usize>,
+    log: Option<bool>,
+    x_of: Option<String>,
+    book: Option<String>,
+    sheet: Option<String>,
+    plot: Option<bool>,
+    image: Option<String>,
+    values: Option<bool>,
+}
+
+/// The shared simulation of `sheaf simulate` (`sheaf_ops::simulate::run`). Like a fit it is all or
+/// nothing: if the image cannot be written the executor undoes the new sheet and graph.
+fn simulate_curve(s: &mut Ctx, a_raw: &Value) -> Res {
+    let a: SimulateArgs = args(a_raw)?;
+    let image_path = a.image.as_deref().map(|p| s.policy.roots.check(p)).transpose()?;
+    if let Some(p) = &image_path {
+        s.policy.check_new_file(p)?;
+    }
+    check_names(s.project, a.book.as_deref(), a.sheet.as_deref(), a.x_of.as_slice())?;
+    let spec = sheaf_ops::simulate::SimulateSpec {
+        function: a.function.clone().unwrap_or_else(|| "Gauss".to_string()),
+        params: a.params.iter().map(|(k, v)| format!("{k}={v}")).collect(),
+        from: a.from,
+        to: a.to,
+        points: a.points,
+        log: a.log == Some(true),
+        x_of: a.x_of.clone(),
+        book: book_name(s.project, a.book.as_deref())?,
+        sheet: a.sheet.clone(),
+        plot: a.plot == Some(true) || image_path.is_some(),
+    };
+    let run = sheaf_ops::simulate::run(s.project, &spec)?;
+    let policy = s.policy;
+    let project = &mut *s.project;
+    let image = match (&image_path, run.report.new_graph) {
+        (Some(path), Some(graph)) => {
+            policy.write_with(path, |to| {
+                sheaf_ops::render::write_graph(project, graph, to, &ExportSettings::default())
+            })?;
+            json!(path)
+        }
+        _ => Value::Null,
+    };
+    let ws = &project.workbook(run.book).expect("the run found it").sheets[run.result_sheet];
+    let (x, y) = (&ws.columns[0], &ws.columns[1]);
+    let points = ws.row_count();
+    let mut out = json!({
+        "book": book_title(project, run.book),
+        "sheet": ws.name,
+        "x_column": qualified(project, x.id),
+        "y_column": qualified(project, y.id),
+        "function": y.long_name,
+        "points": points,
+        "graph": run.report.new_graph.and_then(|g| project.graph(g)).map(|g| g.name.clone()),
+        "image": image,
+        "notes": run.report.notes,
+        "message": run.summary(project),
+    });
+    if a.values.unwrap_or(points <= SIMULATE_VALUES) {
+        out["x"] = json!(x.numeric().unwrap_or(&[]));
+        out["y"] = json!(y.numeric().unwrap_or(&[]));
+    }
+    Ok(ToolOut::json(out))
 }
 
 #[cfg(test)]

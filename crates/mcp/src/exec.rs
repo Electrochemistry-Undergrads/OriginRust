@@ -288,6 +288,10 @@ pub fn undo_label(tool: &str, args: &Value, project: &Project) -> String {
             parts.extend(book_shown());
             parts.extend(columns(names(args, "y")));
         }
+        "simulate_curve" => {
+            parts.extend(text(args, "function").map(str::to_string).or_else(|| Some("Gauss".to_string())));
+            parts.extend(book_shown());
+        }
         "sort_sheet" => {
             parts.extend(book_shown());
             parts.extend(columns(names(args, "key")));

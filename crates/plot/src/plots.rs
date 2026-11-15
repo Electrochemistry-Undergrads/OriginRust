@@ -33,7 +33,7 @@ const SMOOTH_MAX_SUB: usize = 128;
 
 /// The stroke of a data line.
 pub(crate) fn line_stroke(line: &LineStyle) -> Stroke {
-    let dash: Vec<f64> = line.dash.pattern().iter().map(|m| m * line.width_pt).collect();
+    let dash = crate::dash::lengths(line.dash, line.width_pt);
     let cap = if dash.is_empty() { Cap::Round } else { Cap::Butt };
     Stroke { color: line.color, width: line.width_pt, dash, cap, join: Join::Round }
 }

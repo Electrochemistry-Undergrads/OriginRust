@@ -24,6 +24,7 @@ use crate::dialogs::graph_props::PropsTab;
 use crate::dialogs::reshape::ReshapeKind;
 use crate::gadget::GadgetOp;
 use crate::panels::PanelId;
+use crate::recent::{self, RecentKind};
 use eframe::egui::{
     self, Color32, Key, KeyboardShortcut, Modifiers, Stroke, TextStyle,
     text::{LayoutJob, TextFormat},
@@ -32,6 +33,7 @@ use sheaf_core::graph::PlotKind;
 use sheaf_core::sheetops::{MaskOp, MoveTo};
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
 /// Tooltip of an item that Sheaf does not have.
@@ -197,6 +199,8 @@ pub enum Cmd {
     InterpolateFromColumn,
     Fit(FitKind),
     FitMore(FitMoreKind),
+    /// Analysis > Fitting > Simulate Curve...
+    SimulateCurve,
     /// The graph settings of the active layer on a tab.
     GraphProps(PropsTab),
     /// Graph > Layer Contents... (F12): Origin's own window for the plots of a layer; `None` is the
@@ -270,6 +274,8 @@ pub enum Cmd {
     WindowSwitcher,
     /// File > Append...: bring the windows of another project into this one.
     AppendProject,
+    /// Clear Recent Projects / Clear Recent Imports.
+    ClearRecent(RecentKind),
     /// View > Project Explorer and the other panels.
     Panel(PanelId),
     Cascade,
@@ -286,6 +292,8 @@ pub enum Entry {
     Submenu(Submenu),
     /// The numbered list of the windows of the project, with a tick on the active one.
     Windows,
+    /// The entries of File > Recent Projects or File > Import > Recent Imports, from the context.
+    Recent(RecentKind),
 }
 
 #[derive(Clone)]
@@ -335,8 +343,12 @@ pub struct MenuContext<'a> {
     pub undo_ai: bool,
     /// All windows of the project, in order, with their titles.
     pub windows: Vec<(WindowId, String)>,
-    /// A top-level menu to hold open (`--show menu:Plot`, for pictures of the menus).
+    /// A top-level menu to hold open (`--show menu:Plot`, for pictures of the menus); `File>Recent
+    /// Projects` holds that submenu of File open too.
     pub open: Option<&'a str>,
+    /// The recent projects and imports, newest first (stored text; no file is touched to draw them).
+    pub recent_projects: &'a [PathBuf],
+    pub recent_imports: &'a [PathBuf],
     /// Which side panels are shown, in the order of `PanelId::ALL` (the ticks of the View menu).
     pub panels: [bool; 4],
     /// The AI link is on (the tick of Tools > AI Assistants (MCP)).
@@ -539,7 +551,14 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                 } else {
                     vec![sep(), grey_keyed("Re-Import Directly", ctrl(Key::Num4)), grey("Re-Import...")]
                 },
-                vec![grey("Recent Imports")],
+                vec![sub(
+                    "Recent Imports",
+                    vec![
+                        Entry::Recent(RecentKind::Imports),
+                        sep(),
+                        item("Clear Recent Imports", Cmd::ClearRecent(RecentKind::Imports)),
+                    ],
+                )],
             ]
             .concat(),
         ),
@@ -567,7 +586,18 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     if kind == WindowKind::Graph {
         v.push(grey("Recent Graphs"));
     }
-    v.extend([grey("Recent Projects"), sep(), item("Exi&t", Cmd::Exit)]);
+    v.extend([
+        sub(
+            "Recent Projects",
+            vec![
+                Entry::Recent(RecentKind::Projects),
+                sep(),
+                item("Clear Recent Projects", Cmd::ClearRecent(RecentKind::Projects)),
+            ],
+        ),
+        sep(),
+        item("Exi&t", Cmd::Exit),
+    ]);
     v
 }
 
@@ -1092,7 +1122,7 @@ fn analysis_menu() -> Vec<Entry> {
                 grey("Nonlinear Implicit Curve Fit..."),
                 grey("Nonlinear Surface Fit..."),
                 sep(),
-                grey("Simulate Curve..."),
+                item("Simulate Curve...", Cmd::SimulateCurve),
                 grey("Simulate Surface..."),
                 sep(),
                 item("Exponential Fit...", Cmd::Fit(FitKind::Exponential)),
@@ -1874,7 +1904,7 @@ fn walk<'a>(entries: &'a [Entry], f: &mut dyn FnMut(&'a Item)) {
         match e {
             Entry::Item(i) => f(i),
             Entry::Submenu(s) => walk(&s.entries, f),
-            Entry::Separator | Entry::Windows => {}
+            Entry::Separator | Entry::Windows | Entry::Recent(_) => {}
         }
     }
 }
@@ -2212,6 +2242,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
             (None, _) => return Err(NEED_BOOK),
         },
+        // The window needs no data: with no workbook it makes a new one.
+        Cmd::SimulateCurve => Action::SimulateCurve { book: c.book.or(c.curve.map(|(book, _)| book)) },
         Cmd::FitMore(kind) => match (c.book, c.curve) {
             (Some(book), _) => Action::FitMore { book, column: c.selected.first().copied(), kind: *kind },
             (None, Some((book, y))) if c.kind == WindowKind::Graph => {
@@ -2268,6 +2300,13 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::DuplicateWindow => Action::DuplicateWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::WindowSwitcher => Action::OpenSwitcher,
         Cmd::AppendProject => Action::AppendProject(None),
+        Cmd::ClearRecent(kind) => {
+            let list = if *kind == RecentKind::Projects { c.recent_projects } else { c.recent_imports };
+            if list.is_empty() {
+                return Err("The list is empty");
+            }
+            Action::ClearRecent(*kind)
+        }
         Cmd::Panel(p) => Action::TogglePanel(*p),
         Cmd::Cascade => Action::Cascade,
         Cmd::TileHorizontally => Action::TileHorizontally,
@@ -2353,7 +2392,17 @@ pub fn show_bar(ui: &mut egui::Ui, c: &MenuContext, actions: &mut Vec<Action>) {
                 ui.set_min_width(180.0);
                 show_entries(ui, &menu.entries, c, actions);
             });
-            if c.open == Some(menu.name().as_str()) {
+            if menu.name() == "File" {
+                // The recent files are read again each time File opens, not every frame.
+                let key = ui.id().with("file menu was open");
+                let open = response.inner.is_some();
+                let was = ui.data(|d| d.get_temp::<bool>(key)).unwrap_or(false);
+                if open && !was {
+                    actions.push(Action::ReloadRecent);
+                }
+                ui.data_mut(|d| d.insert_temp(key, open));
+            }
+            if c.open.is_some_and(|o| o.split('>').next() == Some(menu.name().as_str())) {
                 egui::Popup::open_id(ui.ctx(), response.response.id.with("popup"));
             }
             // Alt and the letter opens the menu.
@@ -2374,11 +2423,20 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                 ui.separator();
             }
             Entry::Submenu(s) => {
-                ui.menu_button(label_job(ui, &s.label, true), |ui| {
+                let response = ui.menu_button(label_job(ui, &s.label, true), |ui| {
                     ui.set_min_width(160.0);
                     show_entries(ui, &s.entries, c, actions);
                 });
+                // `--show menu:File>Recent Projects` holds the submenu open for a picture.
+                if c.open.is_some_and(|o| o.split('>').skip(1).any(|sub| sub == plain(&s.label))) {
+                    use egui::containers::menu::{MenuState, SubMenu};
+                    let id = SubMenu::id_from_widget_id(response.response.id);
+                    MenuState::from_ui(ui, |state, _| state.open_item = Some(id));
+                    // The menu forgets an open item that was not shown last frame.
+                    MenuState::mark_shown(ui.ctx(), id);
+                }
             }
+            Entry::Recent(kind) => show_recent(ui, *kind, c, actions),
             Entry::Windows => {
                 for (n, (id, title)) in c.windows.iter().enumerate() {
                     let label = format!("&{} {title}", n + 1);
@@ -2444,6 +2502,40 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
         }
     }
 }
+
+/// The entries of a recent list: numbered, the name first and the folder after it in a weaker
+/// colour, the full path as the tooltip. An empty list shows a greyed "(none)".
+fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &mut Vec<Action>) {
+    let list = if kind == RecentKind::Projects { c.recent_projects } else { c.recent_imports };
+    if list.is_empty() {
+        ui.add_enabled(false, egui::Button::new(label_job(ui, "(none)", true)));
+        return;
+    }
+    for (n, path) in list.iter().enumerate() {
+        let (name, folder) = recent::entry_parts(path, RECENT_FOLDER_CHARS);
+        let mut job = label_job(ui, &recent::numbered(n, &name), true);
+        if !folder.is_empty() {
+            let font_id = TextStyle::Button.resolve(ui.style());
+            let weak = TextFormat { font_id, color: ui.visuals().weak_text_color(), ..Default::default() };
+            job.append(&folder, 14.0, weak);
+        }
+        let full = path.display().to_string();
+        let response = ui.add(egui::Button::new(job)).on_hover_text(&full);
+        if response.contains_pointer() {
+            crate::panels::set_hint(ui.ctx(), &full);
+        }
+        if response.clicked() {
+            actions.push(match kind {
+                RecentKind::Projects => Action::OpenRecent(path.clone()),
+                RecentKind::Imports => Action::ImportRecent(path.clone()),
+            });
+            ui.close();
+        }
+    }
+}
+
+/// The longest folder text an entry shows; longer folders are cut from the left (Sheaf's choice).
+const RECENT_FOLDER_CHARS: usize = 48;
 
 /// A check mark in the room left of the label.
 fn tick(ui: &egui::Ui, response: &egui::Response) {
@@ -2646,6 +2738,8 @@ mod tests {
             undo_ai: false,
             windows: Vec::new(),
             open: None,
+            recent_projects: &[],
+            recent_imports: &[],
             panels: [true; 4],
             ai_link: false,
             layer: 0,

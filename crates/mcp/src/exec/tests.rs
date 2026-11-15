@@ -30,6 +30,8 @@ fn undo_names_follow_the_table() {
         ("fit", json!({"model": "Gauss", "y": ["B"]}), "AI: fit Gauss Book1 B(Y)"),
         ("fit", json!({"options": {"model": "linear", "y": "C"}}), "AI: fit linear Book1 C(Y)"),
         ("fit", json!({}), "AI: fit Book1"),
+        ("simulate_curve", json!({"function": "ExpDec1", "points": 5}), "AI: simulate_curve ExpDec1 Book1"),
+        ("simulate_curve", json!({}), "AI: simulate_curve Gauss Book1"),
         ("analyze", json!({"tool": "integrate", "columns": ["B"]}), "AI: analyze integrate Book1 B(Y)"),
         ("set_column_values", json!({"column": "C", "formula": "A*2"}), "AI: set_column_values Book1 C = A*2"),
         ("sort_sheet", json!({"key": "B"}), "AI: sort_sheet Book1 B(Y)"),

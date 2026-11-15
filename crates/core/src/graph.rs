@@ -2021,6 +2021,8 @@ fn yes() -> bool {
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum LegendPosition {
+    /// Stock Line/Scatter/Line+Symbol/Column upper-left anchor (graphing spec 2.4).
+    Automatic,
     TopRight,
     TopLeft,
     BottomRight,
@@ -2064,6 +2066,10 @@ fn is_one_column(c: &u32) -> bool {
 }
 
 impl Legend {
+    /// Upper-left fractions of the layer frame, measured in Origin 2016. The rectangle grows
+    /// right/down as its text, rows or columns change; it is not a centre or right-edge anchor.
+    pub const AUTOMATIC_ANCHOR: (f64, f64) = (0.8223, -0.1044);
+
     /// The automatic legend text for plots with these ids (see [`Legend::text`]): a symbol and a
     /// name per line.
     pub fn automatic_text<S: AsRef<str>>(ids: &[S]) -> String {

@@ -1,6 +1,6 @@
 # T38: Recent projects and recent imports
 
-**Status:** claimed 2026-11-15 (branch `recent-files`, Claude macOS "mac-recent"). Brief written from parity
+**Status:** done, merged 2026-11-15 (Claude macOS "mac-recent"; spec `docs/spec/recent-files.md`): `sheaf_io::recent` (locked re-read-and-merge writes, canonical case-insensitive de-duplication, non-UTF-8 paths kept), File > Recent Projects and Import > Recent Imports. Reviewed by three agents with each finding checked; six fixed. Left: Origin measurements on Windows (list length, numbering, path display, missing-file behaviour); Recent Books/Graphs/Exports wait for single-window files. Brief written from parity
 row "Recent projects, books, graphs, imports" (P1, ✗) and the greyed File menu items.
 **Size:** M. **Branch:** `recent-files`. **Model:** Sonnet. No Origin needed for the mechanism; the list
 length and menu wording are measured once on Windows.

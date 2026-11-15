@@ -535,6 +535,49 @@ pub fn defs() -> Vec<Def> {
             ),
             example: json!({"model": "Gauss", "y": ["B"], "x_range": "0.2:0.6", "init": {"xc": 0.4}, "bounds": {"w": [0, null]}}),
         },
+        Def {
+            name: "list_simulate_functions",
+            description: "The built-in functions that simulate_curve can draw, with each parameter's starting value (the value used when a parameter is not given).",
+            read_only: true,
+            mutates: false,
+            headless_only: false,
+            schema: obj(vec![("category", s("Only this category."))], &[]),
+            example: json!({"category": "Peak Functions"}),
+        },
+        Def {
+            name: "simulate_curve",
+            description: "Simulate Curve: the values of a built-in fit function (list_simulate_functions) for chosen parameter values, at X values from a range (from, to, points, linear or log spacing) or from a column (x_of). The X and Y columns go to a new sheet of the workbook (Simulate1, ...); plot also draws a graph, image also writes it as a picture. Parameters not given keep their starting values.",
+            read_only: false,
+            mutates: true,
+            headless_only: false,
+            schema: obj(
+                vec![
+                    ("function", s("Built-in fit function name, case does not matter. Default Gauss.")),
+                    (
+                        "params",
+                        json!({"type": "object", "additionalProperties": {"type": "number"},
+                            "description": "Parameter values by name, for example {\"xc\": 5, \"w\": 2}."}),
+                    ),
+                    ("from", t("number", "First X value (default 1). Above to gives falling X.")),
+                    ("to", t("number", "Last X value (default 10).")),
+                    ("points", t("integer", "Number of X values, 2 to 1000000 (default 100).")),
+                    ("log", b("Space the X values evenly on a logarithmic scale; from and to must be positive.")),
+                    (
+                        "x_of",
+                        s(
+                            "Use the X values of this column instead of a range. Cannot be combined with from, to, points or log; the call is refused.",
+                        ),
+                    ),
+                    ("book", s(BOOK)),
+                    ("sheet", s("Sheet that x_of is looked up in. Default: the active sheet.")),
+                    ("plot", b("Also draw the curve in a new graph.")),
+                    ("image", s("Also render the curve as an image at this path (implies plot).")),
+                    ("values", b("Put the X and Y values in the reply (default true up to 1000 points).")),
+                ],
+                &[],
+            ),
+            example: json!({"function": "Gauss", "params": {"xc": 5, "w": 2, "A": 4}, "from": 0, "to": 10, "points": 101, "plot": true}),
+        },
     ]
 }
 

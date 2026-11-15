@@ -6,11 +6,15 @@ use sheaf_core::template::Template;
 use sheaf_core::{ColumnData, Designation};
 
 fn project(n: usize) -> (Project, WindowId) {
+    project_with_template(n, Template::Line)
+}
+
+fn project_with_template(n: usize, template: Template) -> (Project, WindowId) {
     let mut p = Project::new();
     let book = p.add_workbook("data");
     let x: Vec<f64> = (0..=10).map(f64::from).collect();
     p.add_column(book, 0, Designation::X, ColumnData::numeric(x.clone())).unwrap();
-    let g = p.add_graph(Template::Line);
+    let g = p.add_graph(template);
     for k in 0..n {
         let yc = p
             .add_column(book, 0, Designation::Y, ColumnData::numeric(x.iter().map(|v| v * (k + 1) as f64).collect()))
@@ -79,6 +83,7 @@ fn an_unknown_plot_number_draws_nothing() {
 #[test]
 fn columns_fill_top_to_bottom_and_widen_the_legend() {
     let (mut p, g) = project(5);
+    p.graph_mut(g).unwrap().layers[0].legend.position = sheaf_core::graph::LegendPosition::TopRight;
     let one = legend_items(&scene(&p, g));
     p.graph_mut(g).unwrap().layers[0].legend.columns = 2;
     let (two, samples) = legend_items(&scene(&p, g));
@@ -107,4 +112,74 @@ fn the_legend_of_a_double_y_graph_names_plots_by_layer_and_plot() {
     let g = p.plot_columns_double_y(Template::DoubleY, &[a], &[b]).unwrap();
     p.graph_mut(g).unwrap().layers[0].legend.scope = sheaf_core::graph::LegendScope::Graph;
     assert_eq!(legend_automatic_text(&p, g, 0).unwrap(), "\\l(1.1) %(1.1)\n\\l(2.1) %(2.1)");
+}
+
+/// The frame rectangle, excluding its stroke, so this checks the placement anchor rather than
+/// font-dependent hit bounds. Reference values are the 2016 stock Line object's x1/y1.
+fn automatic_legend_box(p: &Project, g: WindowId) -> Rect {
+    let s = scene(p, g);
+    let l = &s.layers[0];
+    let object = l.objects.iter().find(|o| o.kind == ObjectKind::Legend).unwrap();
+    l.overlay[object.items.clone()]
+        .iter()
+        .find_map(|item| match item {
+            Item::Rect { rect, fill, .. } => {
+                assert_eq!(*fill, Some(sheaf_core::color::Color::WHITE), "opaque stock legend");
+                Some(*rect)
+            }
+            _ => None,
+        })
+        .unwrap()
+}
+
+fn check_origin_anchor(p: &Project, g: WindowId) -> Rect {
+    let rect = automatic_legend_box(p, g);
+    let frame = layout_geometry(p, g).unwrap()[0].frame;
+    // x=4.933850365 on 0..6, y=12.043552036 on 1..11; the tolerance includes
+    // Origin's page/frame rounding and the subpixel border of its exported rectangle.
+    let expected_x = frame.x + (4.933_850_365 / 6.0) * frame.w;
+    let expected_y = frame.y + (1.0 - (12.043_552_036 - 1.0) / 10.0) * frame.h;
+    assert!((rect.x - expected_x).abs() < 0.0005 * frame.w, "{rect:?}, {frame:?}");
+    assert!((rect.y - expected_y).abs() < 0.0005 * frame.h, "{rect:?}, {frame:?}");
+    rect
+}
+
+#[test]
+fn automatic_legend_anchor_matches_the_four_measured_stock_templates() {
+    use sheaf_core::graph::LegendPosition;
+    for template in [Template::Line, Template::Scatter, Template::LineSymbol, Template::Column] {
+        let (p, g) = project_with_template(2, template);
+        assert_eq!(p.graph(g).unwrap().layers[0].legend.position, LegendPosition::Automatic);
+        check_origin_anchor(&p, g);
+    }
+    assert_eq!(
+        Template::CyclicVoltammetry.new_graph(WindowId(1), "CV").layers[0].legend.position,
+        LegendPosition::BottomRight
+    );
+    assert_eq!(Template::DoubleY.new_graph(WindowId(1), "DY").layers[0].legend.position, LegendPosition::TopRight);
+}
+
+#[test]
+fn automatic_legend_anchor_stays_fixed_as_content_and_geometry_change() {
+    use sheaf_core::graph::{Frame, Page};
+    let (mut p, g) = project(4);
+    let initial = check_origin_anchor(&p, g);
+    {
+        let legend = &mut p.graph_mut(g).unwrap().layers[0].legend;
+        legend.text = Some("A much longer literal legend row\nsecond\nthird\nfourth".into());
+    }
+    let longer = check_origin_anchor(&p, g);
+    assert!(longer.w > initial.w);
+    assert_eq!((longer.x, longer.y), (initial.x, initial.y));
+    p.graph_mut(g).unwrap().layers[0].legend.columns = 2;
+    let columns = check_origin_anchor(&p, g);
+    assert!(columns.h < longer.h && columns.w > longer.w);
+    assert_eq!((columns.x, columns.y), (initial.x, initial.y));
+    p.graph_mut(g).unwrap().layers[0].legend.font.size_pt = 30.0;
+    let larger_font = check_origin_anchor(&p, g);
+    assert_eq!((larger_font.x, larger_font.y), (initial.x, initial.y));
+    p.graph_mut(g).unwrap().layers[0].frame = Frame { left: 0.25, top: 0.20, width: 0.55, height: 0.55 };
+    check_origin_anchor(&p, g);
+    p.graph_mut(g).unwrap().page = Page::inches(15.0, 7.5);
+    check_origin_anchor(&p, g);
 }

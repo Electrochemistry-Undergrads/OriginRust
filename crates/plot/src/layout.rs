@@ -1500,6 +1500,10 @@ fn draw_legend(
     let m_right = 0.8 * fs + ticks.right.unwrap_or(0.0);
     let m_top = 0.8 * fs + ticks.top.unwrap_or(0.0);
     let (x0, y0) = match lg.position {
+        LegendPosition::Automatic => {
+            let (x, y) = Legend::AUTOMATIC_ANCHOR;
+            (f.x + x * f.w, f.y + y * f.h)
+        }
         LegendPosition::TopLeft => (f.x + m_left, f.y + m_top),
         LegendPosition::TopRight => (f.x + f.w - m_right - w, f.y + m_top),
         LegendPosition::BottomLeft => (f.x + m_left, f.y + f.h - m_bottom - h),

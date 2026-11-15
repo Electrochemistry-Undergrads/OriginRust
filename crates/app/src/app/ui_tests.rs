@@ -17,12 +17,16 @@ mod fill_inclusive;
 mod fill_sidelines;
 mod frozen_panes;
 mod hexbin;
+mod import_themes;
 mod label_frames;
 mod label_whiteout;
+mod legend_position;
 mod live;
 mod lollipop;
 mod offset_multipliers;
+mod recent;
 mod rug;
+mod simulate;
 mod skip_points;
 mod sort_x;
 mod switcher;
@@ -2152,6 +2156,11 @@ fn a_graph_is_saved_inside_the_opj_without_a_companion() {
     let dir = save_dir("graph");
     let opj = dir.join("lab.opj");
     let mut h = start(vec![data_file("save-graph")]);
+    h.state_mut().doc.apply("Fixed legend", |p| {
+        let id = p.graphs().next().unwrap().id;
+        p.graph_mut(id).unwrap().layers[0].legend.position = LegendPosition::TopRight;
+        p.graph_mut(id).unwrap().layers[0].legend.background = None;
+    });
     assert_eq!(project(&h).graphs().count(), 1, "the import made a graph");
     h.state_mut().path = Some(opj.clone());
     ctrl_s(&mut h);
@@ -2174,6 +2183,11 @@ fn a_save_that_loses_nothing_writes_no_companion_and_deletes_an_old_one() {
     // No overlap: now the .opj holds everything.
     h.state_mut().message = None;
     set_overlap(&mut h, 0.0);
+    h.state_mut().doc.apply("Fixed legend", |p| {
+        let id = p.graphs().next().unwrap().id;
+        p.graph_mut(id).unwrap().layers[0].legend.position = LegendPosition::TopRight;
+        p.graph_mut(id).unwrap().layers[0].legend.background = None;
+    });
     ctrl_s(&mut h);
     assert!(opj.exists());
     assert!(!dir.join("lab.opj.sheaf").exists(), "the companion Sheaf wrote is deleted");
@@ -6200,6 +6214,7 @@ mod clipboard_formats;
 mod find_replace;
 mod find_selection;
 mod go_to;
+mod go_to_browser;
 mod go_to_picker;
 mod label_panels;
 #[path = "ui_tests/stack_panels.rs"]

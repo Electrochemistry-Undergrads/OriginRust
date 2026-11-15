@@ -456,6 +456,12 @@ has not been seen (section 10).
   and `--show export-excel`.
 - **Not done in the app.** Multi-file preview of the sheets of every file at once (the sheet list is per
   file) and re-import.
+- **Dialog theme (T46).** The window gets the Dialog Theme row of the text window: `<default>`, `<last used>`
+  and saved names, with Save, Save As... and Delete. Origin's Excel window has not been seen, so the row is
+  **[S]** (Sheaf's choice, not measured), as in `import-ascii.md` section 17. The theme holds the whole of
+  `ExcelOptions` except `sheets` (the ticked sheets belong to the files, not to a theme), the import mode, the
+  partial-import tick and the graph tick, in the `excel` store (`import-themes/excel.json`). OK records
+  `<last used>`; Cancel does not.
 
 Tests: `crates/app/src/app/ui_tests/excel.rs`.
 

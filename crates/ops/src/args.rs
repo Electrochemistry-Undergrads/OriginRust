@@ -31,6 +31,9 @@ pub enum Command {
     /// Fit a model to a column: straight line, polynomial, a built-in function, a formula or an
     /// Origin .FDF function. Prints the parameters, statistics and ANOVA table.
     Fit(FitArgs),
+    /// Simulate Curve: the values of a built-in fit function for typed parameters, at X values from a range
+    /// or from a column. Writes X and Y as delimited text or an Excel workbook, or adds them to a project.
+    Simulate(SimulateArgs),
 }
 
 #[derive(Args, Debug)]
@@ -195,6 +198,65 @@ pub struct FitArgs {
     pub read: ReadOptions,
 }
 
+/// `sheaf simulate`: Analysis > Fitting > Simulate Curve without a window.
+#[derive(Args, Debug)]
+pub struct SimulateArgs {
+    /// A data file, a .sheaf project or an Origin .opj or .opju project: the workbook that gets the new
+    /// sheet, and the place --x-of looks in. Without it the curve is a project of its own.
+    pub input: Option<PathBuf>,
+    /// List the functions with their parameters and starting values, and exit.
+    #[arg(long)]
+    pub list: bool,
+    /// The built-in fit function, such as Gauss, ExpDec1 or Boltzmann (see --list). Case does not matter.
+    #[arg(short, long, default_value = "Gauss")]
+    pub function: String,
+    /// A parameter value, for example --param xc=5 (repeat the option or separate with commas). The
+    /// parameters left out keep the starting values of --list.
+    #[arg(short, long, value_delimiter = ',', value_name = "NAME=VALUE", allow_hyphen_values = true)]
+    pub param: Vec<String>,
+    /// The first X value (default 1). A first value above --to gives falling X.
+    #[arg(long, allow_hyphen_values = true, conflicts_with = "x_of")]
+    pub from: Option<f64>,
+    /// The last X value (default 10).
+    #[arg(long, allow_hyphen_values = true, conflicts_with = "x_of")]
+    pub to: Option<f64>,
+    /// How many X values, from 2 to 1000000 (default 100).
+    #[arg(long, conflicts_with = "x_of")]
+    pub points: Option<usize>,
+    /// Space the X values evenly on a logarithmic scale (both ends must be positive).
+    #[arg(long, conflicts_with = "x_of")]
+    pub log: bool,
+    /// Use the X values of this column (short or long name, in --sheet) instead of a range.
+    #[arg(long, value_name = "COLUMN")]
+    pub x_of: Option<String>,
+    /// For a project input: the workbook (default: the first one).
+    #[arg(long)]
+    pub book: Option<String>,
+    /// The sheet --x-of looks in, by name (default: the workbook's active sheet).
+    #[arg(long)]
+    pub sheet: Option<String>,
+    /// Draw the curve and write the figure (.png, .tif, .jpg, .bmp, .gif, .tga, .pcx, .psd, .svg, .pdf, .eps
+    /// or .emf). The graph is also kept with --save.
+    #[arg(long, value_name = "FIGURE")]
+    pub plot: Option<PathBuf>,
+    /// Resolution of a raster figure in dots per inch.
+    #[arg(long, default_value_t = 300.0)]
+    pub dpi: f64,
+    /// Draw the curve in a graph of the project that --save writes (--plot does this too).
+    #[arg(long)]
+    pub graph: bool,
+    /// Write the X and Y columns as delimited text (.tsv or .txt gives tabs, anything else commas) or, for a
+    /// .xlsx path, as an Excel workbook. Without --output and --save the curve is printed.
+    #[arg(short, long, visible_alias = "export", value_name = "FILE")]
+    pub output: Option<PathBuf>,
+    /// Save the project with the new sheet to this file: .opj (also when no extension is given, with a
+    /// companion .opj.sheaf if the .opj cannot hold everything) or .sheaf.
+    #[arg(long, visible_alias = "project", value_name = "PROJECT")]
+    pub save: Option<PathBuf>,
+    #[command(flatten)]
+    pub read: ReadOptions,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Format {
     /// Decide from the file content; .xls, .xlsx and .xlsm files are Excel workbooks.
@@ -326,6 +388,19 @@ pub struct ReadOptions {
     /// Excel: leave hidden sheets out when --sheets is not given.
     #[arg(long)]
     pub skip_hidden_sheets: bool,
+    /// Start from a saved import theme (the Dialog Theme row of the import windows): a saved name,
+    /// `<default>` or `<last used>`. Options given on the command line win over the theme; a flag
+    /// can only turn an option on, so to switch one off save a theme without it. A name that is in
+    /// no store lists the saved themes.
+    #[arg(long, value_name = "NAME", conflicts_with = "last_used")]
+    pub theme: Option<String>,
+    /// Start from the settings of the last OK in the import windows (same as `--theme "<last used>"`).
+    #[arg(long)]
+    pub last_used: bool,
+    /// The folder of the saved import themes (default: `$SHEAF_THEMES_DIR`, else `import-themes` in the
+    /// settings folder). Only read with --theme or --last-used.
+    #[arg(long, value_name = "DIR")]
+    pub themes_dir: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]

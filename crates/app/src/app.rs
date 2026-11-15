@@ -20,6 +20,7 @@ use crate::dialogs::go_to::{GoToDialog, GoToOutcome};
 use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome, ImportRequest};
 use crate::dialogs::import_excel::{ExcelImportDialog, split_excel};
+use crate::dialogs::import_theme::Themed;
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::label_panels::{LabelPanelsDialog, Outcome as LabelPanelsOutcome};
 use crate::dialogs::mask_condition::MaskConditionDialog;
@@ -30,6 +31,7 @@ use crate::dialogs::reshape::{ReshapeDialog, ReshapeOutcome};
 use crate::dialogs::row_filter::RowFilterDialog;
 use crate::dialogs::set_values::SetValuesDialog;
 use crate::dialogs::shape_object::ShapeDialog;
+use crate::dialogs::simulate::{Outcome as SimulateOutcome, SimulateDialog};
 use crate::dialogs::sort::{SortDialog, SortOutcome};
 use crate::dialogs::stack_panels::{Outcome as StackPanelsOutcome, StackPanelsDialog};
 use crate::dialogs::text_object::TextDialog;
@@ -40,6 +42,7 @@ use crate::live::{self, Live, Note};
 use crate::menus::{self, MenuContext, WindowKind};
 use crate::panels::logs::Logs;
 use crate::panels::{self, PanelData, PanelId, Panels, explorer, objects};
+use crate::recent::{self, Recent, RecentKind};
 use crate::theme;
 use crate::toolbar::{self, Bar, Toolbars};
 use crate::workspace::{WindowInfo, Workspace};
@@ -76,6 +79,12 @@ pub struct Startup {
     pub recovery_dir: Option<PathBuf>,
     /// Where the autosave switch and interval are kept; `None` keeps the defaults and writes nothing.
     pub settings_path: Option<PathBuf>,
+    /// The file of the recent projects and imports (`recent.json`); `None` keeps no lists and writes
+    /// nothing (the tests pass a temporary file).
+    pub recent_path: Option<PathBuf>,
+    /// The folder of the saved import settings (`import-themes`: the Dialog Theme row of the import
+    /// windows); `None` hides the row and writes nothing (the tests pass a temporary folder).
+    pub themes_dir: Option<PathBuf>,
     /// Turn the AI link on at start (`--mcp`). It is never saved: a run starts with it off.
     pub mcp: bool,
     /// The run folders the AI link may listen in, best first. `None` has no folder, so the link
@@ -133,6 +142,7 @@ pub struct SheafApp {
     trendline: Option<TrendlineDialog>,
     stack_panels: Option<StackPanelsDialog>,
     label_panels: Option<LabelPanelsDialog>,
+    simulate: Option<SimulateDialog>,
     column_props: Option<ColumnPropsDialog>,
     text_dialog: Option<TextDialog>,
     shape_dialog: Option<ShapeDialog>,
@@ -196,6 +206,8 @@ pub struct SheafApp {
     recovered_from: Option<PathBuf>,
     /// The endpoint of `sheaf-mcp --attach`, when Tools > AI Assistants (MCP) is ticked.
     live: Live,
+    /// The recent projects and imports (File > Recent Projects, File > Import > Recent Imports).
+    recent: Recent,
     /// The Window Switcher (Ctrl+Tab) while it is open.
     switcher: Option<crate::switcher::Switcher>,
 }
@@ -204,6 +216,7 @@ impl SheafApp {
     pub fn new(cc: &eframe::CreationContext<'_>, startup: Startup) -> Self {
         theme::apply(&cc.egui_ctx);
         let startup_dirs = startup.mcp_dirs.clone().unwrap_or_default();
+        let recent_path = startup.recent_path.clone();
         let mut app = SheafApp {
             doc: Document::default(),
             path: None,
@@ -223,6 +236,7 @@ impl SheafApp {
             trendline: None,
             stack_panels: None,
             label_panels: None,
+            simulate: None,
             column_props: None,
             text_dialog: None,
             shape_dialog: None,
@@ -272,6 +286,7 @@ impl SheafApp {
             recovery_offer: None,
             recovered_from: None,
             live: Live::new(cc.egui_ctx.clone(), startup_dirs),
+            recent: Recent::new(recent_path),
             switcher: None,
         };
         app.start_recovery();
@@ -463,10 +478,10 @@ impl SheafApp {
         let (workbooks, paths) = split_excel(paths);
         if ask {
             if !workbooks.is_empty() {
-                self.import_excel = Some(ExcelImportDialog::new(workbooks));
+                self.import_excel = Some(self.excel_dialog(workbooks));
             }
             if !paths.is_empty() {
-                self.import = Some(ImportDialog::new(paths));
+                self.import = Some(self.import_dialog(paths));
             }
             return;
         }
@@ -525,6 +540,7 @@ impl SheafApp {
     fn load_project(&mut self, path: PathBuf) {
         match sheaf_io::open_project(&path) {
             Ok(opened) => {
+                self.note_project(&path);
                 self.doc.replace(opened.project);
                 self.reset_views();
                 self.recovered_from = None;
@@ -570,6 +586,7 @@ impl SheafApp {
         self.trendline = None;
         self.stack_panels = None;
         self.label_panels = None;
+        self.simulate = None;
         self.column_props = None;
         self.set_values = None;
         self.export = None;
@@ -665,6 +682,12 @@ impl SheafApp {
                     said.push_str(&format!("; the original Origin file is kept as {}", b.display()));
                 }
                 self.say(said);
+                // Only a file that exists is listed: the .opj, or the companion when it was refused.
+                if outcome.main_written {
+                    self.note_project(&path);
+                } else if let Some(companion) = &outcome.companion {
+                    self.note_project(companion);
+                }
                 self.path = Some(path);
                 self.recovered_from = None;
                 if let Some(text) = outcome.details() {
@@ -680,6 +703,37 @@ impl SheafApp {
             Err(e) => {
                 self.message = Some(("Could not save the project".to_string(), e.to_string()));
                 false
+            }
+        }
+    }
+
+    /// A project was opened or saved: it goes to the top of the recent projects.
+    fn note_project(&mut self, path: &Path) {
+        if let Some(why) = self.recent.push_project(path) {
+            self.logs.warn(why);
+        }
+    }
+
+    /// A click on an entry of the recent lists. The file is checked now (the menu never touches it):
+    /// a missing file, a folder or a link to one, or a file of the wrong kind is reported and
+    /// dropped from the lists. Otherwise it goes the way a dropped file does, so the question about
+    /// unsaved changes comes first for a project.
+    fn follow_recent(&mut self, path: PathBuf, kind: RecentKind) {
+        match recent::check_target(&path, kind) {
+            Ok(()) => self.open_paths(vec![path], false),
+            Err(why) => {
+                let title = match kind {
+                    RecentKind::Projects => "Could not open the project",
+                    RecentKind::Imports => "Could not import the file",
+                };
+                self.warn(format!("{title}: {}", path.display()));
+                if let Some(failed) = self.recent.forget(&path) {
+                    self.logs.warn(failed);
+                }
+                self.message = Some((
+                    title.to_string(),
+                    format!("{}\n\n{why}\n\nIt was removed from the recent files.", path.display()),
+                ));
             }
         }
     }
@@ -706,6 +760,7 @@ impl SheafApp {
     fn finish_import(&mut self, request: ImportRequest) {
         let ImportRequest { items, errors, plot, template, mode, place } = request;
         let count = items.len();
+        let sources: Vec<PathBuf> = items.iter().map(|i| i.path.clone()).collect();
         let excel_sheets: usize = items.iter().filter(|i| i.format == "excel").map(|i| i.workbook.sheets.len()).sum();
         let mut notes: Vec<String> = errors;
         for i in &items {
@@ -740,6 +795,9 @@ impl SheafApp {
             notes.extend(placement_notes);
             let sheets = if excel_sheets > 0 { format!(", {excel_sheets} Excel sheet(s)") } else { String::new() };
             self.say(format!("Imported {count} file(s){sheets}"));
+            if let Some(why) = self.recent.push_imports(&sources) {
+                self.logs.warn(why);
+            }
         }
         for note in &notes {
             self.logs.warn(note.clone());
@@ -1189,7 +1247,7 @@ impl SheafApp {
                 if self.import_wizard.is_some() {
                     ctx.move_to_top(egui::LayerId::new(egui::Order::Middle, egui::Id::new("import_wizard")));
                 } else {
-                    self.import_wizard = Some(ImportWizard::new(Vec::new()));
+                    self.import_wizard = Some(self.wizard(Vec::new()));
                 }
             }
             Action::Undo => {
@@ -1407,6 +1465,7 @@ impl SheafApp {
                     self.warn("Nothing to fit: choose a column that holds numbers and is set as Y".to_string());
                 }
             }
+            Action::SimulateCurve { book } => self.simulate = Some(SimulateDialog::new(self.doc.project(), book)),
             Action::SortSheet { column, descending } => self.sort_sheet(column, descending),
             Action::SortRange { columns, descending } => self.sort_selected(columns, descending, true),
             Action::SortColumns { columns, descending } => self.sort_selected(columns, descending, false),
@@ -1665,6 +1724,21 @@ impl SheafApp {
                 });
                 if let Some(path) = path {
                     self.append_project_file(&path);
+                }
+            }
+            Action::ReloadRecent => {
+                self.recent.reload();
+                ctx.request_repaint();
+            }
+            Action::OpenRecent(path) => self.follow_recent(path, RecentKind::Projects),
+            Action::ImportRecent(path) => self.follow_recent(path, RecentKind::Imports),
+            Action::ClearRecent(kind) => {
+                let failed = match kind {
+                    RecentKind::Projects => self.recent.clear_projects(),
+                    RecentKind::Imports => self.recent.clear_imports(),
+                };
+                if let Some(why) = failed {
+                    self.logs.warn(why);
                 }
             }
             Action::DuplicateWindow(id) => {
@@ -2439,6 +2513,8 @@ impl SheafApp {
             undo_ai: self.can_undo_ai_changes(),
             windows: project.windows.iter().map(|w| (w.id(), w.title())).collect(),
             open: self.open_menu.as_deref(),
+            recent_projects: self.recent.projects(),
+            recent_imports: self.recent.imports(),
             panels: self.panels.shown_flags(),
             ai_link: self.live.active(),
             layer: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer),
@@ -2592,6 +2668,7 @@ impl SheafApp {
             || self.trendline.is_some()
             || self.stack_panels.is_some()
             || self.label_panels.is_some()
+            || self.simulate.is_some()
             || self.column_props.is_some()
             || self.text_dialog.is_some()
             || self.shape_dialog.is_some()
@@ -2700,6 +2777,25 @@ impl SheafApp {
         });
     }
 
+    /// An import window on `files`, started from `<last used>` (or `<default>`) of the saved settings.
+    fn import_dialog(&self, files: Vec<PathBuf>) -> ImportDialog {
+        let mut d = ImportDialog::new(files);
+        d.attach_themes(self.startup.themes_dir.clone());
+        d
+    }
+
+    fn excel_dialog(&self, files: Vec<PathBuf>) -> ExcelImportDialog {
+        let mut d = ExcelImportDialog::new(files);
+        d.attach_themes(self.startup.themes_dir.clone());
+        d
+    }
+
+    fn wizard(&self, files: Vec<PathBuf>) -> ImportWizard {
+        let mut w = ImportWizard::new(files);
+        w.attach_themes(self.startup.themes_dir.clone());
+        w
+    }
+
     /// Opens the import dialog on `files`, or on what the user picks when there are none.
     fn start_import(&mut self, files: Option<Vec<PathBuf>>, pick: ImportPick) {
         let files = files.or_else(|| {
@@ -2722,10 +2818,10 @@ impl SheafApp {
             // An Excel workbook chosen with an ASCII item still goes to the Excel window.
             let (workbooks, files) = split_excel(files);
             if !workbooks.is_empty() {
-                self.import_excel = Some(ExcelImportDialog::new(workbooks));
+                self.import_excel = Some(self.excel_dialog(workbooks));
             }
             if !files.is_empty() {
-                let mut dialog = ImportDialog::new(files);
+                let mut dialog = self.import_dialog(files);
                 if pick == ImportPick::Csv {
                     dialog.preset_comma();
                 }
@@ -2770,6 +2866,9 @@ impl SheafApp {
                 ImportOutcome::Open => {}
                 ImportOutcome::Cancelled => self.import = None,
                 ImportOutcome::Done(request) => {
+                    if let Some(warning) = d.take_theme_warning() {
+                        self.logs.warn(warning);
+                    }
                     self.import = None;
                     self.finish_import(request);
                 }
@@ -2780,6 +2879,9 @@ impl SheafApp {
                 ImportOutcome::Open => {}
                 ImportOutcome::Cancelled => self.import_excel = None,
                 ImportOutcome::Done(request) => {
+                    if let Some(warning) = d.take_theme_warning() {
+                        self.logs.warn(warning);
+                    }
                     self.import_excel = None;
                     self.finish_import(request);
                 }
@@ -2790,6 +2892,9 @@ impl SheafApp {
                 ImportOutcome::Open => {}
                 ImportOutcome::Cancelled => self.import_wizard = None,
                 ImportOutcome::Done(request) => {
+                    if let Some(warning) = d.take_theme_warning() {
+                        self.logs.warn(warning);
+                    }
                     self.import_wizard = None;
                     self.finish_import(request);
                 }
@@ -2859,6 +2964,20 @@ impl SheafApp {
                     self.label_panels = None;
                     self.focus(graph);
                     self.say("Created panels by label");
+                }
+            }
+        }
+        if let Some(d) = &mut self.simulate {
+            match d.show(ctx, &mut self.doc) {
+                SimulateOutcome::Open => {}
+                SimulateOutcome::Closed => self.simulate = None,
+                SimulateOutcome::Done { book, graph, message } => {
+                    self.simulate = None;
+                    self.focus(book);
+                    if let Some(graph) = graph {
+                        self.focus(graph);
+                    }
+                    self.say(message);
                 }
             }
         }
@@ -3118,11 +3237,7 @@ impl SheafApp {
         }
         if let Some(d) = &mut self.go_to {
             let book = d.book;
-            let sheet = self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet));
-            let outcome = match sheet {
-                Some(sheet) => d.show(ctx, sheet),
-                None => GoToOutcome::Closed,
-            };
+            let outcome = d.show(ctx, self.doc.project());
             match outcome {
                 GoToOutcome::Open => {}
                 GoToOutcome::Closed => self.go_to = None,
@@ -3533,6 +3648,15 @@ impl SheafApp {
                         self.focus(book);
                     }
                 }
+                // simulate or simulate:FUNCTION opens Analysis > Fitting > Simulate Curve on the first workbook.
+                "simulate" => {
+                    let book = project.workbooks().next().map(|b| b.id);
+                    let mut d = SimulateDialog::new(self.doc.project(), book);
+                    if !arg.is_empty() {
+                        d.choose_function_named(arg);
+                    }
+                    self.simulate = Some(d);
+                }
                 "label-panels" => {
                     let book = project.workbooks().next().map(|b| b.id);
                     if let Some(book) = book {
@@ -3616,7 +3740,7 @@ impl SheafApp {
                 }
                 "import-wizard" => {
                     let files = if arg.is_empty() { Vec::new() } else { vec![PathBuf::from(arg)] };
-                    self.import_wizard = Some(ImportWizard::new(files));
+                    self.import_wizard = Some(self.wizard(files));
                 }
                 // import-wizard-page:header, variables, file, data, selection or save (after import-wizard).
                 "import-wizard-page" => {
@@ -3635,7 +3759,7 @@ impl SheafApp {
                 }
                 "import-excel" => {
                     if !arg.is_empty() {
-                        self.import_excel = Some(ExcelImportDialog::new(vec![PathBuf::from(arg)]));
+                        self.import_excel = Some(self.excel_dialog(vec![PathBuf::from(arg)]));
                     }
                 }
                 // import-excel-page:mode, header, columns, partial or misc (after import-excel).
@@ -3651,7 +3775,7 @@ impl SheafApp {
                 }
                 "import" | "import-data-options" => {
                     if !arg.is_empty() {
-                        let mut d = ImportDialog::new(vec![PathBuf::from(arg)]);
+                        let mut d = self.import_dialog(vec![PathBuf::from(arg)]);
                         if name == "import-data-options" {
                             d.show_data_import_options();
                         }

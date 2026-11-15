@@ -71,7 +71,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T18](T18-backlog.md) | Large items not yet briefed (scripting, 3D, Options, importers, templates) | - | backlog |
 | [T19](T19-import-and-column-dialogs.md) | ASCII import options, Import Wizard pages, Column Properties formats | M | items 1 and 3 done; delimiter sets, consecutive-run combining and row/column range-pattern selection with except-first batch scope added; seven Import Wizard pages measured and added (remaining controls in brief) |
 | [T20](T20-automatic-axis-range.md) | Automatic axis range as Origin (8 % margin, step rule, log padding), Rescale Margin | M | done (`522c625`) |
-| [T21](T21-graph-defaults.md) | Graph defaults as Origin: colour order, fonts, line widths, ticks, symbols, dashes | M | done; legend position, tick lengths in .opj left |
+| [T21](T21-graph-defaults.md) | Graph defaults as Origin: colour order, fonts, line widths, ticks, symbols, dashes | M | done; four stock legend anchors, major tick lengths in .opj and measured thin-width dash interpolation copied; round dash caps/backend rounding, other template legend placements and chosen minor tick lengths remain |
 | [T22](T22-curve-mathematics.md) | Mathematics: Average Multiple Curves, Intersect, Polygon Area | M | done, merged (`734a1ff`); Origin details unmeasured (spec `analysis-curve-math.md`) |
 | [T23](T23-data-manipulation-tools.md) | Subtract Straight Line, Reduce to Evenly Spaced X, Curve Translate X/Y, Median Filter | M | done, merged (`f66dbea`); Origin details unmeasured (spec section 12) |
 | [T24](T24-drawn-graph-objects.md) | Drawn objects on graphs: line, arrow, rectangle, ellipse | M | done, merged (`542fef7`) |
@@ -88,7 +88,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T35](T35-conditional-highlight.md) | Conditional formatting: highlight min/max, top/bottom | M | done 2026-11-15; left: Heatmap, Pareto, Outliers, custom highlight, Manager |
 | [T36](T36-cell-notes.md) | Worksheet cell notes (add, hover, edit, delete) | M | done 2026-11-15 (`cell-notes`, macOS) |
 | [T37](T37-violin-plot.md) | Violin plot (kernel density silhouettes per Y column, box/quartile/point variants) | M | done 2026-11-15 (graphing 14.22); left: Split Violin, grouped violins, violin settings (bandwidth, extend, scale), Origin's defaults unmeasured |
-| [T38](T38-recent-files.md) | Recent Projects and Recent Imports (File menu lists that survive a restart) | M | claimed 2026-11-15 (`recent-files`, Claude macOS "mac-recent") |
+| [T38](T38-recent-files.md) | Recent Projects and Recent Imports (File menu lists that survive a restart) | M | done, merged 2026-11-15 (`docs/spec/recent-files.md`); left: Origin measurements, Recent Books/Graphs/Exports |
 | [T39](T39-plot-sort-x.md) | Line plots connected in X order without sorting the sheet | M | done 2026-11-15 (graphing 18.9, `plot-sort-x`, macOS); left: Origin's effect on symbols, fills, missing values, ties and splines unmeasured |
 | [T40](T40-graphical-summary.md) | Graphical Summary: statistics, CIs, Anderson-Darling and charts per variable/group | L | done 2026-11-15 (statistics.md 22); left: three other arrangements, Origin layout unmeasured |
 | [T41](T41-rug-plot.md) | Rug plots: Axis dialog Rug tab and Scatter + Rug template | M | done 2026-11-15 (graphing 18.10); left: Origin defaults unmeasured, rug hit-testing |
@@ -96,6 +96,9 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |
+| [T46](T46-import-themes.md) | Saved import settings: Dialog Theme row (`<last used>`, named themes) in the ASCII, CHI and Excel import windows, `sheaf import --theme` | M | done, merged 2026-11-15 (import-ascii.md 17); left: Origin measurements of the theme list and defaults |
+| [T47](T47-simulate-curve.md) | Simulate Curve: a curve from any fit-library function with typed parameters, window, CLI and MCP | M | done, merged 2026-11-15 (fitting.md 13); left: Origin measurements, user-defined functions, Simulate Surface |
+| [T48](T48-graph-data-tools.md) | Graph Data menu: Mask Data Points (rectangle), Remove Bad Data Points, Move Data Points | M | claimed 2026-11-15 (`graph-data-tools`, Claude macOS "mac-datatools") |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

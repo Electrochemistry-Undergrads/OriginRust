@@ -1,0 +1,375 @@
+//! Go To's Column Browser. Choosing a range changes the parent field, not the worksheet.
+
+use crate::panels::explorer::home;
+use eframe::egui;
+use egui_extras::{Column as TableColumn, TableBuilder};
+use sheaf_core::format::NumberFormat;
+use sheaf_core::{Column, ColumnId, Project, WindowId, Workbook, Worksheet};
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Scope {
+    Project,
+    Folder,
+    RecursiveFolder,
+    Book,
+    Sheet,
+}
+
+impl Scope {
+    const ALL: [Self; 5] = [Self::Project, Self::Folder, Self::RecursiveFolder, Self::Book, Self::Sheet];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Project => "in Current Project",
+            Self::Folder => "in Current Folder",
+            Self::RecursiveFolder => "in Current Folder (recursive)",
+            Self::Book => "in Current Book",
+            Self::Sheet => "in Current Sheet",
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Choice {
+    book: WindowId,
+    sheet: usize,
+    column: ColumnId,
+}
+
+struct Entry<'a> {
+    choice: Choice,
+    book: &'a Workbook,
+    sheet: &'a Worksheet,
+    column: &'a Column,
+    index: usize,
+}
+
+impl Choice {
+    fn resolve(self, project: &Project) -> Option<Entry<'_>> {
+        let book = project.workbook(self.book)?;
+        let sheet = book.sheets.get(self.sheet)?;
+        let index = sheet.column_index(self.column)?;
+        Some(Entry { choice: self, book, sheet, column: &sheet.columns[index], index })
+    }
+}
+
+impl Entry<'_> {
+    fn prefix(&self) -> String {
+        format!("[{}]{}!", self.book.name, self.sheet.name)
+    }
+
+    fn reference(&self) -> String {
+        format!("{}{}", self.prefix(), super::column_reference(self.column))
+    }
+
+    fn row_label(&self) -> String {
+        format!(
+            "{} / {} / {}({}): {}",
+            self.book.name,
+            self.sheet.name,
+            self.column.short_name,
+            self.column.designation.tag(),
+            self.column.long_name
+        )
+    }
+}
+
+pub(super) enum BrowserOutcome {
+    Open,
+    Closed,
+    /// Native Go To uses an ordinal in its original sheet. Multiple ranges yield zero (end).
+    Selected {
+        reference: String,
+        ordinal: usize,
+    },
+}
+
+pub(super) struct ColumnBrowser {
+    book: WindowId,
+    sheet: usize,
+    scope: Scope,
+    selected: Option<Choice>,
+    added: Vec<Choice>,
+    selected_range: Option<usize>,
+    expanded: bool,
+    first_frame: bool,
+}
+
+impl ColumnBrowser {
+    pub fn new(book: WindowId, sheet: usize) -> Self {
+        Self {
+            book,
+            sheet,
+            scope: Scope::Sheet,
+            selected: None,
+            added: Vec::new(),
+            selected_range: None,
+            expanded: true,
+            first_frame: true,
+        }
+    }
+
+    fn entries<'a>(&self, project: &'a Project) -> Vec<Entry<'a>> {
+        let folder = home(&project.root, self.book);
+        project
+            .workbooks()
+            .filter(|book| match self.scope {
+                Scope::Project => true,
+                Scope::Folder => home(&project.root, book.id) == folder,
+                Scope::RecursiveFolder => home(&project.root, book.id).starts_with(&folder),
+                Scope::Book | Scope::Sheet => book.id == self.book,
+            })
+            .flat_map(|book| {
+                book.sheets.iter().enumerate().filter_map(move |(index, sheet)| {
+                    (self.scope != Scope::Sheet || index == self.sheet).then_some((book, index, sheet))
+                })
+            })
+            .flat_map(|(book, sheet_index, sheet)| {
+                sheet.columns.iter().enumerate().map(move |(index, column)| Entry {
+                    choice: Choice { book: book.id, sheet: sheet_index, column: column.id },
+                    book,
+                    sheet,
+                    column,
+                    index,
+                })
+            })
+            .collect()
+    }
+
+    fn selection(&self, project: &Project) -> Option<(String, usize)> {
+        let entries = self.added.iter().map(|choice| choice.resolve(project)).collect::<Option<Vec<_>>>()?;
+        let first = entries.first()?;
+        if entries.len() == 1 {
+            return Some((first.reference(), first.index + 1));
+        }
+        let reference = if entries
+            .iter()
+            .all(|entry| entry.choice.book == first.choice.book && entry.choice.sheet == first.choice.sheet)
+        {
+            format!(
+                "{}({})",
+                first.prefix(),
+                entries.iter().map(|entry| super::column_reference(entry.column)).collect::<Vec<_>>().join(",")
+            )
+        } else {
+            format!("({})", entries.iter().map(Entry::reference).collect::<Vec<_>>().join(","))
+        };
+        Some((reference, 0))
+    }
+
+    pub fn show(&mut self, ctx: &egui::Context, project: &Project) -> BrowserOutcome {
+        let mut open = true;
+        let mut outcome = BrowserOutcome::Open;
+        let popup_was_open = egui::Popup::is_any_open(ctx);
+        egui::Window::new("Column Browser").open(&mut open).collapsible(false).default_width(700.0).show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                let label = ui.label("List Columns");
+                let previous = self.scope;
+                let scope = egui::ComboBox::from_id_salt("goto_browser_scope")
+                    .selected_text(self.scope.label())
+                    .width(180.0)
+                    .show_ui(ui, |ui| {
+                        for scope in Scope::ALL {
+                            ui.selectable_value(&mut self.scope, scope, scope.label());
+                        }
+                    })
+                    .response
+                    .labelled_by(label.id);
+                if self.first_frame {
+                    scope.request_focus();
+                    self.first_frame = false;
+                }
+                if previous != self.scope {
+                    self.selected = None;
+                }
+                ui.add_enabled(false, egui::Button::new("Exclude"));
+            });
+            let entries = self.entries(project);
+            egui::ScrollArea::horizontal().id_salt("goto_browser_columns").show(ui, |ui| {
+                // Leave the scroll bar below every row, rather than over the final row's hit area.
+                ui.set_min_height(270.0);
+                TableBuilder::new(ui)
+                    .striped(true)
+                    .sense(egui::Sense::click())
+                    .columns(TableColumn::auto().at_least(60.0), 10)
+                    .min_scrolled_height(215.0)
+                    .max_scroll_height(235.0)
+                    .header(22.0, |mut header| {
+                        for label in [
+                            "Sheet",
+                            "Book Long Name",
+                            "Book Short Name",
+                            "Index",
+                            "SName",
+                            "LName",
+                            "Comments",
+                            "Format",
+                            "Size",
+                            "1st Value",
+                        ] {
+                            header.col(|ui| {
+                                ui.strong(label);
+                            });
+                        }
+                    })
+                    .body(|body| {
+                        body.rows(20.0, entries.len(), |mut row| {
+                            let entry = &entries[row.index()];
+                            let selected = self.selected == Some(entry.choice);
+                            row.set_selected(selected);
+                            let mut clicked = false;
+                            row.col(|ui| {
+                                let response = ui.selectable_label(selected, &entry.sheet.name);
+                                let _ =
+                                    ctx.accesskit_node_builder(response.id, |node| node.set_label(entry.row_label()));
+                                clicked = response.clicked();
+                            });
+                            for value in [
+                                entry.book.long_name.clone(),
+                                entry.book.name.clone(),
+                                (entry.index + 1).to_string(),
+                                entry.column.short_name.clone(),
+                                entry.column.long_name.clone(),
+                                entry.column.comments.clone(),
+                                format_kind(entry.column).into(),
+                                entry.column.len().to_string(),
+                                entry.column.shown_text(0),
+                            ] {
+                                row.col(|ui| {
+                                    ui.label(value);
+                                });
+                            }
+                            if clicked || row.response().clicked() {
+                                self.selected = Some(entry.choice);
+                            }
+                        });
+                    });
+            });
+            ui.horizontal(|ui| {
+                ui.weak("Column Selected");
+                ui.add_enabled(false, egui::Button::new("Add as One Block"));
+                let add_response = ui.add_enabled(
+                    self.selected.and_then(|choice| choice.resolve(project)).is_some(),
+                    egui::Button::new("Add"),
+                );
+                if add_response.clicked()
+                    && let Some(choice) = self.selected
+                {
+                    self.added.push(choice);
+                }
+                if ui.add_enabled(self.selected_range.is_some(), egui::Button::new("Remove")).clicked()
+                    && let Some(index) = self.selected_range.take().filter(|index| *index < self.added.len())
+                {
+                    self.added.remove(index);
+                }
+                let selection = self.selection(project);
+                if ui.add_enabled(selection.is_some(), egui::Button::new("OK")).clicked()
+                    && let Some((reference, ordinal)) = selection
+                {
+                    outcome = BrowserOutcome::Selected { reference, ordinal };
+                }
+                if ui.button("Cancel").clicked() {
+                    outcome = BrowserOutcome::Closed;
+                }
+                if ui
+                    .button(if self.expanded { "▴" } else { "▾" })
+                    .on_hover_text("Show or hide selected ranges")
+                    .clicked()
+                {
+                    self.expanded = !self.expanded;
+                }
+            });
+            if self.expanded {
+                egui::ScrollArea::vertical()
+                    .id_salt("goto_browser_ranges")
+                    .max_height(150.0)
+                    .min_scrolled_height(120.0)
+                    .show(ui, |ui| {
+                        egui::Grid::new("goto_browser_added").striped(true).show(ui, |ui| {
+                            ui.strong("Range");
+                            ui.strong("Rows");
+                            ui.end_row();
+                            for (index, choice) in self.added.iter().enumerate() {
+                                let reference = choice
+                                    .resolve(project)
+                                    .map_or_else(|| "Unavailable column".into(), |entry| entry.reference());
+                                if ui.selectable_label(self.selected_range == Some(index), reference).clicked() {
+                                    self.selected_range = Some(index);
+                                }
+                                ui.label("[1:end]");
+                                ui.end_row();
+                            }
+                        });
+                    });
+            }
+            if matches!(outcome, BrowserOutcome::Open)
+                && !popup_was_open
+                && !egui::Popup::is_any_open(ctx)
+                && ctx.input(|input| input.key_pressed(egui::Key::Enter))
+                && let Some((reference, ordinal)) = self.selection(project)
+            {
+                outcome = BrowserOutcome::Selected { reference, ordinal };
+            }
+        });
+        if !open || (!popup_was_open && ctx.input(|input| input.key_pressed(egui::Key::Escape))) {
+            BrowserOutcome::Closed
+        } else {
+            outcome
+        }
+    }
+}
+
+fn format_kind(column: &Column) -> &'static str {
+    match column.format {
+        NumberFormat::Date(_) => "Date",
+        NumberFormat::Time(_) => "Time",
+        NumberFormat::DateTime(_, _) => "Date/Time",
+        NumberFormat::Month(_) => "Month",
+        NumberFormat::Weekday(_) => "Day of Week",
+        _ if column.numeric().is_none() => "Text",
+        _ => "T&N",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sheaf_core::project::Folder;
+    use sheaf_core::{ColumnData, Designation};
+
+    #[test]
+    fn scopes_distinguish_the_original_sheet_book_folder_descendants_and_unlisted_root_books() {
+        let mut project = Project::default();
+        let mut books = Vec::new();
+        for name in ["Current", "Peer", "Child", "Elsewhere", "Unlisted root"] {
+            let book = project.add_workbook(name);
+            project.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+            books.push(book);
+        }
+        let current = books[0];
+        project.add_column(current, 0, Designation::Y, ColumnData::numeric(vec![2.0])).unwrap();
+        project.workbook_mut(current).unwrap().sheets.push(Worksheet::new("Second"));
+        project.add_column(current, 1, Designation::Y, ColumnData::numeric(vec![3.0])).unwrap();
+        project.root.folders = vec![
+            Folder {
+                name: "Current folder".into(),
+                windows: vec![current, books[1]],
+                folders: vec![Folder { name: "Child".into(), windows: vec![books[2]], ..Folder::default() }],
+            },
+            Folder { name: "Other folder".into(), windows: vec![books[3]], ..Folder::default() },
+        ];
+        let mut browser = ColumnBrowser::new(current, 0);
+        assert_eq!(browser.entries(&project).len(), 2, "default scope is the opening sheet");
+        for (scope, count) in [(Scope::Book, 3), (Scope::Folder, 4), (Scope::RecursiveFolder, 5), (Scope::Project, 7)] {
+            browser.scope = scope;
+            assert_eq!(browser.entries(&project).len(), count, "{}", scope.label());
+        }
+        browser.book = books[4];
+        browser.scope = Scope::Folder;
+        let entries = browser.entries(&project);
+        assert_eq!(entries.len(), 1, "unlisted windows belong to root, not a child");
+        assert_eq!(entries[0].book.id, books[4]);
+        browser.scope = Scope::RecursiveFolder;
+        assert_eq!(browser.entries(&project).len(), 7, "root recursion includes unlisted and explicitly filed windows");
+    }
+}

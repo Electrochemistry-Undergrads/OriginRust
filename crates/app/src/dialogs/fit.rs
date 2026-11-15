@@ -1441,14 +1441,19 @@ struct Preview {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Series {
+pub(super) enum Series {
     Dots,
     Line,
 }
 
 /// A small plot drawn with the painter: the series scaled to a frame with the end values of both
 /// axes written at the edges, and a line at zero if asked.
-fn draw_xy(ui: &mut egui::Ui, size: egui::Vec2, series: &[(&[(f64, f64)], Series, egui::Color32)], zero_line: bool) {
+pub(super) fn draw_xy(
+    ui: &mut egui::Ui,
+    size: egui::Vec2,
+    series: &[(&[(f64, f64)], Series, egui::Color32)],
+    zero_line: bool,
+) {
     let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);

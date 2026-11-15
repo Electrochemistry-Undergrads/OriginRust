@@ -76,7 +76,7 @@ const EMPTY_LABEL: &str = "\u{2060}";
 const EXACT_INTEGER: i64 = 1 << 53;
 
 /// One sheet of a workbook, by name or by position.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SheetRef {
     /// The sheet's name (letter case does not matter).
     Name(String),
@@ -105,7 +105,8 @@ impl SheetRef {
 
 /// Settings of [`read_workbook`]. Header lines and rows are counted in Excel's own row numbers:
 /// line 1 is the first row of the sheet. A header line of 0 means "there is none".
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct ExcelOptions {
     /// The sheets to read, in this order. Empty: every sheet, in the file's order (hidden ones
     /// only when `include_hidden` is set). A sheet named here is read even when it is hidden.

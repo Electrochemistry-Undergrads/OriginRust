@@ -318,7 +318,7 @@ fn a_call_goes_to_the_app_and_back_on_every_transport() {
         who.send(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}));
         let tools = who.reply(2)["result"]["tools"].clone();
         let names: Vec<&str> = tools.as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names.len(), 13, "{names:?}");
+        assert_eq!(names.len(), 15, "{names:?}");
         for hidden in ["new_project", "open_project", "save_project"] {
             assert!(!names.contains(&hidden), "{hidden} is hidden");
         }
@@ -1049,14 +1049,14 @@ fn the_binary_attaches_to_the_app_and_says_where_it_looked_when_there_is_none() 
     };
     let replies = run(&a.scratch, &a.scratch.run());
     assert_eq!(replies.len(), 3);
-    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 13);
+    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 15);
     assert_eq!(replies[2]["result"]["isError"], false, "{}", replies[2]);
     assert!(replies[0]["result"]["instructions"].as_str().unwrap().contains("attached to Sheaf"));
     a.stop();
 
     let none = Scratch::new("none");
     let replies = run(&none, &none.run());
-    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 13, "tools/list needs no app");
+    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 15, "tools/list needs no app");
     let message = text(&replies[2]["result"]);
     assert_eq!(replies[2]["result"]["isError"], true);
     assert!(message.contains("no Sheaf is listening") && message.contains(none.run().to_str().unwrap()), "{message}");

@@ -53,7 +53,7 @@ fn a_plane_is_fitted_and_the_results_are_placed() {
     let grid = &book.sheets[3];
     let designations: Vec<Designation> = grid.columns.iter().map(|c| c.designation).collect();
     assert_eq!(designations, [Designation::X, Designation::Y, Designation::Z]);
-    assert_eq!(grid.row_count(), 900);
+    assert_eq!(grid.row_count(), 2500);
     // X and Y, and the fit result columns, are not offered as Y columns again.
     assert_eq!(surface_columns(&p, z), Some((x, y)));
     // The saved project holds the results and reads back equal.

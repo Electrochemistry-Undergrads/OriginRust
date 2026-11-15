@@ -21,7 +21,7 @@ use crate::ids::ColumnId;
 use crate::worksheet::Worksheet;
 
 /// Points per side of the grid of the `FitSurfaceCurve` sheet.
-const GRID: usize = 30;
+const GRID: usize = 50;
 
 /// Origin's category name of the surface functions.
 pub const SURFACE_CATEGORY: &str = "Surface Fitting";
@@ -176,7 +176,6 @@ impl Project {
         let ys = y_all[first..=last].to_vec();
         let source_label = format!("{}, {}, {}", column_label(x_col), column_label(y_col), column_label(z_col));
         let z_name = z_col.display_name().to_string();
-        let (x_name, y_name) = (x_col.display_name().to_string(), y_col.display_name().to_string());
         let (x_units, y_units, z_units) = (x_col.units.clone(), y_col.units.clone(), z_col.units.clone());
         let rows_note = if first == 0 && last + 1 == n_rows {
             format!("all {n_rows} rows")
@@ -320,13 +319,13 @@ impl Project {
             "",
             ColumnData::text(rows.iter().map(|r| r.2.clone()).collect()),
         );
-        let curve_x = sheet_column(self, &mut grid_ws, Designation::X, &x_name, &x_units, ColumnData::numeric(grid_x));
-        sheet_column(self, &mut grid_ws, Designation::Y, &y_name, &y_units, ColumnData::numeric(grid_y));
+        let curve_x = sheet_column(self, &mut grid_ws, Designation::X, "FitX", &x_units, ColumnData::numeric(grid_x));
+        sheet_column(self, &mut grid_ws, Designation::Y, "FitY", &y_units, ColumnData::numeric(grid_y));
         let curve_y = sheet_column(
             self,
             &mut grid_ws,
             Designation::Z,
-            &format!("Fit of {z_name}"),
+            "FitZ",
             &z_units,
             ColumnData::numeric(grid_z),
         );

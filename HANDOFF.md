@@ -131,6 +131,9 @@ open. History of what was merged when is in `git log` (not repeated here).
   `Worksheet.frozen`, saved in `.sheaf`, `.opj` warns. grid.rs draws frozen rows as extra head rows of the one
   table and frozen columns as an overlay over empty placeholder columns (exact scroll sync, hit guard
   `visible_part`); darker heads, 2 px divider, resizable frozen columns. Rules unmeasured (gui-look.md 3).
+- T41 rug plots (2026-11-15, macOS, no Origin): Axis dialog Rug tab with Origin's documented controls, strip
+  outside the frame with tick labels pushed out, Plot > Symbol > Scatter + Rug (`-t scatter-rug`, MCP); rug
+  Data choice is the plot's Y column; histograms mark raw observations; `.opj` warns (graphing.md 18.10).
 - T40 Graphical Summary (2026-11-15, macOS, no Origin): Statistics > Descriptive Statistics > Graphical Summary
   (Origin 2026, Separate Graphs arrangement only): per variable/group descriptive statistics, mean (t), median
   (exact binomial) and SD (chi-square) intervals, Anderson-Darling from the existing normality code; one graph per
@@ -195,7 +198,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `recent-files` | Claude macOS, "mac-recent" | T38 Recent Projects and Recent Imports: new sheaf-io recent module, File menu submenus, app open/save/import hooks, Startup recent_path, UI tests, spec | claimed 2026-11-15; no Recent Books/Graphs/Exports, no window saving, no other sessions' scope |
-| `rug-plot` | Claude macOS, "mac-multipdf" | T41 rug plots (Origin 2019b): per-axis Rug settings, rug strip drawing beside the axis, Axis dialog Rug tab, Scatter + Rug template, CLI/MCP template | claimed 2026-11-15; core graph.rs axis rug field + template, plot axis-side drawing/layout, graph_axis.rs Rug tab, menus; no axis breaks, X:Y ratio, shapes or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

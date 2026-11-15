@@ -1,6 +1,9 @@
 # T41: Rug plots (axis rug marks)
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `rug-plot`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `rug-plot`: Axis dialog Rug
+tab (Show, Data by Y column, Color, Thickness, Transparency, Size, Overlap, Gap, Margin, borders), Plot >
+Symbol > Scatter + Rug, `-t scatter-rug`, MCP; histograms mark raw observations; `.opj` warns. Left:
+Origin's defaults and placement unmeasured, rug hit-testing (graphing.md 18.10).
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Graphing: Rug plot, Origin 2019b).
 
 ## Goal

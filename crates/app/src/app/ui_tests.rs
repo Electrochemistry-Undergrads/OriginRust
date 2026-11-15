@@ -21,6 +21,7 @@ mod label_whiteout;
 mod live;
 mod lollipop;
 mod offset_multipliers;
+mod rug;
 mod skip_points;
 mod sort_x;
 mod symbol_line_gaps;

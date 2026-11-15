@@ -314,7 +314,7 @@ fn group_geometry(
             edges.bottom = edges.bottom.max(b);
             continue;
         }
-        label_edges(&mut edges, &g.layers[i], f, x, y, m);
+        label_edges(&mut edges, &g.layers[i], f, x, y, m, stack::waterfall(g, i).is_some());
     }
     let fitted = fit_on_page(bounds, &edges, &g.page);
     let f = if bounds == nominal { fitted } else { scale_into(nominal, bounds, fitted) };
@@ -369,7 +369,18 @@ impl LabelEdges {
 }
 
 /// Widens `e` by the tick labels and titles of one layer laid out at frame `f`.
-fn label_edges(e: &mut LabelEdges, layer: &Layer, f: Rect, x: &ResolvedAxis, y: &ResolvedAxis, m: &dyn TextMeasurer) {
+///
+/// `waterfall` is true for a layer drawn as a waterfall, which draws no ticks on the opposite edges, so
+/// an opposite rug starts at the frame there (the same view of the axes as `layer_scene` draws with).
+fn label_edges(
+    e: &mut LabelEdges,
+    layer: &Layer,
+    f: Rect,
+    x: &ResolvedAxis,
+    y: &ResolvedAxis,
+    m: &dyn TextMeasurer,
+    waterfall: bool,
+) {
     let mut scratch = Vec::new();
     let (xa, ya) = (&layer.x_axis, &layer.y_axis);
     if let Some(p) = layer.coords.polar() {
@@ -404,6 +415,13 @@ fn label_edges(e: &mut LabelEdges, layer: &Layer, f: Rect, x: &ResolvedAxis, y: 
         }
         AxisSide::Hidden => {}
     }
+    let across = crate::rug::opposite_reach(xa, f, !waterfall);
+    if across > 0.0 {
+        match xa.side {
+            AxisSide::Normal => e.top = e.top.min(f.y - across),
+            _ => e.bottom = e.bottom.max(f.y + f.h + across),
+        }
+    }
     let y_size = ya.title_font.size_pt;
     match ya.side {
         AxisSide::Normal => {
@@ -417,6 +435,13 @@ fn label_edges(e: &mut LabelEdges, layer: &Layer, f: Rect, x: &ResolvedAxis, y: 
             e.right = e.right.max(edge);
         }
         AxisSide::Hidden => {}
+    }
+    let across = crate::rug::opposite_reach(ya, f, !waterfall);
+    if across > 0.0 {
+        match ya.side {
+            AxisSide::Normal => e.right = e.right.max(f.x + f.w + across),
+            _ => e.left = e.left.min(f.x - across),
+        }
     }
 }
 
@@ -693,6 +718,7 @@ fn layer_scene(
     if ya.side != AxisSide::Hidden {
         rec(objects, out, start, ObjectKind::YAxis, &[y_line]);
     }
+    crate::rug::draw(out, layer, xa, ya, geom, pds, xp.line, yp.line);
     let start = out.len();
     let x_edge = (xa.side != AxisSide::Hidden).then(|| draw_x_labels(out, xa, &geom.x, f, &xp.labels, m));
     rec(objects, out, start, ObjectKind::XAxis, &[]);
@@ -769,12 +795,7 @@ fn draw_legend_and_labels(
 /// The color of the first drawable plot of a layer: its line color, or the symbol (fill) color
 /// for scatter and column plots, which have no line of their own to show.
 fn plot_color(pds: &[PlotData]) -> Option<Color> {
-    pds.first().map(|pd| match pd.plot.kind {
-        PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area | PlotKind::StackedArea | PlotKind::Stacked100Area => {
-            pd.plot.line.color
-        }
-        _ => pd.plot.symbol.color,
-    })
+    pds.first().map(crate::rug::plot_color)
 }
 
 /// The colors an axis is drawn in: its own, or that of the layer's first plot when the axis
@@ -977,7 +998,7 @@ fn tick_span(dir: TickDirection, len: f64) -> Option<(f64, f64)> {
 }
 
 /// How far ticks reach out of the frame on the axis' outer side.
-fn outward_extent(axis: &Axis) -> f64 {
+pub(crate) fn outward_extent(axis: &Axis) -> f64 {
     let ext = |dir: TickDirection, len: f64| match dir {
         TickDirection::Out | TickDirection::Both => len.max(0.0),
         _ => 0.0,
@@ -1076,7 +1097,8 @@ fn draw_x_labels(
 ) -> f64 {
     let size = axis.tick_font.size_pt;
     let top_side = axis.side == AxisSide::Opposite;
-    let tick_end = if top_side { f.y - outward_extent(axis) } else { f.y + f.h + outward_extent(axis) };
+    let rug = crate::rug::main_extent(axis, f);
+    let tick_end = if top_side { f.y - outward_extent(axis) - rug } else { f.y + f.h + outward_extent(axis) + rug };
     if !axis.show_tick_labels {
         return tick_end;
     }
@@ -1131,7 +1153,8 @@ fn draw_y_labels(
     m: &dyn TextMeasurer,
 ) -> f64 {
     let right_side = axis.side == AxisSide::Opposite;
-    let tick_end = if right_side { f.x + f.w + outward_extent(axis) } else { f.x - outward_extent(axis) };
+    let rug = crate::rug::main_extent(axis, f);
+    let tick_end = if right_side { f.x + f.w + outward_extent(axis) + rug } else { f.x - outward_extent(axis) - rug };
     if !axis.show_tick_labels {
         return tick_end;
     }

@@ -16,6 +16,7 @@ Summary. One small expression language serves two jobs: worksheet column formula
   - A bare `col(A)` is the value in the row being calculated.
   - Only column references take a subscript; `(x+1)[2]` is an error.
 - Variables: any other name is a variable looked up in the host (fit parameters, `x`, and so on). The name `i` is the 1-based number of the row being calculated, unless the host defines a variable called `i` itself. **[choice: the host wins, so a fit function may use `i` as a parameter]**
+- The column index `j` (Set Multiple Columns Values, T53). A worksheet host may supply `j`, the 1-based position in the sheet of the column whose formula is being calculated, as a variable (`col(A)*j`) and inside a column reference: `wcol(j-1)` is the column to the left of the column being set, `wcol(j+2)` two to the right, `col(j)` the column itself. In the parser `col(j+k)` and `col(j-k)` (a whole number `k`, no spaces needed) are a relative reference (`ColumnRef::Relative(offset)`, printed `col(j-1)`); a host that has no `j`, such as a fit function or a sheet filter, finds no column for it and reports an unknown column or variable. A relative reference outside the sheet (`wcol(j-1)` on column A) is an unknown column error. The sheet host defines `j` for every column formula, so the single-column Set Column Values window may use it too. Name rules, all **[choice]** until measured: the variable `j` follows the same host-wins rule as `i`; a bare `col(j)` or `wcol(j)` is a name first, as `col(A)` is: a column whose short name is j in any case (the tenth column of a default sheet is called J) or whose long name is exactly `j` is read, so formulas written before T53 keep their meaning; only on a sheet with no such column does a bare `col(j)` mean the position, where before it was an unknown column. The explicit form `col(j+0)` or `col(j-0)` is always the position. A formula that reads its own column (`col(j-0)` on column j) runs once, as for any self read. A layout change (insert, delete or move of a column) that changes the position of a column whose formula reads `j` (the variable or a position `col(j)`) recalculates it, or marks it pending in Manual mode, as for any other changed read. A user parameter row called `j` still wins in `col(A)[j]`, as it does for any name.
 - The conditional `c ? a : b` evaluates only the branch it takes.
 - Text strings `"abc"` (no escape sequences; cannot contain a double quote) and `col(A)$` / `col(A)[i]$` (the text of a cell) are text values; see the text section below. `col("Long Name")` also takes a quoted name.
 - `col(A)[L]$` reads a column header rather than a data row; built-in header codes `G`, `L`, `U`, `C`, `O` are supported (see below).
@@ -278,5 +279,27 @@ has no project scope and continues to reject qualified references.
 - A single `=` is not a comparison here; use `==`.
 - `e` is the constant 2.718...; a parameter literally named `e` in a fit function cannot be used (rename it).
 - `i` is read-only and always the 1-based row number of the output row.
+- `j` exists only where the host supplies the column position (a worksheet column formula); it is the position in the sheet, not the position within a multi-column selection **[choice, not measured]**. See section 7.
 - Names of variables are case-sensitive; function names are not.
 - Unknown names are errors at evaluation time, not silently zero.
+
+## 7. Set Multiple Columns Values (T53)
+
+Origin's Set Multiple Columns Values (Column menu, Ctrl+Shift+Q) opens the Set Values window for the selected columns at once: one formula, `i` the row and `j` the column. Nothing here is measured yet (no Origin on the macOS machine); everything marked **[choice]** is Sheaf's guess from Origin's public documentation and must be checked on Windows.
+
+Core API (`sheaf-core`, `crates/core/src/formula.rs`):
+
+- `Project::set_columns_values_with(&[ColumnId], formula, rows, mode)` sets the same formula on each column as `set_column_values_with` would, from left to right in sheet order whatever the order of the slice; `Document::set_columns_values(...)` does it as one undo step ("Set multiple columns values"). The columns must be on one sheet. Any failure (unknown column, cycle, text outside the rows) undoes the whole call and names the column when the error comes from the formula.
+- Each column keeps the formula text exactly as typed, `j` included, and recalculates with its own `j`. **[choice: the stored text is literal; Origin may store the text with `j` replaced]**
+- Recalculate (None, Manual, Auto) and the row range apply to every column. For Auto and Manual the dependencies are resolved per column, so `wcol(j-1)` over B to E is a chain B reads A, C reads B, and so on, calculated in dependency order, and a change in A reaches all of them. A loop (`wcol(j+1)+wcol(j-1)` over B and C) is refused with the chain named; a column that reads itself runs once. A reorder or insertion of columns changes `j`, so recalculating columns re-resolve their reads (the same trigger as a renamed column).
+- `j` is the position in the sheet, so selecting only column D gives `j = 4`. **[choice]**
+
+To measure on Windows with `tools/origin-ref`:
+
+1. The window title, and whether the column navigation buttons are shown or hidden.
+2. Whether `j` is the sheet position or the position in the selection (select C and E and set `j`).
+3. What each column's stored formula (the F(x) label row) shows afterwards: the literal text with `j`, or `j` substituted.
+4. How Auto recalculation treats a `wcol(j-1)` chain, and a selection that makes a loop.
+5. Whether a selection that includes a locked, text or non-numeric column is refused or silently skipped.
+6. `col(j)`, `wcol(j)` and `col(J)` on a sheet with a column named J and on one without, and whether `wcol(j+k)` outside the sheet is an error or missing values.
+7. Whether one undo step reverts every column (Sheaf: yes).

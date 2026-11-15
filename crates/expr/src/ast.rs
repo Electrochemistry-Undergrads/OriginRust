@@ -19,6 +19,11 @@ pub enum ColumnRef {
     Long(String),
     /// `col(3)` or `wcol(3)`: 1-based position in the sheet.
     Index(usize),
+    /// `col(j-1)`, `wcol(j+2)`: the column at the position of the column being calculated plus
+    /// this offset (`col(j)` is offset 0). The host that knows `j` resolves it; without a `j` no
+    /// column matches. A bare lowercase `col(j)` is the name `j` ([`ColumnRef::Short`]); the host
+    /// decides whether that means the position.
+    Relative(i64),
     /// `[Book]Sheet!col(A)` or `Sheet!col(A)`. Without a book, use the formula's workbook.
     Scoped { book: Option<String>, sheet: WorksheetRef, column: Box<ColumnRef> },
 }
@@ -59,6 +64,8 @@ impl std::fmt::Display for ColumnRef {
             ColumnRef::Short(s) => write!(f, "col({s})"),
             ColumnRef::Long(s) => write!(f, "col(\"{s}\")"),
             ColumnRef::Index(n) => write!(f, "col({n})"),
+            ColumnRef::Relative(0) => write!(f, "col(j)"),
+            ColumnRef::Relative(d) => write!(f, "col(j{d:+})"),
             ColumnRef::Scoped { book, sheet, column } => {
                 if let Some(book) = book {
                     write!(f, "[{book}]")?;

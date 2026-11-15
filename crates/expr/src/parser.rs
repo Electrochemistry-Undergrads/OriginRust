@@ -407,10 +407,18 @@ impl Parser {
         }
     }
 
-    /// Parses after `col (`: a short name, a quoted long name or a 1-based number.
+    /// Parses after `col (`: a short name, a quoted long name, a 1-based number or `j` with an offset.
     fn column_ref(&mut self, pos: usize) -> Result<Node, ExprError> {
         let t = self.advance();
         let r = match t.tok {
+            Tok::Ident(s) if s == "j" && matches!(self.peek_tok(), Tok::Plus | Tok::Minus) => {
+                let sign = if self.advance().tok == Tok::Minus { -1 } else { 1 };
+                let offset = self.advance();
+                match offset.tok {
+                    Tok::Num(v) if v.fract() == 0.0 && (0.0..1e9).contains(&v) => ColumnRef::Relative(sign * v as i64),
+                    _ => return Err(ExprError::at(offset.pos, "expected a whole number after j+ or j- inside col()")),
+                }
+            }
             Tok::Ident(s) => ColumnRef::Short(s),
             Tok::Str(s) => ColumnRef::Long(s),
             Tok::Num(v) => {

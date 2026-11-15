@@ -22,7 +22,7 @@ pub enum Command {
     Print(PrintArgs),
     /// Write a graph of a project as PNG, TIFF, JPEG, BMP, GIF, TGA, PCX, SVG, PDF, EPS or EMF, or
     /// the project (or a data file) as an Origin .opj project or an Excel .xlsx workbook.
-    Export(ExportArgs),
+    Export(Box<ExportArgs>),
     /// Write a worksheet of a project as delimited text, or as an Excel .xlsx workbook.
     ExportData(ExportDataArgs),
     /// Run an analysis tool on worksheet columns: integrate, differentiate, smooth, normalize,
@@ -30,7 +30,7 @@ pub enum Command {
     Analyze(AnalyzeArgs),
     /// Fit a model to a column: straight line, polynomial, a built-in function, a formula or an
     /// Origin .FDF function. Prints the parameters, statistics and ANOVA table.
-    Fit(FitArgs),
+    Fit(Box<FitArgs>),
     /// Simulate Curve: the values of a built-in fit function for typed parameters, at X values from a range
     /// or from a column. Writes X and Y as delimited text or an Excel workbook, or adds them to a project.
     Simulate(SimulateArgs),
@@ -223,13 +223,13 @@ pub struct SimulateArgs {
     /// parameters left out keep the starting values of --list.
     #[arg(short, long, value_delimiter = ',', value_name = "NAME=VALUE", allow_hyphen_values = true)]
     pub param: Vec<String>,
-    /// The first X value (default 1). A first value above --to gives falling X.
+    /// The first X value (default: the X range of Origin's Simulate Curve window for the function, Gauss -1). A first value above --to gives falling X.
     #[arg(long, allow_hyphen_values = true, conflicts_with = "x_of")]
     pub from: Option<f64>,
-    /// The last X value (default 10).
+    /// The last X value (default: the function's, Gauss 5).
     #[arg(long, allow_hyphen_values = true, conflicts_with = "x_of")]
     pub to: Option<f64>,
-    /// How many X values, from 2 to 1000000 (default 100).
+    /// How many X values, from 2 to 1000000 (default 200).
     #[arg(long, conflicts_with = "x_of")]
     pub points: Option<usize>,
     /// Space the X values evenly on a logarithmic scale (both ends must be positive).
@@ -618,6 +618,36 @@ pub struct StyleArgs {
     /// from it), from 2 to 1000 (default 20).
     #[arg(long, value_name = "N")]
     pub hex_bins: Option<usize>,
+    /// Treemaps (-t treemap): the layout of every level: squarified (default), squarified-plus, split, pivot-size,
+    /// pivot-middle or pivot-split-size.
+    #[arg(long, value_name = "LAYOUT")]
+    pub treemap_layout: Option<String>,
+    /// Treemaps: the order of the rectangles: categorical (default, the order of first appearance), alphabetical,
+    /// size or column:NAME (by a column, smallest first). The squarified layouts sort by size and ignore it.
+    #[arg(long, value_name = "ORDER")]
+    pub treemap_order: Option<String>,
+    /// Treemaps: the number of levels shown, 1 or more (default: every level).
+    #[arg(long, value_name = "N")]
+    pub treemap_depth: Option<usize>,
+    /// Treemaps: the gap between rectangles in pt, from 0 to 20 (default 1.5).
+    #[arg(long, value_name = "PT")]
+    pub treemap_gap: Option<f64>,
+    /// Sunburst plots (-t sunburst): where the first wedge starts, in degrees counter-clockwise from 3 o'clock
+    /// (default 90: 12 o'clock; the wedges go clockwise).
+    #[arg(long, value_name = "DEGREES", allow_hyphen_values = true)]
+    pub sunburst_start: Option<f64>,
+    /// Sunburst plots: the hole in the middle as a percentage of the radius, 0 to 90 (default 30).
+    #[arg(long, value_name = "PCT")]
+    pub sunburst_hole: Option<f64>,
+    /// Sunburst plots: the gap between rings in pt, from 0 to 20 (default 0).
+    #[arg(long, value_name = "PT")]
+    pub sunburst_gap: Option<f64>,
+    /// Sunburst plots: what the wedges are labelled with: names (default), values, both or none.
+    #[arg(long, value_name = "WHAT")]
+    pub sunburst_labels: Option<String>,
+    /// Sunburst plots: the order of the wedges of a ring: worksheet (default, first appearance) or size (largest first).
+    #[arg(long, value_name = "ORDER")]
+    pub sunburst_order: Option<String>,
     /// Add a free text label to the first layer: "TEXT@X,Y", where X and Y are fractions of the
     /// layer frame (0,0 is its top left corner, 1,1 its bottom right; the label's text starts
     /// there). The text may use Origin's escapes, for example --label "\b(Zn-LMO)@0.85,0.1".
@@ -677,7 +707,13 @@ pub struct PlotArgs {
     /// Y column as a mirrored kernel density silhouette, like box (also violin-box, violin-point,
     /// violin-quartile, violin-stick and half-violin, which differ in the marks inside); ridgeline draws
     /// each Y column as a density curve on its own baseline, the columns stacked up the page; hexbin bins
-    /// the X column against the first Y column into hexagons coloured by their count (see --hex-bins).
+    /// the X column against the first Y column into hexagons coloured by their count (see --hex-bins);
+    /// parallel (two or more Y columns) draws one vertical axis per column and one line per row, coloured by a
+    /// column with a colour scale; parallel-index (three or more Y columns and a text group column, see --group)
+    /// colours the lines by group, with a legend; treemap nests rectangles by the category columns (--group; default:
+    /// the text columns) with areas proportional to the last numeric Y column (see the --treemap-* options); sunburst
+    /// draws the same hierarchy as concentric rings, the first category innermost, angles proportional to the last
+    /// numeric Y column, coloured by value (see the --sunburst-* options).
     #[arg(short, long)]
     pub template: Option<String>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).
@@ -700,6 +736,13 @@ pub struct PlotArgs {
     /// with a companion .opj.sheaf if needed) or .sheaf.
     #[arg(long, value_name = "PROJECT")]
     pub save: Option<PathBuf>,
+    /// Parallel plots (-t parallel, -t parallel-index): the column that colours the lines. For a parallel index the
+    /// group column (text; default: the first text column of the sheet), one colour and legend entry per distinct
+    /// text. For a parallel plot a numeric column (default: the last Y column) shown with a colour scale; `none`
+    /// draws every line in the plot colour. For a treemap or sunburst the category columns, comma-separated, the first the top level or innermost ring
+    /// (default: the text columns among --y, else every text column of the sheet).
+    #[arg(long, value_name = "COLUMN", conflicts_with_all = ["graph", "panels"])]
+    pub group: Option<String>,
     /// Make a graph of several panels: stack (one column of panels that share the X axis, the
     /// first at the bottom, as Origin's Stack command), or ROWSxCOLUMNS such as 2x1 (Origin's
     /// Vertical 2 Panel), 1x2 (Horizontal 2 Panel) or 2x2 (4 Panel). Each Y column gets its own

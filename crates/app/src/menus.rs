@@ -15,7 +15,7 @@
 //! underlined, and Alt plus the letter of a top-level menu opens that menu. Letters inside the
 //! open menus are not handled (egui has no way to pick an item by letter).
 
-use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, DataTool, GraphOp, GraphTool, ImportPick, SheetOp};
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
@@ -43,6 +43,7 @@ const NEED_GRAPH: &str = "Activate a graph window first";
 const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
 const NEED_CELLS: &str = "Select cells, columns or rows first";
+const NEED_TWO_COLUMNS: &str = "Select two or more columns first";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
 const NO_UNDO: &str = "Nothing to undo";
@@ -168,6 +169,8 @@ pub enum Cmd {
     Refresh,
     SetAs(Designation),
     SetColumnValues,
+    /// Column > Set Multiple Columns Values... (Ctrl+Shift+Q): two or more selected columns.
+    SetMultipleColumnsValues,
     Recalculate,
     AddColumns,
     ColumnProperties,
@@ -235,6 +238,8 @@ pub enum Cmd {
     Pointer,
     /// The Data Reader tool of the Tools toolbar.
     DataReader,
+    /// A tool of the Data menu (Mask, Move or Remove Bad Data Points).
+    DataTool(DataTool),
     /// The Text tool of the Tools toolbar.
     TextTool,
     /// A drawing tool of the Tools toolbar.
@@ -873,6 +878,15 @@ fn plot_menu() -> Vec<Entry> {
             .concat(),
         ),
         sub(
+            "Cate&gorical",
+            vec![
+                item("Parallel Plot", Cmd::Plot(Template::Parallel)),
+                item("Parallel Index", Cmd::Plot(Template::ParallelIndex)),
+                item("Treemap", Cmd::Plot(Template::Treemap)),
+                item("Sunburst Plot", Cmd::Plot(Template::Sunburst)),
+            ],
+        ),
+        sub(
             "&Area",
             vec![
                 item("&Area", Cmd::Plot(Template::Area)),
@@ -943,7 +957,7 @@ fn column_menu() -> Vec<Entry> {
         item("Set as Categorical", Cmd::SetCategorical),
         sep(),
         keyed("Set Column &Values...", ctrl(Key::Q), Cmd::SetColumnValues),
-        grey_keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q)),
+        keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q), Cmd::SetMultipleColumnsValues),
         // Origin has this as a toolbar button and in the column's right-click menu.
         item("Re&calculate", Cmd::Recalculate),
         grey_sub(
@@ -1323,9 +1337,9 @@ fn data_menu() -> Vec<Entry> {
         grey_sub("Analysis Markers", &["Hide", "Show Partial Ranges", "Show All", "Tiny", "Small", "Medium", "Large"]),
         grey_sub("Lock Position", &["Layer Icon", "First Point", "Last Point"]),
         sep(),
-        grey("Mask Data Points"),
-        grey("Move Data Points"),
-        grey("Remove Bad Data Points"),
+        item("Mask Data Points", Cmd::DataTool(DataTool::Mask)),
+        item("Move Data Points", Cmd::DataTool(DataTool::Move)),
+        item("Remove Bad Data Points", Cmd::DataTool(DataTool::RemoveBad)),
     ]
 }
 
@@ -1524,7 +1538,7 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(item("Set As Categorical", Cmd::SetCategorical));
     v.push(sep());
     v.push(keyed("Set Column Values...", ctrl(Key::Q), Cmd::SetColumnValues));
-    v.push(grey_keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q)));
+    v.push(keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q), Cmd::SetMultipleColumnsValues));
     v.push(item("Recalculate", Cmd::Recalculate));
     v.push(item("Add New Columns...", Cmd::AddColumns));
     v.push(sep());
@@ -1774,8 +1788,8 @@ pub fn graph_shape_menu(layer: usize, shape: usize) -> Vec<Entry> {
         grey_keyed("Copy", ctrl(Key::C)),
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteShape { layer, shape })),
         sep(),
-        grey("Bring to the front"),
-        grey("Push to the back"),
+        item("Bring to the front", Cmd::GraphEdit(GraphOp::OrderShape { layer, shape, front: true })),
+        item("Push to the back", Cmd::GraphEdit(GraphOp::OrderShape { layer, shape, front: false })),
         sep(),
         item("Properties...", Cmd::EditShape { layer, shape }),
     ]
@@ -2130,6 +2144,13 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             book?;
             Action::SetColumnValues(one()?)
         }
+        Cmd::SetMultipleColumnsValues => {
+            book?;
+            match c.selected {
+                [_, _, ..] => Action::SetMultipleColumnsValues(c.selected.to_vec()),
+                _ => return Err(NEED_TWO_COLUMNS),
+            }
+        }
         Cmd::Recalculate => {
             book?;
             Action::Recalculate(some()?)
@@ -2280,6 +2301,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::GoTo(id) => Action::Focus(*id),
         Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pointer },
         Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Reader },
+        Cmd::DataTool(tool) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Data(*tool) },
         Cmd::TextTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Text },
         Cmd::ShapeTool(kind) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Draw(*kind) },
         Cmd::EditShape { layer, shape } => {
@@ -2503,8 +2525,9 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
     }
 }
 
-/// The entries of a recent list: numbered, the name first and the folder after it in a weaker
-/// colour, the full path as the tooltip. An empty list shows a greyed "(none)".
+/// The entries of a recent list as Origin 2016 shows them: numbered 1 to 9 and A to F, the path
+/// without its extension shortened to 80 characters, the full path as the tooltip. An empty list
+/// shows a greyed "(none)".
 fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &mut Vec<Action>) {
     let list = if kind == RecentKind::Projects { c.recent_projects } else { c.recent_imports };
     if list.is_empty() {
@@ -2512,13 +2535,7 @@ fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &m
         return;
     }
     for (n, path) in list.iter().enumerate() {
-        let (name, folder) = recent::entry_parts(path, RECENT_FOLDER_CHARS);
-        let mut job = label_job(ui, &recent::numbered(n, &name), true);
-        if !folder.is_empty() {
-            let font_id = TextStyle::Button.resolve(ui.style());
-            let weak = TextFormat { font_id, color: ui.visuals().weak_text_color(), ..Default::default() };
-            job.append(&folder, 14.0, weak);
-        }
+        let job = label_job(ui, &recent::numbered(n, &recent::entry_text(path, RECENT_ENTRY_CHARS)), true);
         let full = path.display().to_string();
         let response = ui.add(egui::Button::new(job)).on_hover_text(&full);
         if response.contains_pointer() {
@@ -2535,7 +2552,8 @@ fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &m
 }
 
 /// The longest folder text an entry shows; longer folders are cut from the left (Sheaf's choice).
-const RECENT_FOLDER_CHARS: usize = 48;
+/// Origin 2016 shortens a recent entry to 80 characters (recent-files.md 2).
+const RECENT_ENTRY_CHARS: usize = 80;
 
 /// A check mark in the room left of the label.
 fn tick(ui: &egui::Ui, response: &egui::Response) {
@@ -2713,6 +2731,7 @@ mod tests {
         let find = |ks: KeyboardShortcut| keys.iter().find(|(k, _)| *k == ks).map(|(_, c)| c.clone());
         assert_eq!(find(ctrl(Key::K)), Some(Cmd::Import), "Ctrl+K imports, as in Origin");
         assert_eq!(find(ctrl(Key::Q)), Some(Cmd::SetColumnValues));
+        assert_eq!(find(ctrl_shift(Key::Q)), Some(Cmd::SetMultipleColumnsValues));
         assert_eq!(find(ctrl(Key::D)), Some(Cmd::AddColumns));
         assert_eq!(find(ctrl(Key::Y)), Some(Cmd::Fit(FitKind::BuiltIn)), "Ctrl+Y is Origin's, not redo");
         assert_eq!(find(ctrl(Key::N)), Some(Cmd::NewProject));
@@ -2768,6 +2787,14 @@ mod tests {
         let c = MenuContext { kind: WindowKind::Workbook, book: Some(WindowId(1)), graph: None, selected: &sel, ..c };
         assert!(matches!(resolve(&Cmd::SetColumnValues, &c), Ok(Action::SetColumnValues(x)) if x == id));
         assert_eq!(resolve(&Cmd::ExportGraph, &c).unwrap_err(), NEED_GRAPH);
+        // Several columns need two or more.
+        assert_eq!(resolve(&Cmd::SetMultipleColumnsValues, &c).unwrap_err(), NEED_TWO_COLUMNS);
+        let two = [ColumnId(7), ColumnId(8)];
+        let c = MenuContext { selected: &two, ..c };
+        assert!(
+            matches!(resolve(&Cmd::SetMultipleColumnsValues, &c), Ok(Action::SetMultipleColumnsValues(x)) if x == two)
+        );
+        assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_ONE_COLUMN);
     }
 
     #[test]

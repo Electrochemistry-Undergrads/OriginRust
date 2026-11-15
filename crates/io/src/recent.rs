@@ -18,7 +18,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 /// The most entries each list keeps (Sheaf's choice, not measured in Origin).
-pub const MAX_ENTRIES: usize = 10;
+/// Origin 2016 shows 15 recent projects, numbered 1 to 9 and A to F (measured, recent-files.md 2).
+pub const MAX_ENTRIES: usize = 15;
 /// The name of the file in the settings folder.
 pub const FILE_NAME: &str = "recent.json";
 

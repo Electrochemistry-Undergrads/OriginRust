@@ -1869,6 +1869,242 @@ Origin's documented facts (Origin 2027 help, not measured; no Origin was at hand
 - Not done: XYZ and matrix input, Binned Scatter, UpSet, a hexbin toolbar button, colour map choice, a tick count
   setting, Origin's real defaults, outlines, hover read-out of bin counts.
 
+### 14.25 Parallel Plot and Parallel Index (T49)
+
+Origin's documented facts (Origin 2019 help, not measured; no Origin was at hand; [W:origin-help/parallel-plot],
+[W:origin-help/parallel-index], [W:origin-help/axes_dialog_parallel_coordinates], [W:origin-help/pd-dialog-parallel-tab]):
+
+- Parallel Plot: menu "Plot > Categorical: Parallel Plot" (also "Plot > 2D: Parallel Plot"), template `Parallel.otpu`;
+  at least two columns, all treated as Y; a colour scale legend; the colour is usually mapped from a column (By Points
+  tab). Parallel Index: "Plot > Categorical: Parallel Index"; at least three columns plus a grouping column of
+  categorical data that creates the legend and assigns the plot colour.
+- Axes dialog: "Rescale Each Axis Independently": checked, each axis has its own From and To; cleared, all axes share one
+  range, that of the variable with the greatest range. The axis title defaults to `%(?Y)` (Long Name or Short Name plus
+  Unit). Dragging a column onto the plot adds a last axis.
+- Plot Details Parallel tab: Style, Width, Transparency 0 to 100 (0 opaque); Curvature 0 to 100 (used by the alluvial and
+  sets plots, not by these two).
+- Not documented (Sheaf's choices, unmeasured, listed below): the default of Rescale, line width and transparency, straight
+  lines, the colour map, the tick layout, the default colour column, missing values, where the legend goes. Parallel Sets
+  are not done.
+
+**What Sheaf does** (everything else is Sheaf's choice, unmeasured):
+
+- `PlotKind::Parallel` and `PlotKind::ParallelIndex`, `Template::Parallel` (`parallel`, "Parallel Plot", legend hidden:
+  the colour scale names the colours) and `Template::ParallelIndex` (`parallel-index`, "Parallel Index", legend position
+  Automatic). One plot per axis (its Y column); the settings are per plot, shared by the layer's parallel plots:
+  `Plot::parallel` (`ParallelStyle`, skipped when default) with `rescale_each_axis` (true), `width_pt` (0.5),
+  `transparency_pct` (0) and `color` (`Option<ColumnId>`). Hidden plots leave their axis out.
+- Colour source. Parallel Plot: an optional numeric column; Sheaf's default is the last selected column (a new graph sets
+  `color` to the last axis column, so the colour scale shows at once; "None" draws every line in the plot colour, the
+  first plot's). Parallel Index: a required group column, by default the first text column of the sheet that is set as
+  Group, else the first text column (never one of the axes), or the text column among the selected columns in the app, or
+  `--group COLUMN` on the command line (any column; the cells are grouped by their shown text, so a numeric code works).
+- Refusals (core `ProjectError`, so the app, CLI and MCP all show them): a Parallel Plot needs two or more numeric
+  columns, a Parallel Index three or more plus a group column; a right Y axis is refused (`plot_columns_double_y`, `--y2`)
+  and so are panels (`--panels`). A refused plot leaves no graph behind. The numeric columns among the selection are the
+  axes; a text column among them is the group.
+- Layout (`crates/plot/src/parallel.rs`): the layer's own X and Y axes, grid and ticks are not drawn. Axis `i` of `n`
+  stands at `frame.x + frame.w (i + 0.5) / n` and runs from the bottom to the top of the frame: its line, major ticks
+  (the layer's Y axis settings: length, direction, colour, width, tick font, number format; a linear scale and automatic
+  range, a fixed Y limit of the layer is ignored) with labels left of it. The title is above the frame, centred on the axis,
+  in the Y title font, shrunk (never below 5 pt) so that the widest title fits the spacing of the axes; it is the plot's
+  label if set, else the column's long name and unit (`Long Name (unit)`, Origin's `%(?Y)`). The frame is fitted on the
+  page with room for the titles, the first axis' labels and the colour scale or legend.
+- Scaling: rescale on, each axis has the nice range of its own column (the same rule as any automatic Y axis, with the
+  layer's range margin); off, every axis has the nice range of the union of all the columns' values (the documented
+  "variable with the greatest range", widened so that the smaller columns also fit) and shows the same ticks. A row's
+  point on an axis is `(value - min) / (max - min)` of that axis' range.
+- Lines: one straight polyline per row through the axes, one scene path per row in worksheet order (later rows on top),
+  Round caps and joins, width and transparency (the colour's alpha is scaled by `1 - transparency / 100`) from the Parallel
+  tab. A row with a missing cell (NaN, an empty cell, a masked point) breaks there: each run of two or more consecutive
+  axes with values is drawn as its own piece of the path; a lone value draws nothing, and a row with no such run draws no
+  line. Rows hidden by a worksheet filter are not drawn; the rows come from the first axis' plot.
+- Colour: a Parallel Plot with a numeric colour column colours each line with `plots::map_color` (the colour mapped
+  scatter's ramp, unchanged) at `(v - min) / (max - min)` of that column's smallest and largest value (0.5 when they are
+  equal); a row whose colour cell is missing takes the plot colour. The colour scale is the hexbin plot's bar
+  (`hexbin::draw_color_bar`, now shared; the hexbin output is unchanged): a 14 pt bar 14 pt right of the frame with the
+  column's name as title and nice ticks inside the data range. A Parallel Index gives each distinct text of the group
+  column, in order of first appearance, one colour of the layer's palette (`Palette::color(i, groups)`) and one legend
+  entry. Origin's colour map was not measured.
+- Group legend (`parallel::draw_legend`): the layer's legend font, frame and background, one row per group with a line
+  sample in the group's colour and the group's text ("(blank)" for an empty one). Automatic (the template's) places it
+  right of the frame, 14 pt away and top aligned, and the frame leaves room for it; the corner and manual positions place
+  it inside the frame as the ordinary legend does. A custom legend text and columns are not used. `draw_legend` of the
+  ordinary legend returns at once for parallel plots (it would list the axes). The group legend and the Parallel Plot's
+  colour scale are recorded together as one `ObjectKind::Legend` (their drawn rect), so in the app they are picked,
+  selected, dragged and double-clicked to the Legend tab like any legend. The layer legend's position places both: the
+  drag sets `LegendPosition::Manual` (centre at fractions of the frame); the colour scale (title, bar and labels, as high
+  as the frame) is moved by the same rule (`parallel::scale_shift`; Automatic leaves it right of the frame, a corner puts
+  it at the frame's left or right inside edge, Manual centres it on the point). There is no separate offset.
+- Plot Details "Parallel" tab: Rescale Each Axis Independently, Width, Transparency (%), and Color Column (Parallel Plot) or
+  Group Column (Parallel Index), a list of every column of the project (any, for the group) or only the numeric columns
+  (for the colour of a Parallel Plot, a text column would be ignored) with "None". The settings are shared by the layer's
+  parallel plots. Undo works as for other settings. Menu: Plot > Categorical > Parallel Plot and Parallel Index (a new
+  submenu), also in Column > Plot.
+- CLI `-t parallel`, `-t parallel-index`, `--group COLUMN` (`none` for the plot colour; with `-t parallel` a numeric
+  colour column: a text one is refused with a message that suggests `-t parallel-index`); MCP `template` text and `group`. `.opj`: written as line plots of the columns, the save warns
+  ("parallel plots and parallel indexes were written as line plots of their columns; their axes, colours and groups were
+  not written").
+- Tests: `crates/plot/src/parallel_tests.rs` (axis places, scaling on and off, breaks at missing and masked cells, colour by
+  column and by group, titles, colour scale, legend, width and transparency; the legend and scale are hit-test objects
+  that a Manual or corner position moves); core template/refusal/serde test; `.opj`
+  warning test; `crates/cli/tests/parallel.rs` (both kinds as SVG, `--group`, refusals, a text colour column);
+  `graph_details.rs` colour-column choices test; UI menu, group-from-text-column and
+  Plot Details tests. The existing hexbin and golden tests pin that other kinds are unchanged.
+- Not done: Parallel Sets, a curvature setting, a custom colour map or By Points tab, log axes, dragging a column onto the
+  plot, reordering or flipping axes, hover read-out of rows, hit-testing of the axes, a toolbar button, Origin's real defaults.
+
+### 14.26 Treemap (T50)
+
+Origin's documented facts (Origin 2025b help, not measured; no Origin was at hand; [W:originlab.com/2025b],
+[W:origin-help/treemap], [W:origin-help/pd-layout-tab-treemap]):
+
+- New graph type "Treemap plot", menu "Plot > Categorical: Treemap", template `treemap.otpu`; data: several columns of
+  categories and one column of values.
+- Plot Details Layout tab: Layout (Split, Squarified, Squarified+, Pivot by Size, Pivot by Middle, Pivot by Split Size),
+  Order (Categorical Order, Alphabetical, by Size, by a column), Depth (1 to the number of levels, or Infinite), Gap
+  between rectangles, and an optional separate Layout and Order for each level but the first. Squarified sorts the
+  rectangles by size, the largest at the top left, and ignores Order; Squarified+ keeps for each row the direction with the
+  better aspect ratio; Pivot by Size takes the largest item as pivot, Pivot by Middle the middle item, Pivot by Split Size
+  the item that splits the list into roughly equal areas.
+- Not documented (Sheaf's choices, unmeasured, listed below): the default layout, order, depth and gap, the colours, the
+  labels, the borders, missing and non-positive values, the algorithms themselves.
+
+**What Sheaf does** (everything else is Sheaf's choice, unmeasured):
+
+- Algorithms (`sheaf_calc::treemap`, pure functions `layout(kind, weights, rect) -> rects`, one rectangle per weight in the
+  order of the weights, tiling the rectangle, the area of each `weight / total * area`; a weight that is not finite and
+  positive gets a zero-size rectangle):
+  - Squarified: Bruls, Huizing and van Wijk (2000): sorted by size, descending; rows along the shorter side of the rest, an
+    item joins the row while its worst aspect ratio does not grow; the first row is a column on the left (wide rest) or a
+    band along the top (tall rest), so the largest item is at the top left.
+  - Squarified+: as Squarified, but for every row both the shorter and the longer side of the rest are tried and the row with
+    the smaller worst aspect ratio is kept (a tie: the shorter side). This is Sheaf's reading of Origin's one-line description.
+  - Split: the ordered list is cut in two, in order, at the first position whose two total weights differ least; the rectangle
+    is cut across its longer side in the ratio of the two weights (left or top gets the first part), each part again.
+  - Pivot by Size / Middle / Split Size: the ordered treemaps of Shneiderman and Wattenberg (2001) and Bederson et al.
+    (2002): pivot `P`, `L1` the items before it, then the items after it cut into `L2` and `L3`. In a rectangle at least as
+    wide as high: `L1` a full-height column on the left, `P` at the top left of the rest with `L2` on its right, `L3` the
+    band along the bottom; in a taller rectangle the axes are exchanged. The `L2`/`L3` cut is the one that brings `P`'s aspect
+    ratio nearest to 1 (the first on a tie; found with prefix sums, so one step is linear and 30000 sorted weights lay out in well under a second); the lists are laid out again the same way. Pivot choice: the largest item (first
+    on a tie); the item at index `n / 2`; the item with the least difference between the total before and after it.
+- Hierarchy (`sheaf_calc::treemap_tree`): one level per category column, the first the top level. Rows with a missing, non-finite
+  or non-positive value are skipped (not an error); rows with the same category path are one leaf with the summed value; an
+  empty category cell is named "(blank)"; a node's value is the sum of its children. Order: Categorical (first appearance,
+  the default), Alphabetical (case-insensitive), By Size (largest first), By Column (ascending by the smallest key of the
+  node's rows: numbers first, then text alphabetically, missing last; the column is `order_column`). The Squarified layouts
+  sort by size themselves, so their Order is ignored (the Order list is greyed out for them).
+- Nesting: the children of a node are laid out in the node's rectangle inset by half the gap (below a header band for a
+  top-level node) and every laid-out cell is shrunk by half the gap on each side, so a child lies at least one gap inside
+  its parent and siblings are one gap apart; the whole treemap lies half a gap inside the layer frame. A rectangle too small for the inset
+  becomes empty and is not drawn. Depth N shows N levels; the nodes of the last level shown are leaves with the value of
+  everything below. Per level: with the check box on, level 2, 3, ... take their own layout and order from the list (a level
+  without an entry takes the general ones).
+- Settings: `PlotKind::Treemap`, `Template::Treemap` (`treemap`, "Treemap"; axes hidden, legend hidden), `Plot::treemap`
+  (`TreemapStyle`, skipped when default): `categories` (columns, first = top level), `layout` (Squarified), `order`
+  (Categorical), `order_column`, `depth` (`None` = Infinite), `gap_pt` (1.5), `per_level_on` and `per_level`. One plot per
+  graph: the plot's own Y column is the value column (the last numeric selected column); the category columns are the
+  columns of text among the selected columns, in selection order, else every column of text of the value column's sheet
+  (core `plot_columns`, `plot_treemap`). Refusals: no category column, no numeric value column, a value column that is
+  text, a right Y axis (`--y2`), panels, an overlay. A refused plot leaves no graph behind.
+- Drawing (`crates/plot/src/treemap.rs`): the rectangles fill the layer frame; no axes, no frame line, no legend. One colour
+  of the layer's palette per top-level category (by first appearance, whatever the order); a node `L` levels deep is that
+  colour blended `1 - 0.7^L` of the way to white; every rectangle has a 0.5 pt white border. A node with its
+  children shown has a header band 1.55 text heights high (and a padding) holding its name, in the colour of the band; the
+  band and its text of level `L` are `0.85^L` of the top level's (Sheaf's choice), and a level-1+ node less than twice the
+  band high or wide has none and its name is not drawn (level 0: the height test only). A leaf (the
+  last level shown) shows its name and below it its value (up to four significant digits, no exponent) at the top left, in
+  the layer's X axis tick font at 0.45 of its size (9.9 pt for the 22 pt default), black or white as reads better on the fill.
+  A label is drawn whole or not at all: the name is left out when it is wider than the rectangle (less a 0.3 text size padding
+  each side) or the rectangle is not as high as one line, the value when it does not fit under the name; a header name too wide
+  for its band is left out. There is no clipping.
+- Plot Details "Layout" tab (a new tab, shown for a treemap plot): Layout and Order lists (the Order greyed out for the
+  Squarified layouts), Depth (Infinite, 1 to the number of category columns), Gap (pt), the Order column list (shown when an order
+  by column is chosen), and the check box "Different Layout and Order for Each Level Below the First" with one Layout and Order
+  row per level below the first. Undo works as for other settings. Menu: Plot > Categorical > Treemap (also in Column > Plot).
+- CLI `-t treemap` with `--y` (the value; the last numeric one counts), `--group A,B` (category columns, first = top; default the
+  text columns among `--y`, else every text column of the sheet), `--treemap-layout`, `--treemap-order`
+  (`categorical|alphabetical|size|column:NAME`), `--treemap-depth`, `--treemap-gap`; the same in MCP (`group`, `treemap_*`) with the
+  template text. `.opj`: written as column plots of the value column; the save warns ("treemaps were written as column
+  plots of their value column; their categories and nested rectangles were not written").
+- Tests: `crates/calc/src/treemap.rs` (all six layouts on random weights with fixed seeds: tiling without overlap, areas in
+  proportion within 1e-9 relative, hand cases for Bruls' example, Split order, the pivot lists, tall rectangles, degenerate
+  input), `treemap_tree.rs` (aggregation, skipped values, duplicates, orders, depth, gap nesting, per-level),
+  `crates/plot/src/treemap_tests.rs` (nesting inside parents by the gap, colours per top level and tints, labels hidden when they do
+  not fit, depth, every layout with every order, other kinds unchanged), core template/refusal/serde test, `.opj` warning test,
+  `crates/cli/tests/treemap.rs` (SVG, defaults, every layout and option, refusals), UI menu and Layout tab tests with undo.
+- File > Append renumbers the appended graphs' columns through `Graph::remap_columns` (core `graph.rs`): the plots' X, Y, error,
+  base, size and colour columns, label columns, treemap and sunburst `categories`, the treemap `order_column`, the parallel `color` column, plot
+  offsets, tick-label columns and the rug `plot` choice of each axis. A new field holding a column id goes there.
+- Not done: Origin's real defaults, colours and labels, hover read-out and picking of rectangles, drilling down, a colour-by-value
+  option, a toolbar button, a label font setting, reading Origin's treemap from .opj, a size cap on very many rectangles.
+
+### 14.27 Sunburst plot (T51)
+
+Origin's documented facts (Origin 2022 help, not measured; no Origin was at hand; [W:originlab.com/2022],
+[W:ReleaseNotes ORG-23725], [W:origin-help/sunburst-plot]):
+
+- New graph type "Sunburst Plot", menu "Plot > Categorical: Sunburst Plot", template `Sunburst.OTP`; data: at least two
+  text columns and one numeric column; the last numeric column holds the values and every other column is a category or
+  sub-category; each level is a ring.
+- A wedge's colour follows its value; a category's colour follows the mean value of its children; a missing text category
+  appears unfilled.
+- Plot Details: Pie Geometry tab (Rotation, Radius/Center, Doughnut) and Labels tab; the sunburst is a variant of the Doughnut
+  plot. The Mini Toolbar button "Collapse Expand Mode" drills into a clicked wedge.
+- Not documented (Sheaf's choices, **unmeasured**, listed below): which level is innermost, the start angle and direction, the
+  hole, ring widths, borders, the colour map, the label rules, the order, how "mean" and "missing" are read.
+
+**What Sheaf does** (everything else is Sheaf's choice, unmeasured):
+
+- Hierarchy: the one of the treemap (`sheaf_calc::treemap_tree`, 14.26: skipped missing or non-positive values, duplicate paths
+  summed, a node's value the sum of its children), generalised only by a flag `Node::blank` that marks a node whose category cell
+  was empty (named "(blank)"); the treemap output is unchanged. The angular layout is `sheaf_calc::sunburst::layout`: wedges
+  parents before children; a node's angle is its value's share of its parent's angle, the top level sharing the full turn, so
+  the angles of the children add up to the parent's. Order: Worksheet (first appearance, the default) or By Size (largest first).
+- Colour value: a leaf's own value; a category's is the unweighted mean of the values of the leaves below it (Sheaf's reading of
+  "the mean value of its children"). The colour is `plots::map_color` (the shared blue-cyan-green-yellow-red ramp) at
+  `(value - lo) / (hi - lo)` over the range `lo..hi` of the leaf values (0.5 when the range is empty). A wedge whose category cell
+  was empty is outline only (no fill; a dark outline of the tick font colour, at least 0.5 pt).
+- Geometry: the circle is centred in the layer frame with a diameter equal to the shorter side of the frame, so it stays round on
+  a non-square frame; no axes, no frame line, no legend (template: axes and legend hidden). The first category column is the
+  innermost ring; every level has the same width from the hole radius to the outer radius; a ring gap (pt) takes half from each
+  side of a ring where it has a neighbour (not at the hole or the rim). The first wedge starts at the start angle in degrees
+  counter-clockwise from 3 o'clock (default 90, 12 o'clock, as Origin's pie rotation is counted) and the wedges follow clockwise.
+  Arcs are polylines of steps of at most 2 degrees; a wedge round the whole turn is two circles (outer and the hole).
+  Every wedge has a white border (0.5 pt by default).
+- Labels: the name (and, when asked, the value, with up to four significant digits) at the wedge's centre (middle radius, middle
+  angle), along the radial direction and turned half a turn when it would read upside down, in the layer's X axis tick font at 0.45
+  of its size, black or white as reads better on the fill. A line is drawn whole or not at all: it is left out when its text (plus
+  0.3 text sizes each side) is wider than the ring, and the lines together (their height plus 0.3 text sizes each side) must fit
+  the chord of the wedge at the inner end of the widest line (middle radius minus half its width: a radial label is widest
+  across the wedge where the wedge is narrowest), else the second line (the value) goes first; a name that does not fit hides the whole label, so a value is never drawn without its name
+  (unless names are off). Names default on, values off.
+- Colour scale: a vertical bar right of the frame (the hexbin and Parallel Plot bar, `hexbin::draw_color_bar`, with its reserve in
+  the layer's edges), titled with the value column's name and ticked at nice values over the leaf range.
+- Settings: `PlotKind::Sunburst`, `Template::Sunburst` (`sunburst`, "Sunburst Plot"), `Plot::sunburst` (`SunburstStyle`, skipped when
+  default): `categories` (columns, first = innermost), `start_angle_deg` (90), `hole` (fraction of the radius, 0.3, 0 to 0.9),
+  `ring_gap_pt` (0), `border_pt` (0.5), `show_names` (true), `show_values` (false), `order` (`worksheet`|`by_size`). One plot per graph:
+  the plot's Y is the value column (the last numeric selected column); the categories are the columns of text among the selected
+  columns in selection order, else every text column of the value column's sheet (`plot_columns`, `plot_sunburst`). Refusals: no
+  category column, no numeric value column, a text value column, a right Y axis, panels (CLI also: overlay, styling a graph). A
+  refused plot leaves no graph behind.
+- Plot Details "Pie Geometry" tab (shown for a sunburst plot; Origin's tab name, with the Labels tab's two check boxes folded in):
+  Start Angle, Hole (%), Ring Gap, Border Width, Order, and Labels Names and Values. Undo works as for other settings. Menu: Plot >
+  Categorical > Sunburst Plot (also in Column > Plot).
+- CLI `-t sunburst` with `--y`, `--group A,B,C` as for the treemap, `--sunburst-start`, `--sunburst-hole` (percent), `--sunburst-gap`,
+  `--sunburst-labels names|values|both|none`, `--sunburst-order worksheet|size`; the same in MCP (`group`, `sunburst_*`) with the
+  template text. `.opj`: written as column plots of the value column; the save warns ("sunburst plots were written as column plots
+  of their value column; their categories and rings were not written").
+- File > Append renumbers the sunburst `categories` through `Graph::remap_columns` (test in `project.rs`).
+- Tests: `crates/calc/src/sunburst.rs` (angles as shares of the parent, colour values and means, order),
+  `crates/plot/src/sunburst_tests.rs` (angles drawn, start angle and direction, hole and ring radii with the gap, arcs of at most
+  2 degrees inside a round circle on a wide frame, leaf and category colours, unfilled missing category, labels hidden when too
+  small and upright, scale title and ticks, full-turn ring, other kinds unchanged), core template/refusal/serde and append tests,
+  `.opj` warning test, `crates/cli/tests/sunburst.rs` (SVG, defaults, options, refusals), UI menu and Pie Geometry tab tests with undo.
+- Not done: Origin's real defaults, colours and labels, hover read-out and picking, Collapse/Expand drilling, a depth setting,
+  the Radius/Center settings, tangential labels for thin rings, a colour-by-category-palette option, a label font setting, reading
+  Origin's sunburst from .opj.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.
@@ -2208,7 +2444,8 @@ Unmeasured, so chosen by Sheaf: the default line width and colour, the arrow hea
 - A click selects an object, dragging it moves it (it moves when the button is let go), Delete removes it, a double click or right-click Properties... opens the window with the line colour, width and style, the fill of a rectangle or ellipse, and the head length and a second head of an arrow. OK and Apply are one undo step each.
 - The window closes when Delete, Undo or Redo changes the objects of its layer, or when its object is gone or another kind of object has its place, so it never edits another object.
 - Add, Move, Edit and Delete of a drawn object are one undo step each ("Add drawn object", "Move drawn object", "Edit drawn object", "Delete drawn object").
-- The right-click menu of an object has Delete and Properties...; Cut, Copy, "Bring to the front" and "Push to the back" are shown greyed.
+- The right-click menu of a drawn shape has Delete, Properties..., "Bring to the front" and "Push to the back". The ordering commands move that shape to the end or beginning of its layer's shape list, retaining all geometry and style. Cut and Copy remain greyed. This within-layer shape ordering is Sheaf's choice and has not been measured in Origin.
+- Ordering changes the renderer and topmost hit together. The moved shape's selection follows its new index; undo/redo clears a selected shape when its layer's shape list changed, so later Delete or Properties cannot silently target another object. An open shape-properties window closes when the layer's shapes change, as for other shape edits. An edge move or stale index does nothing and adds no undo step. Labels, legends and other layers retain their existing stacking behavior.
 - `sheaf-app --show shape:N` opens the window of the N-th object of the first graph (for pictures).
 
 **Command line** (`sheaf plot`, `sheaf export`, style option):
@@ -2220,7 +2457,7 @@ An `.opj` file written here does not hold drawn objects. The writer says so in a
 
 ### 17.5 Not done
 
-Colour of the head apart from the line, head width, dash of the head, rounded rectangles, pattern fills, page and scale attachment, resizing by handles, Cut, Copy and Paste, ordering, grouping, snapping to a grid, polylines, curves, pictures and the inset graph.
+Colour of the head apart from the line, head width, dash of the head, rounded rectangles, pattern fills, page and scale attachment, resizing by handles, Cut, Copy and Paste, ordering across object kinds/layers, grouping, snapping to a grid, polylines, curves, pictures and the inset graph.
 
 
 Measured with LabTalk's `draw` command (2026-11-13, `re-workspace/scratch/draw17/draw1.out.txt`), which
@@ -3090,3 +3327,161 @@ Sheaf's choices (all unmeasured):
   power, exponential and logarithmic).
 - Not done: a Mini Toolbar, a label dragged with the mouse (the offset is in the model only), a trendline per
   group of plots, a trendline hit test, Pearson's R for linear, confidence bands, fit parameters to a sheet.
+
+## 20. Data menu tools: Mask, Remove Bad and Move Data Points (T48)
+
+Origin's graph Data menu has three tools that act on the points of a plot: Mask Data Points, Move Data
+Points and Remove Bad Data Points (Sheaf's menu already lists them in that order, after the display-range
+items). Measured elsewhere (workbook-model 13.1a): worksheet masks, Mask Change Color, Disable Masking, Hide
+Masked Points. Nothing of the graph tools themselves has been measured. Every choice below is labelled
+**[Sheaf choice]** (made without Origin, change it when measured) or **[?]** (not known). The mechanism, the
+core edits, is independent of those choices.
+
+### 20.1 Sheaf's rules
+
+- **Any shown plot of any layer [Sheaf choice].** A tool acts on the points of the plots the pointer picks, the
+  nearest point that the graph draws within the Data Reader's reach (30 screen points), in any layer; a
+  rectangle masks the drawn points of every plot inside it. Sheaf has no active plot (only an active layer), so
+  the brief's "active plot only" is not what is built: the pointer decides, which is what "active plot" comes
+  to when the plots do not overlap. Origin may act on the active plot only, or on all plots of the layer [?].
+  A point that is not drawn cannot be picked: a hidden plot, a layer with Show Elements Data off, a row that
+  Skip Points leaves without a symbol (the rows of `PlotData::point_rows`: the first of every n shown rows,
+  missing values counting), a masked point under Hide Masked Points, and a point outside the clip rectangle
+  (the axis range; with Clip Data to Frame off the point is drawn and so can be picked).
+- **Which plots [Sheaf choice].** Line, Scatter and Line + Symbol plots. Other kinds ignore the tools (bars,
+  areas, boxes and so on have no single point to pick), and so do polar and ternary layers.
+- **Mask Data Points [Sheaf choice].** While the tool is on, a drag draws a rectangle (screen rectangle,
+  corner to corner); when the button is let go, the Y cell of every picked-eligible point inside it is masked.
+  A point is inside when its drawn position (after multipliers, offsets and the axis scale, so on a log axis
+  the rectangle is a rectangle on the screen) is inside the rectangle, edges included. A drag that covers no
+  point does nothing. A click without a drag on a masked point unmasks it; a click on an unmasked point does
+  nothing. Only the plot's Y cell is masked, not its X cell, as Column > Mask on the Y column does. Origin
+  may select by clicking, by a region of another shape, or add Ctrl/Shift modifiers [?].
+- **Masked points that are hidden.** With Hide Masked Points on a masked point is not drawn, so it cannot be
+  picked and cannot be unmasked from the graph (switch Hide Masked Points off first). With Disable Masking on,
+  masks are not applied: a rectangle still masks (the flag is kept, as in the worksheet) but nothing changes
+  on the screen [Sheaf choice].
+- **Remove Bad Data Points [Sheaf choice].** A click on a point sets the plot's Y cell to a missing value.
+  The row is kept: the X cell, the other columns and the row numbers do not change, and the line breaks at the
+  gap as it does for a missing value typed in the worksheet. The tool stays on for the next click. Whether
+  Origin deletes the row or only the Y cell [?]; the brief of T48 asks for rows to be kept.
+- **Move Data Points [Sheaf choice].** A drag starting on a point moves it; the pointer's final position, taken
+  back through the axis scale (log axes), the plot's offset and multiplier (Individual stack and waterfall,
+  spec 13) and the Y axis of the plot's layer, becomes the point's new X and Y: both cells change, and for a
+  plot without an X column (drawn against the row number) only the Y cell. Origin may move Y only, or ask for
+  a modifier to move in one direction [?]. The point moves by the distance the pointer is dragged: it is
+  dropped at the pointer's position less the offset at which it was grabbed (the grab may be up to 30 points
+  from the point), so a drag that returns to where it began (within half a pixel) writes nothing and makes
+  no undo step. In a waterfall the pointer is taken back by the plot's shift first, so the point lands where
+  it is dropped. Two cases re-lay the graph out after the move, so other points may appear to jump: in an Auto
+  stack the offsets come from each curve's extent, so dropping a point below the curve's minimum or above its
+  maximum changes the offsets of that curve and of the ones above it; and curves that share an X column
+  move that row's X for all of them (the cell is the shared one).
+  The new numbers are the exact converted values, not rounded to the grid or to the screen pixel. A point
+  dropped outside the frame is moved there too (the axes do not rescale at once, as for any edit).
+- **Ending a mode [Sheaf choice].** Esc or the Pointer button of the Tools toolbar leaves the mode (the same
+  as for the Data Reader and the drawing tools). Origin's double-click or right-click to end [?]. The Tools
+  toolbar shows no tool pressed while a Data menu mode is on (Origin has no toolbar button for them), and the
+  status bar names the mode and how to end it.
+- **Cursor [?].** Sheaf shows a crosshair for Mask and Remove Bad and a move cursor (a four-way arrow) for
+  Move; Origin's shapes were not captured.
+- **Nothing to act on.** On a graph without a plot, or when the pointer is not within reach of a point, the
+  tools do nothing (no message, no undo step).
+
+### 20.2 What a change does to the worksheet (core, `graph_data.rs`) [Sheaf choice]
+
+Each action is one `Document::edit` step, so one Undo reverts it and Redo brings it back; analysis and plots
+follow as they do for worksheet edits and masks. The steps are labelled by the Y column's short name and
+designation and the row counted from 1 (`Document::mask_points`, `remove_bad_points`, `move_point`):
+
+| Tool | Undo label | Cells changed |
+|---|---|---|
+| Mask a rectangle | `Mask 4 points of B(Y)` | the masks of the Y cells (`Unmask 1 point of B(Y)` for a click on a masked point) |
+| Remove Bad | `Remove bad point B(Y) row 12` | the Y cell becomes missing |
+| Move | `Move point B(Y) row 12` | the Y cell and, when the plot has one, the X cell |
+
+- Nothing is recorded (no undo step, no dirty mark) when no cell would change: a mask that is already set,
+  a missing value removed again, a point dropped where it was. A row beyond the data of a column is
+  skipped for a mask and for Remove Bad, and is an error for Move (nothing changes). Several cells in the
+  same column and row count once.
+- **Formula columns follow the worksheet's typing rule.** A column whose values come from a formula that keeps
+  running (Recalculate Auto or Manual, `Column::is_locked`; workbook-model 10a rule 8) refuses typed values:
+  the grid, Fill, Paste, Clear, Replace, Insert Rows and Delete Rows leave it alone and the app says "That
+  column is calculated from a formula; change the formula in Set Column Values". Remove Bad and Move do the same
+  (nothing changes, `DataEditReport::locked` says how many columns refused, and the app shows that message).
+  Move is all or nothing: if either the X or the Y column is calculated, neither cell changes. A mask is
+  not a typed value; the worksheet's Column > Mask works on such columns too, so the graph's mask does.
+  Columns that an analysis tool wrote (`Column::analysis`) are not locked in the worksheet and are not here;
+  a later recalculation of the link overwrites an edit, as for a typed edit.
+- **Recalculating columns and analysis links.** Auto formulas that read a changed cell recalculate inside the
+  same undo step, so Undo restores source and results together (workbook-model 10a rule 3). Auto analysis links
+  (Smooth, Simulate Curve and the other linked tools) run again when a source column's values **or its mask**
+  change, so masking a point from the graph updates a linked result as masking in the worksheet should (before
+  T48 a mask change did not touch links; this is a fix of `update_analysis_links`). A Manual link is marked
+  pending. Formulas do not read masks, so a mask changes no formula column.
+- **Text and Numeric columns.** Remove Bad also clears the text of a Text & Numeric cell. A moved value is a
+  number, so it replaces a text cell. A column that holds only text cannot be moved (error).
+- **Not finite values.** A point cannot be moved to NaN or infinity (an error; the app's mapping gives NaN for a
+  pointer outside the range of a log axis, in which case it does nothing).
+
+### 20.3 Hit testing, modes and overlay (app, `data_tools.rs`, `reader.rs`, `graph_view.rs`) [Sheaf choice]
+
+- **Menu.** Data > Mask Data Points, Move Data Points and Remove Bad Data Points are enabled on a graph and
+  start the mode (`GraphTool::Data`); the other Data items stay grey (they need a column display range). No
+  check mark is shown on the item [?]. Choosing another item, the Data Reader or another tool replaces the
+  mode; Esc or the Pointer button ends it. The Tools toolbar shows no button pressed. The status bar names
+  the mode and how to end it ("Mask Data Points: drag a rectangle over the points; click a masked point to
+  unmask it; Esc ends").
+- **Picking is the Data Reader's code** (`reader::each_point`, shared; `Pick::Edit` is the stricter variant):
+  plot data are the worksheet columns as they are (`plot_xy`), the plot's row range, rows that fail an
+  active worksheet filter, non-visible plots and non-finite values are not pickable; the multiplier/offset
+  place of the plot (`stack_places`), the layer's axes (`data_to_page`) and, in a waterfall, the plot's shift
+  (`sheaf_plot::waterfall_shift`: member k is `k * (dx% * w, -dy% * h)` of the front frame) give the drawn
+  position, for the Data Reader as well; error bars are not points. `Pick::Edit` also skips plots that are
+  not Line, Scatter or Line + Symbol, polar and ternary layers, layers with Show Elements Data off, rows that
+  Skip Points does not draw, masked points while Hide Masked Points is on, and points whose page position is
+  outside the layer's clip rectangle (`LayerGeometry::clip`, 0.5 pt tolerance, unless Clip Data to Frame is
+  off) because the renderer does not draw them. The reach is 30 screen points, the nearest point wins, in any
+  layer.
+- **Mask.** A drag (egui's drag threshold) draws a translucent rectangle with a ring on each point that
+  would be masked; letting go sends one action with the Y cells of those points. A click masks nothing:
+  it unmasks the nearest *masked* point within reach (so an unmasked neighbour is never the target). A point
+  counts as masked as drawn, so with Disable Masking on a click does nothing.
+- **Move.** A drag that starts within reach of a point picks it; while dragging, a ring follows the pointer
+  and a line joins it to the point's place. On release the pointer goes screen, page, `page_to_data` (the
+  axis scales, so log and reciprocal axes are handled), then the plot's inverse placement (`Place::source_x`
+  and `source_y`: subtract the offset, divide by the multiplier) and the two numbers are written to the X
+  and Y cells (Y only when the plot has no numeric X column); in a waterfall the plot's shift is taken off the
+  page position first. The pointer position used is the final one less the grab offset (see 20.1). A position
+  that is not finite (outside a log axis) writes nothing. A click or a drag that does not start on a point does nothing.
+- **Remove Bad.** A click on the nearest point within reach sends its Y cell.
+- **Esc** pressed during a drag drops the drag without writing anything and ends the mode.
+- **Hover.** The point that a click would act on (for Mask, the nearest masked one) gets a ring.
+- **Nothing to act on.** No plot, no point within reach or a column that a formula keeps up to date (message
+  "That column is calculated from a formula; change the formula in Set Column Values") records no undo
+  step. Plot-only X sorting (18.9) changes only the order the line joins the points, so a picked point is
+  still a worksheet row.
+- `--show data-tool:mask|move|remove` and `--show mask-points:4,5` (rows from 1 of the first plot) put the
+  first graph in a mode or mask rows, for screenshots (the Data Reader's `--show reader` does the same).
+
+### 20.4 To measure on Windows (`tools/origin-ref`)
+
+1. Cursor shape while Data > Mask Data Points, Move Data Points and Remove Bad Data Points are on; whether the
+   menu item shows a check mark, and how the mode ends (Esc, double-click, right-click, another tool).
+2. Mask: rectangle or click or both; which plots (active plot, all plots of the layer, all layers); whether
+   the X cell is masked with the Y cell; the effect of Ctrl and Shift (add to, toggle); whether it can unmask
+   from the graph and how (Data > Mask Data Points again on a masked point, or Ctrl).
+3. Remove Bad: whether it sets the Y cell missing or deletes the row (read the worksheet afterwards with
+   LabTalk `wks.nRows` and the cell value), whether the X cell stays, and what happens in a formula column.
+4. Move: whether X and Y both change or only Y, the numbers written (exact or snapped, a rounding step?),
+   behaviour on log axes, with an offset or multiplier, in a column that a formula fills, and on a plot with
+   no X column; whether Shift or Ctrl constrains the direction; whether Esc during a drag cancels it.
+5. Whether each action is one Undo step in Origin (Edit > Undo's text), and whether the worksheet shows the
+   change at once.
+6. Whether the tools work on plots other than line, scatter and line + symbol (column, area, bubble), on
+   a graph with Hide Masked Points on, and on a worksheet with an active filter.
+7. The picking radius and whether a point under the pointer is highlighted first.
+8. Whether points clipped by the axis range, rows that Skip Points leaves without a symbol and the plots of a
+   layer with Show Elements Data off can be picked or masked; and, in a waterfall, whether the tools work on
+   the shifted curves at all.
+9. Move: whether the point follows the drag distance (Sheaf) or jumps to the pointer.

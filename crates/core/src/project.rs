@@ -88,6 +88,35 @@ pub struct Project {
     next_id: u64,
 }
 
+/// Origin's rule for the short name of a window (measured on workbooks in Origin 2016 with `win -r`,
+/// workbook-model.md 1): only ASCII letters and digits are kept (spaces, `_`, `-`, `.`, `/`, brackets
+/// and the like are dropped); a name that is then empty or starts with a digit gets an `A` in front;
+/// the result is cut to 13 characters without a message (`12345678901234` becomes `A123456789012`).
+pub fn clean_window_name(text: &str) -> String {
+    let mut name: String = text.chars().filter(char::is_ascii_alphanumeric).collect();
+    if name.is_empty() || name.starts_with(|c: char| c.is_ascii_digit()) {
+        name.insert(0, 'A');
+    }
+    name.chars().take(13).collect()
+}
+
+/// `formula` with every `[old]` (any case) replaced by `[new]`.
+fn replace_book_reference(formula: &str, old: &str, new: &str) -> String {
+    let needle = format!("[{}]", old.to_ascii_lowercase());
+    let lower = formula.to_ascii_lowercase();
+    let mut out = String::with_capacity(formula.len());
+    let mut i = 0;
+    while let Some(k) = lower[i..].find(&needle) {
+        out.push_str(&formula[i..i + k]);
+        out.push('[');
+        out.push_str(new);
+        out.push(']');
+        i += k + needle.len();
+    }
+    out.push_str(&formula[i..]);
+    out
+}
+
 fn default_mask_color() -> u8 {
     1
 }
@@ -162,6 +191,30 @@ pub enum ProjectError {
     RidgelineNoRightAxis,
     #[error("a hexbin plot cannot have a right Y axis; use one Y axis or another template")]
     HexbinNoRightAxis,
+    #[error("a parallel plot needs two or more numeric columns (got {0}); select at least two Y columns")]
+    ParallelNeedsTwoColumns(usize),
+    #[error(
+        "a parallel index needs three or more numeric columns (got {0}) and a group column; select at least three Y columns"
+    )]
+    ParallelIndexNeedsThreeColumns(usize),
+    #[error(
+        "a parallel index needs a group column (a column of text, such as a species name); select one or name it with --group"
+    )]
+    ParallelIndexNeedsGroup,
+    #[error("a parallel plot cannot have a right Y axis; use one Y axis or another template")]
+    ParallelNoRightAxis,
+    #[error("a treemap needs a category column (a column of text) and a numeric value column; select both")]
+    TreemapNeedsCategory,
+    #[error("a treemap needs a numeric value column; select one")]
+    TreemapNeedsValue,
+    #[error("a treemap cannot have a right Y axis; use one Y axis or another template")]
+    TreemapNoRightAxis,
+    #[error("a sunburst plot needs a category column (a column of text) and a numeric value column; select both")]
+    SunburstNeedsCategory,
+    #[error("a sunburst plot needs a numeric value column; select one")]
+    SunburstNeedsValue,
+    #[error("a sunburst plot cannot have a right Y axis; use one Y axis or another template")]
+    SunburstNoRightAxis,
 }
 
 impl Project {
@@ -242,6 +295,35 @@ impl Project {
             }
         }
         self.next_id = self.next_id.max(max + 1);
+    }
+
+    /// Gives window `id` the short name `wanted`, cleaned by Origin's rule ([`clean_window_name`]).
+    /// Refused (with a message) when another window has the cleaned name, in any case. Column
+    /// formulas that name the old window (`[Old]...`) are changed to the new name. Returns the name
+    /// the window got.
+    pub fn rename_window(&mut self, id: WindowId, wanted: &str) -> Result<String, String> {
+        let new = clean_window_name(wanted);
+        let old = self.window(id).map(|w| w.name().to_string()).ok_or_else(|| "no such window".to_string())?;
+        if self.windows.iter().any(|w| w.id() != id && w.name().eq_ignore_ascii_case(&new)) {
+            return Err(format!("The name {new} is already used by another window."));
+        }
+        match self.windows.iter_mut().find(|w| w.id() == id) {
+            Some(Window::Workbook(b)) => b.name = new.clone(),
+            Some(Window::Graph(g)) => g.name = new.clone(),
+            None => {}
+        }
+        if old != new {
+            for w in &mut self.windows {
+                if let Window::Workbook(b) = w {
+                    for c in b.sheets.iter_mut().flat_map(|s| &mut s.columns) {
+                        if let Some(f) = &mut c.formula {
+                            *f = replace_book_reference(f, &old, &new);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(new)
     }
 
     /// A window name that is not in use: `prefix` followed by the smallest
@@ -394,30 +476,7 @@ impl Project {
                 }
                 Window::Graph(graph) => {
                     graph.id = w(graph.id);
-                    for layer in &mut graph.layers {
-                        for p in &mut layer.plots {
-                            p.y = c(p.y);
-                            for id in [
-                                &mut p.x,
-                                &mut p.y_error,
-                                &mut p.x_error,
-                                &mut p.y_base,
-                                &mut p.size_from,
-                                &mut p.color_from,
-                            ] {
-                                *id = id.map(c);
-                            }
-                        }
-                        for o in &mut layer.plot_offsets {
-                            o.column = c(o.column);
-                            o.follows = o.follows.map(c);
-                        }
-                        for axis in [&mut layer.x_axis, &mut layer.y_axis] {
-                            if let crate::graph::TickLabelSource::Column { column } = &mut axis.tick_label_source {
-                                *column = c(*column);
-                            }
-                        }
-                    }
+                    graph.remap_columns(&c);
                 }
             }
         }
@@ -605,6 +664,9 @@ impl Project {
             hist: Default::default(),
             ridge: Default::default(),
             hexbin: Default::default(),
+            parallel: Default::default(),
+            treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -722,6 +784,48 @@ impl Project {
         if template == Template::Lollipop && ys.len() < 2 {
             return Err(ProjectError::LollipopNeedsTwoColumns(ys.len()));
         }
+        if template.is_parallel() {
+            // The numeric columns are the axes; for a parallel index a column of text among them is the group
+            // (else the first text column of the sheet), for a parallel plot the last axis colours the lines.
+            let axes: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_some()).collect();
+            let group = ys.iter().copied().find(|y| self.numeric(*y).is_none());
+            let color = if template == Template::ParallelIndex {
+                Some(
+                    group
+                        .or_else(|| self.parallel_group_default(&axes))
+                        .ok_or(ProjectError::ParallelIndexNeedsGroup)?,
+                )
+            } else {
+                axes.last().copied()
+            };
+            return self.plot_parallel(template, &axes, color);
+        }
+        if template == Template::Treemap {
+            // The category columns are the columns of text, in selection order (else those of the value column's
+            // sheet); the value is the last numeric column.
+            let value =
+                ys.iter().rev().copied().find(|y| self.numeric(*y).is_some()).ok_or(ProjectError::TreemapNeedsValue)?;
+            let mut categories: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_none()).collect();
+            if categories.is_empty() {
+                categories = self.treemap_default_categories(value);
+            }
+            return self.plot_treemap(&categories, value);
+        }
+        if template == Template::Sunburst {
+            // Like the treemap: the columns of text are the rings, in selection order (else those of the value
+            // column's sheet); the value is the last numeric column.
+            let value = ys
+                .iter()
+                .rev()
+                .copied()
+                .find(|y| self.numeric(*y).is_some())
+                .ok_or(ProjectError::SunburstNeedsValue)?;
+            let mut categories: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_none()).collect();
+            if categories.is_empty() {
+                categories = self.treemap_default_categories(value);
+            }
+            return self.plot_sunburst(&categories, value);
+        }
         // One hexbin plot per layer: the colour scale and the hexagons of a second plot would cover the first's.
         let ys = if template == Template::Hexbin { &ys[..ys.len().min(1)] } else { ys };
         let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
@@ -785,6 +889,133 @@ impl Project {
         Ok(graph)
     }
 
+    /// The category columns of a treemap of `value` when none are named: every column of text of its sheet, in
+    /// sheet order.
+    pub fn treemap_default_categories(&self, value: ColumnId) -> Vec<ColumnId> {
+        let Some((_, sheet, _)) = self.locate(value) else { return Vec::new() };
+        sheet.columns.iter().filter(|c| !c.data.is_numeric() && c.id != value).map(|c| c.id).collect()
+    }
+
+    /// Creates a treemap of `value` (a numeric column; the areas) nested by the `categories` columns (the first
+    /// the top level) and returns its id. One plot, the value column's; the categories live in its style.
+    pub fn plot_treemap(&mut self, categories: &[ColumnId], value: ColumnId) -> Result<WindowId, ProjectError> {
+        for c in categories.iter().chain([&value]) {
+            self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
+        }
+        if self.numeric(value).is_none() {
+            return Err(ProjectError::TreemapNeedsValue);
+        }
+        let mut cats: Vec<ColumnId> = Vec::new();
+        for c in categories {
+            if *c != value && !cats.contains(c) {
+                cats.push(*c);
+            }
+        }
+        if cats.is_empty() {
+            return Err(ProjectError::TreemapNeedsCategory);
+        }
+        let long_name = self.locate(value).map(|(b, _, _)| b.long_name.clone());
+        let graph = self.add_graph(Template::Treemap);
+        self.add_plot(graph, 0, value)?;
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                l.apply_palette();
+                for p in &mut l.plots {
+                    p.treemap.categories = cats.clone();
+                }
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
+    /// Creates a sunburst plot of `value` (a numeric column; the angles) with a ring per `categories` column (the
+    /// first innermost) and returns its id. One plot, the value column's; the categories live in its style.
+    pub fn plot_sunburst(&mut self, categories: &[ColumnId], value: ColumnId) -> Result<WindowId, ProjectError> {
+        for c in categories.iter().chain([&value]) {
+            self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
+        }
+        if self.numeric(value).is_none() {
+            return Err(ProjectError::SunburstNeedsValue);
+        }
+        let mut cats: Vec<ColumnId> = Vec::new();
+        for c in categories {
+            if *c != value && !cats.contains(c) {
+                cats.push(*c);
+            }
+        }
+        if cats.is_empty() {
+            return Err(ProjectError::SunburstNeedsCategory);
+        }
+        let long_name = self.locate(value).map(|(b, _, _)| b.long_name.clone());
+        let graph = self.add_graph(Template::Sunburst);
+        self.add_plot(graph, 0, value)?;
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                l.apply_palette();
+                for p in &mut l.plots {
+                    p.sunburst.categories = cats.clone();
+                }
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
+    /// The column that groups the rows of a parallel index when none is named: the first column of the axes' sheet
+    /// that is set as Group and holds text, else the first one that holds text (never one of the axes).
+    pub fn parallel_group_default(&self, axes: &[ColumnId]) -> Option<ColumnId> {
+        let (_, sheet, _) = self.locate(*axes.first()?)?;
+        let texty = |c: &&Column| !c.data.is_numeric() && !axes.contains(&c.id);
+        let by_designation = sheet.columns.iter().filter(texty).find(|c| c.designation == Designation::Group);
+        by_designation.or_else(|| sheet.columns.iter().find(texty)).map(|c| c.id)
+    }
+
+    /// Creates a Parallel Plot or Parallel Index (`template`) with one vertical axis per column of `axes`, and
+    /// returns its id. `color` is a Parallel Plot's numeric colour column or a Parallel Index's group column (a
+    /// parallel index without one is refused; a parallel plot without one draws every line in the plot colour).
+    /// A parallel plot needs two axes, a parallel index three.
+    pub fn plot_parallel(
+        &mut self,
+        template: Template,
+        axes: &[ColumnId],
+        color: Option<ColumnId>,
+    ) -> Result<WindowId, ProjectError> {
+        for y in axes.iter().chain(&color) {
+            self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
+        }
+        match template {
+            Template::Parallel if axes.len() < 2 => return Err(ProjectError::ParallelNeedsTwoColumns(axes.len())),
+            Template::ParallelIndex if axes.len() < 3 => {
+                return Err(ProjectError::ParallelIndexNeedsThreeColumns(axes.len()));
+            }
+            Template::ParallelIndex if color.is_none() => return Err(ProjectError::ParallelIndexNeedsGroup),
+            Template::Parallel | Template::ParallelIndex => {}
+            _ => return self.plot_columns(template, axes),
+        }
+        let long_name = axes.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
+        let graph = self.add_graph(template);
+        for y in axes {
+            self.add_plot(graph, 0, *y)?;
+        }
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                l.apply_palette();
+                for p in &mut l.plots {
+                    p.parallel.color = color;
+                }
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
     /// Turns the plots of a new graph into a lollipop plot: vertical drop lines to the next data
     /// plot and, as Origin's template exchanges X and Y, each plot's X and Y columns traded (with
     /// the two axes) when every plot has an X column. Plots against the row number cannot be
@@ -831,6 +1062,15 @@ impl Project {
         }
         if template == Template::Hexbin {
             return Err(ProjectError::HexbinNoRightAxis);
+        }
+        if template.is_parallel() {
+            return Err(ProjectError::ParallelNoRightAxis);
+        }
+        if template == Template::Treemap {
+            return Err(ProjectError::TreemapNoRightAxis);
+        }
+        if template == Template::Sunburst {
+            return Err(ProjectError::SunburstNoRightAxis);
         }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
@@ -1160,6 +1400,43 @@ mod tests {
         // Text columns are never plotted.
         let t = p.add_column(book, 0, Designation::Y, ColumnData::text(vec!["a".into()])).unwrap();
         assert!(!p.default_plot_columns(book, 0, Template::Line).contains(&t));
+    }
+
+    #[test]
+    fn window_short_names_follow_origins_rule_and_formulas_follow_a_rename() {
+        // Origin 2016 `win -r` (workbook-model.md 1)
+        assert_eq!(clean_window_name("ABCDEFGHIJKLMN"), "ABCDEFGHIJKLM");
+        assert_eq!(clean_window_name("abcdefghijklmnopqrstuvwxyz"), "abcdefghijklm");
+        for (typed, got) in [
+            ("a b", "ab"),
+            ("a_b", "ab"),
+            ("a-b", "ab"),
+            ("a.b", "ab"),
+            ("x/y", "xy"),
+            ("ab(c)", "abc"),
+            ("Ab#1", "Ab1"),
+        ] {
+            assert_eq!(clean_window_name(typed), got, "{typed}");
+        }
+        assert_eq!(clean_window_name("1abc"), "A1abc");
+        assert_eq!(clean_window_name("123"), "A123");
+        assert_eq!(clean_window_name("12345678901234"), "A123456789012");
+        assert_eq!(clean_window_name("___"), "A");
+        let mut p = Project::new();
+        let a = p.add_workbook("Data");
+        let b = p.add_workbook("Other");
+        let col = p.add_column(b, 0, crate::Designation::Y, crate::ColumnData::numeric(vec![1.0])).unwrap();
+        p.column_mut(col).unwrap().formula = Some("[Book1]Sheet1!col(A) * 2 + [book1]Sheet1!col(B)".into());
+        let first = p.window(a).unwrap().name().to_string();
+        assert_eq!(first, "Book1");
+        assert_eq!(p.rename_window(a, "Raw data 2026"), Ok("Rawdata2026".to_string()));
+        assert_eq!(
+            p.column(col).unwrap().formula.as_deref(),
+            Some("[Rawdata2026]Sheet1!col(A) * 2 + [Rawdata2026]Sheet1!col(B)")
+        );
+        let taken = p.window(b).unwrap().name().to_string();
+        assert!(p.rename_window(a, &taken.to_lowercase()).is_err(), "another window's name, in any case");
+        assert_eq!(p.window(a).unwrap().name(), "Rawdata2026");
     }
 
     #[test]
@@ -1538,5 +1815,51 @@ mod tests {
         let (new, _) = p.append(other, "f");
         let col = p.workbook(new[0]).unwrap().sheets[0].columns[0].id;
         assert_eq!(p.workbook(new[0]).unwrap().sheets[0].note(col, 0), Some("o"));
+    }
+
+    #[test]
+    fn append_remaps_the_column_ids_inside_plot_styles() {
+        use crate::graph::PlotKind;
+        let mut here = Project::new();
+        let hb = here.add_workbook("");
+        for i in 0..5 {
+            here.add_column(hb, 0, Designation::Y, ColumnData::numeric(vec![100.0 + i as f64])).unwrap();
+        }
+
+        let mut other = Project::new();
+        let ob = other.add_workbook("");
+        let mut cols = Vec::new();
+        for i in 0..4 {
+            let d = ColumnData::numeric(vec![i as f64, i as f64 + 0.5, i as f64 + 1.0]);
+            cols.push(other.add_column(ob, 0, Designation::Y, d).unwrap());
+        }
+        let g = other.plot_columns(Template::Line, &[cols[0]]).unwrap();
+        {
+            let plot = &mut other.graph_mut(g).unwrap().layers[0].plots[0];
+            plot.kind = PlotKind::Treemap;
+            plot.treemap.categories = vec![cols[1], cols[2]];
+            plot.treemap.order_column = Some(cols[3]);
+            plot.sunburst.categories = vec![cols[2], cols[1]];
+            plot.parallel.color = Some(cols[3]);
+        }
+        {
+            let l = &mut other.graph_mut(g).unwrap().layers[0];
+            l.x_axis.rug.plot = Some(cols[0]);
+            l.y_axis.rug_opposite.plot = Some(cols[0]);
+        }
+        let (new, _) = here.append(other, "f");
+        let graph = here.graph(new[1]).unwrap();
+        let l = &graph.layers[0];
+        let plot = &l.plots[0];
+        let data = |id: ColumnId| here.numeric(id).unwrap().to_vec();
+        let want = |i: usize| vec![i as f64, i as f64 + 0.5, i as f64 + 1.0];
+        assert_eq!(data(plot.y), want(0));
+        assert_eq!(plot.treemap.categories.iter().map(|&c| data(c)).collect::<Vec<_>>(), vec![want(1), want(2)]);
+        assert_eq!(data(plot.treemap.order_column.unwrap()), want(3));
+        assert_eq!(plot.sunburst.categories.iter().map(|&c| data(c)).collect::<Vec<_>>(), vec![want(2), want(1)]);
+        assert_eq!(data(plot.parallel.color.unwrap()), want(3));
+        assert_eq!(data(l.x_axis.rug.plot.unwrap()), want(0));
+        assert_eq!(data(l.y_axis.rug_opposite.plot.unwrap()), want(0));
+        assert_eq!(l.x_axis.rug_opposite.plot, None, "an unset rug choice stays unset");
     }
 }

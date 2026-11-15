@@ -56,18 +56,19 @@ fn opening_a_project_again_moves_it_to_the_top_without_a_repeat() {
 }
 
 #[test]
-fn each_list_keeps_ten_entries_and_drops_the_oldest() {
+fn each_list_keeps_fifteen_entries_and_drops_the_oldest() {
     let dir = scratch("cap");
     let mut list = RecentList::default();
-    for i in 0..13 {
+    for i in 0..18 {
         list.push_project(&touch(&dir, &format!("p{i}.sheaf")));
         list.push_import(&[touch(&dir, &format!("d{i}.csv"))]);
     }
     assert_eq!(list.projects.len(), MAX_ENTRIES);
     assert_eq!(list.imports.len(), MAX_ENTRIES);
-    assert_eq!(names(&list.projects)[0], "p12.sheaf");
-    assert_eq!(names(&list.projects)[9], "p3.sheaf");
-    assert_eq!(names(&list.imports)[9], "d3.csv");
+    assert_eq!(MAX_ENTRIES, 15, "Origin 2016 shows 15 recent projects");
+    assert_eq!(names(&list.projects)[0], "p17.sheaf");
+    assert_eq!(names(&list.projects)[14], "p3.sheaf");
+    assert_eq!(names(&list.imports)[14], "d3.csv");
 }
 
 #[test]

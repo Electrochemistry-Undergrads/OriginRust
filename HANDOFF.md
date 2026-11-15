@@ -42,7 +42,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   height follows the axis ranges, even past the page. Sheaf copies both; it compares spans in the
   axes' own scale (log unmeasured) and ignores the link with axis breaks, for linked child layers and
   in polar/ternary layers. Also measured: Speed Mode's worksheet limit is ticked at 3000 by default
-  (spec table said off; speed mode itself is still not done). Tests: see the merge note below.
+  (spec table said off; speed mode itself is still not done). Formatting, strict all-target Clippy and 2714 workspace tests pass (8 ignored) on 9200269.
 - T11 several axis breaks (2026-11-15, Windows, branch `axis-breaks`): an axis holds up to
   seven breaks (`Axis::axis_breaks`; the former single `axis_break` still reads as one, keeping
   its place). Measured in Origin 2016's Breaks tab and PNG exports (graphing 3.6): Auto Position

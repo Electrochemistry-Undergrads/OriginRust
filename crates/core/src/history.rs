@@ -19,12 +19,17 @@ pub struct Document {
     /// Counts every change of the project, including undo and redo. Views
     /// compare it with the value they last drew to know when to redraw.
     revision: u64,
+    /// Identity of the undoable content, independent of redraw revisions and view adjustments.
+    state: u64,
+    next_state: u64,
+    saved_state: Option<u64>,
 }
 
 #[derive(Debug)]
 struct Step {
     label: String,
     project: Project,
+    state: u64,
     /// Steps with the same non-zero token are merged into one (see
     /// [`Document::apply_merging`]).
     merge_token: u64,
@@ -37,8 +42,19 @@ impl Default for Document {
 }
 
 impl Document {
-    pub fn new(project: Project) -> Self {
-        Document { project, undo: Vec::new(), redo: Vec::new(), dirty: false, limit: 100, revision: 0 }
+    pub fn new(mut project: Project) -> Self {
+        project.apply_mask_switch();
+        Document {
+            project,
+            undo: Vec::new(),
+            redo: Vec::new(),
+            dirty: false,
+            limit: 100,
+            revision: 0,
+            state: 0,
+            next_state: 1,
+            saved_state: Some(0),
+        }
     }
 
     pub fn project(&self) -> &Project {
@@ -48,6 +64,22 @@ impl Document {
     /// A number that changes whenever the project changes.
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// Records that the current content was successfully saved. A subsequent live-dialog change
+    /// must start a new step, so undo can return exactly to this checkpoint.
+    pub fn mark_saved(&mut self) {
+        self.saved_state = Some(self.state);
+        self.dirty = false;
+        if let Some(step) = self.undo.last_mut() {
+            step.merge_token = 0;
+        }
+    }
+
+    /// Marks content with no saved checkpoint (for example a recovered project).
+    pub fn mark_unsaved(&mut self) {
+        self.saved_state = None;
+        self.dirty = true;
     }
 
     /// Changes the project as one undoable step named `label`.
@@ -80,16 +112,24 @@ impl Document {
                 // restores the source and everything computed from it together.
                 self.project.recalculate_since(&before);
                 self.project.update_analysis_links(&before);
+                self.project.apply_mask_switch();
                 if self.project != before {
                     let merge = token != 0 && self.undo.last().is_some_and(|s| s.merge_token == token);
                     if !merge {
-                        self.undo.push(Step { label: label.to_string(), project: before, merge_token: token });
+                        self.undo.push(Step {
+                            label: label.to_string(),
+                            project: before,
+                            state: self.state,
+                            merge_token: token,
+                        });
                         if self.undo.len() > self.limit {
                             self.undo.remove(0);
                         }
                     }
                     self.redo.clear();
-                    self.dirty = true;
+                    self.state = self.next_state;
+                    self.next_state = self.next_state.checked_add(1).expect("document state counter exhausted");
+                    self.dirty = self.saved_state != Some(self.state);
                     self.revision += 1;
                 }
                 Ok(value)
@@ -130,8 +170,9 @@ impl Document {
     pub fn undo(&mut self) -> Option<String> {
         let step = self.undo.pop()?;
         let current = std::mem::replace(&mut self.project, step.project);
-        self.redo.push(Step { label: step.label.clone(), project: current, merge_token: 0 });
-        self.dirty = true;
+        let current_state = std::mem::replace(&mut self.state, step.state);
+        self.redo.push(Step { label: step.label.clone(), project: current, state: current_state, merge_token: 0 });
+        self.dirty = self.saved_state != Some(self.state);
         self.revision += 1;
         Some(step.label)
     }
@@ -139,17 +180,22 @@ impl Document {
     pub fn redo(&mut self) -> Option<String> {
         let step = self.redo.pop()?;
         let current = std::mem::replace(&mut self.project, step.project);
-        self.undo.push(Step { label: step.label.clone(), project: current, merge_token: 0 });
-        self.dirty = true;
+        let current_state = std::mem::replace(&mut self.state, step.state);
+        self.undo.push(Step { label: step.label.clone(), project: current, state: current_state, merge_token: 0 });
+        self.dirty = self.saved_state != Some(self.state);
         self.revision += 1;
         Some(step.label)
     }
 
     /// Replaces the project (for example after opening a file) and clears the history.
-    pub fn replace(&mut self, project: Project) {
+    pub fn replace(&mut self, mut project: Project) {
+        project.apply_mask_switch();
         self.project = project;
         self.undo.clear();
         self.redo.clear();
+        self.state = self.next_state;
+        self.next_state = self.next_state.checked_add(1).expect("document state counter exhausted");
+        self.saved_state = Some(self.state);
         self.dirty = false;
         self.revision += 1;
     }
@@ -218,5 +264,102 @@ mod tests {
         doc.undo();
         doc.apply("Two", |p| p.add_workbook(""));
         assert!(doc.redo_label().is_none());
+    }
+
+    #[test]
+    fn undo_and_redo_follow_saved_checkpoint_across_branches() {
+        let mut doc = Document::default();
+        doc.apply("A", |p| p.add_workbook("a"));
+        doc.mark_saved();
+        doc.apply("B", |p| p.add_workbook("b"));
+        assert!(doc.dirty);
+        doc.undo();
+        assert!(!doc.dirty, "undo returns to saved content");
+        doc.redo();
+        assert!(doc.dirty);
+        doc.mark_saved();
+        doc.undo();
+        assert!(doc.dirty);
+        doc.redo();
+        assert!(!doc.dirty, "redo returns to saved content");
+        doc.undo();
+        doc.mark_saved();
+        doc.apply("C", |p| p.add_workbook("c"));
+        assert!(doc.dirty, "a new branch never reuses the abandoned state id");
+        assert!(doc.redo().is_none());
+        doc.undo();
+        assert!(!doc.dirty, "saved checkpoint after undo is reachable");
+    }
+
+    #[test]
+    fn saving_during_a_merged_dialog_is_an_undo_boundary() {
+        let mut doc = Document::default();
+        doc.apply_merging("Dialog", 5, |p| p.add_workbook("first"));
+        doc.mark_saved();
+        doc.apply_merging("Dialog", 5, |p| p.add_workbook("second"));
+        doc.apply_merging("Dialog", 5, |p| p.add_workbook("third"));
+        assert!(doc.dirty);
+        doc.undo();
+        assert!(!doc.dirty);
+        assert_eq!(doc.project().windows.len(), 1);
+        doc.undo();
+        assert!(doc.dirty);
+        doc.redo();
+        assert!(!doc.dirty);
+        doc.redo();
+        assert!(doc.dirty);
+        assert_eq!(doc.project().windows.len(), 3);
+    }
+
+    #[test]
+    fn truncated_history_and_recovered_content_never_become_clean_by_accident() {
+        let mut doc = Document { limit: 2, ..Document::default() };
+        doc.mark_saved();
+        for name in ["a", "b", "c"] {
+            doc.apply("Add", |p| p.add_workbook(name));
+        }
+        doc.undo();
+        doc.undo();
+        assert!(doc.undo().is_none());
+        assert!(doc.dirty, "saved state was evicted");
+        doc.replace(Project::new());
+        assert!(!doc.dirty);
+        doc.mark_unsaved();
+        assert!(doc.dirty);
+        doc.apply("Edit recovery", |p| p.add_workbook("a"));
+        doc.undo();
+        assert!(doc.dirty, "recoveries have no saved checkpoint");
+        doc.mark_saved();
+        assert!(!doc.dirty);
+        doc.redo();
+        assert!(doc.dirty);
+        doc.undo();
+        assert!(!doc.dirty);
+    }
+
+    #[test]
+    fn view_changes_noops_and_failed_edits_do_not_move_the_saved_checkpoint() {
+        let mut doc = Document::default();
+        doc.apply("A", |p| p.add_workbook("a"));
+        doc.mark_saved();
+        let revision = doc.revision();
+        doc.adjust_view(|p| p.window_places.clear());
+        assert!(!doc.dirty);
+        assert!(doc.revision() > revision);
+        let revision = doc.revision();
+        doc.apply("Noop", |_| ());
+        let result: Result<(), ()> = doc.edit("Fail", |p| {
+            p.add_workbook("failed");
+            Err(())
+        });
+        assert!(result.is_err());
+        assert_eq!(doc.revision(), revision);
+        assert!(!doc.dirty);
+        doc.apply("B", |p| p.add_workbook("b"));
+        doc.undo();
+        assert!(!doc.dirty);
+        doc.replace(Project::new());
+        assert!(!doc.dirty);
+        assert!(doc.undo().is_none());
     }
 }

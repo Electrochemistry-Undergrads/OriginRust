@@ -57,7 +57,8 @@ pub(super) fn crosstab(
         if !sheet.row_shown(row) {
             continue;
         }
-        let level = |c: &Column| if c.mask.contains(&row) { None } else { level_text(c, row) };
+        let level =
+            |c: &Column| if c.active_mask().is_some_and(|m| m.contains(&row)) { None } else { level_text(c, row) };
         match (level(cr), level(cc)) {
             (Some(a), Some(b)) => pairs.push((a, b)),
             (None, None) => {}

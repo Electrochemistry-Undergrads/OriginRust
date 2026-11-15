@@ -488,3 +488,76 @@ fn the_autosave_menu_entry_is_enabled_and_options_stays_grey() {
     assert!(!menu_entry(&h, "Autosave...").accesskit_node().is_disabled());
     assert!(menu_entry(&h, "Options...").accesskit_node().is_disabled());
 }
+
+#[test]
+fn undo_to_saved_clears_recovery_and_redo_writes_it_again() {
+    let dir = scratch("undo-saved");
+    let mut h = start_in(vec![data_file("autosave-undo-saved")], &dir, None);
+    let target = scratch("undo-saved-target").join("saved.sheaf");
+    assert!(h.state_mut().save_to(target));
+    h.state_mut().doc.apply("Edit", |p| p.add_workbook("after save"));
+    h.state_mut().autosave.advance(11 * MINUTE);
+    wait_for_write(&mut h);
+    assert!(recovery_file(&h).exists());
+    let invalid_target = dir.join("missing-folder").join("cannot-save.sheaf");
+    assert!(!h.state_mut().save_to(invalid_target));
+    assert!(h.state().doc.dirty, "a failed save does not move the checkpoint");
+    h.state_mut().doc.undo();
+    assert!(!h.state().doc.dirty);
+    settle(&mut h);
+    assert!(!recovery_file(&h).exists());
+    h.state_mut().doc.redo();
+    assert!(h.state().doc.dirty);
+    settle(&mut h);
+    h.state_mut().autosave.advance(11 * MINUTE);
+    wait_for_write(&mut h);
+    assert!(recovery_file(&h).exists());
+}
+
+#[test]
+fn undo_while_worker_is_blocked_schedules_cleanup_after_the_write() {
+    let dir = scratch("undo-during-write");
+    let mut h = start_in(vec![data_file("autosave-undo-pending")], &dir, None);
+    let target = scratch("undo-pending-target").join("saved.sheaf");
+    assert!(h.state_mut().save_to(target));
+    h.state_mut().doc.apply("Edit", |p| p.add_workbook("after save"));
+    let release = h.state_mut().autosave.pause_next_write();
+    let project = h.state().doc.project().clone();
+    let revision = h.state().doc.revision();
+    h.state_mut().autosave.start_write(project, None, revision);
+    h.state_mut().doc.undo();
+    assert!(!h.state().doc.dirty);
+    let ctx = egui::Context::default();
+    // Drain egui's initial repaint requests, so this assertion checks our cleanup polling.
+    for _ in 0..4 {
+        let _ = ctx.run(egui::RawInput::default(), |_| {});
+    }
+    let idle = ctx.run(egui::RawInput::default(), |_| {});
+    assert_eq!(idle.viewport_output[&egui::ViewportId::ROOT].repaint_delay, Duration::MAX);
+    let output = ctx.run(egui::RawInput::default(), |ctx| h.state_mut().autosave_step(ctx));
+    assert!(h.state().autosave.write_pending());
+    assert!(output.viewport_output[&egui::ViewportId::ROOT].repaint_delay <= Duration::from_millis(100));
+    release.send(()).unwrap();
+    assert!(h.state_mut().autosave.finish_write().unwrap().is_ok());
+    assert!(recovery_file(&h).exists(), "the old snapshot finished after undo");
+    let _ = ctx.run(egui::RawInput::default(), |ctx| h.state_mut().autosave_step(ctx));
+    assert!(!recovery_file(&h).exists(), "clean state removes the late recovery");
+}
+
+#[test]
+fn undo_in_a_recovered_project_remains_dirty_until_saved() {
+    let dir = scratch("recover-undo");
+    planted(&dir, None);
+    let mut h = start_in(Vec::new(), &dir, None);
+    click(&mut h, "Recover");
+    h.state_mut().doc.apply("Edit", |p| p.add_workbook("new"));
+    h.state_mut().doc.undo();
+    assert!(h.state().doc.dirty);
+    settle(&mut h);
+    assert!(recovery_file(&h).exists());
+    let target = scratch("recover-undo-target").join("saved.sheaf");
+    assert!(h.state_mut().save_to(target));
+    settle(&mut h);
+    assert!(!h.state().doc.dirty);
+    assert!(!recovery_file(&h).exists());
+}

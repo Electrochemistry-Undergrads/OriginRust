@@ -256,7 +256,7 @@ pub fn registry() -> Vec<ToolDesc> {
         "median_filter",
         "Running median of each curve into a new column.",
         vec![
-            int("points", 5, "Points of the window (odd)."),
+            int("points", 5, "Points of the window (an even number acts like the next odd one)."),
             choice("edge", "shrink", &["shrink", "repeat", "reflect"], "The window at the ends."),
         ],
         None,

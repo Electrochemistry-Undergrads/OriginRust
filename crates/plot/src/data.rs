@@ -36,8 +36,10 @@ pub(crate) struct PlotData<'a> {
     /// How the X column shows its values (a date format makes a date axis).
     pub x_format: Option<NumberFormat>,
     pub y: Cow<'a, [f64]>,
-    /// Rows of the Y column that are masked: drawn red, as Origin does.
+    /// Rows of the Y column that are masked (none while masking is disabled): drawn in
+    /// `mask_color`, red unless Column > Mask > Change Color chose another, as Origin does.
     pub mask: Option<&'a std::collections::BTreeSet<usize>>,
+    pub mask_color: sheaf_core::Color,
     /// Active filters on the source worksheets. Indices remain original worksheet rows.
     pub filters: Vec<&'a sheaf_core::rowfilter::RowFilter>,
     pub err: Option<&'a [f64]>,
@@ -289,7 +291,8 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             x: x.map(Cow::Borrowed),
             x_format,
             y: Cow::Borrowed(y),
-            mask: project.column(plot.y).map(|c| &c.mask).filter(|m| !m.is_empty()),
+            mask: project.column(plot.y).and_then(|c| c.active_mask()),
+            mask_color: project.mask_color_rgb(),
             filters: project.plot_row_filters(plot),
             err,
             xerr,

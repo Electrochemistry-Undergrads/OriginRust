@@ -1,4 +1,4 @@
-//! Resources: the project tree, one column as CSV, one graph as PNG.
+//! Resources: project tree, column CSV, graph PNG, and UI context supplied by the desktop host.
 
 use crate::b64;
 use crate::server::{INVALID_PARAMS, RESOURCE_NOT_FOUND, RpcError};
@@ -8,6 +8,21 @@ use sheaf_core::Project;
 use sheaf_ops::render::ExportSettings;
 
 const PROJECT_URI: &str = "sheaf://project";
+
+/// The desktop app's current UI context. Headless servers do not list or serve it.
+pub const APP_URI: &str = "sheaf://app";
+
+pub fn app_descriptor() -> Value {
+    json!({
+        "uri": APP_URI, "name": "app", "mimeType": "application/json",
+        "description": "The active desktop window, selection and dialog/edit state. Rows and object indices count from 1. Column names are limited to 1024, with total count and truncation flag."
+    })
+}
+
+pub fn read_app(context: &Value) -> Value {
+    json!({"contents": [{"uri": APP_URI, "mimeType": "application/json",
+        "text": serde_json::to_string_pretty(context).unwrap_or_default()}]})
+}
 
 fn encode(name: &str) -> String {
     let mut out = String::new();
@@ -150,6 +165,18 @@ pub fn read(p: &Project, uri: &str) -> Result<Value, RpcError> {
 mod tests {
     use super::*;
     use sheaf_core::column::{ColumnData, Designation};
+
+    #[test]
+    fn app_context_is_not_advertised_or_served_by_a_headless_server() {
+        let mut server = crate::Server::new(crate::roots::Roots::new(&[]).unwrap());
+        let list = server.handle_message(json!({"jsonrpc": "2.0", "id": 1, "method": "resources/list"})).unwrap();
+        assert!(!list["result"]["resources"].as_array().unwrap().iter().any(|r| r["uri"] == APP_URI));
+        let read = server
+            .handle_message(json!({"jsonrpc": "2.0", "id": 2, "method": "resources/read", "params": {"uri": APP_URI}}))
+            .unwrap();
+        assert_eq!(read["error"]["code"], RESOURCE_NOT_FOUND);
+        assert!(server.project().windows.is_empty());
+    }
 
     #[test]
     fn names_survive_encoding() {

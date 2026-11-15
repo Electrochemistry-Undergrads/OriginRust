@@ -269,8 +269,28 @@ impl Job {
         self.begin().then(|| self.run(doc, protected))
     }
 
+    /// Runs on the UI thread with a context reader for `sheaf://app`. The reader is called only
+    /// for that resource, after the job begins, and receives the current document without edit access.
+    pub fn execute_with_app_context(
+        &self,
+        doc: &mut Document,
+        protected: Protected,
+        app_context: &dyn Fn(&Document) -> Value,
+    ) -> Option<Done> {
+        self.begin().then(|| self.run_with_context(doc, protected, Some(app_context)))
+    }
+
     /// Runs a job that [`begin`](Job::begin) accepted and sends the reply.
     pub fn run(&self, doc: &mut Document, protected: Protected) -> Done {
+        self.run_with_context(doc, protected, None)
+    }
+
+    fn run_with_context(
+        &self,
+        doc: &mut Document,
+        protected: Protected,
+        app_context: Option<&dyn Fn(&Document) -> Value>,
+    ) -> Done {
         let done = match &self.op {
             Op::Call { name, args, structured } => {
                 let mut policy = self.conn.policy.clone();
@@ -296,13 +316,24 @@ impl Job {
                 Done { tool: name.clone(), label, failed: failed.map(|m| sanitize(&m, ERROR_CHARS)) }
             }
             Op::ResourcesList => {
-                let listed = json!({"resources": resources::list(doc.project())});
+                let mut list = resources::list(doc.project());
+                if app_context.is_some() {
+                    list.insert(1, resources::app_descriptor());
+                }
+                let listed = json!({"resources": list});
                 self.finish(proto::result_line(self.req_id, &listed));
                 Done { tool: "resources".into(), label: "AI: resources".into(), failed: None }
             }
             Op::ResourceRead { uri } => {
-                let read =
-                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| resources::read(doc.project(), uri)));
+                let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    if uri == resources::APP_URI
+                        && let Some(context) = app_context
+                    {
+                        Ok(resources::read_app(&context(doc)))
+                    } else {
+                        resources::read(doc.project(), uri)
+                    }
+                }));
                 let (line, failed) = match read {
                     Ok(Ok(v)) => (proto::result_line(self.req_id, &v), None),
                     Ok(Err(e)) => (proto::error_line(Some(self.req_id), e.code, &e.message), Some(e.message)),

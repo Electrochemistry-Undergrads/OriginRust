@@ -1,6 +1,6 @@
 # T25: MCP server so Claude and other AI tools can use Sheaf
 
-**Status:** phase 2 done, merged 2026-11-15 (macOS session "mac-attach"; ADR 0013, `docs/spec/mcp.md` section 11): Tools > AI Assistants (MCP) or `sheaf-app --mcp` opens a per-user local endpoint (Unix socket in a 0700 folder; loopback TCP with a 256-bit token on Windows), `sheaf-mcp --attach` forwards tool calls to the open app, each change is one undo step "AI: <tool> <target>", a status-bar chip shows connected assistants, attached exports never overwrite files. Left for phase 2: the Windows acceptance check (ADR 0013), an "Undo AI Changes" command, a `sheaf://app` resource with the selection. Before that: phase 1 done and merged (2026-11-14, Windows); extended the same day: `sheaf-mcp` over stdio, the CLI's work in `sheaf-ops`, ADR 0011 (with its amendment), `docs/spec/mcp.md`, 16 tools, resources, prompts (`plot_cv_files`, `integrate_peak`, `fit_curve`), root confinement, paged reads, PNG image blocks. `analyze` reaches all 55 tools of `sheaf analyze`: 21 hand-mapped, 34 through the CLI's clap definitions (now in `sheaf_ops::args`, translated by `sheaf_ops::cli_analyze::job_from`; `crates/mcp/src/bridge.rs`), with a test that enumerates the subcommands and parity tests against the CLI code. Fixed: a `create` over another column's long name, replies to notifications, shared long names resolving to the first, the `.bak` of an Origin `.opj` written through a link. Extended again on macOS without Origin (`mcp-plot-fit`): `plot` and `fit` accept CLI-derived `options`, use shared CLI-to-library conversions, preserve the structured arguments and reject overlaps. Extended again (`mcp-new-sheet`): `analyze` accepts `output: new_sheet` through the shared core output path for both hand-mapped and bridged tools; sort/filter reject that setting, while intrinsic table tools keep their layouts. Left: phase 2 (`--attach` to the open desktop app). (CHI binary import through MCP, the 8 MB line cap and Windows junctions are tested: `T25-protocol-validation.md`.) Owner's request, 2026-11-14. **Size:** L. **Model:** Sonnet.
+**Status:** phase 2 done, merged 2026-11-15 (macOS session "mac-attach"; ADR 0013, `docs/spec/mcp.md` section 11): Tools > AI Assistants (MCP) or `sheaf-app --mcp` opens a per-user local endpoint (Unix socket in a 0700 folder; loopback TCP with a 256-bit token on Windows), `sheaf-mcp --attach` forwards tool calls to the open app, each change is one undo step "AI: <tool> <target>", a status-bar chip shows connected assistants, attached exports never overwrite files. Left for phase 2: the Windows acceptance check (ADR 0013), an "Undo AI Changes" command. The read-only `sheaf://app` current-window/selection resource is available (mcp.md 11.18). Before that: phase 1 done and merged (2026-11-14, Windows); extended the same day: `sheaf-mcp` over stdio, the CLI's work in `sheaf-ops`, ADR 0011 (with its amendment), `docs/spec/mcp.md`, 16 tools, resources, prompts (`plot_cv_files`, `integrate_peak`, `fit_curve`), root confinement, paged reads, PNG image blocks. `analyze` reaches all 55 tools of `sheaf analyze`: 21 hand-mapped, 34 through the CLI's clap definitions (now in `sheaf_ops::args`, translated by `sheaf_ops::cli_analyze::job_from`; `crates/mcp/src/bridge.rs`), with a test that enumerates the subcommands and parity tests against the CLI code. Fixed: a `create` over another column's long name, replies to notifications, shared long names resolving to the first, the `.bak` of an Origin `.opj` written through a link. Extended again on macOS without Origin (`mcp-plot-fit`): `plot` and `fit` accept CLI-derived `options`, use shared CLI-to-library conversions, preserve the structured arguments and reject overlaps. Extended again (`mcp-new-sheet`): `analyze` accepts `output: new_sheet` through the shared core output path for both hand-mapped and bridged tools; sort/filter reject that setting, while intrinsic table tools keep their layouts. (CHI binary import through MCP, the 8 MB line cap and Windows junctions are tested: `T25-protocol-validation.md`.) Owner's request, 2026-11-14. **Size:** L. **Model:** Sonnet.
 
 ## Windows portability follow-up (2026-11-15)
 
@@ -10,6 +10,21 @@ normalization, retaining their exact path checks. Formatting, strict workspace a
 and all 2,609 workspace tests pass on Windows (five existing ignored), including the attach
 UI, executor and real loopback-link tests. The separate desktop acceptance walkthrough in
 ADR 0013 remains open.
+
+## App context resource follow-up (2026-11-15)
+
+Attached clients can list/read `sheaf://app` for the current workbook/sheet or graph, cell/row/
+column/metadata selection, graph object and Data Reader pin, and dialog/edit flags. Indices count
+from one. Selection metadata is bounded and reflects the UI when the request runs, including a
+mid-frame sheet-switch guard; editor text and values stay out of the reply. Headless mode omits
+this resource. It uses the existing version-1 resource operation and leaves document/history and
+selection behavior intact. ADR 0013's amendment and mcp.md 11.18 define the contract. Six new
+regressions cover the real attach proxy/UI, busy states, unchanged data/history, wide sheets,
+parameter labels, graph indices, stale sheet selections and headless availability.
+
+Validation on integrated T39 `31f97d4`: formatting, strict workspace all-target Clippy and all
+2,653 workspace tests pass (7 existing ignored). All six new context regressions pass;
+all owned workers exited before merge.
 
 ## Goal
 

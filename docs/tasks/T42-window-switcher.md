@@ -1,6 +1,6 @@
 # T42: Window Switcher (Ctrl+Tab)
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `window-switcher`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `window-switcher`.
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Worksheets and project workflows: Window
 Switcher, Origin 2025b).
 

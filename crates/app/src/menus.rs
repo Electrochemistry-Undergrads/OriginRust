@@ -257,6 +257,9 @@ pub enum Cmd {
     CloseWindow,
     /// Window > Duplicate: a copy of the active workbook or graph.
     DuplicateWindow,
+    /// Window > Window Switcher (Ctrl+Tab, handled by `switcher.rs`; the menu entry opens it
+    /// and keeps it open until a card is chosen).
+    WindowSwitcher,
     /// File > Append...: bring the windows of another project into this one.
     AppendProject,
     /// View > Project Explorer and the other panels.
@@ -1408,6 +1411,8 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
         sep(),
         grey_sub("&Folders", &["Folders List"]),
         sep(),
+        keyed("Window S&witcher", KeyboardShortcut::new(Modifiers::CTRL, Key::Tab), Cmd::WindowSwitcher),
+        sep(),
         Entry::Windows,
     ]);
     v
@@ -2228,6 +2233,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ToggleAiLink => Action::ToggleAiLink,
         Cmd::CloseWindow => Action::HideWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::DuplicateWindow => Action::DuplicateWindow(c.active.ok_or(NEED_WINDOW)?),
+        Cmd::WindowSwitcher => Action::OpenSwitcher,
         Cmd::AppendProject => Action::AppendProject(None),
         Cmd::Panel(p) => Action::TogglePanel(*p),
         Cmd::Cascade => Action::Cascade,
@@ -2246,7 +2252,9 @@ pub fn shortcuts() -> Vec<(KeyboardShortcut, Cmd)> {
     for kind in [WindowKind::Workbook, WindowKind::Graph, WindowKind::None] {
         for m in bar(kind) {
             walk(&m.entries, &mut |i| {
+                // Ctrl+Tab is read by the Window Switcher itself (it needs the key release).
                 if let (Some(keys), Some(cmd)) = (i.keys, &i.cmd)
+                    && *cmd != Cmd::WindowSwitcher
                     && !out.iter().any(|(k, c)| *k == keys && c == cmd)
                 {
                     out.push((keys, cmd.clone()));

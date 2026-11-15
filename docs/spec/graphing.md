@@ -1242,6 +1242,36 @@ Measured with Origin on a scatter plot of 5 points with a Y error column (`p6`, 
 - **Range.** The automatic axis range reaches the ends of the error bars (data 2..5 with ends 1.5 and 6 gave Y 1..6.5).
 - **Sheaf.** `Plot::x_error` (X error column after the Y column, found like the Y error), `Plot::error` with direction (both, positive, negative) and cap width (default 8 pt, 0 = no cap); Plot Details > Error Bar edits direction and cap width; Plot > Symbol > XY Error plots with both columns. X error bars are not drawn for bar plots. Positive and negative directions draw the bar from the point to that end only, with one cap; the range widens only on that side. Not stored in `.opj` (save warning).
 
+### 14.13a Graph > Add Error Bars: existing-column chooser (T01 follow-up)
+
+Measured in Origin 2016 on 2026-11-14 through `tools/origin-ref/origin-dialog.ps1`, under the
+global Origin lock. Synthetic data: X = 1..4, B = 2,4,3,5, C = 5,3,4,2, D = 0.1..0.4,
+E = 0.5..0.8; B and C plotted as scatter curves. Setup and raw control list are local-only at
+`re-workspace/scratch/t01-error-bars-dialog/setup.labtalk.txt` and `dialog/first.controls.txt`.
+
+`worksheet -e err;` opens **Error Bars**. **Add Error Bars to** names `[Graph1]1!1"Signal B"`;
+**Source of Errors** contains **Percent of Data (%)** (selected), **Standard Deviation of Data**,
+**Square Root of Data**, two numeric edits, and **Scaling Factor**, with OK and Cancel. The edits
+were empty in this capture. No numeric defaults or generated values were measured. The screenshot
+was obscured by another foreground window and is not visual evidence. The earlier T01 assumption
+that this dialog simply asks for an error column was incorrect.
+
+**Sheaf's existing-column chooser** is deliberately a smaller scope using `Plot::y_error`: Graph >
+Add Error Bars opens **Error Bars**, with **Add Error Bars to** choosing one curve of the active
+layer and **Y Error Column** choosing any numeric or Text & Numeric column across all workbooks
+and sheets. Fully qualified names and long names identify columns. The selected graph curve is
+the initial target, otherwise the first curve; its current Y-error column, or the adjacent
+designated Y-error column, is suggested. Otherwise the source starts unselected and OK is disabled.
+
+Opening or changing choices does not edit the project. OK assigns/replaces only the chosen
+curve's Y-error column, leaving its row range, X errors, direction, cap width and other curves
+unchanged, in one Undo/Redo step. Confirming the current source creates no undo step. Cancel,
+Escape and the close button discard choices. Changed/reordered plots and missing/non-numeric
+sources cannot be applied; switching projects closes the chooser. No data or designation is
+changed. Pure-text columns are excluded. Short, missing or negative error values retain the
+renderer’s existing handling. Origin's percentage/standard-deviation/square-root generation and
+its layout remain separate work; this chooser is not claimed as matching that dialog.
+
 ### 14.14 Colour lists of column and area templates; stacked area and fill area (T12)
 
 Measured with `plotxy` and `expGraph` through COM on synthetic data (scripts and PNGs in `re-workspace/scratch/T12/`, local only), legends read pixel by pixel. The same twelve Y columns plotted from each template:

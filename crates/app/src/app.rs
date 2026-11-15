@@ -5,6 +5,7 @@
 use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::column_props::ColumnPropsDialog;
+use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::export_sheet::SheetExportDialog;
 use crate::dialogs::find::{FindDialog, FindOutcome};
@@ -101,6 +102,7 @@ pub struct SheafApp {
     graph_props: Option<GraphPropsDialog>,
     layer_contents: Option<crate::dialogs::layer_contents::LayerContentsDialog>,
     plot_setup: Option<crate::dialogs::plot_setup::PlotSetupDialog>,
+    error_bars: Option<ErrorBarsDialog>,
     column_props: Option<ColumnPropsDialog>,
     text_dialog: Option<TextDialog>,
     shape_dialog: Option<ShapeDialog>,
@@ -167,6 +169,7 @@ impl SheafApp {
             graph_props: None,
             layer_contents: None,
             plot_setup: None,
+            error_bars: None,
             column_props: None,
             text_dialog: None,
             shape_dialog: None,
@@ -323,6 +326,7 @@ impl SheafApp {
         self.books.clear();
         self.graphs.clear();
         self.graph_props = None;
+        self.error_bars = None;
         self.column_props = None;
         self.set_values = None;
         self.export = None;
@@ -1627,36 +1631,17 @@ impl SheafApp {
         }
     }
 
-    /// Graph > Add Error Bars: every plot of the layer without error bars takes the Y error
-    /// column that follows its Y column in the sheet.
+    /// Graph > Add Error Bars: choose a plot and an existing error column, without changing
+    /// any other plot of the layer.
     fn add_error_bars(&mut self, graph: WindowId, layer: usize) {
-        let project = self.doc.project();
-        let Some(l) = project.graph(graph).and_then(|g| g.layers.get(layer)) else { return };
-        let found: Vec<(usize, ColumnId)> = l
-            .plots
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| p.y_error.is_none())
-            .filter_map(|(k, p)| {
-                let (_, sheet, _) = project.locate(p.y)?;
-                let err = sheet.y_error_for(sheet.column_index(p.y)?)?;
-                Some((k, err.id))
-            })
-            .collect();
-        if found.is_empty() {
-            self.warn(
-                "No error bars added: the plots have none left to add, or no Y error column follows their Y column",
-            );
-            return;
-        }
-        self.doc.apply("Add error bars", |p| {
-            if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
-                for (k, err) in &found {
-                    l.plots[*k].y_error = Some(*err);
-                }
-            }
+        let selected = self.graphs.get(&graph).and_then(|state| match state.selected {
+            Some((l, sheaf_plot::scene::ObjectKind::Plot(i))) if l == layer => Some(i),
+            _ => None,
         });
-        self.say(format!("Added error bars to {} plot(s)", found.len()));
+        self.error_bars = ErrorBarsDialog::new(self.doc.project(), graph, layer, selected);
+        if self.error_bars.is_none() {
+            self.warn("No error bars added: the active layer has no plots");
+        }
     }
 
     /// Window > Refresh: recalculates the columns of the active workbook that wait for it.
@@ -1957,6 +1942,7 @@ impl SheafApp {
             || self.graph_props.is_some()
             || self.layer_contents.is_some()
             || self.plot_setup.is_some()
+            || self.error_bars.is_some()
             || self.column_props.is_some()
             || self.text_dialog.is_some()
             || self.shape_dialog.is_some()
@@ -2151,6 +2137,16 @@ impl SheafApp {
             && matches!(d.show(ctx, &mut self.doc), crate::dialogs::plot_setup::Outcome::Closed)
         {
             self.plot_setup = None;
+        }
+        if let Some(d) = &mut self.error_bars {
+            match d.show(ctx, &mut self.doc) {
+                ErrorBarsOutcome::Open => {}
+                ErrorBarsOutcome::Closed => self.error_bars = None,
+                ErrorBarsOutcome::Added => {
+                    self.error_bars = None;
+                    self.say("Updated Y error bars for the selected plot");
+                }
+            }
         }
         if let Some(column) = self.graph_props.as_mut().and_then(|d| d.take_show_workbook())
             && let Some((book, _, _)) = self.doc.project().locate(column)
@@ -2694,6 +2690,12 @@ impl SheafApp {
                     if let Some(id) = first_graph {
                         self.layer_contents =
                             Some(crate::dialogs::layer_contents::LayerContentsDialog::new(id, 0, 1_000_000));
+                        self.focus(id);
+                    }
+                }
+                "error-bars" => {
+                    if let Some(id) = first_graph {
+                        self.add_error_bars(id, 0);
                         self.focus(id);
                     }
                 }

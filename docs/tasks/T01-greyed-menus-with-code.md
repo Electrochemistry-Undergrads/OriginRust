@@ -1,6 +1,6 @@
 # T01: Enable greyed menu items whose feature already exists
 
-**Status:** done, merged to main (`a2fb77b`); selected-row sorting and Sort Columns/column-context Custom are also enabled; see "Left" for what remains. **Size:** M. **Branch:** `menus-live`. **Model:** Sonnet.
+**Status:** done, merged to main (`a2fb77b`); selected-row sorting and Sort Columns/column-context Custom are also enabled; Graph > Add Error Bars now selects a plot and an existing numeric Y-error column (Sheaf's chooser, graphing 14.13a); see "Left" for what remains. **Size:** M. **Branch:** `menus-live`. **Model:** Sonnet.
 
 ## Goal
 
@@ -23,7 +23,7 @@ new features here; if an item needs real new code, leave it greyed and list it i
 |---|---|
 | Plot > Multi-Panel > Vertical 2 Panel, Horizontal 2 Panel, 4 Panel, 9 Panel, Stack... | `crates/core/src/panels.rs` `PanelLayout::stack(n)` / `PanelLayout::grid(rows, cols, frame)`; CLI `sheaf plot --panels` (`crates/cli/src/args.rs`, field `panels`) shows how a graph is built from them |
 | Plot > Symbol > Y Error | Y error bars exist (symmetric Y only, `crates/plot/src/plots.rs`); a plot of Y with a `YError` column. Origin's Y Error template is a scatter with error bars from the adjacent `YError` column |
-| Graph > Add Error Bars... | same error-bar model; Origin adds an error-bar plot to the selected plot (minimal dialog: choose the column) |
+| Graph > Add Error Bars... | same error-bar model; Sheaf's dialog chooses a plot and an existing numeric error column; Origin 2016 instead generates errors (14.13a) |
 | Graph > Legend > Update Legend | Reconstruct Legend exists (`Cmd::ReconstructLegend`, Ctrl+L); Update Legend keeps custom text and refreshes entries (graphing.md section 6) |
 | Window > Refresh (F5) | redraw + recalculate pending formula columns (recalculation exists, `Project::set_column_values` modes) |
 | Worksheet > Sort Columns / Sort Range | `Project::sort_sheet` in `crates/core/src/analysis.rs` sorts the whole sheet by one key; Sort Range needs a row/column subset argument (small core change is fine) |
@@ -53,8 +53,8 @@ The wired items are live, each has a UI test, checks pass, feature-parity rows u
 Wired (each has a UI test in `ui_tests.rs`): Plot > Multi-Panel > Vertical 2 Panel / Horizontal 2 Panel /
 4 Panel / 9 Panel (`Cmd::PlotPanels`, `PanelLayout::grid`, one panel per selected Y column), Plot > Symbol >
 Y Error (`Cmd::PlotYError`, scatter; plots anyway and says so when no Y error column follows),
-Graph > Add Error Bars... (`Cmd::AddErrorBars`, no dialog: every plot of the layer without error bars takes
-the Y error column that follows its Y column), Graph > Legend > Update Legend and the same item of the
+Graph > Add Error Bars... (`Cmd::AddErrorBars`, a chooser for one plot and any numeric column across sheets/books;
+defaults to the selected curve and its current or adjacent Y-error column), Graph > Legend > Update Legend and the same item of the
 legend's right-click menu (`GraphOp::UpdateLegend`), Window > Refresh F5 (`Cmd::Refresh`), Worksheet > Sort
 Range and Sort Columns, Ascending/Descending and explicit Each Column modes (row-aware core helpers);
 Sort Range, Sort Columns, Sort Worksheet and column-header Custom use the existing nested sort
@@ -65,10 +65,22 @@ Left greyed, and why:
 - Multi-Panel > Stack... and Multiple Panels by Label...: Stack is a dialog with the options of graphing.md
   15.6; the label variant needs a column-label grouping. Both are new UI.
 
-Differences from Origin that were not measured (use `tools/origin-ref/` before relying on them):
+Measured Add Error Bars follow-up (2026-11-14):
 
-- Add Error Bars... has no dialog; Origin asks for the column. A dialog that picks any column needs a
-  list of plot rows and the column chooser of Plot Details.
+- `worksheet -e err;` on a synthetic two-curve graph opens **Error Bars** with the first active
+  curve's reference and **Percent of Data (%)**, **Standard Deviation of Data**, **Square Root of Data**
+  and **Scaling Factor** controls. It does not offer the existing-column chooser assumed by the brief.
+  The controls and selected percentage radio were captured in
+  `re-workspace/scratch/t01-error-bars-dialog/dialog/first.controls.txt`; the picture was obscured by
+  another foreground window, so it is not visual evidence. The numeric edits were empty in this run;
+  no numeric default or generated output is inferred.
+- This follow-up stays within the existing-model scope: Sheaf's chooser assigns or replaces one
+  plot's `y_error` on OK, leaves other plots and error styling alone, supports Cancel/Escape and one
+  Undo/Redo step, and refuses stale plot/source choices. Pure text columns are excluded. It creates
+  no columns and changes no column designation. Origin's error generation remains open.
+
+Other differences from Origin that were not measured (use `tools/origin-ref/` before relying on them):
+
 - Update Legend: Origin's exact rule for custom text is not measured; Sheaf keeps custom lines, drops the
   lines of plots that are gone and appends the automatic line of each plot the text does not mention.
 - Refresh recalculates the Manual columns marked pending in the active workbook; it does not reload

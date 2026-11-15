@@ -305,8 +305,7 @@ pub enum Action {
         rows: usize,
         cols: usize,
     },
-    /// Graph > Add Error Bars: the plots of the layer that have none take the Y error column
-    /// of their sheet.
+    /// Graph > Add Error Bars: choose an existing Y-error column for one plot of the layer.
     AddErrorBars {
         graph: WindowId,
         layer: usize,

@@ -5802,7 +5802,7 @@ fn y_error_without_an_error_column_still_plots_but_says_so() {
 }
 
 #[test]
-fn add_error_bars_gives_the_plots_the_error_column_of_their_sheet() {
+fn add_error_bars_chooses_one_plot_and_commits_only_on_ok() {
     let mut h = start(vec![data_file("adderr")]);
     let (book, graph) = window_ids(&h);
     let err = h
@@ -5813,18 +5813,33 @@ fn add_error_bars_gives_the_plots_the_error_column_of_their_sheet() {
         })
         .unwrap();
     settle(&mut h);
-    // Column C is the last Y column, so only its plot has an error column after it.
+    // The selected C curve starts with the adjacent error column as a suggestion.
+    h.state_mut().graphs.get_mut(&graph).unwrap().selected = Some((0, ObjectKind::Plot(1)));
     assert!(project(&h).graph(graph).unwrap().layers[0].plots.iter().all(|p| p.y_error.is_none()));
+    let revision = h.state().doc.revision();
     menu_path(&mut h, &["Graph", "Add Error Bars..."]);
+    assert!(h.state().error_bars.is_some());
+    assert_eq!(h.state().doc.revision(), revision, "opening does not change the project");
+    click(&mut h, "OK");
     let plots = &project(&h).graph(graph).unwrap().layers[0].plots;
     assert_eq!(plots[0].y_error, None, "B has no error column");
     assert_eq!(plots[1].y_error, Some(err));
     assert_eq!(h.state().doc.undo_label(), Some("Add error bars"));
-    // Nothing left to add: no new undo step, and a message.
+    assert!(h.state().error_bars.is_none());
+    let revision = h.state().doc.revision();
+    // Confirming the same column is a no-op, rather than another undo step.
     menu_path(&mut h, &["Graph", "Add Error Bars..."]);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.revision(), revision);
+    menu(&mut h, "Edit", "Undo Add error bars");
+    assert!(project(&h).graph(graph).unwrap().layers[0].plots.iter().all(|p| p.y_error.is_none()));
+    menu(&mut h, "Edit", "Redo Add error bars");
+    assert_eq!(project(&h).graph(graph).unwrap().layers[0].plots[1].y_error, Some(err));
     assert_eq!(h.state().doc.undo_label(), Some("Add error bars"));
-    assert!(h.state().status.contains("No error bars added"));
 }
+
+#[path = "ui_tests/error_bars.rs"]
+mod error_bars;
 
 #[test]
 fn update_legend_keeps_custom_text_and_adds_the_plots_it_lacks() {

@@ -2,12 +2,14 @@
 //! application shows while its `Option` is filled.
 
 pub mod analysis;
+pub mod autosave;
 pub mod bin2d_options;
 pub mod column_props;
 pub mod details_look;
 pub mod dist_options;
 pub mod error_bars;
 pub mod export;
+pub mod export_excel;
 pub mod export_sheet;
 pub mod find;
 pub mod fit;
@@ -18,15 +20,21 @@ pub mod graph_axis;
 pub mod graph_details;
 pub mod graph_props;
 pub mod import;
+pub mod import_excel;
 pub mod import_wizard;
+pub mod label_panels;
 pub mod layer_contents;
 pub mod manip_options;
 pub mod math_curves;
+pub mod multivariate_options;
 pub mod plot_setup;
 pub mod power;
+pub mod printing;
+pub mod recovery;
 pub mod reshape;
 pub mod row_filter;
 pub mod set_values;
 pub mod shape_object;
 pub mod sort;
+pub mod stack_panels;
 pub mod text_object;

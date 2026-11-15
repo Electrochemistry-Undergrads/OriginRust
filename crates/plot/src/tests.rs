@@ -3878,8 +3878,13 @@ fn drop_lines_run_to_the_left_and_bottom_edges_in_the_plot_colour_by_default() {
     let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
     plot.decor.drop.vertical.on = true;
     let blue = Color { r: 0, g: 0, b: 255, a: 255 };
-    plot.decor.drop.horizontal =
-        DropLine { on: true, dash: sheaf_core::graph::Dash::Dash, width_pt: 2.0, color: Some(blue) };
+    plot.decor.drop.horizontal = DropLine {
+        on: true,
+        dash: sheaf_core::graph::Dash::Dash,
+        width_pt: 2.0,
+        color: Some(blue),
+        ..DropLine::default()
+    };
     let line_color = plot.line.color;
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     let f = scene.layers[0].clip;
@@ -3956,4 +3961,78 @@ fn the_display_tab_hides_data_unclips_it_and_puts_the_grid_on_top() {
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     assert!(scene.layers[0].plots.is_empty());
     assert!(!scene.layers[0].overlay.is_empty());
+}
+
+#[test]
+fn print_svg_uses_saved_asymmetric_margins_and_rejects_invalid_setup() {
+    use sheaf_core::page_setup::{Margins, Orientation, Paper};
+    let (mut p, g) = project(Template::Line, vec![0., 1.], vec![vec![0., 1.]]);
+    let page = &mut p.graph_mut(g).unwrap().page;
+    page.width_pt = 400.;
+    page.height_pt = 200.;
+    p.page_setup.paper = Paper::Letter;
+    p.page_setup.orientation = Orientation::Auto;
+    p.page_setup.margins = Margins { left: 36., right: 72., top: 100., bottom: 80. };
+    // 792x612 landscape; available 684x432; the 2:1 graph is 684x342 at (36,145).
+    let svg = print_svg(&p, g).unwrap();
+    let d = doc(&svg);
+    let root = d.root_element();
+    assert_eq!(root.attribute("viewBox"), Some("0 0 792 612"));
+    let placement = root.descendants().find(|n| n.has_tag_name("g") && n.attribute("transform").is_some()).unwrap();
+    assert_eq!(placement.attribute("transform"), Some("translate(36 145) scale(1.71)"));
+    assert!(render_print_pdf(&p, g).unwrap().starts_with(b"%PDF-"));
+    for m in [Margins::all(-1.), Margins::all(f64::NAN), Margins::all(f64::INFINITY), Margins::all(1000.)] {
+        p.page_setup.margins = m;
+        assert!(render_print_pdf(&p, g).is_err(), "{m:?}");
+    }
+    p.page_setup.margins = Margins::all(72.);
+    for width in [0., -1., f64::NAN, f64::INFINITY] {
+        p.graph_mut(g).unwrap().page.width_pt = width;
+        assert!(render_print_pdf(&p, g).is_err(), "{width}");
+    }
+}
+
+#[test]
+fn additional_lines_cross_the_layer_at_a_value_of_the_other_axis() {
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let y: Vec<f64> = x.iter().map(|v| (v - 5.0) / 5.0).collect();
+    let (mut p, g) = project(Template::Line, x, vec![y]);
+    let lines = |p: &Project| -> Vec<String> {
+        let scene = layout::build_scene(p, g, &FixedMetrics).unwrap();
+        scene.layers[0]
+            .overlay
+            .iter()
+            .filter_map(|it| match it {
+                scene::Item::Path { d, stroke: Some(_), fill: None } => Some(d.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    let before = lines(&p);
+    {
+        let layer = &mut p.graph_mut(g).unwrap().layers[0];
+        layer.x_axis.additional_line = Some(0.0); // Origin's "Y = 0" on the X axis page
+        layer.y_axis.additional_line = Some(5.0); // "X = 5" on the Y axis page
+    }
+    let geom = fixed_geometry(&p, g)[0].clone();
+    let f = geom.frame;
+    let after = lines(&p);
+    assert_eq!(after.len(), before.len() + 2, "two more lines");
+    // "M x0 y0 L x1 y1" as four numbers
+    let nums = |d: &str| -> Vec<f64> {
+        d.split(['M', 'L', ' ']).filter(|t| !t.is_empty()).filter_map(|t| t.parse().ok()).collect()
+    };
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-2;
+    let y0 = f.y + (1.0 - geom.y.to_unit(0.0)) * f.h;
+    let x5 = f.x + geom.x.to_unit(5.0) * f.w;
+    let is = |d: &String, want: [f64; 4]| {
+        let n = nums(d);
+        n.len() == 4 && n.iter().zip(want).all(|(&a, b)| near(a, b))
+    };
+    let horizontal = after.iter().any(|d| is(d, [f.x, y0, f.x + f.w, y0]));
+    let vertical = after.iter().any(|d| is(d, [x5, f.y, x5, f.y + f.h]));
+    assert!(horizontal && vertical, "{after:?}\ny0 {y0} x5 {x5} frame {f:?}");
+    // a value outside the axis range draws nothing
+    p.graph_mut(g).unwrap().layers[0].x_axis.additional_line = Some(99.0);
+    assert_eq!(lines(&p).len(), before.len() + 1);
 }

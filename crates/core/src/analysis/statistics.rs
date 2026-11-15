@@ -291,7 +291,7 @@ fn ttest(spec: &TTestSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
 //
 // The result sheets follow Origin's report: one group of columns for each of its tables (the descriptive
 // statistics, the test statistics, the confidence intervals; for proportions one set for each method), the
-// null and alternative hypotheses and the conclusion as notes. See docs/spec/statistics.md section 17.
+// null and alternative hypotheses and the conclusion as notes. See docs/spec/statistics.md section 21.
 
 /// Checks the confidence levels (percent) and returns them, or nothing when the intervals are off.
 fn check_levels(intervals: bool, levels: &[f64]) -> Result<Vec<f64>, AnalysisError> {

@@ -2,7 +2,7 @@
 //! Variance (`vartest1`), Two-Sample Test for Variance (`vartest2`), One-Sample Test for Proportion and
 //! Two-Sample Test for Proportions.
 //!
-//! Measured against OriginPro 2016 (docs/spec/statistics.md, section 17 (Variance and proportion tests); fixtures in
+//! Measured against OriginPro 2016 (docs/spec/statistics.md, section 21 (Variance and proportion tests); fixtures in
 //! `tests/origin_vartest.rs`). What Origin does, as far as these functions copy it:
 //!
 //! - one sample, variance: `chi2 = (n - 1) s^2 / sigma0^2` with `n - 1` degrees of freedom; the interval is

@@ -476,6 +476,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     shape: match shape {
                         PeakFitKind::Gauss => analysis::PeakShape::Gauss,
                         PeakFitKind::Lorentz => analysis::PeakShape::Lorentz,
+                        PeakFitKind::Voigt => analysis::PeakShape::Voigt,
                     },
                     baseline: match fit_baseline {
                         PeakFitBaselineKind::Constant => analysis::FitBaseline::Constant,
@@ -781,6 +782,62 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 kind: analysis::ProbPlotKind::QQ,
                 family: family_of(family),
                 graph: !no_graph,
+            })),
+        ),
+        AnalyzeTool::Pca { target, covariance, pairwise, components, standardize_scores, no_scores, no_graph } => (
+            target,
+            Job::Tool(Tool::Pca(analysis::PcaSpec {
+                correlation: !covariance,
+                pairwise,
+                components,
+                standardize_scores,
+                scores: !no_scores,
+                scree: !no_graph,
+            })),
+        ),
+        AnalyzeTool::Roc { target, positive, lower_is_positive, confidence, no_graph } => (
+            target,
+            Job::Tool(Tool::Roc(analysis::RocSpec {
+                positive,
+                higher_is_positive: !lower_is_positive,
+                confidence,
+                curve: !no_graph,
+            })),
+        ),
+        AnalyzeTool::Kmeans { target, clusters, max_passes, no_anova, no_membership, no_graph } => (
+            target,
+            Job::Tool(Tool::Kmeans(analysis::KmeansSpec {
+                clusters,
+                max_passes,
+                anova: !no_anova,
+                membership: !no_membership,
+                member_distance: !no_membership,
+                graph: !no_graph,
+            })),
+        ),
+        AnalyzeTool::KaplanMeier {
+            target,
+            censor,
+            confidence,
+            no_quartiles,
+            no_mean,
+            log_rank,
+            breslow,
+            tarone_ware,
+            band,
+            no_graph,
+        } => (
+            target,
+            Job::Tool(Tool::KaplanMeier(analysis::KaplanMeierSpec {
+                censor,
+                confidence,
+                quartiles: !no_quartiles,
+                mean: !no_mean,
+                log_rank,
+                breslow,
+                tarone_ware,
+                curve: !no_graph,
+                band,
             })),
         ),
         AnalyzeTool::Sort { target, by, descending } => {

@@ -108,6 +108,21 @@ pub fn defs() -> Vec<Def> {
         ],
         &[],
     );
+    let excel = obj(
+        vec![
+            (
+                "sheets",
+                strs(
+                    "Excel files: sheets to read, as names or 1-based positions (a number is a sheet's name if one has it, otherwise a position; default: every worksheet, hidden ones too, as Origin). The header and row settings of ascii apply to Excel too.",
+                ),
+            ),
+            (
+                "include_hidden",
+                b("Excel files: read hidden sheets when sheets is not given (they are read by default)."),
+            ),
+        ],
+        &[],
+    );
     let chi = obj(
         vec![
             ("split_scans", b("One sheet per scan of a multi-scan file (default true).")),
@@ -170,7 +185,7 @@ pub fn defs() -> Vec<Def> {
         },
         Def {
             name: "import_files",
-            description: "Import data files, folders or wildcards (CH Instruments text and .bin, CSV, other text) into the project. A file that fails is listed in errors; the others are imported.",
+            description: "Import data files, folders or wildcards (CH Instruments text and .bin, CSV, other text, Excel .xls/.xlsx/.xlsm with one sheet per Excel sheet) into the project. A file that fails is listed in errors; the others are imported.",
             read_only: false,
             schema: obj(
                 vec![
@@ -187,6 +202,7 @@ pub fn defs() -> Vec<Def> {
                     ("file_name_in_comments", b("Put the file name in the column comments.")),
                     ("ascii", ascii),
                     ("chi", chi),
+                    ("excel", excel),
                     ("plot", b("Also make a default graph of each book.")),
                 ],
                 &["files"],
@@ -259,7 +275,7 @@ pub fn defs() -> Vec<Def> {
                     (
                         "template",
                         s(
-                            "line, scatter, line+symbol, column, ... (the names of sheaf plot --template). Default: what the data suggests.",
+                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), ... (the names of sheaf plot --template). Default: what the data suggests.",
                         ),
                     ),
                     ("book", s(BOOK)),
@@ -276,6 +292,13 @@ pub fn defs() -> Vec<Def> {
                     ),
                     ("style", style_schema()),
                     (
+                        "options",
+                        crate::bridge::schema(
+                            &crate::bridge::subcommand(&["plot"]).expect("plot command"),
+                            &crate::bridge::session_filter("plot"),
+                        ),
+                    ),
+                    (
                         "size",
                         obj(
                             vec![("width_in", n("Page width in inches.")), ("height_in", n("Page height in inches."))],
@@ -289,11 +312,18 @@ pub fn defs() -> Vec<Def> {
         },
         Def {
             name: "export_graph",
-            description: "Render a graph to a file (png, svg, pdf, eps, tiff, emf, jpg, bmp) and/or return it as a PNG image to look at.",
+            description: "Render a graph to a file (png, svg, pdf, eps, tiff, emf, jpg, bmp) and/or return it as a PNG image to look at. With graphs or all_graphs, several graphs go into one multi-page PDF, one page per graph (at most 500).",
             read_only: false,
             schema: obj(
                 vec![
                     ("graph", s("Graph name. Default: the only graph.")),
+                    (
+                        "graphs",
+                        strs(
+                            "Several graph names, one PDF page each in this order (not with graph). Needs a .pdf path; return_image must not be true. At most 500 pages per call.",
+                        ),
+                    ),
+                    ("all_graphs", b("Every graph of the project, in project order, as with graphs (not with graph).")),
                     ("path", s("File to write; the extension picks the format.")),
                     (
                         "format",
@@ -314,14 +344,21 @@ pub fn defs() -> Vec<Def> {
         },
         Def {
             name: "export_data",
-            description: "Write a sheet as delimited text (comma for csv, tab for tsv).",
+            description: "Write a sheet as delimited text (comma for csv, tab for tsv) or as an Excel .xlsx workbook.",
             read_only: false,
             schema: obj(
                 vec![
                     ("book", s(BOOK)),
                     ("sheet", s(SHEET)),
                     ("path", s("File to write.")),
-                    ("format", en(&["csv", "tsv"], "Default: tabs for .tsv and .txt, commas otherwise.")),
+                    (
+                        "format",
+                        en(
+                            &["csv", "tsv", "xlsx"],
+                            "Default: xlsx for .xlsx, tabs for .tsv and .txt, commas otherwise.",
+                        ),
+                    ),
+                    ("all_sheets", b("xlsx only: write every sheet of the workbook (default: one sheet).")),
                 ],
                 &["path"],
             ),
@@ -352,7 +389,10 @@ pub fn defs() -> Vec<Def> {
                     ("x_range", s(XRANGE)),
                     (
                         "output",
-                        en(&["next_to_input"], "Where results go. Tools that write a table always use a new sheet."),
+                        en(
+                            &["next_to_input", "new_sheet"],
+                            "Where per-row results go (default: next_to_input). Tables use their own destinations. Sort and filter require next_to_input.",
+                        ),
                     ),
                 ],
                 &["tool"],
@@ -431,6 +471,13 @@ pub fn defs() -> Vec<Def> {
                     ("global", obj(vec![("share", strs("Parameters shared by all columns."))], &[])),
                     ("regress", strs("Multiple linear regression of the first y on these X columns.")),
                     ("plot", s("Also render the first fit as an image at this path.")),
+                    (
+                        "options",
+                        crate::bridge::schema(
+                            &crate::bridge::subcommand(&["fit"]).expect("fit command"),
+                            &crate::bridge::session_filter("fit"),
+                        ),
+                    ),
                 ],
                 &[],
             ),

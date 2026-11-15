@@ -1,7 +1,7 @@
 //! Tests for variance and proportions against numbers from Origin (OriginPro 2016): the X-functions
 //! `vartest1` and `vartest2` (LabTalk probes) and the report sheets of the One-Sample and Two-Sample Test for
 //! Variance, One-Sample Proportion Test and Two-Sample Proportion Test dialogs (run through the menu with
-//! `tools/origin-ref/origin-dialog.ps1`). docs/spec/statistics.md section 17 lists every case and what was not
+//! `tools/origin-ref/origin-dialog.ps1`). docs/spec/statistics.md section 21 lists every case and what was not
 //! measured. The inputs are closed-form columns that we generated. Tolerance 1e-6 relative everywhere (Origin
 //! prints 15 digits; its exact binomial p-values carry errors near 1e-11).
 

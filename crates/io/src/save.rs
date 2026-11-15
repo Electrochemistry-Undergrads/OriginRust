@@ -113,7 +113,7 @@ pub fn save_project(project: &Project, path: &Path) -> Result<SaveOutcome, IoErr
     }
     let companion = companion_path(&path);
     let name = path.file_stem().and_then(|s| s.to_str()).filter(|s| !s.is_empty()).unwrap_or("Project");
-    let written = match opj::write_named(project, name, opj::julian_day_now()) {
+    let mut written = match opj::write_named(project, name, opj::julian_day_now()) {
         Ok(w) => w,
         Err(IoError::OpjWrite { reason }) => {
             ensure_companion_free(&companion)?;
@@ -125,6 +125,9 @@ pub fn save_project(project: &Project, path: &Path) -> Result<SaveOutcome, IoErr
         }
         Err(e) => return Err(e),
     };
+    if project.page_setup != sheaf_core::page_setup::PageSetup::default() {
+        written.warnings.push("Page Setup (paper, orientation and margins) is not stored in an .opj file.".to_string());
+    }
     if !written.warnings.is_empty() {
         // Checked before anything is written, so a refusal leaves every file as it was.
         ensure_companion_free(&companion)?;
@@ -197,7 +200,7 @@ pub fn backup_original(path: &Path) -> Result<Option<PathBuf>, IoError> {
 }
 
 /// Writes to a temporary file next to `path` and renames it over `path`.
-fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), IoError> {
+pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), IoError> {
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "project".into());
     let tmp = path.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
     let result = std::fs::write(&tmp, bytes)

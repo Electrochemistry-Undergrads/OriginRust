@@ -146,7 +146,7 @@ the default project format.
         Set Column Values layout and controls (T09); Column Properties formats and ASCII import
         options in Origin's layout (T19 items 1 and 3)
   - [x] Export Graphs layout, preview, filename substitution, Apply and image settings (T05);
-        worksheet export dialog (T07)
+        worksheet export dialog (T07); several graphs in one multi-page PDF (T32)
   - [x] Window/worksheet commands and shortcuts (T01/T02): multi-panel and Y-error plotting,
         Add Error Bars, legend update, Refresh/recalculation, Go to and Explorer rename/delete
   - [x] Edit > Find in Sheets (Ctrl+F), Replace (Ctrl+H), Worksheet > Clear Worksheet,
@@ -154,7 +154,7 @@ the default project format.
         columns or a graph sharing its data); interpolation menu presets (2026-11-13)
   - [ ] Peak Analyzer wizard (T04), Import Wizard pages 2-6 measured against Origin (T19 item 2),
         remaining Plot Details/axis controls and separate Layer Contents/Plot Setup dialogs
-        (T13; Individual X/Y multipliers, Skip Points and White Out now available)
+        (T13; Individual X/Y multipliers, Skip Points, White Out and label Frame/Margin now available)
   - [ ] Owner's click-through; remaining dialog options listed in each brief
 - [x] Write `.opj`: workbooks (names, long names, units, comments, designations, text and numbers),
       verified by opening the files in Origin and comparing every cell (`sheaf export ... -o
@@ -195,7 +195,7 @@ the default project format.
   - [x] The Integrate gadget on graphs (Gadgets > Integrate): drag a range, see the shaded area
         and its value live, write it to a sheet; same rows and rule as Analysis > Integrate
   - [x] Peak analysis chain: baseline, find peaks (four methods, filters), integrate each peak,
-        multi-peak Gauss or Lorentz fit (Analysis > Analyze Peaks, `sheaf analyze peaks`); the
+        multi-peak Gauss, Lorentz or Voigt fit (Analysis > Analyze Peaks, `sheaf analyze peaks`); the
         limit rules and the multi-peak fit are not yet compared with Origin's Peak Analyzer
   - [x] Curve mathematics (T22, `734a1ff`): Average Multiple Curves (X-grid/range and interpolation
         choices, optional SD/count), Intersect and Polygon Area; app dialogs, CLI and Manual/Auto
@@ -254,10 +254,14 @@ the default project format.
       (T05). PSD is a flattened RGB, grayscale or indexed image with resolution metadata.
       TIFF also supports indexed 256 colors with None/PackBits/LZW compression.
       Graph/dialog themes, mono and 16-color modes remain
+- [ ] Printing (T27): Windows graph print dialog, Print Preview and saved Page Setup exist;
+      `sheaf print` writes paper-sized vector PDF and submits through `lp` on macOS/Linux.
+      Workbook printing, native macOS panel and Windows CLI submission remain
 - [x] MCP server (T25 phase 1, branch `mcp-server`): `sheaf-mcp` speaks the Model Context Protocol over
       stdio so Claude and other AI tools can import, plot, analyze, fit, export and save through the
       shared `sheaf-ops` crate; file access is limited to `--root` folders. Phase 2 (act on the open
-      desktop app) is left; `analyze` reaches every tool of `sheaf analyze` and three prompts are offered
+      desktop app) is left; `analyze` reaches every tool of `sheaf analyze`, `plot` and `fit` accept
+      CLI-derived options, analysis can write to a new sheet, and three prompts are offered
       (`docs/spec/mcp.md`)
 - [ ] Matrices, contour plots and heatmaps (matrix branch is not merged)
 - [x] Statistics: t-tests, one- and two-way ANOVA, Mann-Whitney, Wilcoxon, Kruskal-Wallis,

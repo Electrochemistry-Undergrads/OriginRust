@@ -30,6 +30,10 @@ pub const CELL_CAP: usize = 10_000;
 const ROW_CAP: usize = 10_000_000;
 /// Largest image the server renders.
 const PIXEL_CAP: f64 = 40_000_000.0;
+
+/// The most pages one `export_graph` call writes into a multi-page PDF. Sheaf's own bound for
+/// one tool call (not an Origin limit): each page costs a render and a conversion.
+const MAX_EXPORT_PAGES: usize = 500;
 /// Longest side of an image returned in a reply.
 const IMAGE_SIDE: f64 = 1600.0;
 /// Largest file `import_files` reads.
@@ -499,6 +503,14 @@ struct AsciiArgs {
     date_order: Option<String>,
 }
 
+/// Which sheets of an Excel file to read. The header and row settings are those of `ascii`.
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields, default)]
+struct ExcelArgs {
+    sheets: Vec<String>,
+    include_hidden: bool,
+}
+
 #[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields, default)]
 struct ChiArgs {
@@ -520,6 +532,7 @@ struct ImportArgs {
     file_name_in_comments: bool,
     ascii: AsciiArgs,
     chi: ChiArgs,
+    excel: ExcelArgs,
     plot: bool,
 }
 
@@ -574,6 +587,8 @@ fn read_settings(a: &ImportArgs) -> Result<ReadSettings, ToolError> {
     }
     r.dates_as_text = one_of("dates", x.dates.as_deref().unwrap_or("detect"), &["detect", "text"])? == "text";
     r.day_first = one_of("date_order", x.date_order.as_deref().unwrap_or("mdy"), &["mdy", "dmy"])? == "dmy";
+    r.sheets = a.excel.sheets.iter().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
+    r.hidden_sheets = a.excel.include_hidden;
     Ok(r)
 }
 
@@ -885,6 +900,7 @@ struct PlotArgs {
     graph: Option<String>,
     panels: Option<PanelArgs>,
     overlay_files: Vec<String>,
+    options: Option<Map<String, Value>>,
     style: Option<Map<String, Value>>,
     size: Option<SizeArgs>,
 }
@@ -962,8 +978,163 @@ fn panels_from(p: PanelArgs) -> Result<PanelsSpec, ToolError> {
     })
 }
 
-fn plot(s: &mut Server, a: &Value) -> Res {
-    let a: PlotArgs = args(a)?;
+// Combine the structured interface with CLI option names before clap checks conflicts and requirements.
+fn bridge_insert(map: &mut Map<String, Value>, key: &str, value: Value) -> Result<(), ToolError> {
+    if value.is_null() {
+        return Ok(());
+    }
+    map.retain(|k, v| k.replace('-', "_") != key || !v.is_null());
+    if map.keys().any(|k| k.replace('-', "_") == key) {
+        return Err(ToolError::new(format!("option '{key}' is given in both options and a structured argument")));
+    }
+    map.insert(key.to_string(), value);
+    Ok(())
+}
+
+fn session_options(raw: &Value, command: &str) -> Result<Map<String, Value>, ToolError> {
+    let obj = raw.as_object().ok_or_else(|| ToolError::new("arguments must be an object"))?;
+    let mut map = match obj.get("options") {
+        None | Some(Value::Null) => Map::new(),
+        Some(Value::Object(m)) => m.clone(),
+        _ => return Err(ToolError::new("options must be an object")),
+    };
+    let common: &[&str] = if command == "plot" {
+        &["template", "book", "sheet", "y", "y2", "graph"]
+    } else {
+        &[
+            "model",
+            "formula",
+            "params",
+            "fdf",
+            "book",
+            "sheet",
+            "y",
+            "rows",
+            "x_range",
+            "yerr",
+            "xerr",
+            "confidence",
+            "bands",
+            "max_iterations",
+            "tolerance",
+            "rank",
+            "regress",
+        ]
+    };
+    for key in common {
+        if let Some(v) = obj.get(*key) {
+            let normalized = if command == "fit" && *key == "bands" {
+                v.as_str().map(|x| Value::String(x.trim().to_ascii_lowercase())).unwrap_or_else(|| v.clone())
+            } else {
+                v.clone()
+            };
+            bridge_insert(&mut map, key, normalized)?;
+        }
+    }
+    if command == "plot" {
+        if let Some(Value::Object(style)) = obj.get("style") {
+            let converted = style_from(Some(style.clone()), None)?;
+            let converted = serde_json::to_value(converted).map_err(|e| ToolError::new(e.to_string()))?;
+            for key in style.keys() {
+                let dest = if key == "text_labels" { "label" } else { key };
+                bridge_insert(&mut map, dest, converted[dest].clone())?;
+            }
+        }
+        if let Some(Value::Object(size)) = obj.get("size") {
+            for (from, to) in [("width_in", "width"), ("height_in", "height")] {
+                if let Some(v) = size.get(from) {
+                    bridge_insert(&mut map, to, v.clone())?;
+                }
+            }
+        }
+        if let Some(Value::Object(p)) = obj.get("panels") {
+            for (from, to) in [
+                ("shape", "panels"),
+                ("per_panel", "per_panel"),
+                ("gap", "panel_gap"),
+                ("margins", "panel_margins"),
+                ("order", "panel_order"),
+                ("link", "panel_link"),
+            ] {
+                if let Some(v) = p.get(from) {
+                    let v = if from == "order" || from == "link" {
+                        v.as_str()
+                            .map(|s| Value::String(s.trim().to_ascii_lowercase().replace('_', "-")))
+                            .unwrap_or_else(|| v.clone())
+                    } else {
+                        v.clone()
+                    };
+                    bridge_insert(&mut map, to, v)?;
+                }
+            }
+            if let Some(Value::Array(groups)) = p.get("y") {
+                let groups = groups
+                    .iter()
+                    .map(|g| {
+                        g.as_array()
+                            .map(|a| a.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(","))
+                            .map(Value::String)
+                            .unwrap_or_else(|| g.clone())
+                    })
+                    .collect();
+                bridge_insert(&mut map, "panel_y", Value::Array(groups))?;
+            }
+        }
+    } else {
+        for (from, to) in [("weighting", "weight"), ("band_level", "level"), ("compare_with", "compare")] {
+            if let Some(v) = obj.get(from) {
+                let normalized = if from == "weighting" {
+                    v.as_str().map(|x| Value::String(x.trim().to_ascii_lowercase())).unwrap_or_else(|| v.clone())
+                } else {
+                    v.clone()
+                };
+                bridge_insert(&mut map, to, normalized)?;
+            }
+        }
+        if let Some(v) = obj.get("scale_errors").filter(|v| !v.is_null()) {
+            bridge_insert(
+                &mut map,
+                "no_scale_errors",
+                Value::Bool(!v.as_bool().ok_or_else(|| ToolError::new("scale_errors must be boolean"))?),
+            )?;
+        }
+        for key in ["init", "fix", "bounds"] {
+            if let Some(Value::Object(entries)) = obj.get(key) {
+                let mut values = Vec::new();
+                for (name, value) in entries {
+                    let text = if key == "bounds" {
+                        let a = value.as_array().filter(|a| a.len() == 2).ok_or_else(|| {
+                            ToolError::new(format!("bounds of \"{name}\" must be [low, high], with null for no bound"))
+                        })?;
+                        let side = |v: &Value| if v.is_null() { String::new() } else { v.to_string() };
+                        format!("{}:{}", side(&a[0]), side(&a[1]))
+                    } else {
+                        value.to_string()
+                    };
+                    values.push(Value::String(format!("{name}={text}")));
+                }
+                bridge_insert(&mut map, key, Value::Array(values))?;
+            }
+        }
+        if let Some(Value::Object(global)) = obj.get("global") {
+            bridge_insert(&mut map, "global", json!(true))?;
+            if let Some(v) = global.get("share") {
+                bridge_insert(&mut map, "share", v.clone())?;
+            }
+        }
+    }
+    Ok(map)
+}
+
+fn session_cli(s: &Server, command: &str, raw: &Value) -> Result<sheaf_ops::args::Cli, ToolError> {
+    let options = session_options(raw, command)?;
+    let roots = s.roots.clone();
+    let mut resolve = |p: &str| roots.check(p).map(|p| p.to_string_lossy().into_owned()).map_err(|e| anyhow!("{e}"));
+    Ok(bridge::parse_session(command, &options, &mut resolve)?)
+}
+
+fn plot(s: &mut Server, a_raw: &Value) -> Res {
+    let a: PlotArgs = args(a_raw)?;
     if !a.overlay_files.is_empty() && (a.book.is_some() || a.sheet.is_some() || a.graph.is_some()) {
         return Err(ToolError::new("overlay_files cannot be combined with book, sheet or graph"));
     }
@@ -972,6 +1143,12 @@ fn plot(s: &mut Server, a: &Value) -> Res {
             "with graph, plot only restyles that graph; template, y and y2 are not used. Leave graph out to make a new graph",
         ));
     }
+    let bridged = if a.options.is_some() {
+        let sheaf_ops::args::Command::Plot(cli) = session_cli(s, "plot", a_raw)?.command else { unreachable!() };
+        Some(sheaf_ops::cli_plot::plot_spec(&cli))
+    } else {
+        None
+    };
     let mut spec = PlotSpec {
         template: a.template.clone(),
         y: a.y.clone(),
@@ -984,8 +1161,19 @@ fn plot(s: &mut Server, a: &Value) -> Res {
         overlay_books: Vec::new(),
         style: style_from(a.style, a.size.as_ref())?,
     };
-    let mut ys = a.y.clone();
-    ys.extend(a.y2.iter().cloned());
+    if let Some(mut parsed) = bridged {
+        parsed.book = book_name(&s.project, parsed.book.as_deref())?;
+        parsed.overlay = !a.overlay_files.is_empty();
+        spec = parsed;
+    }
+    if !a.overlay_files.is_empty() && (spec.book.is_some() || spec.sheet.is_some() || spec.graph.is_some()) {
+        return Err(ToolError::new("overlay_files cannot be combined with book, sheet or graph"));
+    }
+    if spec.graph.is_some() && (spec.template.is_some() || !spec.y.is_empty() || !spec.y2.is_empty()) {
+        return Err(ToolError::new("with graph, plot only restyles that graph; template, y and y2 are not used"));
+    }
+    let mut ys = spec.y.clone();
+    ys.extend(spec.y2.iter().cloned());
     check_names(&s.project, spec.book.as_deref(), spec.sheet.as_deref(), &ys)?;
     spec.validate()?;
     let overlay_files = a.overlay_files;
@@ -1030,6 +1218,11 @@ fn plot(s: &mut Server, a: &Value) -> Res {
 #[serde(deny_unknown_fields)]
 struct ExportArgs {
     graph: Option<String>,
+    /// Several graphs, in page order, for one multi-page PDF.
+    graphs: Option<Vec<String>>,
+    /// Every graph of the project, in project order.
+    #[serde(default)]
+    all_graphs: bool,
     path: Option<String>,
     format: Option<String>,
     dpi: Option<f64>,
@@ -1050,14 +1243,114 @@ fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
     Some((be(16), be(20)))
 }
 
-fn export_graph(s: &mut Server, a: &Value) -> Res {
-    let a: ExportArgs = args(a)?;
-    let graph = pick_graph(&s.project, a.graph.as_deref())?;
-    let graph_name = s.project.graph(graph).map(|g| g.name.clone()).unwrap_or_default();
-    let dpi = a.dpi.unwrap_or(300.0);
+/// The graphs `graphs` or `all_graphs` name, each resolved as `pick_graph` does; `None` when
+/// neither is given.
+fn export_graph_list(project: &Project, a: &ExportArgs) -> Result<Option<Vec<WindowId>>, ToolError> {
+    if a.graph.is_some() && (a.graphs.is_some() || a.all_graphs) {
+        return Err(ToolError::new(
+            "give graph for one graph, or graphs or all_graphs for several; not graph together with them",
+        ));
+    }
+    let ids = match (&a.graphs, a.all_graphs) {
+        (Some(_), true) => return Err(ToolError::new("give graphs or all_graphs, not both")),
+        (Some(names), false) if names.len() > MAX_EXPORT_PAGES => return Err(too_many_pages(names.len())),
+        (Some(names), false) => names.iter().map(|n| pick_graph(project, Some(n))).collect::<Result<Vec<_>, _>>()?,
+        (None, true) => project.graphs().map(|g| g.id).collect(),
+        (None, false) => return Ok(None),
+    };
+    if ids.len() > MAX_EXPORT_PAGES {
+        return Err(too_many_pages(ids.len()));
+    }
+    if ids.is_empty() {
+        return Err(ToolError::new(if a.all_graphs { "the project has no graph" } else { "graphs is empty" }));
+    }
+    Ok(Some(ids))
+}
+
+fn too_many_pages(n: usize) -> ToolError {
+    ToolError::new(format!(
+        "{n} graphs is too many for one PDF; the limit is {MAX_EXPORT_PAGES} pages per call. Export them in several files"
+    ))
+}
+
+fn check_dpi(dpi: f64) -> Result<(), ToolError> {
     if !(dpi.is_finite() && (36.0..=1200.0).contains(&dpi)) {
         return Err(ToolError::new(format!("dpi must be between 36 and 1200 (got {dpi})")));
     }
+    Ok(())
+}
+
+/// Fails when the figure of `graph` at this size and dpi would pass the pixel cap.
+fn check_pixels(project: &Project, graph: WindowId, size: sheaf_plot::ExportSize, dpi: f64) -> Result<(), ToolError> {
+    let page = project.graph(graph).map(|g| (g.page.width_pt, g.page.height_pt)).unwrap_or((360.0, 252.0));
+    let scale = size.scale(page.0, page.1).map_err(|e| ToolError::new(e.to_string()))?;
+    let (est_w, est_h) = (page.0 / 72.0 * scale * dpi, page.1 / 72.0 * scale * dpi);
+    if est_w * est_h > PIXEL_CAP {
+        return Err(ToolError::new(format!(
+            "the figure would be about {est_w:.0} x {est_h:.0} pixels; the limit is 40 million pixels. Lower dpi or the size"
+        )));
+    }
+    Ok(())
+}
+
+/// Several graphs into one PDF, one page per graph (Origin 2018b's multi-page PDF export,
+/// expGraph `multipage`). Sheaf's own rules: a path is needed, the format must be pdf, no image
+/// is returned, and each page passes the same pixel cap as a one-graph export.
+fn export_pages(s: &Server, a: &ExportArgs, ids: &[WindowId], dpi: f64) -> Res {
+    let Some(path) = a.path.as_deref() else {
+        return Err(ToolError::new("several graphs go into one PDF file; give a path ending in .pdf"));
+    };
+    let path = s.roots.check(path)?;
+    let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
+    let format = a.format.as_deref().map(str::to_ascii_lowercase).or(ext.clone());
+    if format.as_deref() != Some("pdf") || ext.as_deref().is_some_and(|e| e != "pdf") {
+        return Err(ToolError::new(
+            "several graphs can only be exported as one multi-page PDF; use a path ending in .pdf, or one graph",
+        ));
+    }
+    if a.return_image == Some(true) {
+        return Err(ToolError::new(
+            "return_image works with one graph only; export the graphs to the PDF, then one graph to look at",
+        ));
+    }
+    let settings = ExportSettings {
+        dpi,
+        image_width: a.width.clone(),
+        image_height: a.height.clone(),
+        margin: MarginSettings { margin: a.margin.clone().unwrap_or_else(|| "auto".to_string()), border_width: None },
+    };
+    let (size, layout) = settings.resolve()?;
+    for &g in ids {
+        check_pixels(&s.project, g, size, dpi)?;
+    }
+    let bytes = sheaf_plot::render_multipage_pdf(&s.project, ids, size, layout)
+        .context("could not render the graphs as one PDF")?;
+    std::fs::write(&path, &bytes)
+        .with_context(|| format!("could not write '{}'", path.display()))
+        .map_err(ToolError::from)?;
+    let names: Vec<String> = ids.iter().filter_map(|&g| s.project.graph(g)).map(|g| g.name.clone()).collect();
+    Ok(ToolOut::json(json!({
+        "graph": names.first(), "graphs": names, "pages": ids.len(), "path": path, "format": "pdf",
+        "width_px": None::<u32>, "height_px": None::<u32>, "bytes": bytes.len(),
+    })))
+}
+
+fn export_graph(s: &mut Server, a: &Value) -> Res {
+    let a: ExportArgs = args(a)?;
+    let list = export_graph_list(&s.project, &a)?;
+    let dpi = a.dpi.unwrap_or(300.0);
+    if let Some(ids) = &list
+        && ids.len() > 1
+    {
+        check_dpi(dpi)?;
+        return export_pages(s, &a, ids, dpi);
+    }
+    let graph = match list {
+        Some(ids) => ids[0],
+        None => pick_graph(&s.project, a.graph.as_deref())?,
+    };
+    let graph_name = s.project.graph(graph).map(|g| g.name.clone()).unwrap_or_default();
+    check_dpi(dpi)?;
     let path = a.path.as_deref().map(|p| s.roots.check(p)).transpose()?;
     let from_path = path.as_ref().and_then(|p| p.extension()).and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
     let same = |f: &str, e: &str| {
@@ -1094,14 +1387,7 @@ fn export_graph(s: &mut Server, a: &Value) -> Res {
         margin: MarginSettings { margin: a.margin.clone().unwrap_or_else(|| "auto".to_string()), border_width: None },
     };
     let (size, _) = settings.resolve()?;
-    let page = s.project.graph(graph).map(|g| (g.page.width_pt, g.page.height_pt)).unwrap_or((360.0, 252.0));
-    let scale = size.scale(page.0, page.1).map_err(|e| ToolError::new(e.to_string()))?;
-    let (est_w, est_h) = (page.0 / 72.0 * scale * dpi, page.1 / 72.0 * scale * dpi);
-    if est_w * est_h > PIXEL_CAP {
-        return Err(ToolError::new(format!(
-            "the figure would be about {est_w:.0} x {est_h:.0} pixels; the limit is 40 million pixels. Lower dpi or the size"
-        )));
-    }
+    check_pixels(&s.project, graph, size, dpi)?;
     let bytes = sheaf_ops::render::render_graph(&s.project, graph, &settings, &format)?;
     if let Some(p) = &path {
         std::fs::write(p, &bytes)
@@ -1141,6 +1427,8 @@ struct ExportDataArgs {
     sheet: Option<String>,
     path: String,
     format: Option<String>,
+    #[serde(default)]
+    all_sheets: bool,
 }
 
 fn export_data(s: &mut Server, a: &Value) -> Res {
@@ -1148,11 +1436,18 @@ fn export_data(s: &mut Server, a: &Value) -> Res {
     let path = s.roots.check(&a.path)?;
     let (book, sheet) = locate_sheet(&s.project, a.book.as_deref(), a.sheet.as_deref())?;
     let ws = &s.project.workbook(book).ok_or_else(|| anyhow!("workbook not found"))?.sheets[sheet];
-    let format = match a.format.as_deref() {
-        Some(f) => match one_of("format", f, &["csv", "tsv"])?.as_str() {
-            "tsv" => SheetFormat::Tsv,
-            _ => SheetFormat::Csv,
-        },
+    let chosen = a.format.as_deref().map(|f| one_of("format", f, &["csv", "tsv", "xlsx"])).transpose()?;
+    if chosen.as_deref() == Some("xlsx") || (chosen.is_none() && sheaf_ops::tabular::is_xlsx_path(&path)) {
+        let request = sheaf_ops::tabular::XlsxRequest { all_sheets: a.all_sheets, ..Default::default() };
+        let out = sheaf_ops::tabular::write_xlsx(&s.project, book, a.sheet.as_deref(), &request, &path)?;
+        return Ok(ToolOut::json(json!({
+            "path": out.path, "sheets": out.sheet_names, "warnings": out.warnings,
+            "rows": ws.row_count(), "columns": ws.columns.len(),
+        })));
+    }
+    let format = match chosen.as_deref() {
+        Some("tsv") => SheetFormat::Tsv,
+        Some(_) => SheetFormat::Csv,
         None => SheetFormat::from_path(&path),
     };
     let bytes = sheaf_ops::tabular::sheet_to_bytes(ws, format)?;
@@ -1196,15 +1491,11 @@ fn report_json(project: &Project, r: &sheaf_core::analysis::Report) -> Value {
 
 fn analyze(s: &mut Server, a: &Value) -> Res {
     let a: AnalyzeArgs = args(a)?;
-    match a.output.as_deref() {
-        None | Some("next_to_input") => {}
-        Some("new_sheet") => {
-            return Err(ToolError::new(
-                "output \"new_sheet\" is not available: results go next to the input, and tools that write a table use a new sheet by themselves",
-            ));
-        }
-        Some(o) => return Err(ToolError::new(format!("output must be next_to_input (got \"{o}\")"))),
-    }
+    let output = match a.output.as_deref() {
+        None | Some("next_to_input") => sheaf_core::analysis::OutputTarget::NextToInput,
+        Some("new_sheet") => sheaf_core::analysis::OutputTarget::NewSheet,
+        Some(o) => return Err(ToolError::new(format!("output must be next_to_input or new_sheet (got \"{o}\")"))),
+    };
     let options = a.options.clone().unwrap_or_default();
     let columns = a.columns.clone().unwrap_or_default();
     match analysis_tools::resolve(&a.tool)? {
@@ -1219,7 +1510,7 @@ fn analyze(s: &mut Server, a: &Value) -> Res {
                 x_range: a.x_range,
                 read: ReadSettings::default(),
             };
-            let run = s.transact(|s| Ok(sheaf_ops::analyze::run_job(&mut s.project, &target, job)?))?;
+            let run = s.transact(|s| Ok(sheaf_ops::analyze::run_job_to(&mut s.project, &target, job, &output)?))?;
             match run.outcome {
                 Outcome::Report(r) => Ok(ToolOut::json(report_json(&s.project, &r))),
                 _ => Err(ToolError::new("the tool gave no report")),
@@ -1227,7 +1518,7 @@ fn analyze(s: &mut Server, a: &Value) -> Res {
         }
         analysis_tools::Which::Bridged(tool) => {
             check_names(&s.project, a.book.as_deref(), a.sheet.as_deref(), &columns)?;
-            analyze_bridged(s, &tool, &options, &columns, &a)
+            analyze_bridged(s, &tool, &options, &columns, &a, &output)
         }
     }
 }
@@ -1241,6 +1532,7 @@ fn analyze_bridged(
     options: &Map<String, Value>,
     columns: &[String],
     a: &AnalyzeArgs,
+    output: &sheaf_core::analysis::OutputTarget,
 ) -> Res {
     let selection = bridge::Selection {
         columns,
@@ -1285,7 +1577,7 @@ fn analyze_bridged(
         x_range: target_args.x_range,
         read: ReadSettings::default(),
     };
-    let run = s.transact(|s| Ok(sheaf_ops::analyze::run_job(&mut s.project, &target, job)?))?;
+    let run = s.transact(|s| Ok(sheaf_ops::analyze::run_job_to(&mut s.project, &target, job, output)?))?;
     for f in &run.foreign_inputs {
         if !s.foreign.contains(f) {
             s.foreign.push(f.clone());
@@ -1398,6 +1690,7 @@ struct FitArgs {
     global: Option<GlobalArgs>,
     regress: Vec<String>,
     plot: Option<String>,
+    options: Option<Map<String, Value>>,
 }
 
 fn fit_spec(a: &FitArgs, project: &Project, fdf: Option<PathBuf>) -> Result<FitSpec, ToolError> {
@@ -1506,11 +1799,19 @@ fn fit_json(project: &Project, o: &sheaf_core::fitting::FitOutcome) -> Value {
     })
 }
 
-fn fit(s: &mut Server, a: &Value) -> Res {
-    let a: FitArgs = args(a)?;
+fn fit(s: &mut Server, a_raw: &Value) -> Res {
+    let a: FitArgs = args(a_raw)?;
     let fdf = a.fdf.as_deref().map(|p| s.roots.check(p)).transpose()?;
     let plot_path = a.plot.as_deref().map(|p| s.roots.check(p)).transpose()?;
-    let spec = fit_spec(&a, &s.project, fdf)?;
+    let spec = if a.options.is_some() {
+        let sheaf_ops::args::Command::Fit(cli) = session_cli(s, "fit", a_raw)?.command else { unreachable!() };
+        let mut spec = sheaf_ops::cli_fit::fit_spec(&cli);
+        spec.book = book_name(&s.project, spec.book.as_deref())?;
+        check_names(&s.project, spec.book.as_deref(), spec.sheet.as_deref(), &spec.y)?;
+        spec
+    } else {
+        fit_spec(&a, &s.project, fdf)?
+    };
     if plot_path.is_some() && (spec.compare.is_some() || !spec.rank.is_empty() || !spec.regress.is_empty()) {
         return Err(ToolError::new("plot applies to a fit of a model, not to compare_with, rank or regress"));
     }

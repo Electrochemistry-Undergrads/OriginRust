@@ -47,8 +47,11 @@ pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
+pub use multivariate::{KmeansSpec, PcaSpec};
+pub use roc::RocSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
+pub use survival::KaplanMeierSpec;
 
 /// The multi-peak fit of [`PeakChainSpec`]: a sum of `shape` peaks on `baseline`, one peak for
 /// every peak the search found, started at the found centre, width and height.
@@ -124,7 +127,7 @@ pub struct InterpSpec {
     /// X range of the result; `None` is the X range of the data.
     pub range: Option<(f64, f64)>,
     /// Smoothing factor of the B-spline method: the allowed sum of squared residuals (Origin's
-    /// `sf`). 0 gives the interpolating spline, which differs from Origin's automatic factor.
+    /// `sf`). 0 chooses the factor from the data as Origin does (`sheaf_calc::automatic_smoothing`).
     pub smoothing: f64,
     /// Interpolate onto the values of this column instead of an even grid (Mathematics >
     /// Interpolate/Extrapolate Y from X, Origin's `interp1` with `ix` given); `npts` and `range` are
@@ -830,6 +833,15 @@ pub enum Tool {
     DistFit(DistFitSpec),
     /// Probability plot and Q-Q plot against a distribution family; makes a graph.
     ProbPlot(ProbPlotSpec),
+    /// Statistics > Multivariate Analysis > Principal Component Analysis (T29, `docs/spec/statistics.md` section 17).
+    Pca(PcaSpec),
+    /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (T29, `docs/spec/statistics.md` section 18).
+    Kmeans(KmeansSpec),
+    /// Statistics > ROC Curve (T29, `docs/spec/statistics.md` section 19): test variables, then the state column.
+    Roc(RocSpec),
+    /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
+    /// censor and, optionally, group columns.
+    KaplanMeier(KaplanMeierSpec),
     AverageCurves(AverageSpec),
     Intersect(IntersectSpec),
     PolygonArea,
@@ -912,6 +924,10 @@ impl Tool {
                 ProbPlotKind::Probability => "Probability plot",
                 ProbPlotKind::QQ => "Q-Q plot",
             },
+            Tool::Pca(_) => "Principal component analysis",
+            Tool::Kmeans(_) => "K-means cluster analysis",
+            Tool::Roc(_) => "ROC curve",
+            Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::AverageCurves(_) => "Average multiple curves",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "Polygon area",
@@ -965,6 +981,10 @@ impl Tool {
                 ProbPlotKind::Probability => "ProbPlot",
                 ProbPlotKind::QQ => "QQPlot",
             },
+            Tool::Pca(_) => "PCA",
+            Tool::Kmeans(_) => "KMeans",
+            Tool::Roc(_) => "ROC",
+            Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::AverageCurves(_) => "AverageResult",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "PolygonArea",
@@ -1476,9 +1496,10 @@ fn run_peak_chain(
             let get = |name: String| report.param(&name).map_or(f64::NAN, |p| p.value);
             let mut total = 0.0;
             for k in 1..=starts.len() {
-                let (xc, w, a) = (get(format!("xc{k}")), get(format!("w{k}")), get(format!("A{k}")));
-                total += a;
-                fitted_peaks.push([xc, fs.shape.height(w, a), fs.shape.fwhm(w), a, 0.0]);
+                let p: Vec<f64> = fs.shape.param_names(k).into_iter().map(get).collect();
+                let peak = fs.shape.summary(&p);
+                total += peak.area;
+                fitted_peaks.push([peak.center, peak.height, peak.fwhm, peak.area, 0.0]);
             }
             for p in fitted_peaks.iter_mut() {
                 p[4] = if total != 0.0 { 100.0 * p[3] / total } else { f64::NAN };
@@ -1524,8 +1545,11 @@ mod categorical;
 mod curves;
 mod dist;
 mod manip;
+mod multivariate;
 mod power;
+mod roc;
 mod statistics;
+mod survival;
 pub use manip::{
     MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
 };
@@ -1618,7 +1642,12 @@ impl Project {
         // The two-way ANOVA reads its columns itself: the factor columns may hold text.
         let own_columns = matches!(
             request.tool,
-            Tool::TwoWayAnova(_) | Tool::Crosstab(_) | Tool::DiscreteFrequency(_) | Tool::PropTest(_)
+            Tool::TwoWayAnova(_)
+                | Tool::Crosstab(_)
+                | Tool::DiscreteFrequency(_)
+                | Tool::PropTest(_)
+                | Tool::Roc(_)
+                | Tool::KaplanMeier(_)
         );
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
@@ -1712,6 +1741,27 @@ impl Project {
             }
             Tool::DistFit(_) | Tool::ProbPlot(_) => {
                 let out = dist::run(&request.tool, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::Roc(spec) => {
+                let out = roc::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::KaplanMeier(spec) => {
+                let out = survival::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::Pca(_) | Tool::Kmeans(_) => {
+                let out = multivariate::run(&request.tool, &inputs)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;
@@ -3995,6 +4045,24 @@ mod tests {
         assert!((t.rows[0].1[h("Fit area %")] + t.rows[1].1[h("Fit area %")] - 100.0).abs() < 1e-9);
         assert_eq!(r.notes.len(), 1);
         assert!(r.notes[0].contains("R^2"));
+    }
+
+    #[test]
+    fn peak_chain_voigt_fit_of_gauss_peaks_gives_their_center_width_and_area() {
+        // Gaussian peaks: the Voigt's Lorentzian width goes to its bound 0 and the Voigt FWHM
+        // (0.5346 wL + sqrt(0.2166 wL^2 + wG^2)) is the Gaussian one.
+        let (mut p, _, y) = two_peaks();
+        let fit = PeakFitSpec { shape: PeakShape::Voigt, baseline: FitBaseline::Linear };
+        let r = p.analyze(&request(&[y], chain(true, Some(fit)))).unwrap();
+        let t = r.table.unwrap();
+        let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
+        assert!((t.rows[0].1[h("Fit center")] - 6.0).abs() < 1e-4);
+        assert!((t.rows[1].1[h("Fit center")] - 13.0).abs() < 1e-4);
+        assert!((t.rows[0].1[h("Fit FWHM")] - 0.4 * 2.354_820).abs() < 1e-3, "{}", t.rows[0].1[h("Fit FWHM")]);
+        let exact = 0.4 * (2.0 * std::f64::consts::PI).sqrt();
+        assert!((t.rows[0].1[h("Fit area")] - exact).abs() < 1e-3);
+        assert!((t.rows[0].1[h("Fit height")] - 1.0).abs() < 1e-3, "{}", t.rows[0].1[h("Fit height")]);
+        assert!(r.notes[0].contains("Voigt fit of 2 peaks"), "{}", r.notes[0]);
     }
 
     #[test]

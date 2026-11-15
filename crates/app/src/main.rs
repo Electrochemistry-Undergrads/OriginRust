@@ -5,20 +5,26 @@
 //! sheaf-app lab.sheaf            open a project (Save writes .opj by default)
 //! sheaf-app old.opj              import the workbooks of an Origin project
 //! sheaf-app run1.txt run2.txt    import data files with default settings and plot them
+//! sheaf-app results.xlsx         import every sheet of an Excel workbook (also .xls, .xlsm)
 //! ```
+//!
+//! The project is autosaved to a recovery folder of Sheaf's own while it has unsaved changes, and the
+//! next start offers it back after a crash (`docs/spec/autosave.md`). `--recovery-dir DIR` uses another
+//! folder and `--no-recovery` turns recovery off for the run (no folder is read or written).
 //!
 //! Two more options exist so the interface can be checked without a person
 //! at the screen: `--screenshot FILE.png` saves a picture of the window after
 //! a moment and quits, and `--show ITEM` opens a dialog first (`graph-settings:x`,
 //! `graph-settings:plots`, `panel:explorer` (also `-docked`, `-hidden`; `objects`, `messages`,
-//! `results`), `hide-plot:2`, `text:1` (the Text window of the first label), `shape:1` (the window of the first drawn object), `column`, `export`, `import:FILE`, `import-wizard:FILE` (with `import-wizard-page:header|names|file|data|save`), `analysis:smooth`, `analysis-preview:smooth`, `focus:Book1`, `menu:Plot` to
-//! hold a top-level menu open, `select-column:B` and `column-menu:B` for the first workbook).
+//! `results`), `hide-plot:2`, `text:1` (the Text window of the first label), `shape:1` (the window of the first drawn object), `column`, `export`, `import:FILE`, `import-excel:FILE` (with `import-excel-page:mode|header|columns|partial|misc`), `export-excel` (the first workbook), `import-wizard:FILE` (with `import-wizard-page:header|names|file|data|save`), `analysis:smooth`, `analysis-preview:smooth`, `focus:Book1`, `menu:Plot` to
+//! hold a top-level menu open, `select-column:B` and `column-menu:B` for the first workbook, `autosave` for Tools > Autosave).
 
 // In release builds on Windows, do not open a console window next to the app.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod actions;
 mod app;
+mod autosave;
 mod dialogs;
 mod gadget;
 mod graph_view;
@@ -29,6 +35,7 @@ mod reader;
 mod theme;
 mod toolbar;
 mod winclip;
+mod winprint;
 mod wks_clipboard;
 mod workspace;
 
@@ -43,10 +50,16 @@ fn app_icon() -> eframe::egui::IconData {
 }
 
 fn main() -> eframe::Result {
-    let mut startup = app::Startup::default();
+    let mut startup = app::Startup {
+        recovery_dir: sheaf_io::recovery::default_dir(),
+        settings_path: sheaf_io::recovery::default_settings_path(),
+        ..Default::default()
+    };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--recovery-dir" => startup.recovery_dir = args.next().map(PathBuf::from),
+            "--no-recovery" => startup.recovery_dir = None,
             "--screenshot" => startup.screenshot = args.next().map(PathBuf::from),
             "--show" => startup.show.extend(args.next()),
             _ => startup.paths.push(PathBuf::from(arg)),

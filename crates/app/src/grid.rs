@@ -117,6 +117,8 @@ pub struct BookUi {
     reveal_rect: Option<Rect>,
     /// How many rows fit in the view (for Page Up and Page Down).
     page_rows: usize,
+    /// Destination to reveal while Go To leaves a row/column/range selection in place.
+    navigation_target: Option<(usize, usize)>,
     /// The grid keeps the keyboard (after a click in it or editing a cell) unless a text field
     /// takes it.
     focus_grid: bool,
@@ -135,6 +137,7 @@ pub struct BookUi {
 impl BookUi {
     /// Forgets the selection (a different sheet was shown, a project was loaded).
     pub fn clear_selection(&mut self) {
+        self.navigation_target = None;
         self.selected.clear();
         self.sel = Sel::None;
         self.dragging = false;
@@ -177,13 +180,50 @@ impl BookUi {
 
     /// Edit > Go to: selects one cell and scrolls it into view.
     pub fn go_to(&mut self, sheet: &Worksheet, column: usize, row: usize) {
-        self.select_cells(sheet, (column, row), (column, row));
+        let to = visible_cell(sheet, (column, row), (column, row), row.max(sheet.row_count() + SPARE_ROWS - 1));
+        self.select_cells(sheet, to, to);
         self.reveal = 4;
         self.focus_grid = true;
     }
 
+    /// Origin's Go To keeps an omitted axis and extends from the opposite edge when moving
+    /// before a region, otherwise from its first edge (including a target inside the region).
+    pub fn go_to_selection(&mut self, sheet: &Worksheet, column: Option<usize>, row: Option<usize>, extend: bool) {
+        if (column.is_none() && row.is_none()) || sheet.columns.is_empty() {
+            return;
+        }
+        let column = column.map(|c| c.min(sheet.columns.len() - 1));
+        let row = row.map(|r| r.min(self.row_capacity(sheet) - 1));
+        let old = self.target(sheet);
+        let cols = old.as_ref().and_then(|t| Some((*t.columns.first()?, *t.columns.last()?))).unwrap_or((0, 0));
+        let rows = old.as_ref().map_or((0, 0), |t| (t.rows.start, t.rows.end.saturating_sub(1).max(t.rows.start)));
+        let axis = |(lo, hi): (usize, usize), destination: Option<usize>| match destination {
+            Some(to) if extend => (if to < lo { hi } else { lo }, to),
+            Some(to) => (to, to),
+            None => (lo, hi),
+        };
+        let (c0, c1) = axis(cols, column);
+        let (r0, r1) = axis(rows, row);
+        if row.is_none() && matches!(self.sel, Sel::Columns) {
+            self.selected = sheet.columns[c0.min(c1)..=c0.max(c1)].iter().map(|c| c.id).collect();
+            self.active = None;
+        } else {
+            self.select_cells(sheet, (c0, r0), (c1, r1));
+        }
+        let destination = (column.unwrap_or(c1), row.unwrap_or(r1));
+        self.navigation_target = Some(destination);
+        self.reveal_rect = None;
+        self.reveal = 4;
+        self.focus_grid = true;
+    }
+
+    pub fn row_capacity(&self, sheet: &Worksheet) -> usize {
+        sheet.row_count().saturating_add(SPARE_ROWS)
+    }
+
     /// Selects a block of cells and records which columns it touches.
     pub fn select_cells(&mut self, sheet: &Worksheet, anchor: (usize, usize), end: (usize, usize)) {
+        self.navigation_target = None;
         self.sel = Sel::Cells { anchor, end };
         self.active = None;
         let (lo, hi) = (anchor.0.min(end.0), anchor.0.max(end.0));
@@ -200,6 +240,7 @@ impl BookUi {
     }
 
     fn focus(&mut self, ctx: &egui::Context) {
+        self.navigation_target = None;
         self.focus_grid = true;
         if let Some(grid) = self.grid {
             ctx.memory_mut(|m| m.request_focus(grid));
@@ -232,6 +273,9 @@ impl BookUi {
 
     /// The cell the view follows after keys: the active cell of a block, else the moving corner.
     fn reveal_target(&self) -> Option<(usize, usize)> {
+        if self.reveal > 0 && self.navigation_target.is_some() {
+            return self.navigation_target;
+        }
         match &self.sel {
             Sel::Cells { anchor, end } if anchor != end && self.active.is_some() => self.active_cell(),
             _ => self.active_corner(),
@@ -244,6 +288,7 @@ impl BookUi {
     }
 
     fn select_rows(&mut self, anchor: usize, end: usize) {
+        self.navigation_target = None;
         self.sel = Sel::Rows { anchor, end };
         self.selected.clear();
     }
@@ -282,6 +327,26 @@ impl BookUi {
             && sheet.column(*id).is_none()
         {
             self.editing = None;
+        }
+        if let Some((id, row, _)) = &self.editing
+            && (!sheet.row_shown(*row) || sheet.column(*id).is_none_or(|c| c.hidden))
+        {
+            self.editing = None;
+        }
+        if let Some((c, r)) = self.active_cell()
+            && (!sheet.row_shown(r) || sheet.columns.get(c).is_none_or(|c| c.hidden))
+            && let Sel::Cells { anchor, end } = self.sel
+        {
+            let col =
+                (anchor.0.min(end.0)..=anchor.0.max(end.0)).find(|c| sheet.columns.get(*c).is_some_and(|c| !c.hidden));
+            let row = (anchor.1.min(end.1)..=anchor.1.max(end.1)).find(|r| sheet.row_shown(*r));
+            if let (Some(c), Some(r)) = (col, row) {
+                self.active = Some((c, r));
+            } else {
+                let to = visible_cell(sheet, anchor, anchor, sheet.row_count() + SPARE_ROWS - 1);
+                self.select_cells(sheet, to, to);
+            }
+            self.reveal = 4;
         }
         if let Some((id, ..)) = &self.editing_label
             && sheet.column(*id).is_none()
@@ -553,13 +618,17 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
             if cell.left() < view.left() {
                 state.h_offset = (state.h_offset - (view.left() - cell.left())).max(0.0);
             } else if cell.right() > view.right() {
-                state.h_offset += (cell.right() - view.right()).min(view.width());
+                let distance = cell.right() - view.right();
+                state.h_offset += if state.navigation_target.is_some() { distance } else { distance.min(view.width()) };
             }
             if view.contains_rect(cell) {
                 state.reveal = 0;
             }
         }
         ui.ctx().request_repaint();
+    }
+    if state.reveal == 0 {
+        state.navigation_target = None;
     }
     state.h_content = output.content_size.x;
     state.h_view = output.inner_rect.width();
@@ -590,60 +659,62 @@ fn edge_scroll(p: Pos2, area: Rect, dt: f32) -> (f32, f32) {
 /// The next cell inside a block when Enter (`dy` = 1), Tab (`dx` = 1) or their Shift versions
 /// (-1) are pressed: down the column and on at the top of the next column of the block (wrapping
 /// from the last column to the first), or along the row and on at the start of the next row.
-fn block_next(cols: (usize, usize), rows: (usize, usize), cur: (usize, usize), dx: isize, dy: isize) -> (usize, usize) {
-    let (mut c, mut r) = cur;
-    let (c0, c1, r0, r1) = (cols.0, cols.1, rows.0, rows.1);
-    if dy > 0 {
-        if r < r1 {
-            r += 1;
-        } else {
-            r = r0;
-            c = if c < c1 { c + 1 } else { c0 };
-        }
-    } else if dy < 0 {
-        if r > r0 {
-            r -= 1;
-        } else {
-            r = r1;
-            c = if c > c0 { c - 1 } else { c1 };
-        }
-    } else if dx > 0 {
-        if c < c1 {
-            c += 1;
-        } else {
-            c = c0;
-            r = if r < r1 { r + 1 } else { r0 };
-        }
-    } else if dx < 0 {
-        if c > c0 {
-            c -= 1;
-        } else {
-            c = c1;
-            r = if r > r0 { r - 1 } else { r1 };
-        }
+fn block_next(
+    cols: (usize, usize),
+    rows: (usize, usize),
+    cur: (usize, usize),
+    dx: isize,
+    dy: isize,
+    sheet: Option<&Worksheet>,
+) -> Option<(usize, usize)> {
+    let column_shown = |c: usize| sheet.is_none_or(|s| s.columns.get(c).is_some_and(|c| !c.hidden));
+    let row_shown = |r| sheet.is_none_or(|s| s.row_shown(r));
+    let (c, r) = cur;
+    if dy != 0 {
+        let (next_row, wrapped) = cycle_visible(rows, r, dy > 0, &row_shown)?;
+        let next_col = if wrapped { cycle_visible(cols, c, dy > 0, &column_shown)?.0 } else { c };
+        Some((next_col, next_row))
+    } else if dx != 0 {
+        let (next_col, wrapped) = cycle_visible(cols, c, dx > 0, &column_shown)?;
+        let next_row = if wrapped { cycle_visible(rows, r, dx > 0, &row_shown)?.0 } else { r };
+        Some((next_col, next_row))
+    } else {
+        Some(cur)
     }
-    (c, r)
+}
+
+/// Next visible position along one dimension, plus whether it wrapped to the other edge.
+fn cycle_visible(
+    (lo, hi): (usize, usize),
+    from: usize,
+    forward: bool,
+    visible: &dyn Fn(usize) -> bool,
+) -> Option<(usize, bool)> {
+    if forward {
+        (if from < hi { (from + 1..=hi).find(|i| visible(*i)) } else { None })
+            .map(|i| (i, false))
+            .or_else(|| (lo..=from).find(|i| visible(*i)).map(|i| (i, true)))
+    } else {
+        (if from > lo { (lo..from).rev().find(|i| visible(*i)) } else { None })
+            .map(|i| (i, false))
+            .or_else(|| (from..=hi).rev().find(|i| visible(*i)).map(|i| (i, true)))
+    }
 }
 
 impl BookUi {
     /// With a block of several cells selected and `from` inside it: moves the active cell as
     /// Enter and Tab do in Origin, keeping the block selected. Returns false when the selection
     /// is not such a block.
-    fn step_in_block(&mut self, from: (usize, usize), dx: isize, dy: isize, visible: &dyn Fn(usize) -> bool) -> bool {
+    fn step_in_block(&mut self, from: (usize, usize), dx: isize, dy: isize, sheet: &Worksheet) -> bool {
         let Sel::Cells { anchor, end } = self.sel else { return false };
         let (c0, c1) = (anchor.0.min(end.0), anchor.0.max(end.0));
         let (r0, r1) = (anchor.1.min(end.1), anchor.1.max(end.1));
         if anchor == end || !(c0..=c1).contains(&from.0) || !(r0..=r1).contains(&from.1) {
             return false;
         }
-        // A hidden column is stepped over.
-        let mut next = block_next((c0, c1), (r0, r1), from, dx, dy);
-        for _ in 0..(c1 - c0 + 1) {
-            if visible(next.0) {
-                break;
-            }
-            next = block_next((c0, c1), (r0, r1), next, dx, dy);
-        }
+        let Some(next) = block_next((c0, c1), (r0, r1), from, dx, dy, Some(sheet)) else {
+            return false;
+        };
         self.active = Some(next);
         self.reveal = 4;
         self.focus_grid = true;
@@ -1003,7 +1074,8 @@ fn move_label(state: &mut BookUi, sheet: &Worksheet, column: ColumnId, row: &Lab
     let c = skip_hidden(sheet, position, position.saturating_add_signed(dx).min(sheet.columns.len() - 1));
     let r = r.saturating_add_signed(dy);
     if r >= rows.len() {
-        state.select_cells(sheet, (c, 0), (c, 0));
+        let row = skip_filtered(sheet, 0, 0, sheet.row_count() + SPARE_ROWS - 1);
+        state.select_cells(sheet, (c, row), (c, row));
         state.reveal = 4;
     } else {
         state.select_label(sheet.columns[c].id, rows[r].clone());
@@ -1444,16 +1516,19 @@ fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &Worksheet, book_id: 
         }
         state.editing = None;
         let in_block = match (step, sheet.column_index(column)) {
-            (Some((dx, dy)), Some(position)) => {
-                state.step_in_block((position, row), dx, dy, &|c| sheet.columns.get(c).is_some_and(|c| !c.hidden))
-            }
+            (Some((dx, dy)), Some(position)) => state.step_in_block((position, row), dx, dy, sheet),
             _ => false,
         };
         if let (false, Some((dx, dy)), Some(position)) = (in_block, step, sheet.column_index(column)) {
             let last_col = sheet.columns.len().saturating_sub(1);
-            let to = (
-                position.saturating_add_signed(dx).min(last_col),
-                row.saturating_add_signed(dy).min(sheet.row_count() + SPARE_ROWS),
+            let to = visible_cell(
+                sheet,
+                (position, row),
+                (
+                    position.saturating_add_signed(dx).min(last_col),
+                    row.saturating_add_signed(dy).min(sheet.row_count() + SPARE_ROWS - 1),
+                ),
+                sheet.row_count() + SPARE_ROWS - 1,
             );
             state.select_cells(sheet, to, to);
             state.reveal = 4;
@@ -1545,6 +1620,27 @@ pub fn skip_hidden(sheet: &Worksheet, from: usize, to: usize) -> usize {
         if forward { (to..sheet.columns.len()).find(|i| visible(*i)) } else { (0..=to).rev().find(|i| visible(*i)) }
     };
     first(forward).or_else(|| first(!forward)).unwrap_or(from)
+}
+
+/// Skips filter-hidden rows, favouring the direction of travel and staying within the target
+/// range. Rows beyond the stored filter remain visible, including the spare entry rows.
+fn skip_filtered(sheet: &Worksheet, from: usize, to: usize, max_row: usize) -> usize {
+    let to = to.min(max_row);
+    if sheet.row_shown(to) {
+        return to;
+    }
+    let find = |forward| {
+        if forward {
+            (to..=max_row).find(|r| sheet.row_shown(*r))
+        } else {
+            (0..=to).rev().find(|r| sheet.row_shown(*r))
+        }
+    };
+    find(to >= from).or_else(|| find(to < from)).unwrap_or(from)
+}
+
+fn visible_cell(sheet: &Worksheet, from: (usize, usize), to: (usize, usize), max_row: usize) -> (usize, usize) {
+    (skip_hidden(sheet, from.0, to.0), skip_filtered(sheet, from.1, to.1, max_row))
 }
 
 /// The keys Sheaf takes from spreadsheet programs such as Excel (none of them is bound in Origin's
@@ -1702,7 +1798,7 @@ pub fn handle_keys(
                     let step = if shift { -1 } else { 1 };
                     let (dx, dy) = if *key == egui::Key::Tab { (step, 0) } else { (0, step) };
                     if let Some(from) = state.active_cell()
-                        && state.step_in_block(from, dx, dy, &|c| sheet.columns.get(c).is_some_and(|c| !c.hidden))
+                        && state.step_in_block(from, dx, dy, sheet)
                     {
                         consumed.push(*key);
                         taken = true;
@@ -1737,10 +1833,15 @@ pub fn handle_keys(
                     let from = origin(shift);
                     match from {
                         // Nothing selected yet: the first key press selects the first cell.
-                        None => (Some((0, 0)), false),
+                        None => (Some(visible_cell(sheet, (0, 0), (0, 0), max_row)), false),
                         Some(from) => {
                             let to = nav_target(nav, ctrl, from, &lens, max_row, state.page_rows.max(1));
-                            (Some((skip_hidden(sheet, from.0, to.0), to.1)), shift)
+                            let limit = if ctrl && matches!(nav, NavKey::Down | NavKey::End) {
+                                lens.get(to.0).copied().unwrap_or(0).saturating_sub(1).min(max_row)
+                            } else {
+                                max_row
+                            };
+                            (Some(visible_cell(sheet, from, to, limit)), shift)
                         }
                     }
                 } else if ctrl {
@@ -1751,12 +1852,20 @@ pub fn handle_keys(
                             let nav = if shift { NavKey::Left } else { NavKey::Right };
                             let from = origin(false).unwrap_or((0, 0));
                             let to = nav_target(nav, false, from, &lens, max_row, 1);
-                            (Some((skip_hidden(sheet, from.0, to.0), to.1)), false)
+                            (Some(visible_cell(sheet, from, to, max_row)), false)
                         }
                         egui::Key::Enter => {
                             let nav = if shift { NavKey::Up } else { NavKey::Down };
                             let from = origin(false).unwrap_or((0, 0));
-                            (Some(nav_target(nav, false, from, &lens, max_row, 1)), false)
+                            (
+                                Some(visible_cell(
+                                    sheet,
+                                    from,
+                                    nav_target(nav, false, from, &lens, max_row, 1),
+                                    max_row,
+                                )),
+                                false,
+                            )
                         }
                         egui::Key::F2 => {
                             edit_start = true;
@@ -1941,6 +2050,75 @@ mod tests {
         assert_eq!(skip_hidden(&ws, 0, 1), 0, "nothing visible further right: stay");
     }
 
+    fn filtered_sheet(keep: Vec<bool>) -> Worksheet {
+        let mut ws = sheet();
+        ws.filter = Some(sheaf_core::rowfilter::RowFilter { condition: "fixture".into(), enabled: true, keep });
+        ws
+    }
+
+    #[test]
+    fn filtered_row_targets_clamp_searches_and_reach_spare_entry_rows() {
+        let mut ws = filtered_sheet(vec![false, true, false, true, false]);
+        assert_eq!(skip_filtered(&ws, 1, 2, 30), 3);
+        assert_eq!(skip_filtered(&ws, 3, 2, 30), 1);
+        assert_eq!(skip_filtered(&ws, 3, 4, 30), 5, "new rows beyond the filter stay visible");
+        assert_eq!(skip_filtered(&ws, 1, 4, 4), 3, "a data-end jump stays within the data");
+        assert_eq!(skip_filtered(&ws, 3, 0, 30), 1, "Home reaches the first visible row");
+        ws.filter.as_mut().unwrap().enabled = false;
+        assert_eq!(skip_filtered(&ws, 1, 2, 30), 2);
+    }
+
+    #[test]
+    fn block_steps_skip_both_hidden_dimensions_and_wrap_in_both_orders() {
+        let mut ws = filtered_sheet(vec![true, false, true, false]);
+        ws.columns[1].hidden = true;
+        let step = |at, dx, dy| block_next((0, 2), (0, 3), at, dx, dy, Some(&ws));
+        assert_eq!(step((0, 0), 1, 0), Some((2, 0)));
+        assert_eq!(step((2, 0), 1, 0), Some((0, 2)));
+        assert_eq!(step((0, 0), -1, 0), Some((2, 2)));
+        assert_eq!(step((0, 0), 0, 1), Some((0, 2)));
+        assert_eq!(step((0, 2), 0, 1), Some((2, 0)));
+        assert_eq!(step((0, 0), 0, -1), Some((2, 2)));
+        assert_eq!(block_next((0, 2), (1, 1), (0, 1), 0, 1, Some(&ws)), None);
+        assert_eq!(block_next((1, 1), (0, 3), (1, 2), 1, 0, Some(&ws)), None);
+    }
+
+    #[test]
+    fn a_new_filter_repairs_the_active_cell_without_editing_hidden_data() {
+        let ws = filtered_sheet(vec![false, false, true, true]);
+        let mut state = BookUi::default();
+        state.select_cells(&ws, (1, 0), (1, 0));
+        state.repair(&ws);
+        assert_eq!(state.active_cell(), Some((1, 2)));
+        state.select_cells(&ws, (1, 0), (2, 3));
+        state.editing = Some((ws.columns[1].id, 0, "unsaved".into()));
+        state.repair(&ws);
+        assert!(state.editing.is_none(), "an editor hidden by filtering is cancelled");
+        assert_eq!(state.active_cell(), Some((1, 2)));
+        assert_eq!(
+            state.sel,
+            Sel::Cells { anchor: (1, 0), end: (2, 3) },
+            "a visible portion of a block stays selected"
+        );
+        let ws = filtered_sheet(vec![false; 4]);
+        state.select_cells(&ws, (0, 0), (1, 3));
+        state.repair(&ws);
+        assert_eq!(state.active_cell(), Some((0, 4)), "an entirely hidden block moves to a spare row");
+    }
+
+    #[test]
+    fn label_navigation_and_go_to_enter_a_visible_data_cell() {
+        let ws = filtered_sheet(vec![false, false, true, true]);
+        let mut state = BookUi::default();
+        state.go_to(&ws, 1, 0);
+        assert_eq!(state.active_cell(), Some((1, 2)));
+        state.go_to(&ws, 1, 1000);
+        assert_eq!(state.active_cell(), Some((1, 1000)), "an explicit Go to beyond current data keeps its row");
+        let labels = label_rows(&ws);
+        move_label(&mut state, &ws, ws.columns[1].id, labels.last().unwrap(), 0, 1);
+        assert_eq!(state.active_cell(), Some((1, 2)));
+    }
+
     #[test]
     fn the_head_name_has_the_designation_and_the_number_of_the_data_set() {
         let s = sheet();
@@ -2040,14 +2218,14 @@ mod tests {
     #[test]
     fn enter_and_tab_walk_a_block_and_wrap_to_the_next_column_or_row() {
         let (cols, rows) = ((1, 2), (0, 1));
-        assert_eq!(block_next(cols, rows, (1, 0), 0, 1), (1, 1));
-        assert_eq!(block_next(cols, rows, (1, 1), 0, 1), (2, 0), "the top of the next column");
-        assert_eq!(block_next(cols, rows, (2, 1), 0, 1), (1, 0), "from the end back to the start");
-        assert_eq!(block_next(cols, rows, (2, 0), 0, -1), (1, 1));
-        assert_eq!(block_next(cols, rows, (1, 0), 1, 0), (2, 0));
-        assert_eq!(block_next(cols, rows, (2, 0), 1, 0), (1, 1), "the start of the next row");
-        assert_eq!(block_next(cols, rows, (2, 1), 1, 0), (1, 0));
-        assert_eq!(block_next(cols, rows, (1, 1), -1, 0), (2, 0));
+        assert_eq!(block_next(cols, rows, (1, 0), 0, 1, None), Some((1, 1)));
+        assert_eq!(block_next(cols, rows, (1, 1), 0, 1, None), Some((2, 0)), "the top of the next column");
+        assert_eq!(block_next(cols, rows, (2, 1), 0, 1, None), Some((1, 0)), "from the end back to the start");
+        assert_eq!(block_next(cols, rows, (2, 0), 0, -1, None), Some((1, 1)));
+        assert_eq!(block_next(cols, rows, (1, 0), 1, 0, None), Some((2, 0)));
+        assert_eq!(block_next(cols, rows, (2, 0), 1, 0, None), Some((1, 1)), "the start of the next row");
+        assert_eq!(block_next(cols, rows, (2, 1), 1, 0, None), Some((1, 0)));
+        assert_eq!(block_next(cols, rows, (1, 1), -1, 0, None), Some((2, 0)));
     }
 
     #[test]
@@ -2068,16 +2246,17 @@ mod tests {
     #[test]
     fn stepping_in_a_block_moves_the_active_cell_and_keeps_the_block() {
         let mut state = BookUi { sel: Sel::Cells { anchor: (0, 0), end: (1, 1) }, ..Default::default() };
-        let all = |_: usize| true;
-        assert!(state.step_in_block((0, 0), 0, 1, &all));
+        let mut ws = sheet();
+        assert!(state.step_in_block((0, 0), 0, 1, &ws));
         assert_eq!(state.active_cell(), Some((0, 1)));
         assert_eq!(state.sel, Sel::Cells { anchor: (0, 0), end: (1, 1) });
         // A single cell is not stepped.
         state.sel = Sel::Cells { anchor: (0, 0), end: (0, 0) };
-        assert!(!state.step_in_block((0, 0), 0, 1, &all));
+        assert!(!state.step_in_block((0, 0), 0, 1, &ws));
         // Tab over a hidden column: from column 0 the next column 1 is hidden, so the walk goes on.
         state.sel = Sel::Cells { anchor: (0, 0), end: (2, 0) };
-        assert!(state.step_in_block((0, 0), 1, 0, &|c| c != 1));
+        ws.columns[1].hidden = true;
+        assert!(state.step_in_block((0, 0), 1, 0, &ws));
         assert_eq!(state.active_cell(), Some((2, 0)));
     }
 }

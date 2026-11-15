@@ -86,7 +86,7 @@ Three facts from the code decide how:
   identical and are the check that the move was faithful.
 - `analyze` over MCP reaches every tool of `sheaf analyze`: 21 are mapped by hand in the registry,
   the rest come from the CLI's own clap definitions (see the amendment). `fit` covers what its
-  tool lists; fit options are still mapped by hand.
+  tool lists; plot and fit also accept clap-derived options (see the second amendment).
 - Phase 2 (driving the open desktop app) forwards the same `sheaf-ops` requests to the app, which
   runs them inside `Document::edit`. That needs its own ADR.
 
@@ -101,3 +101,13 @@ CLI's clap types and calls `job_from`, and builds the JSON Schema of a tool's op
 definitions, so the CLI and the server cannot drift for those tools. The hand-mapped tools keep
 their behaviour. Alternative rejected: a second registry for the 34 tools (the drift this ADR set
 out to avoid).
+
+
+## Amendment (2026-11-14): plot and fit options share the CLI bridge
+
+`plot` and `fit` accept an `options` object whose schema and parsing come from their CLI commands.
+The existing structured MCP arguments remain supported; overlapping settings are refused rather
+than silently overridden. CLI-to-library specification conversions live in `sheaf-ops` and are
+called by both the CLI and MCP. File loading, project saving and independent exports stay in their
+existing tools. Path options still pass through the server's allowed-root checks. This work needs
+no Origin reference: it extends Sheaf's own automation interface.

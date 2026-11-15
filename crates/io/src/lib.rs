@@ -9,14 +9,17 @@ pub mod batch;
 pub mod chi;
 pub mod chi_bin;
 mod error;
+pub mod excel;
 pub mod export;
 pub mod opj;
 pub mod opju;
 pub mod project_file;
+pub mod recovery;
 pub mod save;
 mod text;
 
 pub use error::IoError;
+pub use excel::{is_excel_file, is_excel_workbook};
 pub use text::{decode_text, read_text_file};
 
 use sheaf_core::Workbook;
@@ -156,7 +159,7 @@ pub enum ImportKind {
 pub struct Imported {
     /// The data; `workbook.source` records the file and importer.
     pub workbook: Workbook,
-    /// `"chi"` or `"ascii"`.
+    /// `"chi"`, `"ascii"` or `"excel"`.
     pub format: &'static str,
     /// The graph template that suits the data: cyclic voltammetry for a CHI
     /// CV file, a plain line plot otherwise.
@@ -167,13 +170,38 @@ pub struct Imported {
     pub warnings: Vec<String>,
 }
 
-/// Reads a file with the chosen importer and options.
+/// Reads a file with the chosen importer and options. An Excel workbook (`.xls`, `.xlsx`,
+/// `.xlsm`, recognised by its first bytes as well as its name) is read with the default
+/// [`excel::ExcelOptions`] when the kind is `Auto`; use [`import_file_with_excel`] to choose its
+/// sheets and header rows.
 pub fn import_file(
     path: &Path,
     kind: ImportKind,
     chi_opts: &chi::ChiOptions,
     ascii_opts: &ascii::AsciiOptions,
 ) -> Result<Imported, IoError> {
+    import_file_with_excel(path, kind, chi_opts, ascii_opts, &excel::ExcelOptions::default())
+}
+
+/// [`import_file`] with the options for Excel workbooks.
+pub fn import_file_with_excel(
+    path: &Path,
+    kind: ImportKind,
+    chi_opts: &chi::ChiOptions,
+    ascii_opts: &ascii::AsciiOptions,
+    excel_opts: &excel::ExcelOptions,
+) -> Result<Imported, IoError> {
+    if kind == ImportKind::Auto && excel::is_excel_workbook(path) {
+        let r = excel::read_workbook(path, excel_opts)?;
+        let names: Vec<&str> = r.workbook.sheets.iter().map(|s| s.name.as_str()).collect();
+        return Ok(Imported {
+            meta: vec![("Sheets".to_string(), names.join(", "))],
+            workbook: r.workbook,
+            format: "excel",
+            suggested_template: Template::Line,
+            warnings: r.warnings,
+        });
+    }
     let bytes = std::fs::read(path).map_err(|e| IoError::io(path, e))?;
     let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let shown = path.display().to_string();
@@ -195,13 +223,12 @@ pub fn import_file(
     let r = ascii::parse_ascii(&text, &stem, ascii_opts).map_err(|e| name_file(e, &shown))?;
     let mut workbook = r.workbook;
     workbook.source = Some(ImportSource { path: shown, importer: "ascii".to_string() });
-    Ok(Imported {
-        workbook,
-        format: "ascii",
-        suggested_template: Template::Line,
-        meta: Vec::new(),
-        warnings: r.warnings,
-    })
+    let mut warnings = r.warnings;
+    if excel::is_excel_file(path) {
+        warnings
+            .push("the file is named like an Excel workbook but holds text; it was read as a text file".to_string());
+    }
+    Ok(Imported { workbook, format: "ascii", suggested_template: Template::Line, meta: Vec::new(), warnings })
 }
 
 /// Wraps the result of either CH Instruments reader (text or binary).

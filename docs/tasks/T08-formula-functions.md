@@ -12,8 +12,26 @@ recalculation, undo and project save/reopen. Scalar reads and conversions measur
 the existing alphabetical row order and remaining name-syntax limits are documented in the spec.
 Validation on Windows, Rust 1.99.1, after merging `0b9bd4e`: formatting, strict all-target
 workspace Clippy and the full workspace suite pass (1,929 passed, two ignored; 13 new regressions).
-**Left:** cross-sheet/book references (group 6), `%()` substitution,
-and Origin global/`@SD` formatting defaults. **Size:** M. **Branch:** `expr-funcs2`. **Model:** Sonnet.
+Cross-sheet/book `col()` references (group 6) added on branch `codex/formula-cross-sheet`:
+named/positional sheets, project-wide dependency order and cycles, remote metadata and parameter
+rows, Manual/Auto/None, source removal/rebinding, Undo/Redo and native/companion persistence.
+Origin 2016 range-variable vectors measured; direct qualified formula syntax and recalculation
+rules are documented Sheaf extensions, with published Origin range notation as their basis.
+Workbook-title lookup is measured in Origin; short-name precedence and ambiguous-title refusal
+are explicit Sheaf rules. Final validation on integrated `d04e909` plus this change: formatting,
+strict workspace/all-target Clippy and all workspace tests pass (2,047 passed, three existing
+ignored; 17 new regressions: core 12, expression 4, I/O 1).
+String-expression `%(...)` added on branch `codex/formula-string-substitution`: interpolation
+inside quoted strings, standalone numeric conversion, TAB/CRLF and literal `%%(`, with existing
+column/metadata dependencies, recalculation modes, undo and native/companion persistence.
+Scalar strings, numeric conversion and escaping measured in Origin 2016; per-row formulas
+and the narrower conversion-only data boundary are documented Sheaf choices.
+Validation on integrated `0666218` plus this change and the Windows XDG test-fixture repair:
+formatting, strict workspace/all-target Clippy and the full workspace suite pass
+(2,128 passed, three existing ignored; 12 new expression/core/I/O regressions).
+**Left:** legacy multi-argument worksheet/graph `%()` substitution, session/range-variable
+substitution and generated expression text; Origin global/`@SD` formatting defaults.
+**Size:** M. **Branch:** `expr-funcs2`. **Model:** Sonnet.
 **Detail:** audit E "Missing" (formula functions). **Spec:** `docs/spec/expression-language.md`.
 
 ## Where

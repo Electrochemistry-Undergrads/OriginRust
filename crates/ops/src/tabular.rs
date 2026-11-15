@@ -1,8 +1,9 @@
-//! Worksheets as delimited text.
+//! Worksheets as delimited text and Excel workbooks.
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use sheaf_core::Worksheet;
+use sheaf_core::{Project, WindowId, Worksheet};
+use sheaf_io::excel::{ExcelExportOptions, ExportOutcome};
 use std::path::Path;
 
 /// The delimiter of an exported sheet.
@@ -46,4 +47,53 @@ pub fn write_sheet(ws: &Worksheet, path: &Path) -> Result<()> {
     sheaf_io::export::write_delimited(ws, &mut out, &opts)
         .with_context(|| format!("could not write '{}'", path.display()))?;
     Ok(())
+}
+
+/// True when the path asks for an Excel workbook (`.xlsx`).
+pub fn is_xlsx_path(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("xlsx"))
+}
+
+/// What goes into an `.xlsx` file.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct XlsxRequest {
+    /// Every sheet of the workbook, one Excel sheet each. Otherwise one sheet.
+    pub all_sheets: bool,
+    pub no_long_names: bool,
+    pub no_units: bool,
+    pub no_comments: bool,
+    /// A first row of short names.
+    pub short_names: bool,
+}
+
+impl XlsxRequest {
+    pub fn options(&self) -> ExcelExportOptions {
+        ExcelExportOptions {
+            long_names: !self.no_long_names,
+            units: !self.no_units,
+            comments: !self.no_comments,
+            short_names: self.short_names,
+        }
+    }
+}
+
+/// Writes a sheet of a workbook, or all its sheets, as an `.xlsx` file. `sheet` is a sheet name;
+/// without it the workbook's active sheet is written, and with `all_sheets` every sheet.
+pub fn write_xlsx(
+    project: &Project,
+    book: WindowId,
+    sheet: Option<&str>,
+    request: &XlsxRequest,
+    path: &Path,
+) -> Result<ExportOutcome> {
+    let b = project.workbook(book).context("workbook not found")?;
+    let outcome = if request.all_sheets && sheet.is_none() {
+        sheaf_io::excel::write_workbook_xlsx(b, path, &request.options())
+    } else {
+        let picked = crate::pick::pick_sheet(project, book, sheet)?;
+        let ws = b.sheets.get(picked).with_context(|| format!("workbook '{}' has no sheet", b.name))?;
+        sheaf_io::excel::write_xlsx(&[ws], path, &request.options())
+    };
+    outcome.with_context(|| format!("could not write '{}'", path.display()))
 }

@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 140 | 49 | 238 |
+| All rows | 49 | 143 | 46 | 238 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 71 | 49 | 137 |
+| P1 and P2 together | 17 | 74 | 46 | 137 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
@@ -122,7 +122,7 @@ Cross-cutting findings:
 | Masking | Column > Mask | Apply, Remove, Swap on selected cells; masks follow rows through sorts, inserts and deletes; statistics, analysis tools and fits leave masked cells out; masked points draw red with their adjacent line segments (measured in Origin) | ◐ | no Change Color, Disable Masking, mask by condition or from the graph; two-way ANOVA ignores masks; the .opj reader skips masks and the writer leaves them to the companion | P1 |
 | Internal types | double, short, long, complex | f64 only | ✗ | | P1 |
 | Categorical columns | Set as Categorical | Set as Categorical toggle (column and Column menus); Unstack Columns offers categorical columns first; Group and Subject designations in Set As and Column Properties | ◐ | no analysis tool reads Group or Subject yet; the .opj file codes of Group and Subject are unknown (companion keeps them) | P1 |
-| Worksheet display and view options | Format > Worksheet F4; hide, freeze, zoom | fixed layout | ✗ | | P1 |
+| Worksheet display and view options | Format > Worksheet F4; hide, freeze, zoom | hidden columns; View > Freeze/Unfreeze Panes (Ctrl+Shift+F) keeps the first rows and columns in view while the rest scrolls, per sheet, saved in `.sheaf`, darker heads (gui-look.md 3, T34) | ◐ | no Format > Worksheet window or zoom; the freeze rules (displayed rows, n = index - 1, label rows not counted) are unmeasured; `.opj` save warns | P1 |
 | Before-formula script, multi-column set | Set Column Values | none | ✗ | one column only | P1 |
 | Fill Column With | row numbers, random, patterns | only formula `i` | ◐ | no random, series or dates | P1 |
 | Date and time arithmetic | date columns | columns are plain numbers in formulas (days) | ◐ | no `date()`, `time()` or date functions | P1 |

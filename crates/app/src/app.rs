@@ -1260,6 +1260,26 @@ impl SheafApp {
                     self.warn("This sheet has no filter: use Add or Remove Filter first");
                 }
             }
+            Action::FreezePanes(book) => {
+                let Some(sheet) = self.doc.project().workbook(book).map(|b| b.sheet()) else { return };
+                let (next, label) = if sheet.frozen.is_none() {
+                    match self.books.get(&book).map(|s| grid::freeze_counts(s, sheet)) {
+                        Some(Ok(frozen)) => (frozen, "Freeze panes"),
+                        Some(Err(why)) => {
+                            self.warn(why);
+                            return;
+                        }
+                        None => return,
+                    }
+                } else {
+                    (sheaf_core::Frozen::default(), "Unfreeze panes")
+                };
+                self.doc.apply(label, |p| {
+                    if let Some(b) = p.workbook_mut(book) {
+                        b.sheet_mut().frozen = next;
+                    }
+                });
+            }
             Action::ReapplyRowFilter(book) => {
                 let sheet = self.doc.project().workbook(book).map(|b| b.active_sheet).unwrap_or(0);
                 match self.doc.edit("Reapply filter", |p| p.reapply_row_filter(book, sheet)) {

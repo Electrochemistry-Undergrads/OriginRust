@@ -11,6 +11,7 @@ use sheaf_plot::scene::ObjectKind;
 
 mod autosave;
 mod excel;
+mod frozen_panes;
 mod label_frames;
 mod label_whiteout;
 mod lollipop;

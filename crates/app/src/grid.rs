@@ -10,6 +10,7 @@ use crate::menus::{self, MenuContext, WindowKind};
 use eframe::egui::{self, Align, Color32, Layout, Pos2, Rect, RichText, Sense, Shape, Stroke, UiBuilder, vec2};
 use egui_extras::{Column as TableColumn, TableBuilder};
 use sheaf_core::{Column, ColumnId, Document, FormulaState, RecalcMode, WindowId, Worksheet};
+use std::collections::HashMap;
 use std::ops::Range;
 
 /// What is selected in a worksheet.
@@ -132,9 +133,32 @@ pub struct BookUi {
     h_offset: f32,
     h_content: f32,
     h_view: f32,
+    /// Frozen panes (see [`frozen_split`]), from the last frame's layout. The width in pixels
+    /// of the scrolling columns' heads, to start a frozen column from.
+    col_px: HashMap<ColumnId, f32>,
+    /// Widths the user gave frozen columns by dragging the edge of their heads.
+    frozen_widths: HashMap<ColumnId, f32>,
+    /// The screen x where the scrolling cells are not hidden by the frozen columns.
+    frozen_clip_x: f32,
+    /// Total width of the frozen block (row header and frozen columns), 0 without frozen columns.
+    frozen_w: f32,
+    /// The most the frozen block may take in this frame ([`frozen_cap`] of the body width).
+    frozen_max_w: f32,
+    /// The frozen columns and the frozen data rows as laid out in this frame.
+    frozen_cols: Vec<ColumnId>,
+    frozen_rows: Vec<usize>,
+    /// The cell to reveal sits in a frozen column (or row): it never scrolls along that axis.
+    reveal_frozen_x: bool,
+    reveal_frozen_y: bool,
 }
 
 impl BookUi {
+    /// The horizontal and vertical scroll positions of the last frame, for the tests.
+    #[cfg(test)]
+    pub fn scroll_offsets(&self) -> (f32, f32) {
+        (self.h_offset, self.v_offset)
+    }
+
     /// Forgets the selection (a different sheet was shown, a project was loaded).
     pub fn clear_selection(&mut self) {
         self.navigation_target = None;
@@ -395,6 +419,11 @@ const SPARE_ROWS: usize = 30;
 const TAB_BAR_HEIGHT: f32 = 20.0;
 
 const HEADER_GREY: Color32 = Color32::from_rgb(222, 222, 222);
+/// The heads and row numbers of frozen rows and columns (Origin shades them darker).
+const FROZEN_GREY: Color32 = Color32::from_rgb(184, 184, 192);
+/// The line between the frozen panes and the scrolling cells, in points.
+const FREEZE_LINE: f32 = 2.0;
+const FREEZE_LINE_COLOR: Color32 = Color32::from_rgb(70, 70, 82);
 const LABEL_YELLOW: Color32 = Color32::from_rgb(255, 255, 214);
 const ROW_SELECTED: Color32 = Color32::from_rgb(176, 196, 222);
 const BLOCK_BLACK: Color32 = Color32::from_rgb(16, 16, 24);
@@ -405,6 +434,104 @@ const TEXT: Color32 = Color32::BLACK;
 /// A masked cell: light red fill and red text (Origin draws masked points red).
 const MASK_FILL: Color32 = Color32::from_rgb(255, 224, 224);
 const MASK_TEXT: Color32 = Color32::from_rgb(190, 0, 0);
+
+/// The width in pixels a column is drawn with when it starts being frozen: its own fixed width, the
+/// width the user dragged it to in the frozen block, or the width it had in the scrolling table.
+fn column_px(state: &BookUi, column: &Column) -> f32 {
+    match column.width {
+        Some(chars) => column_pixels(chars),
+        None => state
+            .frozen_widths
+            .get(&column.id)
+            .or_else(|| state.col_px.get(&column.id))
+            .copied()
+            .unwrap_or(COLUMN_WIDTH),
+    }
+}
+
+/// The share of the body width that the frozen block (row header and frozen columns) may take.
+const FROZEN_MAX_SHARE: f32 = 0.5;
+
+/// The widest the frozen block may be in a body `body_width` pixels wide.
+fn frozen_cap(body_width: f32) -> f32 {
+    body_width * FROZEN_MAX_SHARE
+}
+
+/// The frozen panes as drawn: how many displayed rows and which column positions are frozen.
+/// The setting of the sheet is clamped here and never changed: the frozen rows leave at least
+/// three rows of the body to scroll, and the frozen block takes at most half the width.
+/// `data_rows` is the number of displayed rows that hold data (spare entry rows are never frozen).
+pub fn frozen_split(
+    sheet: &Worksheet,
+    data_rows: usize,
+    body_size: egui::Vec2,
+    header_height: f32,
+    width_of: &dyn Fn(&Column) -> f32,
+) -> (usize, Vec<usize>) {
+    let room = ((body_size.y - header_height) / ROW_HEIGHT).floor() as i64 - 3;
+    let rows = usize::from(sheet.frozen.rows).min(data_rows).min(room.max(0) as usize);
+    let mut used = ROW_HEADER_WIDTH;
+    let mut columns = Vec::new();
+    for (position, column) in
+        sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden).take(usize::from(sheet.frozen.columns))
+    {
+        let w = width_of(column);
+        if used + w > frozen_cap(body_size.x) {
+            break;
+        }
+        used += w;
+        columns.push(position);
+    }
+    (rows, columns)
+}
+
+/// The panes that Freeze Panes sets from the selection (Origin: the cell D4 freezes 3 rows and 3
+/// columns, a whole row only rows, a whole column only columns), or why it cannot.
+pub fn freeze_counts(state: &BookUi, sheet: &Worksheet) -> Result<sheaf_core::Frozen, &'static str> {
+    let before_row = |r: usize| match sheet.shown_rows(r + 1) {
+        Some(shown) => shown.iter().filter(|s| **s < r).count(),
+        None => r,
+    };
+    let before_column = |c: usize| sheet.columns.iter().take(c).filter(|c| !c.hidden).count();
+    let (rows, columns) = match &state.sel {
+        Sel::Cells { anchor, end } => (before_row(anchor.1.min(end.1)), before_column(anchor.0.min(end.0))),
+        Sel::Rows { anchor, end } => (before_row(*anchor.min(end)), 0),
+        Sel::Columns => {
+            let first = state.selected.iter().filter_map(|id| sheet.column_index(*id)).min();
+            (0, first.map_or(0, before_column))
+        }
+        _ => return Err("Select a cell, a row or a column to freeze panes above and left of it"),
+    };
+    let limit = usize::from(sheaf_core::MAX_FROZEN) - 1;
+    if rows > limit || columns > limit {
+        return Err("Freeze Panes needs a row or column index from 1 to 10: select a cell nearer the top left");
+    }
+    if rows == 0 && columns == 0 {
+        return Err("Nothing to freeze above or left of the selection: select a cell below or right of it");
+    }
+    Ok(sheaf_core::Frozen { rows: rows as u8, columns: columns as u8 })
+}
+
+/// The part of `rect` where the pointer really reaches it: inside the clip of the ui that draws
+/// it and, for a cell that scrolls (not `overlay`), right of the frozen columns that cover it.
+fn visible_part(ui: &egui::Ui, rect: Rect, overlay: bool, state: &BookUi) -> Rect {
+    let mut r = rect.intersect(ui.clip_rect());
+    if !overlay {
+        r.min.x = r.min.x.max(state.frozen_clip_x);
+    }
+    r
+}
+
+/// A cell of the head or frozen block: a child ui bound to `rect` (clipped to it) with its own id.
+fn cell_scope(ui: &mut egui::Ui, rect: Rect, salt: impl std::hash::Hash, add: impl FnOnce(&mut egui::Ui)) {
+    ui.scope_builder(
+        UiBuilder::new().max_rect(rect).id_salt(salt).layout(Layout::left_to_right(Align::Center)),
+        |ui| {
+            ui.set_clip_rect(ui.clip_rect().intersect(rect));
+            add(ui);
+        },
+    );
+}
 
 /// The label rows of a sheet in order: the four fixed ones, then one per user parameter.
 fn label_rows(sheet: &Worksheet) -> Vec<LabelRow> {
@@ -482,6 +609,21 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     let rows_drawn = shown.as_ref().map_or(rows, Vec::len);
     let label_rows = label_rows(sheet);
     let header_height = ROW_HEIGHT * (1 + label_rows.len()) as f32;
+
+    // Frozen panes: the first displayed rows go under the head, the first visible columns sit in
+    // an overlay over the table, whose own cells for them stay empty placeholders of the same width.
+    let data_shown = shown.as_ref().map_or(sheet.row_count(), |s| s.iter().filter(|r| **r < sheet.row_count()).count());
+    let (nf_rows, frozen_positions) =
+        frozen_split(sheet, data_shown, body.size(), header_height, &|c| column_px(state, c));
+    let frozen_px: Vec<f32> = frozen_positions.iter().map(|p| column_px(state, &sheet.columns[*p])).collect();
+    let frozen_w = if frozen_positions.is_empty() { 0.0 } else { ROW_HEADER_WIDTH + frozen_px.iter().sum::<f32>() };
+    let header_total = header_height + nf_rows as f32 * ROW_HEIGHT;
+    let frozen_rows: Vec<usize> = (0..nf_rows).map(|i| shown.as_ref().map_or(i, |s| s[i])).collect();
+    state.frozen_cols = frozen_positions.iter().map(|p| sheet.columns[*p].id).collect();
+    state.frozen_rows = frozen_rows.clone();
+    state.frozen_w = frozen_w;
+    state.frozen_max_w = frozen_cap(body.width());
+    state.frozen_clip_x = body.left() + frozen_w;
     // The primary button was released: a drag over cells is over.
     if !ui.input(|i| i.pointer.primary_down()) {
         state.dragging = false;
@@ -496,7 +638,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     let drag_on = state.dragging || state.head_drag.is_some() || state.row_drag;
     state.drag_pointer =
         if drag_on { ui.input(|i| i.pointer.latest_pos()).map(|p| clamp_to(p, cells_area)) } else { None };
-    state.page_rows = (((body.height() - header_height) / ROW_HEIGHT).floor() as usize).max(1);
+    state.page_rows = (((body.height() - header_total) / ROW_HEIGHT).floor() as usize).max(1);
     // The keyboard belongs to the grid once something in it was clicked: Tab and the arrow keys
     // stay with it instead of moving the focus to other widgets.
     let grid = grid_id(book_id);
@@ -508,6 +650,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         )
     });
     state.reveal_rect = None;
+    state.reveal_frozen_x = false;
+    state.reveal_frozen_y = false;
     state.grid = Some(grid);
     if state.focus_grid && state.editing.is_none() && state.editing_label.is_none() {
         match ui.memory(|m| m.focused()) {
@@ -517,6 +661,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         }
     }
 
+    // Where the table drew the rows of the body this frame (row number, top y), for the overlay.
+    let mut drawn_rows: Vec<(usize, f32)> = Vec::new();
     let output = ui
         .scope_builder(UiBuilder::new().max_rect(body), |ui| {
             egui::ScrollArea::horizontal()
@@ -533,8 +679,11 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                         .cell_layout(Layout::left_to_right(Align::Center))
                         .column(TableColumn::exact(ROW_HEADER_WIDTH))
                         .min_scrolled_height(0.0);
-                    for column in sheet.columns.iter().filter(|c| !c.hidden) {
+                    for (position, column) in sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden) {
                         table = match column.width {
+                            _ if frozen_positions.contains(&position) => {
+                                table.column(TableColumn::exact(column_px(state, column)))
+                            }
                             Some(chars) => table.column(TableColumn::exact(column_pixels(chars)).clip(true)),
                             None => table.column(TableColumn::initial(COLUMN_WIDTH).at_least(30.0).clip(true)),
                         };
@@ -545,8 +694,11 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                         && let Some(row) = state.reveal_target().map(|c| c.1)
                     {
                         let at = shown.as_ref().map_or(Some(row), |s| s.iter().position(|r| *r == row));
-                        if let Some(at) = at {
-                            table = table.scroll_to_row(at, None);
+                        // A frozen row is always in view: only the rows below them scroll.
+                        if let Some(at) = at
+                            && at >= nf_rows
+                        {
+                            table = table.scroll_to_row(at - nf_rows, None);
                         }
                     }
                     if let Some(y) = state.v_set.take() {
@@ -554,11 +706,52 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                     }
 
                     table
-                        .header(header_height, |mut header| {
-                            header.col(|ui| corner_and_titles(ui, sheet, &label_rows, book_id, state, actions));
+                        .header(header_total, |mut header| {
+                            header.col(|ui| {
+                                // With frozen columns the row header is drawn by the overlay.
+                                if frozen_w > 0.0 {
+                                    return;
+                                }
+                                corner_and_titles(ui, sheet, &label_rows, book_id, state, actions);
+                                let rect = ui.max_rect();
+                                let band_top = rect.top() + header_height;
+                                for (i, r) in frozen_rows.iter().enumerate() {
+                                    let cell = Rect::from_min_size(
+                                        Pos2::new(rect.left(), band_top + ROW_HEIGHT * i as f32),
+                                        vec2(rect.width(), ROW_HEIGHT),
+                                    );
+                                    cell_scope(ui, cell, ("frozen_rowhead", *r), |ui| {
+                                        row_header_cell(ui, *r, false, book_id, state, actions)
+                                    });
+                                }
+                            });
                             for (position, column) in sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden) {
                                 header.col(|ui| {
-                                    column_head(ui, sheet, position, column, &label_rows, book_id, state, actions);
+                                    if frozen_positions.contains(&position) {
+                                        return;
+                                    }
+                                    column_head(
+                                        ui,
+                                        sheet,
+                                        position,
+                                        column,
+                                        &label_rows,
+                                        false,
+                                        book_id,
+                                        state,
+                                        actions,
+                                    );
+                                    let rect = ui.max_rect();
+                                    let band_top = rect.top() + header_height;
+                                    for (i, r) in frozen_rows.iter().enumerate() {
+                                        let cell = Rect::from_min_size(
+                                            Pos2::new(rect.left(), band_top + ROW_HEIGHT * i as f32),
+                                            vec2(rect.width(), ROW_HEIGHT),
+                                        );
+                                        cell_scope(ui, cell, ("frozen_row", column.id.0, *r), |ui| {
+                                            body_cell(ui, sheet, position, column, *r, false, book_id, state, actions)
+                                        });
+                                    }
                                 });
                             }
                             header.col(|ui| {
@@ -581,11 +774,23 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                             });
                         })
                         .body(|body| {
-                            body.rows(ROW_HEIGHT, rows_drawn, |mut row| {
-                                let r = shown.as_ref().map_or(row.index(), |s| s[row.index()]);
-                                row.col(|ui| row_header_cell(ui, r, book_id, state, actions));
+                            body.rows(ROW_HEIGHT, rows_drawn - nf_rows, |mut row| {
+                                let i = nf_rows + row.index();
+                                let r = shown.as_ref().map_or(i, |s| s[i]);
+                                if frozen_w > 0.0 {
+                                    // The cell's own rect (an empty cell's used rect sits at its middle).
+                                    let mut top = 0.0;
+                                    row.col(|ui| top = ui.max_rect().top());
+                                    drawn_rows.push((r, top));
+                                } else {
+                                    row.col(|ui| row_header_cell(ui, r, false, book_id, state, actions));
+                                }
                                 for (position, column) in sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden) {
-                                    row.col(|ui| body_cell(ui, sheet, position, column, r, book_id, state, actions));
+                                    row.col(|ui| {
+                                        if !frozen_positions.contains(&position) {
+                                            body_cell(ui, sheet, position, column, r, false, book_id, state, actions);
+                                        }
+                                    });
                                 }
                                 row.col(|_ui| {});
                             });
@@ -595,10 +800,49 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         .inner;
     state.h_offset = output.state.offset.x;
     state.v_offset = output.inner.state.offset.y;
-    // Dragging a selection past the edge of the view scrolls the view that way.
+    if frozen_w > 0.0 {
+        let layout = FrozenView {
+            positions: &frozen_positions,
+            widths: &frozen_px,
+            rows: &frozen_rows,
+            header_height,
+            header_total,
+            width: frozen_w,
+        };
+        frozen_overlay(ui, output.inner_rect, &layout, &drawn_rows, sheet, &label_rows, book_id, state, actions);
+    }
+    if nf_rows > 0 || frozen_w > 0.0 {
+        frozen_dividers(ui, output.inner_rect, frozen_w, if nf_rows > 0 { Some(header_total) } else { None });
+    }
+    // The wheel over the head and the frozen rows scrolls the body (only the sideways part of it
+    // belongs to the horizontal area that holds the head).
+    if nf_rows > 0 {
+        let band = Rect::from_min_size(output.inner_rect.min, vec2(output.inner_rect.width(), header_total));
+        let over = ui.input(|i| i.pointer.hover_pos()).is_some_and(|p| band.contains(p));
+        let dy = ui.input(|i| i.smooth_scroll_delta.y);
+        if over && dy != 0.0 {
+            state.v_set = Some((state.v_offset - dy).max(0.0));
+            ui.ctx().input_mut(|i| i.smooth_scroll_delta.y = 0.0);
+            ui.ctx().request_repaint();
+        }
+    }
+    // Dragging a selection past the edge of the view scrolls the view that way. The frozen
+    // panes do not scroll: the edge is where the scrolling cells start.
     if drag_on && let Some(p) = ui.input(|i| i.pointer.latest_pos()) {
         let dt = ui.input(|i| i.stable_dt).min(0.1);
-        let (dx, dy) = edge_scroll(p, cells_area, dt);
+        let scroll_area = Rect::from_min_max(
+            Pos2::new(cells_area.left() + frozen_w, cells_area.top() + nf_rows as f32 * ROW_HEIGHT),
+            cells_area.max,
+        );
+        let (mut dx, mut dy) = edge_scroll(p, scroll_area, dt);
+        // A drag that began in a frozen column (row) and has not left it scrolls no further.
+        let (anchor_column, anchor_row) = drag_anchor(state, sheet);
+        if p.x < scroll_area.left() && anchor_column.is_some_and(|c| state.frozen_cols.contains(&c)) {
+            dx = 0.0;
+        }
+        if p.y < scroll_area.top() && anchor_row.is_some_and(|r| state.frozen_rows.contains(&r)) {
+            dy = 0.0;
+        }
         if dx != 0.0 && !state.row_drag {
             let max = (output.content_size.x - output.inner_rect.width()).max(0.0);
             state.h_offset = (state.h_offset + dx).clamp(0.0, max);
@@ -613,15 +857,23 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     if state.reveal > 0 {
         state.reveal -= 1;
         if let Some(cell) = state.reveal_rect {
-            // Bring the cell into the horizontal view; the table scrolls to the row itself.
+            // Bring the cell into the horizontal view (right of the frozen columns); the table
+            // scrolls to the row itself. A frozen cell never scrolls along its frozen axis.
             let view = output.inner_rect;
-            if cell.left() < view.left() {
-                state.h_offset = (state.h_offset - (view.left() - cell.left())).max(0.0);
-            } else if cell.right() > view.right() {
-                let distance = cell.right() - view.right();
-                state.h_offset += if state.navigation_target.is_some() { distance } else { distance.min(view.width()) };
+            let left = view.left() + frozen_w;
+            if !state.reveal_frozen_x {
+                if cell.left() < left - 0.5 {
+                    state.h_offset = (state.h_offset - (left - cell.left())).max(0.0);
+                } else if cell.right() > view.right() {
+                    let distance = cell.right() - view.right();
+                    let step = if state.navigation_target.is_some() { distance } else { distance.min(view.width()) };
+                    state.h_offset += step;
+                }
             }
-            if view.contains_rect(cell) {
+            let x_ok = state.reveal_frozen_x || (cell.left() >= left - 0.5 && cell.right() <= view.right() + 0.5);
+            let y_ok = state.reveal_frozen_y
+                || (cell.top() >= view.top() + header_total - 0.5 && cell.bottom() <= view.bottom() + 0.5);
+            if x_ok && y_ok {
                 state.reveal = 0;
             }
         }
@@ -632,6 +884,116 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     }
     state.h_content = output.content_size.x;
     state.h_view = output.inner_rect.width();
+}
+
+/// What a drag in progress started on: the column and the row of its anchor, where it has one.
+fn drag_anchor(state: &BookUi, sheet: &Worksheet) -> (Option<ColumnId>, Option<usize>) {
+    if let Some(d) = &state.head_drag {
+        return (sheet.columns.get(d.anchor).map(|c| c.id), None);
+    }
+    match &state.sel {
+        Sel::Rows { anchor, .. } if state.row_drag => (None, Some(*anchor)),
+        Sel::Cells { anchor, .. } if state.dragging => (sheet.columns.get(anchor.0).map(|c| c.id), Some(anchor.1)),
+        _ => (None, None),
+    }
+}
+
+/// The frozen panes of one frame: the frozen column positions with their widths, the frozen rows,
+/// and the heights of the head without and with the frozen rows.
+struct FrozenView<'a> {
+    positions: &'a [usize],
+    widths: &'a [f32],
+    rows: &'a [usize],
+    header_height: f32,
+    header_total: f32,
+    /// Width of the row header and the frozen columns together.
+    width: f32,
+}
+
+/// The frozen columns, drawn over the table after it (so they are on top for drawing and for the
+/// pointer): the head with the row header, the frozen rows, and the frozen columns of each body
+/// row the table drew. The table keeps empty placeholders under them, so the scrolling columns
+/// pass beneath.
+#[allow(clippy::too_many_arguments)]
+fn frozen_overlay(
+    ui: &mut egui::Ui,
+    inner: Rect,
+    fv: &FrozenView,
+    body_rows: &[(usize, f32)],
+    sheet: &Worksheet,
+    label_rows: &[LabelRow],
+    book_id: WindowId,
+    state: &mut BookUi,
+    actions: &mut Vec<Action>,
+) {
+    let area = Rect::from_min_size(inner.min, vec2(fv.width, inner.height()));
+    ui.scope_builder(UiBuilder::new().max_rect(area).id_salt("frozen_overlay"), |ui| {
+        ui.set_clip_rect(ui.clip_rect().intersect(area));
+        ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+        let (left, top) = (inner.left(), inner.top());
+        let band_top = top + fv.header_height;
+        // The corner with the titles of the label rows, and the numbers of the frozen rows.
+        let corner = Rect::from_min_size(Pos2::new(left, top), vec2(ROW_HEADER_WIDTH, fv.header_total));
+        cell_scope(ui, corner, "frozen_corner", |ui| corner_and_titles(ui, sheet, label_rows, book_id, state, actions));
+        for (i, r) in fv.rows.iter().enumerate() {
+            let cell = Rect::from_min_size(
+                Pos2::new(left, band_top + ROW_HEIGHT * i as f32),
+                vec2(ROW_HEADER_WIDTH, ROW_HEIGHT),
+            );
+            cell_scope(ui, cell, ("frozen_rowhead", *r), |ui| row_header_cell(ui, *r, true, book_id, state, actions));
+        }
+        // The heads and the frozen rows of each frozen column.
+        let mut x = left + ROW_HEADER_WIDTH;
+        for (&position, &w) in fv.positions.iter().zip(fv.widths) {
+            let column = &sheet.columns[position];
+            let head = Rect::from_min_size(Pos2::new(x, top), vec2(w, fv.header_total));
+            cell_scope(ui, head, ("frozen_head", column.id.0), |ui| {
+                column_head(ui, sheet, position, column, label_rows, true, book_id, state, actions)
+            });
+            for (i, r) in fv.rows.iter().enumerate() {
+                let cell = Rect::from_min_size(Pos2::new(x, band_top + ROW_HEIGHT * i as f32), vec2(w, ROW_HEIGHT));
+                cell_scope(ui, cell, ("frozen_cell", column.id.0, *r), |ui| {
+                    body_cell(ui, sheet, position, column, *r, true, book_id, state, actions)
+                });
+            }
+            x += w;
+        }
+        // The frozen columns of the body rows, clipped below the head.
+        let below = Rect::from_min_max(Pos2::new(left, top + fv.header_total), inner.right_bottom());
+        ui.scope_builder(UiBuilder::new().id_salt("frozen_body"), |ui| {
+            ui.set_clip_rect(ui.clip_rect().intersect(below));
+            for &(r, y) in body_rows {
+                if y + ROW_HEIGHT < below.top() || y > below.bottom() {
+                    continue;
+                }
+                let cell = Rect::from_min_size(Pos2::new(left, y), vec2(ROW_HEADER_WIDTH, ROW_HEIGHT));
+                cell_scope(ui, cell, ("frozen_rowhead", r), |ui| row_header_cell(ui, r, true, book_id, state, actions));
+                let mut x = left + ROW_HEADER_WIDTH;
+                for (&position, &w) in fv.positions.iter().zip(fv.widths) {
+                    let column = &sheet.columns[position];
+                    let cell = Rect::from_min_size(Pos2::new(x, y), vec2(w, ROW_HEIGHT));
+                    cell_scope(ui, cell, ("frozen_cell", column.id.0, r), |ui| {
+                        body_cell(ui, sheet, position, column, r, true, book_id, state, actions)
+                    });
+                    x += w;
+                }
+            }
+        });
+    });
+}
+
+/// The lines between the frozen panes and the cells that scroll: right of the frozen columns,
+/// and under the frozen rows (`rows_bottom` is the height of the head with them).
+fn frozen_dividers(ui: &egui::Ui, inner: Rect, width: f32, rows_bottom: Option<f32>) {
+    let painter = ui.painter_at(inner);
+    let stroke = Stroke::new(FREEZE_LINE, FREEZE_LINE_COLOR);
+    if width > 0.0 {
+        painter.vline(inner.left() + width - FREEZE_LINE / 2.0, inner.y_range(), stroke);
+    }
+    if let Some(bottom) = rows_bottom {
+        painter.hline(inner.x_range(), inner.top() + bottom - FREEZE_LINE / 2.0, stroke);
+    }
 }
 
 /// The pointer pulled into a rectangle.
@@ -878,18 +1240,32 @@ fn column_head(
     position: usize,
     column: &Column,
     label_rows: &[LabelRow],
+    overlay: bool,
     book_id: WindowId,
     state: &mut BookUi,
     actions: &mut Vec<Action>,
 ) {
     let rect = ui.max_rect();
+    let frozen = state.frozen_cols.contains(&column.id);
+    if !overlay {
+        // The width this column has in the table, where a frozen column starts from.
+        state.col_px.insert(column.id, rect.width());
+        state.frozen_widths.remove(&column.id);
+    }
     let selected = state.selected.contains(&column.id) && matches!(state.sel, Sel::Columns | Sel::All);
     let line = Stroke::new(1.0_f32, LINE_HEADER);
     let text_color = if selected { Color32::WHITE } else { TEXT };
 
     // The grey row with the name.
     let head = Rect::from_min_size(rect.min, vec2(rect.width(), ROW_HEIGHT));
-    ui.painter().rect_filled(head, 0.0, if selected { HEADER_DARK } else { HEADER_GREY });
+    let head_fill = if selected {
+        HEADER_DARK
+    } else if frozen {
+        FROZEN_GREY
+    } else {
+        HEADER_GREY
+    };
+    ui.painter().rect_filled(head, 0.0, head_fill);
     let head_response = ui.interact(head, ui.id().with(("col_header", column.id.0)), Sense::CLICK | Sense::DRAG);
     ui.scope_builder(
         UiBuilder::new().max_rect(head).layout(Layout::centered_and_justified(egui::Direction::LeftToRight)),
@@ -902,7 +1278,10 @@ fn column_head(
         select_column(state, sheet, column.id, modifiers);
         state.focus(ui.ctx());
     }
-    head_drag(ui, state, sheet, position, &head_response, head);
+    head_drag(ui, state, sheet, position, &head_response, head, overlay);
+    if overlay && column.width.is_none() {
+        frozen_resize(ui, state, column, head);
+    }
     if head_response.double_clicked() {
         actions.push(Action::ColumnProperties(column.id));
     }
@@ -952,6 +1331,9 @@ fn label_cell(
     let selected = matches!(&state.sel, Sel::Label { column: c, row: r } if *c == column.id && r == row);
     if selected {
         state.reveal_rect = Some(cell);
+        // The label rows never scroll away.
+        state.reveal_frozen_y = true;
+        state.reveal_frozen_x = state.frozen_cols.contains(&column.id);
     }
     let fill = if column_selected { BLOCK_BLACK } else { LABEL_YELLOW };
     ui.painter().rect_filled(cell, 0.0, fill);
@@ -1187,6 +1569,22 @@ fn select_column(state: &mut BookUi, sheet: &Worksheet, id: ColumnId, modifiers:
     }
 }
 
+/// The strip at the right edge of a frozen column's head: dragging it sets the width of the column.
+/// The table's placeholder for the column follows in the next frame.
+fn frozen_resize(ui: &mut egui::Ui, state: &mut BookUi, column: &Column, head: Rect) {
+    let strip = Rect::from_min_max(Pos2::new(head.right() - 6.0, head.top()), head.right_bottom());
+    let response = ui
+        .interact(strip, ui.id().with(("resize", column.id.0)), Sense::drag())
+        .on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
+    if response.dragged() {
+        // Never wider than leaves the block within the cap, or the column would leave the block.
+        let room = state.frozen_max_w - (state.frozen_w - head.width());
+        let width = (head.width() + response.drag_delta().x).max(30.0).min(room.max(30.0) - 0.01);
+        state.frozen_widths.insert(column.id, width);
+        ui.ctx().request_repaint();
+    }
+}
+
 /// Selecting columns by pressing on one head and dragging over others, as if Shift-clicked; with
 /// Ctrl the dragged range is added to the columns that were selected before.
 fn head_drag(
@@ -1196,6 +1594,7 @@ fn head_drag(
     position: usize,
     response: &egui::Response,
     head: Rect,
+    overlay: bool,
 ) {
     if response.drag_started_by(egui::PointerButton::Primary) {
         let m = click_modifiers(ui);
@@ -1210,7 +1609,8 @@ fn head_drag(
         state.focus_grid = true;
     }
     let Some(drag) = state.head_drag.clone() else { return };
-    let over = state.pointer(ui).is_some_and(|p| p.x >= head.left() && p.x < head.right());
+    let reach = visible_part(ui, head, overlay, state);
+    let over = state.pointer(ui).is_some_and(|p| p.x >= reach.left() && p.x < reach.right());
     if !over || drag.last == position {
         return;
     }
@@ -1233,14 +1633,28 @@ pub fn grid_id(book: WindowId) -> egui::Id {
     egui::Id::new(("sheet_grid", book))
 }
 
-fn row_header_cell(ui: &mut egui::Ui, r: usize, book_id: WindowId, state: &mut BookUi, actions: &mut Vec<Action>) {
+fn row_header_cell(
+    ui: &mut egui::Ui,
+    r: usize,
+    overlay: bool,
+    book_id: WindowId,
+    state: &mut BookUi,
+    actions: &mut Vec<Action>,
+) {
     let rect = ui.max_rect();
     let selected = match &state.sel {
         Sel::Rows { anchor, end } => (*anchor.min(end)..=*anchor.max(end)).contains(&r),
         Sel::All => true,
         _ => false,
     };
-    ui.painter().rect_filled(rect, 0.0, if selected { ROW_SELECTED } else { HEADER_GREY });
+    let fill = if selected {
+        ROW_SELECTED
+    } else if state.frozen_rows.contains(&r) {
+        FROZEN_GREY
+    } else {
+        HEADER_GREY
+    };
+    ui.painter().rect_filled(rect, 0.0, fill);
     let line = Stroke::new(1.0_f32, LINE_HEADER);
     ui.painter().hline(rect.x_range(), rect.bottom() - 0.5, line);
     ui.painter().vline(rect.right() - 0.5, rect.y_range(), line);
@@ -1257,7 +1671,10 @@ fn row_header_cell(ui: &mut egui::Ui, r: usize, book_id: WindowId, state: &mut B
             _ => state.select_rows(r, r),
         }
     } else if state.row_drag
-        && state.pointer(ui).is_some_and(|p| p.y >= rect.top() && p.y < rect.bottom())
+        && state.pointer(ui).is_some_and(|p| {
+            let reach = visible_part(ui, rect, overlay, state);
+            p.y >= reach.top() && p.y < reach.bottom()
+        })
         && let Sel::Rows { anchor, end } = state.sel
         && end != r
     {
@@ -1324,6 +1741,7 @@ fn body_cell(
     position: usize,
     column: &Column,
     r: usize,
+    overlay: bool,
     book_id: WindowId,
     state: &mut BookUi,
     actions: &mut Vec<Action>,
@@ -1369,6 +1787,8 @@ fn body_cell(
     let shift = click_modifiers(ui).shift;
     if state.reveal_target() == Some((position, r)) {
         state.reveal_rect = Some(rect);
+        state.reveal_frozen_x = state.frozen_cols.contains(&column.id);
+        state.reveal_frozen_y = state.frozen_rows.contains(&r);
     }
     if pressed && response.hovered() {
         state.dragging = true;
@@ -1381,7 +1801,7 @@ fn body_cell(
             _ => state.select_cells(sheet, (position, r), (position, r)),
         }
     } else if state.dragging
-        && pointer.is_some_and(|p| rect.contains(p))
+        && pointer.is_some_and(|p| visible_part(ui, rect, overlay, state).contains(p))
         && let Sel::Cells { anchor, end } = state.sel.clone()
         && end != (position, r)
     {
@@ -2035,6 +2455,87 @@ mod tests {
             p.add_column(b, 0, d, ColumnData::numeric(v)).unwrap();
         }
         p.workbook(b).unwrap().sheet().clone()
+    }
+
+    fn split(ws: &Worksheet, data_rows: usize, w: f32, h: f32) -> (usize, Vec<usize>) {
+        frozen_split(ws, data_rows, vec2(w, h), 80.0, &|_| 67.0)
+    }
+
+    #[test]
+    fn the_frozen_split_counts_visible_columns_and_clamps_to_the_body() {
+        let mut ws = sheet();
+        ws.frozen = sheaf_core::Frozen { rows: 3, columns: 2 };
+        assert_eq!(split(&ws, 40, 1000.0, 800.0), (3, vec![0, 1]));
+        ws.columns[0].hidden = true;
+        assert_eq!(split(&ws, 40, 1000.0, 800.0), (3, vec![1, 2]), "hidden columns are not counted");
+        ws.columns[0].hidden = false;
+        // The frozen rows leave three rows of the body to scroll.
+        assert_eq!(split(&ws, 40, 1000.0, 80.0 + 16.0 * 4.0).0, 1);
+        assert_eq!(split(&ws, 40, 1000.0, 80.0 + 16.0 * 3.0).0, 0);
+        assert_eq!(split(&ws, 40, 1000.0, 50.0).0, 0, "a body shorter than the head freezes no row");
+        // Spare entry rows are not frozen.
+        assert_eq!(split(&ws, 2, 1000.0, 800.0).0, 2);
+        // The frozen block (the row header and the columns) takes at most half of the width.
+        assert_eq!(split(&ws, 40, 440.0, 800.0).1, vec![0, 1]);
+        assert_eq!(split(&ws, 40, 430.0, 800.0).1, vec![0], "84 + 2 * 67 is over half of 430");
+        assert_eq!(split(&ws, 40, 300.0, 800.0).1, Vec::<usize>::new(), "84 + 67 is over half of 300");
+        // The setting itself is never changed by the clamp.
+        assert_eq!(ws.frozen, sheaf_core::Frozen { rows: 3, columns: 2 });
+        ws.frozen = sheaf_core::Frozen::default();
+        assert_eq!(split(&ws, 40, 1000.0, 800.0), (0, vec![]));
+    }
+
+    fn counts(ws: &Worksheet, sel: Sel) -> Result<(u8, u8), &'static str> {
+        let mut state = BookUi::default();
+        match &sel {
+            Sel::Cells { anchor, end } => state.select_cells(ws, *anchor, *end),
+            Sel::Columns => unreachable!("use counts_of_columns"),
+            other => state.sel = other.clone(),
+        }
+        freeze_counts(&state, ws).map(|f| (f.rows, f.columns))
+    }
+
+    #[test]
+    fn freeze_counts_follow_origins_d4_rule_in_displayed_rows_and_visible_columns() {
+        let ws = sheet();
+        let cell = |c, r| Sel::Cells { anchor: (c, r), end: (c, r) };
+        assert_eq!(counts(&ws, cell(3, 2)), Ok((2, 3)), "the cell D3 freezes 2 rows and 3 columns");
+        // The top left of a block counts.
+        assert_eq!(counts(&ws, Sel::Cells { anchor: (4, 3), end: (2, 1) }), Ok((1, 2)));
+        // A whole row freezes rows only, a whole column columns only.
+        assert_eq!(counts(&ws, Sel::Rows { anchor: 3, end: 3 }), Ok((3, 0)));
+        assert_eq!(counts(&ws, Sel::Rows { anchor: 3, end: 1 }), Ok((1, 0)));
+        let state =
+            BookUi { sel: Sel::Columns, selected: vec![ws.columns[3].id, ws.columns[2].id], ..Default::default() };
+        assert_eq!(freeze_counts(&state, &ws).map(|f| (f.rows, f.columns)), Ok((0, 2)));
+        // Hidden columns and filtered rows do not count.
+        let mut hidden = sheet();
+        hidden.columns[1].hidden = true;
+        assert_eq!(counts(&hidden, cell(3, 2)), Ok((2, 2)));
+        let filtered = filtered_sheet(vec![false, true, false, true, false]);
+        assert_eq!(counts(&filtered, cell(1, 3)), Ok((1, 1)), "only row 2 is shown above row 4");
+        assert_eq!(counts(&filtered, Sel::Rows { anchor: 3, end: 3 }), Ok((1, 0)));
+        // Nothing above or left, or nothing suitable selected.
+        assert!(counts(&ws, cell(0, 0)).unwrap_err().contains("Nothing to freeze"));
+        assert!(counts(&ws, Sel::Rows { anchor: 0, end: 0 }).is_err());
+        for sel in [Sel::None, Sel::All, Sel::Label { column: ws.columns[0].id, row: LabelRow::Units }] {
+            assert!(counts(&ws, sel).unwrap_err().contains("Select a cell"));
+        }
+    }
+
+    #[test]
+    fn freeze_counts_accept_an_index_up_to_ten_and_refuse_more() {
+        let ws = sheet();
+        assert_eq!(counts(&ws, Sel::Rows { anchor: 9, end: 9 }), Ok((9, 0)), "index 10");
+        assert!(counts(&ws, Sel::Rows { anchor: 10, end: 10 }).unwrap_err().contains("1 to 10"));
+        let mut wide = sheet();
+        for i in 0..8 {
+            let mut c = wide.columns[0].clone();
+            c.id = ColumnId(1000 + i);
+            wide.columns.push(c);
+        }
+        assert_eq!(counts(&wide, Sel::Cells { anchor: (9, 1), end: (9, 1) }), Ok((1, 9)));
+        assert!(counts(&wide, Sel::Cells { anchor: (10, 1), end: (10, 1) }).is_err());
     }
 
     #[test]

@@ -28,11 +28,31 @@ pub struct ComparisonGroup {
     pub values: Vec<f64>,
 }
 
+/// A step-down method of the means comparison (Holm): its report lists the plain pairwise p-values and judges each
+/// pair at the level of its rank, so the p-values the brackets show are adjusted from the report's (see
+/// [`holm_adjust`]).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StepDown {
+    Bonferroni,
+    Sidak,
+}
+
 /// The groups behind a report sheet, in the order of the report.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ComparisonSource {
     pub kind: ComparisonKind,
     pub groups: Vec<ComparisonGroup>,
+    /// The groups `(i, j)` (0-based indices into `groups`) of each row of the report's means comparison, in the order
+    /// of the report. Empty in a report that stored none (the pairs are then found by the names in its labels).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pairs: Vec<(usize, usize)>,
+    /// The significance level of the analysis.
+    #[serde(default = "default_threshold")]
+    pub alpha: f64,
+    /// Set for the Holm methods.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_down: Option<StepDown>,
     /// The unit all groups share (empty when they differ).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub units: String,
@@ -164,12 +184,46 @@ pub fn bracket_label(p: f64, style: BracketLabels) -> String {
     }
 }
 
-/// One compared pair of groups (0-based, `a < b`) with the p-value of the report.
+/// One compared pair of groups (0-based, `a < b`) with the p-value of the report. For the Holm methods `p` is the
+/// step-down adjusted p-value derived from the report's plain one (see [`holm_adjust`]); for every other method it is
+/// the report's "Prob" itself.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ComparisonPair {
     pub a: usize,
     pub b: usize,
     pub p: f64,
+    /// The report's own decision for this pair at the analysis' alpha (its "Significant" column); `None` when the
+    /// pair was stored without it (then `p` below the threshold decides).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub significant: Option<bool>,
+}
+
+impl ComparisonPair {
+    fn new(i: usize, j: usize, p: f64, significant: Option<bool>) -> Self {
+        ComparisonPair { a: i.min(j), b: i.max(j), p, significant }
+    }
+}
+
+/// Holm's step-down adjusted p-values of the plain pairwise p-values `p`: with the p-values sorted ascending
+/// (`p_(1) <= ... <= p_(m)`, equal ones in the order given), `adj_(r) = max over k <= r of min(1, (m - k + 1) p_(k))`
+/// for Holm-Bonferroni and `max over k <= r of 1 - (1 - p_(k))^(m - k + 1)` for Holm-Sidak. A pair is significant at
+/// alpha exactly when its adjusted p-value is below alpha, which is the decision the report's step-down makes.
+pub fn holm_adjust(p: &[f64], method: StepDown) -> Vec<f64> {
+    let m = p.len();
+    let mut order: Vec<usize> = (0..m).collect();
+    order.sort_by(|&a, &b| p[a].partial_cmp(&p[b]).unwrap_or(std::cmp::Ordering::Equal));
+    let mut out = vec![f64::NAN; m];
+    let mut running = 0.0f64;
+    for (k, &i) in order.iter().enumerate() {
+        let left = (m - k) as f64;
+        let adj = match method {
+            StepDown::Bonferroni => (left * p[i]).min(1.0),
+            StepDown::Sidak => 1.0 - (1.0 - p[i]).powf(left),
+        };
+        running = running.max(adj);
+        out[i] = running;
+    }
+    out
 }
 
 /// A bracket between two groups, drawn above them (group indices from 0; the groups stand at 1, 2, 3, ...).
@@ -190,11 +244,15 @@ pub struct ComparisonPlotOptions {
     pub error_bar: ComparisonErrorBar,
     #[serde(default)]
     pub labels: BracketLabels,
-    /// Show only the pairs with p below [`ComparisonPlotOptions::threshold`].
+    /// Show only the significant pairs: those with p below [`ComparisonPlotOptions::threshold`], or, when the threshold
+    /// is the analysis' own alpha, those the report marks significant.
     #[serde(default = "yes")]
     pub significant_only: bool,
     #[serde(default = "default_threshold")]
     pub threshold: f64,
+    /// The significance level of the analysis (filled from the report).
+    #[serde(default = "default_threshold")]
+    pub alpha: f64,
     /// Every compared pair of the report, shown or not.
     #[serde(default)]
     pub pairs: Vec<ComparisonPair>,
@@ -216,23 +274,46 @@ impl Default for ComparisonPlotOptions {
             labels: BracketLabels::Asterisks,
             significant_only: true,
             threshold: 0.05,
+            alpha: 0.05,
             pairs: Vec::new(),
         }
     }
 }
 
 impl ComparisonPlotOptions {
-    /// The brackets these settings show: every pair (or those with p below the threshold), in report order.
+    /// Whether the report's decision (rather than `p < threshold`) rules the pair: the threshold is the analysis' alpha.
+    fn follows_report(&self) -> bool {
+        (self.threshold - self.alpha).abs() <= 1e-12
+    }
+
+    /// Whether a pair is shown when only the significant ones are.
+    fn passes(&self, q: &ComparisonPair) -> bool {
+        match q.significant {
+            Some(sig) if self.follows_report() => sig,
+            _ => q.p < self.threshold,
+        }
+    }
+
+    /// The text of a pair's bracket. Asterisks follow the report's decision at the analysis' alpha: a pair the report
+    /// marks not significant reads `ns` whatever its p, a significant one has at least one `*`.
+    fn label(&self, q: &ComparisonPair) -> String {
+        let stars = bracket_label(q.p, self.labels);
+        if self.labels != BracketLabels::Asterisks {
+            return stars;
+        }
+        match q.significant {
+            Some(false) => "ns".to_string(),
+            Some(true) if stars == "ns" => "*".to_string(),
+            _ => stars,
+        }
+    }
+
+    /// The brackets these settings show: every pair (or the significant ones), in report order.
     pub fn brackets(&self) -> Vec<SignificanceBracket> {
         self.pairs
             .iter()
-            .filter(|q| q.p.is_finite() && (!self.significant_only || q.p < self.threshold))
-            .map(|q| SignificanceBracket {
-                group_a: q.a.min(q.b),
-                group_b: q.a.max(q.b),
-                p: q.p,
-                label: bracket_label(q.p, self.labels),
-            })
+            .filter(|q| q.p.is_finite() && (!self.significant_only || self.passes(q)))
+            .map(|q| SignificanceBracket { group_a: q.a.min(q.b), group_b: q.a.max(q.b), p: q.p, label: self.label(q) })
             .collect()
     }
 }
@@ -251,16 +332,23 @@ pub fn error_value(values: &[f64], kind: ComparisonErrorBar) -> f64 {
 }
 
 /// The compared pairs of a report sheet with their p-values, read from the sheet: for a one-way ANOVA the rows of the
-/// means comparison ("<method> comparison" and its "Prob" column), for a t-test its "Prob".
+/// means comparison ("<method> comparison", its "Prob" and "Significant" columns), for a t-test its "Prob".
+///
+/// The groups of each row come from the pair indices stored with the report. A report without them (an older one) is
+/// read by the names in the labels `"{name_j} - {name_i}"`, which is refused when the names do not tell the groups
+/// apart (two groups of one name, or a name that contains " - ").
+///
+/// Holm: the report lists the plain pairwise p-values and judges them by the step-down; the p of each pair returned
+/// here is the adjusted p derived from the report's raw p ([`holm_adjust`]), matching its step-down decisions.
 pub fn read_pairs(sheet: &Worksheet) -> Result<Vec<ComparisonPair>, String> {
     let src = sheet.comparison_source.as_ref().ok_or("This sheet is not the report of a one-way ANOVA or t-test")?;
-    let prob_after = |from: usize| {
-        sheet.columns.iter().skip(from).find(|c| c.long_name == "Prob").and_then(Column::numeric).map(<[f64]>::to_vec)
+    let numeric_after = |name: &str, from: usize| {
+        sheet.columns.iter().skip(from).find(|c| c.long_name == name).and_then(Column::numeric).map(<[f64]>::to_vec)
     };
     match src.kind {
         ComparisonKind::TwoSampleTTest => {
-            let p = prob_after(0).and_then(|v| v.first().copied()).ok_or("The report has no Prob column")?;
-            Ok(vec![ComparisonPair { a: 0, b: 1, p }])
+            let p = numeric_after("Prob", 0).and_then(|v| v.first().copied()).ok_or("The report has no Prob column")?;
+            Ok(vec![ComparisonPair::new(0, 1, p, Some(p < src.alpha))])
         }
         ComparisonKind::OneWayAnova => {
             let at = sheet
@@ -268,19 +356,43 @@ pub fn read_pairs(sheet: &Worksheet) -> Result<Vec<ComparisonPair>, String> {
                 .iter()
                 .position(|c| c.long_name.ends_with(" comparison"))
                 .ok_or("The ANOVA has no means comparison")?;
-            let probs = prob_after(at + 1).ok_or("The means comparison has no Prob column")?;
-            let labels = sheet.columns[at].text().ok_or("The means comparison has no labels")?;
-            let names: Vec<&str> = src.groups.iter().map(|g| g.name.as_str()).collect();
-            let mut out = Vec::new();
-            for (label, &p) in labels.iter().zip(&probs) {
-                let found = (0..names.len())
-                    .flat_map(|i| (0..names.len()).map(move |j| (i, j)))
-                    .find(|&(i, j)| i != j && *label == format!("{} - {}", names[j], names[i]))
-                    .ok_or_else(|| format!("The comparison {label:?} names no pair of groups"))?;
-                out.push(ComparisonPair { a: found.0.min(found.1), b: found.0.max(found.1), p });
-            }
-            Ok(out)
+            let raw = numeric_after("Prob", at + 1).ok_or("The means comparison has no Prob column")?;
+            let sig = numeric_after("Significant", at + 1);
+            let n = src.groups.len();
+            let pairs: Vec<(usize, usize)> =
+                if src.pairs.len() == raw.len() && src.pairs.iter().all(|&(i, j)| i < n && j < n) {
+                    src.pairs.clone()
+                } else {
+                    let labels = sheet.columns[at].text().ok_or("The means comparison has no labels")?;
+                    labels.iter().map(|l| pair_by_name(src, l)).collect::<Result<_, _>>()?
+                };
+            let adjusted = src.step_down.map(|m| holm_adjust(&raw, m));
+            Ok(pairs
+                .into_iter()
+                .enumerate()
+                .map(|(k, (i, j))| {
+                    let p = adjusted.as_ref().map_or(raw[k], |a| a[k]);
+                    let significant = sig.as_ref().and_then(|s| s.get(k)).map(|v| *v != 0.0).or(Some(p < src.alpha));
+                    ComparisonPair::new(i, j, p, significant)
+                })
+                .collect())
         }
+    }
+}
+
+/// The groups named by a label `"{name_j} - {name_i}"`; an error unless exactly one pair of groups fits.
+fn pair_by_name(src: &ComparisonSource, label: &str) -> Result<(usize, usize), String> {
+    let names: Vec<&str> = src.groups.iter().map(|g| g.name.as_str()).collect();
+    let found: Vec<(usize, usize)> = (0..names.len())
+        .flat_map(|i| (0..names.len()).map(move |j| (i, j)))
+        .filter(|&(i, j)| i != j && label == format!("{} - {}", names[j], names[i]))
+        .collect();
+    match found.as_slice() {
+        [one] => Ok(*one),
+        [] => Err(format!("The comparison {label:?} names no pair of groups")),
+        _ => Err(format!(
+            "The comparison {label:?} fits more than one pair of groups (the group names are not distinct, or contain \" - \"); run the analysis again to make the plot"
+        )),
     }
 }
 
@@ -307,7 +419,7 @@ impl Project {
             self.workbook(book).and_then(|b| b.sheets.get(sheet)).ok_or("The report sheet no longer exists")?;
         let pairs = read_pairs(report)?;
         let src = report.comparison_source.clone().expect("read_pairs checked it");
-        let options = ComparisonPlotOptions { pairs, ..options.clone() };
+        let options = ComparisonPlotOptions { pairs, alpha: src.alpha, ..options.clone() };
         let groups = &src.groups;
         let n = groups.len();
         if n < 2 {

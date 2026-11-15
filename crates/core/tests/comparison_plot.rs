@@ -191,3 +191,185 @@ fn settings_round_trip_and_old_layers_load_without_them() {
     let opts: ComparisonPlotOptions = serde_json::from_str("{}").unwrap();
     assert_eq!(opts, ComparisonPlotOptions::default());
 }
+
+// ----- Holm adjusted p-values and decisions that agree with the report -----
+
+fn named(names: &[&str], groups: &[&[f64]], spec: AnovaSpec) -> (Project, WindowId, usize) {
+    let mut p = Project::new();
+    let b = p.add_workbook("data");
+    let mut ids = Vec::new();
+    for (name, g) in names.iter().zip(groups) {
+        let id = p.add_column(b, 0, Designation::Y, ColumnData::numeric(g.to_vec())).unwrap();
+        p.column_mut(id).unwrap().long_name = name.to_string();
+        ids.push(id);
+    }
+    let r = p
+        .analyze_to(&Request { columns: ids, rows: RowRange::All, tool: Tool::Anova(spec) }, &OutputTarget::NewSheet)
+        .unwrap();
+    (p, b, r.new_sheet.unwrap())
+}
+
+fn set_column(p: &mut Project, b: WindowId, sheet: usize, name: &str, values: Vec<f64>) {
+    let ws = &mut p.workbook_mut(b).unwrap().sheets[sheet];
+    ws.columns.iter_mut().find(|c| c.long_name == name).unwrap().data = ColumnData::numeric(values);
+}
+
+fn column(p: &Project, b: WindowId, sheet: usize, name: &str) -> Vec<f64> {
+    let ws = &p.workbook(b).unwrap().sheets[sheet];
+    ws.columns.iter().find(|c| c.long_name == name).unwrap().numeric().unwrap().to_vec()
+}
+
+#[test]
+fn holm_adjusted_p_values_match_the_hand_computation() {
+    // Sorted: 0.01 (x4), 0.03 (x3), 0.04 (x2, but not below the one before), 0.2 (x1).
+    let raw = [0.01, 0.04, 0.03, 0.2];
+    let bonf = holm_adjust(&raw, StepDown::Bonferroni);
+    for (got, want) in bonf.iter().zip([0.04, 0.09, 0.09, 0.2]) {
+        assert!((got - want).abs() < 1e-12, "{bonf:?}");
+    }
+    let sidak = holm_adjust(&raw, StepDown::Sidak);
+    let want = [1.0 - 0.99f64.powi(4), 1.0 - 0.97f64.powi(3), 1.0 - 0.97f64.powi(3), 0.2];
+    for (got, want) in sidak.iter().zip(want) {
+        assert!((got - want).abs() < 1e-12, "{sidak:?}");
+    }
+    // Capped at 1, and monotone in the sorted order.
+    assert_eq!(holm_adjust(&[0.6, 0.7], StepDown::Bonferroni), vec![1.0, 1.0]);
+}
+
+#[test]
+fn a_holm_pair_the_report_calls_not_significant_gets_no_star_and_no_bracket() {
+    for (method, step) in
+        [(MeansComparison::HolmBonferroni, StepDown::Bonferroni), (MeansComparison::HolmSidak, StepDown::Sidak)]
+    {
+        let spec = AnovaSpec { comparison: Some(method), ..Default::default() };
+        let (mut p, b, sheet) =
+            named(&["A", "B", "C"], &[&[1.0, 2.0, 1.5, 1.2], &[2.1, 2.4, 2.9, 2.2], &[3.0, 3.5, 3.1, 3.2]], spec);
+        // The three raw p-values of the example, sorted as the report lists them; none is significant by the
+        // step-down (0.04 > 0.05 / 3).
+        set_column(&mut p, b, sheet, "Prob", vec![0.04, 0.2, 0.3]);
+        set_column(&mut p, b, sheet, "Significant", vec![0.0, 0.0, 0.0]);
+        let report = p.workbook(b).unwrap().sheets[sheet].clone();
+        let pairs = read_pairs(&report).unwrap();
+        let adj: Vec<f64> = pairs.iter().map(|q| q.p).collect();
+        let want = holm_adjust(&[0.04, 0.2, 0.3], step);
+        assert_eq!(adj, want);
+        assert!(adj[0] > 0.05, "the adjusted p of the 0.04 pair is {}", adj[0]);
+        // Significant only: nothing to show.
+        let g = p.comparison_plot(b, sheet, &ComparisonPlotOptions::default()).unwrap();
+        assert!(p.graph(g).unwrap().layers[0].brackets.is_empty(), "{method:?}");
+        // Every pair: all "ns", also with the 0.04 pair whose raw p is below 0.05.
+        let all = ComparisonPlotOptions { significant_only: false, ..Default::default() };
+        let g = p.comparison_plot(b, sheet, &all).unwrap();
+        let l = &p.graph(g).unwrap().layers[0];
+        assert_eq!(l.brackets.len(), 3);
+        assert!(l.brackets.iter().all(|br| br.label == "ns"), "{method:?}");
+        // P-value labels show the adjusted p.
+        let pv =
+            ComparisonPlotOptions { significant_only: false, labels: BracketLabels::PValues, ..Default::default() };
+        let g = p.comparison_plot(b, sheet, &pv).unwrap();
+        let l = &p.graph(g).unwrap().layers[0];
+        assert_eq!(l.brackets[0].label, bracket_label(want[0], BracketLabels::PValues));
+    }
+}
+
+#[test]
+fn the_brackets_agree_with_the_significant_column_for_every_method() {
+    // Moderately separated groups, so that the methods disagree on some pairs.
+    let fixtures: [Vec<&[f64]>; 2] = [
+        GROUPS.to_vec(),
+        vec![
+            &[5.0, 6.1, 5.5, 6.4, 5.2, 5.9],
+            &[5.8, 6.9, 6.2, 7.1, 6.0, 6.6],
+            &[6.3, 7.4, 6.6, 7.8, 6.5, 7.0],
+            &[6.9, 8.0, 7.2, 8.4, 7.1, 7.7],
+            &[5.1, 6.0, 5.4, 6.6, 5.3, 6.1],
+        ],
+    ];
+    let methods = [
+        MeansComparison::Tukey,
+        MeansComparison::Bonferroni,
+        MeansComparison::HolmBonferroni,
+        MeansComparison::HolmSidak,
+        MeansComparison::Dunnett,
+        MeansComparison::Sidak,
+        MeansComparison::FisherLsd,
+        MeansComparison::Scheffe,
+    ];
+    let mut holm_differs_from_raw = false;
+    for groups in &fixtures {
+        let names: Vec<String> = (0..groups.len()).map(|i| format!("G{i}")).collect();
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        for alpha in [0.05, 0.1] {
+            for method in methods {
+                let spec = AnovaSpec { comparison: Some(method), alpha, ..Default::default() };
+                let (mut p, b, sheet) = named(&names, groups, spec);
+                let sig = column(&p, b, sheet, "Significant");
+                let raw = column(&p, b, sheet, "Prob");
+                holm_differs_from_raw |= method.is_holm() && raw.iter().zip(&sig).any(|(p, s)| *p < alpha && *s == 0.0);
+                let opts = |only: bool, labels| ComparisonPlotOptions {
+                    significant_only: only,
+                    threshold: alpha,
+                    labels,
+                    ..Default::default()
+                };
+                let g = p.comparison_plot(b, sheet, &opts(false, BracketLabels::Asterisks)).unwrap();
+                let all = p.graph(g).unwrap().layers[0].brackets.clone();
+                assert_eq!(all.len(), sig.len());
+                for (br, s) in all.iter().zip(&sig) {
+                    assert_eq!(br.label != "ns", *s != 0.0, "{method:?} alpha {alpha}: {br:?}");
+                }
+                let g = p.comparison_plot(b, sheet, &opts(true, BracketLabels::PValues)).unwrap();
+                let shown = &p.graph(g).unwrap().layers[0].brackets;
+                let want: Vec<(usize, usize)> =
+                    all.iter().zip(&sig).filter(|(_, s)| **s != 0.0).map(|(b, _)| (b.group_a, b.group_b)).collect();
+                let got: Vec<(usize, usize)> = shown.iter().map(|b| (b.group_a, b.group_b)).collect();
+                assert_eq!(got, want, "{method:?} alpha {alpha}");
+            }
+        }
+    }
+    assert!(holm_differs_from_raw, "a fixture has a Holm pair whose raw p is below alpha but is not significant");
+}
+
+// ----- pairs by index -----
+
+#[test]
+fn groups_with_the_same_name_or_a_dash_in_the_name_map_to_the_right_pairs() {
+    let data: [&[f64]; 3] = [&[1.0, 2.0, 1.5, 1.2], &[2.1, 2.4, 2.9, 2.2], &[5.0, 5.5, 6.1, 5.2]];
+    let want = [(0, 1), (0, 2), (1, 2)];
+    for names in [["Value", "Value", "Other"], ["x - y", "x", "y - x"], ["Value", "Value", "Value"]] {
+        let (mut p, b, sheet) = named(&names, &data, AnovaSpec::default());
+        let report = p.workbook(b).unwrap().sheets[sheet].clone();
+        let pairs = read_pairs(&report).unwrap();
+        assert_eq!(pairs.iter().map(|q| (q.a, q.b)).collect::<Vec<_>>(), want, "{names:?}");
+        assert_eq!(pairs.iter().map(|q| q.p).collect::<Vec<_>>(), column(&p, b, sheet, "Prob"));
+        let o = ComparisonPlotOptions { significant_only: false, ..Default::default() };
+        let g = p.comparison_plot(b, sheet, &o).unwrap();
+        let l = &p.graph(g).unwrap().layers[0];
+        assert_eq!(l.brackets.iter().map(|q| (q.group_a, q.group_b)).collect::<Vec<_>>(), want);
+    }
+}
+
+#[test]
+fn a_report_without_stored_pairs_is_read_by_name_and_refused_when_the_names_are_ambiguous() {
+    let data: [&[f64]; 3] = [&[1.0, 2.0, 1.5, 1.2], &[2.1, 2.4, 2.9, 2.2], &[5.0, 5.5, 6.1, 5.2]];
+    let strip = |p: &mut Project, b: WindowId, sheet: usize| {
+        p.workbook_mut(b).unwrap().sheets[sheet].comparison_source.as_mut().unwrap().pairs.clear();
+        p.workbook(b).unwrap().sheets[sheet].clone()
+    };
+    // Distinct names: the fallback finds the pairs.
+    let (mut p, b, sheet) = named(&["A", "B", "C"], &data, AnovaSpec::default());
+    let stripped = strip(&mut p, b, sheet);
+    let pairs = read_pairs(&stripped).unwrap();
+    assert_eq!(pairs.iter().map(|q| (q.a, q.b)).collect::<Vec<_>>(), [(0, 1), (0, 2), (1, 2)]);
+    // Two groups called Value.
+    let (mut p, b, sheet) = named(&["Value", "Value", "C"], &data, AnovaSpec::default());
+    let stripped = strip(&mut p, b, sheet);
+    let err = read_pairs(&stripped).unwrap_err();
+    assert!(err.contains("more than one pair"), "{err}");
+    // "a - b" minus "c" and "a" minus "b - c" are both written "a - b - c".
+    let four: [&[f64]; 4] =
+        [&[1.0, 2.0, 1.5, 1.2], &[2.1, 2.4, 2.9, 2.2], &[5.0, 5.5, 6.1, 5.2], &[8.0, 8.4, 9.1, 8.8]];
+    let (mut p, b, sheet) = named(&["c", "a - b", "b - c", "a"], &four, AnovaSpec::default());
+    let stripped = strip(&mut p, b, sheet);
+    assert!(read_pairs(&stripped).is_err());
+}

@@ -13,6 +13,9 @@ pub(super) struct Output {
     pub notes: Vec<String>,
     /// Pairs of indices into `on_sheet` (X column, Y column) for the plots of a histogram graph.
     pub plots: Vec<(usize, usize)>,
+    /// The groups (indices into the inputs, `(i, j)` of each row) of the rows of a means comparison, in the order of the
+    /// report; empty for every other tool. Kept on the report sheet for the Multiple Comparisons Plot (T58).
+    pub comparison_pairs: Vec<(usize, usize)>,
 }
 
 pub(super) fn run(tool: &Tool, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
@@ -284,7 +287,7 @@ fn ttest(spec: &TTestSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
         "The confidence interval has level {} (a one-tailed test gives the interval of level 1 - 2 alpha, as Origin does).",
         num(1.0 - if spec.tail == Tail::Two { spec.alpha } else { 2.0 * spec.alpha })
     ));
-    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 // ----- tests of variances and proportions ------------------------------------------------------------
@@ -456,7 +459,7 @@ fn var_test(spec: &VarTestSpec, inputs: &[Input<'_>]) -> Result<Output, Analysis
             ));
         }
     }
-    Ok(Output { table: None, on_sheet, notes, plots: Vec::new() })
+    Ok(Output { table: None, on_sheet, notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 /// The warning line under the normal approximation (our wording).
@@ -628,7 +631,7 @@ pub(super) fn prop_test(spec: &PropTestSpec) -> Result<Output, AnalysisError> {
             power_table(&mut on_sheet, &spec.power, actual, |n, a| calc::power_two_proportions(p1, p2, n, a, tail))?;
         }
     }
-    Ok(Output { table: None, on_sheet, notes, plots: Vec::new() })
+    Ok(Output { table: None, on_sheet, notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 // ----- one-way ANOVA ---------------------------------------------------------------------------------
@@ -678,6 +681,7 @@ fn anova(spec: &AnovaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
         num(r.cov),
         num(r.grand_mean)
     ));
+    let mut comparison_pairs = Vec::new();
     if let Some(method) = spec.comparison {
         if method == MeansComparison::Dunnett && spec.control >= inputs.len() {
             return Err(AnalysisError::BadOption(format!(
@@ -687,6 +691,7 @@ fn anova(spec: &AnovaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
             )));
         }
         let comparisons = r.compare_with_control(method, spec.control, spec.alpha);
+        comparison_pairs = comparisons.iter().map(|c| (c.i, c.j)).collect();
         let stat_name = match method {
             MeansComparison::Tukey => "q",
             MeansComparison::Scheffe => "F",
@@ -732,7 +737,7 @@ fn anova(spec: &AnovaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
             ));
         }
     }
-    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new(), comparison_pairs })
 }
 
 // ----- histogram -------------------------------------------------------------------------------------
@@ -797,7 +802,7 @@ pub(super) fn histogram(spec: &HistogramSpec, inputs: &[Input<'_>]) -> Result<Ou
     if !spec.graph {
         plots.clear();
     }
-    Ok(Output { table: Some(table), on_sheet, notes, plots })
+    Ok(Output { table: Some(table), on_sheet, notes, plots, comparison_pairs: Vec::new() })
 }
 
 // ----- 2D frequency counts and binning -----------------------------------------------------------------
@@ -850,7 +855,7 @@ fn binning_2d(spec: &Bin2dOptions, inputs: &[Input<'_>]) -> Result<Output, Analy
             inputs[2..].iter().map(|i| i.short.as_str()).collect::<Vec<_>>().join(", ")
         ));
     }
-    Ok(Output { table: None, on_sheet, notes, plots: Vec::new() })
+    Ok(Output { table: None, on_sheet, notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 // ----- discrete frequency -------------------------------------------------------------------------------
@@ -962,7 +967,7 @@ pub(super) fn discrete_frequency(
             if spec.case_sensitive { ", case-sensitive" } else { "" }
         ));
     }
-    Ok(Output { table: None, on_sheet, notes, plots: Vec::new() })
+    Ok(Output { table: None, on_sheet, notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 // ----- normality tests -------------------------------------------------------------------------------
@@ -1019,7 +1024,7 @@ fn normality(spec: &NormalitySpec, inputs: &[Input<'_>]) -> Result<Output, Analy
         line.push('.');
         notes.push(line);
     }
-    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 // ----- two-way ANOVA ---------------------------------------------------------------------------------
@@ -1270,7 +1275,7 @@ pub(super) fn two_way_anova(
             ));
         }
     }
-    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 // ----- Mann-Whitney, signed rank, Kruskal-Wallis ---------------------------------------------------------
@@ -1344,7 +1349,7 @@ fn mann_whitney(spec: &MannWhitneySpec, inputs: &[Input<'_>]) -> Result<Output, 
     if spec.exact && r.p_exact.is_none() {
         notes.push("The exact p-value would take too long for this many numbers; the asymptotic one was used.".into());
     }
-    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 fn signed_rank(spec: &SignedRankSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
@@ -1418,7 +1423,7 @@ fn signed_rank(spec: &SignedRankSpec, inputs: &[Input<'_>]) -> Result<Output, An
             add(format!("{} vs {}", a.name, b.name), claim, &r);
         }
     }
-    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 fn kruskal_wallis(spec: &KruskalWallisSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
@@ -1445,7 +1450,7 @@ fn kruskal_wallis(spec: &KruskalWallisSpec, inputs: &[Input<'_>]) -> Result<Outp
         if r.p < spec.alpha { "differ significantly" } else { "do not differ significantly" },
         num(spec.alpha)
     )];
-    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 // ----- sign test, two-sample Kolmogorov-Smirnov, median test, Friedman ----------------------------------------
@@ -1524,7 +1529,7 @@ fn sign_test(spec: &SignTestSpec, inputs: &[Input<'_>]) -> Result<Output, Analys
         num(r.p),
         reject_words(r.p, spec.alpha)
     )];
-    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 fn ks_two_sample(spec: &KsTwoSampleSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
@@ -1555,7 +1560,7 @@ fn ks_two_sample(spec: &KsTwoSampleSpec, inputs: &[Input<'_>]) -> Result<Output,
         num(r.p),
         reject_words(r.p, spec.alpha)
     )];
-    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 fn median_test(spec: &MedianTestSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
@@ -1589,7 +1594,7 @@ fn median_test(spec: &MedianTestSpec, inputs: &[Input<'_>]) -> Result<Output, An
         if r.p < spec.alpha { "differ significantly" } else { "do not differ significantly" },
         num(spec.alpha)
     )];
-    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 fn friedman(spec: &FriedmanSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
@@ -1617,7 +1622,7 @@ fn friedman(spec: &FriedmanSpec, inputs: &[Input<'_>]) -> Result<Output, Analysi
         if r.p < spec.alpha { "differ significantly" } else { "do not differ significantly" },
         num(spec.alpha)
     )];
-    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 // ----- outlier tests ----------------------------------------------------------------------------------------
@@ -1684,7 +1689,7 @@ fn grubbs(spec: &OutlierSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisEr
             r.critical,
         ));
     }
-    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 fn dixon(spec: &OutlierSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
@@ -1717,7 +1722,7 @@ fn dixon(spec: &OutlierSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisErr
             r.critical,
         ));
     }
-    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 // ----- correlation coefficients ---------------------------------------------------------------------------
@@ -1822,7 +1827,7 @@ fn correlation(spec: &CorrelationSpec, inputs: &[Input<'_>]) -> Result<Output, A
         "Missing values are left out {}.",
         if spec.listwise { "row by row over all columns (listwise)" } else { "pair by pair (pairwise)" }
     ));
-    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 #[cfg(test)]

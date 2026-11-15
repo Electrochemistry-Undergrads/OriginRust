@@ -81,7 +81,8 @@ Projects save as `.sheaf` or Origin `.opj`; see the
 ## Use Sheaf from Claude or other AI tools
 
 `sheaf-mcp` is a Model Context Protocol server. An assistant can import data, read columns, plot,
-analyze, fit, export figures and save projects. It works on a project held by the server and sees
+analyze (every tool of `sheaf analyze`), fit, export figures and save projects, and offers three
+prompts (plot CV files, integrate a peak, fit a curve). It works on a project held by the server and sees
 only the folders you give with `--root`; with no `--root` every file path is refused.
 
 ```sh

@@ -2075,8 +2075,9 @@ Origin's documented facts (Origin 2022 help, not measured; no Origin was at hand
 - Labels: the name (and, when asked, the value, with up to four significant digits) at the wedge's centre (middle radius, middle
   angle), along the radial direction and turned half a turn when it would read upside down, in the layer's X axis tick font at 0.45
   of its size, black or white as reads better on the fill. A line is drawn whole or not at all: it is left out when its text (plus
-  0.3 text sizes each side) is wider than the ring, and the lines together must fit the chord of the wedge at its middle radius
-  (the second line goes first). Names default on, values off.
+  0.3 text sizes each side) is wider than the ring, and the lines together (their height plus 0.3 text sizes each side) must fit
+  the chord of the wedge at the inner end of the widest line (middle radius minus half its width: a radial label is widest
+  across the wedge where the wedge is narrowest), else the second line goes first, then the first. Names default on, values off.
 - Colour scale: a vertical bar right of the frame (the hexbin and Parallel Plot bar, `hexbin::draw_color_bar`, with its reserve in
   the layer's edges), titled with the value column's name and ticked at nice values over the leaf range.
 - Settings: `PlotKind::Sunburst`, `Template::Sunburst` (`sunburst`, "Sunburst Plot"), `Plot::sunburst` (`SunburstStyle`, skipped when

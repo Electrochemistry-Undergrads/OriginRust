@@ -254,6 +254,30 @@ fn labels_are_hidden_when_the_wedge_is_too_small_and_stay_upright() {
     assert!(!t.contains(&"Asia".to_string()) && !t.contains(&"70".to_string()), "{t:?}");
 }
 
+/// Twenty equal one-ring wedges (18 degrees) without a hole, named `name`; the labels written.
+fn narrow_wedges(name: &str) -> Vec<String> {
+    let mut p = Project::new();
+    let b = p.add_workbook("data");
+    let names: Vec<String> = (0..20).map(|i| format!("{name}{}", (b'a' + i as u8) as char)).collect();
+    let c = p.add_column(b, 0, Designation::Y, ColumnData::text(names)).unwrap();
+    let v = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0; 20])).unwrap();
+    let g = p.plot_sunburst(&[c], v).unwrap();
+    set(&mut p, g, |s| s.hole = 0.0);
+    texts(&doc(&svg_of(&p, g)))
+}
+
+#[test]
+fn a_radial_label_must_fit_the_wedge_at_its_inner_end() {
+    // Short names fit everywhere; a name nearly as long as the ring fits the chord at the middle radius but
+    // overflows the narrow wedge at its inner end, so it is hidden.
+    let short = narrow_wedges("");
+    assert!(short.iter().any(|s| s == "a"), "{short:?}");
+    let shown = |n: usize| narrow_wedges(&"W".repeat(n)).iter().filter(|s| s.starts_with('W')).count();
+    assert_eq!(shown(5), 20);
+    // 35 W's are shorter than the ring (the middle-radius test alone let them through) but not the inner chord.
+    assert_eq!(shown(35), 0, "overflows into the neighbouring wedges");
+}
+
 #[test]
 fn the_colour_scale_is_titled_with_the_value_column() {
     let (mut p, g, v) = world();

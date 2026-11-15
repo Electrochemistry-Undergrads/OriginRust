@@ -220,8 +220,8 @@ fn label(out: &mut Vec<Item>, sb: &SunburstData, rings: &Rings, w: &Wedge, m: &d
     let (rm, ring) = ((ri + ro) / 2.0, ro - ri);
     let mid = angle(style.start_angle_deg, w.from + w.span / 2.0);
     let span_rad = w.span * 2.0 * PI;
-    // The room across the wedge at its middle radius: the chord, or the diameter of a half turn or more.
-    let room = if span_rad >= PI { 2.0 * rm } else { 2.0 * rm * (span_rad / 2.0).sin() };
+    // The room across the wedge at radius `r`: the chord, or the diameter of a half turn or more.
+    let across = |r: f64| if span_rad >= PI { 2.0 * r } else { 2.0 * r * (span_rad / 2.0).sin() };
     let pad = PAD_EM * size;
     let line = (ASCENT + DESCENT) * size;
     let mut font = sb.font.clone();
@@ -238,8 +238,14 @@ fn label(out: &mut Vec<Item>, sb: &SunburstData, rings: &Rings, w: &Wedge, m: &d
     if style.show_values && !value.is_empty() && fits(&value) {
         lines.push(value);
     }
-    // Both lines need twice the height; when they do not fit, the first one alone may.
-    while !lines.is_empty() && lines.len() as f64 * line + 2.0 * pad > room {
+    // A radial line spans rm +- width / 2, so the wedge is narrowest at the line's inner end: the lines together must
+    // fit the room across the wedge there. Both lines need twice the height; when they do not fit, the first alone may.
+    while !lines.is_empty() {
+        let widest = lines.iter().map(|s| text::width(m, s, &font, size)).fold(0.0, f64::max);
+        let inner = (rm - widest / 2.0).max(0.0);
+        if lines.len() as f64 * line + 2.0 * pad <= across(inner) {
+            break;
+        }
         lines.pop();
     }
     if lines.is_empty() {
@@ -262,7 +268,7 @@ fn label(out: &mut Vec<Item>, sb: &SunburstData, rings: &Rings, w: &Wedge, m: &d
 
 /// The ticks of the colour scale over `(lo, hi)`: (position 0..1, label).
 pub(crate) fn scale_ticks(lo: f64, hi: f64) -> Vec<(f64, String)> {
-    if !(hi > lo) {
+    if hi.partial_cmp(&lo) != Some(std::cmp::Ordering::Greater) {
         return vec![(0.5, value_text(lo))];
     }
     let step = crate::ticks::nice_step((hi - lo) / 4.0);

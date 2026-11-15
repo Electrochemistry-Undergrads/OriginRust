@@ -75,7 +75,9 @@ T08 static worksheet-cell substitution (`34c1ba3`) adds fixed qualified cell ref
 measured 15-digit defaults, column-display `W` and preserved text. Expression/core/I/O tests
 cover recalculation, cycles, Undo and native/companion reopen; expression-language section 3
 records scalar measurements and the existing no-generated-code boundary. Active-sheet/book-only,
-dataset/graph/session and generated-reference forms remain open.
+dataset/graph/session and generated-reference forms remain open. Formatting, strict workspace
+all-target Clippy and 3,356 tests pass (eight existing ignored); inventory and eight Python
+tooling checks also pass on the combined browser/slope/prioritization tree.
 
 T25 proxy disconnect cleanup (`ef98bf7`) and T02 browser row ranges (`d9b4af7`) landed during
 planning; both claims are released. T52 slope annotation also landed (`33c4d246`);

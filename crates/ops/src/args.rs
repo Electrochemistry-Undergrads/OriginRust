@@ -2148,7 +2148,7 @@ pub enum AnalyzeTool {
         no_graph: bool,
     },
     /// Principal component analysis of the --y columns (the variables): eigenvalues, percent of variance,
-    /// loadings and scores; makes a scree plot as a graph.
+    /// loadings and scores; makes a scree plot, a loading plot and a biplot as graphs.
     Pca {
         #[command(flatten)]
         target: TargetArgs,
@@ -2167,9 +2167,24 @@ pub enum AnalyzeTool {
         /// Do not write the scores.
         #[arg(long)]
         no_scores: bool,
-        /// Do not make the scree plot.
+        /// Do not make the scree plot, loading plot and biplot.
         #[arg(long)]
         no_graph: bool,
+        /// Do not make the loading plot (the loadings of two components as vectors).
+        #[arg(long)]
+        no_loading_plot: bool,
+        /// Do not make the biplot (scores as points with the loading vectors on the top and right axes).
+        #[arg(long)]
+        no_biplot: bool,
+        /// Also make a score plot (the scores of two components as points).
+        #[arg(long)]
+        score_plot: bool,
+        /// The component on the horizontal axis of the loading plot, score plot and biplot.
+        #[arg(long, default_value_t = 1)]
+        x_component: usize,
+        /// The component on the vertical axis of those plots.
+        #[arg(long, default_value_t = 2)]
+        y_component: usize,
     },
     /// ROC curve: the --y columns are the test variables followed, last, by the state column. Area under the
     /// curve with standard error (DeLong) and confidence interval, the curve and the best cut-off; makes a graph.

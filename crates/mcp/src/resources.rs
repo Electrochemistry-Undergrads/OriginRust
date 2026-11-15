@@ -1,9 +1,10 @@
 //! Resources: the project tree, one column as CSV, one graph as PNG.
 
 use crate::b64;
-use crate::server::{INVALID_PARAMS, RESOURCE_NOT_FOUND, RpcError, Server};
+use crate::server::{INVALID_PARAMS, RESOURCE_NOT_FOUND, RpcError};
 use crate::tools::{CELL_CAP, cell_value, contents};
 use serde_json::{Value, json};
+use sheaf_core::Project;
 use sheaf_ops::render::ExportSettings;
 
 const PROJECT_URI: &str = "sheaf://project";
@@ -52,8 +53,7 @@ pub fn templates() -> Vec<Value> {
     ]
 }
 
-pub fn list(server: &Server) -> Vec<Value> {
-    let p = &server.project;
+pub fn list(p: &Project) -> Vec<Value> {
     let mut out = vec![json!({
         "uri": PROJECT_URI, "name": "project", "description": "Folders, workbooks, sheets, columns and graphs.",
         "mimeType": "application/json"
@@ -94,8 +94,7 @@ fn csv_value(v: &Value) -> String {
     }
 }
 
-pub fn read(server: &mut Server, uri: &str) -> Result<Value, RpcError> {
-    let p = &server.project;
+pub fn read(p: &Project, uri: &str) -> Result<Value, RpcError> {
     if uri == PROJECT_URI {
         let text = serde_json::to_string_pretty(&contents(p, None)).unwrap_or_default();
         return Ok(json!({"contents": [{"uri": uri, "mimeType": "application/json", "text": text}]}));
@@ -150,7 +149,6 @@ pub fn read(server: &mut Server, uri: &str) -> Result<Value, RpcError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::roots::Roots;
     use sheaf_core::column::{ColumnData, Designation};
 
     #[test]
@@ -163,28 +161,28 @@ mod tests {
 
     #[test]
     fn project_and_column_resources_read() {
-        let mut s = Server::new(Roots::default());
-        let book = s.project.add_workbook("");
-        let x = s.project.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
-        let y = s.project.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![10.0, f64::NAN])).unwrap();
-        s.project.column_mut(x).unwrap().short_name = "A".into();
-        s.project.column_mut(y).unwrap().short_name = "B".into();
-        s.project.column_mut(y).unwrap().units = "mA".into();
-        let listed = list(&s);
+        let mut project = Project::new();
+        let book = project.add_workbook("");
+        let x = project.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        let y = project.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![10.0, f64::NAN])).unwrap();
+        project.column_mut(x).unwrap().short_name = "A".into();
+        project.column_mut(y).unwrap().short_name = "B".into();
+        project.column_mut(y).unwrap().units = "mA".into();
+        let listed = list(&project);
         assert!(listed.iter().any(|r| r["uri"] == PROJECT_URI));
         assert!(listed.iter().any(|r| r["uri"] == "sheaf://column/Book1/Sheet1/B"));
-        let r = read(&mut s, "sheaf://column/Book1/Sheet1/B").unwrap();
+        let r = read(&project, "sheaf://column/Book1/Sheet1/B").unwrap();
         assert_eq!(r["contents"][0]["text"], "A,B (mA)\n1.0,10.0\n2.0,\n");
-        let p = read(&mut s, PROJECT_URI).unwrap();
+        let p = read(&project, PROJECT_URI).unwrap();
         assert!(p["contents"][0]["text"].as_str().unwrap().contains("Book1"));
         let long: Vec<f64> = (0..20000).map(|i| i as f64).collect();
-        let z = s.project.add_column(book, 0, Designation::Y, ColumnData::numeric(long)).unwrap();
-        s.project.column_mut(z).unwrap().short_name = "C".into();
-        let t = read(&mut s, "sheaf://column/Book1/Sheet1/C").unwrap();
+        let z = project.add_column(book, 0, Designation::Y, ColumnData::numeric(long)).unwrap();
+        project.column_mut(z).unwrap().short_name = "C".into();
+        let t = read(&project, "sheaf://column/Book1/Sheet1/C").unwrap();
         let text = t["contents"][0]["text"].as_str().unwrap();
         assert!(text.contains("# truncated: 5000 of 20000 rows"), "{}", &text[text.len().saturating_sub(120)..]);
-        assert_eq!(read(&mut s, "sheaf://column/Book1/Sheet1/Q").unwrap_err().code, RESOURCE_NOT_FOUND);
-        assert_eq!(read(&mut s, "sheaf://graph/Nope.png").unwrap_err().code, RESOURCE_NOT_FOUND);
-        assert_eq!(read(&mut s, "file:///etc/passwd").unwrap_err().code, RESOURCE_NOT_FOUND);
+        assert_eq!(read(&project, "sheaf://column/Book1/Sheet1/Q").unwrap_err().code, RESOURCE_NOT_FOUND);
+        assert_eq!(read(&project, "sheaf://graph/Nope.png").unwrap_err().code, RESOURCE_NOT_FOUND);
+        assert_eq!(read(&project, "file:///etc/passwd").unwrap_err().code, RESOURCE_NOT_FOUND);
     }
 }

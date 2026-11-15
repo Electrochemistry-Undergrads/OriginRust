@@ -34,6 +34,7 @@ use crate::dialogs::stack_panels::{Outcome as StackPanelsOutcome, StackPanelsDia
 use crate::dialogs::text_object::TextDialog;
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi, Sel};
+use crate::live::{self, Live, Note};
 use crate::menus::{self, MenuContext, WindowKind};
 use crate::panels::logs::Logs;
 use crate::panels::{self, PanelData, PanelId, Panels, explorer, objects};
@@ -73,6 +74,11 @@ pub struct Startup {
     pub recovery_dir: Option<PathBuf>,
     /// Where the autosave switch and interval are kept; `None` keeps the defaults and writes nothing.
     pub settings_path: Option<PathBuf>,
+    /// Turn the AI link on at start (`--mcp`). It is never saved: a run starts with it off.
+    pub mcp: bool,
+    /// The run folders the AI link may listen in, best first. `None` has no folder, so the link
+    /// cannot start (the tests; they pass a temporary folder of their own).
+    pub mcp_dirs: Option<Vec<PathBuf>>,
 }
 
 /// Something that needs an answer about unsaved changes first.
@@ -184,11 +190,14 @@ pub struct SheafApp {
     recovery_offer: Option<RecoveryOffer>,
     /// The file the recovered project belonged to: suggested by Save, since the project has no name.
     recovered_from: Option<PathBuf>,
+    /// The endpoint of `sheaf-mcp --attach`, when Tools > AI Assistants (MCP) is ticked.
+    live: Live,
 }
 
 impl SheafApp {
     pub fn new(cc: &eframe::CreationContext<'_>, startup: Startup) -> Self {
         theme::apply(&cc.egui_ctx);
+        let startup_dirs = startup.mcp_dirs.clone().unwrap_or_default();
         let mut app = SheafApp {
             doc: Document::default(),
             path: None,
@@ -254,12 +263,16 @@ impl SheafApp {
             autosave_dialog: None,
             recovery_offer: None,
             recovered_from: None,
+            live: Live::new(cc.egui_ctx.clone(), startup_dirs),
         };
         app.start_recovery();
         let paths = std::mem::take(&mut app.startup.paths);
         app.open_paths(paths, false);
         app.sync_windows();
         app.run_startup_show();
+        if app.startup.mcp {
+            app.set_link(true);
+        }
         app
     }
 
@@ -791,46 +804,76 @@ impl SheafApp {
         }
     }
 
-    /// File > Print... (Ctrl+P): the graph page, as a vector drawing, through the system's print
-    /// dialog, scaled into the paper of Page Setup as File > Print Preview shows. Windows plays the
-    /// page's metafile into the printer; macOS uses PDFKit and other systems use `lp`.
-    fn print_graph(&mut self, graph: WindowId) {
+    /// File > Print... (Ctrl+P): the active window printed as a vector drawing through the
+    /// system's print dialog. A graph page is scaled into the paper of Page Setup as File > Print
+    /// Preview shows; a workbook's active sheet prints as a table, split over as many pages as it
+    /// needs (graphing.md 19.8). Windows plays the metafiles into the printer; macOS shows PDFKit's panel for a graph; elsewhere,
+    /// and for a sheet on macOS, the PDF goes to `lp`.
+    fn print_graph(&mut self, window: WindowId) {
         let project = self.doc.project();
-        let Some((page, title)) = project.graph(graph).map(|g| ((g.page.width_pt, g.page.height_pt), g.name.clone()))
-        else {
+        let mut setup = project.page_setup;
+        // (title, page size in points, the pages as metafiles, the same as one PDF)
+        let (title, page, what) = if let Some(g) = project.graph(window) {
+            (g.name.clone(), (g.page.width_pt, g.page.height_pt), "graph")
+        } else if let Some(b) = project.workbook(window) {
+            // A sheet's orientation follows the paper (Automatic means portrait, as in Print
+            // Preview), never the printed area, which can be wider than tall.
+            setup.orientation = setup.orientation_for(0.0, 1.0);
+            let area = sheaf_plot::sheet_pages(b.sheet(), &setup).map(|p| p.area).unwrap_or((0.0, 0.0));
+            (b.name.clone(), area, "sheet")
+        } else {
             return;
         };
-        let setup = project.page_setup;
         if cfg!(test) {
             // Tests never reach a printer.
             self.say("Printing is skipped under test");
             return;
         }
+        let is_graph = what == "graph";
         #[cfg(windows)]
-        match sheaf_plot::render_emf(project, graph) {
-            Ok(emf) => match crate::winprint::print_with_dialog(&emf, page, &setup, &title) {
-                Ok(crate::winprint::Outcome::Printed) => self.say(format!("Printed {title}")),
-                Ok(crate::winprint::Outcome::Cancelled) => {}
-                Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
-            },
-            Err(e) => self.warn(format!("Could not print the graph: {e}")),
+        {
+            let pages = if is_graph {
+                sheaf_plot::render_emf(project, window).map(|e| vec![e])
+            } else {
+                project
+                    .workbook(window)
+                    .map_or(Ok(Vec::new()), |b| sheaf_plot::render_sheet_emf_pages(b.sheet(), &setup))
+            };
+            match pages {
+                Ok(pages) => match crate::winprint::print_with_dialog(&pages, page, &setup, &title) {
+                    Ok(crate::winprint::Outcome::Printed) => self.say(format!("Printed {title}")),
+                    Ok(crate::winprint::Outcome::Cancelled) => {}
+                    Err(e) => self.message = Some((format!("Could not print the {what}"), e)),
+                },
+                Err(e) => self.warn(format!("Could not print the {what}: {e}")),
+            }
         }
         #[cfg(target_os = "macos")]
-        match sheaf_plot::render_print_pdf(project, graph) {
-            Ok(pdf) => match crate::macprint::print_with_dialog(&pdf, &setup, page, &title) {
-                Ok(crate::macprint::Outcome::Printed) => self.say(format!("Printed {title}")),
-                Ok(crate::macprint::Outcome::CancelledOrFailed) => {}
-                Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
-            },
-            Err(e) => self.warn(format!("Could not print the graph: {e}")),
+        if is_graph {
+            match sheaf_plot::render_print_pdf(project, window) {
+                Ok(pdf) => match crate::macprint::print_with_dialog(&pdf, &setup, page, &title) {
+                    Ok(crate::macprint::Outcome::Printed) => self.say(format!("Printed {title}")),
+                    Ok(crate::macprint::Outcome::CancelledOrFailed) => {}
+                    Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
+                },
+                Err(e) => self.warn(format!("Could not print the graph: {e}")),
+            }
+            return;
         }
-        #[cfg(not(any(windows, target_os = "macos")))]
-        match sheaf_plot::render_pdf(project, graph) {
-            Ok(pdf) => match crate::winprint::print_pdf(&pdf, &setup, page, &title) {
-                Ok(()) => self.say(format!("Sent {title} to the default printer")),
-                Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
-            },
-            Err(e) => self.warn(format!("Could not print the graph: {e}")),
+        #[cfg(not(windows))]
+        {
+            let pdf = if is_graph {
+                sheaf_plot::render_pdf(project, window)
+            } else {
+                project.workbook(window).map_or(Ok(Vec::new()), |b| sheaf_plot::render_sheet_pdf(b.sheet(), &setup))
+            };
+            match pdf {
+                Ok(pdf) => match crate::winprint::print_pdf(&pdf, &setup, page, &title) {
+                    Ok(()) => self.say(format!("Sent {title} to the default printer")),
+                    Err(e) => self.message = Some((format!("Could not print the {what}"), e)),
+                },
+                Err(e) => self.warn(format!("Could not print the {what}: {e}")),
+            }
         }
     }
 
@@ -973,6 +1016,49 @@ impl SheafApp {
         let text = text.into();
         self.logs.warn(text.clone());
         self.status = text;
+    }
+
+    // ----- the AI link ---------------------------------------------------
+
+    /// Turns the endpoint of `sheaf-mcp --attach` on or off (Tools > AI Assistants (MCP)). A start
+    /// that fails (another Sheaf has it, no folder can be used) is a warning, and the link stays off.
+    fn set_link(&mut self, on: bool) {
+        if on == self.live.active() {
+            return;
+        }
+        if on {
+            match self.live.start(self.doc.generation()) {
+                Ok(()) => self.say("AI link on: an assistant started with sheaf-mcp --attach can connect"),
+                Err(e) => self.warn(format!("The AI link could not start: {e}")),
+            }
+        } else {
+            self.live.stop();
+            self.say("AI link off");
+        }
+    }
+
+    /// Once a frame, after the owner's actions and before the new windows are opened: runs the calls
+    /// of the connected assistants. A call that changes the project waits for a dialog to close and
+    /// for a cell edit to end.
+    fn live_step(&mut self) {
+        if !self.live.active() {
+            return;
+        }
+        let editing = self.books.values().any(|b| b.editing.is_some() || b.editing_label.is_some());
+        let blocked = editing || self.dialog_open();
+        let files = sheaf_mcp::files::OpenFiles {
+            project: self.path.clone(),
+            origin: self.foreign_source.clone(),
+            recovered_from: self.recovered_from.clone(),
+        };
+        let now = std::time::Instant::now();
+        let recovery = self.startup.recovery_dir.as_deref();
+        for note in self.live.step(&mut self.doc, blocked, &files, recovery, now) {
+            match note {
+                Note::Info(t) => self.say(t),
+                Note::Warn(t) => self.warn(t),
+            }
+        }
     }
 
     fn token(&mut self) -> u64 {
@@ -1589,6 +1675,7 @@ impl SheafApp {
                 self.autosave_dialog = Some(AutosaveDialog::new(self.autosave.settings, self.autosave.has_session()));
             }
             Action::ToggleStatusBar => self.status_bar_hidden = !self.status_bar_hidden,
+            Action::ToggleAiLink => self.set_link(!self.live.active()),
             Action::Quit => {
                 if self.doc.dirty {
                     self.pending = Some(Pending::Quit);
@@ -2213,6 +2300,7 @@ impl SheafApp {
             windows: project.windows.iter().map(|w| (w.id(), w.title())).collect(),
             open: self.open_menu.as_deref(),
             panels: self.panels.shown_flags(),
+            ai_link: self.live.active(),
             layer: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer),
             tool: graph.and_then(|g| self.graphs.get(&g)).map_or(GraphTool::Pointer, |s| s.tool()),
             curve: graph.and_then(|g| self.graph_curve(g)),
@@ -2368,6 +2456,7 @@ impl SheafApp {
             || self.set_values.is_some()
             || self.analysis.is_some()
             || self.fit.is_some()
+            || self.fit_more.is_some()
             || self.filter.is_some()
             || self.row_filter.is_some()
             || self.mask_condition.is_some()
@@ -2448,6 +2537,10 @@ impl SheafApp {
             };
             // Origin's trigonometric functions take radians, and so do ours (`sin`, `cos`, ...).
             boxed(ui, "Radian", "Angle unit of the trigonometric functions in formulas");
+            if !self.live.clients().is_empty() {
+                let text = format!("AI: connected ({})", self.live.clients().len());
+                boxed(ui, &text, &live::tooltip(self.live.clients()));
+            }
             if !reference.is_empty() {
                 boxed(ui, &reference, "The active sheet or graph layer");
             }
@@ -3631,6 +3724,7 @@ impl eframe::App for SheafApp {
         for action in actions {
             self.apply(action, ctx);
         }
+        self.live_step();
         self.sync_windows();
         self.autosave_step(ctx);
         match &self.message {
@@ -3658,6 +3752,7 @@ impl eframe::App for SheafApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.live.stop();
         self.end_autosave();
     }
 }

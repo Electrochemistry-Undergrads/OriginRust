@@ -1,28 +1,31 @@
 //! `sheaf-mcp`: the MCP server. Protocol messages go to stdout, one per line; logs go to stderr.
 
 use sheaf_mcp::Server;
+use sheaf_mcp::link::frame::{self, Line, REQUEST_CAP};
+use sheaf_mcp::proxy::{self, ProxyConfig};
 use sheaf_mcp::roots::Roots;
-use std::io::{BufRead, Write};
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-/// Longest request line accepted.
-const LINE_CAP: usize = 8 * 1024 * 1024;
-
 const HELP: &str = "sheaf-mcp: Model Context Protocol server for Sheaf, over stdin and stdout.
 
-Usage: sheaf-mcp [--root DIR]...
+Usage: sheaf-mcp [--attach] [--root DIR]...
 
 Options:
+  --attach     Do not open a project of its own: drive the project open in the Sheaf
+               app, which must have Tools > AI Assistants (MCP) turned on.
   --root DIR   A folder the server may read and write (repeatable). Without one,
                tools that read or write files refuse.
   --version    Print the version.
   --help       Print this text.
 
-Add it to Claude Code with:  claude mcp add sheaf -- sheaf-mcp --root ~/Data";
+Add it to Claude Code with:  claude mcp add sheaf -- sheaf-mcp --root ~/Data
+To drive the open app instead:  claude mcp add sheaf -- sheaf-mcp --attach --root ~/Data";
 
 fn main() -> ExitCode {
     let mut roots: Vec<PathBuf> = Vec::new();
+    let mut attach = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -34,6 +37,7 @@ fn main() -> ExitCode {
                 println!("sheaf-mcp {}", env!("CARGO_PKG_VERSION"));
                 return ExitCode::SUCCESS;
             }
+            "--attach" => attach = true,
             "--root" => match args.next() {
                 Some(d) => roots.push(PathBuf::from(d)),
                 None => {
@@ -60,56 +64,33 @@ fn main() -> ExitCode {
     if roots.is_empty() {
         eprintln!("sheaf-mcp: no --root given; tools that read or write files will refuse");
     }
+    if attach {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        let code = proxy::run(ProxyConfig::new(&roots), std::io::BufReader::new(std::io::stdin()), &mut out);
+        return ExitCode::from(code as u8);
+    }
     let mut server = Server::new(roots);
     let stdin = std::io::stdin();
     let mut input = stdin.lock();
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
-    let mut buf = Vec::new();
     loop {
-        buf.clear();
-        // Read a line, but never keep more than the cap.
-        let mut too_long = false;
-        loop {
-            let chunk = match input.fill_buf() {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("sheaf-mcp: reading stdin failed: {e}");
-                    return ExitCode::SUCCESS;
-                }
-            };
-            if chunk.is_empty() {
-                break;
+        let reply = match frame::read_line(&mut input, REQUEST_CAP, &mut || true) {
+            Ok(Line::Eof) => return ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("sheaf-mcp: reading stdin failed: {e}");
+                return ExitCode::SUCCESS;
             }
-            let (take, done) = match chunk.iter().position(|b| *b == b'\n') {
-                Some(i) => (i + 1, true),
-                None => (chunk.len(), false),
-            };
-            if buf.len() + take <= LINE_CAP + 1 {
-                buf.extend_from_slice(&chunk[..take]);
-            } else {
-                too_long = true;
-            }
-            input.consume(take);
-            if done {
-                break;
-            }
-        }
-        if buf.is_empty() && !too_long {
-            return ExitCode::SUCCESS;
-        }
-        // The extra buffer byte is only for LF. At EOF it may instead be an extra payload byte.
-        let payload_len = buf.len() - usize::from(buf.ends_with(b"\n"));
-        let reply = if too_long || payload_len > LINE_CAP {
-            Some(
+            Ok(Line::TooLong) => Some(
                 serde_json::json!({"jsonrpc": "2.0", "id": null,
                     "error": {"code": -32600, "message": "invalid request: the line is longer than 8 MB"}})
                 .to_string(),
-            )
-        } else {
-            let line = String::from_utf8_lossy(&buf);
-            let line = line.trim();
-            if line.is_empty() { None } else { server.handle_line(line) }
+            ),
+            Ok(Line::Text(line)) => {
+                let line = line.trim();
+                if line.is_empty() { None } else { server.handle_line(line) }
+            }
         };
         if let Some(r) = reply
             && (writeln!(out, "{r}").and_then(|()| out.flush())).is_err()

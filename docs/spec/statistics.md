@@ -686,8 +686,12 @@ Statistics > Multivariate Analysis > Principal Component Analysis. Origin's X-Fu
 1 pairwise, `std` standardize scores, `stat` descriptive statistics; outputs `rt` report sheet and `rd` score sheet).
 Runs: `tools/origin-ref/pca-suite1.lines.txt` (10 rows, 4 complete columns: correlation, covariance, standardized
 scores, descriptive statistics) and `pca-suite2.lines.txt` (12 rows, 5 columns with 3 missing numbers: the four
-combinations of correlation or covariance and listwise or pairwise). Raw outputs are local
-(`re-workspace/scratch/t29/pca*.out.txt`). The numerics are `crates/calc/src/pca.rs` (`nalgebra`'s symmetric
+combinations of correlation or covariance and listwise or pairwise); for the graphs and the report layout
+`pca-plots3.lines.txt` (seven runs with all four plots on: correlation and covariance, two data sets, one with missing
+numbers, standardized scores, components 2 and 3 on the axes; the window list, the axis limits of each layer, the
+datasets of each plot and a PNG export of every graph) and `t29-report-setup.labtalk.txt` with
+`t29-report-steps.txt` (`origin-screenshot.ps1`: the report sheet window maximized, sections opened, one picture per
+screen). Raw outputs and pictures are local (`re-workspace/scratch/t29/pca*.out.txt`, `plots/`). The numerics are `crates/calc/src/pca.rs` (`nalgebra`'s symmetric
 eigen-decomposition), the tool `crates/core/src/analysis/multivariate.rs`, the command line
 `sheaf analyze pca`, the window Statistics > Multivariate Analysis > Principal Component Analysis...
 (`dialogs/multivariate_options.rs`).
@@ -711,31 +715,89 @@ eigen-decomposition), the tool `crates/core/src/analysis/multivariate.rs`, the c
   are equal: Bartlett's chi-square `(n - 1 - (2p + 5)/6) (q ln(mean) - sum ln lambda)` over the `q` eigenvalues
   left, `(q + 2)(q - 1)/2` degrees of freedom; the last row is 0, 0, 0. `n` is the largest column count (also with
   pairwise exclusion).
-- **Origin also draws** three graphs (scree plot, loading plot, biplot) with the report.
+- **Report sheet** (a tree of titled tables; `rt`), measured from the pictures and the cell dump: title "Principal
+  Component Analysis (date)", then **Notes** (X-Function, User Name, Time, Data Filter), **Input Data** ("Variables":
+  Data and Range, one row per column named by its short name), **Descriptive Statistics** (N analysis, N missing,
+  Mean, Standard Deviation), **Correlation Matrix** (always the correlation matrix, also for a covariance analysis),
+  **Eigenvalues of the Correlation Matrix** or **of the Covariance Matrix** (Eigenvalue, Percentage of Variance and
+  Cumulative as text with two decimals and a percent sign; for covariance also Chisq, Degrees of Freedom,
+  Significance Level, and a blue remark "At the 0.05 level, eigenvalues from 1 to 4 are significantly equal."),
+  **Extracted Eigenvectors** (Coefficients of PC1 ... PCk, rows named by the short names), then the embedded graphs
+  **Scree Plot**, **Loading Plot**, **Biplot** (and **Scores Plot** when asked). The scores are in a sheet of their
+  own (`rd`: columns "Principal Component 1 ..", comment "Scores") and the data of the graphs in a third (`rdplot`).
+- **The dialog's plot switches** (the X-Function's options): `screeplot` (default on), `lplot` Loading Plot (on),
+  `splot` Score Plot (off), `biplot` (on), `xcomp` and `ycomp` the components on the axes (1 and 2), `npc` number of
+  components, `label` observation labels (not run). With all four on, the windows are named "Scree Plot", "Loading
+  Plot", "Scores Plot" and "Biplot", in that creation order.
+- **Scree plot.** Eigenvalues against the component number: blue squares joined by a red line, bottom and left axes
+  only, horizontal axis "Principal Component Number" from 0.5 to p + 0.5 with step 1, vertical axis "Eigenvalues" from
+  0; no legend.
+- **Loading plot.** One vector from the origin to the eigenvector coefficients of the two chosen components for each
+  variable, thin blue lines with the variable's short name in blue at the tip, no symbols, black lines through zero,
+  a closed frame without ticks on top and right, both axes fixed from -1 to 1 with step 0.2 (also for a covariance
+  analysis, whose eigenvectors are also of unit length), titled "Principal Component 1" and "Principal Component 2"
+  (the long names of the score columns); no legend. Its data (`rdplot`): the component number and eigenvalue, then
+  for the vectors two columns of zeros, the two coefficient columns and the labels.
+- **Scores plot.** The scores of the two components as small red squares, black lines through zero, closed frame,
+  automatic axes, the same titles; no legend.
+- **Biplot.** Two layers: the scores as in the scores plot against the bottom and left axes (the automatic limits
+  of the scores: for example -2 to 4 and -2 to 2), the loading vectors against the **top and right axes, drawn in
+  blue**, whose limits are those of the bottom and left axes **times `max |loading| / min(|smallest score|, |largest
+  score|)`** of the component on that axis, so that zero lies on the same line in both and the longest loading reaches
+  the nearer end of the scores. Fits all 14 axes of the seven runs to the six digits Origin shows (limits such as
+  -0.71618 to 1.43236 and -1.202706 to 1.202706 from scores -1.628..2.967 and -1.421..1.623 and loadings up to 0.583
+  and 0.854); the scores are the standardized ones when `std` is on, and those of the rows without missing values
+  with listwise exclusion.
 
 ### 17.2 What Sheaf does
 
 The chosen columns are the variables (at least two), the chosen rows the cases. Options: correlation or covariance,
 listwise or pairwise, number of components (default 2, at most the number of columns), standardize scores, write
-scores, scree plot. Result sheet `PCA1` (one row per variable, the rows beyond that only for the scores): Variable,
-N, Missing, Mean, SD, Component, Component number, Eigenvalue, Percent of variance, Cumulative percent (and
-Chi-square, DF, Prob>Chi-square for a covariance analysis), Loading PC1..PCk, Correlation with each variable, Score
-PC1..PCk (the scores are in the rows of the input). The table printed on the command line is the eigenvalue
-table; the loadings are in the notes. The scree plot (eigenvalue against component number) is a new graph; one
-undo removes sheet and graph. A column without spread, fewer than two columns or fewer than two usable rows is refused.
+scores, scree plot, loading plot, score plot, biplot and the two components on their axes. Result sheet `PCA1` (one
+row per variable, the rows beyond that only for the scores and plot data); its layout is given below. The table printed
+on the command line is the eigenvalue table; the loadings are in the notes. A column without spread, fewer than two columns or fewer than two usable rows is
+refused.
+
+**Result sheet layout (follows Origin's tables, 17.1).** The columns appear in Origin's table order and carry
+Origin's labels; the title of each table is in the comment row of its columns: Variable, N analysis, N missing,
+Mean, Standard Deviation ("Descriptive Statistics"); one column per variable named by its short name ("Correlation
+Matrix"); Component, Principal Component Number, Eigenvalue, Percentage of Variance, Cumulative and, for a covariance
+analysis, Chisq, Degrees of Freedom, Significance Level ("Eigenvalues of the Correlation Matrix" or "... Covariance
+Matrix"); Coefficients of PC1 ... PCk ("Extracted Eigenvectors"); the scores "Principal Component k" ("Scores", only
+when written); then the plot data. The printed table keeps Sheaf's own headers. Numbers are numbers (Origin's report
+shows the two percentages as text). A note repeats Origin's remark on the equality of eigenvalues in the one form
+measured.
+
+**Graphs.** Like Origin, a run makes up to four graphs, each its own window: the scree plot (default on), the loading
+plot (on), the score plot (off) and the biplot (on), looking as in 17.1 (own sizes: the point squares are 3 pt, the
+vectors 0.5 pt). The switches are the window's check boxes and `--no-graph`, `--no-loading-plot`, `--no-biplot`,
+`--score-plot`, `--x-component`, `--y-component` of `sheaf analyze pca`; the components on the axes default to 1 and
+2. When the two components are not both among those extracted or are equal, the three plots are left out and a note
+says so. The plots need the scores of their two components; when "write the scores" is off they are added to the sheet
+with the plot data. The vectors are one line plot with a gap after each vector (a missing number) and the labels come
+from a text column; the biplot's second layer is the `overlay` of the graph plan, with its own scales. One undo
+removes the sheet and all graphs.
 
 ### 17.3 Fixtures and tolerances
 
 `crates/calc/tests/origin_pca.rs`: N, missing, mean and SD to 1e-12 relative; eigenvalues, loadings, scores and
 the equality tests to 1e-5 relative (Origin prints the eigenvalues and test statistics with six digits); percent of
-variance to 0.005 (two decimals printed). Hand-worked tests in `pca.rs` (two columns: eigenvalues `1 +- r`).
+variance to 0.005 (two decimals printed). Hand-worked tests in `pca.rs` (two columns: eigenvalues `1 +- r`). The
+biplot axes: `crates/core/src/analysis/multivariate.rs` (`biplot_axes_match_origins_seven_runs`: the 14 axes of the
+seven runs to 2e-4 relative, 13 of them also in the limits of the score axes); the graphs, the report tables and the
+switches: the tests of the same file, `crates/cli/tests/analyze.rs` and the two window tests in `ui_tests.rs`.
 
 ### 17.4 Not measured
 
-- Origin's report sheet layout (Sheaf's is its own), the loading plot and biplot (not built: only the scree plot),
-  the dialog's labels and defaults, other output options (the component-number selection by Kaiser or percent
-  rule, the "Quantities to Compute" ticks), the behaviour of Origin on a column without spread or with fewer
-  rows than columns, and a sign rule for a component whose sum is exactly zero.
+- The observation labels (`label`), the look of the points and vectors beyond what the pictures show (sizes, line
+  widths and fonts are matched by eye, not read), the score plot on data with missing numbers, the loading plot and
+  biplot of a covariance analysis with pairwise exclusion, the remark under the eigenvalue table when no group of
+  eigenvalues is equal or for a correlation analysis (Sheaf writes the remark only in the measured form), what Origin
+  does when `xcomp` or `ycomp` is beyond `npc`, other output options (the component-number selection by Kaiser or
+  percent rule, the "Quantities to Compute" ticks), the behaviour of Origin on a column without spread or with fewer
+  rows than columns, and a sign rule for a component whose sum is exactly zero. One vertical axis differed: the
+  automatic range of the scores in the covariance run (scores -6.33..7.33) is -7.5 to 10 with step 5 in Origin and
+  -8 to 9 in Sheaf's automatic range (`autorange.rs`); the loading axes then follow Sheaf's limits there.
 
 ## 18 K-means cluster analysis (measured against Origin 2016)
 
@@ -745,7 +807,9 @@ sheet). Runs: `tools/origin-ref/kmeans-suite1.lines.txt` (12 cases, two variable
 analysis of variance and the membership sheet) and `kmeans-suite2.lines.txt` (ten cases in one variable with two,
 three and four clusters and the same cases in reverse order; 15 cases in two variables with three, four and five
 clusters and with `iter:=1`). Nine runs gave initial centres, final centres and sizes that fix the algorithm. Raw
-outputs are local (`re-workspace/scratch/t29/km2.out`, `km4.out`). The numerics are `crates/calc/src/kmeans.rs`, the
+outputs are local (`re-workspace/scratch/t29/km2.out`, `km4.out`). The report layout comes from the pictures of the
+report sheet window (`t29-report-setup.labtalk.txt`, `t29-report-steps.txt`) and `kmeans-members.lines.txt` (the
+membership sheet's column labels). The numerics are `crates/calc/src/kmeans.rs`, the
 tool `crates/core/src/analysis/multivariate.rs`, the command line `sheaf analyze kmeans`, the window Statistics >
 Multivariate Analysis > K-Means Cluster Analysis... (`dialogs/multivariate_options.rs`).
 
@@ -769,15 +833,26 @@ Multivariate Analysis > K-Means Cluster Analysis... (`dialogs/multivariate_optio
   the error degrees of freedom (`n - k`), the error mean square, `F` and its probability. **Membership sheet** (`rd`):
   the cluster number and, with `distance:=1`, the distance to the centre, one row per case.
 - The probability of `F` agrees with the exact `F` tail to 1e-9.
+- **Report layout** (measured from the pictures of the report sheet): title "K-Means Cluster Analysis (date)", then
+  **Notes**, **Input Data**, **Descriptive Statistics** (as in 17.1), **Initial Cluster Center** and **Final Cluster
+  Center** (rows Cluster1, Cluster2, ..., one column per variable named by its short name), **Cluster Summary**
+  (Number of Observations, Within Cluster Sum of Square, Average Distance, Maximum Distance), **Distance between Final
+  Cluster Centers** (a k x k table, rows and columns Cluster1 ...), **ANOVA** (rows per variable; Cluster DF, Cluster
+  SS, Error DF, Error SS, F Value, Prob>F). **The two "SS" columns hold the mean squares**: for the ten-case example
+  "Cluster SS" 178.9375 over "Error SS" 0.52083 is the F value 343.56. The membership sheet (`rd`) has the columns
+  "Membership" and (with `distance`) "Distance".
 
 ### 18.2 What Sheaf does
 
 The chosen columns are the variables, the chosen rows the cases; a row with a missing number in any column is left out
 (not measured). Options: number of clusters (default 3, at least 2, at most the rows), maximum passes of single-case
 moves (default 100), analysis of variance, write the cluster of every row and its distance, scatter graph. Result sheet
-`KMeans1`: Variable, N, Missing, Mean, SD; Cluster, Initial centre and Centre per variable, Cluster N, Sum of squares,
-Mean distance, Max distance, Distance to Cluster 1..k; ANOVA variable, DF between, MS between, DF error, MS error, F,
-Prob>F; Cluster number and Distance to centre (rows of the input, empty for a left-out row). The scatter graph shows the
+`KMeans1` follows Origin's tables (18.1), the title of each in the comment row of its columns: Variable, N analysis,
+N missing, Mean, Standard Deviation ("Descriptive Statistics"); Cluster (Cluster1 ...) and one column per variable
+("Initial Cluster Center"), the same again ("Final Cluster Center"); Number of Observations, Within Cluster Sum of
+Square, Average Distance, Maximum Distance ("Cluster Summary"); Cluster1 ... Clusterk ("Distance between Final Cluster
+Centers"); ANOVA variable, Cluster DF, Cluster SS, Error DF, Error SS, F Value, Prob>F ("ANOVA"; the two SS columns
+are the mean squares, as Origin's); Membership and Distance (rows of the input, empty for a left-out row). The scatter graph shows the
 first two variables with one plot per cluster (not made for one variable); one undo removes sheet and graph. Fewer than
 two clusters, more clusters than rows, an infinite number, or two identical rows among the initial centres (a cluster
 would stay empty) are refused.
@@ -785,14 +860,16 @@ would stay empty) are refused.
 ### 18.3 Fixtures and tolerances
 
 `crates/calc/tests/origin_kmeans.rs`: every run above; centres, SS and distances to 1e-12 relative, the probability of
-`F` to 1e-9, sizes and initial centres exact. Hand-worked tests in `kmeans.rs`.
+`F` to 1e-9, sizes and initial centres exact. Hand-worked tests in `kmeans.rs`; the table order and titles of the
+result sheet in `multivariate.rs`.
 
 ### 18.4 Not measured
 
 - Missing values, the iteration limit (`iter`) and Origin's convergence test, standardized variables, k-means with a
   user-chosen set of initial centres (Origin's dialog offers other initial-centre choices that were not run), a case
-  that ties between two centres at the first assignment other than the ones in the runs, k-medians, the report
-  layout and graph that Origin draws, and the behaviour for more clusters than distinct rows.
+  that ties between two centres at the first assignment other than the ones in the runs, k-medians, the graph that
+  Origin draws (`plot`, `iy`: not run, the call needs a range of plot variables), the Input Data and Notes tables
+  (not written by Sheaf), and the behaviour for more clusters than distinct rows.
 
 ## 19 ROC curve (scipy-checked, not Origin)
 
@@ -887,20 +964,45 @@ Statistics > Survival Analysis > Kaplan-Meier Estimator... (`dialogs/multivariat
 - **Tests of groups** (two or more groups): log-rank (weight 1), Breslow (generalised Wilcoxon, weight `n`) and
   Tarone-Ware (weight `sqrt(n)`); chi-square with `groups - 1` degrees of freedom, hypergeometric variance. Measured with
   two and three groups; the probability agrees with the exact chi-square tail to 4e-8 (Origin's own tail routine).
-- The confidence limits of the curve itself and the plot: Origin offers them with its survival plot, which the scripting
-  interface refused to draw, so they were not read.
+- **Confidence limits of the curve** (`sfci:=1`; measured with 90, 95 and 99 percent, one and two groups, runs
+  `kaplan-plots2.lines.txt`, `kaplan-plots3.lines.txt`): the survival-function sheet (`rd`) has per group the columns
+  "Time", "Survival(g)", "95% UCI" and "95% LCI" (the level is the `conf` option; comment "Survival Function"), on the
+  event rows, the start `(0, 1, 1, 1)` first. The limits are the **linear limits `S -/+ z se`, not cut off** at 1 or 0
+  (the first upper limit of the two-group example is 1.1163677216739256, a lower limit -0.15141395101436683), 0 and 0
+  once the curve is 0. The call with `sfci:=1` returned false (nothing drawn) with `plotinone:=1`; with `plotinone:=0`
+  it made one graph per group. (The other plot options `omsf`, `hazard`, `lsf` write further column groups: 1 - S,
+  the hazard and ln S; not read further.)
+- **Survival graph** (picture): window "Survival Function" (a second group "Survival Function(2)"), boxed title
+  "Survival Function" with a shadow, a black step line "Survival(1)" (red for the second group when two groups share
+  a graph), the limits dotted and thin ("95% UCI", "95% LCI"), horizontal axis the time column from -5 left of 0 on, the
+  vertical axis "Survival Function" fixed from -0.02 to 1.02 (so a limit beyond 0 or 1 is cut by the frame), no marks for
+  censored cases, a legend at the top right.
+- **Report layout** (pictures of the report sheet): title "Kaplan-Meier Estimates (date)", **Notes** (X-Function, User
+  Name, Time, Data Filter), **Input Data** (Data and Range of the Time Range, Censor Range and Grouping Range
+  (Optional)), **Summary of Event and Censored Values** (rows 1, 2, ... per group: Total, Events, Censored, Percent
+  Censored as a fraction; note "Censored Value(s): 1"), then per group **Survival Analysis of Time (g)** with
+  **Kaplan-Meier Survival Estimates** (Time, Status, Cumulative Survival, Standard Error, Cumulative Event, Number
+  Remaining; a "+" and "--" on censored rows; note "Observations with status as + are censored ones."), **Quartile
+  Estimates** (Percent Failures 25, 50, 75; Estimate; "95% LCL"; "95% UCL"), **Mean Estimate** (Estimate, Std.Error, "95%
+  LCL", "95% UCL"; note "Estimation is underestimated because the largest observation is censored." when it is),
+  then **Survival Plots** (the graph) and **Test of Equality over Groups** (rows Log Rank, Breslow, Tarone-Ware;
+  Chi-Square, df, Prob>Chi-Square).
 
 ### 20.2 What Sheaf does
 
 The chosen columns are the time, the censor column and, optionally, a grouping column (numbers or text), in that order.
 A case is censored where its censor cell equals the censoring value (default 1; numbers compare by value, text as text);
 rows with a missing time, censor or group cell are left out. Options: censoring value, confidence level (default 95 %),
-quartiles, mean, the three tests, a graph and the confidence limits in it. Result sheet `KaplanMeier1`: one row per
-group (Group, N, Events, Censored, Percent censored, the quartiles with limits, Mean, Mean SE, Mean lower, Mean upper),
-the tests (Test, Chi-square, DF, Prob>Chi-square), and per group the case table (Time, Status, Survival, Standard error,
-Events, At risk), the curve (starting at `(0, 1)`, running to the largest time), the censored cases at their survival
-(and optionally the limits, `S -/+ z se` inside 0 and 1, a choice of Sheaf made from the quartile limits). The graph has
-one step line per group and a symbol at every censored case; one undo removes sheet and graph. Tests with fewer than
+quartiles, mean, the three tests, a graph and the confidence limits in it. Result sheet `KaplanMeier1` follows Origin's tables (20.1), the title of each in the comment row of its columns and the
+group in the units row: Group, Total, Events, Censored, Percent Censored ("Summary of Event and Censored Values"); per
+group Time, Status, Cumulative Survival, Standard Error, Cumulative Event, Number Remaining ("Kaplan-Meier Survival
+Estimates"), Percent Failures, Estimate, "95% LCL", "95% UCL" ("Quartile Estimates") and Estimate, Std.Error, "95%
+LCL", "95% UCL" ("Mean Estimate"); Test (Log Rank, Breslow, Tarone-Ware), Chi-Square, df, Prob>Chi-Square ("Test of
+Equality over Groups"); then Sheaf's plot data per group ("Survival curve": the step curve starting at `(0, 1)` and
+running to the largest time, the censored cases at their survival and, optionally, "95% UCI" and "95% LCI", the
+limits of the curve `S -/+ z se` **not cut off**, as Origin's). The printed table keeps Sheaf's own headers. The graph
+has one step line per group, a symbol at every censored case (Origin draws none) and optionally the limits as dotted
+lines; its vertical axis runs from -0.02 to 1.02 like Origin's; one undo removes sheet and graph. Tests with fewer than
 two groups say so in the notes. A time that is negative or infinite, a confidence level outside 0 to 100, or other than two
 or three columns is refused.
 
@@ -908,14 +1010,18 @@ or three columns is refused.
 
 `crates/calc/tests/origin_survival.rs`: survival, standard errors, per-case events and at-risk columns, quartiles with
 limits, means with standard errors and limits, and the test statistics, to 1e-12 relative (Origin prints 14 digits in the
-table cells, so those use 1e-13); probabilities to 1e-6. Hand-worked tests in `survival.rs`.
+table cells, so those use 1e-13); probabilities to 1e-6; the limits of the curve (two groups at 95 percent, one sample) in
+`curve_limits_are_linear_and_not_cut_off`, 1e-12 relative. Hand-worked tests in `survival.rs`; the table order,
+titles and the cut of the graph in `report_tables_and_unclamped_limits_follow_origin`.
 
 ### 20.4 Not measured
 
-- Confidence limits of the survival curve (the formula, and the choice among linear, log and arcsine), the quartile
-  limits when the estimate itself or the lower limit is never reached (Sheaf gives none), the mean variance factor when
-  there is exactly one event, more than three groups, stratified and trend tests, left-truncated data, the plot Origin
-  draws and its report layout, text censor values, and the default confidence level.
+- Whether Origin offers other limit formulas (log, arcsine; its dialog showed one check box), why `sfci:=1` with
+  `plotinone:=1` returned false, the survival graph of several groups with limits in one window, the other plot
+  options (1 - S, hazard, ln S) beyond their first column group, the quartile limits when the estimate itself or the
+  lower limit is never reached (Sheaf gives none), the mean variance factor when there is exactly one event, more than
+  three groups, stratified and trend tests, left-truncated data, the Input Data and Notes tables (not written by
+  Sheaf), text censor values, and the default confidence level.
 
 ## 21 Variance and proportion tests
 

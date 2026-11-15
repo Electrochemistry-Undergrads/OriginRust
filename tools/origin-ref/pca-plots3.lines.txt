@@ -1,0 +1,447 @@
+string nm$ = "";
+string w$ = "";
+string ds$ = "";
+string info$ = "";
+string all$ = "";
+string g$ = "";
+int nt = 0;
+newbook;
+col(1) = {15.38, 13.7, 8.24, 7.82, 13.88, 18.35, 15.52, 10.34, 11.23, 17.7};
+wks.addcol(); col(2) = {15.44, 8.81, 14.84, 19.92, 13.7, 18.94, 24.92, 17.99, 23.46, 29.86};
+wks.addcol(); col(3) = {17.12, 20.08, 19.22, 16.71, 15.96, 19.09, 25.35, 31.78, 35.37, 35.38};
+wks.addcol(); col(4) = {10.58, 12.15, 7.57, 12.74, 7.06, 16.12, 8.93, 18.82, 8.85, 17.98};
+pca irng:=(1:4) mtype:=0 npc:=2 screeplot:=1 lplot:=1 splot:=1 biplot:=1 rt:=<new name:=Rc1> rd:=<new name:=Dc1> rdplot:=<new name:=Pc1>;
+#[Book1]Pc1
+newbook;
+col(1) = {15.38, 13.7, 8.24, 7.82, 13.88, 18.35, 15.52, 10.34, 11.23, 17.7};
+wks.addcol(); col(2) = {15.44, 8.81, 14.84, 19.92, 13.7, 18.94, 24.92, 17.99, 23.46, 29.86};
+wks.addcol(); col(3) = {17.12, 20.08, 19.22, 16.71, 15.96, 19.09, 25.35, 31.78, 35.37, 35.38};
+wks.addcol(); col(4) = {10.58, 12.15, 7.57, 12.74, 7.06, 16.12, 8.93, 18.82, 8.85, 17.98};
+pca irng:=(1:4) mtype:=1 npc:=2 screeplot:=1 lplot:=1 splot:=1 biplot:=1 rt:=<new name:=Rc2> rd:=<new name:=Dc2> rdplot:=<new name:=Pc2>;
+#[Book2]Pc2
+newbook;
+col(1) = {24.96, 24.56, 21.98, 19.92, 20.41, 23.33, 26.83, 28.88, 28.81, 27.47, 26.43, 26.76};
+wks.addcol(); col(2) = {19.98, 13.09, 18.49, 0/0, 13.52, 12.37, 15.28, 14.46, 10.99, 8.81, 11.11, 12.28};
+wks.addcol(); col(3) = {13.91, 22.27, 18.83, 15.97, 19.45, 18.25, 13.03, 21.25, 12.76, 15.28, 18.33, 10.46};
+wks.addcol(); col(4) = {19.32, 20.56, 23.15, 20.71, 25.23, 27.66, 27.77, 0/0, 0/0, 37.79, 43.74, 42.51};
+wks.addcol(); col(5) = {23.18, 14.92, 20.26, 17.06, 22.9, 16.22, 18.24, 14.26, 20.21, 17.22, 18.31, 13.09};
+pca irng:=(1:5) mtype:=0 npc:=3 missing:=0 screeplot:=1 lplot:=1 splot:=1 biplot:=1 rt:=<new name:=Rc3> rd:=<new name:=Dc3> rdplot:=<new name:=Pc3>;
+#[Book3]Pc3
+newbook;
+col(1) = {15.38, 13.7, 8.24, 7.82, 13.88, 18.35, 15.52, 10.34, 11.23, 17.7};
+wks.addcol(); col(2) = {15.44, 8.81, 14.84, 19.92, 13.7, 18.94, 24.92, 17.99, 23.46, 29.86};
+wks.addcol(); col(3) = {17.12, 20.08, 19.22, 16.71, 15.96, 19.09, 25.35, 31.78, 35.37, 35.38};
+wks.addcol(); col(4) = {10.58, 12.15, 7.57, 12.74, 7.06, 16.12, 8.93, 18.82, 8.85, 17.98};
+pca irng:=(1:4) mtype:=0 npc:=3 std:=1 screeplot:=1 lplot:=1 splot:=1 biplot:=1 rt:=<new name:=Rc4> rd:=<new name:=Dc4> rdplot:=<new name:=Pc4>;
+#[Book4]Pc4
+newbook;
+col(1) = {15.38, 13.7, 8.24, 7.82, 13.88, 18.35, 15.52, 10.34, 11.23, 17.7};
+wks.addcol(); col(2) = {15.44, 8.81, 14.84, 19.92, 13.7, 18.94, 24.92, 17.99, 23.46, 29.86};
+wks.addcol(); col(3) = {17.12, 20.08, 19.22, 16.71, 15.96, 19.09, 25.35, 31.78, 35.37, 35.38};
+wks.addcol(); col(4) = {10.58, 12.15, 7.57, 12.74, 7.06, 16.12, 8.93, 18.82, 8.85, 17.98};
+pca irng:=(1:4) mtype:=0 npc:=3 xcomp:=2 ycomp:=3 screeplot:=1 lplot:=1 splot:=1 biplot:=1 rt:=<new name:=Rc5> rd:=<new name:=Dc5> rdplot:=<new name:=Pc5>;
+#[Book5]Pc5
+newbook;
+col(1) = {1.2, 2.3, 3.1, 4.8, 5.0, 6.7, 7.1, 8.9};
+wks.addcol(); col(2) = {2.0, 1.8, 4.4, 3.9, 6.1, 5.5, 8.0, 7.2};
+wks.addcol(); col(3) = {9.1, 7.7, 6.5, 5.2, 4.9, 3.0, 2.8, 1.1};
+pca irng:=(1:3) mtype:=0 npc:=2 screeplot:=1 lplot:=1 splot:=1 biplot:=1 rt:=<new name:=Rc6> rd:=<new name:=Dc6> rdplot:=<new name:=Pc6>;
+#[Book6]Pc6
+newbook;
+col(1) = {1.2, 2.3, 3.1, 4.8, 5.0, 6.7, 7.1, 8.9};
+wks.addcol(); col(2) = {2.0, 1.8, 4.4, 3.9, 6.1, 5.5, 8.0, 7.2};
+wks.addcol(); col(3) = {9.1, 7.7, 6.5, 5.2, 4.9, 3.0, 2.8, 1.1};
+pca irng:=(1:3) mtype:=1 npc:=2 screeplot:=1 lplot:=1 splot:=1 biplot:=1 rt:=<new name:=Rc7> rd:=<new name:=Dc7> rdplot:=<new name:=Pc7>;
+#[Book7]Pc7
+win -a Graph1;
+g$ = "Graph1|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph1.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph1|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph2;
+g$ = "Graph2|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph2.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph2|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph3;
+g$ = "Graph3|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph3.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph3|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph4;
+g$ = "Graph4|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph4.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph4|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph5;
+g$ = "Graph5|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph5.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph5|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph6;
+g$ = "Graph6|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph6.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph6|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph7;
+g$ = "Graph7|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph7.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph7|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph8;
+g$ = "Graph8|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph8.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph8|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph9;
+g$ = "Graph9|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph9.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph9|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph10;
+g$ = "Graph10|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph10.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph10|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph11;
+g$ = "Graph11|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph11.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph11|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph12;
+g$ = "Graph12|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph12.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph12|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph13;
+g$ = "Graph13|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph13.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph13|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph14;
+g$ = "Graph14|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph14.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph14|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph15;
+g$ = "Graph15|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph15.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph15|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph16;
+g$ = "Graph16|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph16.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph16|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph17;
+g$ = "Graph17|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph17.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph17|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph18;
+g$ = "Graph18|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph18.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph18|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph19;
+g$ = "Graph19|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph19.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph19|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph20;
+g$ = "Graph20|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph20.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph20|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph21;
+g$ = "Graph21|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph21.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph21|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph22;
+g$ = "Graph22|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph22.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph22|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph23;
+g$ = "Graph23|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph23.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph23|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph24;
+g$ = "Graph24|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph24.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph24|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph25;
+g$ = "Graph25|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph25.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph25|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph26;
+g$ = "Graph26|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph26.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph26|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph27;
+g$ = "Graph27|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph27.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph27|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;
+win -a Graph28;
+g$ = "Graph28|%(page.longname$)|nl=$(page.nlayers)|L1 x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+expGraph type:=png path:="C:\Users\RenLab\Downloads\OriginRust\re-workspace\scratch\t29\plots" filename:="all_Graph28.png" overwrite:=1 tr1.unit:=2 tr1.width:=800;
+layer -s 2;
+g$ = "Graph28|L2|nl=$(page.nlayers)|x $(layer.x.from) $(layer.x.to) $(layer.x.inc) y $(layer.y.from) $(layer.y.to) $(layer.y.inc)|";
+ds$ = "";
+doc -e D { ds$ = ds$ + "%C|"; }
+g$ = g$ + ds$;
+$g$
+layer -s 1;

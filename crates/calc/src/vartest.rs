@@ -16,8 +16,9 @@
 //! - one proportion: see [`proportion_one`] (normal approximation with the quirk that z is 0 below `n p0`,
 //!   exact binomial test whose two-sided p sums every count no more likely than the observed one, Wald and
 //!   Clopper-Pearson intervals);
-//! - two proportions: see [`proportion_two`] (only the pooled z, the unpooled Wald interval of the
-//!   difference and the layout were measured; see the spec for what was not).
+//! - two proportions: see [`proportion_two`] (pooled and unpooled z with the sign kept, Fisher's exact p, the
+//!   unpooled Wald interval of the difference, all measured; the Raw and Indexed input forms were not);
+//! - power analysis of the proportion tests: [`power_one_proportion`] and [`power_two_proportions`].
 
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal};
 use statrs::function::beta::beta_reg;
@@ -392,9 +393,9 @@ pub struct TwoProportions {
 
 /// Test of the difference of two proportions, `(successes, trials)` each, against `difference` (first minus
 /// second). Needs both sample sizes above 0, no more successes than trials and `|difference| < 1`.
-/// Measured against Origin: the pooled z and the two-sided p, the unpooled Wald interval of the difference
-/// ([`wald_difference_interval`]). Not measured: the unpooled z, a hypothesized difference other than 0, a
-/// negative z (the one-sample test clips it to 0; here it is kept), the one-sided p-values and Fisher's test.
+/// Measured against the dialog (the interval is [`wald_difference_interval`]): the unpooled and pooled z (the pooled standard
+/// error only for a hypothesized difference of 0), the sign of z, the three tails, Fisher's exact p and the
+/// unpooled Wald interval. Both samples all successes give no z and no p.
 pub fn proportion_two(
     first: (u64, u64),
     second: (u64, u64),
@@ -454,7 +455,7 @@ fn fisher_p(first: (u64, u64), second: (u64, u64), tail: Tail) -> f64 {
 
 /// The Wald interval of the difference `p1 - p2`, `diff +- z sqrt(p1 (1 - p1) / n1 + p2 (1 - p2) / n2)`,
 /// level `level` (0 to 1), one-sided as [`wald_interval`] (`[lower, 1]` for the upper-tailed test, `[-1, upper]`
-/// for the lower-tailed one; the one-sided limits are not measured), cut to `[-1, 1]`.
+/// for the lower-tailed one, as measured), cut to `[-1, 1]`.
 pub fn wald_difference_interval(first: (u64, u64), second: (u64, u64), tail: Tail, level: f64) -> (f64, f64) {
     let ((x1, n1), (x2, n2)) = (first, second);
     let (p1, p2) = (x1 as f64 / n1 as f64, x2 as f64 / n2 as f64);
@@ -498,7 +499,7 @@ pub fn power_one_proportion(p1: f64, p0: f64, n: f64, alpha: f64, tail: Tail) ->
 }
 
 fn power_terms(d: f64, se0: f64, se1: f64, alpha: f64, tail: Tail) -> f64 {
-    if !(se1 > 0.0) || !se0.is_finite() {
+    if se1.is_nan() || se1 <= 0.0 || !se0.is_finite() {
         return f64::NAN;
     }
     let norm = std_normal();

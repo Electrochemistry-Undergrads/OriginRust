@@ -1414,6 +1414,47 @@ fn export_graphs_apply_writes_the_file_and_asks_before_replacing_it() {
 }
 
 #[test]
+fn export_graphs_multipage_pdf_writes_all_graphs_into_one_file() {
+    let mut h = start(vec![data_file("export-multipage-a"), data_file("export-multipage-b")]);
+    assert_eq!(project(&h).graphs().count(), 2);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Export Graphs..."]);
+    let label = "Export as multi-page PDF file";
+    assert!(h.query_by_label(label).is_none(), "only offered for PDF");
+    h.get_by_value("Portable Network Graphics (*.png)").click();
+    settle(&mut h);
+    // PDF is below the fold of the type list.
+    h.get_by_label("Portable Document Format (*.pdf)").scroll_to_me();
+    settle(&mut h);
+    click(&mut h, "Portable Document Format (*.pdf)");
+    // One graph (Active Page): shown but greyed.
+    assert!(h.get_by_label(label).accesskit_node().is_disabled(), "Active Page is one graph");
+    h.get_by_value("Active Page").click();
+    settle(&mut h);
+    click(&mut h, "All Graphs in Project");
+    assert!(!h.get_by_label(label).accesskit_node().is_disabled());
+    click(&mut h, label);
+    assert!(h.query_by_label("File will be saved as sample.pdf (2 pages)").is_some());
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-export-multipage-out-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    h.state_mut().export.as_mut().unwrap().set_path(&dir);
+    settle(&mut h);
+    click(&mut h, "Apply");
+    let pdfs: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "pdf"))
+        .collect();
+    assert_eq!(pdfs, vec![dir.join("sample.pdf")], "one PDF for both graphs");
+    let bytes = std::fs::read(&pdfs[0]).unwrap();
+    assert!(String::from_utf8_lossy(&bytes).contains("/Count 2"), "two pages");
+    assert!(h.state().status.contains("Wrote 2 graphs to"), "{}", h.state().status);
+    assert!(h.state().export.is_some(), "Apply keeps the window open");
+    click(&mut h, "Cancel");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn export_graphs_psd_picker_writes_rgb_grey_and_indexed_images() {
     let mut h = start(vec![data_file("export-psd")]);
     show_window(&mut h, "Graph1 - sample");

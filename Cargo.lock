@@ -3348,6 +3348,8 @@ dependencies = [
  "fontdb",
  "gif 0.14.2",
  "image",
+ "miniz_oxide 0.8.9",
+ "pdf-writer",
  "png 0.18.1",
  "resvg",
  "roxmltree",

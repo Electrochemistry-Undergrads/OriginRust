@@ -60,6 +60,14 @@ pub fn write_graph(project: &Project, graph: WindowId, path: &Path, settings: &E
         .with_context(|| format!("could not write '{}'", path.display()))
 }
 
+/// Renders several graphs into one multi-page PDF file, one page per graph in the order given
+/// (Origin's Export Graphs `multipage`); the size and margin settings apply to every page.
+pub fn write_graphs_pdf(project: &Project, graphs: &[WindowId], path: &Path, settings: &ExportSettings) -> Result<()> {
+    let (size, layout) = settings.resolve()?;
+    sheaf_plot::export_multipage_pdf_file(project, graphs, path, size, layout)
+        .with_context(|| format!("could not write '{}'", path.display()))
+}
+
 /// The export size from `--image-width` and `--image-height`; a value in `%` is a page ratio.
 pub fn export_size(width: Option<&str>, height: Option<&str>, dpi: f64) -> Result<sheaf_plot::ExportSize> {
     let percent = |text: Option<&str>, what: &str| -> Result<Option<f64>> {

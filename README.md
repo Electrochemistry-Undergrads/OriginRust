@@ -67,6 +67,9 @@ cargo run --release -p sheaf-cli -- import run1.txt -o experiment.sheaf --plot
 # Export a figure
 cargo run --release -p sheaf-cli -- plot run1.txt -o figure.png --dpi 300
 
+# Export every graph of a project as one multi-page PDF (or repeat --graph NAME)
+cargo run --release -p sheaf-cli -- export experiment.sheaf --all-graphs -o figures.pdf
+
 # Analyze and fit
 cargo run --release -p sheaf-cli -- analyze integrate run1.txt
 cargo run --release -p sheaf-cli -- fit run1.txt --model linear

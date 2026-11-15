@@ -117,10 +117,11 @@ fn fir_window_and_least_squares_remove_200_hz_without_a_delay() {
     let w = filtered("fir-window", &["fir-filter", "--order", "100", "--cutoff", "50"]);
     assert!((amplitude(&w, 10.0) - 1.0).abs() < 0.02, "{}", amplitude(&w, 10.0));
     assert!(amplitude(&w, 200.0) < 0.01, "{}", amplitude(&w, 200.0));
-    // aligned with the input: the 10 Hz sine stays in phase (the sine has no cosine part at row 250: t = 0.25 s)
-    let t = 0.4;
+    // aligned with the input: the 10 Hz sine stays in phase. At row 425 (t = 0.425 s) the input is
+    // sin(8.5 pi) = 1; the 50 samples of delay of an order 100 filter read sin(7.5 pi) = -1 there.
+    let t = 0.425;
     let i = (t * 1000.0) as usize;
-    assert!((w[i] - (2.0 * PI * 10.0 * t).sin()).abs() < 0.03, "{} at row {i}", w[i]);
+    assert!((w[i] - 1.0).abs() < 0.03, "{} at row {i}", w[i]);
     let ls = filtered(
         "fir-ls",
         &["fir", "--method", "least-squares", "--order", "80", "--pass", "50", "--stop", "100", "--forward-backward"],
@@ -167,4 +168,80 @@ fn unusable_filters_are_refused_with_a_reason() {
     assert!(!ok && err.contains("even order"), "{err}");
     let (ok, _, err) = sheaf(&["analyze", "fir-filter", d, "--y", "B", "--order", "2000", "--cutoff", "100"]);
     assert!(!ok && err.contains("order"), "{err}");
+}
+
+#[test]
+fn the_window_parameter_reaches_the_filter() {
+    let base = ["fir-filter", "--order", "60", "--cutoff", "50", "--window", "kaiser"];
+    let with = |param: &str| {
+        let mut a = base.to_vec();
+        a.extend_from_slice(&["--window-param", param]);
+        filtered(&format!("fir-kaiser-{param}"), &a)
+    };
+    let (flat, steep) = (with("0"), with("12"));
+    // beta 0 is a rectangular window: its stopband leaks far more than beta 12
+    assert!(
+        amplitude(&flat, 200.0) > 5.0 * amplitude(&steep, 200.0),
+        "{} {}",
+        amplitude(&flat, 200.0),
+        amplitude(&steep, 200.0)
+    );
+    let rect = filtered("fir-rect", &["fir-filter", "--order", "60", "--cutoff", "50", "--window", "rectangle"]);
+    for (a, b) in flat.iter().zip(&rect) {
+        assert!((a - b).abs() < 1e-12);
+    }
+}
+
+#[test]
+fn a_window_parameter_that_overflows_is_refused_even_without_scaling() {
+    let dir = scratch("filters-overflow");
+    let data = signal_file(&dir);
+    let d = data.to_str().unwrap();
+    for extra in [&[][..], &["--no-scale"][..]] {
+        let mut a = vec!["analyze", "fir-filter", d, "--y", "B", "--cutoff", "100", "--window", "kaiser"];
+        a.extend_from_slice(&["--window-param", "800"]);
+        a.extend_from_slice(extra);
+        let (ok, _, err) = sheaf(&a);
+        assert!(!ok && err.contains("not finite"), "{extra:?}: {err}");
+    }
+}
+
+#[test]
+fn a_high_order_band_pass_is_not_all_zero() {
+    // order 100 at Fs = 2000 Hz: the gain used to underflow to 0 and the column came out all zero
+    let dir = scratch("filters-high-order");
+    let mut text = String::from("t,y\n");
+    for i in 0..400 {
+        let t = i as f64 / 2000.0;
+        text.push_str(&format!("{t},{}\n", (2.0 * PI * 450.0 * t).sin()));
+    }
+    let data = dir.join("tone.csv");
+    std::fs::write(&data, text).unwrap();
+    let out = dir.join("out.csv");
+    let (ok, _, err) = sheaf(&[
+        "analyze",
+        "iir-filter",
+        data.to_str().unwrap(),
+        "--y",
+        "B",
+        "--type",
+        "band-pass",
+        "--order",
+        "100",
+        "--cutoff",
+        "300",
+        "--cutoff2",
+        "600",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "{err}");
+    let y: Vec<f64> = std::fs::read_to_string(&out)
+        .unwrap()
+        .lines()
+        .skip(2)
+        .map(|l| l.rsplit(',').next().unwrap().parse().unwrap())
+        .collect();
+    let peak = y.iter().skip(200).fold(0.0f64, |a, v| a.max(v.abs()));
+    assert!((peak - 1.0).abs() < 0.05, "peak {peak}");
 }

@@ -1534,7 +1534,9 @@ pub enum AnalyzeTool {
         /// Sample frequency in Hz; by default 1 / the X step of the column.
         #[arg(long)]
         fs: Option<f64>,
-        /// Cutoff frequency (low and high pass) or the first cutoff (band pass and band stop).
+        /// Cutoff frequency (low and high pass) or the first cutoff (band pass and band stop). Butterworth: the
+        /// -3 dB point; Chebyshev I and elliptic: the passband edge (gain down by --ripple); Chebyshev II: the
+        /// stopband edge (gain down by --attenuation).
         #[arg(long)]
         cutoff: Option<f64>,
         /// The second cutoff of band pass and band stop.

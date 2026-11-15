@@ -147,4 +147,47 @@ mod tests {
             assert_eq!(back.analysis_links, p.analysis_links);
         }
     }
+
+    fn gappy(values: Vec<f64>) -> (Project, ColumnId) {
+        let mut p = Project::new();
+        let book = p.add_workbook("Book1");
+        let x: Vec<f64> = (0..values.len()).map(|i| i as f64).collect();
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(values)).unwrap();
+        (p, y)
+    }
+
+    fn both() -> [Tool; 2] {
+        [
+            Tool::IirFilter(IirSpec { order: Some(2), cutoff: Some(0.2), ..IirSpec::default() }),
+            Tool::FirFilter(FirSpec { order: Some(4), cutoff: Some(0.2), ..FirSpec::default() }),
+        ]
+    }
+
+    #[test]
+    fn a_missing_value_inside_the_input_is_refused() {
+        // a recursive filter would carry the NaN to the end of the column
+        for tool in both() {
+            let mut v = vec![1.0; 20];
+            v[7] = f64::NAN;
+            let (mut p, y) = gappy(v);
+            let e = p.analyze(&req(y, tool)).unwrap_err();
+            assert!(matches!(&e, AnalysisError::BadOption(m) if m.contains("missing values")), "{e:?}");
+            assert!(p.analysis_links.is_empty());
+        }
+    }
+
+    #[test]
+    fn trailing_missing_values_are_left_missing_in_the_output() {
+        for tool in both() {
+            let mut v = vec![2.0; 20];
+            v[16..].fill(f64::NAN);
+            let (mut p, y) = gappy(v);
+            let r = p.analyze(&req(y, tool)).unwrap();
+            let got = p.numeric(r.new_columns[0]).unwrap().to_vec();
+            assert_eq!(got.len(), 20);
+            assert!(got[..16].iter().all(|v| v.is_finite()), "{got:?}");
+            assert!(got[16..].iter().all(|v| v.is_nan()), "{got:?}");
+        }
+    }
 }

@@ -323,7 +323,7 @@ impl Project {
     }
 
     /// Brings the links up to date after an edit that turned `before` into `self`: Auto links whose
-    /// input columns changed run again, Manual links are marked pending. Used by
+    /// input columns changed (their values or their mask) run again, Manual links are marked pending. Used by
     /// [`crate::Document`] inside the undo step of the edit. Returns what could not run.
     pub fn update_analysis_links(&mut self, before: &Project) -> Vec<String> {
         if self.analysis_links.is_empty() {
@@ -333,7 +333,10 @@ impl Project {
         for b in self.workbooks() {
             for s in &b.sheets {
                 for c in &s.columns {
-                    if before.column(c.id).is_some_and(|o| o.data != c.data) {
+                    if before
+                        .column(c.id)
+                        .is_some_and(|o| o.data != c.data || o.mask != c.mask || o.mask_disabled != c.mask_disabled)
+                    {
                         changed.insert(c.id);
                     }
                 }

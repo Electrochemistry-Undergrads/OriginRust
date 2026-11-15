@@ -3326,3 +3326,161 @@ Sheaf's choices (all unmeasured):
   power, exponential and logarithmic).
 - Not done: a Mini Toolbar, a label dragged with the mouse (the offset is in the model only), a trendline per
   group of plots, a trendline hit test, Pearson's R for linear, confidence bands, fit parameters to a sheet.
+
+## 20. Data menu tools: Mask, Remove Bad and Move Data Points (T48)
+
+Origin's graph Data menu has three tools that act on the points of a plot: Mask Data Points, Move Data
+Points and Remove Bad Data Points (Sheaf's menu already lists them in that order, after the display-range
+items). Measured elsewhere (workbook-model 13.1a): worksheet masks, Mask Change Color, Disable Masking, Hide
+Masked Points. Nothing of the graph tools themselves has been measured. Every choice below is labelled
+**[Sheaf choice]** (made without Origin, change it when measured) or **[?]** (not known). The mechanism, the
+core edits, is independent of those choices.
+
+### 20.1 Sheaf's rules
+
+- **Any shown plot of any layer [Sheaf choice].** A tool acts on the points of the plots the pointer picks, the
+  nearest point that the graph draws within the Data Reader's reach (30 screen points), in any layer; a
+  rectangle masks the drawn points of every plot inside it. Sheaf has no active plot (only an active layer), so
+  the brief's "active plot only" is not what is built: the pointer decides, which is what "active plot" comes
+  to when the plots do not overlap. Origin may act on the active plot only, or on all plots of the layer [?].
+  A point that is not drawn cannot be picked: a hidden plot, a layer with Show Elements Data off, a row that
+  Skip Points leaves without a symbol (the rows of `PlotData::point_rows`: the first of every n shown rows,
+  missing values counting), a masked point under Hide Masked Points, and a point outside the clip rectangle
+  (the axis range; with Clip Data to Frame off the point is drawn and so can be picked).
+- **Which plots [Sheaf choice].** Line, Scatter and Line + Symbol plots. Other kinds ignore the tools (bars,
+  areas, boxes and so on have no single point to pick), and so do polar and ternary layers.
+- **Mask Data Points [Sheaf choice].** While the tool is on, a drag draws a rectangle (screen rectangle,
+  corner to corner); when the button is let go, the Y cell of every picked-eligible point inside it is masked.
+  A point is inside when its drawn position (after multipliers, offsets and the axis scale, so on a log axis
+  the rectangle is a rectangle on the screen) is inside the rectangle, edges included. A drag that covers no
+  point does nothing. A click without a drag on a masked point unmasks it; a click on an unmasked point does
+  nothing. Only the plot's Y cell is masked, not its X cell, as Column > Mask on the Y column does. Origin
+  may select by clicking, by a region of another shape, or add Ctrl/Shift modifiers [?].
+- **Masked points that are hidden.** With Hide Masked Points on a masked point is not drawn, so it cannot be
+  picked and cannot be unmasked from the graph (switch Hide Masked Points off first). With Disable Masking on,
+  masks are not applied: a rectangle still masks (the flag is kept, as in the worksheet) but nothing changes
+  on the screen [Sheaf choice].
+- **Remove Bad Data Points [Sheaf choice].** A click on a point sets the plot's Y cell to a missing value.
+  The row is kept: the X cell, the other columns and the row numbers do not change, and the line breaks at the
+  gap as it does for a missing value typed in the worksheet. The tool stays on for the next click. Whether
+  Origin deletes the row or only the Y cell [?]; the brief of T48 asks for rows to be kept.
+- **Move Data Points [Sheaf choice].** A drag starting on a point moves it; the pointer's final position, taken
+  back through the axis scale (log axes), the plot's offset and multiplier (Individual stack and waterfall,
+  spec 13) and the Y axis of the plot's layer, becomes the point's new X and Y: both cells change, and for a
+  plot without an X column (drawn against the row number) only the Y cell. Origin may move Y only, or ask for
+  a modifier to move in one direction [?]. The point moves by the distance the pointer is dragged: it is
+  dropped at the pointer's position less the offset at which it was grabbed (the grab may be up to 30 points
+  from the point), so a drag that returns to where it began (within half a pixel) writes nothing and makes
+  no undo step. In a waterfall the pointer is taken back by the plot's shift first, so the point lands where
+  it is dropped. Two cases re-lay the graph out after the move, so other points may appear to jump: in an Auto
+  stack the offsets come from each curve's extent, so dropping a point below the curve's minimum or above its
+  maximum changes the offsets of that curve and of the ones above it; and curves that share an X column
+  move that row's X for all of them (the cell is the shared one).
+  The new numbers are the exact converted values, not rounded to the grid or to the screen pixel. A point
+  dropped outside the frame is moved there too (the axes do not rescale at once, as for any edit).
+- **Ending a mode [Sheaf choice].** Esc or the Pointer button of the Tools toolbar leaves the mode (the same
+  as for the Data Reader and the drawing tools). Origin's double-click or right-click to end [?]. The Tools
+  toolbar shows no tool pressed while a Data menu mode is on (Origin has no toolbar button for them), and the
+  status bar names the mode and how to end it.
+- **Cursor [?].** Sheaf shows a crosshair for Mask and Remove Bad and a move cursor (a four-way arrow) for
+  Move; Origin's shapes were not captured.
+- **Nothing to act on.** On a graph without a plot, or when the pointer is not within reach of a point, the
+  tools do nothing (no message, no undo step).
+
+### 20.2 What a change does to the worksheet (core, `graph_data.rs`) [Sheaf choice]
+
+Each action is one `Document::edit` step, so one Undo reverts it and Redo brings it back; analysis and plots
+follow as they do for worksheet edits and masks. The steps are labelled by the Y column's short name and
+designation and the row counted from 1 (`Document::mask_points`, `remove_bad_points`, `move_point`):
+
+| Tool | Undo label | Cells changed |
+|---|---|---|
+| Mask a rectangle | `Mask 4 points of B(Y)` | the masks of the Y cells (`Unmask 1 point of B(Y)` for a click on a masked point) |
+| Remove Bad | `Remove bad point B(Y) row 12` | the Y cell becomes missing |
+| Move | `Move point B(Y) row 12` | the Y cell and, when the plot has one, the X cell |
+
+- Nothing is recorded (no undo step, no dirty mark) when no cell would change: a mask that is already set,
+  a missing value removed again, a point dropped where it was. A row beyond the data of a column is
+  skipped for a mask and for Remove Bad, and is an error for Move (nothing changes). Several cells in the
+  same column and row count once.
+- **Formula columns follow the worksheet's typing rule.** A column whose values come from a formula that keeps
+  running (Recalculate Auto or Manual, `Column::is_locked`; workbook-model 10a rule 8) refuses typed values:
+  the grid, Fill, Paste, Clear, Replace, Insert Rows and Delete Rows leave it alone and the app says "That
+  column is calculated from a formula; change the formula in Set Column Values". Remove Bad and Move do the same
+  (nothing changes, `DataEditReport::locked` says how many columns refused, and the app shows that message).
+  Move is all or nothing: if either the X or the Y column is calculated, neither cell changes. A mask is
+  not a typed value; the worksheet's Column > Mask works on such columns too, so the graph's mask does.
+  Columns that an analysis tool wrote (`Column::analysis`) are not locked in the worksheet and are not here;
+  a later recalculation of the link overwrites an edit, as for a typed edit.
+- **Recalculating columns and analysis links.** Auto formulas that read a changed cell recalculate inside the
+  same undo step, so Undo restores source and results together (workbook-model 10a rule 3). Auto analysis links
+  (Smooth, Simulate Curve and the other linked tools) run again when a source column's values **or its mask**
+  change, so masking a point from the graph updates a linked result as masking in the worksheet should (before
+  T48 a mask change did not touch links; this is a fix of `update_analysis_links`). A Manual link is marked
+  pending. Formulas do not read masks, so a mask changes no formula column.
+- **Text and Numeric columns.** Remove Bad also clears the text of a Text & Numeric cell. A moved value is a
+  number, so it replaces a text cell. A column that holds only text cannot be moved (error).
+- **Not finite values.** A point cannot be moved to NaN or infinity (an error; the app's mapping gives NaN for a
+  pointer outside the range of a log axis, in which case it does nothing).
+
+### 20.3 Hit testing, modes and overlay (app, `data_tools.rs`, `reader.rs`, `graph_view.rs`) [Sheaf choice]
+
+- **Menu.** Data > Mask Data Points, Move Data Points and Remove Bad Data Points are enabled on a graph and
+  start the mode (`GraphTool::Data`); the other Data items stay grey (they need a column display range). No
+  check mark is shown on the item [?]. Choosing another item, the Data Reader or another tool replaces the
+  mode; Esc or the Pointer button ends it. The Tools toolbar shows no button pressed. The status bar names
+  the mode and how to end it ("Mask Data Points: drag a rectangle over the points; click a masked point to
+  unmask it; Esc ends").
+- **Picking is the Data Reader's code** (`reader::each_point`, shared; `Pick::Edit` is the stricter variant):
+  plot data are the worksheet columns as they are (`plot_xy`), the plot's row range, rows that fail an
+  active worksheet filter, non-visible plots and non-finite values are not pickable; the multiplier/offset
+  place of the plot (`stack_places`), the layer's axes (`data_to_page`) and, in a waterfall, the plot's shift
+  (`sheaf_plot::waterfall_shift`: member k is `k * (dx% * w, -dy% * h)` of the front frame) give the drawn
+  position, for the Data Reader as well; error bars are not points. `Pick::Edit` also skips plots that are
+  not Line, Scatter or Line + Symbol, polar and ternary layers, layers with Show Elements Data off, rows that
+  Skip Points does not draw, masked points while Hide Masked Points is on, and points whose page position is
+  outside the layer's clip rectangle (`LayerGeometry::clip`, 0.5 pt tolerance, unless Clip Data to Frame is
+  off) because the renderer does not draw them. The reach is 30 screen points, the nearest point wins, in any
+  layer.
+- **Mask.** A drag (egui's drag threshold) draws a translucent rectangle with a ring on each point that
+  would be masked; letting go sends one action with the Y cells of those points. A click masks nothing:
+  it unmasks the nearest *masked* point within reach (so an unmasked neighbour is never the target). A point
+  counts as masked as drawn, so with Disable Masking on a click does nothing.
+- **Move.** A drag that starts within reach of a point picks it; while dragging, a ring follows the pointer
+  and a line joins it to the point's place. On release the pointer goes screen, page, `page_to_data` (the
+  axis scales, so log and reciprocal axes are handled), then the plot's inverse placement (`Place::source_x`
+  and `source_y`: subtract the offset, divide by the multiplier) and the two numbers are written to the X
+  and Y cells (Y only when the plot has no numeric X column); in a waterfall the plot's shift is taken off the
+  page position first. The pointer position used is the final one less the grab offset (see 20.1). A position
+  that is not finite (outside a log axis) writes nothing. A click or a drag that does not start on a point does nothing.
+- **Remove Bad.** A click on the nearest point within reach sends its Y cell.
+- **Esc** pressed during a drag drops the drag without writing anything and ends the mode.
+- **Hover.** The point that a click would act on (for Mask, the nearest masked one) gets a ring.
+- **Nothing to act on.** No plot, no point within reach or a column that a formula keeps up to date (message
+  "That column is calculated from a formula; change the formula in Set Column Values") records no undo
+  step. Plot-only X sorting (18.9) changes only the order the line joins the points, so a picked point is
+  still a worksheet row.
+- `--show data-tool:mask|move|remove` and `--show mask-points:4,5` (rows from 1 of the first plot) put the
+  first graph in a mode or mask rows, for screenshots (the Data Reader's `--show reader` does the same).
+
+### 20.4 To measure on Windows (`tools/origin-ref`)
+
+1. Cursor shape while Data > Mask Data Points, Move Data Points and Remove Bad Data Points are on; whether the
+   menu item shows a check mark, and how the mode ends (Esc, double-click, right-click, another tool).
+2. Mask: rectangle or click or both; which plots (active plot, all plots of the layer, all layers); whether
+   the X cell is masked with the Y cell; the effect of Ctrl and Shift (add to, toggle); whether it can unmask
+   from the graph and how (Data > Mask Data Points again on a masked point, or Ctrl).
+3. Remove Bad: whether it sets the Y cell missing or deletes the row (read the worksheet afterwards with
+   LabTalk `wks.nRows` and the cell value), whether the X cell stays, and what happens in a formula column.
+4. Move: whether X and Y both change or only Y, the numbers written (exact or snapped, a rounding step?),
+   behaviour on log axes, with an offset or multiplier, in a column that a formula fills, and on a plot with
+   no X column; whether Shift or Ctrl constrains the direction; whether Esc during a drag cancels it.
+5. Whether each action is one Undo step in Origin (Edit > Undo's text), and whether the worksheet shows the
+   change at once.
+6. Whether the tools work on plots other than line, scatter and line + symbol (column, area, bubble), on
+   a graph with Hide Masked Points on, and on a worksheet with an active filter.
+7. The picking radius and whether a point under the pointer is highlighted first.
+8. Whether points clipped by the axis range, rows that Skip Points leaves without a symbol and the plots of a
+   layer with Show Elements Data off can be picked or masked; and, in a waterfall, whether the tools work on
+   the shifted curves at all.
+9. Move: whether the point follows the drag distance (Sheaf) or jumps to the pointer.

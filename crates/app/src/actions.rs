@@ -126,6 +126,31 @@ pub enum GraphTool {
     Text,
     /// A drawing tool (Line, Arrow, Rectangle, Circle): a drag on the graph draws one object.
     Draw(sheaf_core::shape::ShapeKind),
+    /// One of the Data menu's tools (Mask, Move, Remove Bad Data Points).
+    Data(DataTool),
+}
+
+/// The tools of a graph's Data menu that act on the points of a plot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataTool {
+    /// Data > Mask Data Points: a drag masks the points in a rectangle, a click on a masked point
+    /// unmasks it.
+    Mask,
+    /// Data > Move Data Points: a drag moves a point, changing its X and Y cells.
+    Move,
+    /// Data > Remove Bad Data Points: a click sets the Y cell of a point missing.
+    RemoveBad,
+}
+
+/// A change of worksheet cells made from a graph's Data menu tools (one undo step each).
+#[derive(Debug, Clone, PartialEq)]
+pub enum DataEdit {
+    /// Masks or unmasks the Y cells of points.
+    Mask { cells: Vec<sheaf_core::DataCell>, masked: bool },
+    /// Sets the Y cells of points missing.
+    RemoveBad { cells: Vec<sheaf_core::DataCell> },
+    /// Moves a point: its Y cell and, when the plot has an X column, its X cell.
+    Move { y: (sheaf_core::DataCell, f64), x: Option<(sheaf_core::DataCell, f64)> },
 }
 
 /// Which File > Import item opened the file chooser.
@@ -393,6 +418,8 @@ pub enum Action {
         graph: WindowId,
         tool: GraphTool,
     },
+    /// A change that a Data menu tool made to the cells of a plot's worksheet.
+    DataEdit(DataEdit),
     /// Add Text: opens the text window for a new label in a layer (the active one when `layer`
     /// is `None`) at a point given as fractions of the layer frame (the middle when `None`).
     AddText {

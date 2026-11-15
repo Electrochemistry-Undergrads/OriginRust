@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 154 | 42 | 245 |
+| All rows | 49 | 155 | 42 | 246 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 85 | 42 | 144 |
+| P1 and P2 together | 17 | 86 | 42 | 145 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 57 are P2.
 
@@ -289,6 +289,7 @@ Cross-cutting findings:
 | 3D plots | Plot > 3D | none | ✗ | no 3D renderer | P2 |
 | Parallel plots | Plot > Categorical | Plot > Categorical > Parallel Plot and Parallel Index (T49, graphing.md 14.25; `-t parallel`, `parallel-index`, `--group`) | ◐ | one vertical axis per column, per-axis or shared range, lines coloured by a numeric column (colour scale) or by group (legend), Plot Details Parallel tab; Origin's defaults and colour map unmeasured, no Parallel Sets, curvature or axis reordering; written to .opj as line plots | P2 |
 | Treemap | Plot > Categorical | Plot > Categorical > Treemap (T50, graphing.md 14.26; `-t treemap`, `--group`, `--treemap-*`) | ◐ | nested rectangles by category columns sized by a value column, six layouts (squarified, squarified+, split, three pivots), order, depth, gap, per-level layout; Origin's defaults, colours and labels unmeasured; no hover or drill-down | P2 |
+| Sunburst plot | Plot > Categorical | Plot > Categorical > Sunburst Plot (T51, graphing.md 14.27; `-t sunburst`, `--group`, `--sunburst-*`) | ◐ | hierarchy of category columns as concentric rings, angles by a value column, leaves coloured by value and categories by their leaves' mean on the shared ramp with a colour scale, unfilled missing categories, radial labels, Pie Geometry tab (start angle, hole, ring gap, labels); Origin's defaults unmeasured; no hover or Collapse/Expand drilling; written to .opj as columns | P2 |
 | Contour, heat map | Plot > Contour | Plot > Contour/Heat Map > Hexbin only (T45, graphing.md 14.24; `-t hexbin`) | ◐ | Hexbin of XY data with Origin's bin controls and a count colour scale; contour and heat map need matrices | P2 |
 | Inset, pictures in graphs | Zoom, Insert picture | none | ✗ | | P2 |
 | Other plot-type IDs when reading .opj | area, box, bar, histogram, pie | only types 200 to 203 mapped | ✗ | | P2 |

@@ -2034,10 +2034,74 @@ Origin's documented facts (Origin 2025b help, not measured; no Origin was at han
   not fit, depth, every layout with every order, other kinds unchanged), core template/refusal/serde test, `.opj` warning test,
   `crates/cli/tests/treemap.rs` (SVG, defaults, every layout and option, refusals), UI menu and Layout tab tests with undo.
 - File > Append renumbers the appended graphs' columns through `Graph::remap_columns` (core `graph.rs`): the plots' X, Y, error,
-  base, size and colour columns, label columns, treemap `categories` and `order_column`, the parallel `color` column, plot
+  base, size and colour columns, label columns, treemap and sunburst `categories`, the treemap `order_column`, the parallel `color` column, plot
   offsets, tick-label columns and the rug `plot` choice of each axis. A new field holding a column id goes there.
 - Not done: Origin's real defaults, colours and labels, hover read-out and picking of rectangles, drilling down, a colour-by-value
   option, a toolbar button, a label font setting, reading Origin's treemap from .opj, a size cap on very many rectangles.
+
+### 14.27 Sunburst plot (T51)
+
+Origin's documented facts (Origin 2022 help, not measured; no Origin was at hand; [W:originlab.com/2022],
+[W:ReleaseNotes ORG-23725], [W:origin-help/sunburst-plot]):
+
+- New graph type "Sunburst Plot", menu "Plot > Categorical: Sunburst Plot", template `Sunburst.OTP`; data: at least two
+  text columns and one numeric column; the last numeric column holds the values and every other column is a category or
+  sub-category; each level is a ring.
+- A wedge's colour follows its value; a category's colour follows the mean value of its children; a missing text category
+  appears unfilled.
+- Plot Details: Pie Geometry tab (Rotation, Radius/Center, Doughnut) and Labels tab; the sunburst is a variant of the Doughnut
+  plot. The Mini Toolbar button "Collapse Expand Mode" drills into a clicked wedge.
+- Not documented (Sheaf's choices, **unmeasured**, listed below): which level is innermost, the start angle and direction, the
+  hole, ring widths, borders, the colour map, the label rules, the order, how "mean" and "missing" are read.
+
+**What Sheaf does** (everything else is Sheaf's choice, unmeasured):
+
+- Hierarchy: the one of the treemap (`sheaf_calc::treemap_tree`, 14.26: skipped missing or non-positive values, duplicate paths
+  summed, a node's value the sum of its children), generalised only by a flag `Node::blank` that marks a node whose category cell
+  was empty (named "(blank)"); the treemap output is unchanged. The angular layout is `sheaf_calc::sunburst::layout`: wedges
+  parents before children; a node's angle is its value's share of its parent's angle, the top level sharing the full turn, so
+  the angles of the children add up to the parent's. Order: Worksheet (first appearance, the default) or By Size (largest first).
+- Colour value: a leaf's own value; a category's is the unweighted mean of the values of the leaves below it (Sheaf's reading of
+  "the mean value of its children"). The colour is `plots::map_color` (the shared blue-cyan-green-yellow-red ramp) at
+  `(value - lo) / (hi - lo)` over the range `lo..hi` of the leaf values (0.5 when the range is empty). A wedge whose category cell
+  was empty is outline only (no fill; a dark outline of the tick font colour, at least 0.5 pt).
+- Geometry: the circle is centred in the layer frame with a diameter equal to the shorter side of the frame, so it stays round on
+  a non-square frame; no axes, no frame line, no legend (template: axes and legend hidden). The first category column is the
+  innermost ring; every level has the same width from the hole radius to the outer radius; a ring gap (pt) takes half from each
+  side of a ring where it has a neighbour (not at the hole or the rim). The first wedge starts at the start angle in degrees
+  counter-clockwise from 3 o'clock (default 90, 12 o'clock, as Origin's pie rotation is counted) and the wedges follow clockwise.
+  Arcs are polylines of steps of at most 2 degrees; a wedge round the whole turn is two circles (outer and the hole).
+  Every wedge has a white border (0.5 pt by default).
+- Labels: the name (and, when asked, the value, with up to four significant digits) at the wedge's centre (middle radius, middle
+  angle), along the radial direction and turned half a turn when it would read upside down, in the layer's X axis tick font at 0.45
+  of its size, black or white as reads better on the fill. A line is drawn whole or not at all: it is left out when its text (plus
+  0.3 text sizes each side) is wider than the ring, and the lines together must fit the chord of the wedge at its middle radius
+  (the second line goes first). Names default on, values off.
+- Colour scale: a vertical bar right of the frame (the hexbin and Parallel Plot bar, `hexbin::draw_color_bar`, with its reserve in
+  the layer's edges), titled with the value column's name and ticked at nice values over the leaf range.
+- Settings: `PlotKind::Sunburst`, `Template::Sunburst` (`sunburst`, "Sunburst Plot"), `Plot::sunburst` (`SunburstStyle`, skipped when
+  default): `categories` (columns, first = innermost), `start_angle_deg` (90), `hole` (fraction of the radius, 0.3, 0 to 0.9),
+  `ring_gap_pt` (0), `border_pt` (0.5), `show_names` (true), `show_values` (false), `order` (`worksheet`|`by_size`). One plot per graph:
+  the plot's Y is the value column (the last numeric selected column); the categories are the columns of text among the selected
+  columns in selection order, else every text column of the value column's sheet (`plot_columns`, `plot_sunburst`). Refusals: no
+  category column, no numeric value column, a text value column, a right Y axis, panels (CLI also: overlay, styling a graph). A
+  refused plot leaves no graph behind.
+- Plot Details "Pie Geometry" tab (shown for a sunburst plot; Origin's tab name, with the Labels tab's two check boxes folded in):
+  Start Angle, Hole (%), Ring Gap, Border Width, Order, and Labels Names and Values. Undo works as for other settings. Menu: Plot >
+  Categorical > Sunburst Plot (also in Column > Plot).
+- CLI `-t sunburst` with `--y`, `--group A,B,C` as for the treemap, `--sunburst-start`, `--sunburst-hole` (percent), `--sunburst-gap`,
+  `--sunburst-labels names|values|both|none`, `--sunburst-order worksheet|size`; the same in MCP (`group`, `sunburst_*`) with the
+  template text. `.opj`: written as column plots of the value column; the save warns ("sunburst plots were written as column plots
+  of their value column; their categories and rings were not written").
+- File > Append renumbers the sunburst `categories` through `Graph::remap_columns` (test in `project.rs`).
+- Tests: `crates/calc/src/sunburst.rs` (angles as shares of the parent, colour values and means, order),
+  `crates/plot/src/sunburst_tests.rs` (angles drawn, start angle and direction, hole and ring radii with the gap, arcs of at most
+  2 degrees inside a round circle on a wide frame, leaf and category colours, unfilled missing category, labels hidden when too
+  small and upright, scale title and ticks, full-turn ring, other kinds unchanged), core template/refusal/serde and append tests,
+  `.opj` warning test, `crates/cli/tests/sunburst.rs` (SVG, defaults, options, refusals), UI menu and Pie Geometry tab tests with undo.
+- Not done: Origin's real defaults, colours and labels, hover read-out and picking, Collapse/Expand drilling, a depth setting,
+  the Radius/Center settings, tangential labels for thin rings, a colour-by-category-palette option, a label font setting, reading
+  Origin's sunburst from .opj.
 
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 

@@ -1784,7 +1784,7 @@ fn long_data_file(tag: &str) -> PathBuf {
 #[test]
 fn iir_filter_opens_from_signal_processing_and_adds_a_column_per_input() {
     let mut h = start(vec![data_file("iirfilter")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Signal Processing", "IIR Filter..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -1798,7 +1798,7 @@ fn iir_filter_opens_from_signal_processing_and_adds_a_column_per_input() {
 #[test]
 fn fir_filter_opens_from_signal_processing_and_adds_a_column_per_input() {
     let mut h = start(vec![long_data_file("firfilter")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Signal Processing", "FIR Filter..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");

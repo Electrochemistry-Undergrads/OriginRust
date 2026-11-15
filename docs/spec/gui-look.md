@@ -684,6 +684,63 @@ disabled controls are grey; blue bold text marks a hint or a state message.
   The tab and the list are independent: choosing a different tab changes which targets the list
   offers (two for Scale and Breaks, four for the others).
 
+### Find and Replace (2026-11-15)
+
+Origin 2016's public `findreplace option:=0;` and `option:=1;` commands open the Find and Replace
+tabs of one window. The [command reference](https://docs.originlab.com/x-function/ref/findreplace/)
+documents this entry point. Clear pictures, control dumps and post-operation values are in
+`re-workspace/scratch/t02-find-replace/`. The initial Ctrl+F/Ctrl+H attempts found no dialog and
+are excluded as layout evidence; the direct-command captures succeeded.
+
+The initial captures show Numeric selected, condition `=`, Active Worksheet, and expanded Options.
+Find what is seeded from the selected cell's display: B2 containing 5 gives `5`, and a stored
+100.000001 displayed as 100 gives `100`. Selecting text Alpha seeds `Alpha` but leaves Numeric
+selected, with Find Next disabled until the query is valid or the user chooses String.
+Skip linked cells is checked. Absolute value, Search up, Keep sign and Set as missing are unchecked;
+tolerance is `1e-8`. Numeric conditions are `=`, `<`, `<=`, `>`, `>=`, `!=`.
+The Replace tab adds its replacement field and two numeric replacement flags. Its bottom buttons
+are Find Next, Replace, Replace All, Close; Find has Find Next and Close at the right.
+
+String mode hides the numeric condition/tolerance and shows Match case, Match whole cell contents,
+Use wildcards and Include label rows, initially unchecked, alongside Skip linked cells and Search
+up. Look in also offers workbook, folder, recursive folder, open books in folder and project scopes.
+Options can persist in Origin across temporary instances: the last probe explicitly
+restored the original numeric/string flags, condition, scope and tolerance; the restored image and
+action log are retained in `final/restore/` and `conditions/restore/`.
+
+The synthetic GUI probes establish these rules:
+
+| Probe | Observed result |
+|---|---|
+| Numeric 100, tolerance 1e-8, data 100.000001 and 100 | both found/replaced: relative tolerance, not an absolute 1e-8 difference |
+| Numeric 2, data 1.99999999, 2, 2.00000001, missing | `=`, `<=`, `>=` match the three finite cells; `<` matches the first; `>` the third; `!=` matches first, third and missing |
+| Absolute 2, replace 7, Keep sign, data -2, 2, -3, 0 | -7, 7, -3, 0 |
+| Greater than 2, replace 7, Set as missing, data -2, 2, 3, missing | missing, missing, 7, missing |
+| Find numeric `--` with one explicit missing value at A4 | A4; unused allocation beyond the data did not become the result |
+| Find 2 upward from B2, B = 2, 5, 2, 8 | B1 rather than B3 |
+| String `a*c`, wildcard on, replace Z; abXXc, xabc, abc | Z, xabc, Z: the pattern must match the entire cell |
+| Numeric 2, empty replacement | the matching cell becomes missing |
+
+Equality uses the relative difference `abs(a-b)/(abs(a)+abs(b))` with exact equality handling zero.
+The inclusive comparisons include that equality test; strict comparisons and `!=` do not use its
+tolerance. Thus `!=` is deliberately not the complement of tolerant `=`. Numeric searches use stored
+numbers, whereas String searches use displayed text and preserve ordinary substring replacement
+when wildcards are off. Wildcard replacement substitutes the entire matching cell with literal text.
+
+Sheaf follows these measured controls and rules in the existing dialog, with a shared Find/Replace
+window, preserved inputs across its tabs, selected-cell seeding and one undo step per replacement
+action. Formula columns retain their existing replacement protection. Search, invalid input, Close
+and Escape create no document edit. Case and whole-cell String behavior remains available; old
+substring UI regressions explicitly select String now that Numeric is the initial mode.
+Four new UI regressions and four parser/matching fixtures cover these behaviors. `--show find` and
+`--show replace` support native screenshots.
+
+Remaining: searches still cover active-sheet data only. The wider Look in scopes, label rows,
+individual cell links, selected-range restriction, saved dialog history/settings and the query's
+triangle menu are not implemented. Look in and Include label rows are disabled; Skip linked cells
+is fixed checked because individual links are not modeled. The worksheet's normal formula-column
+protection remains in force independently. These gaps keep the parity row partial.
+
 ### Go To (2026-11-14)
 
 Origin 2016's `dlgRowColGoto -d;` opens **Go To: dlgRowColGoto**. The clear screenshot and control

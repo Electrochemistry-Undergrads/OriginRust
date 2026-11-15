@@ -6100,6 +6100,7 @@ mod clipboard_origin;
 #[path = "ui_tests/clipboard_formats.rs"]
 mod clipboard_formats;
 
+mod find_replace;
 mod go_to;
 mod go_to_picker;
 mod label_panels;
@@ -7794,6 +7795,7 @@ fn find_in_sheets_moves_the_cursor_to_the_cell_with_the_text() {
     show_window(&mut h, "Book1 - sample");
     menu(&mut h, "Edit", "Find in Sheets...");
     assert!(h.state().find.is_some(), "the window opens");
+    click(&mut h, "String");
     h.state_mut().find.as_mut().unwrap().set_text("4.5");
     settle(&mut h);
     click(&mut h, "Find Next");
@@ -7813,6 +7815,7 @@ fn replace_changes_the_cell_at_the_cursor_and_replace_all_every_cell_in_one_step
     let mut h = start(vec![data_file("replacesheet")]);
     show_window(&mut h, "Book1 - sample");
     menu(&mut h, "Edit", "Replace...");
+    click(&mut h, "String");
     {
         let d = h.state_mut().find.as_mut().expect("the Replace window opens");
         d.set_text("4.5");

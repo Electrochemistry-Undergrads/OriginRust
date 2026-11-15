@@ -27,6 +27,14 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T02 Find/Replace (2026-11-15, Windows): one tabbed window, selected-display query seed,
+  Numeric initial mode with measured comparisons/relative tolerance/missing/sign flags,
+  String wildcards and reverse search. `!=` is strict, independently of tolerant equality.
+  Replacement remains one undo action; tabs have distinct accessibility roles from actions.
+  Origin 2016 GUI fixtures, four new UI tests and four matching fixtures cover these rules.
+  Formatting, strict all-target Clippy and 2393 workspace tests pass (three existing ignored).
+  Active-sheet data only; wider scopes, label rows, cell links and saved dialog history remain
+  (gui-look section 5).
 - T02 Go To picker/name lookup (2026-11-15, Windows): the flyout lists short names,
   designations and long names, fills an unambiguous short-name/quoted-long-name reference,
   and Reset clears only the column. Typed names ignore ASCII case; repeated long names
@@ -92,7 +100,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t02-find-replace` | Codex Windows, t02-find-replace | T02 existing Find in Sheets/Replace layout, defaults and options measured against Origin; find dialog and focused UI tests | claimed 2026-11-15; no Find in Project, grid/Go To, core/expr/history, plot, statistics, printing or other sessions' scopes |
 | `axis-breaks` | Claude Windows, "axis-breaks" | T11 more than one axis break (Origin's 1-7 breaks, per-break position), measured Origin break layout; core Axis break list, plot axis/tick drawing, graph_axis.rs Breaks tab, persistence and focused tests | claimed 2026-11-15; Axis fields only, no PLOT/plots.rs draw_plot, graph_details, navigation, stats or other sessions' scopes |
 | `codex/t13-fill-sidelines` | Codex Windows, t13-fill-sidelines | T13 Fill Area Sidelines only / Sidelines and Base; plot fill-mode/group copy, draw_fill_under/draw_line boundaries, draw_legend sample, graph_details selector and focused tests | claimed 2026-11-15; no Axis/layout geometry/PDF, mask policy/color, navigation, labels, stats or other sessions scopes |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |

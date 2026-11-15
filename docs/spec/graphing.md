@@ -2705,3 +2705,54 @@ View > Print View, Origin's Source (tray), native CLI printer submission on Wind
 Options... window, the printed layout of an Origin worksheet (19.8), printing a selection or a row/column
 range of a sheet, CLI workbook printing, the PDFKit panel for a sheet on macOS (a sheet goes to `lp`).
 
+### 18.10 Rug plot (T41)
+
+Origin facts (documentation only, nothing measured; no Origin on the machine that built this):
+
+- Origin 2019b added "Rug Plot - Add rug marks to axes", to show data density. [W:originlab.com/2019b]
+- Plot > Basic 2D > Scatter + Rug (template `ScatterRug.OTP`): each point is projected onto the axis as a thin
+  line beside it; equal values overlap. A rug is not a density plot. [W:origin-help/scatter-rug-graph]
+- Axis dialog, Rug tab (2D XY Cartesian layers): Show (a rug panel for the selected axis); Data (`<All>` or
+  one plot); Color (Auto = the plot's colour); Thickness; Transparency (%) 0 to 100; Layout: Size (%) (panel
+  height as a percentage of the average of the layer's width and height), Overlap (checked for built-in rug
+  templates such as Scatter Rug), Gap Between Rugs (%) (only when Overlap is cleared), Margin (%) (below 50),
+  Show Perpendicular Border, Show Parallel Border. [W:origin-help/axesref-rug]
+- Not stated by Origin: default Size, Thickness, Transparency, Margin, inside or outside placement, and
+  whether tick labels move.
+
+Sheaf's choices (all unmeasured):
+
+- Model: `Axis::rug` for the axis' own edge (bottom of X, left of Y; the edge the axis line is on) and
+  `Axis::rug_opposite` for the edge across (top, right), each a `Rug`. The default is "no rug" and is not
+  written, so graphs without rugs save and export exactly as before. The Axis dialog's Rug tab lists the four
+  edges and maps them to the right field, also for an axis drawn on the far edge.
+- Defaults when shown: Size 5 %, Thickness 0.5 pt, Transparency 0, Margin 0 %, Overlap on, Gap 10 %, both
+  borders off, Data `<All>`, Color Auto.
+- Placement: outside the frame, in a panel beside the axis starting where the outward tick marks end, between
+  the ticks and the tick labels; the tick labels and the title move outward by the panel size, and the page
+  fit counts the panel. Panel size = Size % of the average of the frame's width and height.
+- Marks: one segment per plotted row across the panel, at the value of the row on that axis (bottom/top: X as
+  drawn; left/right: Y as drawn, so horizontal bars and exchanged axes work), through the axis' own transform
+  (log, reversed). Rows with a missing X or Y, masked rows, filtered rows and values outside the axis range
+  get no mark. Pie, box and violin plots have none. Rugs mark the plotted positions: stacked and offset
+  plots, and bars or columns with a categorical X, are marked where they are drawn. A histogram is the
+  exception: its plot data is bins, so its rug marks the raw observations (shown, unmasked rows of the Y
+  column) along the value axis (X) and nothing beside the count axis.
+- Data choice: `Rug::plot` is the Y column id of the chosen plot, not a position; the rug marks the first plot
+  of the layer with that Y column, so removing, reordering or moving other plots keeps the choice. When no
+  plot of the layer has that column any more the rug falls back to `<All>` (the dialog shows `<All>`). The
+  dialog lists one entry per Y column.
+- Waterfall: a waterfall layer draws no ticks on the opposite edges, so an opposite rug starts at the frame
+  there and the page fit reserves room for the rug only, the same as drawn.
+- Margin: space left empty at both ends of each segment across the panel, as a percentage of the panel
+  (clamped below 50). Gap: with Overlap cleared each selected plot gets a sub-panel, the first plot nearest the
+  axis, separated by Gap % of the panel size (the whole panel keeps its Size). Overlap on: all plots share
+  the whole panel.
+- Colour Auto is each plot's colour (line colour for line and area kinds, else symbol colour); Transparency
+  scales the colour's alpha. Borders are drawn in the axis colour: Parallel = the two lines along the axis
+  at the panel's inner and outer sides; Perpendicular = the two lines across the panel at its ends.
+- Template: Scatter + Rug (`scatter-rug`, Plot > Symbol and the CLI/MCP template name) is the scatter template
+  with the rug shown on the bottom and left axes. Polar and ternary layers have no rug.
+- `.opj` save: the rug is not written; a save warning names it, the companion file keeps it.
+- Not done: rug hit testing / selection, a rug on the right axis of a double-Y layer is
+  possible (it is the opposite edge of that layer's Y axis) but not tuned.

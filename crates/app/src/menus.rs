@@ -697,7 +697,12 @@ fn plot_menu() -> Vec<Entry> {
         sub(
             "&Symbol",
             [
-                vec![item("&Scatter", Cmd::Plot(Template::Scatter)), grey("Scatter Central"), grey("Column Scatter")],
+                vec![
+                    item("&Scatter", Cmd::Plot(Template::Scatter)),
+                    item("Scatter + Rug", Cmd::Plot(Template::ScatterRug)),
+                    grey("Scatter Central"),
+                    grey("Column Scatter"),
+                ],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
                 greys(&["Vertical Drop Line"]),
                 vec![item("Lollipop Plot", Cmd::Plot(Template::Lollipop))],

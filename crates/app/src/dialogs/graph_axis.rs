@@ -1,6 +1,6 @@
 //! The body of the axis dialog: a list at the left to choose the horizontal or the vertical axis of
 //! the layer, and the tabs Scale, Tick Labels, Title, Grids, Line and Ticks, Special Ticks and
-//! Breaks. As in Origin the list names Horizontal and Vertical on the Scale and Breaks tabs and the
+//! Breaks, and Rug (T41). As in Origin the list names Horizontal and Vertical on the Scale and Breaks tabs and the
 //! four edges (Bottom, Top, Left, Right) on the others; the Top and Right pages only hold what Sheaf
 //! keeps for the far edge (its line and ticks). "Apply To..." copies the look of the shown axis.
 
@@ -22,11 +22,12 @@ pub enum AxisTab {
     LineAndTicks,
     SpecialTicks,
     Breaks,
+    Rug,
 }
 
 impl AxisTab {
     /// Origin's order.
-    const ALL: [(AxisTab, &'static str, bool); 7] = [
+    const ALL: [(AxisTab, &'static str, bool); 8] = [
         (AxisTab::Scale, "Scale", true),
         (AxisTab::TickLabels, "Tick Labels", true),
         (AxisTab::Title, "Title", true),
@@ -34,6 +35,7 @@ impl AxisTab {
         (AxisTab::LineAndTicks, "Line and Ticks", true),
         (AxisTab::SpecialTicks, "Special Ticks", true),
         (AxisTab::Breaks, "Breaks", true),
+        (AxisTab::Rug, "Rug", true),
     ];
 }
 
@@ -75,6 +77,24 @@ pub fn dialog_body(
             ui.separator();
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                 let layer = &mut graph.layers[li];
+                if *tab == AxisTab::Rug {
+                    // One entry per Y column (the rug refers to the first plot with that column).
+                    let mut names: Vec<(ColumnId, String)> = Vec::new();
+                    for (i, p) in layer.plots.iter().enumerate() {
+                        if names.iter().all(|n| n.0 != p.y) {
+                            let name = columns
+                                .iter()
+                                .find(|c| c.0 == p.y)
+                                .map_or_else(|| format!("Plot {}", i + 1), |c| c.1.clone());
+                            names.push((p.y, name));
+                        }
+                    }
+                    let cartesian = layer.coords.polar().is_none() && layer.coords.ternary().is_none();
+                    let axis = if *vertical { &mut layer.y_axis } else { &mut layer.x_axis };
+                    let id = if *vertical { "y" } else { "x" };
+                    rug_tab(ui, axis, far, cartesian, &names, id);
+                    return;
+                }
                 let (axis, id) = if *vertical { (&mut layer.y_axis, "y") } else { (&mut layer.x_axis, "x") };
                 if by_edge && far {
                     far_edge_page(ui, axis, *tab, *vertical, id);
@@ -88,11 +108,81 @@ pub fn dialog_body(
                     AxisTab::LineAndTicks => line_and_ticks_tab(ui, axis, *vertical, id),
                     AxisTab::SpecialTicks => special_ticks_tab(ui, axis, resolved, id),
                     AxisTab::Breaks => breaks_tab(ui, axis, resolved, id),
+                    AxisTab::Rug => {} // handled above: it picks its rug by edge
                 }
             });
         });
     });
     ui.data_mut(|d| d.insert_temp(side_id, far));
+}
+
+/// The rug of the edge the list has chosen: an axis on its own edge keeps its first rug there, an axis
+/// drawn on the far edge (Opposite side) the other way round.
+pub fn rug_mut(axis: &mut Axis, far: bool) -> &mut Rug {
+    if far != (axis.side == AxisSide::Opposite) { &mut axis.rug_opposite } else { &mut axis.rug }
+}
+
+/// The Rug tab (graphing spec 18.10): one short line per plotted point in a strip beside the chosen edge.
+fn rug_tab(ui: &mut egui::Ui, axis: &mut Axis, far: bool, cartesian: bool, plots: &[(ColumnId, String)], id: &str) {
+    if !cartesian {
+        ui.weak("Rugs are offered for 2D Cartesian layers only.");
+        return;
+    }
+    let id = format!("{id}_{}", if far { "far" } else { "near" });
+    let rug = rug_mut(axis, far);
+    ui.checkbox(&mut rug.show, "Show");
+    ui.add_enabled_ui(rug.show, |ui| {
+        grid(ui, &format!("{id}_rug_head"), |ui| {
+            ui.label("Data");
+            // A column no plot has any more draws as `<All>` too.
+            let shown = rug
+                .plot
+                .and_then(|c| plots.iter().find(|p| p.0 == c))
+                .map_or_else(|| "<All>".to_string(), |p| p.1.clone());
+            egui::ComboBox::from_id_salt(format!("{id}_rug_data")).selected_text(shown).show_ui(ui, |ui| {
+                ui.selectable_value(&mut rug.plot, None, "<All>");
+                for (col, name) in plots {
+                    ui.selectable_value(&mut rug.plot, Some(*col), name);
+                }
+            });
+            ui.end_row();
+            ui.label("Color");
+            ui.horizontal(|ui| {
+                let mut auto = rug.color.is_none();
+                if ui.checkbox(&mut auto, "Auto").changed() {
+                    rug.color = if auto { None } else { Some(Color::BLACK) };
+                }
+                if let Some(c) = &mut rug.color {
+                    color_button(ui, c);
+                }
+            });
+            ui.end_row();
+            ui.label("Thickness");
+            ui.add(DragValue::new(&mut rug.thickness_pt).range(0.0..=20.0).speed(0.05).suffix(" pt"));
+            ui.end_row();
+            ui.label("Transparency (%)");
+            ui.add(DragValue::new(&mut rug.transparency_pct).range(0.0..=100.0).speed(0.5));
+            ui.end_row();
+        });
+        group_box(ui, "Layout", |ui| {
+            grid(ui, &format!("{id}_rug_layout"), |ui| {
+                ui.label("Size (%)");
+                ui.add(DragValue::new(&mut rug.size_pct).range(0.0..=100.0).speed(0.1).max_decimals(2));
+                ui.end_row();
+                ui.label("Overlap");
+                ui.checkbox(&mut rug.overlap, "");
+                ui.end_row();
+                ui.label("Gap Between Rugs (%)");
+                ui.add_enabled(!rug.overlap, DragValue::new(&mut rug.gap_pct).range(0.0..=100.0).speed(0.5));
+                ui.end_row();
+                ui.label("Margin (%)");
+                ui.add(DragValue::new(&mut rug.margin_pct).range(0.0..=49.0).speed(0.5));
+                ui.end_row();
+            });
+            ui.checkbox(&mut rug.perpendicular_border, "Show Perpendicular Border");
+            ui.checkbox(&mut rug.parallel_border, "Show Parallel Border");
+        });
+    });
 }
 
 /// The far edge (top of X, right of Y): Sheaf keeps its line and its ticks with the near axis.
@@ -123,6 +213,8 @@ fn copy_axis_look(dst: &mut Axis, src: &Axis) {
         reverse: dst.reverse,
         first_tick: dst.first_tick,
         axis_breaks: dst.axis_breaks.clone(),
+        rug: dst.rug.clone(),
+        rug_opposite: dst.rug_opposite.clone(),
         special_ticks: dst.special_ticks.clone(),
         tick_label_source: dst.tick_label_source,
         ..src.clone()

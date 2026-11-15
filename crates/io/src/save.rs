@@ -165,7 +165,8 @@ pub fn backup_original(path: &Path) -> Result<Option<PathBuf>, IoError> {
     let backup = path.with_file_name(name);
     // Copying through a symlink (even a dangling one) would write wherever it points.
     match backup.symlink_metadata() {
-        Ok(m) if m.file_type().is_symlink() => {
+        // A link to an existing file counts as a backup that is already there, as it always has.
+        Ok(m) if m.file_type().is_symlink() && !backup.exists() => {
             let e = std::io::Error::other("the backup path is a symbolic link; remove it first");
             return Err(IoError::io(&backup, e));
         }

@@ -93,6 +93,13 @@ fn element_type(arg: &Arg) -> &'static str {
     if ints!(usize, u8, u16, u32, u64, isize, i8, i16, i32, i64) { "integer" } else { "string" }
 }
 
+fn is_unsigned(arg: &Arg) -> bool {
+    macro_rules! any {
+        ($($t:ty),*) => { false $(|| is_type::<$t>(arg))* };
+    }
+    any!(usize, u8, u16, u32, u64)
+}
+
 /// The key a tool shows for an option: the long name with `_` instead of `-`.
 pub fn key_of(long: &str) -> String {
     long.replace('-', "_")
@@ -166,9 +173,18 @@ fn property(arg: &Arg) -> Value {
         prop.insert("type".into(), json!("boolean"));
     } else if is_list(arg) {
         prop.insert("type".into(), json!("array"));
+        let mut item = item;
+        if ty == "integer" {
+            item.insert("minimum".into(), json!(if is_unsigned(arg) { 0 } else { -INTEGER_CAP }));
+            item.insert("maximum".into(), json!(INTEGER_CAP));
+        }
         prop.insert("items".into(), Value::Object(item));
     } else {
         prop = item;
+        if ty == "integer" {
+            prop.insert("minimum".into(), json!(if is_unsigned(arg) { 0 } else { -INTEGER_CAP }));
+            prop.insert("maximum".into(), json!(INTEGER_CAP));
+        }
         if let Some(d) = default_value(arg, ty) {
             prop.insert("default".into(), d);
         }
@@ -210,12 +226,12 @@ fn scalar_text(arg: &Arg, name: &str, v: &Value) -> Result<String> {
         Value::String(s) => Ok(s.clone()),
         // JSON Schema calls 7.0 an integer, and some clients write every number with a fraction.
         Value::Number(n) if integer && n.as_i64().is_none() && n.as_u64().is_none() => match n.as_f64() {
-            Some(f) if f.fract() == 0.0 && f.abs() < 9.0e15 => capped(name, f as i64),
+            Some(f) if f.fract() == 0.0 && f.abs() < 9.0e15 => capped(arg, name, f as i64),
             _ => Ok(n.to_string()),
         },
         Value::Number(n) if integer => match n.as_i64() {
-            Some(i) => capped(name, i),
-            None => bail!("option '{name}' must be between -{INTEGER_CAP} and {INTEGER_CAP}"),
+            Some(i) => capped(arg, name, i),
+            None => bail!("option '{name}' must be between {} and {INTEGER_CAP}", lowest(arg)),
         },
         Value::Number(n) => Ok(n.to_string()),
         Value::Bool(b) => Ok(b.to_string()),
@@ -223,9 +239,13 @@ fn scalar_text(arg: &Arg, name: &str, v: &Value) -> Result<String> {
     }
 }
 
-fn capped(name: &str, i: i64) -> Result<String> {
-    if i.abs() > INTEGER_CAP {
-        bail!("option '{name}' must be between -{INTEGER_CAP} and {INTEGER_CAP} (got {i})");
+fn lowest(arg: &Arg) -> i64 {
+    if is_unsigned(arg) { 0 } else { -INTEGER_CAP }
+}
+
+fn capped(arg: &Arg, name: &str, i: i64) -> Result<String> {
+    if i < lowest(arg) || i > INTEGER_CAP {
+        bail!("option '{name}' must be between {} and {INTEGER_CAP} (got {i})", lowest(arg));
     }
     Ok(i.to_string())
 }
@@ -250,6 +270,7 @@ pub fn to_argv(
     resolve: &mut dyn FnMut(&str) -> Result<String>,
 ) -> Result<Vec<String>> {
     let mut argv = Vec::new();
+    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     for (key, value) in options {
         let wanted = key.replace('_', "-");
         let Some(arg) =
@@ -265,6 +286,9 @@ pub fn to_argv(
             continue;
         }
         let long = arg.get_long().expect("offered options have a long name");
+        if let Some(first) = seen.insert(long.to_string(), key.clone()) {
+            bail!("option '{long}' is given twice, as '{first}' and '{key}'");
+        }
         if is_flag(arg) {
             match value {
                 Value::Bool(true) => argv.push(format!("--{long}")),
@@ -445,6 +469,18 @@ mod tests {
         assert!(analyze("integrate", &Selection::default(), json!({"row_ranges": ["1:5"]})).is_ok());
         let e = analyze("decimate", &Selection::default(), json!({"factor": 4_000_000_000_000u64})).unwrap_err();
         assert!(e.to_string().contains("between"), "{e}");
+    }
+
+    #[test]
+    fn schemas_bound_integers_and_a_repeated_key_is_refused() {
+        let cmd = subcommand(&["analyze", "histogram"]).unwrap();
+        let s = schema(&cmd, &analyze_filter());
+        assert_eq!(s["properties"]["bins"]["minimum"], 0);
+        assert_eq!(s["properties"]["bins"]["maximum"], INTEGER_CAP);
+        let e = analyze("histogram", &Selection::default(), json!({"bins": -3})).unwrap_err();
+        assert!(e.to_string().contains("between 0 and"), "{e}");
+        let e = analyze("histogram", &Selection::default(), json!({"no_graph": true, "no-graph": false})).unwrap_err();
+        assert!(e.to_string().contains("twice"), "{e}");
     }
 
     #[test]

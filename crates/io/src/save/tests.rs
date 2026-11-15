@@ -265,14 +265,14 @@ fn the_backup_is_never_written_through_a_symlink() {
 
 #[cfg(unix)]
 #[test]
-fn a_link_to_an_existing_file_is_refused_too_and_its_target_is_not_touched() {
+fn a_link_to_an_existing_file_counts_as_a_backup_already_there_and_its_target_is_not_touched() {
     let dir = scratch("backup_link_file");
     let f = dir.join("x.opj");
     std::fs::write(&f, b"original").unwrap();
     let elsewhere = dir.join("elsewhere");
     std::fs::write(&elsewhere, b"precious").unwrap();
     std::os::unix::fs::symlink(&elsewhere, dir.join("x.opj.bak")).unwrap();
-    assert!(backup_original(&f).is_err());
+    assert!(backup_original(&f).unwrap().is_none());
     assert_eq!(std::fs::read(&elsewhere).unwrap(), b"precious");
 }
 

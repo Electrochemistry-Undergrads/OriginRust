@@ -95,7 +95,8 @@ impl Server {
             if obj.contains_key("result") || obj.contains_key("error") {
                 return None;
             }
-            return Some(error_reply(id.unwrap_or(Value::Null), INVALID_REQUEST, "invalid request: no method"));
+            // An object with no id is a notification: it gets no reply, valid or not.
+            return id.map(|id| error_reply(id, INVALID_REQUEST, "invalid request: no method"));
         };
         if obj.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
             // A notification (no id) never gets a reply, valid or not.
@@ -290,6 +291,9 @@ mod tests {
         assert!(s.handle_line(r#"{"jsonrpc":"1.0","method":"ping"}"#).is_none());
         assert!(s.handle_line(r#"{"method":"notifications/initialized"}"#).is_none());
         assert!(s.handle_line(r#"{"jsonrpc":2,"method":"ping","params":"x"}"#).is_none());
+        assert!(s.handle_line(r#"{"jsonrpc":"2.0","method":5}"#).is_none());
+        assert!(s.handle_line(r#"{"jsonrpc":"2.0","params":{}}"#).is_none());
+        assert!(s.handle_line("{}").is_none());
         // A reply from the client is not answered.
         assert!(s.handle_line(r#"{"jsonrpc":"2.0","id":3,"result":{}}"#).is_none());
     }

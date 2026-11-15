@@ -85,6 +85,11 @@ pub fn get(name: &str, args: &Map<String, Value>) -> Result<Value, String> {
             )
         }
         "integrate_peak" => {
+            for (arg, v) in [("from", &values[1]), ("to", &values[2])] {
+                if !v.parse::<f64>().is_ok_and(f64::is_finite) {
+                    return Err(format!("argument '{arg}' of prompt {name} must be a number (got '{v}')"));
+                }
+            }
             let (c, a, b) = (q(&values[0]), &values[1], &values[2]);
             format!(
                 "Integrate the peak of column {c0} between X = {a} and X = {b}.\n\n\
@@ -179,6 +184,8 @@ mod tests {
     fn missing_arguments_and_unknown_prompts_are_refused() {
         assert!(get("fit_curve", &args(json!({"column": "B"}))).unwrap_err().contains("'model'"));
         assert!(get("plot_cv_files", &args(json!({"files": "  "}))).is_err());
+        let e = get("integrate_peak", &args(json!({"column": "A", "from": "x\n\"{}", "to": "1"}))).unwrap_err();
+        assert!(e.contains("'from'") && e.contains("number"), "{e}");
         assert!(get("nope", &args(json!({}))).unwrap_err().contains("unknown prompt"));
     }
 }

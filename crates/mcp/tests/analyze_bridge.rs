@@ -255,6 +255,8 @@ fn power_puts_its_workbook_into_the_session_project() {
     let dir = Dir::new("power");
     std::fs::write(dir.0.join("data.csv"), csv()).unwrap();
     let mut s = server(&dir);
+    // A workbook already there: the power table is not the first one.
+    call(&mut s, "import_files", json!({"files": ["data.csv"]}));
     let before = payload(&call(&mut s, "list_contents", json!({})))["workbooks"].as_array().unwrap().len();
     let out = payload(&call(
         &mut s,
@@ -262,6 +264,7 @@ fn power_puts_its_workbook_into_the_session_project() {
         json!({"tool": "power", "options": {"test": "two-sample", "sizes": [10, 20, 40], "mean2": 1.0, "sd": 1.0}}),
     ));
     let book = out["book"].as_str().unwrap().to_string();
+    assert!(out["message"].as_str().unwrap().ends_with(&format!("in workbook {book}")), "{out}");
     let after = payload(&call(&mut s, "list_contents", json!({})));
     assert_eq!(after["workbooks"].as_array().unwrap().len(), before + 1);
     assert!(after["workbooks"].as_array().unwrap().iter().any(|b| b["name"] == json!(book)));

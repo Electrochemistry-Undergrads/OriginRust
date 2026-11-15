@@ -1269,6 +1269,10 @@ fn analyze_bridged(
             let (made, mut report) = sheaf_ops::analyze::run_power(&spec)?;
             let wb = made.workbook(report.book).ok_or_else(|| ToolError::new("the power table is missing"))?.clone();
             report.book = s.project.adopt_workbook(wb);
+            // The message named the workbook of the temporary project; name the adopted one.
+            if let Some((head, _)) = report.message.rsplit_once(" in workbook ") {
+                report.message = format!("{head} in workbook {}", book_title(&s.project, report.book));
+            }
             Ok(ToolOut::json(report_json(&s.project, &report)))
         });
     }

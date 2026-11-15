@@ -51,7 +51,7 @@ outputs or UI behavior.
 |---|---|---|---|
 | Manhattan plot | 2017 Pro App | Plot significance across grouped genomic positions, typically with chromosome groups and a significance cutoff. | [2017][o17] |
 | Violin and parallel-coordinate plots | 2019 | Show each group's distribution as a density silhouette, or draw each record across parallel variable axes. | [2019][o19] |
-| Rug plot | 2019b | Add a mark along an axis for each observation to reveal its distribution. | [2019b][o19b] |
+| Rug plot | 2019b | Done (T41). Add a mark along an axis for each observation to reveal its distribution. | [2019b][o19b] |
 | Sankey and alluvial diagrams | 2020 | Show quantities as flows whose widths reflect their values, including transitions between categories across stages. | [2020][o20] |
 | Browser Graph | 2020b / 2024 | Browse similarly structured datasets inside a graph and switch the displayed series, including datasets on different sheets. | [2020b][browser] · [2024][o24] |
 | Chord and lollipop plots | 2021 | Lollipop done (T33). Draw relationships as chords between categories. Draw values as stems ending in markers. | [2021][o21] |
@@ -77,7 +77,7 @@ outputs or UI behavior.
 | Time series modeling and forecasting | 2024b Pro App | Check stationarity, inspect autocorrelation, separate trend and seasonality, and use ARIMA to forecast future observations. | [2024b][o24b] · [Time Series Analysis][tsa] |
 | Best Subset Selection | 2025b Pro App | Compare regression models over candidate predictor subsets and rank the models by fit criteria. | [2025b][o25b] |
 | Piecewise Peak Fitting | 2025b Pro App | Divide a single curve into fitting regions, set a separate baseline for each region and resolve peaks within each region. | [2025b][o25b] · [Piecewise Peak Fitting][piecewise] |
-| Graphical Summary | 2026 | Produce a descriptive report with statistics, diagnostic charts and Anderson–Darling normality testing for individual or grouped data. | [2026][o26] |
+| Graphical Summary | 2026 | Done (T40, Separate Graphs). Produce a descriptive report with statistics, diagnostic charts and Anderson–Darling normality testing for individual or grouped data. | [2026][o26] |
 | Life Science structured tables | 2026b Pro | Give experimental data explicit group, replicate, time or survival roles and surface table-specific graphing and analysis actions. | [2026b][o26b] |
 | Random Forest and Acceptance Sampling | 2026b Pro Apps | Train ensembles of decision trees for predictive modeling. Design or evaluate lot-acceptance sampling plans. | [2026b][o26b] |
 | Multiple Comparisons and Significance Plots | 2027 | Generate a chart directly from ANOVA or t-test reports, including comparisons, error bars and p-value annotations. | [2027][o27] |

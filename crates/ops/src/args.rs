@@ -576,7 +576,8 @@ pub struct PlotArgs {
     /// side by side, with sample names from a text X column under the bars; double-y puts the 1st,
     /// 3rd, ... Y column on the left axis and the 2nd, 4th, ... on a right axis; stacked moves each
     /// curve above the one before it; lollipop (two or more Y columns) joins each Y column's points
-    /// to the next column's at the same row with drop lines, X and Y exchanged; violin draws each
+    /// to the next column's at the same row with drop lines, X and Y exchanged; scatter-rug is a scatter
+    /// with a rug (one short line per point) beside the bottom and left axes; violin draws each
     /// Y column as a mirrored kernel density silhouette, like box (also violin-box, violin-point,
     /// violin-quartile, violin-stick and half-violin, which differ in the marks inside).
     #[arg(short, long)]
@@ -1781,6 +1782,16 @@ pub enum AnalyzeTool {
         /// Confidence levels in percent, for example 90,95,99; none means no intervals.
         #[arg(long, value_delimiter = ',')]
         levels: Vec<f64>,
+        /// Power analysis: the power at the observed sample sizes (Origin's "Actual Power").
+        #[arg(long)]
+        power: bool,
+        /// Power analysis: also the power at these sample sizes, for example 50,100,200 (Origin's "Hypothetical
+        /// Power"; per sample for the two-sample test).
+        #[arg(long, value_delimiter = ',')]
+        power_sizes: Vec<u64>,
+        /// Significance level of the power analysis (separate from --alpha, as in Origin).
+        #[arg(long, default_value_t = 0.05)]
+        power_alpha: f64,
     },
     /// One-way ANOVA: every chosen column is a group. The result (group statistics, ANOVA table,
     /// means comparison of all pairs) goes to a new sheet.
@@ -2262,6 +2273,26 @@ pub enum AnalyzeTool {
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,
+    },
+    /// Graphical summary (Statistics > Descriptive Statistics > Graphical Summary): for each --y column (and each
+    /// group of the --groups columns) a report of descriptive statistics, confidence intervals of the mean, median
+    /// and standard deviation and the Anderson-Darling normality test, and a graph with a histogram and normal
+    /// curve, an interval plot and a normal probability plot.
+    #[command(name = "graphsummary", alias = "graph-summary")]
+    GraphSummary {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Group columns, comma-separated short or long names; each group (combination of values) is summarized
+        /// on its own.
+        #[arg(long, value_delimiter = ',')]
+        groups: Vec<String>,
+        /// Confidence level of the intervals, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        level: f64,
+        /// Graph arrangement: separate (one graph per variable and group). The other three Origin arrangements
+        /// (per-variable, per-group, all-in-one) are not available yet.
+        #[arg(long, default_value = "separate")]
+        arrangement: String,
     },
     /// Sort the rows of the sheet by one column.
     Sort {

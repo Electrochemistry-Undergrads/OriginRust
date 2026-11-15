@@ -553,6 +553,9 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             exact_only,
             pooled,
             levels,
+            power,
+            power_sizes,
+            power_alpha,
         } => {
             if successes.len() != size.len() || !(1..=2).contains(&successes.len()) {
                 bail!(
@@ -577,6 +580,12 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 normal: !exact_only,
                 exact,
                 pooled,
+                power: analysis::PropPowerSpec {
+                    actual: power,
+                    hypothetical: !power_sizes.is_empty(),
+                    alpha: power_alpha,
+                    sizes: if power_sizes.is_empty() { analysis::PropPowerSpec::default().sizes } else { power_sizes },
+                },
             };
             (target, Job::Tool(Tool::PropTest(spec)))
         }
@@ -861,6 +870,13 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 band,
             })),
         ),
+        AnalyzeTool::GraphSummary { target, groups, level, arrangement } => {
+            no_x_range(&target, "the graphical summary")?;
+            let Some(arrangement) = analysis::GraphArrangement::from_word(&arrangement) else {
+                bail!("--arrangement is separate, per-variable, per-group or all-in-one; got \"{arrangement}\"");
+            };
+            (target, Job::GraphSummary { groups, level, arrangement })
+        }
         AnalyzeTool::Sort { target, by, descending } => {
             whole_sheet_only(&target, "sort")?;
             (target, Job::Sort { by, descending })

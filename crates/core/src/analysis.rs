@@ -51,6 +51,7 @@ pub use multivariate::{KmeansSpec, PcaSpec};
 pub use roc::RocSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
+pub use summary::{GraphArrangement, GraphSummarySpec};
 pub use survival::KaplanMeierSpec;
 
 /// The multi-peak fit of [`PeakChainSpec`]: a sum of peaks on `baseline`, one peak for every peak
@@ -421,6 +422,26 @@ pub struct PropTestSpec {
     /// Two samples: the standard error of the z statistic from the pooled proportion (when the hypothesized
     /// difference is 0).
     pub pooled: bool,
+    /// The "Power Analysis" group of Origin's dialogs.
+    pub power: PropPowerSpec,
+}
+
+/// The "Power Analysis" group of the proportion dialogs: the power of the test at the observed sample sizes
+/// ("Actual Power") and at typed sample sizes ("Hypothetical Power"), each at its own significance level.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropPowerSpec {
+    pub actual: bool,
+    pub hypothetical: bool,
+    /// The significance level of the power analysis (Origin keeps it apart from the test's own level).
+    pub alpha: f64,
+    /// Hypothetical sample sizes (per sample for two samples).
+    pub sizes: Vec<u64>,
+}
+
+impl Default for PropPowerSpec {
+    fn default() -> Self {
+        PropPowerSpec { actual: false, hypothetical: false, alpha: 0.05, sizes: vec![50, 100, 200] }
+    }
 }
 
 impl Default for PropTestSpec {
@@ -434,6 +455,7 @@ impl Default for PropTestSpec {
             normal: true,
             exact: false,
             pooled: true,
+            power: PropPowerSpec::default(),
         }
     }
 }
@@ -857,6 +879,8 @@ pub enum Tool {
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
     /// censor and, optionally, group columns.
     KaplanMeier(KaplanMeierSpec),
+    /// Statistics > Descriptive Statistics > Graphical Summary (T40; `docs/spec/statistics.md` section 22).
+    GraphSummary(GraphSummarySpec),
     AverageCurves(AverageSpec),
     Intersect(IntersectSpec),
     PolygonArea,
@@ -943,6 +967,7 @@ impl Tool {
             Tool::Kmeans(_) => "K-means cluster analysis",
             Tool::Roc(_) => "ROC curve",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
+            Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "Polygon area",
@@ -1000,6 +1025,7 @@ impl Tool {
             Tool::Kmeans(_) => "KMeans",
             Tool::Roc(_) => "ROC",
             Tool::KaplanMeier(_) => "KaplanMeier",
+            Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "PolygonArea",
@@ -1637,6 +1663,7 @@ mod multivariate;
 mod power;
 mod roc;
 mod statistics;
+mod summary;
 mod survival;
 pub use manip::{
     MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
@@ -1799,6 +1826,7 @@ impl Project {
                 | Tool::PropTest(_)
                 | Tool::Roc(_)
                 | Tool::KaplanMeier(_)
+                | Tool::GraphSummary(_)
         );
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
@@ -1845,6 +1873,8 @@ impl Project {
         let mut xy_graph: Option<dist::XyGraph> = None;
         // Further graphs of the same tool (loading plot, biplot).
         let mut more_xy_graphs: Vec<dist::XyGraph> = Vec::new();
+        // The graphs of a graphical summary (three layers each).
+        let mut summary_graphs: Vec<summary::SummaryGraph> = Vec::new();
 
         match &request.tool {
             Tool::TwoWayAnova(spec) => {
@@ -1912,6 +1942,13 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 xy_graph = out.graph;
+            }
+            Tool::GraphSummary(spec) => {
+                let out = summary::run(spec, sheet, &request.columns, request.rows)?;
+                table = Some(out.table);
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                summary_graphs = out.graphs;
             }
             Tool::Pca(_) | Tool::Kmeans(_) => {
                 let out = multivariate::run(&request.tool, &inputs)?;
@@ -2956,6 +2993,14 @@ impl Project {
         let mut more_graphs = Vec::new();
         for plan in &more_xy_graphs {
             more_graphs.push(self.xy_graph(&sheet_column_ids, plan));
+        }
+        for plan in &summary_graphs {
+            let id = self.summary_graph(&sheet_column_ids, plan);
+            if new_graph.is_none() {
+                new_graph = Some(id);
+            } else {
+                more_graphs.push(id);
+            }
         }
         let columns = if count == 1 { "1 column".to_string() } else { format!("{count} columns") };
         // Name the added columns, so that the result can be found without opening the sheet.

@@ -1028,6 +1028,78 @@ pub struct Axis {
     pub tick_prefix: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub tick_suffix: String,
+    /// The rug beside the axis' own edge (bottom or left; the edge the axis line is on, see [`Axis::side`]).
+    #[serde(default, skip_serializing_if = "Rug::is_default")]
+    pub rug: Rug,
+    /// The rug beside the opposite edge (top for X, right for Y).
+    #[serde(default, skip_serializing_if = "Rug::is_default")]
+    pub rug_opposite: Rug,
+}
+
+/// Origin's Rug tab of the Axis dialog (2019b, graphing spec 18.10): a strip beside an axis edge with one
+/// short line per plotted point, projected onto that axis. [`Rug::default`] is "no rug"; the numbers
+/// are Sheaf's own choices (Origin's are unmeasured).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Rug {
+    /// Show the rug panel.
+    pub show: bool,
+    /// Which plot's points: the Y column of the plot (the first plot of the layer with that Y column);
+    /// `None` is Origin's `<All>`. A column no plot of the layer uses any more also means `<All>`.
+    /// A column id, not a position, so removing, reordering or moving plots keeps the choice.
+    pub plot: Option<ColumnId>,
+    /// Line colour; `None` is Auto, the colour of each plot.
+    pub color: Option<Color>,
+    /// Line thickness in points.
+    pub thickness_pt: f64,
+    /// Transparency of the lines, 0 to 100 percent.
+    pub transparency_pct: f64,
+    /// Panel size across the axis, in percent of the average of the layer's width and height.
+    pub size_pct: f64,
+    /// All plots share one strip (Origin's Overlap); off gives each plot a sub-strip of its own.
+    pub overlap: bool,
+    /// Space between sub-strips when `overlap` is off, in percent of the panel size.
+    pub gap_pct: f64,
+    /// Space left empty at both ends of the lines across the panel, in percent of the panel size (below 50).
+    pub margin_pct: f64,
+    /// Border lines at the two ends of the panel along the axis (perpendicular to the axis).
+    pub perpendicular_border: bool,
+    /// Border lines along the panel's inner and outer edges (parallel to the axis).
+    pub parallel_border: bool,
+}
+
+impl Default for Rug {
+    fn default() -> Rug {
+        Rug {
+            show: false,
+            plot: None,
+            color: None,
+            thickness_pt: 0.5,
+            transparency_pct: 0.0,
+            size_pct: 5.0,
+            overlap: true,
+            gap_pct: 10.0,
+            margin_pct: 0.0,
+            perpendicular_border: false,
+            parallel_border: false,
+        }
+    }
+}
+
+impl Rug {
+    pub fn is_default(&self) -> bool {
+        *self == Rug::default()
+    }
+
+    /// A shown rug with the defaults (what the Scatter + Rug template puts on the bottom and left axes).
+    pub fn shown() -> Rug {
+        Rug { show: true, ..Rug::default() }
+    }
+
+    /// The values the drawing uses: percentages and the thickness limited to their ranges.
+    pub fn size_frac(&self) -> f64 {
+        self.size_pct.clamp(0.0, 100.0) / 100.0
+    }
 }
 
 /// An extra tick of an axis.

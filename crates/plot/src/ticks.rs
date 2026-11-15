@@ -869,6 +869,8 @@ mod tests {
             tick_width_pt: None,
             tick_prefix: String::new(),
             tick_suffix: String::new(),
+            rug: Default::default(),
+            rug_opposite: Default::default(),
         }
     }
 

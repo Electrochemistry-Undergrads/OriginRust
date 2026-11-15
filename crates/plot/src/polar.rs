@@ -119,6 +119,8 @@ pub(crate) fn angle_axis(axis: &Axis, unit: AngleUnit) -> ResolvedAxis {
         tick_format: sheaf_core::graph::TickFormat::Auto,
         tick_prefix: String::new(),
         tick_suffix: String::new(),
+        rug: Default::default(),
+        rug_opposite: Default::default(),
         tick_label_formula: String::new(),
         reverse: false,
         ..axis.clone()

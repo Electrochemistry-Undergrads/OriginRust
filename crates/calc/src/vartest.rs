@@ -16,8 +16,9 @@
 //! - one proportion: see [`proportion_one`] (normal approximation with the quirk that z is 0 below `n p0`,
 //!   exact binomial test whose two-sided p sums every count no more likely than the observed one, Wald and
 //!   Clopper-Pearson intervals);
-//! - two proportions: see [`proportion_two`] (only the pooled z, the unpooled Wald interval of the
-//!   difference and the layout were measured; see the spec for what was not).
+//! - two proportions: see [`proportion_two`] (pooled and unpooled z with the sign kept, Fisher's exact p, the
+//!   unpooled Wald interval of the difference, all measured; the Raw and Indexed input forms were not);
+//! - power analysis of the proportion tests: [`power_one_proportion`] and [`power_two_proportions`].
 
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal};
 use statrs::function::beta::beta_reg;
@@ -225,10 +226,20 @@ pub struct OneProportion {
     pub tail: Tail,
 }
 
-/// Origin shows a warning under the normal approximation when fewer than 10 successes or fewer than 10 failures
-/// were seen.
+/// Origin shows a warning under the normal approximation when fewer than 10 failures were seen (measured); the
+/// extra "fewer than 10 successes" condition is an unmeasured guess.
 pub fn normal_approximation_doubtful(successes: u64, trials: u64) -> bool {
     successes < 10 || trials.saturating_sub(successes) < 10
+}
+
+/// Origin's warning under the normal approximation of the two-sample test: shown when some sample has fewer
+/// than 10 successes or fewer than 10 failures (3/10 against 1/8, 20/25 against 20/25, 3/10 against 30/50 and
+/// 30/50 against 3/10 gave it; 30/50 against 20/50, 12/30 against 30/50 and 15/40 against 25/35, whose second
+/// sample has exactly 10 failures, did not). Every measured case that warned has fewer than 10 failures and every
+/// one that did not has at least 10; no run had fewer than 10 successes with 10 or more failures, so that half of
+/// the rule (and the limit of exactly 10 successes) is unmeasured and kept as a conservative guess.
+pub fn two_sample_normal_doubtful(first: (u64, u64), second: (u64, u64)) -> bool {
+    [first, second].into_iter().any(|(x, n)| normal_approximation_doubtful(x, n))
 }
 
 fn std_normal() -> Normal {
@@ -236,6 +247,9 @@ fn std_normal() -> Normal {
 }
 
 fn z_p(z: f64, tail: Tail) -> f64 {
+    if z.is_nan() {
+        return f64::NAN;
+    }
     let n = std_normal();
     p_of(n.cdf(z), n.sf(z), tail)
 }
@@ -369,7 +383,8 @@ pub struct TwoProportions {
     pub hypothesized: f64,
     /// Normal approximation `(p1 - p2 - d0) / se`; `se` is the pooled one (`sqrt(p (1 - p) (1/n1 + 1/n2))`,
     /// `p = (x1 + x2) / (n1 + n2)`) when `pooled` and the hypothesized difference is 0, else the unpooled
-    /// `sqrt(p1 (1 - p1) / n1 + p2 (1 - p2) / n2)`. 0 when that is 0 (equal all-or-nothing samples).
+    /// `sqrt(p1 (1 - p1) / n1 + p2 (1 - p2) / n2)`. The sign is kept (unlike the one-sample test). NaN, with a
+    /// NaN p-value, when that standard error is 0 (both samples all successes: Origin printed `--`).
     pub z: f64,
     pub p_normal: f64,
     /// Fisher's exact p-value (hypergeometric); two-sided: every table no more likely than the observed one.
@@ -380,9 +395,9 @@ pub struct TwoProportions {
 
 /// Test of the difference of two proportions, `(successes, trials)` each, against `difference` (first minus
 /// second). Needs both sample sizes above 0, no more successes than trials and `|difference| < 1`.
-/// Measured against Origin: the pooled z and the two-sided p, the unpooled Wald interval of the difference
-/// ([`wald_difference_interval`]). Not measured: the unpooled z, a hypothesized difference other than 0, a
-/// negative z (the one-sample test clips it to 0; here it is kept), the one-sided p-values and Fisher's test.
+/// Measured against the dialog (the interval is [`wald_difference_interval`]): the unpooled and pooled z (the pooled standard
+/// error only for a hypothesized difference of 0), the sign of z, the three tails, Fisher's exact p and the
+/// unpooled Wald interval. Both samples all successes give no z and no p.
 pub fn proportion_two(
     first: (u64, u64),
     second: (u64, u64),
@@ -403,7 +418,7 @@ pub fn proportion_two(
         (p1 * (1.0 - p1) / g1 + p2 * (1.0 - p2) / g2).sqrt()
     };
     let diff = p1 - p2;
-    let z = if se > 0.0 { (diff - difference) / se } else { 0.0 };
+    let z = if se > 0.0 { (diff - difference) / se } else { f64::NAN };
     Some(TwoProportions {
         first,
         second,
@@ -442,7 +457,7 @@ fn fisher_p(first: (u64, u64), second: (u64, u64), tail: Tail) -> f64 {
 
 /// The Wald interval of the difference `p1 - p2`, `diff +- z sqrt(p1 (1 - p1) / n1 + p2 (1 - p2) / n2)`,
 /// level `level` (0 to 1), one-sided as [`wald_interval`] (`[lower, 1]` for the upper-tailed test, `[-1, upper]`
-/// for the lower-tailed one; the one-sided limits are not measured), cut to `[-1, 1]`.
+/// for the lower-tailed one, as measured), cut to `[-1, 1]`.
 pub fn wald_difference_interval(first: (u64, u64), second: (u64, u64), tail: Tail, level: f64) -> (f64, f64) {
     let ((x1, n1), (x2, n2)) = (first, second);
     let (p1, p2) = (x1 as f64 / n1 as f64, x2 as f64 / n2 as f64);
@@ -454,6 +469,50 @@ pub fn wald_difference_interval(first: (u64, u64), second: (u64, u64), tail: Tai
         Tail::Two => ((d - width).max(-1.0), (d + width).min(1.0)),
         Tail::Upper => ((d - width).max(-1.0), 1.0),
         Tail::Lower => (-1.0, (d + width).min(1.0)),
+    }
+}
+
+/// The power of the two-proportion test as Origin's "Power Analysis" group computes it, for `n` in each sample
+/// and the observed proportions `p1`, `p2` taken as the true ones (`alpha` is the group's own level; the
+/// hypothesized difference does not enter). With `d = p1 - p2`, the null standard error of the difference
+/// `se0 = sqrt(2 pbar (1 - pbar) / n)` (`pbar = (p1 + p2) / 2`) and the alternative one
+/// `se1 = sqrt((p1 (1 - p1) + p2 (1 - p2)) / n)`:
+///
+/// * two-sided: `Phi((d - z se0) / se1) + Phi((-d - z se0) / se1)`, `z` the `1 - alpha/2` quantile;
+/// * upper tail: only `Phi((-d - z se0) / se1)`, lower tail only `Phi((d - z se0) / se1)`, `z` the `1 - alpha`
+///   quantile. That is Origin's number even though the sign looks reversed (30 of 50 against 20 of 50, upper
+///   tail, gave 9.96e-5; the lower tail of 15 of 40 against 25 of 35 gave 3.0e-7), so it is copied as measured.
+///
+/// NaN when `n` is 0 or both proportions are 0 or 1 (no spread under the alternative).
+pub fn power_two_proportions(p1: f64, p2: f64, n: f64, alpha: f64, tail: Tail) -> f64 {
+    let d = p1 - p2;
+    let pbar = (p1 + p2) / 2.0;
+    let se0 = (2.0 * pbar * (1.0 - pbar) / n).sqrt();
+    let se1 = ((p1 * (1.0 - p1) + p2 * (1.0 - p2)) / n).sqrt();
+    power_terms(d, se0, se1, alpha, tail)
+}
+
+/// The power of the one-proportion test (Origin's "Power Analysis" group) for `n` observations, the observed
+/// proportion `p1` taken as the true one and the hypothesized `p0`: as [`power_two_proportions`] with
+/// `d = p1 - p0` scaled by `sqrt(n)`, `se0 = sqrt(p0 (1 - p0))` and `se1 = sqrt(p1 (1 - p1))`.
+pub fn power_one_proportion(p1: f64, p0: f64, n: f64, alpha: f64, tail: Tail) -> f64 {
+    let root = n.sqrt();
+    power_terms((p1 - p0) * root, (p0 * (1.0 - p0)).sqrt(), (p1 * (1.0 - p1)).sqrt(), alpha, tail)
+}
+
+fn power_terms(d: f64, se0: f64, se1: f64, alpha: f64, tail: Tail) -> f64 {
+    if se1.is_nan() || se1 <= 0.0 || !se0.is_finite() {
+        return f64::NAN;
+    }
+    let norm = std_normal();
+    let term = |shift: f64, z: f64| norm.cdf((shift - z * se0) / se1);
+    match tail {
+        Tail::Two => {
+            let z = norm.inverse_cdf(1.0 - alpha / 2.0);
+            term(d, z) + term(-d, z)
+        }
+        Tail::Upper => term(-d, norm.inverse_cdf(1.0 - alpha)),
+        Tail::Lower => term(d, norm.inverse_cdf(1.0 - alpha)),
     }
 }
 

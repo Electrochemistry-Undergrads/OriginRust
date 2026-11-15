@@ -249,3 +249,85 @@ fn plain_tab_in_the_grid_moves_the_cell_and_ctrl_tab_still_opens_the_switcher() 
     assert_eq!(active(&h), project(&h).workbooks().last().map(|b| b.id));
     assert_eq!(cell(&h), moved, "the grid did not take the Ctrl+Tab");
 }
+
+#[test]
+fn restoring_a_project_makes_the_topmost_window_the_most_recent_one() {
+    let (mut h, ids) = three();
+    // A saved stacking order whose topmost window (ids[0]) is not the last one added.
+    let places: Vec<sheaf_core::project::WindowPlace> = [ids[2], ids[1], ids[0]]
+        .iter()
+        .enumerate()
+        .map(|(k, id)| sheaf_core::project::WindowPlace {
+            window: *id,
+            x: 20.0 + 30.0 * k as f64,
+            y: 20.0,
+            width: 400.0,
+            height: 300.0,
+            state: sheaf_core::project::WindowState::Normal,
+        })
+        .collect();
+    h.state_mut().workspace.restore(&places);
+    settle(&mut h);
+    assert_eq!(active(&h), Some(ids[0]));
+    ctrl_tab(&mut h);
+    assert_ne!(selected(&h), Some(ids[0]), "the active window is not the first selection");
+    assert_eq!(selected(&h), Some(ids[2]));
+    release_ctrl(&mut h);
+    assert_eq!(active(&h), Some(ids[2]));
+}
+
+#[test]
+fn the_first_selection_skips_the_active_window_only_when_it_is_listed() {
+    let (mut h, ids) = three();
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::NewFolder(vec![]), &ctx);
+    // Folder 0 holds the two older windows; the active window (ids[2]) stays at the top level.
+    h.state_mut().apply(Action::MoveWindow { window: ids[0], folder: vec![0] }, &ctx);
+    h.state_mut().apply(Action::MoveWindow { window: ids[1], folder: vec![0] }, &ctx);
+    settle(&mut h);
+    h.state_mut().focus(ids[2]);
+    settle(&mut h);
+    h.state_mut().panels.explorer.folder = vec![0];
+    ctrl_tab(&mut h);
+    assert_eq!(selected(&h), Some(ids[1]), "the most recent window of the folder, not the second");
+    release_ctrl(&mut h);
+    assert_eq!(active(&h), Some(ids[1]));
+}
+
+#[test]
+fn other_keys_are_swallowed_while_the_switcher_is_open() {
+    let mut h = start(vec![data_file("switcher-modal")]);
+    show_window(&mut h, "Book1 - sample");
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::NewWorkbook, &ctx);
+    settle(&mut h);
+    let first = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().focus(first);
+    settle(&mut h);
+    click_text(&mut h, "4.5");
+    let before = column(&h, "B");
+    ctrl_tab(&mut h);
+    assert!(h.state().switcher.is_some());
+    press(&mut h, egui::Key::Delete, Modifiers::CTRL);
+    h.event(egui::Event::Text("x".to_string()));
+    settle(&mut h);
+    assert!(h.state().switcher.is_some());
+    assert_eq!(column(&h, "B"), before, "Delete did not clear the cell");
+    assert!(h.state().books[&first].editing.is_none(), "the letter did not start an edit");
+    key_while_ctrl(&mut h, egui::Key::Escape);
+    release_ctrl(&mut h);
+    assert!(h.state().switcher.is_none());
+    // The menu-opened (sticky) switcher is modal too.
+    menu(&mut h, "Window", "Window Switcher");
+    assert!(h.state().switcher.is_some());
+    press(&mut h, egui::Key::Delete, Modifiers::NONE);
+    assert_eq!(column(&h, "B"), before);
+    press(&mut h, egui::Key::Escape, Modifiers::NONE);
+    assert!(h.state().switcher.is_none());
+    // After Esc, typing edits normally.
+    h.state_mut().focus(first);
+    settle(&mut h);
+    click_text(&mut h, "4.5");
+    press(&mut h, egui::Key::Delete, Modifiers::NONE);
+    assert_ne!(column(&h, "B"), before, "Delete works again once the switcher is closed");
+}

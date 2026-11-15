@@ -35,7 +35,7 @@ pub enum Nav {
 }
 
 /// Takes the keys of the switcher out of this frame's input. `open` is true while the switcher is
-/// shown (then Tab, the arrows, Enter and Esc are all its); otherwise only Ctrl+Tab and
+/// shown (then it is modal: Tab, the arrows, Enter and Esc are its and every other key and text event is swallowed); otherwise only Ctrl+Tab and
 /// Ctrl+Shift+Tab count, and only when `may_open` (no dialog has the keyboard). Ctrl is the
 /// physical Control key on every system (on macOS Cmd+Tab belongs to the system).
 pub fn take_keys(ctx: &egui::Context, open: bool, may_open: bool) -> Vec<Nav> {
@@ -45,6 +45,14 @@ pub fn take_keys(ctx: &egui::Context, open: bool, may_open: bool) -> Vec<Nav> {
     }
     ctx.input_mut(|i| {
         i.events.retain(|e| {
+            // While open the switcher is modal: no other key or text reaches the grid, the graph
+            // or the shortcut table. (Ctrl itself is read from `modifiers`, not from events.)
+            if open && matches!(e, Event::Text(_) | Event::Copy | Event::Cut | Event::Paste(_) | Event::Ime(_)) {
+                return false;
+            }
+            if open && matches!(e, Event::Key { pressed: false, .. }) {
+                return false;
+            }
             let Event::Key { key, pressed: true, modifiers, .. } = e else { return true };
             let nav = match key {
                 Key::Tab if open || modifiers.ctrl => Some(if modifiers.shift { Nav::Prev } else { Nav::Next }),
@@ -61,7 +69,7 @@ pub fn take_keys(ctx: &egui::Context, open: bool, may_open: bool) -> Vec<Nav> {
                     out.push(n);
                     false
                 }
-                None => true,
+                None => !open,
             }
         });
     });
@@ -109,13 +117,14 @@ pub struct Switcher {
 impl Switcher {
     /// Builds the switcher for `ids` (already in most-recent-first order); `hidden` tells the
     /// windows that are closed. Needs two or more windows: with fewer, Ctrl+Tab does nothing.
-    /// `backward` starts on the last card (Ctrl+Shift+Tab), otherwise on the second (the
-    /// previous window).
+    /// `backward` starts on the last card (Ctrl+Shift+Tab), otherwise on the first card
+    /// that is not `active` (the previous window).
     pub fn open(
         ctx: &egui::Context,
         project: &Project,
         ids: &[WindowId],
         hidden: impl Fn(WindowId) -> bool,
+        active: Option<WindowId>,
         backward: bool,
         sticky: bool,
     ) -> Option<Self> {
@@ -141,7 +150,15 @@ impl Switcher {
             };
             thumbs.insert(c.id, thumb);
         }
-        let selected = if backward { cards.len() - 1 } else { 1 };
+        // Forward starts on the first card that is not the active window (the cards come from
+        // the explorer's folder, which may not hold the active window at all).
+        let selected = if backward {
+            cards.len() - 1
+        } else if cards.first().is_some_and(|c| Some(c.id) == active) {
+            1
+        } else {
+            0
+        };
         Some(Self { cards, thumbs, selected, sticky, columns: 1 })
     }
 

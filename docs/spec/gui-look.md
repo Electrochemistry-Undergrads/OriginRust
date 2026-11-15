@@ -926,11 +926,16 @@ Sheaf's choices (unmeasured, the documentation gives no order, Esc or sizes):
   Project Explorer, Go To, opening). So the first Ctrl+Tab selects the second card, the previous
   window. A window that is closed or minimised drops to the end of the list (or behind the new
   active window), so it is not "previous". Windows never activated follow in creation order.
-- **Keys:** Ctrl+Tab opens with the second card selected, Ctrl+Shift+Tab with the last. While
+- **Keys:** Ctrl+Tab opens with the first card that is not the active window selected (the
+  second card when the active window is listed first, the first card when the Project Explorer's
+  folder does not hold the active window), Ctrl+Shift+Tab with the last. While
   open: Tab / Shift+Tab and Left / Right move and wrap, Up / Down move by a row, Enter confirms,
   Esc cancels, releasing Ctrl activates the selection (showing it if hidden), a click on a card
   activates it, a click outside cancels. Ctrl+Tab is read before the grid, so it works while a
   worksheet has the keyboard; plain Tab still moves the cell. Not opened while a dialog is open.
+  While it is open (also when opened from the menu) it is modal: every other key and text event
+  (Delete, letters, shortcuts, paste) is swallowed and never reaches the grid, the graph or the
+  shortcut table; only the Ctrl state is read to detect the release.
 - **macOS:** Ctrl is the physical Control key (Cmd+Tab belongs to the system); the Window menu
   shows the shortcut as the Control symbol plus Tab. On Windows and Linux it is Ctrl+Tab.
 - **Windows listed:** all windows of the Project Explorer's selected folder (not subfolders),

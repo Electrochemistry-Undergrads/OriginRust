@@ -318,6 +318,8 @@ impl Workspace {
         self.z.retain(|id| !restored.contains(id));
         self.z.extend(restored);
         self.active = self.top_visible();
+        // The recent list must start with the active window, or the first Ctrl+Tab would select it.
+        self.touch_active();
     }
 
     /// The topmost window that is shown and not minimised.

@@ -1012,6 +1012,7 @@ impl SheafApp {
             self.doc.project(),
             &ids,
             |id| !workspace.is_shown(id),
+            workspace.active(),
             backward,
             sticky,
         );
@@ -2579,6 +2580,7 @@ impl SheafApp {
             || self.pending.is_some()
             || self.autosave_dialog.is_some()
             || self.recovery_offer.is_some()
+            || self.switcher.is_some()
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {

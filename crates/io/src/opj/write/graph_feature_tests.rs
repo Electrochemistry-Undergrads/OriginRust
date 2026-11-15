@@ -637,6 +637,19 @@ fn plot_decorations_and_a_layer_background_are_named_in_the_save_warnings() {
 }
 
 #[test]
+fn lollipop_drop_settings_are_named_in_the_save_warnings() {
+    let mut p = source();
+    line_graph(&mut p, |l| {
+        let d = &mut l.plots[0].decor.drop.vertical;
+        d.on = true;
+        d.target = sheaf_core::graph::DropTarget::NextDataPlot;
+        d.color_mode = sheaf_core::graph::DropColorMode::PlusMinus;
+    });
+    let (_, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("Plus-Minus")), "{:?}", out.warnings);
+}
+
+#[test]
 fn the_plot_details_settings_the_file_cannot_hold_are_named_in_the_save_warnings() {
     let mut p = one_layer(|l| {
         l.bars.width_pct = Some(70.0);

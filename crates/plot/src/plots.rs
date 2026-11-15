@@ -7,8 +7,8 @@ use crate::fill::{fill_polygon, fill_rect};
 use crate::fonts::TextMeasurer;
 use crate::scene::{Anchor, Cap, Item, Join, Stroke, TextItem, line_to, move_to, push_num};
 use sheaf_core::graph::{
-    Connect, DataLabels, DropLine, ErrorDirection, LabelForm, LabelFrame, LabelPosition, LineStyle, PlotKind,
-    ScaleKind, SymbolShape, SymbolStyle,
+    Connect, DataLabels, DropColorMode, DropTarget, ErrorDirection, LabelForm, LabelFrame, LabelPosition, LineStyle,
+    PLUS_MINUS_NEGATIVE, PLUS_MINUS_POSITIVE, PlotKind, ScaleKind, SymbolShape, SymbolStyle,
 };
 
 /// Points closer than this (in pt) to the last kept point are dropped.
@@ -39,7 +39,17 @@ pub(crate) fn line_stroke(line: &LineStyle) -> Stroke {
 }
 
 /// Appends the items of one plot to `out`.
-pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m: &dyn TextMeasurer) {
+///
+/// `next` is the plot drawn after this one in the layer (the first plot for the last one; none
+/// when the last plot's partner would only repeat a two-plot segment), the target of drop lines
+/// set to Next Data Plot.
+pub(crate) fn draw_plot(
+    out: &mut Vec<Item>,
+    pd: &PlotData,
+    geom: &LayerGeometry,
+    next: Option<&PlotData>,
+    m: &dyn TextMeasurer,
+) {
     let plot = pd.plot;
     if plot.kind == PlotKind::Pie {
         draw_pie(out, pd, geom);
@@ -68,7 +78,7 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     let offers_drop_lines =
         (plot.kind.has_line() || plot.kind.has_symbols()) && !plot.kind.is_bar() && !plot.kind.is_area();
     if offers_drop_lines && (decor.drop.horizontal.on || decor.drop.vertical.on) {
-        draw_drop_lines(out, pd, geom);
+        draw_drop_lines(out, pd, geom, next);
     }
     let line_in_front =
         plot.kind == PlotKind::LineSymbol && decor.symbol_line.draw_in_front && !decor.symbol_line.gap_to_symbol;
@@ -136,37 +146,81 @@ fn draw_fill_under(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, col
 }
 
 /// Drop lines: from each point across to the left edge of the frame (the Y axis, "Horizontal")
-/// and down to its bottom edge (the X axis, "Vertical").
-fn draw_drop_lines(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+/// and down to its bottom edge (the X axis, "Vertical"); or, with Drop To = Next Data Plot, to
+/// the point of `next` (the next plot of the layer) at the same row.
+///
+/// With the "Y Value: Plus-Minus" colour each segment takes one of two fixed colours by the sign
+/// of the value (Sheaf's own, unmeasured): for a drop to the axis, the plotted Y value; for a drop
+/// to the next plot, the coordinate of the segment's start along the direction the segment runs
+/// (the horizontal value when it runs sideways, as in an exchanged lollipop). A point or a
+/// partner point that is missing, NaN or masked gives no segment.
+fn draw_drop_lines(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, next: Option<&PlotData>) {
     let f = geom.frame;
     let auto = pd.plot.line.color;
-    let stroke = |l: &DropLine| {
-        line_stroke(&LineStyle {
-            color: l.color.unwrap_or(auto),
-            width_pt: l.width_pt,
-            dash: l.dash,
-            connect: Connect::Straight,
-        })
-    };
     let drops = &pd.plot.decor.drop;
-    let (mut h, mut v) = (String::new(), String::new());
-    for i in pd.point_rows() {
-        if let Some((x, y)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
-            if drops.horizontal.on {
-                move_to(&mut h, f.x, y);
-                line_to(&mut h, x, y);
-            }
-            if drops.vertical.on {
-                move_to(&mut v, x, y);
-                line_to(&mut v, x, f.y + f.h);
+    for (l, horizontal) in [(&drops.horizontal, true), (&drops.vertical, false)] {
+        if !l.on {
+            continue;
+        }
+        // Segments in page coordinates with the data value that Plus-Minus looks at.
+        let mut segs: Vec<((f64, f64), (f64, f64), f64)> = Vec::new();
+        // The rows the next plot draws a symbol at (row range, row filters, skip points): a
+        // segment ends only at a point that is drawn.
+        let partner_rows: std::collections::BTreeSet<usize> = match next {
+            Some(n) if l.target == DropTarget::NextDataPlot => n.point_rows().collect(),
+            _ => Default::default(),
+        };
+        for i in pd.point_rows() {
+            let Some((x, y)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
+            if l.target == DropTarget::NextDataPlot {
+                let Some(n) = next else { continue };
+                let masked = |d: &PlotData| d.mask.is_some_and(|m| m.contains(&i));
+                if !partner_rows.contains(&i) || i >= n.y.len() || masked(pd) || masked(n) {
+                    continue;
+                }
+                let Some((nx, ny)) = geom.checked_data_to_page(n.x_at(i), n.y_at(i)) else { continue };
+                if (nx, ny) == (x, y) {
+                    continue;
+                }
+                let sideways = (nx - x).abs() > (ny - y).abs();
+                let value = if sideways { pd.x_at(i) } else { pd.y_at(i) };
+                segs.push(((x, y), (nx, ny), value));
+            } else if horizontal {
+                segs.push(((f.x, y), (x, y), pd.y_at(i)));
+            } else {
+                segs.push(((x, y), (x, f.y + f.h), pd.y_at(i)));
             }
         }
-    }
-    if !h.is_empty() {
-        out.push(Item::Path { d: h, fill: None, stroke: Some(stroke(&drops.horizontal)) });
-    }
-    if !v.is_empty() {
-        out.push(Item::Path { d: v, fill: None, stroke: Some(stroke(&drops.vertical)) });
+        let stroke = |color: sheaf_core::Color| {
+            line_stroke(&LineStyle { color, width_pt: l.width_pt, dash: l.dash, connect: Connect::Straight })
+        };
+        let path = |keep: &dyn Fn(f64) -> bool| {
+            let mut d = String::new();
+            for &((x0, y0), (x1, y1), v) in &segs {
+                if keep(v) {
+                    move_to(&mut d, x0, y0);
+                    line_to(&mut d, x1, y1);
+                }
+            }
+            d
+        };
+        match (l.color, l.color_mode) {
+            (None, DropColorMode::PlusMinus) => {
+                for (color, d) in
+                    [(PLUS_MINUS_POSITIVE, path(&|v| v >= 0.0)), (PLUS_MINUS_NEGATIVE, path(&|v| v < 0.0))]
+                {
+                    if !d.is_empty() {
+                        out.push(Item::Path { d, fill: None, stroke: Some(stroke(color)) });
+                    }
+                }
+            }
+            _ => {
+                let d = path(&|_| true);
+                if !d.is_empty() {
+                    out.push(Item::Path { d, fill: None, stroke: Some(stroke(l.color.unwrap_or(auto))) });
+                }
+            }
+        }
     }
 }
 

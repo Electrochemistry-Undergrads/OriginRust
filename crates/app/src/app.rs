@@ -693,8 +693,10 @@ impl SheafApp {
                     if plot {
                         let sheet = placed.sheet;
                         let ys = p.default_plot_columns(book, sheet, t);
-                        if !ys.is_empty() {
-                            let _ = p.plot_columns(t, &ys);
+                        if !ys.is_empty()
+                            && let Err(e) = p.plot_columns(t, &ys)
+                        {
+                            placement_notes.push(format!("No graph was made: {e}"));
                         }
                     }
                 }

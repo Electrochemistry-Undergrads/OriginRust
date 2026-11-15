@@ -13,6 +13,7 @@ mod autosave;
 mod excel;
 mod label_frames;
 mod label_whiteout;
+mod lollipop;
 mod offset_multipliers;
 mod skip_points;
 mod symbol_line_gaps;
@@ -6007,6 +6008,7 @@ mod clipboard_origin;
 mod clipboard_formats;
 
 mod go_to;
+mod go_to_picker;
 mod label_panels;
 #[path = "ui_tests/stack_panels.rs"]
 mod stack_panels;

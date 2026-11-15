@@ -130,6 +130,10 @@ pub enum ProjectError {
     NoSuchPlot(usize),
     #[error("{0}")]
     Panels(#[from] PanelError),
+    #[error("a lollipop plot needs two or more Y columns (got {0}); select at least two Y columns")]
+    LollipopNeedsTwoColumns(usize),
+    #[error("a lollipop plot cannot have a right Y axis; use one Y axis or another template")]
+    LollipopNoRightAxis,
 }
 
 impl Project {
@@ -635,6 +639,9 @@ impl Project {
         for y in ys {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
         }
+        if template == Template::Lollipop && ys.len() < 2 {
+            return Err(ProjectError::LollipopNeedsTwoColumns(ys.len()));
+        }
         let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
         let graph = self.add_graph(template);
         if matches!(template, Template::FloatingColumn | Template::FloatingBar) {
@@ -681,6 +688,9 @@ impl Project {
                 }
             }
         }
+        if template == Template::Lollipop {
+            self.make_lollipop(graph, ys);
+        }
         if let Some(g) = self.graph_mut(graph) {
             // A new graph has no colors chosen by the user, so spread the palette over all plots.
             if let Some(l) = g.layers.first_mut() {
@@ -693,6 +703,32 @@ impl Project {
         Ok(graph)
     }
 
+    /// Turns the plots of a new graph into a lollipop plot: vertical drop lines to the next data
+    /// plot and, as Origin's template exchanges X and Y, each plot's X and Y columns traded (with
+    /// the two axes) when every plot has an X column. Plots against the row number cannot be
+    /// exchanged here (Sheaf's own limit, unmeasured), so those lollipops stand upright.
+    fn make_lollipop(&mut self, graph: WindowId, ys: &[ColumnId]) {
+        let labels: Vec<String> =
+            ys.iter().map(|y| self.column(*y).map(|c| c.display_name().to_string()).unwrap_or_default()).collect();
+        let Some(l) = self.graph_mut(graph).and_then(|g| g.layers.first_mut()) else { return };
+        for p in &mut l.plots {
+            p.decor.drop.vertical.on = true;
+            p.decor.drop.vertical.target = crate::graph::DropTarget::NextDataPlot;
+        }
+        if l.plots.iter().all(|p| p.x.is_some()) {
+            std::mem::swap(&mut l.x_axis, &mut l.y_axis);
+            for (p, name) in l.plots.iter_mut().zip(labels) {
+                if let Some(x) = p.x {
+                    // The plot keeps the name of its Y column in the legend.
+                    p.label = Some(name);
+                    p.x = Some(p.y);
+                    p.y = x;
+                }
+                std::mem::swap(&mut p.y_error, &mut p.x_error);
+            }
+        }
+    }
+
     /// Creates a graph of `template` with the `left` columns on its left Y axis and the `right`
     /// columns on a right Y axis (added with [`Project::add_right_y_layer`] unless the template
     /// already has one), and returns its id. The long name comes from the first column's workbook.
@@ -702,6 +738,9 @@ impl Project {
         left: &[ColumnId],
         right: &[ColumnId],
     ) -> Result<WindowId, ProjectError> {
+        if template == Template::Lollipop {
+            return Err(ProjectError::LollipopNoRightAxis);
+        }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
         }
@@ -914,6 +953,15 @@ mod tests {
         let mut part = plot;
         part.rows = Some((1, 3));
         assert_eq!(p.plot_data_name(&part), format!("[Book1]{sheet}! A(X), B(Y) [2:3]"));
+    }
+
+    #[test]
+    fn a_lollipop_is_refused_a_right_y_axis() {
+        let (mut p, _, _, y) = sample();
+        let graphs = p.graphs().count();
+        let r = p.plot_columns_double_y(crate::template::Template::Lollipop, &[y], &[y]);
+        assert!(matches!(r, Err(ProjectError::LollipopNoRightAxis)));
+        assert_eq!(p.graphs().count(), graphs, "no graph is left behind");
     }
 
     #[test]

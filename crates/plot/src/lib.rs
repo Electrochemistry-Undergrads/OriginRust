@@ -10,6 +10,7 @@
 //! [`render_pdf`], [`export_file`] and, for an interactive view,
 //! [`render_raster`] together with [`layout_geometry`].
 
+mod brackets;
 mod break_cut;
 mod dash;
 mod data;

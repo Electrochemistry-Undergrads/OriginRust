@@ -664,7 +664,10 @@ fn the_page_node_has_origins_tabs() {
     click(&mut h, "Display");
     assert!(!graph(&h).page.style.connect_across_breaks);
     click(&mut h, "Connect line across Axis Break");
+    assert!(!graph(&h).page.style.connect_across_missing);
+    click(&mut h, "Connect line across Missing Data");
     click(&mut h, "OK");
+    assert!(graph(&h).page.style.connect_across_missing);
     assert!(graph(&h).layers.iter().all(|l| l.legend.scope == sheaf_core::graph::LegendScope::Graph));
     assert!(graph(&h).page.style.connect_across_breaks);
 }

@@ -4163,3 +4163,45 @@ fn a_line_across_an_axis_break_is_cut_over_the_gap_unless_the_page_connects_it()
     let whole = line_paths(&p);
     assert_eq!(whole[0].len(), 1, "drawn through");
 }
+
+/// Origin 2016 breaks a line at rows with a missing value; the page's "Connect line across Missing Data"
+/// joins the points on either side instead (graphing spec 18.7b: rows 4, 5 and 8 of 0..10 missing gave three
+/// pieces, and one line with the switch). A value that cannot be placed (here -1 on a log axis) still breaks it.
+#[test]
+fn connect_line_across_missing_data_joins_the_points_around_missing_rows() {
+    use sheaf_core::{ColumnData, Designation};
+    let mut p = Project::new();
+    let book = p.add_workbook("M");
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let mut y: Vec<f64> = x.iter().map(|v| 2.0 * v + 1.0).collect();
+    for r in [4, 5, 8] {
+        y[r] = f64::NAN;
+    }
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+    let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+    let g = p.plot_columns(Template::Line, &[yc]).unwrap();
+    let pieces = |p: &Project| -> usize {
+        let scene = crate::graph_scene(p, g).unwrap();
+        scene.layers[0]
+            .plots
+            .iter()
+            .filter_map(|it| match it {
+                crate::scene::Item::Path { d, fill: None, stroke: Some(_) } => Some(crate::hit::subpaths(d).len()),
+                _ => None,
+            })
+            .sum()
+    };
+    assert_eq!(pieces(&p), 3, "broken at the missing rows by default");
+    p.graph_mut(g).unwrap().page.style.connect_across_missing = true;
+    assert_eq!(pieces(&p), 1, "joined across them");
+    // A value that a log axis cannot place still breaks the line.
+    {
+        let pr = &mut p;
+        let col = pr.column_mut(yc).unwrap();
+        if let ColumnData::Numeric(v) = &mut col.data {
+            std::sync::Arc::make_mut(v)[2] = -1.0;
+        }
+        pr.graph_mut(g).unwrap().layers[0].y_axis.scale = sheaf_core::graph::ScaleKind::Log10;
+    }
+    assert_eq!(pieces(&p), 2);
+}

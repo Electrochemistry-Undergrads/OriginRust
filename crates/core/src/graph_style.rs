@@ -338,6 +338,10 @@ pub struct PageStyle {
     /// leaves a line out where it crosses the band of an axis break, on draws it through.
     #[serde(default, skip_serializing_if = "is_false")]
     pub connect_across_breaks: bool,
+    /// Origin's page Display tab "Connect line across Missing Data" (off by default, graphing spec 18.7b): on
+    /// joins the points before and after rows with a missing X or Y value instead of breaking the line.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub connect_across_missing: bool,
 }
 
 fn is_false(v: &bool) -> bool {
@@ -352,6 +356,7 @@ impl Default for PageStyle {
             title_display: TitleDisplay::Both,
             comments: String::new(),
             connect_across_breaks: false,
+            connect_across_missing: false,
         }
     }
 }
@@ -393,6 +398,7 @@ mod tests {
             title_display: TitleDisplay::LongName,
             comments: "notes".into(),
             connect_across_breaks: true,
+            connect_across_missing: true,
         };
         let json = serde_json::to_string(&page).unwrap();
         assert_eq!(serde_json::from_str::<PageStyle>(&json).unwrap(), page);

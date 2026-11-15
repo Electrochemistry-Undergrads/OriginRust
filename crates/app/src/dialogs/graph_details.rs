@@ -264,6 +264,10 @@ pub fn dialog_body(
                             });
                             // Origin's page Display tab (graphing spec 3.6); off by default.
                             ui.checkbox(&mut graph.page.style.connect_across_breaks, "Connect line across Axis Break");
+                            ui.checkbox(
+                                &mut graph.page.style.connect_across_missing,
+                                "Connect line across Missing Data",
+                            );
                         }
                         DetailTab::Misc => look::misc_tab(ui, graph),
                         DetailTab::LegendsTitles => {

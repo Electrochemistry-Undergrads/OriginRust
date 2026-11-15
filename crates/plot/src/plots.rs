@@ -680,6 +680,9 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
                     }
                 }
             }
+            // With the page's "Connect line across Missing Data" a row without a value does not break the
+            // line (a value that cannot be placed still does).
+            None if geom.connect_across_missing && !(pd.x_at(i).is_finite() && pd.y_at(i).is_finite()) => {}
             None => {
                 if let Some(r) = run.take() {
                     r.emit(|q| keep(&mut piece, &mut pending, q));

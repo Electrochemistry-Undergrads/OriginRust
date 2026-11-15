@@ -277,8 +277,9 @@ the default project format.
 - [x] Drawn graph objects (T24, `542fef7`): line, arrow, rectangle and ellipse tools; Shift
       constraints, selection/move/delete, properties and undo; SVG/PNG/PDF rendering and CLI.
       Geometry and UI tests exist; Origin behaviour has not been measured
-- [x] Drawn shapes can move to front/back within one layer, with selection-safe undo/redo (T24).
-- [ ] Drawn-object `.opj` read/write, page/scale attachment, copy/paste, ordering across object kinds/layers and resize handles;
+- [x] Drawn shapes support front/back within one layer and endpoint/corner resize handles, with
+      selection-safe undo/redo (T24).
+- [ ] Drawn-object `.opj` read/write, page/scale attachment and ordering across object kinds/layers (copy/paste: T125; grouping: T162);
       pictures and inset graphs (T24/T18). The `.sheaf` companion preserves current objects
 - [x] Figure export breadth: SVG, PDF, EPS, EMF and PNG/TIFF/JPEG/BMP/GIF/TGA/PCX/PSD; size units,
       margins, colour depth and compression/quality controls; Copy Page bitmap and Windows EMF

@@ -62,6 +62,7 @@ mod save_window;
 mod set_multiple;
 mod shape_clipboard;
 mod shape_ordering;
+mod shape_resize;
 mod simulate;
 mod skip_points;
 mod slope;

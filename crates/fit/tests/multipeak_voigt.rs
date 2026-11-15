@@ -88,7 +88,7 @@ fn a_single_voigt_peak_fits_to_origins_parameters() {
     ] {
         assert!(close(v(name), want, rel), "{name} = {} against Origin's {want}", v(name));
     }
-    assert!(close(r.stats.reduced_chi_sqr, 7.867_348_618_343_568_4e-5, 1e-6), "{}", r.stats.reduced_chi_sqr);
+    assert!(close(r.stats.reduced_chi_sqr, 7.867_348_618_343_568e-5, 1e-6), "{}", r.stats.reduced_chi_sqr);
     // Origin's standard errors of xc and A: 3.4e-4 and 5.3e-3 relative apart, which the
     // derivatives of Origin's approximate Voigt would explain (not measured further).
     assert!(close(r.param("xc1").unwrap().std_error, 0.001_029_423_895_714_3, 1e-3));

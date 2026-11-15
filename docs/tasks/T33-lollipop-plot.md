@@ -1,6 +1,9 @@
 # T33: Lollipop plot
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `lollipop`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `lollipop`: Plot > Symbol >
+Lollipop Plot, `-t lollipop`, Drop To (Axis / Next Data Plot) and "Y Value: Plus-Minus" drop-line colour,
+`.opj` save warning; `--y2`/`--panels` refused. Left: Origin's defaults (symbol, colours, two-column
+rule) unmeasured (graphing.md 18.8); chord plot and rug plot not started.
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Graphing: Chord and lollipop plots, Origin 2021;
 the lollipop half only; chord, and the rug plot of 2019b, are left).
 

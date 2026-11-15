@@ -1369,15 +1369,11 @@ fn report_json(project: &Project, r: &sheaf_core::analysis::Report) -> Value {
 
 fn analyze(s: &mut Server, a: &Value) -> Res {
     let a: AnalyzeArgs = args(a)?;
-    match a.output.as_deref() {
-        None | Some("next_to_input") => {}
-        Some("new_sheet") => {
-            return Err(ToolError::new(
-                "output \"new_sheet\" is not available: results go next to the input, and tools that write a table use a new sheet by themselves",
-            ));
-        }
-        Some(o) => return Err(ToolError::new(format!("output must be next_to_input (got \"{o}\")"))),
-    }
+    let output = match a.output.as_deref() {
+        None | Some("next_to_input") => sheaf_core::analysis::OutputTarget::NextToInput,
+        Some("new_sheet") => sheaf_core::analysis::OutputTarget::NewSheet,
+        Some(o) => return Err(ToolError::new(format!("output must be next_to_input or new_sheet (got \"{o}\")"))),
+    };
     let options = a.options.clone().unwrap_or_default();
     let columns = a.columns.clone().unwrap_or_default();
     match analysis_tools::resolve(&a.tool)? {
@@ -1392,7 +1388,7 @@ fn analyze(s: &mut Server, a: &Value) -> Res {
                 x_range: a.x_range,
                 read: ReadSettings::default(),
             };
-            let run = s.transact(|s| Ok(sheaf_ops::analyze::run_job(&mut s.project, &target, job)?))?;
+            let run = s.transact(|s| Ok(sheaf_ops::analyze::run_job_to(&mut s.project, &target, job, &output)?))?;
             match run.outcome {
                 Outcome::Report(r) => Ok(ToolOut::json(report_json(&s.project, &r))),
                 _ => Err(ToolError::new("the tool gave no report")),
@@ -1400,7 +1396,7 @@ fn analyze(s: &mut Server, a: &Value) -> Res {
         }
         analysis_tools::Which::Bridged(tool) => {
             check_names(&s.project, a.book.as_deref(), a.sheet.as_deref(), &columns)?;
-            analyze_bridged(s, &tool, &options, &columns, &a)
+            analyze_bridged(s, &tool, &options, &columns, &a, &output)
         }
     }
 }
@@ -1414,6 +1410,7 @@ fn analyze_bridged(
     options: &Map<String, Value>,
     columns: &[String],
     a: &AnalyzeArgs,
+    output: &sheaf_core::analysis::OutputTarget,
 ) -> Res {
     let selection = bridge::Selection {
         columns,
@@ -1458,7 +1455,7 @@ fn analyze_bridged(
         x_range: target_args.x_range,
         read: ReadSettings::default(),
     };
-    let run = s.transact(|s| Ok(sheaf_ops::analyze::run_job(&mut s.project, &target, job)?))?;
+    let run = s.transact(|s| Ok(sheaf_ops::analyze::run_job_to(&mut s.project, &target, job, output)?))?;
     for f in &run.foreign_inputs {
         if !s.foreign.contains(f) {
             s.foreign.push(f.clone());

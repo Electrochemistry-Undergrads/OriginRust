@@ -359,7 +359,10 @@ pub fn defs() -> Vec<Def> {
                     ("x_range", s(XRANGE)),
                     (
                         "output",
-                        en(&["next_to_input"], "Where results go. Tools that write a table always use a new sheet."),
+                        en(
+                            &["next_to_input", "new_sheet"],
+                            "Where per-row results go (default: next_to_input). Tables use their own destinations. Sort and filter require next_to_input.",
+                        ),
                     ),
                 ],
                 &["tool"],

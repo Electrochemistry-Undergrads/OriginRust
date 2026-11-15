@@ -261,7 +261,7 @@ the default project format.
       stdio so Claude and other AI tools can import, plot, analyze, fit, export and save through the
       shared `sheaf-ops` crate; file access is limited to `--root` folders. Phase 2 (act on the open
       desktop app) is left; `analyze` reaches every tool of `sheaf analyze`, `plot` and `fit` accept
-      CLI-derived options, and three prompts are offered
+      CLI-derived options, analysis can write to a new sheet, and three prompts are offered
       (`docs/spec/mcp.md`)
 - [ ] Matrices, contour plots and heatmaps (matrix branch is not merged)
 - [x] Statistics: t-tests, one- and two-way ANOVA, Mann-Whitney, Wilcoxon, Kruskal-Wallis,

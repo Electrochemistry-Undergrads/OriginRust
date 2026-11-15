@@ -44,6 +44,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/formula-string-substitution` | Codex Windows, formula-string-substitution | T08 percent string-expression substitution in formulas; expr lexer/parser, isolated core/IO regressions and expression docs | claimed 2026-11-14; no LabTalk command execution, legacy graph/worksheet substitution forms or other sessions' scope |
 | `codex/t13-label-frame-margin` | Codex Windows, t13-label-frame-margin | T13 Label Frame (None/Box/Shadow, border/fill colors) and Margin only; core DataLabels, plot label backgrounds, graph_details and focused tests | claimed 2026-11-14; no T01 stack panels, app state/menu, leader lines or other sessions' work |
 | `vartest` | Claude Windows, "continue all tasks" (owner's decision) | T26 variance and proportion tests: calc vartest.rs, core Tool::VarTest/PropTest, Hypothesis Testing dialogs, ops analyze vartest/proptest | claimed 2026-11-14, continues 7ec9e48/5a08edf |
 | `stats-multi` | Claude Windows, "continue all tasks" | T29 PCA, ROC, Kaplan-Meier, k-means: calc pca/roc/survival/kmeans.rs, core statistics tools, Statistics menu items, ops analyze | claimed 2026-11-14 |
@@ -116,7 +117,9 @@ double-clicked in Finder (Apple open-document events; the bundle declares no doc
 clap-derived `options` object as well as their existing structured arguments. Both frontends use
 shared CLI-to-library conversions in `sheaf-ops`; mixed selections are validated together,
 duplicate settings are refused, FDF paths stay under the allowed roots, and numeric strings obey
-integer limits. CLI-parity, schema and protocol regressions cover the bridge. Phase 2 attach and
+integer limits. CLI-parity, schema and protocol regressions cover the bridge. Formatting, strict
+all-target Clippy and 2,057 workspace tests passed (one ignored) after integrating the latest
+cross-sheet formula work. Phase 2 attach and
 `output: new_sheet` remain open; no Origin measurements are needed for this interface.
 
 ## Known issues and table UI verification

@@ -4117,3 +4117,49 @@ fn line_project_for_ratio() -> (Project, sheaf_core::WindowId) {
     let g = p.plot_columns(sheaf_core::template::Template::Line, &[yc]).unwrap();
     (p, g)
 }
+
+/// Origin 2016 draws the segment from a point below a Y break to one above it but leaves it out over the
+/// band of the break's gap (graphing spec 3.6); the page's "Connect line across Axis Break" draws it through.
+#[test]
+fn a_line_across_an_axis_break_is_cut_over_the_gap_unless_the_page_connects_it() {
+    use sheaf_core::graph::AxisBreak;
+    use sheaf_core::{ColumnData, Designation};
+    let mut p = Project::new();
+    let book = p.add_workbook("B");
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let y = vec![0.0, 0.5, 1.0, 1.5, 2.0, 18.0, 18.5, 19.0, 19.5, 20.0, 20.5];
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+    let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+    let g = p.plot_columns(Template::Line, &[yc]).unwrap();
+    {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        (l.y_axis.min, l.y_axis.max) = (Some(-2.0), Some(23.0));
+        l.y_axis.axis_breaks = vec![AxisBreak::new(4.25, 16.75)];
+    }
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let (lo, hi) = geom.y.gaps[0].span(false);
+    let band = (geom.frame.y + (1.0 - hi) * geom.frame.h, geom.frame.y + (1.0 - lo) * geom.frame.h);
+    let line_paths = |p: &Project| -> Vec<Vec<Vec<(f64, f64)>>> {
+        let scene = crate::graph_scene(p, g).unwrap();
+        scene.layers[0]
+            .plots
+            .iter()
+            .filter_map(|it| match it {
+                crate::scene::Item::Path { d, fill: None, stroke: Some(_) } if d.matches('L').count() >= 9 => {
+                    Some(crate::hit::subpaths(d))
+                }
+                _ => None,
+            })
+            .collect()
+    };
+    let cut = line_paths(&p);
+    assert_eq!(cut.len(), 1, "one line path");
+    assert_eq!(cut[0].len(), 2, "the line is in two pieces: {:?}", cut[0]);
+    let all: Vec<(f64, f64)> = cut[0].iter().flatten().copied().collect();
+    assert!(all.iter().all(|q| q.1 <= band.0 + 2e-3 || q.1 >= band.1 - 2e-3), "nothing inside the band");
+    // The pieces end exactly on the edges of the band.
+    assert!(all.iter().any(|q| (q.1 - band.0).abs() < 2e-3) && all.iter().any(|q| (q.1 - band.1).abs() < 2e-3));
+    p.graph_mut(g).unwrap().page.style.connect_across_breaks = true;
+    let whole = line_paths(&p);
+    assert_eq!(whole[0].len(), 1, "drawn through");
+}

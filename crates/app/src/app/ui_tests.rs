@@ -660,8 +660,13 @@ fn the_page_node_has_origins_tabs() {
     assert!(has_label(&h, "Dimensions") && has_label(&h, "Units") && has_label(&h, "Width"));
     click(&mut h, "Legends/Titles");
     click(&mut h, "Include data plots from all Layers when constructing legend");
+    // Origin's page Display tab: lines are cut at axis breaks unless this is ticked (off by default).
+    click(&mut h, "Display");
+    assert!(!graph(&h).page.style.connect_across_breaks);
+    click(&mut h, "Connect line across Axis Break");
     click(&mut h, "OK");
     assert!(graph(&h).layers.iter().all(|l| l.legend.scope == sheaf_core::graph::LegendScope::Graph));
+    assert!(graph(&h).page.style.connect_across_breaks);
 }
 
 #[test]

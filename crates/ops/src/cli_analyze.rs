@@ -400,6 +400,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             integrate,
             fit,
             fit_baseline,
+            fit_shapes,
         } => {
             let direction = match direction {
                 PeakKind::Both => analysis::PeakDirection::Both,
@@ -472,16 +473,18 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     PeakLimitKind::Baseline => analysis::LimitMode::Baseline,
                     PeakLimitKind::HalfHeight => analysis::LimitMode::HalfHeight,
                 };
+                let peak_shape = |k: &PeakFitKind| match k {
+                    PeakFitKind::Gauss => analysis::PeakShape::Gauss,
+                    PeakFitKind::Lorentz => analysis::PeakShape::Lorentz,
+                    PeakFitKind::Voigt => analysis::PeakShape::Voigt,
+                };
                 let fit = fit.map(|shape| analysis::PeakFitSpec {
-                    shape: match shape {
-                        PeakFitKind::Gauss => analysis::PeakShape::Gauss,
-                        PeakFitKind::Lorentz => analysis::PeakShape::Lorentz,
-                        PeakFitKind::Voigt => analysis::PeakShape::Voigt,
-                    },
+                    shape: peak_shape(&shape),
                     baseline: match fit_baseline {
                         PeakFitBaselineKind::Constant => analysis::FitBaseline::Constant,
                         PeakFitBaselineKind::Linear => analysis::FitBaseline::Linear,
                     },
+                    shapes: fit_shapes.iter().map(peak_shape).collect(),
                 });
                 let find = analysis::FindOptions {
                     method,

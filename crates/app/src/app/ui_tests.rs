@@ -1976,7 +1976,8 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 2));
 }
 
-/// The Fit Peaks goal of the Peak Analyzer offers Origin's Voigt; OK fits every found peak with it.
+/// The Fit Peaks goal of the Peak Analyzer offers Origin's Voigt and a function per peak; OK fits
+/// the found peaks with them.
 #[test]
 fn peak_analyzer_fits_the_found_peaks_with_voigt() {
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-peakvoigt-{}", std::process::id()));
@@ -2009,6 +2010,12 @@ fn peak_analyzer_fits_the_found_peaks_with_voigt() {
     }
     assert!(has_label(&h, "Voigt"), "the Fit Peaks page offers Voigt");
     click(&mut h, "Voigt");
+    // The first peak gets its own function, Gauss; the second keeps Voigt.
+    click(&mut h, "Add Peak Function");
+    h.query_all_by_role(egui::accesskit::Role::ComboBox).last().expect("the per-peak function list").click();
+    settle(&mut h);
+    h.get_all_by_label("Gauss").last().unwrap().click();
+    settle(&mut h);
     click(&mut h, "OK");
     let b = project(&h).workbooks().next().unwrap();
     let sheet = &b.sheets[1];
@@ -2016,8 +2023,8 @@ fn peak_analyzer_fits_the_found_peaks_with_voigt() {
     let names: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
     let center = center.unwrap_or_else(|| panic!("no Fit center column in {names:?}"));
     assert!((center[0] - 6.0).abs() < 1e-4 && (center[1] - 13.0).abs() < 1e-4, "{center:?}");
-    let logged = h.state().logs.results.iter().flat_map(|r| &r.lines).any(|l| l.contains("Voigt fit of 2 peaks"));
-    assert!(logged, "the fit note in the Results Log names the Voigt shape");
+    let logged = h.state().logs.results.iter().flat_map(|r| &r.lines).any(|l| l.contains("Gauss+Voigt fit of 2 peaks"));
+    assert!(logged, "the fit note in the Results Log names each peak's function");
 }
 
 /// A folder for the project files of one save test.

@@ -50,12 +50,27 @@ pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
 
-/// The multi-peak fit of [`PeakChainSpec`]: a sum of `shape` peaks on `baseline`, one peak for
-/// every peak the search found, started at the found centre, width and height.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// The multi-peak fit of [`PeakChainSpec`]: a sum of peaks on `baseline`, one peak for every peak
+/// the search found, started at the found centre, width and height. Peak `k` (0-based) has the
+/// shape `shapes[k]`; peaks beyond the list have the shape `shape`.
+#[derive(Debug, Clone, PartialEq)]
 pub struct PeakFitSpec {
     pub shape: PeakShape,
     pub baseline: FitBaseline,
+    /// A function per peak, in the order found (empty: every peak is `shape`).
+    pub shapes: Vec<PeakShape>,
+}
+
+impl PeakFitSpec {
+    /// Every peak of one shape.
+    pub fn of(shape: PeakShape, baseline: FitBaseline) -> PeakFitSpec {
+        PeakFitSpec { shape, baseline, shapes: Vec::new() }
+    }
+
+    /// The shape of each of `n` peaks.
+    pub fn shapes_for(&self, n: usize) -> Vec<PeakShape> {
+        (0..n).map(|k| self.shapes.get(k).copied().unwrap_or(self.shape)).collect()
+    }
 }
 
 /// What [`Tool::PeakChain`] does: baseline, peak search, per-peak integration and (optionally)
@@ -1345,7 +1360,7 @@ fn run_peak_chain(
         }
         // The multi-peak fit, started at the found peaks.
         let mut fitted_peaks: Vec<[f64; 5]> = Vec::new();
-        if let Some(fs) = spec.fit {
+        if let Some(fs) = &spec.fit {
             let n = xs.len();
             let (y0, m) = match (fs.baseline, &spec.chain.baseline) {
                 (_, ChainBaseline::None) => {
@@ -1375,8 +1390,9 @@ fn run_peak_chain(
                     height: ys[p.index] - (y0 + m * p.center),
                 })
                 .collect();
+            let shapes = fs.shapes_for(starts.len());
             let mut func =
-                sheaf_fit::multipeak::multi_peak_function(fs.shape, fs.baseline, &starts).with_initial("y0", y0);
+                sheaf_fit::multipeak::multi_peak_function_of(&shapes, fs.baseline, &starts).with_initial("y0", y0);
             if fs.baseline == FitBaseline::Linear {
                 func = func.with_initial("m", m);
             }
@@ -1385,9 +1401,9 @@ fn run_peak_chain(
             })?;
             let get = |name: String| report.param(&name).map_or(f64::NAN, |p| p.value);
             let mut total = 0.0;
-            for k in 1..=starts.len() {
-                let p: Vec<f64> = fs.shape.param_names(k).into_iter().map(get).collect();
-                let peak = fs.shape.summary(&p);
+            for (k, shape) in shapes.iter().enumerate() {
+                let p: Vec<f64> = shape.param_names(k + 1).into_iter().map(get).collect();
+                let peak = shape.summary(&p);
                 total += peak.area;
                 fitted_peaks.push([peak.center, peak.height, peak.fwhm, peak.area, 0.0]);
             }
@@ -1397,7 +1413,7 @@ fn run_peak_chain(
             notes.push(format!(
                 "{}: {} fit of {} peaks, R^2 = {:.6}, reduced chi-square = {:.6e}, {} iterations{}",
                 inp.label,
-                fs.shape.name(),
+                sheaf_fit::multipeak::shapes_name(&shapes, "+"),
                 starts.len(),
                 report.stats.r_squared,
                 report.stats.reduced_chi_sqr,
@@ -1408,7 +1424,12 @@ fn run_peak_chain(
                 after: inp.id,
                 long_name: format!("Peak fit of {}", inp.name),
                 units: inp.units.clone(),
-                comments: format!("{} multi-peak fit of {}{}", fs.shape.name(), inp.short, inp.range_note()),
+                comments: format!(
+                    "{} multi-peak fit of {}{}",
+                    sheaf_fit::multipeak::shapes_name(&shapes, "+"),
+                    inp.short,
+                    inp.range_note()
+                ),
                 data: inp.aligned(&report.fitted),
             });
         }
@@ -3884,7 +3905,7 @@ mod tests {
     #[test]
     fn peak_chain_fit_reports_each_peak() {
         let (mut p, _, y) = two_peaks();
-        let fit = PeakFitSpec { shape: PeakShape::Gauss, baseline: FitBaseline::Linear };
+        let fit = PeakFitSpec::of(PeakShape::Gauss, FitBaseline::Linear);
         let r = p.analyze(&request(&[y], chain(true, Some(fit)))).unwrap();
         let t = r.table.unwrap();
         let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
@@ -3903,7 +3924,7 @@ mod tests {
         // Gaussian peaks: the Voigt's Lorentzian width goes to its bound 0 and the Voigt FWHM
         // (0.5346 wL + sqrt(0.2166 wL^2 + wG^2)) is the Gaussian one.
         let (mut p, _, y) = two_peaks();
-        let fit = PeakFitSpec { shape: PeakShape::Voigt, baseline: FitBaseline::Linear };
+        let fit = PeakFitSpec::of(PeakShape::Voigt, FitBaseline::Linear);
         let r = p.analyze(&request(&[y], chain(true, Some(fit)))).unwrap();
         let t = r.table.unwrap();
         let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
@@ -3914,6 +3935,24 @@ mod tests {
         assert!((t.rows[0].1[h("Fit area")] - exact).abs() < 1e-3);
         assert!((t.rows[0].1[h("Fit height")] - 1.0).abs() < 1e-3, "{}", t.rows[0].1[h("Fit height")]);
         assert!(r.notes[0].contains("Voigt fit of 2 peaks"), "{}", r.notes[0]);
+    }
+
+    #[test]
+    fn peak_chain_fit_takes_a_function_per_peak() {
+        // Peak 1 Gauss, peak 2 (beyond the list) the spec's Voigt: the note and the parameters
+        // follow each peak's function, and both Gaussian peaks keep their centre and area.
+        let (mut p, _, y) = two_peaks();
+        let fit =
+            PeakFitSpec { shape: PeakShape::Voigt, baseline: FitBaseline::Linear, shapes: vec![PeakShape::Gauss] };
+        assert_eq!(fit.shapes_for(3), [PeakShape::Gauss, PeakShape::Voigt, PeakShape::Voigt]);
+        let r = p.analyze(&request(&[y], chain(true, Some(fit)))).unwrap();
+        let t = r.table.unwrap();
+        let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
+        assert!(r.notes[0].contains("Gauss+Voigt fit of 2 peaks"), "{}", r.notes[0]);
+        assert!((t.rows[0].1[h("Fit center")] - 6.0).abs() < 1e-4);
+        assert!((t.rows[1].1[h("Fit center")] - 13.0).abs() < 1e-4);
+        let exact = 0.6 * 0.5 * (2.0 * std::f64::consts::PI).sqrt();
+        assert!((t.rows[1].1[h("Fit area")] - exact).abs() < 1e-3, "{}", t.rows[1].1[h("Fit area")]);
     }
 
     #[test]
@@ -3955,7 +3994,7 @@ mod tests {
                 ..ChainOptions::default()
             },
             integrate: true,
-            fit: Some(PeakFitSpec { shape: PeakShape::Gauss, baseline: FitBaseline::Linear }),
+            fit: Some(PeakFitSpec::of(PeakShape::Gauss, FitBaseline::Linear)),
         });
         let t = p.analyze(&request(&[y], end.clone())).unwrap().table.unwrap();
         assert_eq!(t.rows.len(), 2);

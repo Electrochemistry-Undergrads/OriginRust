@@ -167,42 +167,62 @@ impl PeakShape {
     }
 }
 
-/// Builds the fit function for `starts.len()` peaks. Widths are bounded to be positive.
+/// Builds the fit function for `starts.len()` peaks of one shape. Widths are bounded to be positive.
 pub fn multi_peak_function(shape: PeakShape, baseline: FitBaseline, starts: &[PeakStart]) -> FitFunction {
+    multi_peak_function_of(&vec![shape; starts.len()], baseline, starts)
+}
+
+/// Builds the fit function for `starts.len()` peaks, peak `k` of shape `shapes[k]` (a shorter list
+/// repeats its last shape; an empty one means Gauss). Parameters are named per peak by its shape,
+/// so `xc1 w1 A1 xc2 A2 wG2 wL2` for a Gauss and a Voigt.
+pub fn multi_peak_function_of(shapes: &[PeakShape], baseline: FitBaseline, starts: &[PeakStart]) -> FitFunction {
+    let shapes = shapes_for(shapes, starts.len());
     let sloped = baseline == FitBaseline::Linear;
     let head = if sloped { 2 } else { 1 };
     let mut names: Vec<String> = vec!["y0".to_string()];
     if sloped {
         names.push("m".to_string());
     }
-    for i in 1..=starts.len() {
-        names.extend(shape.param_names(i));
+    for (k, shape) in shapes.iter().enumerate() {
+        names.extend(shape.param_names(k + 1));
     }
     let refs: Vec<&str> = names.iter().map(String::as_str).collect();
     let n = starts.len();
     let slope = if sloped { " + m*x" } else { "" };
-    let equation = match shape {
-        PeakShape::Gauss => {
+    let same = shapes.windows(2).all(|w| w[0] == w[1]);
+    let equation = match shapes.first() {
+        Some(PeakShape::Gauss) if same => {
             format!("y = y0{slope} + sum of {n} Gauss peak(s), each A/(w sqrt(pi/2)) exp(-2 ((x-xc)/w)^2)")
         }
-        PeakShape::Lorentz => {
+        Some(PeakShape::Lorentz) if same => {
             format!("y = y0{slope} + sum of {n} Lorentz peak(s), each 2 A/pi * w / (4 (x-xc)^2 + w^2)")
         }
-        PeakShape::Voigt => format!(
+        Some(PeakShape::Voigt) if same => format!(
             "y = y0{slope} + sum of {n} Voigt peak(s), each a Gauss of FWHM wG convolved with a Lorentz of FWHM wL, area A"
         ),
+        _ => format!("y = y0{slope} + sum of {n} peaks: {}", shapes_name(&shapes, ", ")),
     };
-    let per = shape.params_per_peak();
-    let f = Arc::new(move |p: &[f64], x: f64| {
-        let mut y = p[0] + if sloped { p[1] * x } else { 0.0 };
-        for k in 0..n {
-            let o = head + per * k;
-            y += shape.eval(&p[o..o + per], x);
-        }
-        y
-    });
-    let mut func = FitFunction::from_closure(&format!("{} multi-peak", shape.name()), &equation, &refs, f);
-    for (k, s) in starts.iter().enumerate() {
+    let layout: Vec<(PeakShape, usize)> = shapes
+        .iter()
+        .scan(head, |o, &shape| {
+            let at = *o;
+            *o += shape.params_per_peak();
+            Some((shape, at))
+        })
+        .collect();
+    let f = {
+        let layout = layout.clone();
+        Arc::new(move |p: &[f64], x: f64| {
+            let mut y = p[0] + if sloped { p[1] * x } else { 0.0 };
+            for &(shape, o) in &layout {
+                y += shape.eval(&p[o..o + shape.params_per_peak()], x);
+            }
+            y
+        })
+    };
+    let model = if same { shapes.first().map_or("Gauss", |s| s.name()).to_string() } else { "Mixed".to_string() };
+    let mut func = FitFunction::from_closure(&format!("{model} multi-peak"), &equation, &refs, f);
+    for (k, (s, shape)) in starts.iter().zip(&shapes).enumerate() {
         let i = k + 1;
         let initial = shape.initial(s);
         for (name, value) in shape.param_names(i).iter().zip(&initial) {
@@ -221,11 +241,39 @@ pub fn multi_peak_function(shape: PeakShape, baseline: FitBaseline, starts: &[Pe
     func
 }
 
+/// The shape of each of `n` peaks: `shapes` with its last entry repeated (Gauss when empty).
+pub fn shapes_for(shapes: &[PeakShape], n: usize) -> Vec<PeakShape> {
+    let last = shapes.last().copied().unwrap_or(PeakShape::Gauss);
+    (0..n).map(|k| shapes.get(k).copied().unwrap_or(last)).collect()
+}
+
+/// The shapes' names joined by `sep`, each once when they are all the same ("Voigt"), otherwise
+/// one per peak ("Gauss+Voigt").
+pub fn shapes_name(shapes: &[PeakShape], sep: &str) -> String {
+    if shapes.windows(2).all(|w| w[0] == w[1]) {
+        shapes.first().map_or("Gauss", |s| s.name()).to_string()
+    } else {
+        shapes.iter().map(|s| s.name()).collect::<Vec<_>>().join(sep)
+    }
+}
+
 /// The centre, height, FWHM and area of every peak of a fitted multi-peak function, from its
 /// parameter vector (`params` in the order of [`multi_peak_function`]'s names).
 pub fn peak_summaries(shape: PeakShape, baseline: FitBaseline, params: &[f64]) -> Vec<PeakSummary> {
     let head = if baseline == FitBaseline::Linear { 2 } else { 1 };
     params.get(head..).unwrap_or(&[]).chunks_exact(shape.params_per_peak()).map(|p| shape.summary(p)).collect()
+}
+
+/// [`peak_summaries`] for peaks of the given shapes, one per peak (as [`multi_peak_function_of`]).
+pub fn peak_summaries_of(shapes: &[PeakShape], baseline: FitBaseline, params: &[f64]) -> Vec<PeakSummary> {
+    let mut o = if baseline == FitBaseline::Linear { 2 } else { 1 };
+    let mut out = Vec::with_capacity(shapes.len());
+    for shape in shapes {
+        let Some(p) = params.get(o..o + shape.params_per_peak()) else { break };
+        out.push(shape.summary(p));
+        o += shape.params_per_peak();
+    }
+    out
 }
 
 #[cfg(test)]

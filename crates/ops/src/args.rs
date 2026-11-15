@@ -1674,6 +1674,10 @@ pub enum AnalyzeTool {
         /// Baseline of the multi-peak fit.
         #[arg(long, value_enum, default_value_t = PeakFitBaselineKind::Linear)]
         fit_baseline: PeakFitBaselineKind,
+        /// A function per peak, in the order found, comma-separated (for example gauss,voigt);
+        /// peaks beyond the list take the --fit function.
+        #[arg(long, value_enum, value_delimiter = ',', requires = "fit")]
+        fit_shapes: Vec<PeakFitKind>,
     },
     /// Descriptive statistics of each column. By default N, missing, mean, SD, SEM, sum, minimum, quartiles
     /// and maximum; --all adds IQR, variance, skewness, kurtosis, CV and the confidence limits of the mean.

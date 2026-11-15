@@ -131,3 +131,31 @@ fn a_voigt_start_has_the_found_height_and_fwhm() {
     // Equal Gaussian and Lorentzian widths, as Origin's Voigt initialisation.
     assert_eq!(p[3], p[4]);
 }
+
+#[test]
+fn a_gauss_and_a_voigt_peak_are_fitted_each_with_its_own_function() {
+    use sheaf_fit::multipeak::{multi_peak_function_of, peak_summaries_of, shapes_name};
+    let gauss = |x: f64| 1.5 / (0.8 * (std::f64::consts::PI / 2.0).sqrt()) * (-2.0 * ((x - 6.0) / 0.8).powi(2)).exp();
+    let x: Vec<f64> = (0..500).map(|i| i as f64 * 0.04).collect();
+    let y: Vec<f64> = x.iter().map(|&x| 0.2 + gauss(x) + voigt(x, 0.0, 11.0, 2.0, 0.9, 0.5)).collect();
+    let shapes = [PeakShape::Gauss, PeakShape::Voigt];
+    let starts =
+        [PeakStart { center: 6.2, fwhm: 1.0, height: 1.4 }, PeakStart { center: 10.8, fwhm: 1.4, height: 1.1 }];
+    let func = multi_peak_function_of(&shapes, FitBaseline::Constant, &starts).with_initial("y0", 0.0);
+    assert_eq!(func.name, "Mixed multi-peak");
+    let r = fit(&func, &x, &y, &FitOptions::default()).unwrap();
+    let names: Vec<&str> = r.params.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(names, ["y0", "xc1", "w1", "A1", "xc2", "A2", "wG2", "wL2"]);
+    for (name, want) in names.iter().zip([0.2, 6.0, 0.8, 1.5, 11.0, 2.0, 0.9, 0.5]) {
+        let v = r.param(name).unwrap().value;
+        assert!((v - want).abs() < 1e-6, "{name} = {v}, want {want}");
+    }
+    let params: Vec<f64> = r.params.iter().map(|p| p.value).collect();
+    let peaks = peak_summaries_of(&shapes, FitBaseline::Constant, &params);
+    assert_eq!(peaks.len(), 2);
+    assert!(
+        (peaks[0].fwhm - 0.8 * 4.0_f64.ln().sqrt()).abs() < 1e-6 && (peaks[1].fwhm - voigt_fwhm(0.9, 0.5)).abs() < 1e-6
+    );
+    assert_eq!(shapes_name(&shapes, "+"), "Gauss+Voigt");
+    assert_eq!(shapes_name(&[PeakShape::Voigt; 3], "+"), "Voigt");
+}

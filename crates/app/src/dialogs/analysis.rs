@@ -586,6 +586,8 @@ pub struct AnalysisDialog {
     /// The wizard page shown: 0 is Goal, then the pages of the goal.
     chain_page: usize,
     chain_fit: PeakShape,
+    /// The function of each peak in the order found (`None`: the Function of `chain_fit`).
+    chain_fit_shapes: Vec<Option<PeakShape>>,
     chain_fit_linear: bool,
     /// X intervals of "Integrate Ranges".
     ranges: Vec<(f64, f64)>,
@@ -1107,6 +1109,7 @@ impl AnalysisDialog {
             chain_goal: ChainGoal::Integrate,
             chain_page: 0,
             chain_fit: PeakShape::Gauss,
+            chain_fit_shapes: Vec::new(),
             chain_fit_linear: true,
             stats,
             dist: Default::default(),
@@ -1331,6 +1334,35 @@ impl AnalysisDialog {
                     ui.radio_value(&mut self.chain_fit, PeakShape::Voigt, "Voigt");
                 });
                 ui.checkbox(&mut self.chain_fit_linear, "Sloped baseline in the fit");
+                // A function per peak, in the order found; peaks beyond the list take the Function
+                // above (Sheaf's own layout; Origin's Fit Control window was not opened).
+                ui.label("Function per peak (in the order found; the others use the Function above)");
+                let mut remove = None;
+                for (k, choice) in self.chain_fit_shapes.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        let text = choice.map_or("Same as above", PeakShape::name);
+                        egui::ComboBox::from_id_salt(("peak_fit_shape", k))
+                            .selected_text(text)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(choice, None, "Same as above");
+                                for s in [PeakShape::Gauss, PeakShape::Lorentz, PeakShape::Voigt] {
+                                    ui.selectable_value(choice, Some(s), s.name());
+                                }
+                            })
+                            .response
+                            .on_hover_text(format!("Peak {}", k + 1));
+                        ui.label(format!("Peak {}", k + 1));
+                        if ui.small_button("Remove").clicked() {
+                            remove = Some(k);
+                        }
+                    });
+                }
+                if let Some(k) = remove {
+                    self.chain_fit_shapes.remove(k);
+                }
+                if ui.button("Add Peak Function").clicked() {
+                    self.chain_fit_shapes.push(None);
+                }
             }
             _ => {
                 ui.label(format!("{}: press OK to run it.", self.chain_goal.name()));
@@ -1494,9 +1526,10 @@ impl AnalysisDialog {
                     limits: if self.chain_half_height { LimitMode::HalfHeight } else { LimitMode::Baseline },
                 },
                 integrate: self.chain_goal == ChainGoal::Integrate,
-                fit: (self.chain_goal == ChainGoal::Fit).then_some(PeakFitSpec {
+                fit: (self.chain_goal == ChainGoal::Fit).then(|| PeakFitSpec {
                     shape: self.chain_fit,
                     baseline: if self.chain_fit_linear { FitBaseline::Linear } else { FitBaseline::Constant },
+                    shapes: self.chain_fit_shapes.iter().map(|s| s.unwrap_or(self.chain_fit)).collect(),
                 }),
             }),
             AnalysisKind::Statistics => Tool::Statistics(self.stats.desc),

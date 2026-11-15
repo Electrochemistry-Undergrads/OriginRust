@@ -39,7 +39,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 - Connect line across Missing Data (2026-11-15, Windows, branch `missing-lines`): the page Display
   tab's switch (off by default, `PageStyle::connect_across_missing`) joins the points on either side of
   rows with a missing value, as Origin 2016 draws it (measured, graphing 18.7b); values that cannot be
-  placed still break the line. Formatting, strict all-target Clippy and 2737 workspace tests pass (8 ignored) on f74b7b2.
+  placed still break the line. Formatting, strict all-target Clippy and 2,741 workspace tests pass (8 ignored) on 9bf6240.
 - T25 owner Undo AI Changes (2026-11-15, Windows): Edit > Undo AI Changes, also in the
   no-window File Undo/Redo block, undoes consecutive completed AI calls and stops before manual
   work or the history limit. Editor/dialog guards are checked again on dispatch. It uses ordinary

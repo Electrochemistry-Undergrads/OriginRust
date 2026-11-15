@@ -339,12 +339,13 @@ above and the separate snapshot-worker follow-up remain open.
 
 ## Decision for the Undo AI Changes follow-up (2026-11-15, implementation claimed)
 
-Add an owner-only Edit > Undo AI Changes command beside ordinary Undo/Redo. It uses the existing
-Document history to undo consecutive completed entries whose labels start with the executor's
+Add an owner-only Edit > Undo AI Changes command beside ordinary Undo/Redo. The no-window bar
+keeps it in the existing File Undo/Redo fallback. It uses the existing Document history to undo consecutive completed entries whose labels start with the executor's
 `AI: ` prefix, starting at the top. It stops at the first manual entry or the undo limit. This
 preserves manual work and requires no history-schema or selective-undo mechanism. The command
 is disabled while an editor or dialog is active and when the top entry is not an AI step; the
-handler checks the same conditions. Ordinary Redo restores one completed call at a time.
+handler checks the same conditions and reuses the existing Undo action, preserving its cleanup
+hooks. Ordinary Redo restores one completed call at a time.
 
 The command changes only the in-memory document through ordinary undo. Files written by exports
 stay on disk. It does not cancel queued calls, disconnect assistants or expose a new MCP tool;

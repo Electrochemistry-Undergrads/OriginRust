@@ -304,7 +304,7 @@ impl SheafApp {
         };
         let original = newest.sidecar.as_ref().and_then(|s| s.original_path());
         self.doc.replace(project);
-        self.doc.dirty = true;
+        self.doc.mark_unsaved();
         self.reset_views();
         self.path = None;
         // A project that came from an Origin file keeps its `.bak` copy when it is saved over it.
@@ -353,6 +353,9 @@ impl SheafApp {
         if !self.doc.dirty {
             if let Err(e) = self.autosave.clear() {
                 self.autosave_failed(&e);
+                ctx.request_repaint_after(std::time::Duration::from_secs(1));
+            } else if self.autosave.write_pending() {
+                ctx.request_repaint_after(std::time::Duration::from_millis(100));
             }
             return;
         }
@@ -632,7 +635,7 @@ impl SheafApp {
             Ok(outcome) => {
                 // The project is safe on disk either way: in the .opj, or in the companion when
                 // the .opj was refused.
-                self.doc.dirty = false;
+                self.doc.mark_saved();
                 let mut said = outcome.status();
                 if let Some(b) = &backup {
                     said.push_str(&format!("; the original Origin file is kept as {}", b.display()));
@@ -790,7 +793,7 @@ impl SheafApp {
 
     /// File > Print... (Ctrl+P): the graph page, as a vector drawing, through the system's print
     /// dialog, scaled into the paper of Page Setup as File > Print Preview shows. Windows plays the
-    /// page's metafile into the printer; elsewhere the page's PDF goes to `lp`.
+    /// page's metafile into the printer; macOS uses PDFKit and other systems use `lp`.
     fn print_graph(&mut self, graph: WindowId) {
         let project = self.doc.project();
         let Some((page, title)) = project.graph(graph).map(|g| ((g.page.width_pt, g.page.height_pt), g.name.clone()))
@@ -812,7 +815,16 @@ impl SheafApp {
             },
             Err(e) => self.warn(format!("Could not print the graph: {e}")),
         }
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        match sheaf_plot::render_print_pdf(project, graph) {
+            Ok(pdf) => match crate::macprint::print_with_dialog(&pdf, &setup, page, &title) {
+                Ok(crate::macprint::Outcome::Printed) => self.say(format!("Printed {title}")),
+                Ok(crate::macprint::Outcome::CancelledOrFailed) => {}
+                Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
+            },
+            Err(e) => self.warn(format!("Could not print the graph: {e}")),
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
         match sheaf_plot::render_pdf(project, graph) {
             Ok(pdf) => match crate::winprint::print_pdf(&pdf, &setup, page, &title) {
                 Ok(()) => self.say(format!("Sent {title} to the default printer")),

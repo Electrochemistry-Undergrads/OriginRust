@@ -10,15 +10,24 @@ open. History of what was merged when is in `git log` (not repeated here).
 - **When unsure, copy Origin:** measure it through `tools/origin-ref/` (or read its docs for
   behaviour) and copy it; record the measurement in the spec. Don't ask the owner what Origin can
   answer. Clean-room: copy behaviour and layout, never code, icons, help text or files.
-- **Subagents:** Sonnet for building, research, reviews; Haiku for running tests and checking outputs.
+- **Subagents:** Claude sessions use Sonnet for building, research and reviews, and Haiku for tests
+  and output checks. **Codex sessions use Terra instead of Sonnet and Luna instead of Haiku.**
+- **Codex GitHub monitor:** keep a dedicated Luna subagent checking GitHub periodically while work
+  is in flight. Watch remote `main`, branches and task claims for another session taking or
+  overlapping the task; reconcile new work before merging and never overwrite another session's work.
+- **Codex continuous work:** the owner requested an ongoing queue: finish, review, verify and
+  merge/push one suitable task, then find and claim another. Do not stop merely because one task
+  is complete. Refresh GitHub and the handoff before selecting the next task; respect active claims.
 - **No co-author line:** never add `Co-Authored-By: Claude ...` or "Generated with Claude Code" to
   commits or PRs; say so in every subagent prompt. (History was rewritten on 2026-11-12 to remove
   them; branches older than that must be rebased onto `main`, matching commits by tree.)
 - **Repository:** https://github.com/Electrochemistry-Undergrads/OriginRust (private). Nothing on the
   owner's personal account.
-- **Two or more sessions** often share this repo. Claim work in `re-workspace/scratch/peer-notes.md`
-  (local only, read its last 40 lines on start); merge to `main` one branch at a time, after
-  `git fetch`. See LESSONS "Two sessions on one repository need a written split".
+- **Two or more sessions** often share this repo. Pull the latest changes and inspect branches,
+  worktrees and claims before choosing work. Publish the task claim in this file on `main` (push it)
+  and in `re-workspace/scratch/peer-notes.md` (local only, read its last 40 lines on start), so other
+  computers can see the split. Merge to `main` one branch at a time, after `git fetch`.
+  See LESSONS "Two sessions on one repository need a written split".
 - **Inactive task claims:** If a task has had no edits for at least 48 consecutive hours,
   another agent may take ownership. Check the task brief, its branch and worktree when
   available, and the latest peer notes for evidence of newer work. Record the takeover in
@@ -26,6 +35,18 @@ open. History of what was merged when is in `git log` (not repeated here).
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## State of `main`
+
+- T27 native macOS graph print panel (2026-11-15): File > Print uses PDFKit with the saved
+  paper-sized vector PDF, no added margins/scaling/rotation. Construction checks on the main
+  thread cover Letter/A4 portrait/landscape and invalid input; standard tests never print.
+  Formatting, strict all-target Clippy and 2,437 workspace tests pass (two ignored). Opening/
+  cancelling the panel and physical output remain unverified; workbook printing is separate.
+
+- T28 saved-state checkpoints (2026-11-15, macOS, no Origin): undo/redo back to the last saved
+  content clears the modified flag and recovery copy. Saved points survive history branches and
+  merged edits; recovered projects stay modified until saved. Pending recovery workers schedule
+  cleanup polling after a clean state. Latest masking synchronization is retained. Formatting,
+  strict all-target Clippy and 2,436 workspace tests pass (two ignored).
 
 - T02 Go To picker/name lookup (2026-11-15, Windows): the flyout lists short names,
   designations and long names, fills an unambiguous short-name/quoted-long-name reference,
@@ -101,14 +122,13 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `axis-breaks` | Claude Windows, "axis-breaks" | T11 more than one axis break (Origin's 1-7 breaks, per-break position), measured Origin break layout; core Axis break list, plot axis/tick drawing, graph_axis.rs Breaks tab, persistence and focused tests | claimed 2026-11-15; Axis fields only, no PLOT/plots.rs draw_plot, graph_details, navigation, stats or other sessions' scopes |
 | `codex/t13-fill-sidelines` | Codex Windows, t13-fill-sidelines | T13 Fill Area Sidelines only / Sidelines and Base; plot fill-mode/group copy, draw_fill_under/draw_line boundaries, draw_legend sample, graph_details selector and focused tests | claimed 2026-11-15; no Axis/layout geometry/PDF, mask policy/color, navigation, labels, stats or other sessions scopes |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
-| `mac-print-panel` | Codex macOS, no Origin | T27 native macOS graph print panel via PDFKit; app print_graph/macprint, macOS dependencies and no-spool validation example | claimed 2026-11-14; no workbook printing, Windows CLI, Excel/imports or other sessions’ scope |
-| `saved-state-recovery` | Codex macOS, no Origin | T28 undo/redo saved-state checkpoints and recovery cleanup; core/history.rs, app save/recovery hooks, autosave and focused UI tests | claimed 2026-11-14; no Excel dialogs/imports, axis/labels, backup settings or other sessions’ scope |
 | `mcp-attach` | Claude macOS, "mac-attach" | T25 phase 2: ADR 0013, app live link (local socket, off by default, menu + `--mcp`), `sheaf-mcp --attach` forwarding, one undo step per forwarded change, status-bar note; new crates/app module + mcp attach client, docs | claimed 2026-11-14 night; no print, recovery/history internals, Excel, Go To, symbol gaps, stats or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `print-workbook` | Claude Windows, "continue all tasks" | T27 leftover: File > Print / Print Preview of the active workbook sheet as a table (Windows EMF path), app printing dialog + winprint, a sheet-to-page renderer in crates/plot | claimed 2026-11-15; no macOS panel (mac-print-panel), no graph print changes beyond sharing the path |
 | `vartest2` | Claude Windows, "continue all tasks" | T26 leftovers: Origin measurements of the two-sample proportion test (unpooled, tails, differences, Fisher, small samples), two-sample variance dialog with intervals, power analysis outputs; calc vartest.rs, core var/prop runners, their dialogs, statistics.md 21 | claimed 2026-11-15 |
 | `pca-plots` | Claude Windows, "continue all tasks" | T29 leftovers: PCA loading plot and biplot, Origin's report-sheet layout of PCA/k-means/Kaplan-Meier where measurable; core analysis/multivariate.rs, survival.rs, their dialogs, statistics.md 17-20 | claimed 2026-11-15 |
 | `cell-notes` | Claude macOS, "mac-multipdf" | T36 worksheet cell notes (Origin 2022): core per-sheet notes kept through row/column ops and sort, grid corner tab + hover popup, cell menu Add/Edit/Delete Note, note editor | claimed 2026-11-15; core worksheet + sheetops note upkeep, grid.rs body_cell, menus/app/dialogs; no cond-format/frozen/filter/Go To, plot, stats or other sessions' scopes |
+| `violin-plot` | Claude macOS, "violin" | T37 violin plot: core PlotKind/Template, plot data/plots/layout (new violin drawing beside the box chart), calc kernel density, Plot > Statistics menu, CLI/MCP template lists, graphing.md 14.22 | claimed 2026-11-15; no fill-under/sidelines, axis breaks, cell notes, worksheet grid or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

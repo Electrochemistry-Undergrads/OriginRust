@@ -254,9 +254,11 @@ the default project format.
       (T05). PSD is a flattened RGB, grayscale or indexed image with resolution metadata.
       TIFF also supports indexed 256 colors with None/PackBits/LZW compression.
       Graph/dialog themes, mono and 16-color modes remain
+- [x] Autosave recovery follows saved content checkpoints: undo/redo back to a normal save clears
+      the modified flag and recovery copy; recovered projects remain modified until saved (T28).
 - [ ] Printing (T27): Windows graph print dialog, Print Preview and saved Page Setup exist;
       `sheaf print` writes paper-sized vector PDF and submits through `lp` on macOS/Linux.
-      Workbook printing, native macOS panel and Windows CLI submission remain
+      Native macOS graph print panel uses PDFKit; workbook printing and Windows CLI submission remain
 - [x] MCP server (T25 phase 1, branch `mcp-server`): `sheaf-mcp` speaks the Model Context Protocol over
       stdio so Claude and other AI tools can import, plot, analyze, fit, export and save through the
       shared `sheaf-ops` crate; file access is limited to `--root` folders. Phase 2 (act on the open

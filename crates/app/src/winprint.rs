@@ -55,7 +55,7 @@ pub enum Outcome {
 
 /// Elsewhere than Windows: the page's PDF goes to the default printer with `lp` (paper size and
 /// orientation from the Page Setup; the margins are the printer's). A first step: no print dialog.
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn print_pdf(pdf: &[u8], setup: &PageSetup, page_pt: (f64, f64), title: &str) -> Result<(), String> {
     use sheaf_core::page_setup::Orientation;
     let path = std::env::temp_dir().join(format!("sheaf-print-{}.pdf", std::process::id()));

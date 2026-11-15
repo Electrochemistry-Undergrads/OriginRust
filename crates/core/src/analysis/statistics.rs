@@ -468,6 +468,12 @@ pub(super) fn prop_test(spec: &PropTestSpec) -> Result<Output, AnalysisError> {
                 .into(),
         )
     };
+    let exact_too_large = || {
+        AnalysisError::BadOption(format!(
+            "the exact test is only computed for sample sizes up to {}; use the normal approximation",
+            calc::vartest::MAX_EXACT_SIZE
+        ))
+    };
     let tail = spec.tail;
     let head_level = 1.0 - spec.alpha;
     let head = |what: &str| format!("{}% {what}", num(head_level * 100.0));
@@ -493,6 +499,9 @@ pub(super) fn prop_test(spec: &PropTestSpec) -> Result<Output, AnalysisError> {
     };
     match spec.kind {
         PropTestKind::OneSample { successes, size, proportion } => {
+            if spec.exact && size > calc::vartest::MAX_EXACT_SIZE {
+                return Err(exact_too_large());
+            }
             let r = calc::proportion_one(successes, size, proportion, tail).ok_or_else(bad)?;
             let [null, alt] = hypotheses("Proportion", proportion, tail);
             notes.push(null);
@@ -525,6 +534,9 @@ pub(super) fn prop_test(spec: &PropTestSpec) -> Result<Output, AnalysisError> {
             }
         }
         PropTestKind::TwoSample { first, second, difference } => {
+            if spec.exact && difference == 0.0 && first.1.saturating_add(second.1) > calc::vartest::MAX_EXACT_SIZE {
+                return Err(exact_too_large());
+            }
             let r = calc::proportion_two(first, second, difference, spec.pooled, tail).ok_or_else(bad)?;
             let [null, alt] = hypotheses("Proportion1 - Proportion2", difference, tail);
             notes.push(null);
@@ -1869,6 +1881,27 @@ mod tests {
         assert!(p.analyze(&request(&ids[..1], Tool::PropTest(none))).is_err());
         let over = PropTestSpec { kind: PropTestKind::OneSample { successes: 11, size: 10, proportion: 0.5 }, ..spec };
         assert!(p.analyze(&request(&ids[..1], Tool::PropTest(over))).is_err());
+    }
+
+    #[test]
+    fn huge_proportion_samples_use_the_normal_approximation_and_refuse_the_exact_test() {
+        let (mut p, _, ids) = project();
+        let big = PropTestSpec {
+            kind: PropTestKind::OneSample { successes: 5, size: u64::MAX, proportion: 0.5 },
+            ..Default::default()
+        };
+        let r = run(&mut p, &ids[..1], Tool::PropTest(big.clone()));
+        assert_eq!(cell(&p, &r, "P").len(), 1);
+        let exact = PropTestSpec { exact: true, ..big };
+        assert!(p.analyze(&request(&ids[..1], Tool::PropTest(exact))).is_err());
+        let two = PropTestSpec {
+            kind: PropTestKind::TwoSample { first: (5, u64::MAX), second: (3, u64::MAX), difference: 0.0 },
+            ..Default::default()
+        };
+        let r = run(&mut p, &ids[..1], Tool::PropTest(two.clone()));
+        assert_eq!(cell(&p, &r, "P").len(), 1);
+        let two_exact = PropTestSpec { exact: true, ..two };
+        assert!(p.analyze(&request(&ids[..1], Tool::PropTest(two_exact))).is_err());
     }
 
     fn grid() -> Bin2dOptions {

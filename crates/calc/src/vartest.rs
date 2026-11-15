@@ -244,8 +244,17 @@ fn ln_choose(n: u64, k: u64) -> f64 {
     ln_gamma(n as f64 + 1.0) - ln_gamma(k as f64 + 1.0) - ln_gamma((n - k) as f64 + 1.0)
 }
 
-/// Exact binomial p-value of `x` successes in `n` trials against the proportion `p0` (`0 < p0 < 1`).
+/// The largest total sample size the exact tests (binomial, Fisher) are computed for: they sum a probability
+/// mass vector as long as the sample, so beyond this their p-value is NaN (callers refuse an exact test of
+/// such a size) and the normal approximation alone is given.
+pub const MAX_EXACT_SIZE: u64 = 2_000_000;
+
+/// Exact binomial p-value of `x` successes in `n` trials against the proportion `p0` (`0 < p0 < 1`); NaN
+/// beyond [`MAX_EXACT_SIZE`].
 fn binomial_p(x: u64, n: u64, p0: f64, tail: Tail) -> f64 {
+    if n > MAX_EXACT_SIZE {
+        return f64::NAN;
+    }
     let (lp, lq) = (p0.ln(), (1.0 - p0).ln());
     let pmf: Vec<f64> = (0..=n).map(|k| (ln_choose(n, k) + k as f64 * lp + (n - k) as f64 * lq).exp()).collect();
     let x = x as usize;
@@ -407,10 +416,13 @@ pub fn proportion_two(
     })
 }
 
-/// Fisher's exact p-value of the 2 x 2 table with `x1` of `n1` and `x2` of `n2` successes: the number of
+/// Fisher's exact p-value (NaN beyond [`MAX_EXACT_SIZE`]) of the 2 x 2 table with `x1` of `n1` and `x2` of `n2` successes: the number of
 /// successes of the first sample is hypergeometric given the margins; upper tail = the first sample has more.
 fn fisher_p(first: (u64, u64), second: (u64, u64), tail: Tail) -> f64 {
     let ((x1, n1), (x2, n2)) = (first, second);
+    if n1.saturating_add(n2) > MAX_EXACT_SIZE {
+        return f64::NAN;
+    }
     let (k, total) = (x1 + x2, n1 + n2);
     let (lo, hi) = (k.saturating_sub(n2), k.min(n1));
     let ln_total = ln_choose(total, k);

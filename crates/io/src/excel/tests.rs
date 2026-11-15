@@ -45,6 +45,7 @@ fn sheet(name: &str, columns: Vec<Column>) -> Worksheet {
         frozen: Default::default(),
         cond_formats: Vec::new(),
         notes: Vec::new(),
+        cell_formats: Vec::new(),
         comparison_source: None,
     }
 }

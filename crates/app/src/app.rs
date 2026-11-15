@@ -2466,6 +2466,7 @@ impl SheafApp {
                     }
                     copy.remap_cond_format_columns(&|c| renamed.get(&c).copied());
                     copy.remap_note_columns(&|c| renamed.get(&c).copied());
+                    copy.remap_format_columns(&|c| renamed.get(&c).copied());
                     if let Some(b) = p.workbook_mut(book) {
                         b.sheets.insert(active + 1, copy);
                         b.active_sheet = active + 1;
@@ -4268,6 +4269,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
                     s.columns.retain(|c| !columns.contains(&c.id));
                     s.remap_cond_format_columns(&|c| (!columns.contains(&c)).then_some(c));
                     s.remap_note_columns(&|c| (!columns.contains(&c)).then_some(c));
+                    s.remap_format_columns(&|c| (!columns.contains(&c)).then_some(c));
                 }
             }
             Window::Graph(g) => {

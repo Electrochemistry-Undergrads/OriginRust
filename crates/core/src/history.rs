@@ -310,8 +310,7 @@ mod tests {
 
     #[test]
     fn truncated_history_and_recovered_content_never_become_clean_by_accident() {
-        let mut doc = Document::default();
-        doc.limit = 2;
+        let mut doc = Document { limit: 2, ..Document::default() };
         doc.mark_saved();
         for name in ["a", "b", "c"] {
             doc.apply("Add", |p| p.add_workbook(name));

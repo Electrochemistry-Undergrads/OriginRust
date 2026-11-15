@@ -268,7 +268,7 @@ fn build(bar: Bar) -> Vec<Item> {
             b(Import, "Import Single ASCII", Cmd::Import, "Single ASCII"),
             b(ImportMany, "Import Multiple ASCII", Cmd::ImportMultiple, "Multiple ASCII"),
             gap(),
-            g(Print, "Print"),
+            b(Print, "Print the active window", Cmd::Print, "Print"),
             g(Duplicate, "Duplicate"),
             gap(),
             b(PanelLeft, "Project Explorer", Cmd::Panel(PanelId::Explorer), "Project Explorer"),

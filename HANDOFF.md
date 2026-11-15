@@ -10,15 +10,24 @@ open. History of what was merged when is in `git log` (not repeated here).
 - **When unsure, copy Origin:** measure it through `tools/origin-ref/` (or read its docs for
   behaviour) and copy it; record the measurement in the spec. Don't ask the owner what Origin can
   answer. Clean-room: copy behaviour and layout, never code, icons, help text or files.
-- **Subagents:** Sonnet for building, research, reviews; Haiku for running tests and checking outputs.
+- **Subagents:** Claude sessions use Sonnet for building, research and reviews, and Haiku for tests
+  and output checks. **Codex sessions use Terra instead of Sonnet and Luna instead of Haiku.**
+- **Codex GitHub monitor:** keep a dedicated Luna subagent checking GitHub periodically while work
+  is in flight. Watch remote `main`, branches and task claims for another session taking or
+  overlapping the task; reconcile new work before merging and never overwrite another session's work.
+- **Codex continuous work:** the owner requested an ongoing queue: finish, review, verify and
+  merge/push one suitable task, then find and claim another. Do not stop merely because one task
+  is complete. Refresh GitHub and the handoff before selecting the next task; respect active claims.
 - **No co-author line:** never add `Co-Authored-By: Claude ...` or "Generated with Claude Code" to
   commits or PRs; say so in every subagent prompt. (History was rewritten on 2026-11-12 to remove
   them; branches older than that must be rebased onto `main`, matching commits by tree.)
 - **Repository:** https://github.com/Electrochemistry-Undergrads/OriginRust (private). Nothing on the
   owner's personal account.
-- **Two or more sessions** often share this repo. Claim work in `re-workspace/scratch/peer-notes.md`
-  (local only, read its last 40 lines on start); merge to `main` one branch at a time, after
-  `git fetch`. See LESSONS "Two sessions on one repository need a written split".
+- **Two or more sessions** often share this repo. Pull the latest changes and inspect branches,
+  worktrees and claims before choosing work. Publish the task claim in this file on `main` (push it)
+  and in `re-workspace/scratch/peer-notes.md` (local only, read its last 40 lines on start), so other
+  computers can see the split. Merge to `main` one branch at a time, after `git fetch`.
+  See LESSONS "Two sessions on one repository need a written split".
 - **Inactive task claims:** If a task has had no edits for at least 48 consecutive hours,
   another agent may take ownership. Check the task brief, its branch and worktree when
   available, and the latest peer notes for evidence of newer work. Record the takeover in
@@ -37,6 +46,18 @@ open. History of what was merged when is in `git log` (not repeated here).
   found) and offers a step after each break; the Break Half Length unit is unmeasured (typing in
   the scripted dialog did not take), so Sheaf shows one gap in percent of the axis. Formatting,
   strict all-target Clippy and 2,431 workspace tests pass (four ignored) after merging main.
+
+- T27 Standard toolbar Print (2026-11-15): the button uses the existing File > Print command
+  and its active-window availability, with Origin's measured tooltip "Print the active window".
+  A UI regression checks menu/toolbar parity and dispatch without sending a job. Formatting,
+  strict all-target Clippy and 2,438 workspace tests pass (two ignored).
+
+- T27 native macOS graph print panel (2026-11-15): File > Print uses PDFKit with the saved
+  paper-sized vector PDF, no added margins/scaling/rotation. Construction checks on the main
+  thread cover Letter/A4 portrait/landscape and invalid input; standard tests never print.
+  Formatting, strict all-target Clippy and 2,437 workspace tests pass (two ignored). Opening/
+  cancelling the panel and physical output remain unverified; workbook printing is separate.
+
 - T28 saved-state checkpoints (2026-11-15, macOS, no Origin): undo/redo back to the last saved
   content clears the modified flag and recovery copy. Saved points survive history branches and
   merged edits; recovered projects stay modified until saved. Pending recovery workers schedule
@@ -113,10 +134,10 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/t02-find-replace` | Codex Windows, t02-find-replace | T02 existing Find in Sheets/Replace layout, defaults and options measured against Origin; find dialog and focused UI tests | claimed 2026-11-15; no Find in Project, grid/Go To, core/expr/history, plot, statistics, printing or other sessions' scopes |
 | `codex/t13-fill-sidelines` | Codex Windows, t13-fill-sidelines | T13 Fill Area Sidelines only / Sidelines and Base; plot fill-mode/group copy, draw_fill_under/draw_line boundaries, draw_legend sample, graph_details selector and focused tests | claimed 2026-11-15; no Axis/layout geometry/PDF, mask policy/color, navigation, labels, stats or other sessions scopes |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
-| `mac-print-panel` | Codex macOS, no Origin | T27 native macOS graph print panel via PDFKit; app print_graph/macprint, macOS dependencies and no-spool validation example | claimed 2026-11-14; no workbook printing, Windows CLI, Excel/imports or other sessions’ scope |
 | `mcp-attach` | Claude macOS, "mac-attach" | T25 phase 2: ADR 0013, app live link (local socket, off by default, menu + `--mcp`), `sheaf-mcp --attach` forwarding, one undo step per forwarded change, status-bar note; new crates/app module + mcp attach client, docs | claimed 2026-11-14 night; no print, recovery/history internals, Excel, Go To, symbol gaps, stats or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `print-workbook` | Claude Windows, "continue all tasks" | T27 leftover: File > Print / Print Preview of the active workbook sheet as a table (Windows EMF path), app printing dialog + winprint, a sheet-to-page renderer in crates/plot | claimed 2026-11-15; no macOS panel (mac-print-panel), no graph print changes beyond sharing the path |

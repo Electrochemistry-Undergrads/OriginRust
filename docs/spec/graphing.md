@@ -2337,6 +2337,11 @@ line graph active. Everything not listed here is unmeasured.
   (unmeasured). Clicking the Print button by script only showed the tooltip, so the system dialog
   behind it was not captured.
 
+Sheaf's Standard toolbar Print button uses the same command resolver and print action as
+File > Print. It is available for the same active-window contexts as the menu and uses the
+measured tooltip "Print the active window". Tests switch between workbook and graph focus and
+check menu/toolbar availability and click dispatch; the print backend is skipped by the UI harness.
+
 ### 19.2 Page Setup (measured, window captured)
 
 A small modal window titled "Page Setup", about 360 x 415 px:
@@ -2428,7 +2433,32 @@ printable; a real printer may clip marks outside its hardware limits.
 
 This is Sheaf's own command; no Origin CLI or dialog behaviour is claimed.
 
-### 19.7 Not done
+### 19.7 Native macOS graph print panel (T27)
 
-Print and Print Preview of a workbook (a sheet as a table), View > Print View and the Standard
-toolbar's Print button, Origin's Source (tray), native CLI printer submission on Windows, the macOS print panel.
+File > Print... on an active graph uses PDFKit's native print operation on the main thread.
+The input is `sheaf_plot::render_print_pdf`: a vector PDF already laid out on the saved paper by
+`PageSetup::place`. The native operation receives the saved paper and orientation, zero additional
+margins, scale-none and no auto-rotation, so the operation starts with that placement instead of
+applying Sheaf's margins a second time. Changes in the system panel apply to that print job and do
+not change the saved project settings.
+
+The prepared operation retains its PDF document for the operation's full lifetime. A successful
+native run is reported as printed; a false return has no success message because AppKit uses that
+return for both cancellation and failure. Failures to load the PDF or construct an operation are
+reported as errors. This is the system's panel, not an imitation of Origin's Windows Print window.
+
+References: [PDFKit print-operation factory](https://developer.apple.com/documentation/pdfkit/pdfdocument/printoperation(for:scalingmode:autorotate:)),
+[AppKit run](https://developer.apple.com/documentation/appkit/nsprintoperation/run()), and the
+[Rust PDFDocument bindings](https://docs.rs/objc2-pdf-kit/0.3.2/objc2_pdf_kit/struct.PDFDocument.html).
+Automated checks prepare the real native operation on the process main thread without running it;
+standard UI tests never send a print job. Run the no-spool native check on macOS with
+`cargo run -p sheaf-app --example macos_print_check`; it verifies Letter/A4 portrait/landscape,
+PDF media boxes, native paper/orientation, margins, scaling and title, and rejects invalid PDF or
+mismatched paper. Opening and cancelling the actual panel was not manually verified in this
+session. Physical-printer output remains unverified. Changing paper in the system panel does not regenerate the graph layout; use Sheaf's
+Page Setup to change that layout.
+
+### 19.8 Not done
+
+Print and Print Preview of a workbook (a sheet as a table), View > Print View,
+Origin's Source (tray), native CLI printer submission on Windows.

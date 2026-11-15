@@ -36,8 +36,10 @@ pub(crate) struct PlotData<'a> {
     /// How the X column shows its values (a date format makes a date axis).
     pub x_format: Option<NumberFormat>,
     pub y: Cow<'a, [f64]>,
-    /// Rows of the Y column that are masked: drawn red, as Origin does.
+    /// Rows of the Y column that are masked (none while masking is disabled): drawn in
+    /// `mask_color`, red unless Column > Mask > Change Color chose another, as Origin does.
     pub mask: Option<&'a std::collections::BTreeSet<usize>>,
+    pub mask_color: sheaf_core::Color,
     /// Active filters on the source worksheets. Indices remain original worksheet rows.
     pub filters: Vec<&'a sheaf_core::rowfilter::RowFilter>,
     pub err: Option<&'a [f64]>,
@@ -284,12 +286,25 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         let xerr = plot.x_error.and_then(|id| project.numeric(id));
         let base = plot.y_base.and_then(|id| project.numeric(id));
         let (start, end) = row_range(plot, y.len());
+        let active_mask = project.column(plot.y).and_then(|c| c.active_mask());
+        // Hide Masked Points: masked rows become gaps, like missing values, and nothing is drawn red.
+        let (y_plot, mask): (Cow<'_, [f64]>, _) = match active_mask {
+            Some(m) if project.hide_masked => {
+                let mut owned = y.to_vec();
+                for &r in m.range(..owned.len()) {
+                    owned[r] = f64::NAN;
+                }
+                (Cow::Owned(owned), None)
+            }
+            _ => (Cow::Borrowed(y), active_mask),
+        };
         let mut pd = PlotData {
             plot,
             x: x.map(Cow::Borrowed),
             x_format,
-            y: Cow::Borrowed(y),
-            mask: project.column(plot.y).map(|c| &c.mask).filter(|m| !m.is_empty()),
+            y: y_plot,
+            mask,
+            mask_color: project.mask_color_rgb(),
             filters: project.plot_row_filters(plot),
             err,
             xerr,

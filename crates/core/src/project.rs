@@ -70,8 +70,30 @@ pub struct Project {
     /// project; changing it is an undo step like any other setting.
     #[serde(default, skip_serializing_if = "is_default_page_setup")]
     pub page_setup: crate::page_setup::PageSetup,
+    /// Colour of masked points: an index into Origin's colour list ([`crate::template::ORIGIN_COLOR_LIST`]),
+    /// 1 (red) at first. Column > Mask > Change Color steps it on (Origin's `@MC`, a global setting
+    /// there; saved with the project here).
+    #[serde(default = "default_mask_color", skip_serializing_if = "is_default_mask_color")]
+    pub mask_color: u8,
+    /// Column > Mask > Disable Masking, one switch for the whole project as in Origin (`@MM`). The
+    /// columns carry a copy ([`crate::column::Column::mask_disabled`], what the readers use), which
+    /// [`Project::apply_mask_switch`] brings back in line after every edit, so new columns follow it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    masking_off: bool,
+    /// Hide masked points (Origin's Mask toolbar switch `@MP`): graphs leave masked points out, as
+    /// gaps like missing values, instead of drawing them in the mask colour. Analysis is unchanged.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hide_masked: bool,
     /// The next unused identifier (shared by windows and columns).
     next_id: u64,
+}
+
+fn default_mask_color() -> u8 {
+    1
+}
+
+fn is_default_mask_color(c: &u8) -> bool {
+    *c == 1
 }
 
 fn is_default_page_setup(s: &crate::page_setup::PageSetup) -> bool {
@@ -137,6 +159,44 @@ pub enum ProjectError {
 }
 
 impl Project {
+    /// The colour masked points are drawn in.
+    pub fn mask_color_rgb(&self) -> crate::Color {
+        let list = &crate::template::ORIGIN_COLOR_LIST;
+        let (r, g, b) = list[usize::from(self.mask_color) % list.len()];
+        crate::Color::rgb(r, g, b)
+    }
+
+    /// Column > Mask > Change Color: the next colour of Origin's list, back to red (1) after the
+    /// 24th (index 23), so black is never chosen (Origin's rule for `@MC`, measured 2026-11-15).
+    pub fn cycle_mask_color(&mut self) {
+        self.mask_color = if self.mask_color > 22 { 1 } else { self.mask_color + 1 };
+    }
+
+    /// Whether masking is disabled (Column > Mask > Disable Masking); the menu then offers Enable
+    /// Masking.
+    pub fn masking_disabled(&self) -> bool {
+        self.masking_off
+    }
+
+    /// Switches masking off or on for the whole project.
+    pub fn set_masking_disabled(&mut self, disabled: bool) {
+        self.masking_off = disabled;
+        self.apply_mask_switch();
+    }
+
+    /// Gives every column the project's masking switch (columns made after the switch, by an import,
+    /// Unstack or a new sheet, start with masking on). Called after each edit and on loading.
+    pub fn apply_mask_switch(&mut self) {
+        let disabled = self.masking_off;
+        for w in &mut self.windows {
+            if let Window::Workbook(b) = w {
+                for c in b.sheets.iter_mut().flat_map(|s| &mut s.columns) {
+                    c.mask_disabled = disabled;
+                }
+            }
+        }
+    }
+
     pub fn new() -> Self {
         Project {
             windows: Vec::new(),
@@ -144,6 +204,9 @@ impl Project {
             window_places: Vec::new(),
             analysis_links: Vec::new(),
             page_setup: crate::page_setup::PageSetup::default(),
+            mask_color: default_mask_color(),
+            masking_off: false,
+            hide_masked: false,
             next_id: 1,
         }
     }

@@ -34,6 +34,8 @@ mod gadget;
 mod graph_view;
 mod grid;
 mod live;
+#[cfg(target_os = "macos")]
+mod macprint;
 mod menus;
 mod panels;
 mod reader;

@@ -119,10 +119,9 @@ runs on a worker thread, one write at a time, so a large project does not freeze
 error is written once to the Messages log, not on every tick. The app asks for a repaint when the
 interval will have passed, so the timer fires while the app is idle.
 
-When the document becomes clean (a normal save, New, Open; undoing back to the saved state does not count, because the project
-stays marked modified after an undo) the
-recovery files are cleared once any write in flight has finished (the window does not wait for it:
-the clear is retried each frame, and after a failed removal too). A clean exit joins the worker and
+When the document becomes clean (a normal save, New, Open, or undo/redo back to the saved
+content checkpoint), the recovery files are cleared once any write in flight has finished (the window does not wait for it:
+the clear is retried while the worker is pending, and after a failed removal too). A clean exit joins the worker and
 calls `finish`; quitting after choosing to discard the changes is a clean exit too. If the program
 is ended while changes are unsaved and nobody was asked (for example by the system), the changes are
 written one last time and the session is dropped without `finish`, so the next start offers them.
@@ -153,3 +152,21 @@ after the interval with an injected clock and not before; a clean exit removes i
 clears it; a planted orphan shows the dialog at start-up; Recover loads its data, leaves the
 document modified and discards the orphan only after the instance's own copy exists; Discard removes
 it; Later keeps it; autosave off writes nothing; tests never use the user's real folders.
+
+
+## 7. Saved content checkpoints (T28 follow-up)
+
+`Document` tracks a content-state identity separately from its redraw revision. Successful edits
+receive fresh identities; undo and redo restore the identity of their snapshots. A successful normal
+save records the current identity. Returning to that identity clears the modified flag, so the title,
+close prompt and recovery cleanup agree. Redoing an unsaved change marks it modified again.
+
+View-only adjustments still update the redraw revision without changing the content identity.
+No-op and failed edits do not create a new identity. Saving establishes a boundary for merged edits,
+so a later preview or drag cannot erase the saved checkpoint. Discarded redo branches and truncated
+history never reuse an old identity. A recovered project explicitly has no saved checkpoint until it
+is saved, even if the user edits it and undoes that edit.
+
+A cleanup that is waiting for an autosave worker schedules another repaint rather than relying on
+new input. A late worker therefore cannot leave a recovery copy behind after undo restores the saved
+state. The app keeps the disk write off the UI thread.

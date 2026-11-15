@@ -3,9 +3,13 @@
 **Status:** done on branch `stats-multi` (2026-11-15, not yet merged into main). PCA (spec section 17) and k-means
 (section 18) and Kaplan-Meier (section 20) are measured against Origin 2016 with `tools/origin-ref`; ROC (section 19)
 is scipy-checked, not Origin (its X-Function is menu-only). Each has a dialog, an enabled menu item, `sheaf analyze`
-and a graph (scree, cluster scatter, survival curves with censor marks; ROC curve). Left: loading plot and biplot,
-Origin's report layouts, confidence limits of the survival curve (not readable from Origin's scripting interface),
-the numbers of Origin's ROC. Brief written 2026-11-14 from T18's "Multivariate" row, T14's leftovers and parity
+and a graph (scree, cluster scatter, survival curves with censor marks; ROC curve). Leftovers done on branch
+`pca-plots` (2026-11-15): loading plot, score plot and biplot as Origin draws them (spec section 17.1, axes of the
+biplot measured in seven runs), Origin's report tables as the layout of the result sheets of PCA, k-means and
+Kaplan-Meier (title of each table in the comment row, Origin's labels and order; sections 17.2, 18.2, 20.2), the
+confidence limits of the survival curve (Origin's `sfci`: linear, not cut off; section 20.1). Left: the numbers of
+Origin's ROC (menu-only X-Function), PCA observation labels, Origin's own k-means graph, the Notes and Input Data
+tables. Brief written 2026-11-14 from T18's "Multivariate" row, T14's leftovers and parity
 rows "Multivariate analysis" and "Survival, power, ROC", both P2).
 **Size:** L (four tools; each can merge on its own, in the order below). **Branch:** `stats-multi`.
 **Model:** Sonnet.

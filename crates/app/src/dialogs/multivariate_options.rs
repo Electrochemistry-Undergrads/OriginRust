@@ -68,6 +68,15 @@ impl MultiOptions {
                 ui.checkbox(&mut s.standardize_scores, "Standardize the scores (unit variance)");
                 ui.checkbox(&mut s.scores, "Write the scores to the result sheet");
                 ui.checkbox(&mut s.scree, "Scree plot (new graph)");
+                ui.horizontal(|ui| {
+                    ui.label("Plots of two components: horizontal axis");
+                    ui.add(egui::DragValue::new(&mut s.x_component).range(1..=1000));
+                    ui.label("vertical axis");
+                    ui.add(egui::DragValue::new(&mut s.y_component).range(1..=1000));
+                });
+                ui.checkbox(&mut s.loading_plot, "Loading plot (the loadings as vectors from the origin)");
+                ui.checkbox(&mut s.score_plot, "Score plot");
+                ui.checkbox(&mut s.biplot, "Biplot (scores as points, loadings as vectors on the top and right axes)");
                 ui.weak(
                     "The sign of each eigenvector is chosen so that its components add up to a positive number, as \
                      Origin does. A covariance analysis also gives the test that the remaining eigenvalues are equal.",

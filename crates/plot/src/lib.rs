@@ -28,6 +28,7 @@ mod psd;
 mod raster;
 pub mod scene;
 mod shapes;
+mod sheet;
 mod stack;
 mod svg;
 mod symbol_gaps;
@@ -36,11 +37,16 @@ mod text;
 pub mod ticks;
 mod ticks_scales;
 mod vector;
+mod violin;
 
 #[cfg(test)]
 mod detail_tests;
 #[cfg(test)]
 mod export_tests;
+#[cfg(test)]
+mod fill_inclusive_tests;
+#[cfg(test)]
+mod fill_sideline_tests;
 #[cfg(test)]
 mod label_frame_tests;
 #[cfg(test)]
@@ -63,11 +69,14 @@ mod symbol_gap_tests;
 mod symbol_line_order_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod violin_tests;
 
 pub use eps::EpsOutput;
 pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextMeasurer};
 pub use margin::{DEFAULT_BORDER_PT, ExportLayout, Margin, drawn_bounds};
 pub use raster::{ColorDepth, RasterOptions, TiffCompression};
+pub use sheet::{SheetPages, render_sheet_emf_pages, render_sheet_pdf, render_sheet_raster, sheet_pages};
 
 use sheaf_core::graph::ScaleKind;
 use sheaf_core::{Project, WindowId};

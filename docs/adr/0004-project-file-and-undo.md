@@ -30,3 +30,10 @@ Addendum (2026-11-12, ADR 0007 step 10): the project also holds view state that 
 not an edit: which sheet is shown, and the places of the windows in the workspace
 (`Project::window_places`, `docs/spec/project-file-format.md`). It changes through
 `Document::adjust_view`, which neither adds an undo step nor marks the project as changed.
+
+
+Addendum (2026-11-14, T28): undo snapshots also retain a content-state identity. The document's
+saved checkpoint uses that identity, separately from the redraw revision, so undo/redo back to a
+saved state clears the modified flag and its recovery copy. Identities are fresh across branches
+and history trimming. Save is a boundary for merged edits; view-only changes retain the current
+content identity. Recovered projects have no saved checkpoint until a successful normal save.

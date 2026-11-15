@@ -651,6 +651,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         windows: Vec::new(),
         open: None,
         panels: [true; 4],
+        ai_link: false,
         layer,
         tool,
         curve: None,

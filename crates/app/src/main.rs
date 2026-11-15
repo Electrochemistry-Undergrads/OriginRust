@@ -12,6 +12,10 @@
 //! next start offers it back after a crash (`docs/spec/autosave.md`). `--recovery-dir DIR` uses another
 //! folder and `--no-recovery` turns recovery off for the run (no folder is read or written).
 //!
+//! `--mcp` turns on the AI link at start, as Tools > AI Assistants (MCP) does: an assistant started
+//! with `sheaf-mcp --attach` can then work on the open project (`docs/spec/mcp.md` section 11). The
+//! switch is never saved, so a run without the flag starts with the link off.
+//!
 //! Two more options exist so the interface can be checked without a person
 //! at the screen: `--screenshot FILE.png` saves a picture of the window after
 //! a moment and quits, and `--show ITEM` opens a dialog first (`graph-settings:x`,
@@ -29,6 +33,9 @@ mod dialogs;
 mod gadget;
 mod graph_view;
 mod grid;
+mod live;
+#[cfg(target_os = "macos")]
+mod macprint;
 mod menus;
 mod panels;
 mod reader;
@@ -53,6 +60,7 @@ fn main() -> eframe::Result {
     let mut startup = app::Startup {
         recovery_dir: sheaf_io::recovery::default_dir(),
         settings_path: sheaf_io::recovery::default_settings_path(),
+        mcp_dirs: Some(sheaf_io::recovery::run_dir_candidates()),
         ..Default::default()
     };
     let mut args = std::env::args().skip(1);
@@ -62,6 +70,7 @@ fn main() -> eframe::Result {
             "--no-recovery" => startup.recovery_dir = None,
             "--screenshot" => startup.screenshot = args.next().map(PathBuf::from),
             "--show" => startup.show.extend(args.next()),
+            "--mcp" => startup.mcp = true,
             _ => startup.paths.push(PathBuf::from(arg)),
         }
     }

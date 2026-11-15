@@ -571,7 +571,9 @@ pub struct PlotArgs {
     /// side by side, with sample names from a text X column under the bars; double-y puts the 1st,
     /// 3rd, ... Y column on the left axis and the 2nd, 4th, ... on a right axis; stacked moves each
     /// curve above the one before it; lollipop (two or more Y columns) joins each Y column's points
-    /// to the next column's at the same row with drop lines, X and Y exchanged.
+    /// to the next column's at the same row with drop lines, X and Y exchanged; violin draws each
+    /// Y column as a mirrored kernel density silhouette, like box (also violin-box, violin-point,
+    /// violin-quartile, violin-stick and half-violin, which differ in the marks inside).
     #[arg(short, long)]
     pub template: Option<String>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).
@@ -1611,11 +1613,11 @@ pub enum AnalyzeTool {
         #[arg(long, allow_hyphen_values = true, group = "shift", requires = "at")]
         to: Option<f64>,
     },
-    /// Running median of each curve (an odd window).
+    /// Running median of each curve (Origin's percentile filter at 50 %).
     MedianFilter {
         #[command(flatten)]
         target: TargetArgs,
-        /// Points of the window, odd.
+        /// Points of the window; an even number acts like the next odd one, as in Origin.
         #[arg(long, default_value_t = 5)]
         points: usize,
         /// shrink (default): the window shrinks symmetrically at the ends; repeat or reflect fill it.
@@ -2146,7 +2148,7 @@ pub enum AnalyzeTool {
         no_graph: bool,
     },
     /// Principal component analysis of the --y columns (the variables): eigenvalues, percent of variance,
-    /// loadings and scores; makes a scree plot as a graph.
+    /// loadings and scores; makes a scree plot, a loading plot and a biplot as graphs.
     Pca {
         #[command(flatten)]
         target: TargetArgs,
@@ -2165,9 +2167,24 @@ pub enum AnalyzeTool {
         /// Do not write the scores.
         #[arg(long)]
         no_scores: bool,
-        /// Do not make the scree plot.
+        /// Do not make the scree plot, loading plot and biplot.
         #[arg(long)]
         no_graph: bool,
+        /// Do not make the loading plot (the loadings of two components as vectors).
+        #[arg(long)]
+        no_loading_plot: bool,
+        /// Do not make the biplot (scores as points with the loading vectors on the top and right axes).
+        #[arg(long)]
+        no_biplot: bool,
+        /// Also make a score plot (the scores of two components as points).
+        #[arg(long)]
+        score_plot: bool,
+        /// The component on the horizontal axis of the loading plot, score plot and biplot.
+        #[arg(long, default_value_t = 1)]
+        x_component: usize,
+        /// The component on the vertical axis of those plots.
+        #[arg(long, default_value_t = 2)]
+        y_component: usize,
     },
     /// ROC curve: the --y columns are the test variables followed, last, by the state column. Area under the
     /// curve with standard error (DeLong) and confidence interval, the curve and the best cut-off; makes a graph.

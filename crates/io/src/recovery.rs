@@ -101,6 +101,35 @@ pub fn default_settings_path() -> Option<PathBuf> {
     settings_path_for(Platform::current(), &|n| std::env::var_os(n))
 }
 
+fn run_dir_candidates_for(platform: Platform, get: &dyn Fn(&str) -> Option<std::ffi::OsString>) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    let mut push = |p: PathBuf| {
+        if !out.contains(&p) {
+            out.push(p);
+        }
+    };
+    if let Some(dir) = env_path(get, "SHEAF_MCP_RUN_DIR").filter(|p| p.is_absolute()) {
+        push(dir);
+    }
+    if platform == Platform::Other
+        && let Some(dir) = xdg_path(get, "XDG_RUNTIME_DIR")
+    {
+        push(dir.join("sheaf"));
+    }
+    if let Some(base) = base_dir(platform, get, false) {
+        push(base.join("run"));
+    }
+    out
+}
+
+/// The folders where the desktop app's link endpoint may be, best first: `SHEAF_MCP_RUN_DIR` when it is
+/// set to an absolute path (tests and unusual systems); on Linux `$XDG_RUNTIME_DIR/sheaf`; then a `run`
+/// folder next to the recovery folder (`Sheaf/run` on Windows and macOS, `sheaf/run` elsewhere). The app
+/// listens in the first one it may use; a client looks in every one. There is no folder in `/tmp`.
+pub fn run_dir_candidates() -> Vec<PathBuf> {
+    run_dir_candidates_for(Platform::current(), &|n| std::env::var_os(n))
+}
+
 /// The autosave switch and interval the user chose.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]

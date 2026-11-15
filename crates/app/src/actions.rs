@@ -284,6 +284,17 @@ pub enum Action {
     },
     /// Column > Filter > Enable/Disable Filter.
     ToggleRowFilter(WindowId),
+    /// Column > Mask > Change Color: the next colour of the project's mask colour.
+    MaskColor,
+    /// Column > Mask > Disable Masking / Enable Masking, for the whole project.
+    ToggleMasking,
+    /// Column > Mask > Hide/Show Masked Points for the whole project.
+    ToggleHideMasked,
+    /// Column > Mask Cells by Condition...: the window for these columns.
+    MaskByConditionDialog {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     /// View > Freeze/Unfreeze Panes (a toggle): freezes the rows above and the columns left of the
     /// selection, or unfreezes what is frozen.
     FreezePanes(WindowId),
@@ -493,5 +504,7 @@ pub enum Action {
     Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
+    /// Tools > AI Assistants (MCP): turn the endpoint of `sheaf-mcp --attach` on or off.
+    ToggleAiLink,
     Quit,
 }

@@ -787,7 +787,20 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 graph: !no_graph,
             })),
         ),
-        AnalyzeTool::Pca { target, covariance, pairwise, components, standardize_scores, no_scores, no_graph } => (
+        AnalyzeTool::Pca {
+            target,
+            covariance,
+            pairwise,
+            components,
+            standardize_scores,
+            no_scores,
+            no_graph,
+            no_loading_plot,
+            no_biplot,
+            score_plot,
+            x_component,
+            y_component,
+        } => (
             target,
             Job::Tool(Tool::Pca(analysis::PcaSpec {
                 correlation: !covariance,
@@ -796,6 +809,11 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 standardize_scores,
                 scores: !no_scores,
                 scree: !no_graph,
+                loading_plot: !no_graph && !no_loading_plot,
+                score_plot: score_plot && !no_graph,
+                biplot: !no_graph && !no_biplot,
+                x_component,
+                y_component,
             })),
         ),
         AnalyzeTool::Roc { target, positive, lower_is_positive, confidence, no_graph } => (

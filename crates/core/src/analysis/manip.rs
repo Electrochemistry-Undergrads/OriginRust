@@ -72,7 +72,7 @@ pub struct TranslateSpec {
 /// What [`Tool::MedianFilter`] does.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct MedianFilterSpec {
-    /// Points of the window; odd.
+    /// Points of the window; an even number acts like the next odd one, as in Origin's smoothing.
     pub npts: usize,
     pub edge: MedianEdge,
 }
@@ -244,11 +244,8 @@ pub(super) fn run(
             }
         }
         Tool::MedianFilter(spec) => {
-            if spec.npts == 0 || spec.npts % 2 == 0 {
-                return Err(AnalysisError::BadOption(format!(
-                    "the median filter window must be an odd number of points, not {}",
-                    spec.npts
-                )));
+            if spec.npts == 0 {
+                return Err(AnalysisError::BadOption("the median filter window needs at least 1 point".to_string()));
             }
             let edge = match spec.edge {
                 MedianEdge::Shrink => "window shrinks at the ends",
@@ -261,7 +258,12 @@ pub(super) fn run(
                     after: inp.id,
                     long_name: format!("Median filtered {}", inp.name),
                     units: inp.units.clone(),
-                    comments: format!("{} median filter, {} points, {edge}{}", inp.short, spec.npts, inp.range_note()),
+                    comments: format!(
+                        "{} median filter, {} points, {edge}{}",
+                        inp.short,
+                        2 * (spec.npts / 2) + 1,
+                        inp.range_note()
+                    ),
                     data: inp.aligned(&v),
                 });
             }
@@ -388,10 +390,16 @@ mod tests {
         assert!(p.update_analysis_links(&before).is_empty());
         assert_eq!(p.numeric(out).unwrap(), [5.0; 5], "the spike is gone and the same column was updated");
         assert_eq!(p.workbook(book).unwrap().sheets[0].columns.len(), 3);
-        for bad in [0, 4] {
-            let t = Tool::MedianFilter(MedianFilterSpec { npts: bad, edge: MedianEdge::Shrink });
-            assert!(p.analyze(&req(y, t)).is_err(), "window {bad}");
-        }
+        let t = Tool::MedianFilter(MedianFilterSpec { npts: 0, edge: MedianEdge::Shrink });
+        assert!(p.analyze(&req(y, t)).is_err(), "window 0");
+        // An even window acts like the next odd one, as in Origin's smoothing.
+        let even = |n| {
+            let mut q = before.clone();
+            let t = Tool::MedianFilter(MedianFilterSpec { npts: n, edge: MedianEdge::Shrink });
+            let r = q.analyze(&req(y, t)).unwrap();
+            q.numeric(r.new_columns[0]).unwrap().to_vec()
+        };
+        assert_eq!(even(2), even(3));
     }
 
     /// Edits the Y column and runs the Auto links; the results must follow in the same columns.

@@ -38,6 +38,7 @@ use std::sync::OnceLock;
 pub const NOT_YET: &str = "Not available in Sheaf yet";
 const NEED_BOOK: &str = "Activate a workbook window first";
 const NEED_GRAPH: &str = "Activate a graph window first";
+const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
 const NEED_CELLS: &str = "Select cells, columns or rows first";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
@@ -101,6 +102,14 @@ pub enum Cmd {
     UnhideColumns,
     /// Column > Mask > Apply, Remove, Swap.
     Mask(MaskOp),
+    /// Column > Mask > Change Color.
+    MaskColor,
+    /// Column > Mask > Disable Masking (Enable Masking while it is disabled).
+    ToggleMasking,
+    /// Column > Mask > Hide/Show Masked Points.
+    ToggleHideMasked,
+    /// Column > Mask Cells by Condition...
+    MaskByCondition,
     /// Column > Set as Categorical.
     SetCategorical,
     /// Worksheet > Transpose, Stack, Unstack, Split Columns, Reduce Rows.
@@ -238,6 +247,8 @@ pub enum Cmd {
     Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
+    /// Tools > AI Assistants (MCP): a tick item for the endpoint of `sheaf-mcp --attach`.
+    ToggleAiLink,
     /// File > Close: close (hide) the active window, as its title bar's close button does.
     CloseWindow,
     /// Window > Duplicate: a copy of the active workbook or graph.
@@ -311,6 +322,8 @@ pub struct MenuContext<'a> {
     pub open: Option<&'a str>,
     /// Which side panels are shown, in the order of `PanelId::ALL` (the ticks of the View menu).
     pub panels: [bool; 4],
+    /// The AI link is on (the tick of Tools > AI Assistants (MCP)).
+    pub ai_link: bool,
     /// The active layer of the active graph (0 when there is none).
     pub layer: usize,
     /// The active graph's tool (the Tools toolbar shows it pressed).
@@ -780,6 +793,14 @@ fn plot_menu() -> Vec<Entry> {
             [
                 vec![item("Box Chart", Cmd::Plot(Template::BoxChart))],
                 greys(&["Grouped Box Charts", "Interval Plot"]),
+                vec![
+                    item("Violin Plot", Cmd::Plot(Template::Violin)),
+                    item("Violin with Box", Cmd::Plot(Template::ViolinBox)),
+                    item("Violin with Point", Cmd::Plot(Template::ViolinPoint)),
+                    item("Violin with Quartile", Cmd::Plot(Template::ViolinQuartile)),
+                    item("Violin with Stick", Cmd::Plot(Template::ViolinStick)),
+                    item("Half Violin", Cmd::Plot(Template::HalfViolin)),
+                ],
                 vec![item("Histogram", Cmd::Plot(Template::Histogram))],
                 greys(&[
                     "Histogram + Probabilities",
@@ -885,18 +906,22 @@ fn column_menu() -> Vec<Entry> {
         hide_menu(),
         sep(),
         filter_menu(),
-        mask_menu(&["Change Color", "Disable Masking", "Mask Cells by Condition..."]),
+        mask_menu(),
+        item("Mask Cells by Condition...", Cmd::MaskByCondition),
     ]
 }
 
 /// The Mask submenu: Apply, Remove and Swap work on the selected cells; the rest is greyed.
-fn mask_menu(grey_items: &[&str]) -> Entry {
-    let mut entries = vec![
+fn mask_menu() -> Entry {
+    let entries = vec![
         item("Apply", Cmd::Mask(MaskOp::Apply)),
         item("Remove", Cmd::Mask(MaskOp::Remove)),
         item("Swap", Cmd::Mask(MaskOp::Swap)),
+        item("Change Color", Cmd::MaskColor),
+        item("Disable Masking", Cmd::ToggleMasking),
+        // Origin has this switch on its Mask toolbar (`@MP`); Sheaf puts it here.
+        item("Hide Masked Points", Cmd::ToggleHideMasked),
     ];
-    entries.extend(greys(grey_items));
     sub("Mask", entries)
 }
 
@@ -1276,6 +1301,7 @@ fn tools_menu() -> Vec<Entry> {
     vec![
         grey_keyed("&Options...", ctrl(Key::U)),
         item("&Autosave...", Cmd::Autosave),
+        item("AI Assistants (&MCP)", Cmd::ToggleAiLink),
         grey("System Variables..."),
         grey("3D OpenGL Settings..."),
         grey_sub("Protection", &["Protect Project...", "Audit Log"]),
@@ -1452,8 +1478,8 @@ pub fn column_header_menu() -> Vec<Entry> {
     ));
     v.extend(greys(&["Set Sampling Interval...", "Show X Column...", "-"]));
     v.push(filter_menu());
-    v.push(mask_menu(&["Change Color", "Disable Masking"]));
-    v.push(grey("Mask Cells by Condition..."));
+    v.push(mask_menu());
+    v.push(item("Mask Cells by Condition...", Cmd::MaskByCondition));
     v.push(sep());
     v.push(sub(
         "Sort Column",
@@ -1526,7 +1552,7 @@ pub fn cell_menu() -> Vec<Entry> {
         "-",
         "Format Cells...",
     ]));
-    v.push(mask_menu(&[]));
+    v.push(mask_menu());
     v.push(cond_format_menu());
     v.push(grey_sub("Set Data Style", &["Default"]));
     v
@@ -1877,6 +1903,25 @@ fn assign_mnemonics(entries: &mut [Entry]) {
     }
 }
 
+/// Tells the menus whether the project has masking disabled (the Mask submenu then offers Enable
+/// Masking); the program sets it every frame before it draws a menu.
+pub fn set_masking_disabled(ctx: &egui::Context, disabled: bool) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("masking_disabled"), disabled));
+}
+
+/// Tells the menus whether masked points are hidden (for the Hide/Show Masked Points label).
+pub fn set_masked_hidden(ctx: &egui::Context, hidden: bool) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("masked_hidden"), hidden));
+}
+
+fn masked_hidden(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp(egui::Id::new("masked_hidden"))).unwrap_or(false)
+}
+
+fn masking_disabled(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp(egui::Id::new("masking_disabled"))).unwrap_or(false)
+}
+
 /// The Alt letter of a label, lower case.
 pub fn mnemonic(label: &str) -> Option<char> {
     parse(label).1.map(|c| c.to_ascii_lowercase())
@@ -1944,8 +1989,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::ExportExcel => Action::ExportExcel(book?),
-        Cmd::Print => Action::Print(c.graph.ok_or(NEED_GRAPH)?),
-        Cmd::PrintPreview => Action::PrintPreview(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::Print => Action::Print(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
+        Cmd::PrintPreview => Action::PrintPreview(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
         Cmd::PageSetup => Action::PageSetup,
         Cmd::Exit => Action::Quit,
         Cmd::Undo => {
@@ -1986,6 +2031,13 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
                 _ => CellOp::Clear,
             };
             Action::Cells { book, op }
+        }
+        Cmd::MaskColor => Action::MaskColor,
+        Cmd::ToggleMasking => Action::ToggleMasking,
+        Cmd::ToggleHideMasked => Action::ToggleHideMasked,
+        Cmd::MaskByCondition => {
+            let book = book?;
+            Action::MaskByConditionDialog { book, columns: some()? }
         }
         Cmd::Sheet(op) => Action::Sheet { book: book?, op: op.clone() },
         Cmd::Plot(template) => Action::PlotColumns { book: book?, columns: c.selected.to_vec(), template: *template },
@@ -2149,6 +2201,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Toolbars => Action::Toolbars,
         Cmd::Autosave => Action::Autosave,
         Cmd::ToggleStatusBar => Action::ToggleStatusBar,
+        Cmd::ToggleAiLink => Action::ToggleAiLink,
         Cmd::CloseWindow => Action::HideWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::DuplicateWindow => Action::DuplicateWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::AppendProject => Action::AppendProject(None),
@@ -2284,6 +2337,12 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                     }
                     _ => {}
                 }
+                if matches!(it.cmd, Some(Cmd::ToggleMasking)) && masking_disabled(ui.ctx()) {
+                    label = "Enable Masking".to_string();
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleHideMasked)) && masked_hidden(ui.ctx()) {
+                    label = "Show Masked Points".to_string();
+                }
                 let resolved = it.cmd.as_ref().map(|cmd| resolve(cmd, c));
                 let enabled = matches!(resolved, Some(Ok(_)));
                 let mut button = egui::Button::new(label_job(ui, &label, true));
@@ -2294,6 +2353,9 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                 if let Some(Cmd::Panel(p)) = &it.cmd
                     && c.panels[p.index()]
                 {
+                    tick(ui, &response);
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleAiLink)) && c.ai_link {
                     tick(ui, &response);
                 }
                 if response.contains_pointer() {
@@ -2519,6 +2581,7 @@ mod tests {
             windows: Vec::new(),
             open: None,
             panels: [true; 4],
+            ai_link: false,
             layer: 0,
             tool: Default::default(),
             curve: None,

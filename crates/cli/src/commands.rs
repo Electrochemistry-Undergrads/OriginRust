@@ -19,6 +19,7 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Import(a) => import(a),
         Command::Plot(a) => plot(*a),
         Command::Export(a) => export(a),
+        Command::Print(a) => print(a),
         Command::ExportData(a) => export_data(a),
         Command::Analyze(a) => crate::analyze::analyze(a),
         Command::Fit(a) => crate::fit::fit(a),
@@ -296,6 +297,90 @@ fn export_opj(a: &ExportArgs) -> Result<()> {
         p
     };
     save_project(&project, &a.output)
+}
+
+fn print(a: PrintArgs) -> Result<()> {
+    if !is_project(&a.project) {
+        bail!("'{}' is not a project; print needs a .sheaf, .opj or .opju project with a graph", a.project.display());
+    }
+    let project = load_project(&a.project)?;
+    let graph = sheaf_ops::pick::pick_graph(&project, a.graph.as_deref())?;
+    let pdf = sheaf_plot::render_print_pdf(&project, graph)?;
+    if let Some(path) = &a.output {
+        use std::io::Write;
+        if !path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pdf")) {
+            bail!("the print output must have a .pdf extension");
+        }
+        if sheaf_ops::session::same_file(&a.project, path) {
+            bail!("the PDF output cannot overwrite the input project");
+        }
+        let directory = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+        let mut temp = tempfile::Builder::new()
+            .prefix(".sheaf-print-")
+            .tempfile_in(directory)
+            .map_err(|e| anyhow::anyhow!("cannot create PDF in '{}': {e}", directory.display()))?;
+        temp.write_all(&pdf)?;
+        temp.persist(path).map_err(|e| anyhow::anyhow!("cannot write '{}': {}", path.display(), e.error))?;
+        println!("wrote {}", path.display());
+    } else {
+        submit_print(&pdf, &project, graph, a.printer.as_deref())?;
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn submit_print(pdf: &[u8], project: &Project, graph: WindowId, printer: Option<&str>) -> Result<()> {
+    use sheaf_core::page_setup::{Orientation, Paper};
+    use std::io::Write;
+    let page = &project.graph(graph).expect("picked above").page;
+    let setup = project.page_setup;
+    let media = match setup.paper {
+        Paper::Letter => "Letter",
+        Paper::Legal => "Legal",
+        Paper::Tabloid => "Tabloid",
+        Paper::A3 => "A3",
+        Paper::A4 => "A4",
+        Paper::A5 => "A5",
+    };
+    let orientation = if setup.orientation_for(page.width_pt, page.height_pt) == Orientation::Landscape {
+        "landscape"
+    } else {
+        "portrait"
+    };
+    let mut tmp = tempfile::Builder::new().prefix("sheaf-print-").suffix(".pdf").tempfile()?;
+    tmp.write_all(pdf)?;
+    tmp.flush()?;
+    let mut cmd = std::process::Command::new("lp");
+    if let Some(printer) = printer {
+        cmd.arg("-d").arg(printer);
+    }
+    cmd.arg("-t").arg(&project.graph(graph).expect("picked above").name);
+    let output = cmd
+        .args([
+            "-o",
+            &format!("media={media}"),
+            "-o",
+            orientation,
+            "-o",
+            "print-scaling=none",
+            "-o",
+            "fit-to-page=Off",
+            "--",
+        ])
+        .arg(tmp.path())
+        .output()
+        .map_err(|e| anyhow::anyhow!("could not start lp: {e}"))?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr);
+        bail!("lp failed ({}): {}", output.status, detail.trim());
+    }
+    print!("{}", String::from_utf8_lossy(&output.stdout));
+    Ok(())
+}
+
+#[cfg(windows)]
+fn submit_print(_pdf: &[u8], _project: &Project, _graph: WindowId, _printer: Option<&str>) -> Result<()> {
+    bail!("printer submission is not available on Windows; use --output to write a PDF")
 }
 
 fn export(a: ExportArgs) -> Result<()> {

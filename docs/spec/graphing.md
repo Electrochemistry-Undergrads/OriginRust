@@ -2198,7 +2198,37 @@ The check is the ignored test `winprint::tests::prints_a_page_to_a_named_printer
 Not checked: a physical printer (the HP on this machine was not used), copies, collation, several
 pages, other paper sizes through the driver.
 
-### 19.6 Not done
+### 19.6 CLI printing (`sheaf print`, Sheaf's interface)
+
+```
+sheaf print experiment.sheaf --graph Graph1 --output print.pdf
+sheaf print experiment.opj --graph Graph1 --printer LabPrinter
+```
+
+The input is an existing project (`.sheaf`, `.opj` with its companion, or `.opju`); it must contain
+a graph. With one graph its name may be omitted; with several, `--graph` is required. The command
+uses the saved Page Setup: paper, orientation and margins. The graph is uniformly scaled and
+centred by `PageSetup::place` inside a paper-sized vector PDF. This differs from graph export,
+whose PDF has the graph's own page size. Non-finite dimensions/margins, negative margins and
+margins leaving no printable area are refused.
+
+`--output FILE.pdf` requires a `.pdf` extension and writes the print-ready PDF without submitting a job. Without it, macOS/Linux
+submit to the default destination, or the `--printer NAME` destination. The two flags are mutually
+exclusive. Windows currently requires `--output`; the desktop app retains its native Windows
+print dialog. This command does not modify the source project or its saved Page Setup.
+
+Submission invokes `lp` directly, with a unique temporary PDF, the paper and orientation, and
+`print-scaling=none` plus `fit-to-page=Off` to request the computed placement without fitting it again. The temporary copy is removed after submission succeeds
+or fails. Destination and title are process arguments, without shell interpretation. See the
+[CUPS lp manual](https://www.cups.org/doc/man-lp.html) for destination, job options and spool-copy
+semantics and the [OpenPrinting filter documentation](https://github.com/OpenPrinting/cups-filters)
+for scaling controls. Automated tests use a fake spooler: a physical printer, hardware printable edges and
+printer-specific option handling remain unverified. The output PDF assumes the whole paper is
+printable; a real printer may clip marks outside its hardware limits.
+
+This is Sheaf's own command; no Origin CLI or dialog behaviour is claimed.
+
+### 19.7 Not done
 
 Print and Print Preview of a workbook (a sheet as a table), View > Print View and the Standard
-toolbar's Print button, Origin's Source (tray), a `sheaf print` command, the macOS print panel.
+toolbar's Print button, Origin's Source (tray), native CLI printer submission on Windows, the macOS print panel.

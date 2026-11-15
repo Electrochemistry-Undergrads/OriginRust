@@ -3157,11 +3157,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "flate2",
  "serde_json",
  "sheaf-core",
  "sheaf-io",
  "sheaf-ops",
  "sheaf-plot",
+ "tempfile",
 ]
 
 [[package]]

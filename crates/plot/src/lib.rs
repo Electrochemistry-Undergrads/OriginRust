@@ -410,6 +410,48 @@ pub fn render_pdf(project: &Project, graph: WindowId) -> Result<Vec<u8>, PlotErr
     raster::to_pdf(&svg, SystemFonts::shared())
 }
 
+/// Renders the graph on the project's paper using the saved Page Setup, as a vector PDF.
+/// The paper is treated as fully printable, as in Print Preview.
+pub fn render_print_pdf(project: &Project, graph: WindowId) -> Result<Vec<u8>, PlotError> {
+    let svg = print_svg(project, graph)?;
+    raster::to_pdf(&svg, SystemFonts::shared())
+}
+
+fn print_svg(project: &Project, graph: WindowId) -> Result<String, PlotError> {
+    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let (w, h) = (g.page.width_pt, g.page.height_pt);
+    let setup = project.page_setup;
+    let margins = setup.margins;
+    if ![w, h].iter().all(|x| x.is_finite() && *x > 0.0)
+        || ![margins.left, margins.right, margins.top, margins.bottom].iter().all(|x| x.is_finite() && *x >= 0.0)
+    {
+        return Err(PlotError::Size("invalid print page size or margins".into()));
+    }
+    let place = setup.place(w, h).ok_or_else(|| PlotError::Size("print margins leave no space on the paper".into()))?;
+    let (paper_w, paper_h) = setup.paper_pt(w, h);
+    if ![paper_w, paper_h, place.x, place.y, place.w, place.h].iter().all(|x| x.is_finite())
+        || place.w <= 0.0
+        || place.h <= 0.0
+    {
+        return Err(PlotError::Size("invalid print placement".into()));
+    }
+    let svg = render_svg(project, graph)?;
+    // write_svg always emits one root element; its contents use graph-page point coordinates.
+    let start = svg.find('>').ok_or_else(|| PlotError::Svg("missing SVG root".into()))? + 1;
+    let end = svg.rfind("</svg>").ok_or_else(|| PlotError::Svg("missing SVG closing tag".into()))?;
+    let scale = place.w / w;
+    if !scale.is_finite() || scale <= 0.0 {
+        return Err(PlotError::Size("invalid print scale".into()));
+    }
+    let paper_svg = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{paper_w}pt" height="{paper_h}pt" viewBox="0 0 {paper_w} {paper_h}"><defs><clipPath id="print-page-clip"><rect x="0" y="0" width="{w}" height="{h}"/></clipPath></defs><g transform="translate({} {}) scale({scale})"><g clip-path="url(#print-page-clip)">{}</g></g></svg>"#,
+        place.x,
+        place.y,
+        &svg[start..end]
+    );
+    Ok(paper_svg)
+}
+
 /// Renders a graph as Encapsulated PostScript (level 2): vector paths, text in the standard
 /// Helvetica, Times or Courier fonts with ISO Latin-1 encoding, clipping per layer. PostScript
 /// has no transparency, so translucent colours are blended onto the page background.

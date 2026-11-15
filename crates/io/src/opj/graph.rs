@@ -842,6 +842,7 @@ fn read_curve(
             width_pt: width,
             dash,
             connect: if kind == PlotKind::Column { Connect::Straight } else { connect_kind(connect, notes) },
+            sort_x: false,
         },
         symbol: SymbolStyle {
             shape,

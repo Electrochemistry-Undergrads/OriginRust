@@ -24,6 +24,7 @@ pub fn style_spec(s: &StyleArgs) -> Style {
         width: s.width,
         height: s.height,
         line_width: s.line_width,
+        sort_x: s.sort_x,
         colors: s.colors.clone(),
         labels: s.labels.clone(),
         no_legend: s.no_legend,

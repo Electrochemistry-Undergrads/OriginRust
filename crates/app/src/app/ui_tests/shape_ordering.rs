@@ -2,8 +2,8 @@
 use super::*;
 use sheaf_core::shape::{Shape, ShapeKind};
 
-fn setup() -> Harness<'static, SheafApp> {
-    let mut h = start(vec![data_file("shape-order")]);
+fn setup(tag: &str) -> Harness<'static, SheafApp> {
+    let mut h = start(vec![data_file(&format!("shape-order-{tag}"))]);
     let id = graph(&h).id;
     let mut rect = Shape::new(ShapeKind::Rectangle, (0.2, 0.2), (0.7, 0.7));
     rect.fill = Some(sheaf_core::Color::rgba(220, 20, 20, 255));
@@ -23,7 +23,7 @@ fn context(h: &mut Harness<'static, SheafApp>, point: (f64, f64), action: &str) 
 
 #[test]
 fn context_reorders_overlapping_filled_shapes_and_picking_follows_paint_order() {
-    let mut h = setup();
+    let mut h = setup("context");
     let original = shapes(&h);
     context(&mut h, (0.5, 0.5), "Push to the back");
     assert_eq!(shapes(&h), vec![original[1].clone(), original[0].clone()]);
@@ -56,7 +56,7 @@ fn context_reorders_overlapping_filled_shapes_and_picking_follows_paint_order() 
 
 #[test]
 fn undo_redo_clear_stale_shape_selection_before_delete_or_properties() {
-    let mut h = setup();
+    let mut h = setup("history");
     let original = shapes(&h);
     context(&mut h, (0.5, 0.5), "Push to the back");
     assert_eq!(graph_ui(&h).selected, Some((0, ObjectKind::Shape(0))));
@@ -85,7 +85,7 @@ fn undo_redo_clear_stale_shape_selection_before_delete_or_properties() {
 
 #[test]
 fn ordering_stays_in_its_layer_and_history_keeps_unrelated_selection() {
-    let mut h = setup();
+    let mut h = setup("layers");
     let id = graph(&h).id;
     h.state_mut().doc.apply("Other layer", |p| {
         let g = p.graph_mut(id).unwrap();
@@ -110,7 +110,7 @@ fn ordering_stays_in_its_layer_and_history_keeps_unrelated_selection() {
 
 #[test]
 fn ordering_closes_properties_and_undo_invalidates_an_open_shape_menu() {
-    let mut h = setup();
+    let mut h = setup("dialog");
     let id = graph(&h).id;
     let overlap = frame_point(&h, 0.5, 0.5);
     double_click_at(&mut h, overlap);
@@ -130,7 +130,7 @@ fn ordering_closes_properties_and_undo_invalidates_an_open_shape_menu() {
 
 #[test]
 fn undo_ai_changes_also_clears_shape_selection_when_the_stack_changes() {
-    let mut h = setup();
+    let mut h = setup("ai-history");
     let id = graph(&h).id;
     let original = shapes(&h);
     h.state_mut().doc.apply("AI: shape change", |p| p.graph_mut(id).unwrap().layers[0].shapes.reverse());

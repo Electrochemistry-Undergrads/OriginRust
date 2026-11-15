@@ -2,10 +2,11 @@
 //! The numerics are in `sheaf_calc` (`pca`); what the tools compute and report is written down in
 //! `docs/spec/statistics.md`, sections 17 and 18.
 
-use super::dist::{GraphPlot, Output, XyGraph};
+use super::dist::{GraphPlot, Look, Output, Overlay, XyGraph};
 use super::statistics::num;
 use super::*;
-use crate::graph::{PlotKind, ScaleKind};
+use crate::color::Color;
+use crate::graph::{PlotKind, ScaleKind, SymbolShape};
 
 pub(super) fn run(tool: &Tool, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
     match tool {
@@ -23,6 +24,12 @@ fn label_column(name: &str, values: Vec<String>) -> SheetColumn {
         comments: String::new(),
         data: ColumnData::text(values),
     }
+}
+
+/// The column with the title of the table of Origin's report that it belongs to written in its comment row.
+fn titled(mut column: SheetColumn, table: &str) -> SheetColumn {
+    column.comments = table.to_string();
+    column
 }
 
 fn number_column(name: &str, designation: Designation, values: Vec<f64>) -> SheetColumn {
@@ -53,6 +60,16 @@ pub struct PcaSpec {
     pub scores: bool,
     /// Make a scree plot (eigenvalue against component number) as a new graph.
     pub scree: bool,
+    /// Make a loading plot (the loadings of two components as vectors from the origin, labelled with the
+    /// variable names; Origin's default is on).
+    pub loading_plot: bool,
+    /// Make a score plot (the scores of two components as points; Origin's default is off).
+    pub score_plot: bool,
+    /// Make a biplot (the scores as points and the loadings as vectors in one graph; Origin's default is on).
+    pub biplot: bool,
+    /// The components on the horizontal and the vertical axis of those plots, counted from 1 (Origin: 1 and 2).
+    pub x_component: usize,
+    pub y_component: usize,
 }
 
 impl Default for PcaSpec {
@@ -64,6 +81,11 @@ impl Default for PcaSpec {
             standardize_scores: false,
             scores: true,
             scree: true,
+            loading_plot: true,
+            score_plot: false,
+            biplot: true,
+            x_component: 1,
+            y_component: 2,
         }
     }
 }
@@ -100,35 +122,65 @@ fn pca(spec: &PcaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
         table.push_row(pc(k), v, units);
     }
 
-    // The result sheet: descriptive statistics and the eigenvalue table side by side (both have one row per
-    // variable), then the loadings, the correlation matrix and the scores.
+    // The result sheet follows the tables of Origin's report (spec section 17.1): descriptive statistics, the
+    // correlation matrix, the eigenvalues, the eigenvectors; the title of each table is in the comment row of its
+    // columns, and the labels are Origin's. The scores follow (Origin writes them to a sheet of their own).
+    let matrix_name = if spec.correlation { "Correlation" } else { "Covariance" };
+    let eigen_title = format!("Eigenvalues of the {matrix_name} Matrix");
     let mut on_sheet = vec![
-        label_column("Variable", names.clone()),
-        number_column("N", Designation::Y, r.count.iter().map(|&n| n as f64).collect()),
-        number_column("Missing", Designation::Y, r.missing.iter().map(|&n| n as f64).collect()),
-        number_column("Mean", Designation::Y, r.mean.clone()),
-        number_column("SD", Designation::Y, r.sd.clone()),
-        label_column("Component", (0..p).map(pc).collect()),
-        number_column("Component number", Designation::X, (1..=p).map(|k| k as f64).collect()),
-        number_column("Eigenvalue", Designation::Y, r.eigenvalues.clone()),
-        number_column("Percent of variance", Designation::Y, r.percent.clone()),
-        number_column("Cumulative percent", Designation::Y, r.cumulative.clone()),
+        titled(label_column("Variable", names.clone()), "Descriptive Statistics"),
+        titled(
+            number_column("N analysis", Designation::Y, r.count.iter().map(|&n| n as f64).collect()),
+            "Descriptive Statistics",
+        ),
+        titled(
+            number_column("N missing", Designation::Y, r.missing.iter().map(|&n| n as f64).collect()),
+            "Descriptive Statistics",
+        ),
+        titled(number_column("Mean", Designation::Y, r.mean.clone()), "Descriptive Statistics"),
+        titled(number_column("Standard Deviation", Designation::Y, r.sd.clone()), "Descriptive Statistics"),
     ];
-    let eigen_at = on_sheet.len() - 3;
+    for (j, row) in r.correlation.iter().enumerate() {
+        on_sheet.push(titled(number_column(&inputs[j].short, Designation::Y, row.clone()), "Correlation Matrix"));
+    }
+    on_sheet.push(titled(label_column("Component", (0..p).map(pc).collect()), &eigen_title));
+    on_sheet.push(titled(
+        number_column("Principal Component Number", Designation::X, (1..=p).map(|k| k as f64).collect()),
+        &eigen_title,
+    ));
+    let eigen_at = on_sheet.len();
+    on_sheet.push(titled(number_column("Eigenvalue", Designation::Y, r.eigenvalues.clone()), &eigen_title));
+    on_sheet.push(titled(number_column("Percentage of Variance", Designation::Y, r.percent.clone()), &eigen_title));
+    on_sheet.push(titled(number_column("Cumulative", Designation::Y, r.cumulative.clone()), &eigen_title));
     if let Some(t) = &r.tests {
-        on_sheet.push(number_column("Chi-square", Designation::Y, t.iter().map(|x| x.chi_square).collect()));
-        on_sheet.push(number_column("DF", Designation::Y, t.iter().map(|x| x.df).collect()));
-        on_sheet.push(number_column("Prob>Chi-square", Designation::Y, t.iter().map(|x| x.p).collect()));
+        on_sheet.push(titled(
+            number_column("Chisq", Designation::Y, t.iter().map(|x| x.chi_square).collect()),
+            &eigen_title,
+        ));
+        on_sheet.push(titled(
+            number_column("Degrees of Freedom", Designation::Y, t.iter().map(|x| x.df).collect()),
+            &eigen_title,
+        ));
+        on_sheet.push(titled(
+            number_column("Significance Level", Designation::Y, t.iter().map(|x| x.p).collect()),
+            &eigen_title,
+        ));
     }
     for (k, v) in r.loadings.iter().enumerate() {
-        on_sheet.push(number_column(&format!("Loading {}", pc(k)), Designation::Y, v.clone()));
+        on_sheet.push(titled(
+            number_column(&format!("Coefficients of {}", pc(k)), Designation::Y, v.clone()),
+            "Extracted Eigenvectors",
+        ));
     }
-    for (j, row) in r.correlation.iter().enumerate() {
-        on_sheet.push(number_column(&format!("Correlation with {}", inputs[j].short), Designation::Y, row.clone()));
-    }
+    // The sheet column of the scores of each component, where they are written.
+    let mut score_at: Vec<Option<usize>> = vec![None; keep];
     if spec.scores {
         for (k, s) in r.scores.iter().enumerate() {
-            on_sheet.push(number_column(&format!("Score {}", pc(k)), Designation::Y, s.clone()));
+            score_at[k] = Some(on_sheet.len());
+            on_sheet.push(titled(
+                number_column(&format!("Principal Component {}", k + 1), Designation::Y, s.clone()),
+                "Scores",
+            ));
         }
     }
 
@@ -152,6 +204,12 @@ fn pca(spec: &PcaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
         let parts: Vec<String> = inputs.iter().zip(v).map(|(i, w)| format!("{} {}", i.short, num(*w))).collect();
         notes.push(format!("Loadings of {}: {}.", pc(k), parts.join(", ")));
     }
+    if let Some(t) = &r.tests {
+        // Origin's remark under the table of eigenvalues of a covariance analysis (the one measured form).
+        if let Some(k) = (0..p).find(|&k| t[k].p > 0.05) {
+            notes.push(format!("At the 0.05 level, eigenvalues from {} to {p} are significantly equal.", k + 1));
+        }
+    }
     notes.push(
         "The signs of the eigenvectors are chosen so that the components of each sum to a positive number.".into(),
     );
@@ -163,20 +221,204 @@ fn pca(spec: &PcaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
         notes.push(format!("{dropped} rows with a missing value were left out; their scores are empty."));
     }
 
-    let graph = spec.scree.then(|| XyGraph {
-        plots: vec![GraphPlot {
-            x: eigen_at - 1,
-            y: eigen_at,
-            kind: PlotKind::LineSymbol,
-            label: "Eigenvalue".into(),
-            line_of: None,
-        }],
-        x_scale: ScaleKind::Linear,
-        y_scale: ScaleKind::Linear,
-        x_title: "Component number".into(),
-        y_title: "Eigenvalue".into(),
-    });
-    Ok(Output { table: Some(table), on_sheet, notes, graph })
+    // The graphs, in Origin's order: scree plot, loading plot, (score plot,) biplot.
+    let mut graphs: Vec<XyGraph> = Vec::new();
+    if spec.scree {
+        let red = Color::RED;
+        graphs.push(XyGraph {
+            plots: vec![GraphPlot {
+                x: eigen_at - 1,
+                y: eigen_at,
+                kind: PlotKind::LineSymbol,
+                label: "Eigenvalues".into(),
+                line_of: None,
+            }],
+            x_scale: ScaleKind::Linear,
+            y_scale: ScaleKind::Linear,
+            x_title: "Principal Component Number".into(),
+            y_title: "Eigenvalues".into(),
+            look: Look {
+                x_range: Some((0.5, p as f64 + 0.5)),
+                x_step: Some(1.0),
+                y_min: Some(0.0),
+                colors: vec![(0, red)],
+                symbols: vec![(0, SymbolShape::Square, 8.0, Some(Color::BLUE))],
+                title: Some("Scree Plot".into()),
+                no_legend: true,
+                ..Default::default()
+            },
+        });
+    }
+    if spec.loading_plot || spec.score_plot || spec.biplot {
+        let (xc, yc) = (spec.x_component.wrapping_sub(1), spec.y_component.wrapping_sub(1));
+        if xc >= keep || yc >= keep || xc == yc {
+            notes.push(format!(
+                "The loading plot, score plot and biplot need two different components among the {keep} extracted                  (asked for {} and {}); they were not drawn.",
+                spec.x_component, spec.y_component
+            ));
+        } else {
+            let (x_title, y_title) =
+                (format!("Principal Component {}", xc + 1), format!("Principal Component {}", yc + 1));
+            // The loadings as vectors from the origin: (0, 0), the loading, a gap, for every variable.
+            let (mut vx, mut vy, mut vl) = (Vec::new(), Vec::new(), Vec::new());
+            for (j, input) in inputs.iter().enumerate() {
+                vx.extend([0.0, r.loadings[xc][j], f64::NAN]);
+                vy.extend([0.0, r.loadings[yc][j], f64::NAN]);
+                vl.extend([String::new(), input.short.clone(), String::new()]);
+            }
+            let vec_at = on_sheet.len();
+            on_sheet.push(number_column(&format!("Loading plot {}", pc(xc)), Designation::X, vx));
+            on_sheet.push(number_column(&format!("Loading plot {}", pc(yc)), Designation::Y, vy));
+            on_sheet.push(label_column("Loading plot label", vl));
+            let vector_plot = || GraphPlot {
+                x: vec_at,
+                y: vec_at + 1,
+                kind: PlotKind::Line,
+                label: "Loadings".into(),
+                line_of: None,
+            };
+            // The scores of the two components: written already, or added for the plot.
+            let mut score_cols = [0usize; 2];
+            if spec.score_plot || spec.biplot {
+                for (slot, k) in [xc, yc].into_iter().enumerate() {
+                    score_cols[slot] = match score_at[k] {
+                        Some(at) => at,
+                        None => {
+                            on_sheet.push(number_column(
+                                &format!("Principal Component {}", k + 1),
+                                Designation::Y,
+                                r.scores[k].clone(),
+                            ));
+                            on_sheet.len() - 1
+                        }
+                    };
+                }
+            }
+            if spec.loading_plot {
+                graphs.push(XyGraph {
+                    plots: vec![vector_plot()],
+                    x_scale: ScaleKind::Linear,
+                    y_scale: ScaleKind::Linear,
+                    x_title: x_title.clone(),
+                    y_title: y_title.clone(),
+                    look: Look {
+                        cross_lines: true,
+                        box_frame: true,
+                        x_range: Some((-1.0, 1.0)),
+                        y_range: Some((-1.0, 1.0)),
+                        x_step: Some(0.2),
+                        y_step: Some(0.2),
+                        colors: vec![(0, Color::BLUE)],
+                        labels: vec![(0, vec_at + 2, Color::BLUE)],
+                        title: Some("Loading Plot".into()),
+                        no_legend: true,
+                        ..Default::default()
+                    },
+                });
+            }
+            let score_look = |colors: Vec<(usize, Color)>| Look {
+                cross_lines: true,
+                box_frame: true,
+                colors,
+                symbols: vec![(0, SymbolShape::Square, 3.0, Some(Color::RED))],
+                ..Default::default()
+            };
+            let score_plot = || GraphPlot {
+                x: score_cols[0],
+                y: score_cols[1],
+                kind: PlotKind::Scatter,
+                label: "Scores".into(),
+                line_of: None,
+            };
+            if spec.score_plot {
+                graphs.push(XyGraph {
+                    plots: vec![score_plot()],
+                    x_scale: ScaleKind::Linear,
+                    y_scale: ScaleKind::Linear,
+                    x_title: x_title.clone(),
+                    y_title: y_title.clone(),
+                    look: Look {
+                        title: Some("Scores Plot".into()),
+                        no_legend: true,
+                        ..score_look(vec![(0, Color::RED)])
+                    },
+                });
+            }
+            if spec.biplot {
+                let axes = biplot_axes(&r.scores[xc], &r.scores[yc], &r.loadings[xc], &r.loadings[yc]);
+                let mut look = score_look(vec![(0, Color::RED)]);
+                // The loadings go against the top and right axes; without usable scores they get -1 to 1.
+                let (x_range, y_range) = match &axes {
+                    Some(a) => {
+                        look.x_range = Some((a.x.0, a.x.1));
+                        look.y_range = Some((a.y.0, a.y.1));
+                        look.x_step = Some(a.x.2);
+                        look.y_step = Some(a.y.2);
+                        (a.loading_x, a.loading_y)
+                    }
+                    None => ((-1.0, 1.0), (-1.0, 1.0)),
+                };
+                look.overlay = Some(Overlay {
+                    plots: vec![vector_plot()],
+                    x_range,
+                    y_range,
+                    color: Color::BLUE,
+                    labels: vec![(0, vec_at + 2)],
+                });
+                look.title = Some("Biplot".into());
+                look.no_legend = true;
+                graphs.push(XyGraph {
+                    plots: vec![score_plot()],
+                    x_scale: ScaleKind::Linear,
+                    y_scale: ScaleKind::Linear,
+                    x_title,
+                    y_title,
+                    look,
+                });
+            }
+        }
+    }
+    let mut graphs = graphs.into_iter();
+    let graph = graphs.next();
+    let more_graphs: Vec<XyGraph> = graphs.collect();
+    Ok(Output { table: Some(table), on_sheet, notes, graph, more_graphs })
+}
+
+/// The axes of a biplot, measured against Origin (spec section 17.1): the scores are drawn against the bottom and left
+/// axes, whose limits are the usual automatic ones for the scores; the loadings are drawn against the top and right
+/// axes, whose limits are those of the bottom and left axes times `max |loading| / min(|smallest score|, |largest score|)`
+/// of the same component (so the longest loading reaches the nearer end of the scores).
+struct BiplotAxes {
+    /// Limits and major step of the score axes.
+    x: (f64, f64, f64),
+    y: (f64, f64, f64),
+    /// Limits of the loading axes.
+    loading_x: (f64, f64),
+    loading_y: (f64, f64),
+}
+
+fn biplot_axes(sx: &[f64], sy: &[f64], lx: &[f64], ly: &[f64]) -> Option<BiplotAxes> {
+    let axis = |scores: &[f64], loadings: &[f64]| {
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for v in scores.iter().copied().filter(|v| v.is_finite()) {
+            lo = lo.min(v);
+            hi = hi.max(v);
+        }
+        if hi <= lo {
+            return None;
+        }
+        let (from, to, step) = crate::autorange::linear_range(lo, hi, 8.0);
+        let nearer = lo.abs().min(hi.abs());
+        let longest = loadings.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+        if !(nearer > 0.0 && longest > 0.0) {
+            return None;
+        }
+        let f = longest / nearer;
+        Some(((from, to, step), (from * f, to * f)))
+    };
+    let (x, loading_x) = axis(sx, lx)?;
+    let (y, loading_y) = axis(sy, ly)?;
+    Some(BiplotAxes { x, y, loading_x, loading_y })
 }
 
 // ----- k-means cluster analysis -----------------------------------------------------------------------------
@@ -223,61 +465,75 @@ fn kmeans(spec: &KmeansSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisErr
         );
     }
 
-    // The result sheet: statistics of the variables, the clusters (initial and final centres, sizes, distances),
-    // the analysis of variance, then the cluster of every row.
+    // The result sheet follows the tables of Origin's report (spec section 18.1): descriptive statistics, initial and
+    // final cluster centres, the cluster summary, the distances between the final centres and the analysis of
+    // variance; the title of each table is in the comment row of its columns. Then the cluster of every row.
+    let cn = |q: usize| format!("Cluster{}", q + 1);
     let mut on_sheet = vec![
-        label_column("Variable", names.clone()),
-        number_column("N", Designation::Y, r.count.iter().map(|&n| n as f64).collect()),
-        number_column("Missing", Designation::Y, r.missing.iter().map(|&n| n as f64).collect()),
-        number_column("Mean", Designation::Y, r.mean.clone()),
-        number_column("SD", Designation::Y, r.sd.clone()),
-        label_column("Cluster", (0..k).map(cl).collect()),
+        titled(label_column("Variable", names.clone()), "Descriptive Statistics"),
+        titled(
+            number_column("N analysis", Designation::Y, r.count.iter().map(|&n| n as f64).collect()),
+            "Descriptive Statistics",
+        ),
+        titled(
+            number_column("N missing", Designation::Y, r.missing.iter().map(|&n| n as f64).collect()),
+            "Descriptive Statistics",
+        ),
+        titled(number_column("Mean", Designation::Y, r.mean.clone()), "Descriptive Statistics"),
+        titled(number_column("Standard Deviation", Designation::Y, r.sd.clone()), "Descriptive Statistics"),
+        titled(label_column("Cluster", (0..k).map(cn).collect()), "Initial Cluster Center"),
     ];
     for (j, input) in inputs.iter().enumerate() {
-        on_sheet.push(number_column(
-            &format!("Initial centre {}", input.short),
-            Designation::Y,
-            r.clusters.iter().map(|c| c.initial[j]).collect(),
+        on_sheet.push(titled(
+            number_column(&input.short, Designation::Y, r.clusters.iter().map(|c| c.initial[j]).collect()),
+            "Initial Cluster Center",
         ));
     }
     for (j, input) in inputs.iter().enumerate() {
-        on_sheet.push(number_column(
-            &format!("Centre {}", input.short),
-            Designation::Y,
-            r.clusters.iter().map(|c| c.centre[j]).collect(),
+        on_sheet.push(titled(
+            number_column(&input.short, Designation::Y, r.clusters.iter().map(|c| c.centre[j]).collect()),
+            "Final Cluster Center",
         ));
     }
-    on_sheet.push(number_column("Cluster N", Designation::Y, r.clusters.iter().map(|c| c.count as f64).collect()));
-    on_sheet.push(number_column("Sum of squares", Designation::Y, r.clusters.iter().map(|c| c.sum_squares).collect()));
-    on_sheet.push(number_column("Mean distance", Designation::Y, r.clusters.iter().map(|c| c.mean_distance).collect()));
-    on_sheet.push(number_column("Max distance", Designation::Y, r.clusters.iter().map(|c| c.max_distance).collect()));
+    let summary = |name: &str, f: &dyn Fn(&calc::Cluster) -> f64| {
+        titled(number_column(name, Designation::Y, r.clusters.iter().map(f).collect()), "Cluster Summary")
+    };
+    on_sheet.push(summary("Number of Observations", &|c| c.count as f64));
+    on_sheet.push(summary("Within Cluster Sum of Square", &|c| c.sum_squares));
+    on_sheet.push(summary("Average Distance", &|c| c.mean_distance));
+    on_sheet.push(summary("Maximum Distance", &|c| c.max_distance));
     for q in 0..k {
-        on_sheet.push(number_column(
-            &format!("Distance to {}", cl(q)),
-            Designation::Y,
-            r.centre_distances.iter().map(|row| row[q]).collect(),
+        on_sheet.push(titled(
+            number_column(&cn(q), Designation::Y, r.centre_distances.iter().map(|row| row[q]).collect()),
+            "Distance between Final Cluster Centers",
         ));
     }
     if spec.anova {
-        on_sheet.push(label_column("ANOVA variable", names.clone()));
+        on_sheet.push(titled(label_column("ANOVA variable", names.clone()), "ANOVA"));
         let pick = |f: &dyn Fn(&calc::VariableAnova) -> f64| r.anova.iter().map(f).collect::<Vec<f64>>();
-        on_sheet.push(number_column("DF between", Designation::Y, pick(&|a| a.df_between)));
-        on_sheet.push(number_column("MS between", Designation::Y, pick(&|a| a.ms_between)));
-        on_sheet.push(number_column("DF error", Designation::Y, pick(&|a| a.df_error)));
-        on_sheet.push(number_column("MS error", Designation::Y, pick(&|a| a.ms_error)));
-        on_sheet.push(number_column("F", Designation::Y, pick(&|a| a.f)));
-        on_sheet.push(number_column("Prob>F", Designation::Y, pick(&|a| a.p)));
+        // Origin labels the two mean squares "Cluster SS" and "Error SS"; the values are the mean squares (F is
+        // their quotient).
+        for (name, values) in [
+            ("Cluster DF", pick(&|a| a.df_between)),
+            ("Cluster SS", pick(&|a| a.ms_between)),
+            ("Error DF", pick(&|a| a.df_error)),
+            ("Error SS", pick(&|a| a.ms_error)),
+            ("F Value", pick(&|a| a.f)),
+            ("Prob>F", pick(&|a| a.p)),
+        ] {
+            on_sheet.push(titled(number_column(name, Designation::Y, values), "ANOVA"));
+        }
     }
     if spec.membership {
         let nan = f64::NAN;
         on_sheet.push(number_column(
-            "Cluster number",
+            "Membership",
             Designation::Y,
             r.membership.iter().map(|m| m.map_or(nan, |(q, _)| (q + 1) as f64)).collect(),
         ));
         if spec.member_distance {
             on_sheet.push(number_column(
-                "Distance to centre",
+                "Distance",
                 Designation::Y,
                 r.membership.iter().map(|m| m.map_or(nan, |(_, d)| d)).collect(),
             ));
@@ -347,9 +603,10 @@ fn kmeans(spec: &KmeansSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisErr
             y_scale: ScaleKind::Linear,
             x_title: names[0].clone(),
             y_title: names[1].clone(),
+            look: Default::default(),
         });
     }
-    Ok(Output { table: Some(table), on_sheet, notes, graph })
+    Ok(Output { table: Some(table), on_sheet, notes, graph, more_graphs: Vec::new() })
 }
 
 #[cfg(test)]
@@ -387,7 +644,7 @@ mod tests {
         let sheet = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
         let long: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
         assert!(
-            long.contains(&"Loading PC2") && long.contains(&"Score PC1") && long.contains(&"Correlation with C"),
+            long.contains(&"Coefficients of PC2") && long.contains(&"Principal Component 1") && long.contains(&"C"),
             "{long:?}"
         );
         assert!(!long.contains(&"Chi-square"), "a correlation analysis has no equality test");
@@ -396,11 +653,156 @@ mod tests {
             .analyze(&Request {
                 columns: ids,
                 rows: RowRange::All,
-                tool: Tool::Pca(PcaSpec { correlation: false, scree: false, components: 3, ..Default::default() }),
+                tool: Tool::Pca(PcaSpec {
+                    correlation: false,
+                    scree: false,
+                    loading_plot: false,
+                    biplot: false,
+                    components: 3,
+                    ..Default::default()
+                }),
             })
             .unwrap();
         assert!(cov.new_graph.is_none());
         assert_eq!(cov.table.unwrap().headers.len(), 6);
+    }
+
+    #[test]
+    fn default_run_draws_scree_loading_plot_and_biplot_like_origin() {
+        let (mut p, ids) = project();
+        let r = p.analyze(&Request { columns: ids, rows: RowRange::All, tool: Tool::Pca(PcaSpec::default()) }).unwrap();
+        // Origin's pca draws three graphs by default: scree plot, loading plot, biplot.
+        assert_eq!(r.more_graphs.len(), 2);
+        let titles = |g: WindowId| {
+            let l = &p.graph(g).unwrap().layers[0];
+            (l.x_axis.title.clone().unwrap(), l.y_axis.title.clone().unwrap())
+        };
+        assert_eq!(titles(r.new_graph.unwrap()), ("Principal Component Number".into(), "Eigenvalues".into()));
+        assert!(r.message.contains("graphs Graph1"), "{}", r.message);
+        let scree = &p.graph(r.new_graph.unwrap()).unwrap().layers[0];
+        assert_eq!((scree.x_axis.min, scree.x_axis.max, scree.y_axis.min), (Some(0.5), Some(3.5), Some(0.0)));
+
+        // The loading plot: vectors from the origin to the loadings, labelled with the variable names, on a fixed
+        // -1 to 1 frame with lines through zero.
+        let loading = p.graph(r.more_graphs[0]).unwrap();
+        assert_eq!(titles(r.more_graphs[0]), ("Principal Component 1".into(), "Principal Component 2".into()));
+        let l = &loading.layers[0];
+        assert_eq!(l.plots.len(), 1);
+        assert_eq!(
+            (l.x_axis.min, l.x_axis.max, l.y_axis.min, l.y_axis.max),
+            (Some(-1.0), Some(1.0), Some(-1.0), Some(1.0))
+        );
+        assert_eq!((l.x_axis.additional_line, l.y_axis.additional_line), (Some(0.0), Some(0.0)));
+        assert!(l.plots[0].decor.labels.enable);
+        let sheet = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        let column = |id| sheet.column(id).unwrap();
+        let (vx, vy) = (column(l.plots[0].x.unwrap()), column(l.plots[0].y));
+        let (vx, vy) = (vx.numeric().unwrap(), vy.numeric().unwrap());
+        assert_eq!(vx.len(), 9, "three variables: origin, loading, gap");
+        assert_eq!((vx[0], vy[0], vx[2].is_nan(), vy[5].is_nan()), (0.0, 0.0, true, true));
+        // The tip of the vector is the loading of that variable on the two components.
+        let load = |name: &str| column_values(sheet, name);
+        assert_eq!((vx[1], vy[1]), (load("Coefficients of PC1")[0], load("Coefficients of PC2")[0]));
+        let labels = sheet.columns.iter().find(|c| c.long_name == "Loading plot label").unwrap();
+        assert_eq!(labels.data.text_cell(1), Some("A"));
+
+        // The biplot: the scores as red points, the loadings in a second layer on the top and right axes.
+        let bi = p.graph(r.more_graphs[1]).unwrap();
+        assert_eq!(bi.layers.len(), 2);
+        assert_eq!(bi.layers[1].x_axis.side, crate::graph::AxisSide::Opposite);
+        assert_eq!(bi.layers[1].y_axis.side, crate::graph::AxisSide::Opposite);
+        assert_eq!(bi.layers[0].plots.len(), 1);
+        assert_eq!(bi.layers[1].plots.len(), 1);
+        assert_eq!(bi.layers[0].plots[0].kind, PlotKind::Scatter);
+        assert!(bi.layers[1].plots[0].decor.labels.enable);
+    }
+
+    /// Origin's biplot axes, `tools/origin-ref/pca-plots3.lines.txt` (raw output `plots/p7.out`, local): seven runs, two
+    /// axes each. Per axis: smallest and largest score, the loadings' largest absolute value, then Origin's limits
+    /// of the bottom/left axis and of the top/right axis.
+    #[test]
+    fn biplot_axes_match_origins_seven_runs() {
+        #[rustfmt::skip]
+        let axes: [(f64, f64, f64, (f64, f64), (f64, f64)); 14] = [
+            (-1.62820, 2.96747, 0.58304, (-2.0, 4.0), (-0.71618, 1.43236)),
+            (-1.42082, 1.62307, 0.85442, (-2.0, 2.0), (-1.202706, 1.202706)),
+            (-9.99387, 17.26543, 0.79224, (-13.0, 20.0), (-1.030536, 1.58544)),
+            (-6.32670, 7.33164, 0.69870, (-7.5, 10.0), (-0.82827, 1.10436)),
+            (-2.50563, 1.94785, 0.52169, (-3.0, 3.0), (-0.803481, 0.803481)),
+            (-1.47267, 1.92305, 0.73981, (-2.0, 2.5), (-1.00472, 1.2559)),
+            (-1.12713, 2.05425, 0.58304, (-1.5, 2.5), (-0.7759215, 1.2932025)),
+            (-1.45728, 1.66472, 0.85442, (-2.0, 2.0), (-1.17262, 1.17262)),
+            (-1.42082, 1.62307, 0.85442, (-2.0, 2.0), (-1.202706, 1.202706)),
+            (-1.27306, 1.57478, 0.83077, (-2.0, 2.0), (-1.305154, 1.305154)),
+            (-2.42031, 2.33526, 0.58507, (-3.0, 3.0), (-0.751614, 0.751614)),
+            (-0.34435, 0.47463, 0.82609, (-0.5, 0.6), (-1.199473, 1.4393676)),
+            (-6.18052, 6.03765, 0.62193, (-8.0, 8.0), (-0.824064, 0.824064)),
+            (-0.80581, 1.15172, 0.86663, (-1.0, 1.5), (-1.075477, 1.6132155)),
+        ];
+        let close = |a: f64, b: f64| (a - b).abs() <= 2e-4 * b.abs().max(1.0);
+        let mut differ = Vec::new();
+        for (run, pair) in axes.chunks(2).enumerate() {
+            let (a, b) = (pair[0], pair[1]);
+            let got = biplot_axes(&[a.0, a.1], &[b.0, b.1], &[a.2, -0.1], &[b.2, -0.1]).unwrap();
+            for (n, (axis, (own, loading))) in
+                [(a, (got.x, got.loading_x)), (b, (got.y, got.loading_y))].into_iter().enumerate()
+            {
+                // The loading axes are the score axes times max |loading| / the nearer end of the scores.
+                let f = axis.2 / axis.0.abs().min(axis.1.abs());
+                assert!(close(loading.0, own.0 * f) && close(loading.1, own.1 * f), "run {run} axis {n}");
+                if !(close(own.0, axis.3.0) && close(own.1, axis.3.1)) {
+                    differ.push((run, n, own, axis.3));
+                    continue;
+                }
+                assert!(close(loading.0, axis.4.0) && close(loading.1, axis.4.1), "loadings {:?}: {loading:?}", axis.4);
+            }
+        }
+        // Only the vertical axis of the covariance run of the first data set got other automatic limits (Origin:
+        // -7.5 to 10 with step 5, from -6.33 to 7.33; Sheaf's automatic range gives -8 to 9): the automatic range of
+        // `autorange.rs` was measured on other graphs.
+        assert_eq!(differ.len(), 1, "{differ:?}");
+        assert_eq!((differ[0].0, differ[0].1), (1, 1));
+        // No spread in the scores: no scaling.
+        assert!(biplot_axes(&[1.0, 1.0], &[0.0, 1.0], &[0.5], &[0.5]).is_none());
+    }
+
+    fn column_values(sheet: &crate::worksheet::Worksheet, name: &str) -> Vec<f64> {
+        sheet.columns.iter().find(|c| c.long_name == name).unwrap().numeric().unwrap().to_vec()
+    }
+
+    #[test]
+    fn score_plot_component_choice_and_plots_that_cannot_be_drawn() {
+        let (mut p, ids) = project();
+        let spec = PcaSpec {
+            scree: false,
+            loading_plot: false,
+            biplot: false,
+            score_plot: true,
+            scores: false,
+            components: 3,
+            x_component: 2,
+            y_component: 3,
+            ..Default::default()
+        };
+        let r = p.analyze(&Request { columns: ids.clone(), rows: RowRange::All, tool: Tool::Pca(spec) }).unwrap();
+        assert!(r.more_graphs.is_empty());
+        let g = p.graph(r.new_graph.unwrap()).unwrap();
+        let l = &g.layers[0];
+        assert_eq!(l.x_axis.title.as_deref(), Some("Principal Component 2"));
+        assert_eq!(l.y_axis.title.as_deref(), Some("Principal Component 3"));
+        let sheet = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        // The scores were not asked for on the sheet, but the plot needs them (the two it shows).
+        let x = sheet.column(l.plots[0].x.unwrap()).unwrap();
+        assert_eq!(x.long_name, "Principal Component 2");
+        assert_eq!(x.numeric().unwrap().len(), 8);
+        assert!(!sheet.columns.iter().any(|c| c.long_name == "Principal Component 1"));
+        assert_eq!(l.plots[0].kind, PlotKind::Scatter);
+
+        // Components that were not extracted: no plot, and the sheet says so.
+        let bad = PcaSpec { scree: false, x_component: 1, y_component: 3, components: 2, ..Default::default() };
+        let r = p.analyze(&Request { columns: ids, rows: RowRange::All, tool: Tool::Pca(bad) }).unwrap();
+        assert!(r.new_graph.is_none() && r.more_graphs.is_empty());
+        assert!(r.notes.iter().any(|n| n.contains("were not drawn")), "{:?}", r.notes);
     }
 
     #[test]
@@ -432,7 +834,22 @@ mod tests {
         assert_eq!((t.rows[0].1[0], t.rows[1].1[0]), (3.0, 3.0));
         let sheet = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
         let long: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
-        assert!(long.contains(&"Cluster number") && long.contains(&"Prob>F") && long.contains(&"Centre B"), "{long:?}");
+        assert!(
+            long.contains(&"Membership") && long.contains(&"Prob>F") && long.contains(&"Within Cluster Sum of Square"),
+            "{long:?}"
+        );
+        // Origin's tables: the title of each is in the comment row of its columns, in Origin's order.
+        let titles: Vec<&str> = sheet.columns.iter().map(|c| c.comments.as_str()).collect();
+        let first = |t: &str| titles.iter().position(|x| *x == t).unwrap_or_else(|| panic!("no table {t}"));
+        let order = [
+            "Descriptive Statistics",
+            "Initial Cluster Center",
+            "Final Cluster Center",
+            "Cluster Summary",
+            "Distance between Final Cluster Centers",
+            "ANOVA",
+        ];
+        assert!(order.windows(2).all(|w| first(w[0]) < first(w[1])), "{titles:?}");
         assert_eq!(p.graph(r.new_graph.unwrap()).unwrap().layers[0].plots.len(), 2);
         let bare = KmeansSpec { clusters: 2, anova: false, membership: false, graph: false, ..Default::default() };
         let r = p.analyze(&Request { columns: ids.clone(), rows: RowRange::All, tool: Tool::Kmeans(bare) }).unwrap();

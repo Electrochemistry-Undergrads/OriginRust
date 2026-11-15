@@ -267,6 +267,7 @@ impl Project {
             if sheet.columns.len() != had {
                 sheet.remap_cond_format_columns(&|c| (!stale.contains(&c)).then_some(c));
                 sheet.remap_note_columns(&|c| (!stale.contains(&c)).then_some(c));
+                sheet.remap_format_columns(&|c| (!stale.contains(&c)).then_some(c));
             }
             // A sheet that held only old results is gone; the indices in the report move with it.
             keep.push(sheet.columns.len() == had || !sheet.columns.is_empty() || i == report.sheet);
@@ -552,6 +553,27 @@ mod tests {
         assert_eq!(s.notes.len(), 1);
         assert_eq!(s.cond_formats.len(), 1);
         let _ = (keep, second);
+    }
+
+    #[test]
+    fn retiring_result_columns_drops_their_cell_formats() {
+        use crate::cellformat::{CellFormat, FormatTarget};
+        let (mut p, _x, y, book) = setup();
+        let y2 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 20])).unwrap();
+        let two = Request { columns: vec![y, y2], ..smooth_request(y) };
+        let (_, first) = p.analyze_linked_into(None, &two, &OutputTarget::NextToInput, RecalcMode::Manual).unwrap();
+        let (keep, gone) = (first[0], first[1]);
+        let bold = CellFormat { bold: Some(true), ..Default::default() };
+        let s = p.workbook_mut(book).unwrap().sheet_mut();
+        s.apply_cell_format(FormatTarget::whole_columns(vec![y, keep, gone]), bold);
+        let _ = p
+            .analyze_linked_into(Some(&first), &smooth_request(y), &OutputTarget::NextToInput, RecalcMode::Manual)
+            .unwrap();
+        let s = p.workbook(book).unwrap().sheet();
+        assert!(
+            s.cell_formats.iter().all(|r| !r.target.columns().contains(&gone) && !r.target.columns().contains(&keep))
+        );
+        assert!(s.cell_format_at(y, 0).bold, "the input column keeps its format");
     }
 
     #[test]

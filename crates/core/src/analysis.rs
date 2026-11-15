@@ -3164,6 +3164,7 @@ impl Project {
             }
         }
         ws.notes_reorder_rows(&|c| columns.is_empty() || columns.contains(&c), &order, n);
+        ws.formats_reorder_rows(&|c| columns.is_empty() || columns.contains(&c), &order, n);
         // The rows moved, so a filter is applied again to the new order.
         let _ = self.reapply_row_filter(book, sheet);
         Ok(())
@@ -3206,6 +3207,7 @@ impl Project {
         }
         for (id, order) in orders {
             ws.notes_reorder_rows(&|c| c == id, &order, n);
+            ws.formats_reorder_rows(&|c| c == id, &order, n);
         }
         // The rows moved, so a filter is applied again to the new order.
         let _ = self.reapply_row_filter(book, sheet);
@@ -3263,6 +3265,7 @@ impl Project {
                 c.reorder_rows(&keep, n);
             }
             ws.notes_reorder_rows(&|_| true, &keep, n);
+            ws.formats_reorder_rows(&|_| true, &keep, n);
             Ok((kept, sheet))
         }
     }

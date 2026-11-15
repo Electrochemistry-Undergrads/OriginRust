@@ -489,6 +489,28 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
 - **Left out.** Notes window, rich text, `@NCP`, Mini Toolbar button, hovering only on the tab, notes
   on labels/headers.
 
+### Cell formatting (T59)
+
+Origin facts known: Format Cells is on the cell, column-header and row-number context menus,
+Format > Cell... and Format > Worksheet... (F4) exist, Set Data Style > Default is on the cell
+menu, Ctrl+U underlines a selected column, the X-Function is `wcellformat`. Not measured: the
+Format Cells controls and defaults, Apply-to choices, Format > Worksheet's scope, Set Data Style,
+manual versus conditional precedence, sort behaviour and `.opj` storage.
+
+Sheaf (all unmeasured choices): the **Format Cells** window (cell/column/row menus, Format > Cell...)
+shows Font (Default or an installed family), Size (0 = Default), Bold/Italic/Underline, Use color
+with a Text Color button, Use fill with a Fill Color button, Horizontal Default/Left/Center/Right,
+Clear Formats, OK, Cancel, Apply (Apply enabled once something changed). It starts from the first
+selected cell and applies only what the user changed; OK and Apply are one undo step each ("Format
+cells"), Cancel and the close box are inert, Clear Formats is one step ("Clear formats"). With a
+label cell selected it formats that label row of the column. Format > Worksheet... and Set Data
+Style > Default stay grey: the worksheet-wide scope and the style are not measured. The row height
+stays 16 px whatever the size; the grid draws bold by painting the text twice (egui has no bold
+face) and maps fonts to egui's monospace family when the name says so, else proportional (installed
+fonts in the grid are a leftover). Print, worksheet images and PDF use the real family, size
+scaled by printed font / 12, italic, underline (a line under the text), colours, fills and
+alignment; they also show conditional colours. Model and rules: workbook-model.md 13b.
+
 ## 4. Graph window
 
 Pictures: `gr-plain.png`, `gr-graph.png`, `grc-*.png`, `gdlg-*.png`; second study

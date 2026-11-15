@@ -3237,11 +3237,7 @@ impl SheafApp {
         }
         if let Some(d) = &mut self.go_to {
             let book = d.book;
-            let sheet = self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet));
-            let outcome = match sheet {
-                Some(sheet) => d.show(ctx, sheet),
-                None => GoToOutcome::Closed,
-            };
+            let outcome = d.show(ctx, self.doc.project());
             match outcome {
                 GoToOutcome::Open => {}
                 GoToOutcome::Closed => self.go_to = None,

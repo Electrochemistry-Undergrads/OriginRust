@@ -6213,6 +6213,7 @@ mod clipboard_formats;
 mod find_replace;
 mod find_selection;
 mod go_to;
+mod go_to_browser;
 mod go_to_picker;
 mod label_panels;
 #[path = "ui_tests/stack_panels.rs"]

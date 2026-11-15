@@ -339,7 +339,8 @@ impl Proxy<'_> {
         format!(
             "You are attached to Sheaf, which a person has open on their computer, with their project in it. \
              Workbooks, sheets, columns and graphs are named by their names (Book1, Sheet1, B, Graph1), never by \
-             numbers; rows count from 1. Every change you make appears in the person's undo list as \"AI: ...\". \
+             numbers; rows count from 1. Read sheaf://app, when listed, for the active window and selection. \
+             Every change you make appears in the person's undo list as \"AI: ...\". \
              You cannot open, create or save projects: the person does that. Name the sheet in your calls, \
              because an omitted sheet means the sheet the person has selected, and that can change between \
              calls. A call may wait while the person has a dialog open or is typing in a cell. Files you write \

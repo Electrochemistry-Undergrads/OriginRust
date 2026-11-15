@@ -1049,7 +1049,10 @@ impl SheafApp {
             return;
         }
         let editing = self.books.values().any(|b| b.editing.is_some() || b.editing_label.is_some());
-        let blocked = editing || self.dialog_open();
+        let dialog_open = self.dialog_open();
+        let blocked = editing || dialog_open;
+        let context = live::Context::new(self.active, &self.doc, &self.books, &self.graphs, editing, dialog_open);
+        let app_context = |doc: &Document| context.snapshot(doc);
         let files = sheaf_mcp::files::OpenFiles {
             project: self.path.clone(),
             origin: self.foreign_source.clone(),
@@ -1057,7 +1060,7 @@ impl SheafApp {
         };
         let now = std::time::Instant::now();
         let recovery = self.startup.recovery_dir.as_deref();
-        for note in self.live.step(&mut self.doc, blocked, &files, recovery, now) {
+        for note in self.live.step(&mut self.doc, blocked, &files, recovery, now, &app_context) {
             match note {
                 Note::Info(t) => self.say(t),
                 Note::Warn(t) => self.warn(t),

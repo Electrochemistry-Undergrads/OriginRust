@@ -3,6 +3,8 @@
 //! to the app over a real socket. Every test listens in its own folder under the temporary folder; none
 //! touches the user's real run folders (`Startup::default()` has no folder for the link).
 
+mod app_context;
+
 use super::*;
 use serde_json::{Value, json};
 use sheaf_mcp::link::client::{self, ClientOptions};

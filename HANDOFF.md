@@ -44,7 +44,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t01-label-panels` | Codex Windows, t01-label-panels | T01 Multiple Panels by Label dialog over existing panels API; app dialog/menu/state and focused tests, column labels read only | claimed 2026-11-14; no formula/parameter editing, core/plot/DataLabels or other sessions' symbols |
 | `codex/t13-label-frame-margin` | Codex Windows, t13-label-frame-margin | T13 Label Frame (None/Box/Shadow, border/fill colors) and Margin only; core DataLabels, plot label backgrounds, graph_details and focused tests | claimed 2026-11-14; no T01 stack panels, app state/menu, leader lines or other sessions' work |
 | `print` | Claude Windows, "continue all tasks" | T27 Print, Print Preview, Page Setup (Windows half): app winprint.rs, page setup model in core, save/companion, menus File > Print | claimed 2026-11-14 |
 | `vartest` | Claude Windows, "continue all tasks" (owner's decision) | T26 variance and proportion tests: calc vartest.rs, core Tool::VarTest/PropTest, Hypothesis Testing dialogs, ops analyze vartest/proptest | claimed 2026-11-14, continues 7ec9e48/5a08edf |

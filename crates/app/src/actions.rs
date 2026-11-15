@@ -310,6 +310,10 @@ pub enum Action {
         book: WindowId,
         columns: Vec<ColumnId>,
     },
+    LabelPanels {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     /// Graph > Add Error Bars: choose an existing Y-error column for one plot of the layer.
     AddErrorBars {
         graph: WindowId,

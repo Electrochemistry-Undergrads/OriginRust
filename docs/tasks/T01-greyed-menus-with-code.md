@@ -1,6 +1,6 @@
 # T01: Enable greyed menu items whose feature already exists
 
-**Status:** done, merged to main (`a2fb77b`); selected-row sorting and Sort Columns/column-context Custom are also enabled; Graph > Add Error Bars now selects a plot and an existing numeric Y-error column (Sheaf's chooser, graphing 14.13a); Multi-Panel > Stack now exposes vertical stacks with assignment, spacing, orientation, legends and links (15.7a); see "Left" for what remains. **Size:** M. **Branch:** `menus-live`. **Model:** Sonnet.
+**Status:** done, merged to main (`a2fb77b`); selected-row sorting and Sort Columns/column-context Custom are also enabled; Graph > Add Error Bars now selects a plot and an existing numeric Y-error column (Sheaf's chooser, graphing 14.13a); Multi-Panel > Stack exposes vertical stacks (15.7a), and Multiple Panels by Label groups existing column headers into panels (15.7b); see "Left" for remaining controls. **Size:** M. **Branch:** `menus-live`. **Model:** Sonnet.
 
 ## Goal
 
@@ -64,12 +64,18 @@ automatic layer counts, repeated plot counts, layer order, page orientation, per
 optional X or position-only links, page-percent gap/margins and captured selected-row bounds.
 Creation is deferred to OK and is one undo step; invalid inputs and Cancel/Escape make no edits.
 Origin 2016 defaults and assignment cases were measured (graphing.md 15.7a).
+Multiple Panels by Label... uses the same builder, with Long Name, Units, Comments or an existing
+parameter row as the group identifier, four built-in plot types, automatic/manual grid dimensions,
+page-percent spacing and selected-row bounds. Labels are read without editing their source cells.
+Grouping order, ASCII case, whitespace and empty groups were measured in Origin 2016 (15.7b).
 
 Left greyed, and why:
 
-- Multi-Panel > Multiple Panels by Label... needs column-label grouping.
 - Stack's horizontal direction, external/custom templates, whole-page legend, manual layer count,
   unit conversion and live preview remain disabled; their supporting behavior does not yet exist.
+- Multiple Panels by Label has no live preview or external template support. Its built-in page,
+  fonts and legends retain Sheaf's template styling; newer Origin's X-column/group-count modes
+  are not part of the measured 2016 label dialog.
 
 Measured Add Error Bars follow-up (2026-11-14):
 

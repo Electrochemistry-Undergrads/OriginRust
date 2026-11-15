@@ -1663,6 +1663,50 @@ is still disabled. UI regressions cover defaults, source order, grouping, Scatte
 order, independent axes, row bounds, orientation, spacing, invalid values, Cancel/Escape and undo/redo;
 parser regressions use the three measured assignment cases.
 
+### 15.7b Multiple Panels by Label (2026-11-14)
+
+Origin 2016's `plotbylabel -d;` shows **Multiple Panels by Label: plotbylabel**, Group Identifier
+(Long Name by default, Units, Comments), Plot Type (Line by default, Scatter, Line+symbol, Column),
+Number of Rows and Columns (both Auto), Spacing, Preview and Auto Preview. This version has no graph
+template or X-column/group-count selector. The controls and synthetic probes are in
+`re-workspace/scratch/t01-label-panels/`. The current
+[Origin reference](https://docs.originlab.com/x-function/ref/plotbylabel/) documents user header
+identifiers and dates external template selection to 2021b; those newer controls are not inferred
+from this installed dialog.
+
+Measured with X in A and Y in B:F (`grouping.lines.txt` / `grouping.out.txt`): Long Names
+`Beta, Alpha, Beta, empty, alpha` produce three groups, in first-appearance order: B/D, C/F, E.
+The corresponding Y titles are `Beta`, `Alpha`, empty. Units `mA,mA,uA,uA,uA` produce B/C and
+D/E/F. Five empty Comments produce one five-plot layer. Thus group matching ignores ASCII case,
+keeps source order within each group and retains the first label's spelling. A second probe
+(`grouping2`) shows `Beta`, ` beta ` and `beta` combine, and empty and one-space labels combine.
+Only ASCII case and these whitespace cases were measured; Unicode case folding is not implemented.
+
+The page stays landscape. Origin's automatic grids for 1/2/3/5 groups are 1x1, 2x1, 2x2, 3x2
+(rows x columns), filling row by row from the top left, with no layers in unused cells. Defaults
+are gaps 5/5 and margins left/right/top/bottom 12/10/10/12 percent. Three groups give frames at
+(12,9.992), (53.5,9.992), (12,51.51), width 36.51 and height 36.5 percent. Five groups give a
+3x2 grid with height 22.66 percent. Explicit rows=2, cols=3, gaps=8/7 give width 20.66 and height
+35.49 percent. These agree with `PanelLayout::arrange` after applying the measured margins/gaps
+within 0.02 percentage points (Origin's page-unit rounding).
+
+The desktop dialog now reads selected columns' Long Name, Units, full Comments or existing named
+parameters, trims surrounding whitespace and groups with ASCII-insensitive matching. It uses the
+existing `plot_panels` builder with four built-in types, source row bounds and group identifiers as
+Y titles (including an empty title for an empty group). Parameter names are listed alphabetically
+from the existing model; their grouping uses the same rule, but was not measured separately in
+Origin. Parameters, formulas and worksheet data are never edited by this dialog. Axis scales are
+independent. The automatic grid has ceil(sqrt(groups)) rows and enough columns; either dimension
+can be made manual, or both, provided all groups fit in at most 64 cells. Gap/margin validation
+uses the existing panel model. Too many groups are refused before building an unbounded list.
+
+Opening, Cancel and Escape do not edit the document; OK creates one graph in one undo step and
+focuses it. Missing/nonnumeric sources or an unusable grid disable OK. Sheaf retains its built-in
+template's page size, typefaces and legends instead of Origin's MGROUPS template. Live preview is
+disabled. UI tests cover the measured grouping/frames, source immutability, parameters/full
+comments, selected rows, Column/Scatter, manual dimensions/spacing, invalid geometry, Cancel/Escape
+and one-step Undo/Redo; grid regression cases include the measured 1/2/3/5-group arrangements.
+
 ### 15.8 Origin project files
 
 The `.opj` reader reads the layers of a panel graph as independent layers with the limits stored in the file, so the owner's panel graphs already draw at Origin's ranges without links (only the second layer of a double-Y graph is linked, by the rule of section 12.7). Where Origin stores `layer.link`, `x.link` and `y.link` was not found in the layer header (section 12.7 lists bytes that differ for the linked layer of a double-Y graph); reading panel links, and writing panel graphs, needs that first.

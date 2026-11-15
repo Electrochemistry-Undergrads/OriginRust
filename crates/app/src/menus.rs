@@ -122,6 +122,7 @@ pub enum Cmd {
         cols: usize,
     },
     StackPanels,
+    LabelPanels,
     /// Graph > Add Error Bars... on the active layer.
     AddErrorBars,
     /// Window > Refresh (F5).
@@ -715,7 +716,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("4 Panel", Cmd::PlotPanels { rows: 2, cols: 2 }),
                     item("9 Panel", Cmd::PlotPanels { rows: 3, cols: 3 }),
                 ],
-                vec![item("Stack...", Cmd::StackPanels), grey("Multiple Panels by Label...")],
+                vec![item("Stack...", Cmd::StackPanels), item("Multiple Panels by Label...", Cmd::LabelPanels)],
             ]
             .concat(),
         ),
@@ -1972,6 +1973,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::PlotPanels { book: book?, columns: c.selected.to_vec(), rows: *rows, cols: *cols }
         }
         Cmd::StackPanels => Action::StackPanels { book: book?, columns: c.selected.to_vec() },
+        Cmd::LabelPanels => Action::LabelPanels { book: book?, columns: c.selected.to_vec() },
         Cmd::AddErrorBars => Action::AddErrorBars { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::Refresh => Action::Refresh(c.active),
         Cmd::UpdateLegend => {

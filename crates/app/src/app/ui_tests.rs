@@ -5849,6 +5849,7 @@ mod clipboard_origin;
 #[path = "ui_tests/clipboard_formats.rs"]
 mod clipboard_formats;
 
+mod label_panels;
 #[path = "ui_tests/stack_panels.rs"]
 mod stack_panels;
 

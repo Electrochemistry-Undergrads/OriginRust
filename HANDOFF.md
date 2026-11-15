@@ -131,8 +131,15 @@ shared CLI-to-library conversions in `sheaf-ops`; mixed selections are validated
 duplicate settings are refused, FDF paths stay under the allowed roots, and numeric strings obey
 integer limits. CLI-parity, schema and protocol regressions cover the bridge. Formatting, strict
 all-target Clippy and 2,057 workspace tests passed (one ignored) after integrating the latest
-cross-sheet formula work. Phase 2 attach and
-`output: new_sheet` remain open; no Origin measurements are needed for this interface.
+cross-sheet formula work. Phase 2 attach remains open; new-sheet output is covered below.
+No Origin measurements are needed for this interface.
+
+**T25 new-sheet output (macOS, no Origin, 2026-11-14):** MCP `analyze` accepts
+`output: new_sheet` for hand-mapped and CLI-bridged tools, through `sheaf_ops::analyze::run_job_to`
+and the existing core `analyze_to` path. Source worksheets, including masks and X data, stay
+unchanged; result reports name the new sheet and qualified columns. Intrinsic tables and power
+keep their own layout. Sort/filter refuse the setting before mutation; the default remains
+`next_to_input`. Phase 2 attach is still separate.
 
 ## Known issues and table UI verification
 

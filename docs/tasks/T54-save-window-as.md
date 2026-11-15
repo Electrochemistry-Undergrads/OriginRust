@@ -1,8 +1,6 @@
 # T54: Save Window As (single-window files) and Recent Books / Recent Graphs
 
-**Status:** claimed 2026-11-15 (branch `save-window`, Claude macOS "mac-savewin"). Brief written from parity
-row "Save Window As, Save Template As, analysis template" (P1, ✗), the greyed "Save Window As..." item and
-T38's leftover (Recent Books and Recent Graphs wait for single-window files).
+**Status:** done, merged 2026-11-15 (Claude macOS "mac-savewin"; spec `docs/spec/window-files.md`): `Project::extract_window`/`append_windows`, `sheaf_io::window_file` (`.sheaf` zip with a window marker, `.sheafbook`/`.sheafgraph`, a window file never opens as a project), Save Window As... in the workbook and graph File menus, open-as-append routing, Recent Books and Recent Graphs. File > Append now also rewrites `[OldName]` references of renamed books. Reviewed by three agents with each finding checked; seven fixed. Left: the 8 Origin measurements in window-files.md; keeping analysis links wholly inside the window; Save Template As.
 **Size:** M. **Branch:** `save-window`. **Model:** Sonnet. No Origin needed (Sheaf's own file kinds); Origin's
 dialog details are measured once on Windows.
 **Spec:** a new section in `docs/spec/workbook-model.md` or the project-file spec (find where `.sheaf` is

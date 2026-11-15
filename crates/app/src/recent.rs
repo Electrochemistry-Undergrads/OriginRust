@@ -5,6 +5,7 @@
 //! through `sheaf_io::recent::update`, which merges with what another instance wrote meanwhile.
 
 use sheaf_io::recent::{self, RecentList};
+use sheaf_io::window_file::{self, WindowFileKind};
 use std::path::{Path, PathBuf};
 
 /// Which list an entry belongs to.
@@ -12,6 +13,21 @@ use std::path::{Path, PathBuf};
 pub enum RecentKind {
     Projects,
     Imports,
+    /// Workbook window files (`.sheafbook`, T54).
+    Books,
+    /// Graph window files (`.sheafgraph`, T54).
+    Graphs,
+}
+
+impl RecentKind {
+    /// The kind of window file a books or graphs list holds; `None` for the other lists.
+    pub fn window_kind(self) -> Option<WindowFileKind> {
+        match self {
+            RecentKind::Books => Some(WindowFileKind::Book),
+            RecentKind::Graphs => Some(WindowFileKind::Graph),
+            RecentKind::Projects | RecentKind::Imports => None,
+        }
+    }
 }
 
 /// The lists and the file behind them. Without a file there are no lists: nothing is kept or shown.
@@ -45,6 +61,19 @@ impl Recent {
         &self.list.imports
     }
 
+    pub fn books(&self) -> &[PathBuf] {
+        &self.list.books
+    }
+
+    pub fn graphs(&self) -> &[PathBuf] {
+        &self.list.graphs
+    }
+
+    /// A window file was saved or opened: it goes to the top of the books or the graphs.
+    pub fn push_window(&mut self, kind: WindowFileKind, path: &Path) -> Option<String> {
+        self.change(|l| l.push_window(kind, path))
+    }
+
     /// A project was opened or saved. Returns the text to log when the file could not be written
     /// (once, until a write works again).
     pub fn push_project(&mut self, path: &Path) -> Option<String> {
@@ -56,7 +85,7 @@ impl Recent {
         self.change(|l| l.push_import(paths))
     }
 
-    /// Drops a file from both lists (its entry was clicked and the file is not usable).
+    /// Drops a file from every list (its entry was clicked and the file is not usable).
     pub fn forget(&mut self, path: &Path) -> Option<String> {
         self.change(|l| l.remove(path))
     }
@@ -67,6 +96,14 @@ impl Recent {
 
     pub fn clear_imports(&mut self) -> Option<String> {
         self.change(RecentList::clear_imports)
+    }
+
+    pub fn clear_books(&mut self) -> Option<String> {
+        self.change(RecentList::clear_books)
+    }
+
+    pub fn clear_graphs(&mut self) -> Option<String> {
+        self.change(RecentList::clear_graphs)
     }
 
     /// Applies a change to the file (merged with other instances) and keeps the result. When the
@@ -92,7 +129,8 @@ impl Recent {
 }
 
 /// Why an entry cannot be followed, or `Ok` when its file is there, is a regular file (a folder, or a
-/// link to one, is not) and is the kind of file the list is for. Asked only when the entry is clicked.
+/// link to one, is not) and is the kind of file the list is for (a project, a data file, a workbook
+/// file or a graph file). Asked only when the entry is clicked.
 pub fn check_target(path: &Path, kind: RecentKind) -> Result<(), String> {
     match std::fs::metadata(path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err("The file is not there any more.".to_string()),
@@ -100,15 +138,38 @@ pub fn check_target(path: &Path, kind: RecentKind) -> Result<(), String> {
         Ok(m) if !m.is_file() => return Err("It is not a file (a folder, or a link to one).".to_string()),
         Ok(_) => {}
     }
-    match (kind, sheaf_io::is_project_file(path)) {
+    if let Some(wanted) = kind.window_kind() {
+        // The manifest says which kind a window file is, whatever its name.
+        return match window_file::window_file_kind(path) {
+            Some(k) if k == wanted => Ok(()),
+            Some(_) => Err(format!("It is a {} file, not a {} file.", other_name(wanted), window_name(wanted))),
+            None => Err(format!("It is not a {} file.", window_name(wanted))),
+        };
+    }
+    let window = window_file::is_window_file(path);
+    match (kind, window || sheaf_io::is_project_file(path)) {
         (RecentKind::Projects, false) => Err("It is not a project file.".to_string()),
+        (RecentKind::Projects, true) if window => Err("It is a window file, not a project.".to_string()),
+        (RecentKind::Imports, true) if window => Err("It is a window file, not a data file.".to_string()),
         (RecentKind::Imports, true) => Err("It is a project file, not a data file.".to_string()),
         _ => Ok(()),
     }
 }
 
-/// The file name and the folder of an entry, as the menu shows them. The folder is shortened from
-/// the left (`...`) when longer than `max_chars`; the whole path is the tooltip.
+fn window_name(kind: WindowFileKind) -> &'static str {
+    match kind {
+        WindowFileKind::Book => "workbook",
+        WindowFileKind::Graph => "graph",
+    }
+}
+
+fn other_name(kind: WindowFileKind) -> &'static str {
+    match kind {
+        WindowFileKind::Book => "graph",
+        WindowFileKind::Graph => "workbook",
+    }
+}
+
 /// The text of an entry as Origin 2016 shows it: the whole path without the extension, shortened
 /// to `max_chars` by replacing the folders after the first one with `...` until it fits (the drive and
 /// first folder stay, then as many trailing parts as fit; measured, recent-files.md 2). A file name
@@ -213,6 +274,26 @@ mod tests {
         assert!(check_target(&dir, RecentKind::Projects).unwrap_err().contains("not a file"));
         assert!(check_target(&data, RecentKind::Projects).unwrap_err().contains("not a project"));
         assert!(check_target(&project, RecentKind::Imports).unwrap_err().contains("project file"));
+    }
+
+    #[test]
+    fn a_window_file_is_checked_by_its_kind_and_is_never_a_project_or_a_data_file() {
+        let dir = temp_dir("window-kinds");
+        let mut p = sheaf_core::Project::new();
+        let book = p.add_workbook("B");
+        let (book_file, renamed) = (dir.join("b.sheafbook"), dir.join("b-renamed.sheaf"));
+        sheaf_io::window_file::save_window(&p, book, &book_file).unwrap();
+        std::fs::copy(&book_file, &renamed).unwrap();
+        assert!(check_target(&book_file, RecentKind::Books).is_ok());
+        assert!(check_target(&renamed, RecentKind::Books).is_ok(), "the manifest decides, not the name");
+        assert!(check_target(&book_file, RecentKind::Graphs).unwrap_err().contains("workbook file, not a graph"));
+        assert!(check_target(&book_file, RecentKind::Projects).unwrap_err().contains("window file"));
+        assert!(check_target(&renamed, RecentKind::Projects).unwrap_err().contains("window file"));
+        assert!(check_target(&book_file, RecentKind::Imports).unwrap_err().contains("window file"));
+        let project = dir.join("p.sheaf");
+        sheaf_io::save::save_project(&p, &project).unwrap();
+        assert!(check_target(&project, RecentKind::Books).unwrap_err().contains("not a workbook file"));
+        assert!(check_target(&project, RecentKind::Projects).is_ok());
     }
 
     #[cfg(unix)]

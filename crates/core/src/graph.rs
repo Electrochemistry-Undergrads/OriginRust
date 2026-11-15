@@ -1188,6 +1188,25 @@ pub enum PlotKind {
     /// A box chart of the plot's Y column (Origin's plot type 206): one box per plot, standing at
     /// 1, 2, 3, ... in plot order, with the median, the mean, whiskers and outliers.
     Box,
+    /// Origin's violin plot (2019, template Violin.otpu): each plot's Y column as a mirrored
+    /// kernel density silhouette standing at 1, 2, 3, ... in plot order like [`PlotKind::Box`],
+    /// with the median marked inside.
+    Violin,
+    /// Origin's "Violin with Box" (ViolinBox.otpu): the silhouette with a narrow box, whiskers
+    /// and median inside.
+    ViolinBox,
+    /// Origin's "Violin with Point" (ViolinData.otpu): the silhouette with every observation
+    /// drawn as a point inside it.
+    ViolinPoint,
+    /// Origin's "Violin with Quartile" (ViolinQuartile.otpu): the silhouette with lines at the
+    /// quartiles and the median inside.
+    ViolinQuartile,
+    /// Origin's "Violin with Stick" (ViolinStick.otpu): the silhouette with every observation
+    /// drawn as a line across it.
+    ViolinStick,
+    /// Origin's "Half Violin" (HalfViolin.otpu): one half of the silhouette, with a half box on
+    /// the other side.
+    HalfViolin,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,
@@ -1198,7 +1217,49 @@ pub enum PlotKind {
     PieBw,
 }
 
+/// What a violin plot draws inside (or beside) its silhouette.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ViolinInner {
+    /// A marker at the median.
+    Median,
+    /// A narrow box from the first to the third quartile with whiskers and the median.
+    Box,
+    /// Lines at the quartiles and the median.
+    Quartile,
+    /// Every observation as a point.
+    Point,
+    /// Every observation as a line across the silhouette.
+    Stick,
+}
+
 impl PlotKind {
+    /// True for the six violin kinds.
+    pub fn is_violin(&self) -> bool {
+        self.violin_inner().is_some()
+    }
+
+    /// True for the kinds drawn as a distribution per plot at 1, 2, 3, ...: box chart and violins.
+    pub fn is_distribution(&self) -> bool {
+        *self == PlotKind::Box || self.is_violin()
+    }
+
+    /// What a violin kind draws inside its silhouette; `None` for other kinds.
+    pub fn violin_inner(&self) -> Option<ViolinInner> {
+        match self {
+            PlotKind::Violin => Some(ViolinInner::Median),
+            PlotKind::ViolinBox | PlotKind::HalfViolin => Some(ViolinInner::Box),
+            PlotKind::ViolinPoint => Some(ViolinInner::Point),
+            PlotKind::ViolinQuartile => Some(ViolinInner::Quartile),
+            PlotKind::ViolinStick => Some(ViolinInner::Stick),
+            _ => None,
+        }
+    }
+
+    /// True for [`PlotKind::HalfViolin`]: only the right half of the silhouette is drawn.
+    pub fn is_half_violin(&self) -> bool {
+        *self == PlotKind::HalfViolin
+    }
+
     /// Kinds whose Drop Lines tab offers Skip Points. Area and bar plots keep every point.
     pub fn supports_skip_points(&self) -> bool {
         matches!(self, PlotKind::Line | PlotKind::Scatter | PlotKind::LineSymbol)

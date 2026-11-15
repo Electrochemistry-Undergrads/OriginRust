@@ -86,10 +86,23 @@ pub enum Template {
     /// exchanged and vertical drop lines that go from each plot to the next data plot. Needs two
     /// or more Y columns ([`Project::plot_columns`] refuses fewer).
     Lollipop,
+    /// Violin plot (Origin's "Violin Plot"): every Y column a kernel density silhouette, with the
+    /// colours of the box chart template.
+    Violin,
+    /// Origin's "Violin with Box".
+    ViolinBox,
+    /// Origin's "Violin with Point".
+    ViolinPoint,
+    /// Origin's "Violin with Quartile".
+    ViolinQuartile,
+    /// Origin's "Violin with Stick".
+    ViolinStick,
+    /// Origin's "Half Violin".
+    HalfViolin,
 }
 
 impl Template {
-    pub const ALL: [Template; 32] = [
+    pub const ALL: [Template; 38] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -107,6 +120,12 @@ impl Template {
         Template::FillArea,
         Template::Histogram,
         Template::BoxChart,
+        Template::Violin,
+        Template::ViolinBox,
+        Template::ViolinPoint,
+        Template::ViolinQuartile,
+        Template::ViolinStick,
+        Template::HalfViolin,
         Template::Bubble,
         Template::ColorMapped,
         Template::BubbleColorMapped,
@@ -159,6 +178,12 @@ impl Template {
             Template::Radar => "radar",
             Template::Ternary => "ternary",
             Template::Lollipop => "lollipop",
+            Template::Violin => "violin",
+            Template::ViolinBox => "violin-box",
+            Template::ViolinPoint => "violin-point",
+            Template::ViolinQuartile => "violin-quartile",
+            Template::ViolinStick => "violin-stick",
+            Template::HalfViolin => "half-violin",
         }
     }
 
@@ -196,7 +221,26 @@ impl Template {
             Template::Radar => "Radar",
             Template::Ternary => "Ternary",
             Template::Lollipop => "Lollipop Plot",
+            Template::Violin => "Violin Plot",
+            Template::ViolinBox => "Violin with Box",
+            Template::ViolinPoint => "Violin with Point",
+            Template::ViolinQuartile => "Violin with Quartile",
+            Template::ViolinStick => "Violin with Stick",
+            Template::HalfViolin => "Half Violin",
         }
+    }
+
+    /// True for the six violin templates.
+    pub fn is_violin(&self) -> bool {
+        matches!(
+            self,
+            Template::Violin
+                | Template::ViolinBox
+                | Template::ViolinPoint
+                | Template::ViolinQuartile
+                | Template::ViolinStick
+                | Template::HalfViolin
+        )
     }
 
     pub fn from_name(name: &str) -> Option<Template> {
@@ -239,6 +283,12 @@ impl Template {
             Template::Radar => radar(id, name),
             Template::Ternary => ternary(id, name),
             Template::Lollipop => general(id, name, PlotKind::Scatter),
+            Template::Violin => from_red(general(id, name, PlotKind::Violin)),
+            Template::ViolinBox => from_red(general(id, name, PlotKind::ViolinBox)),
+            Template::ViolinPoint => from_red(general(id, name, PlotKind::ViolinPoint)),
+            Template::ViolinQuartile => from_red(general(id, name, PlotKind::ViolinQuartile)),
+            Template::ViolinStick => from_red(general(id, name, PlotKind::ViolinStick)),
+            Template::HalfViolin => from_red(general(id, name, PlotKind::HalfViolin)),
         }
     }
 }
@@ -756,8 +806,11 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 32);
+        assert_eq!(Template::ALL.len(), 38);
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
+        assert_eq!(Template::from_name("violin"), Some(Template::Violin));
+        assert_eq!(Template::from_name("violin-box"), Some(Template::ViolinBox));
+        assert_eq!(Template::from_name("half-violin"), Some(Template::HalfViolin));
     }
 
     #[test]
@@ -966,5 +1019,66 @@ mod tests {
         }
         assert_eq!(p.plot_label(&l.plots[0]), p.column(y1).unwrap().display_name());
         assert_eq!(Template::Lollipop.label(), "Lollipop Plot");
+    }
+
+    #[test]
+    fn the_violin_templates_are_box_chart_templates_with_their_own_kinds() {
+        use crate::graph::ViolinInner;
+        let cases = [
+            (Template::Violin, "violin", "Violin Plot", PlotKind::Violin, ViolinInner::Median),
+            (Template::ViolinBox, "violin-box", "Violin with Box", PlotKind::ViolinBox, ViolinInner::Box),
+            (Template::ViolinPoint, "violin-point", "Violin with Point", PlotKind::ViolinPoint, ViolinInner::Point),
+            (
+                Template::ViolinQuartile,
+                "violin-quartile",
+                "Violin with Quartile",
+                PlotKind::ViolinQuartile,
+                ViolinInner::Quartile,
+            ),
+            (Template::ViolinStick, "violin-stick", "Violin with Stick", PlotKind::ViolinStick, ViolinInner::Stick),
+            (Template::HalfViolin, "half-violin", "Half Violin", PlotKind::HalfViolin, ViolinInner::Box),
+        ];
+        let boxed = Template::BoxChart.new_graph(WindowId(1), "G");
+        for (t, name, label, kind, inner) in cases {
+            assert_eq!((t.name(), t.label()), (name, label));
+            assert_eq!(Template::from_name(name), Some(t));
+            assert!(t.is_violin());
+            let g = t.new_graph(WindowId(1), "G");
+            let l = &g.layers[0];
+            assert_eq!(l.default_kind, kind);
+            assert_eq!(kind.violin_inner(), Some(inner));
+            assert!(kind.is_violin() && kind.is_distribution());
+            assert!(!kind.is_bar() && !kind.has_line() && !kind.has_symbols() && !kind.is_area());
+            // Same page, axes and colours (starting at red) as the box chart.
+            assert_eq!(l.palette, boxed.layers[0].palette);
+            assert_eq!(
+                (&l.x_axis, &l.y_axis, &g.page),
+                (&boxed.layers[0].x_axis, &boxed.layers[0].y_axis, &boxed.page)
+            );
+        }
+        assert!(!Template::BoxChart.is_violin() && PlotKind::Box.is_distribution() && !PlotKind::Box.is_violin());
+        assert!(PlotKind::HalfViolin.is_half_violin() && !PlotKind::ViolinBox.is_half_violin());
+    }
+
+    #[test]
+    fn violin_kinds_save_by_name_and_old_kinds_still_load() {
+        for (kind, name) in [
+            (PlotKind::Violin, "violin"),
+            (PlotKind::ViolinBox, "violin_box"),
+            (PlotKind::ViolinPoint, "violin_point"),
+            (PlotKind::ViolinQuartile, "violin_quartile"),
+            (PlotKind::ViolinStick, "violin_stick"),
+            (PlotKind::HalfViolin, "half_violin"),
+        ] {
+            let json = serde_json::to_string(&kind).unwrap();
+            assert_eq!(json, format!("\"{name}\""));
+            assert_eq!(serde_json::from_str::<PlotKind>(&json).unwrap(), kind);
+        }
+        // A graph saved before the violin kinds existed loads unchanged, and a box chart stays a box chart.
+        let g = Template::BoxChart.new_graph(WindowId(1), "G");
+        let json = serde_json::to_string(&g).unwrap();
+        assert!(json.contains("\"default_kind\":\"box\""));
+        let back: crate::graph::Graph = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, g);
     }
 }

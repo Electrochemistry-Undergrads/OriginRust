@@ -1440,6 +1440,12 @@ impl SheafApp {
             Action::SetColumnValues(column) => {
                 self.set_values = SetValuesDialog::new(self.doc.project(), column);
             }
+            Action::SetMultipleColumnsValues(columns) => {
+                self.set_values = SetValuesDialog::new_multiple(self.doc.project(), &columns);
+                if self.set_values.is_none() {
+                    self.say("Select two or more columns of one sheet first");
+                }
+            }
             Action::PlotColumns { book, columns, template } => self.plot_columns(book, columns, template),
             Action::PlotYError { book, columns, x } => self.plot_y_error(book, columns, x),
             Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
@@ -3801,6 +3807,19 @@ impl SheafApp {
                 "set-values" => {
                     if let Some(c) = first_column {
                         self.set_values = SetValuesDialog::new(self.doc.project(), c);
+                    }
+                }
+                // set-values-multiple or set-values-multiple:B,C,D opens Set Multiple Columns Values
+                // on those columns of the first workbook (every column but the first by default).
+                "set-values-multiple" => {
+                    if let Some(book) = project.workbooks().next() {
+                        let sheet = book.sheet();
+                        let columns: Vec<ColumnId> = if arg.is_empty() {
+                            sheet.columns.iter().skip(1).map(|c| c.id).collect()
+                        } else {
+                            arg.split(',').filter_map(|n| sheet.column_by_name(n.trim())).map(|c| c.id).collect()
+                        };
+                        self.set_values = SetValuesDialog::new_multiple(self.doc.project(), &columns);
                     }
                 }
                 "analysis" => {

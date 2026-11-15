@@ -43,6 +43,7 @@ const NEED_GRAPH: &str = "Activate a graph window first";
 const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
 const NEED_CELLS: &str = "Select cells, columns or rows first";
+const NEED_TWO_COLUMNS: &str = "Select two or more columns first";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
 const NO_UNDO: &str = "Nothing to undo";
@@ -168,6 +169,8 @@ pub enum Cmd {
     Refresh,
     SetAs(Designation),
     SetColumnValues,
+    /// Column > Set Multiple Columns Values... (Ctrl+Shift+Q): two or more selected columns.
+    SetMultipleColumnsValues,
     Recalculate,
     AddColumns,
     ColumnProperties,
@@ -954,7 +957,7 @@ fn column_menu() -> Vec<Entry> {
         item("Set as Categorical", Cmd::SetCategorical),
         sep(),
         keyed("Set Column &Values...", ctrl(Key::Q), Cmd::SetColumnValues),
-        grey_keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q)),
+        keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q), Cmd::SetMultipleColumnsValues),
         // Origin has this as a toolbar button and in the column's right-click menu.
         item("Re&calculate", Cmd::Recalculate),
         grey_sub(
@@ -1535,7 +1538,7 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(item("Set As Categorical", Cmd::SetCategorical));
     v.push(sep());
     v.push(keyed("Set Column Values...", ctrl(Key::Q), Cmd::SetColumnValues));
-    v.push(grey_keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q)));
+    v.push(keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q), Cmd::SetMultipleColumnsValues));
     v.push(item("Recalculate", Cmd::Recalculate));
     v.push(item("Add New Columns...", Cmd::AddColumns));
     v.push(sep());
@@ -2141,6 +2144,13 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             book?;
             Action::SetColumnValues(one()?)
         }
+        Cmd::SetMultipleColumnsValues => {
+            book?;
+            match c.selected {
+                [_, _, ..] => Action::SetMultipleColumnsValues(c.selected.to_vec()),
+                _ => return Err(NEED_TWO_COLUMNS),
+            }
+        }
         Cmd::Recalculate => {
             book?;
             Action::Recalculate(some()?)
@@ -2721,6 +2731,7 @@ mod tests {
         let find = |ks: KeyboardShortcut| keys.iter().find(|(k, _)| *k == ks).map(|(_, c)| c.clone());
         assert_eq!(find(ctrl(Key::K)), Some(Cmd::Import), "Ctrl+K imports, as in Origin");
         assert_eq!(find(ctrl(Key::Q)), Some(Cmd::SetColumnValues));
+        assert_eq!(find(ctrl_shift(Key::Q)), Some(Cmd::SetMultipleColumnsValues));
         assert_eq!(find(ctrl(Key::D)), Some(Cmd::AddColumns));
         assert_eq!(find(ctrl(Key::Y)), Some(Cmd::Fit(FitKind::BuiltIn)), "Ctrl+Y is Origin's, not redo");
         assert_eq!(find(ctrl(Key::N)), Some(Cmd::NewProject));
@@ -2776,6 +2787,14 @@ mod tests {
         let c = MenuContext { kind: WindowKind::Workbook, book: Some(WindowId(1)), graph: None, selected: &sel, ..c };
         assert!(matches!(resolve(&Cmd::SetColumnValues, &c), Ok(Action::SetColumnValues(x)) if x == id));
         assert_eq!(resolve(&Cmd::ExportGraph, &c).unwrap_err(), NEED_GRAPH);
+        // Several columns need two or more.
+        assert_eq!(resolve(&Cmd::SetMultipleColumnsValues, &c).unwrap_err(), NEED_TWO_COLUMNS);
+        let two = [ColumnId(7), ColumnId(8)];
+        let c = MenuContext { selected: &two, ..c };
+        assert!(
+            matches!(resolve(&Cmd::SetMultipleColumnsValues, &c), Ok(Action::SetMultipleColumnsValues(x)) if x == two)
+        );
+        assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_ONE_COLUMN);
     }
 
     #[test]

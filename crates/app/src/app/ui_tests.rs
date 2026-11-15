@@ -28,6 +28,7 @@ mod offset_multipliers;
 mod parallel;
 mod recent;
 mod rug;
+mod set_multiple;
 mod simulate;
 mod skip_points;
 mod sort_x;

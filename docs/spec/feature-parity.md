@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 156 | 41 | 246 |
+| All rows | 49 | 157 | 40 | 246 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 87 | 41 | 145 |
+| P1 and P2 together | 17 | 88 | 40 | 145 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 57 are P2.
 
@@ -126,7 +126,7 @@ Cross-cutting findings:
 | Categorical columns | Set as Categorical | Set as Categorical toggle (column and Column menus); Unstack Columns offers categorical columns first; Group and Subject designations in Set As and Column Properties | ◐ | no analysis tool reads Group or Subject yet; the .opj file codes of Group and Subject are unknown (companion keeps them) | P1 |
 | Cell notes | Mini Toolbar Add Note, Notes window, hover popup on the cell tab (Origin 2022) | Cell menu Add/Edit/Delete Note (plain-text editor), a red corner tab and a hover popup, per sheet, kept through sort, row/column edits, duplicate and append, saved in `.sheaf`; undo (gui-look.md 3, T36) | ◐ | no Notes window, rich text, `@NCP` or Mini Toolbar button; indicator, delete and sort/insert rules are unmeasured; notes are not copied by transpose/stack/split; `.opj` save warns | P2 |
 | Worksheet display and view options | Format > Worksheet F4; hide, freeze, zoom | hidden columns; View > Freeze/Unfreeze Panes (Ctrl+Shift+F) keeps the first rows and columns in view while the rest scrolls, per sheet, saved in `.sheaf`, darker heads (gui-look.md 3, T34) | ◐ | no Format > Worksheet window or zoom; the freeze rules (displayed rows, n = index - 1, label rows not counted) are unmeasured; `.opj` save warns | P1 |
-| Before-formula script, multi-column set | Set Column Values | none | ✗ | one column only | P1 |
+| Before-formula script, multi-column set | Set Column Values | Set Multiple Columns Values (Ctrl+Shift+Q): one formula over the selected columns with `j` and `wcol(j±k)`, stored on each column, per-column Auto recalculation, one undo step (T53) | ◐ | no Before Formula Scripts (no script runtime); Origin's `j` rules unmeasured | P1 |
 | Fill Column With | row numbers, random, patterns | only formula `i` | ◐ | no random, series or dates | P1 |
 | Date and time arithmetic | date columns | columns are plain numbers in formulas (days) | ◐ | no `date()`, `time()` or date functions | P1 |
 | String functions and text in formulas | text functions | `col(A)$`, strings, `+`, left/right/mid/len/upper/lower/trim/find/search/replace/substitute/char/code/compare/exact/text/format/value; `substitute(s,new,find[,n])$` replaces all or the nth occurrence, with text-function `$` suffixes; built-in headers `G/L/U/C/O` have text and numeric reads that follow header edits; direct-column `text()` defaults follow column format edits; a text result makes a Text & Numeric column (expression-language.md, section 3) | ◐ | no Origin global/`@SD` formatting defaults, parameter label rows, `%()` | P1 |
@@ -350,7 +350,7 @@ Cross-cutting findings:
 | Generic analysis dialog frame | input and output ranges, Preview, Auto Apply, theme, recalculate | one shared frame for every analysis and Statistics tool: Dialog Theme row (grey), Description, Recalculate (None, Manual, Auto for Smooth, Integrate and Find Peaks), Auto Apply, a tree with Input (range text and a "..." picker for the columns, rows), the tool's options and Output, Auto Preview and Preview with a preview pane for the tools that write curves (Smooth, Differentiate, Integrate, Normalize, Baseline, Interpolate, reference and simple math), OK, Cancel, Apply (runs and keeps the window) | ◐ | no saved themes, Recalculate links only Smooth, Integrate and Find Peaks, the output can be a new sheet or existing columns for the column-writing tools only, the preview is a small own drawing, not drawn on the source graph | P0 |
 | Column Properties dialog | Format dialog | Origin's layout: Prev and Next, Short Name (18 characters), Long Name, Units, Comments, Options (Plot Designation, Format with Text, Text & Numeric, Month and Day of Week, Display, per-column Column Width, Apply to all columns to the right), OK, Cancel, Apply | ◐ | label-row options remain | P0 |
 | Context menus | header, cell, row, corner, graph objects | worksheet menus for column header, cell, row, sheet tab and corner in the long form of Origin; graph menu | ◐ | Fill, Mask, Filter, Sparklines and more are greyed; no short form with chevron; graph objects only partly | P0 |
-| Set Column Values dialog extras | function list, descriptions | Function menu and Find / Search Functions with every sheaf-expr function, its description and example, insertion at the formula cursor (T09) | ◐ | scripts box read-only, Set Multiple Columns Values missing; search layout is Sheaf's own, based on published Origin behavior | P1 |
+| Set Column Values dialog extras | function list, descriptions | Function menu and Find / Search Functions with every sheaf-expr function, its description and example, insertion at the formula cursor (T09) | ◐ | scripts box read-only; Set Multiple Columns Values done (T53, expression-language 7, `j` = column position, Origin unmeasured); search layout is Sheaf's own, based on published Origin behavior | P1 |
 
 ## Order of work
 

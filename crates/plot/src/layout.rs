@@ -1394,6 +1394,7 @@ fn draw_legend(
                     let plot = entries[*k].plot;
                     // A line plot filled under its curve shows a filled box, as Origin's legend does.
                     let filled = plot.decor.fill_under.filter(|_| plot.kind.has_line() && !plot.kind.is_area());
+                    let mut front_line = None;
                     if let Some(fill) = filled {
                         out.push(Item::Rect {
                             rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
@@ -1405,13 +1406,22 @@ fn draw_legend(
                         let mut d = String::new();
                         move_to(&mut d, sx0, cy);
                         line_to(&mut d, sx1, cy);
-                        out.push(Item::Path { d, fill: None, stroke: Some(line_stroke(&plot.line)) });
+                        let line = Item::Path { d, fill: None, stroke: Some(line_stroke(&plot.line)) };
+                        if plot.kind == PlotKind::LineSymbol
+                            && plot.decor.symbol_line.draw_in_front
+                            && !plot.decor.symbol_line.gap_to_symbol
+                        {
+                            front_line = Some(line);
+                        } else {
+                            out.push(line);
+                        }
                     }
                     if plot.kind.has_symbols() {
                         let mut d = String::new();
                         symbol_path(&mut d, plot.symbol.shape, (sx0 + sx1) / 2.0, cy, plot.symbol.size_pt);
                         out.push(symbol_item(d, &plot.symbol));
                     }
+                    out.extend(front_line);
                     if matches!(plot.kind, PlotKind::Histogram | PlotKind::Box) {
                         // An outlined box in the plot's colour, without a fill.
                         out.push(Item::Rect {

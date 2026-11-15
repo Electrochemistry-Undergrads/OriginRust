@@ -2419,9 +2419,34 @@ project file only when they differ from the default (a file written before loads
   (both names, the short or the long one); Print/Dimensions can keep the layers the same size in points when the
   page is resized (linked layers are fractions of their parent and need no change).
 
+### 18.7a Link Axis Length to Scale with X:Y Ratio (measured)
+
+Measured 2026-11-15 in Origin 2016 (layer Plot Details opened by a double click inside the frame,
+`tools/origin-ref/origin-dialog.ps1`; raw files in `re-workspace/scratch/xy-ratio`). Graph of 0..10 against
+0..20, axes X -2.5..12.5 and Y -2..22, layer 17.91 / 11.58 / 68.16 / 71.83 % of a 10.72 x 8.205 in page.
+- Size/Speed: the tick "Link Axis Length to Scale with X:Y Ratio" (off) with a value box (1, grey until
+  ticked) below Width and Height. The same tab's Speed Mode had "Worksheet data, maximum points per curve" ticked
+  with 3000 and "Matrix data, maximum points per dimension" unticked with 32 and 32.
+- The ratio is the length on the page of one X unit over that of one Y unit. Ticking it (ratio 1) left the
+  width at 34.36 % (height, left and top unchanged); typing 2 then left the height at 35.91 % (width 34.36);
+  typing 0.5 instead left the width at 17.18 % (height 71.83). So turning it on or changing the ratio shrinks
+  one side, never grows one.
+- The link stays: after OK, setting X to -2.5..27.5 by script kept the width and made the height 35.91 %;
+  Y -2..46 then made it 71.83 % again; X -2.5..7.5 made it 215.5 % of the page (the layer runs past the page).
+  The width, left and top stayed throughout.
+- Not measured: log and other non-linear scales (Sheaf compares the spans in the axes' own scale, decades on
+  log10), linked child layers, how the option shows with a break (the axis-dialog notes say it is hidden).
+
+Sheaf: `Layer::xy_ratio` (`None` = off). The Size/Speed tab offers the tick and ratio; ticking or setting the
+ratio calls `Layer::fit_xy_ratio` with the current spans (Origin's shrink), and the layout then keeps the
+frame's left, top and width and sets its height to `width x span_y / (span_x x ratio)`, without the
+page-fitting that otherwise keeps labels on the page. Not offered for a layer that follows another, polar
+and ternary layers, or while an axis has breaks (then the link is ignored). Undo restores both. `.opj`
+saves name it among the settings not written.
+
 ### 18.7 Not done
 
-Speed mode and X:Y ratio of Size/Speed, attach-to,
+Speed mode of Size/Speed, attach-to,
 automatic overlap avoidance and leader lines of Label, the other fill modes and
 Origin's list of fill patterns, subgrouping By Column Label, Binned increments, several groups in one layer,
 writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).

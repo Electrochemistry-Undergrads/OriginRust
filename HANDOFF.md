@@ -36,6 +36,13 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T13 X:Y ratio (2026-11-15, Windows, branch `xy-ratio`): Size/Speed "Link Axis Length to
+  Scale with X:Y Ratio" (`Layer::xy_ratio`). Measured in Origin 2016 (graphing 18.7a): ticking it or
+  changing the ratio shrinks the frame's width or height to fit; afterwards the width stays and the
+  height follows the axis ranges, even past the page. Sheaf copies both; it compares spans in the
+  axes' own scale (log unmeasured) and ignores the link with axis breaks, for linked child layers and
+  in polar/ternary layers. Also measured: Speed Mode's worksheet limit is ticked at 3000 by default
+  (spec table said off; speed mode itself is still not done). Formatting, strict all-target Clippy and 2714 workspace tests pass (8 ignored) on 9200269.
 - T11 several axis breaks (2026-11-15, Windows, branch `axis-breaks`): an axis holds up to
   seven breaks (`Axis::axis_breaks`; the former single `axis_break` still reads as one, keeping
   its place). Measured in Origin 2016's Breaks tab and PNG exports (graphing 3.6): Auto Position
@@ -193,11 +200,11 @@ open. History of what was merged when is in `git log` (not repeated here).
 |---|---|---|---|
 | `codex/t02-find-selection` | Codex Windows, t02-find-selection | T02 Find/Replace selected-range restriction: Origin measurement, immutable selection snapshot in `open_find`, dialog predicate/control, focused tests/docs | claimed 2026-11-15; no grid/selection interaction, core/history, Undo AI command, MCP, recent-files, formulas, graph/axis/shape or statistics changes |
 | `codex/t25-undo-ai` | Codex Windows, t25-undo-ai | T25 Undo AI Changes UI command: new app action/helper using existing Undo dispatch, Edit and no-window File Undo/Redo blocks, guard flag + mechanical menu-context initializers, focused UI tests/docs | claimed 2026-11-15; undo completed contiguous AI steps, stop at manual boundary; editor/dialog guard; existing Document undo/redo only; no core/history API, MCP transport/queue/resources/tools, Find, other menu behavior, grid/graph/shape interactions or recent-files hooks; grid/graph menu-context fields initialized false only |
-| `xy-ratio` | Claude Windows, "axis-breaks" | T13 Size/Speed "Link Axis Length to Scale" with X:Y Ratio measured in Origin; layer setting in core graph.rs (Layer fields only), frame fitting in plot layout, Size/Speed tab control, persistence and focused tests | claimed 2026-11-15; no plot styles/fill/plots.rs, axis breaks logic, drawn shapes, MCP, stats or other sessions' scopes |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `recent-files` | Claude macOS, "mac-recent" | T38 Recent Projects and Recent Imports: new sheaf-io recent module, File menu submenus, app open/save/import hooks, Startup recent_path, UI tests, spec | claimed 2026-11-15; no Recent Books/Graphs/Exports, no window saving, no other sessions' scope |
+| `window-switcher` | Claude macOS, "mac-multipdf" | T42 Window Switcher (Origin 2025b Ctrl+Tab / Ctrl+Shift+Tab with previews): MRU window order, new switcher overlay, key handling, thumbnails | claimed 2026-11-15; app.rs activation/MRU hooks, new crates/app/src/switcher.rs, menus; no grid Tab behaviour, recent files, MCP/live link or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

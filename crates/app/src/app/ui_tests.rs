@@ -8462,6 +8462,29 @@ fn the_size_tab_edits_the_layer_area_and_a_linked_layer_shows_fractions_of_its_p
     assert_eq!(graph(&h).layers[0].frame, parent, "the parent did not move");
 }
 
+#[test]
+fn the_size_tab_links_the_axis_lengths_to_the_scale_and_shrinks_the_frame() {
+    let mut h = start(vec![data_file("xy-ratio")]);
+    let before = graph(&h).layers[0].frame;
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Size/Speed");
+    click(&mut h, "Link Axis Length to Scale with X:Y Ratio");
+    click(&mut h, "OK");
+    let layer = &graph(&h).layers[0];
+    assert_eq!(layer.xy_ratio, Some(1.0));
+    // One side shrank, the other and the corner stayed, as in Origin.
+    let f = layer.frame;
+    assert!((f.left, f.top) == (before.left, before.top), "{f:?}");
+    assert!(
+        (f.width < before.width && (f.height - before.height).abs() < 1e-9)
+            || (f.height < before.height && (f.width - before.width).abs() < 1e-9),
+        "{before:?} -> {f:?}"
+    );
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert_eq!(graph(&h).layers[0].xy_ratio, None);
+}
+
 fn has_label_containing(h: &Harness<'static, SheafApp>, text: &str) -> bool {
     h.query_all_by_label_contains(text).next().is_some()
 }

@@ -104,5 +104,13 @@ sign-preserving replacement, clearing nonmatches, backward search and String wil
 measured strict `!=` rule is distinct from tolerant equality. Empty Numeric replacement clears
 the cell. String mode keeps the existing case/whole-cell and substring rules. Four new UI tests,
 four matching fixtures and the updated existing substring regressions cover the change.
-All probes and the remaining wider-scope, labels, cell-link, selection, history and query-menu
+All probes and the remaining wider-scope, labels, cell-link, history and query-menu
 limitations are recorded in gui-look section 5. `--show find` / `--show replace` open native previews.
+
+Selected-range follow-up (2026-11-15): eleven successful Origin GUI cases establish the checked
+range option for blocks, whole columns and rows, its retention across restricted hits and its
+removal after an unchecked search collapses the range. Sheaf snapshots the opening scope for
+both data modes, forward/backward/wildcard searches and both replacement paths, including
+clearing numeric nonmatches. Four UI regressions and one matching fixture cover this addition.
+The visual difference (Sheaf selects each hit while retaining the saved scope; Origin retains
+the rectangle) and the remaining gaps are recorded in gui-look section 5.

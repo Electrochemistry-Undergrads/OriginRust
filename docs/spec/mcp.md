@@ -363,7 +363,7 @@ parameter.
 
 **`simulate_curve`** `{function?, params?, from?, to?, points?, log?, x_of?, book?, sheet?, plot?, image?, values?}`
 (`docs/spec/fitting.md` section 13). Writes the X and Y columns of a built-in fit function to a new sheet
-`Simulate<n>` of the workbook, at the X values `from` to `to` (defaults 1 to 10) in `points` steps (default 100),
+`Simulate<n>` of the workbook, at the X values `from` to `to` (defaults: the function's range in Origin's window, Gauss -1 to 5, see fitting.md 13.1) in `points` steps (default 200),
 linear or `log`, or at the values of the column `x_of` (which cannot be combined with `from`, `to`, `points` or `log`: the call is refused). `params` is `{NAME: number}`; the others keep their starting
 values. `plot` adds a graph; `image` also writes it as a picture (implies `plot`). One undo step. Result
 `{book, sheet, x_column, y_column, function, points, graph, image, notes, message, x?, y?}`; `x` and `y` are

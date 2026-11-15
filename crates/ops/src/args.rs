@@ -214,13 +214,13 @@ pub struct SimulateArgs {
     /// parameters left out keep the starting values of --list.
     #[arg(short, long, value_delimiter = ',', value_name = "NAME=VALUE", allow_hyphen_values = true)]
     pub param: Vec<String>,
-    /// The first X value (default 1). A first value above --to gives falling X.
+    /// The first X value (default: the X range of Origin's Simulate Curve window for the function, Gauss -1). A first value above --to gives falling X.
     #[arg(long, allow_hyphen_values = true, conflicts_with = "x_of")]
     pub from: Option<f64>,
-    /// The last X value (default 10).
+    /// The last X value (default: the function's, Gauss 5).
     #[arg(long, allow_hyphen_values = true, conflicts_with = "x_of")]
     pub to: Option<f64>,
-    /// How many X values, from 2 to 1000000 (default 100).
+    /// How many X values, from 2 to 1000000 (default 200).
     #[arg(long, conflicts_with = "x_of")]
     pub points: Option<usize>,
     /// Space the X values evenly on a logarithmic scale (both ends must be positive).

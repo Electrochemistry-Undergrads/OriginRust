@@ -38,11 +38,16 @@ impl Default for SimulateCurveSpec {
         SimulateCurveSpec {
             function: "Gauss".to_string(),
             params: Vec::new(),
-            x: SimulateX::Range { from: 1.0, to: 10.0, points: 100, spacing: Spacing::Linear },
+            // Origin's Simulate Curve window for Gauss (fitting.md 13.1).
+            x: SimulateX::Range { from: -1.0, to: 5.0, points: sim::ORIGIN_POINTS, spacing: Spacing::Linear },
             plot: false,
         }
     }
 }
+
+/// Long names of the simulated columns, as Origin's Simulate Curve names them (fitting.md 13.1).
+const X_NAME: &str = "Simulated X1";
+const Y_NAME: &str = "Simulated Y1";
 
 fn option(e: sheaf_fit::FitError) -> AnalysisError {
     AnalysisError::BadOption(e.to_string())
@@ -56,9 +61,8 @@ pub(super) fn run(spec: &SimulateCurveSpec, project: &Project) -> Result<Output,
     let (xs, x_name, x_units, x_comment, log_x) = match &spec.x {
         SimulateX::Range { from, to, points, spacing } => {
             let xs = sim::x_values(*from, *to, *points, *spacing).map_err(option)?;
-            let how = if *spacing == Spacing::Log { "logarithmic" } else { "linear" };
-            let comment = format!("{points} points from {from} to {to}, {how} spacing");
-            (xs, "X".to_string(), String::new(), comment, *spacing == Spacing::Log)
+            // Origin: long name "Simulated X1", the function's name as the comment.
+            (xs, X_NAME.to_string(), String::new(), function.name.clone(), *spacing == Spacing::Log)
         }
         SimulateX::OfColumn(id) => {
             let (_, _, c) = project.locate(*id).ok_or(AnalysisError::NoSuchColumn(*id))?;
@@ -75,7 +79,6 @@ pub(super) fn run(spec: &SimulateCurveSpec, project: &Project) -> Result<Output,
         format!("{}: {}", function.name, function.equation),
         format!("Parameters: {}", sim::describe_params(&function, &params)),
     ];
-    let y_comment = format!("Simulated {}: {}", function.name, sim::describe_params(&function, &params));
     let on_sheet = vec![
         SheetColumn {
             designation: Designation::X,
@@ -86,9 +89,9 @@ pub(super) fn run(spec: &SimulateCurveSpec, project: &Project) -> Result<Output,
         },
         SheetColumn {
             designation: Designation::Y,
-            long_name: function.name.clone(),
+            long_name: Y_NAME.to_string(),
             units: String::new(),
-            comments: y_comment,
+            comments: function.name.clone(),
             data: ColumnData::numeric(ys),
         },
     ];
@@ -97,7 +100,7 @@ pub(super) fn run(spec: &SimulateCurveSpec, project: &Project) -> Result<Output,
         x_scale: if log_x { ScaleKind::Log10 } else { ScaleKind::Linear },
         y_scale: ScaleKind::Linear,
         x_title: x_name,
-        y_title: function.name.clone(),
+        y_title: Y_NAME.to_string(),
         look: Default::default(),
     });
     Ok(Output { table: None, on_sheet, notes, graph, more_graphs: Vec::new() })
@@ -138,8 +141,16 @@ mod tests {
         assert_eq!(sheet.name, "Simulate1");
         assert_eq!(sheet.columns.iter().map(|c| c.designation).collect::<Vec<_>>(), [Designation::X, Designation::Y]);
         assert_eq!(sheet.columns[0].numeric().unwrap(), [0.0, 2.5, 5.0, 7.5, 10.0]);
-        assert_eq!(sheet.columns[1].long_name, "Gauss");
-        assert_eq!(sheet.columns[1].comments, "Simulated Gauss: y0=1, xc=5, w=2, A=4");
+        // Origin's names (fitting.md 13.1): Simulated X1 and Simulated Y1, the function as comment.
+        assert_eq!(
+            (sheet.columns[0].long_name.as_str(), sheet.columns[0].comments.as_str()),
+            ("Simulated X1", "Gauss")
+        );
+        assert_eq!(
+            (sheet.columns[1].long_name.as_str(), sheet.columns[1].comments.as_str()),
+            ("Simulated Y1", "Gauss")
+        );
+        assert_eq!(r.notes[1], "Parameters: y0=1, xc=5, w=2, A=4");
         // At the centre the curve is y0 + A / (w sqrt(pi/2)).
         let y = sheet.columns[1].numeric().unwrap();
         let top = 1.0 + 4.0 / (2.0 * (std::f64::consts::PI / 2.0).sqrt());
@@ -156,9 +167,9 @@ mod tests {
         let spec = SimulateCurveSpec { function: "ExpDec1".into(), params: vec![("t1".into(), 2.0)], ..gauss() };
         let r = p.analyze(&request(x, spec)).unwrap();
         let sheet = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
-        // y0 = 1, A1 = 1 (initial values), t1 = 2: y(0) = 2.
-        assert!((sheet.columns[1].numeric().unwrap()[0] - 2.0).abs() < 1e-12);
-        assert_eq!(sheet.columns[1].comments, "Simulated ExpDec1: y0=1, A1=1, t1=2");
+        // y0 = 1, A1 = 2 (Origin's window values), t1 = 2: y(0) = 3.
+        assert!((sheet.columns[1].numeric().unwrap()[0] - 3.0).abs() < 1e-12);
+        assert_eq!(r.notes[1], "Parameters: y0=1, A1=2, t1=2");
     }
 
     #[test]

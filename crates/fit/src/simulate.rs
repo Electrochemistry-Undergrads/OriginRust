@@ -63,6 +63,48 @@ pub fn x_values(from: f64, to: f64, points: usize, spacing: Spacing) -> Result<V
     Ok(xs)
 }
 
+/// Points of Origin's Simulate Curve window for every function measured (fitting.md 13.1).
+pub const ORIGIN_POINTS: usize = 200;
+
+/// Origin 2016's Simulate Curve window: the parameter values and X range it shows for each function
+/// of its "Origin Basic Functions" category (measured 2026-11-15, fitting.md 13.1). Parameters are in
+/// the function's order. dHyperbl is not in Sheaf's library.
+const ORIGIN_SAMPLES: &[(&str, &[f64], f64, f64)] = &[
+    ("Allometric1", &[1.0, -0.5], 2.0, 3.0),
+    ("Beta", &[0.0, 8.0, 1.0, 15.0, 3.0, 4.0], -1.0, 20.0),
+    ("Boltzmann", &[0.0, 1.0, 0.0, 1.0], -7.0, 7.0),
+    ("ExpAssoc", &[1.0, 1.0, 1.0, 2.0, 2.0], -10.0, 2.0),
+    ("ExpDec1", &[1.0, 2.0, 1.0], -10.0, 0.0),
+    ("ExpDec2", &[1.0, 1.0, 1.0, 2.0, 2.0], -10.0, 0.0),
+    ("ExpDec3", &[-2.0, 1.0, 3.0, 2.0, 2.0, 3.0, 4.0], -10.0, 8.0),
+    ("ExpGrow1", &[1.0, 1.0, 2.0, 1.0], 2.0, 10.0),
+    ("ExpGrow2", &[0.0, 0.0, 1.0, 1.0, 2.0, 2.0], 2.0, 10.0),
+    ("Gauss", &[1.0, 2.0, 1.5, 5.0], -1.0, 5.0),
+    ("GaussAmp", &[0.0, 0.0, 1.0, 10.0], -5.0, 5.0),
+    ("Hyperbl", &[1.0, 1.0], -10.0, 10.0),
+    ("Logistic", &[0.0, 1.0, 5.0, 3.0], 0.0, 25.0),
+    ("LogNormal", &[0.0, 5.0, 0.3, 1.0], -2.0, 15.0),
+    ("Lorentz", &[0.0, 5.0, 2.0, 1.0], 1.0, 9.0),
+    ("Poisson", &[1.0, 1.0], 1.0, 9.0),
+    ("Pulse", &[0.0, 0.0, 1.0, 0.5, 1.0, 0.5], -1.0, 5.0),
+    ("Rational0", &[1.0, 1.0, 35.0], -5.0, 5.0),
+    ("Sine", &[0.0, 1.0, 1.0, 1.0], -2.0, 2.0),
+    ("Voigt", &[0.0, 5.0, 1.0, 1.0, 1.0], 0.0, 10.0),
+];
+
+fn origin_sample(function: &FitFunction) -> Option<&'static (&'static str, &'static [f64], f64, f64)> {
+    ORIGIN_SAMPLES
+        .iter()
+        .find(|(name, values, ..)| function.name.eq_ignore_ascii_case(name) && values.len() == function.params.len())
+}
+
+/// The X range a simulation of `function` starts from: Origin's for the functions it was measured on
+/// (Gauss -1 to 5, ExpDec1 -10 to 0, ...), otherwise Sheaf's 1 to 10 (valid for logarithmic spacing
+/// too); always [`ORIGIN_POINTS`] points.
+pub fn default_range(function: &FitFunction) -> (f64, f64, usize) {
+    origin_sample(function).map_or((1.0, 10.0, ORIGIN_POINTS), |&(_, _, from, to)| (from, to, ORIGIN_POINTS))
+}
+
 /// Starting values that replace the default 1 where 1 makes the function degenerate (a division by
 /// zero, a logarithm of zero, an overflow): `(function, parameter, value)`. Sheaf's own choice.
 const START_OVERRIDES: &[(&str, &str, f64)] = &[
@@ -86,11 +128,15 @@ fn start_value(function: &FitFunction, param: &crate::nlsf::ParamSpec) -> f64 {
         .map_or(1.0, |&(_, _, v)| v)
 }
 
-/// The parameter values a simulation starts from: the function's own initial value where it has
-/// one, otherwise 1 (what a fit starts from without a guess; a few functions that are degenerate
-/// at 1 have another value), moved into the bounds of the parameter if they exclude it. The values
-/// are in the order of `function.params`.
+/// The parameter values a simulation starts from: the values of Origin's Simulate Curve window for
+/// the functions it was measured on (`ORIGIN_SAMPLES`, typed values, bounds not applied); otherwise
+/// the function's own initial value where it has one, otherwise 1 (what a fit starts from without a
+/// guess; a few functions that are degenerate at 1 have another value), moved into the bounds of the
+/// parameter if they exclude it. The values are in the order of `function.params`.
 pub fn initial_params(function: &FitFunction) -> Vec<f64> {
+    if let Some((_, values, ..)) = origin_sample(function) {
+        return values.to_vec();
+    }
     function
         .params
         .iter()
@@ -296,9 +342,15 @@ mod tests {
 
     #[test]
     fn initial_values_respect_bounds_and_explicit_starts() {
+        // A function Origin was not measured on: its own starts, moved into the bounds.
         let f = library::get("Gauss").unwrap().with_bounds("w", Some(3.0), None).with_initial("y0", -2.0);
-        let p = initial_params(&f);
-        assert_eq!(p, vec![-2.0, 1.0, 3.0, 1.0]);
+        let mut f2 = f.clone();
+        f2.name = "NotMeasured".into();
+        assert_eq!(initial_params(&f2), vec![-2.0, 1.0, 3.0, 1.0]);
+        // Origin's window values for the functions it was measured on; typed, so bounds are not applied.
+        assert_eq!(initial_params(&f), vec![1.0, 2.0, 1.5, 5.0]);
+        assert_eq!(default_range(&f), (-1.0, 5.0, 200));
+        assert_eq!(default_range(&f2), (1.0, 10.0, 200));
     }
 
     #[test]

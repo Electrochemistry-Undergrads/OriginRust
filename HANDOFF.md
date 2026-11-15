@@ -36,6 +36,16 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T25 Windows endpoint acceptance (2026-11-15): inherited profile grants exposed token-file
+  read access to other local accounts. The owned runtime folder/lock now have protected DACLs;
+  token files are private from creation, and clients verify/refuse broad or foreign-owned
+  descriptors without permission changes. Only the selected runtime objects are changed.
+  Native app/proxy checks confirm loopback, token/HTTP refusal, no firewall prompt and clean
+  shutdown. Windows Authz denies two non-owner accounts while allowing the owner (effective-access
+  checks, without another interactive login). Feature `26e8e43`; five new Windows regressions,
+  eleven discovery tests, formatting, strict workspace all-target Clippy and 3,006 tests pass
+  (eight existing ignored) with Go To/hexbin integrated. ADR 0013 and mcp.md 11 record the limits.
+
 - T02 Go To Column Browser (2026-11-15, Windows, feature `c941fb0`): Select Columns opens
   a metadata table with project/book/sheet/folder scopes and an added-range list. Add/Remove,
   OK/Cancel and Escape preserve the parent until navigation; typed edits and Reset discard the
@@ -77,7 +87,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   connections stay in place. Formatting, strict workspace all-target Clippy and 2,740 workspace
   tests pass (eight existing ignored), including four new real-proxy/UI regressions, on the
   combined Find, window-switcher, X:Y ratio and axis-break-lines source. Feature `e490370`;
-  ADR 0013 and mcp.md 11.19 describe the contract. Windows endpoint acceptance remains open.
+  ADR 0013 and mcp.md 11.19 describe the contract. Windows endpoint acceptance is covered by the Windows follow-up above.
 
 - Lines across axis breaks (2026-11-15, Windows, branch `break-lines`): as Origin 2016 draws them
   (measured, graphing 3.6), a segment joining points on both sides of an X or Y break is left out over
@@ -271,7 +281,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | Branch | Owner session | What | State |
 |---|---|---|---|
 | `codex/t02-browser-selection` | Codex Windows, t02-browser-selection | T02 Go To Column Browser top-table Ctrl/Shift range selection and Add as One Block: native measurements, browser state and focused UI tests/docs | claimed 2026-11-15; only go_to/browser.rs and own go_to_browser tests/docs; no Exclude, row-range editing/preferences, navigation semantics, app/MRU/grid/core/history/MCP/plot/stats/formula/label or other owner changes |
-| `codex/t25-windows-acceptance` | Codex Windows, t25-windows-acceptance | T25 Windows attach acceptance and measured permissions repair: discovery run-folder/token-file owner/protected DACL, isolated Windows ACL/access regressions, direct existing windows-sys dependency/docs | claimed 2026-11-15; native baseline token inherited another local group read; only runtime folder/files, no global profile/account ACL or protocol/proxy/queue/history/UI/model changes, no other claimed scopes |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |

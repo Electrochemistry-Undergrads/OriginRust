@@ -31,6 +31,17 @@ struct Manifest {
     /// Set on a companion file that Sheaf wrote next to an `.opj` (see `crate::save`).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     companion: bool,
+    /// Set on a window file (File > Save Window As): `workbook` or `graph`. See `crate::window_file`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    window: Option<String>,
+}
+
+/// What a file says it is, besides a project.
+#[derive(Clone, Copy)]
+enum Marker<'a> {
+    Project,
+    Companion,
+    Window(&'a str),
 }
 
 fn numeric_member(id: u64) -> String {
@@ -51,13 +62,29 @@ fn mixed_member(id: u64) -> String {
 /// `path` and then renamed over it, so a crash never leaves a half-written
 /// project behind.
 pub fn save(project: &Project, path: &Path) -> Result<(), IoError> {
-    save_marked(project, path, false)
+    save_marked(project, path, Marker::Project)
 }
 
 /// Like [`save`], and marks the file as a companion of an `.opj` that Sheaf wrote, so that Sheaf
 /// can tell it from a project the user made and delete it when it is no longer needed.
 pub fn save_companion(project: &Project, path: &Path) -> Result<(), IoError> {
-    save_marked(project, path, true)
+    save_marked(project, path, Marker::Companion)
+}
+
+/// Writes a window file: the same archive as a project, with `window` (`workbook` or `graph`) in the
+/// manifest so that it is never taken for a project.
+pub(crate) fn save_window_file(project: &Project, path: &Path, window: &str) -> Result<(), IoError> {
+    save_marked(project, path, Marker::Window(window))
+}
+
+/// The `window` marker of the manifest of `path`: `None` for a project, a companion, a file that is
+/// not a Sheaf archive and a file that cannot be read.
+pub(crate) fn window_marker(path: &Path) -> Option<String> {
+    let file = File::open(path).ok()?;
+    let mut archive = ZipArchive::new(BufReader::new(file)).ok()?;
+    let bytes = read_member(&mut archive, path, MANIFEST).ok()??;
+    let manifest = serde_json::from_slice::<Manifest>(&bytes).ok()?;
+    (manifest.format == FORMAT_NAME).then_some(manifest.window).flatten()
 }
 
 /// True when `path` is a project file that Sheaf wrote as a companion of an `.opj`. False for any
@@ -69,11 +96,11 @@ pub fn is_companion(path: &Path) -> bool {
     serde_json::from_slice::<Manifest>(&bytes).is_ok_and(|m| m.format == FORMAT_NAME && m.companion)
 }
 
-fn save_marked(project: &Project, path: &Path, companion: bool) -> Result<(), IoError> {
+fn save_marked(project: &Project, path: &Path, marker: Marker<'_>) -> Result<(), IoError> {
     let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "project".to_string());
     let tmp: PathBuf = parent.join(format!(".{name}.{}.tmp", std::process::id()));
-    let result = write_archive(project, path, &tmp, companion)
+    let result = write_archive(project, path, &tmp, marker)
         .and_then(|()| std::fs::rename(&tmp, path).map_err(|e| IoError::io(path, e)));
     if result.is_err() {
         let _ = std::fs::remove_file(&tmp);
@@ -81,7 +108,7 @@ fn save_marked(project: &Project, path: &Path, companion: bool) -> Result<(), Io
     result
 }
 
-fn write_archive(project: &Project, path: &Path, tmp: &Path, companion: bool) -> Result<(), IoError> {
+fn write_archive(project: &Project, path: &Path, tmp: &Path, marker: Marker<'_>) -> Result<(), IoError> {
     let zip_err = |source: ZipError| IoError::Zip { path: path.to_path_buf(), source };
     let io_err = |source: std::io::Error| IoError::io(path, source);
     let json_err = |member: &str, source: serde_json::Error| IoError::Json {
@@ -115,7 +142,11 @@ fn write_archive(project: &Project, path: &Path, tmp: &Path, companion: bool) ->
         format: FORMAT_NAME.to_string(),
         version: FORMAT_VERSION,
         app: env!("CARGO_PKG_VERSION").to_string(),
-        companion,
+        companion: matches!(marker, Marker::Companion),
+        window: match marker {
+            Marker::Window(w) => Some(w.to_string()),
+            _ => None,
+        },
     };
     put(&mut zip, MANIFEST, &serde_json::to_vec_pretty(&manifest).map_err(|e| json_err(MANIFEST, e))?)?;
     put(&mut zip, PROJECT, &serde_json::to_vec_pretty(project).map_err(|e| json_err(PROJECT, e))?)?;
@@ -156,8 +187,22 @@ fn write_archive(project: &Project, path: &Path, tmp: &Path, companion: bool) ->
 }
 
 /// Loads a project and makes sure its identifier counter is ahead of every
-/// identifier in the file.
+/// identifier in the file. A window file (File > Save Window As) is refused: it is never opened as
+/// a project, so it cannot replace one (see [`crate::window_file`]).
 pub fn load(path: &Path) -> Result<Project, IoError> {
+    load_any(path, false).map(|(project, _)| project)
+}
+
+/// Loads a window file: the project it holds and the kind in its manifest. A project, or a file
+/// without the marker, is refused.
+pub(crate) fn load_window_file(path: &Path) -> Result<(Project, String), IoError> {
+    let (project, kind) = load_any(path, true)?;
+    Ok((project, kind.unwrap_or_default()))
+}
+
+/// Reads the archive. The manifest is checked before any data is read: a window file is refused
+/// when `want_window` is false, a file without the marker when it is true. Returns the marker.
+fn load_any(path: &Path, want_window: bool) -> Result<(Project, Option<String>), IoError> {
     let file = File::open(path).map_err(|e| IoError::io(path, e))?;
     let mut archive =
         ZipArchive::new(BufReader::new(file)).map_err(|source| IoError::Zip { path: path.to_path_buf(), source })?;
@@ -171,6 +216,12 @@ pub fn load(path: &Path) -> Result<Project, IoError> {
     })?;
     if manifest.format != FORMAT_NAME {
         return Err(IoError::NotAProject { path: path.to_path_buf() });
+    }
+    if manifest.window.is_some() && !want_window {
+        return Err(IoError::IsAWindowFile { path: path.to_path_buf() });
+    }
+    if manifest.window.is_none() && want_window {
+        return Err(IoError::NotAWindowFile { path: path.to_path_buf() });
     }
     if manifest.version > FORMAT_VERSION {
         return Err(IoError::UnsupportedVersion {
@@ -245,7 +296,7 @@ pub fn load(path: &Path) -> Result<Project, IoError> {
         }
     }
     project.repair_ids();
-    Ok(project)
+    Ok((project, manifest.window))
 }
 
 /// Reads one archive member; `None` when the archive has no such member.

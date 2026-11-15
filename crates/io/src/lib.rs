@@ -19,6 +19,7 @@ pub mod recovery;
 pub mod save;
 mod text;
 pub mod themes;
+pub mod window_file;
 
 pub use error::IoError;
 pub use excel::{is_excel_file, is_excel_workbook};
@@ -46,12 +47,15 @@ pub struct OpenedProject {
     pub warnings: Vec<String>,
 }
 
-/// True for file names that [`open_project`] reads: `.sheaf`, `.opj` and `.opju`.
+/// True for files that [`open_project`] reads: `.sheaf`, `.opj` and `.opju`.
+/// A `.sheaf` file that is a window file (File > Save Window As) is not a project: see
+/// [`window_file::is_window_file`].
 pub fn is_project_file(path: &Path) -> bool {
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-    ext.eq_ignore_ascii_case(project_file::EXTENSION)
-        || ext.eq_ignore_ascii_case("opj")
-        || ext.eq_ignore_ascii_case("opju")
+    if ext.eq_ignore_ascii_case(project_file::EXTENSION) {
+        return !window_file::is_window_file(path);
+    }
+    ext.eq_ignore_ascii_case("opj") || ext.eq_ignore_ascii_case("opju")
 }
 
 fn modified(path: &Path) -> Option<std::time::SystemTime> {

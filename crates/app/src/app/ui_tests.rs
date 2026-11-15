@@ -28,6 +28,7 @@ mod offset_multipliers;
 mod parallel;
 mod recent;
 mod rug;
+mod save_window;
 mod set_multiple;
 mod shape_ordering;
 mod simulate;

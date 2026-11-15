@@ -1,8 +1,8 @@
-//! The recently opened projects and the recently imported files, kept in `recent.json` in the
+//! The recently opened projects, window files (books and graphs) and imported files, kept in `recent.json` in the
 //! settings folder (next to the autosave settings) so that they survive a restart and are shared by
 //! every running instance.
 //!
-//! A [`RecentList`] holds two lists, newest first, each capped at [`MAX_ENTRIES`]. A path is stored in
+//! A [`RecentList`] holds four lists, newest first, each capped at [`MAX_ENTRIES`]. A path is stored in
 //! its canonical form and counts once, however it was spelled and (on Windows and macOS) in whatever
 //! letter case. Changes go through [`update`], which takes a lock, re-reads the file, applies the
 //! change and writes the file again, so two instances never wipe each other's entries.
@@ -10,6 +10,7 @@
 //! The rules are in `docs/spec/recent-files.md`.
 
 use crate::error::IoError;
+use crate::window_file::WindowFileKind;
 use crate::{recovery, save};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -35,11 +36,17 @@ pub fn default_path() -> Option<PathBuf> {
     recovery::default_settings_path().map(|p| p.with_file_name(FILE_NAME))
 }
 
-/// The recent projects and recent imports, each newest first.
+/// The recent projects, books, graphs and imports, each newest first. The books and graphs are the
+/// window files of File > Save Window As (`.sheafbook`, `.sheafgraph`); an older `recent.json`
+/// without them loads with those two lists empty.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RecentList {
     /// Projects opened or saved, as canonical paths.
     pub projects: Vec<PathBuf>,
+    /// Workbook files (`.sheafbook`) saved or opened, as canonical paths.
+    pub books: Vec<PathBuf>,
+    /// Graph files (`.sheafgraph`) saved or opened, as canonical paths.
+    pub graphs: Vec<PathBuf>,
     /// Data files imported, as canonical paths.
     pub imports: Vec<PathBuf>,
 }
@@ -65,7 +72,12 @@ impl RecentList {
             out.truncate(MAX_ENTRIES);
             out
         };
-        RecentList { projects: read("projects"), imports: read("imports") }
+        RecentList {
+            projects: read("projects"),
+            books: read("books"),
+            graphs: read("graphs"),
+            imports: read("imports"),
+        }
     }
 
     /// Writes the lists (creating the folder) without taking the lock; use [`update`] to change the
@@ -77,6 +89,8 @@ impl RecentList {
         let entries = |list: &[PathBuf]| Value::Array(list.iter().map(|p| Entry::from_path(p).to_value()).collect());
         let mut map = serde_json::Map::new();
         map.insert("projects".into(), entries(&self.projects));
+        map.insert("books".into(), entries(&self.books));
+        map.insert("graphs".into(), entries(&self.graphs));
         map.insert("imports".into(), entries(&self.imports));
         let json = serde_json::to_vec_pretty(&Value::Object(map)).map_err(|e| IoError::Json {
             path: path.to_path_buf(),
@@ -92,6 +106,15 @@ impl RecentList {
         push(&mut self.projects, normalize(path));
     }
 
+    /// Puts a window file at the top of the books or the graphs, by its kind. The path is made
+    /// canonical; an earlier entry for the same file goes away.
+    pub fn push_window(&mut self, kind: WindowFileKind, path: &Path) {
+        match kind {
+            WindowFileKind::Book => push(&mut self.books, normalize(path)),
+            WindowFileKind::Graph => push(&mut self.graphs, normalize(path)),
+        }
+    }
+
     /// Puts imported files at the top of the imports, one after the other, so the last path of
     /// `paths` ends up first. Each path is made canonical; earlier entries for the same file go away.
     pub fn push_import<P: AsRef<Path>>(&mut self, paths: &[P]) {
@@ -100,11 +123,11 @@ impl RecentList {
         }
     }
 
-    /// Removes a file from both lists, however it is spelled.
+    /// Removes a file from every list, however it is spelled.
     pub fn remove(&mut self, path: &Path) {
         let given = absolute(path);
         let canonical = normalize(path);
-        for list in [&mut self.projects, &mut self.imports] {
+        for list in [&mut self.projects, &mut self.books, &mut self.graphs, &mut self.imports] {
             list.retain(|q| !same(q, &given) && !same(q, &canonical));
         }
     }
@@ -112,6 +135,16 @@ impl RecentList {
     /// Empties the projects.
     pub fn clear_projects(&mut self) {
         self.projects.clear();
+    }
+
+    /// Empties the books.
+    pub fn clear_books(&mut self) {
+        self.books.clear();
+    }
+
+    /// Empties the graphs.
+    pub fn clear_graphs(&mut self) {
+        self.graphs.clear();
     }
 
     /// Empties the imports.
@@ -139,12 +172,17 @@ pub fn record_project(file: &Path, project: &Path) -> Result<RecentList, IoError
     update(file, |l| l.push_project(project))
 }
 
+/// Records a window file saved or opened: [`RecentList::push_window`] through [`update`].
+pub fn record_window(file: &Path, kind: WindowFileKind, window_file: &Path) -> Result<RecentList, IoError> {
+    update(file, |l| l.push_window(kind, window_file))
+}
+
 /// Records imported files: [`RecentList::push_import`] through [`update`].
 pub fn record_imports<P: AsRef<Path>>(file: &Path, imported: &[P]) -> Result<RecentList, IoError> {
     update(file, |l| l.push_import(imported))
 }
 
-/// Drops a file from both lists: [`RecentList::remove`] through [`update`].
+/// Drops a file from every list: [`RecentList::remove`] through [`update`].
 pub fn forget(file: &Path, path: &Path) -> Result<RecentList, IoError> {
     update(file, |l| l.remove(path))
 }
@@ -152,6 +190,16 @@ pub fn forget(file: &Path, path: &Path) -> Result<RecentList, IoError> {
 /// Empties the projects: [`RecentList::clear_projects`] through [`update`].
 pub fn clear_projects(file: &Path) -> Result<RecentList, IoError> {
     update(file, RecentList::clear_projects)
+}
+
+/// Empties the books: [`RecentList::clear_books`] through [`update`].
+pub fn clear_books(file: &Path) -> Result<RecentList, IoError> {
+    update(file, RecentList::clear_books)
+}
+
+/// Empties the graphs: [`RecentList::clear_graphs`] through [`update`].
+pub fn clear_graphs(file: &Path) -> Result<RecentList, IoError> {
+    update(file, RecentList::clear_graphs)
 }
 
 /// Empties the imports: [`RecentList::clear_imports`] through [`update`].

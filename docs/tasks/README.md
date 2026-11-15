@@ -104,8 +104,9 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T51](T51-sunburst.md) | Sunburst plot: hierarchy as concentric rings coloured by value | M | done 2026-11-15 (graphing 14.27, `sunburst`, macOS); left: Origin defaults unmeasured, hover and Collapse/Expand drilling |
 | [T52](T52-slope-annotation.md) | Slope annotation between two data points (per decade on log axes) | M | claimed 2026-11-15 (`slope-annotation`, macOS) |
 | [T53](T53-set-multiple-columns.md) | Set Multiple Columns Values (Ctrl+Shift+Q): one formula over the selected columns with `j` | M | done, merged 2026-11-15 (expression-language 7); Origin's window and `j` measured 2026-11-15 (7.1); left: non-adjacent, locked and text columns in Origin |
-| [T54](T54-save-window-as.md) | Save Window As (`.sheafbook`/`.sheafgraph` window files opened by appending) and Recent Books / Recent Graphs | M | claimed 2026-11-15 (`save-window`, Claude macOS "mac-savewin") |
+| [T54](T54-save-window-as.md) | Save Window As (`.sheafbook`/`.sheafgraph` window files opened by appending) and Recent Books / Recent Graphs | M | done, merged 2026-11-15 (window-files.md); left: Origin measurements, Save Template As |
 | [T55](T55-iir-fir-filters.md) | IIR Filter (Butterworth, Chebyshev, elliptic, Bessel) and FIR Filter design and application | L | claimed 2026-11-15 (`digital-filters`, Claude macOS "violin") |
+| [T56](T56-user-graph-templates.md) | Save Template As and Plot > User Templates (a graph's look without data, applied to new columns; CLI `--template`) | M | claimed 2026-11-15 (`user-templates`, Claude macOS "mac-templates") |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

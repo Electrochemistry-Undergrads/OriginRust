@@ -71,6 +71,14 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+T02 Column Browser Exclude (`e606eef`) now temporarily hides selected upper-list columns,
+selects the first removed list position (or the final remaining row), and preserves original
+column ordinals and already-added ranges. Scope changes and reopening restore excluded columns;
+gapped original columns cannot form one block. Ten valid isolated Origin cases and seven new UI
+regressions cover this follow-up (46 focused Go To tests). Formatting, strict workspace all-target
+Clippy, 3,394 workspace tests (eight existing ignored) and inventory validation pass on the combined
+T48/T64 tree; incoming Windows MCP test fix `81765e8` is preserved. Saved browser preferences remain.
+
 T48 graph Data menu measured in Origin 2016 (branch `t48-origin`, graphing 20.4/20.5): Mask (a click masks,
 a drag masks every plot's Y cells, Tab active plot, Space freehand) and Remove Bad (pick, then Enter;
 `@YPR` 1 keeps the row) now follow Origin, with its undo texts and Esc/right-click ending a mode.
@@ -94,7 +102,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | Branch | Owner session | What | State |
 |---|---|---|---|
 | `codex/text-decorations` | Codex Windows, text-decorations | T58 GRAPH TEXT FORMATTING (`T58-graph-text-formatting.md`), first rendering slice: inline underline/strikethrough, markup/layout/rendering and isolated export tests | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; no toolbar/editor/model fields, significance-plot/brackets (separate T58 brief), shapes/data-tools/browser/export-dialog/import/stats/MCP/printing or other owners |
-| `codex/t02-browser-exclude` | Codex Windows, t02-browser-exclude | T02 Column Browser Exclude control: native behavior, upper-list filtering and own UI tests/docs; integration repair for the newly merged T64 SVG destination test on Windows | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog`, `target/wt-t01-error-bars-dialog`; go_to/browser, own go_to_browser tests, T02/gui-look/HANDOFF, and ONLY the `anova_draws_the_multiple_comparisons_plot_through_the_bridge` path assertion in mcp/tools.rs (canonical filesystem identity); no MCP production/analyze/disconnect changes, saved preferences, navigation, app/MRU/grid/core/history/plot/masks/stats/formulas or other owners; no priority/index/roadmap/parity edits |
 | `codex/t05-export-dialog-themes` | Codex Windows | T05 Dialog Theme row: Origin theme-list/save/reuse behavior, named export-settings themes and isolated persistence/UI regressions | claimed 2026-11-15; own `.claude/worktrees/codex-t13-skip-points`, `target/wt-t13-skip-points`; no Graph Theme, preview, renderers/formats, import behavior, recovery, priority docs or other scopes |
 | `t19-fntrim` | Claude Windows, session fe4b37eb | T19 file-name trimming on ASCII import (Origin's FNameToSht/Bk From/To rules) and the book long name keeping the file extension (owner's decision 2026-11-15); crates/io ascii naming, app import window, cli flags, import-ascii.md, title tests | claimed 2026-11-15 |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |

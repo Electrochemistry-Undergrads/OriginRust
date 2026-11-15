@@ -705,7 +705,7 @@ fn menu_for(
                 };
                 let book = project.locate(plot.y).map(|(b, _, _)| (b.id, b.name.clone()));
                 let on_right = graph.right_y_member(layer) == Some(layer);
-                menus::graph_plot_menu(layer, p, plot.kind, on_right, book)
+                menus::graph_plot_menu(layer, p, plot.kind, on_right, book, plot.decor.trendlines.len())
             }
             ObjectKind::XAxis | ObjectKind::YAxis => {
                 let y = kind == ObjectKind::YAxis;
@@ -804,6 +804,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
     let layer_index = match op {
         GraphOp::SetPlotKind { layer, .. }
         | GraphOp::HidePlot { layer, .. }
+        | GraphOp::RemoveTrendline { layer, .. }
         | GraphOp::MovePlotToAxis { layer, .. }
         | GraphOp::HideAxis { layer, .. }
         | GraphOp::ToggleGrids { layer, .. }
@@ -840,6 +841,11 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         GraphOp::SetPlotKind { plot, kind, .. } => {
             if let Some(p) = l.plots.get_mut(plot) {
                 p.kind = kind;
+            }
+        }
+        GraphOp::RemoveTrendline { plot, .. } => {
+            if let Some(p) = l.plots.get_mut(plot) {
+                p.decor.trendlines.pop();
             }
         }
         GraphOp::HidePlot { plot, .. } => {

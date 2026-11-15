@@ -8597,3 +8597,6 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
     assert_eq!(project(&h).graphs().count(), graphs_before + 1);
     assert_eq!(h.state().doc.undo_label(), Some("K-means cluster analysis"));
 }
+
+#[path = "ui_tests/trendline.rs"]
+mod trendline;

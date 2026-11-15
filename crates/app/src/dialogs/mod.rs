@@ -41,3 +41,4 @@ pub mod shape_object;
 pub mod sort;
 pub mod stack_panels;
 pub mod text_object;
+pub mod trendline;

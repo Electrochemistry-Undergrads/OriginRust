@@ -231,6 +231,35 @@ fn bridged_tools_give_the_numbers_of_the_command_line() {
         json!({"type": "low-pass", "cutoff": 10.0}),
         &["fft-filter", "--y", "A", "--type", "low-pass", "--cutoff", "10"],
     );
+    parity(
+        &dir,
+        "iir_filter",
+        &["B"],
+        json!({"type": "band-pass", "method": "chebyshev1", "order": 3, "cutoff": 2.0, "cutoff2": 20.0, "forward_backward": true}),
+        &[
+            "iir-filter",
+            "--y",
+            "B",
+            "--type",
+            "band-pass",
+            "--method",
+            "chebyshev1",
+            "--order",
+            "3",
+            "--cutoff",
+            "2",
+            "--cutoff2",
+            "20",
+            "--forward-backward",
+        ],
+    );
+    parity(
+        &dir,
+        "fir_filter",
+        &["B"],
+        json!({"order": 30, "cutoff": 10.0, "window": "blackman"}),
+        &["fir-filter", "--y", "B", "--order", "30", "--cutoff", "10", "--window", "blackman"],
+    );
     parity(&dir, "polygon_area", &["A"], json!({}), &["polygon-area", "--y", "A"]);
     parity(&dir, "hilbert", &["A"], json!({}), &["hilbert", "--y", "A"]);
 }

@@ -1763,6 +1763,49 @@ fn fft_filters_open_from_signal_processing_and_add_a_column_per_input() {
     assert_eq!(h.state().doc.undo_label(), Some("FFT filter"));
 }
 
+/// A sheet of 60 rows (X 0..59, two signals), enough for the default FIR order.
+fn long_data_file(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("sample.csv");
+    let mut text = String::from("t,up,down\n");
+    for i in 0..60 {
+        let t = f64::from(i);
+        text += &format!("{t},{},{}\n", (t * 0.05).sin() + 2.0, (t * 2.0).sin());
+    }
+    std::fs::write(&path, text).unwrap();
+    path
+}
+
+#[test]
+fn iir_filter_opens_from_signal_processing_and_adds_a_column_per_input() {
+    let mut h = start(vec![data_file("iirfilter")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "IIR Filter..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let added =
+        b.sheet().columns.iter().filter(|c| c.comments.starts_with("Butterworth low pass IIR filter of")).count();
+    assert_eq!(added, 2);
+    assert_eq!(h.state().doc.undo_label(), Some("IIR filter"));
+}
+
+#[test]
+fn fir_filter_opens_from_signal_processing_and_adds_a_column_per_input() {
+    let mut h = start(vec![long_data_file("firfilter")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "FIR Filter..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let added =
+        b.sheet().columns.iter().filter(|c| c.comments.starts_with("Hamming window low pass FIR filter of")).count();
+    assert_eq!(added, 2);
+    assert_eq!(h.state().doc.undo_label(), Some("FIR filter"));
+}
+
 #[test]
 fn envelope_opens_from_signal_processing_and_puts_its_curves_in_a_new_sheet() {
     // Two peaks and two troughs with the default two points on each side.

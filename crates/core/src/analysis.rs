@@ -44,7 +44,8 @@ pub use sheaf_calc::{
 };
 pub use sheaf_calc::{EnvelopeOptions, EnvelopeType};
 pub use sheaf_calc::{
-    FilterError, FilterResponse, FirMethod, FirSpec, FirWindow, FreqUnit, IirMethod, IirSpec, MagnitudeUnit,
+    FilterError, FilterResponse, FirMethod, FirSpec, FirWindow, FreqUnit, IIR_MAX_ORDER, IirMethod, IirSpec,
+    MAX_FIR_ORDER as FIR_MAX_ORDER, MagnitudeUnit,
 };
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 

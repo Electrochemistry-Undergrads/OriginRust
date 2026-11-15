@@ -64,6 +64,10 @@ pub enum AnalysisKind {
     Ifft,
     /// Signal Processing > FFT Filters (Origin's `fft_filters`).
     FftFilter,
+    /// Signal Processing > IIR Filter (Origin's `dfilter`, OriginPro).
+    IirFilter,
+    /// Signal Processing > FIR Filter (Origin 2027's FIR Filter app).
+    FirFilter,
     /// Signal Processing > Envelope (Origin's `envelope`).
     Envelope,
     /// Signal Processing > Coherence (Origin's `cohere`).
@@ -143,7 +147,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 24] = [
+    pub const ALL: [AnalysisKind; 26] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -160,6 +164,8 @@ impl AnalysisKind {
         AnalysisKind::Fft,
         AnalysisKind::Ifft,
         AnalysisKind::FftFilter,
+        AnalysisKind::IirFilter,
+        AnalysisKind::FirFilter,
         AnalysisKind::Envelope,
         AnalysisKind::Coherence,
         AnalysisKind::Decimate,
@@ -189,6 +195,8 @@ impl AnalysisKind {
             AnalysisKind::Fft => "FFT...",
             AnalysisKind::Ifft => "IFFT...",
             AnalysisKind::FftFilter => "FFT Filters...",
+            AnalysisKind::IirFilter => "IIR Filter...",
+            AnalysisKind::FirFilter => "FIR Filter...",
             AnalysisKind::Envelope => "Envelope...",
             AnalysisKind::Coherence => "Coherence...",
             AnalysisKind::Decimate => "Decimation...",
@@ -264,6 +272,8 @@ impl AnalysisKind {
             "fft" => AnalysisKind::Fft,
             "ifft" => AnalysisKind::Ifft,
             "fft-filter" => AnalysisKind::FftFilter,
+            "iir-filter" => AnalysisKind::IirFilter,
+            "fir-filter" => AnalysisKind::FirFilter,
             "envelope" => AnalysisKind::Envelope,
             "coherence" => AnalysisKind::Coherence,
             "decimate" => AnalysisKind::Decimate,
@@ -726,6 +736,8 @@ pub struct AnalysisDialog {
     fft: FftSpec,
     ifft: IfftSpec,
     fft_filter: FftFilterSpec,
+    /// IIR Filter and FIR Filter (options in `filter_options.rs`).
+    filters: super::filter_options::FilterOptions,
     envelope: EnvelopeSpec,
     /// Coherence: window, lengths, overlap and interval of Origin's `cohere`.
     coherence: CoherenceOptions,
@@ -1185,6 +1197,7 @@ impl AnalysisDialog {
                 options: FftFilterOptions { keep_offset: true, ..Default::default() },
                 interval: None,
             },
+            filters: super::filter_options::FilterOptions::default(),
             envelope: EnvelopeSpec::default(),
             coherence: CoherenceOptions::default(),
             decimate: DecimateSpec::default(),
@@ -1516,6 +1529,8 @@ impl AnalysisDialog {
             AnalysisKind::Hilbert => Tool::Hilbert,
             AnalysisKind::Fft => Tool::Fft(self.fft),
             AnalysisKind::FftFilter => Tool::FftFilter(self.fft_filter),
+            AnalysisKind::IirFilter => self.filters.iir_tool(),
+            AnalysisKind::FirFilter => self.filters.fir_tool(),
             AnalysisKind::Envelope => Tool::Envelope(self.envelope),
             AnalysisKind::Coherence => {
                 let other = self
@@ -1905,6 +1920,8 @@ impl AnalysisDialog {
             }
             AnalysisKind::Fft => fft_options(ui, &mut self.fft),
             AnalysisKind::FftFilter => fft_filter_options(ui, &mut self.fft_filter),
+            AnalysisKind::IirFilter => super::filter_options::iir_options(ui, &mut self.filters.iir),
+            AnalysisKind::FirFilter => super::filter_options::fir_options(ui, &mut self.filters.fir),
             AnalysisKind::Envelope => envelope_options(ui, &mut self.envelope),
             AnalysisKind::Coherence => {
                 self.reference_options(ui);
@@ -2801,6 +2818,8 @@ impl AnalysisDialog {
             AnalysisKind::Hilbert => "hilbert",
             AnalysisKind::Fft => "fft1",
             AnalysisKind::FftFilter => "fft_filters",
+            AnalysisKind::IirFilter => "dfilter",
+            AnalysisKind::FirFilter => "",
             AnalysisKind::Envelope => "envelope",
             AnalysisKind::Coherence => "cohere",
             AnalysisKind::Decimate => "decimate",
@@ -2882,6 +2901,8 @@ impl AnalysisDialog {
             AnalysisKind::Hilbert => "The Hilbert transform of the input signals",
             AnalysisKind::Fft => "The frequency spectrum of the input signals",
             AnalysisKind::FftFilter => "Remove frequencies from the input signals",
+            AnalysisKind::IirFilter => "Design an IIR filter and apply it to the input signals",
+            AnalysisKind::FirFilter => "Design an FIR filter and apply it to the input signals",
             AnalysisKind::Envelope => "The upper and lower envelope of the input curves",
             AnalysisKind::Coherence => "The magnitude-squared coherence of the input signals with a second signal",
             AnalysisKind::Decimate => "Keep every n-th point of the input signals",
@@ -2958,7 +2979,9 @@ impl AnalysisDialog {
             | AnalysisKind::CurveMath
             | AnalysisKind::ColumnMath
             | AnalysisKind::Hilbert
-            | AnalysisKind::FftFilter => "New columns beside the input",
+            | AnalysisKind::FftFilter
+            | AnalysisKind::IirFilter
+            | AnalysisKind::FirFilter => "New columns beside the input",
             AnalysisKind::Envelope => "The envelopes of each input, each with its X, in a new sheet",
             AnalysisKind::Convolution => "The convolution of each input, with its X, in a new sheet",
             AnalysisKind::Decimate => "The kept points of each input, with their X, in a new sheet",
@@ -3117,6 +3140,8 @@ impl AnalysisDialog {
                 | AnalysisKind::ColumnMath
                 | AnalysisKind::Hilbert
                 | AnalysisKind::FftFilter
+                | AnalysisKind::IirFilter
+                | AnalysisKind::FirFilter
                 | AnalysisKind::SubtractLine
                 | AnalysisKind::TranslateY
                 | AnalysisKind::MedianFilter

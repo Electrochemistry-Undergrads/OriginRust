@@ -1169,7 +1169,8 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Decimation...", Cmd::Analyze(AnalysisKind::Decimate)),
                 item("Envelope...", Cmd::Analyze(AnalysisKind::Envelope)),
                 item("Hilbert Transform...", Cmd::Analyze(AnalysisKind::Hilbert)),
-                grey("IIR Filter..."),
+                item("IIR Filter...", Cmd::Analyze(AnalysisKind::IirFilter)),
+                item("FIR Filter...", Cmd::Analyze(AnalysisKind::FirFilter)),
                 grey("STFT..."),
                 grey_sub(
                     "Wavelet",

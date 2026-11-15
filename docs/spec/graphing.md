@@ -2431,6 +2431,39 @@ Sheaf's own choices, all unmeasured (no Origin at hand):
   warning names them and the `.opj.sheaf` companion keeps them. Files without the new fields load as Axis / Auto and
   are written back without them.
 
+### 18.9 Plot-only X sorting (T39)
+
+Origin's documented facts (from its help, not measured; [W:originlab.com/2023]): Origin 2023's
+"Line-Symbol Plot with automatic X value sorting" sorts the data of line and line-symbol plots
+by X "without having to sort the worksheet columns". It is a per-data-plot LabTalk property,
+`layer.plot1.line.sortx=1;`, and the graph can then be saved as a template. The Plot Details Line
+tab page lists no such option [W:origin-help/pd-dialog-line-tab], and no default is documented
+(taken as off).
+
+Sheaf's choices (all unmeasured; Origin's help does not say):
+
+- Field: `LineStyle::sort_x` (serde default false, omitted from `.sheaf` when false, so old files and
+  flag-off output are unchanged). "Apply to all" copies it with the rest of the line style and
+  Dependent group edits copy it from the leader.
+- UI: a check box "Sort X for line connection" at the top of the Line tab, offered only for Line and
+  Line + Symbol plots (Sheaf's own place and label). CLI `--sort-x` and the MCP `style.sort_x` set it on
+  the plots a command makes or restyles.
+- Order: the line joins the plotted rows by increasing drawn X (after multiplier and offset), computed
+  once per plot per draw (`PlotData::line_rows`). The sort is stable, so equal X keep worksheet order.
+  A row whose X is missing or not finite is left out of the path altogether (it neither connects
+  nor breaks it). A row with a missing Y keeps its sorted place and breaks the line between its
+  sorted neighbours, as a missing Y does in worksheet order.
+- Everything that follows the line path uses that order: straight, step, spline, B-spline and Bezier
+  connections (a spline needs strictly increasing X, which sorted data without ties meets), fill under
+  the curve in every mode, Gap to Symbol clearances, No Line Break for skipped points, the outer
+  endpoints of the Sidelines modes.
+- Per-point items (symbols, data labels, error bars, drop lines, masking) stay on their points and keep
+  worksheet painting order; the Data Reader and hit testing read worksheet rows. The worksheet is never
+  sorted.
+- Area, column, bar and other kinds ignore the flag. Sheaf has no exchanged X-Y layer for line
+  plots; horizontal bars are their own kinds.
+- `.opj`: the writer has no field for it; a save warning says so and the companion `.opj.sheaf` keeps it.
+
 ## 19. Printing (File > Print, Print Preview, Page Setup; T27)
 
 Measured in OriginPro 2016 (64-bit) through `tools/origin-ref/origin-screenshot.ps1 -FullScreen`

@@ -104,3 +104,30 @@ fn reversed_limits_put_the_tick_labels_in_decreasing_order_left_to_right() {
     // The X labels are written before the Y labels, so the first match is the X label.
     assert!(pos("10") < pos("6") && pos("6") < pos("0"), "labels are not in decreasing order");
 }
+
+/// The X pixel of every vertex of the red curve in an SVG.
+fn red_curve_xs(svg: &str) -> Vec<f64> {
+    let tag = svg.split("<path ").find(|t| t.contains("stroke=\"#FF0000\"")).expect("a red curve");
+    let d = tag.split("d=\"").nth(1).unwrap().split('"').next().unwrap();
+    d.split(['M', 'L']).filter(|s| !s.is_empty()).map(|s| s.split(' ').next().unwrap().parse().unwrap()).collect()
+}
+
+#[test]
+fn sort_x_connects_an_unsorted_curve_in_increasing_x_and_leaves_it_alone_without_the_flag() {
+    let dir = scratch("sortx");
+    let data = dir.join("unsorted.csv");
+    std::fs::write(&data, "t,v\ns,A\n3,2\n1,6\n2,4\n5,8\n4,1\n").unwrap();
+    let data = data.to_str().unwrap();
+    let (off, on) = (dir.join("off.svg"), dir.join("on.svg"));
+    let base = ["plot", data, "--template", "line", "--colors", "#ff0000", "--line-width", "3"];
+    let (ok, _, e) = sheaf(&[&base[..], &["-o", off.to_str().unwrap()]].concat());
+    assert!(ok, "{e}");
+    let (ok, _, e) = sheaf(&[&base[..], &["--sort-x", "-o", on.to_str().unwrap()]].concat());
+    assert!(ok, "{e}");
+    let xs_off = red_curve_xs(&std::fs::read_to_string(&off).unwrap());
+    let xs_on = red_curve_xs(&std::fs::read_to_string(&on).unwrap());
+    assert_eq!(xs_off.len(), 5);
+    assert!(xs_off.windows(2).any(|w| w[0] > w[1]), "worksheet order without the flag: {xs_off:?}");
+    assert_eq!(xs_on.len(), 5);
+    assert!(xs_on.windows(2).all(|w| w[0] < w[1]), "increasing X with --sort-x: {xs_on:?}");
+}

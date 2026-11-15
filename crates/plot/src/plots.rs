@@ -153,7 +153,7 @@ fn draw_fill_under(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, col
         }
         run.clear();
     };
-    for i in pd.rows() {
+    for i in pd.line_rows() {
         match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
             Some(p) => run.push(p),
             None => close(&mut run, &mut d, out),
@@ -212,7 +212,13 @@ fn draw_drop_lines(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, nex
             }
         }
         let stroke = |color: sheaf_core::Color| {
-            line_stroke(&LineStyle { color, width_pt: l.width_pt, dash: l.dash, connect: Connect::Straight })
+            line_stroke(&LineStyle {
+                color,
+                width_pt: l.width_pt,
+                dash: l.dash,
+                connect: Connect::Straight,
+                sort_x: false,
+            })
         };
         let path = |keep: &dyn Fn(f64) -> bool| {
             let mut d = String::new();
@@ -556,8 +562,14 @@ fn symbol_line_gaps(pd: &PlotData, geom: &LayerGeometry, stroke: &Stroke) -> Opt
     // Keep it beyond the symbol's half-size, including round stroke end caps.
     let cap = if stroke.cap == Cap::Round { stroke.width.max(0.0) / 2.0 } else { 0.0 };
     let radius = size * (0.5 + 0.3) + cap;
-    let rows: Box<dyn Iterator<Item = usize> + '_> =
-        if interface.no_break_skipped { Box::new(pd.point_rows()) } else { Box::new(pd.rows()) };
+    let rows: Box<dyn Iterator<Item = usize> + '_> = if !interface.no_break_skipped {
+        pd.line_rows()
+    } else if pd.plot.line.sort_x {
+        let shown: std::collections::BTreeSet<usize> = pd.point_rows().collect();
+        Box::new(pd.line_rows().filter(move |r| shown.contains(r)))
+    } else {
+        Box::new(pd.point_rows())
+    };
     crate::symbol_gaps::Gaps::new(rows.filter_map(|i| geom.checked_data_to_page(pd.x_at(i), pd.y_at(i))), radius)
 }
 
@@ -571,7 +583,8 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         (pd.plot.decor.fill_under.is_some() && !pd.plot.kind.is_area() && pd.plot.decor.fill_under_mode.is_sidelines())
             .then_some(pd.plot.decor.fill_under_mode);
     let ends = side_mode.and_then(|_| {
-        let mut points = pd.rows().filter_map(|i| geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)).map(|p| (i, p)));
+        let mut points =
+            pd.line_rows().filter_map(|i| geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)).map(|p| (i, p)));
         let first = points.next()?;
         Some((first, points.next_back().unwrap_or(first)))
     });
@@ -650,7 +663,7 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         }
     };
     let mut run: Option<Run> = None;
-    for i in pd.rows() {
+    for i in pd.line_rows() {
         match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
             Some(p) => {
                 first_row.get_or_insert(i);
@@ -739,7 +752,7 @@ fn spline_applies(pd: &PlotData) -> bool {
         return false;
     }
     let mut last = f64::NEG_INFINITY;
-    for i in pd.rows() {
+    for i in pd.line_rows() {
         let x = pd.x_at(i);
         if !x.is_finite() {
             continue;

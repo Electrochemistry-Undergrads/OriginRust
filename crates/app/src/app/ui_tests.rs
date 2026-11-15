@@ -22,6 +22,7 @@ mod live;
 mod lollipop;
 mod offset_multipliers;
 mod skip_points;
+mod sort_x;
 mod symbol_line_gaps;
 mod symbol_line_order;
 mod toolbar_print;

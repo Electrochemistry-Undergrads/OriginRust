@@ -58,7 +58,7 @@ Observed hint: the commented-out keys `defpagewidth=6400`, `defpageheight=4800`,
 | clip data to frame (+ margin %) | hide data outside frame | UNKNOWN | [W:pd-dialog-display-speed-tab] |
 | data on top of axes | draw data over axes | off | same |
 | grid on top of data; reference lines on top | draw order | off [INF] | same |
-| speed mode (max points per curve) | draw decimated data only; "Speed Mode is On" watermark never exported | off | same |
+| speed mode (max points per curve) | draw decimated data only; "Speed Mode is On" watermark never exported | worksheet data ticked, 3000 points per curve; matrix data unticked, 32 x 32 (measured in Origin 2016's Size/Speed tab, 18.7a) | same |
 | show axes / labels / data / frame | visibility toggles | on | same |
 | layer links | X and/or Y scale linked 1:1 to another layer | off | [F:laylink.OXF] |
 

@@ -15,7 +15,7 @@ fn column_with(id: u64, short: &str, designation: Designation, data: ColumnData,
 }
 
 fn sheet_of(name: &str, columns: Vec<Column>) -> Worksheet {
-    Worksheet { name: name.into(), columns, filter: None, frozen: Default::default() }
+    Worksheet { name: name.into(), columns, filter: None, frozen: Default::default(), cond_formats: Vec::new() }
 }
 
 /// A workbook of three sheets written by the exporter: two with data and header rows, one holding

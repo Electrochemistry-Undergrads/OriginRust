@@ -9,6 +9,13 @@ use egui_kittest::kittest::{By, NodeT, Queryable};
 use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
+mod autosave;
+mod excel;
+mod label_frames;
+mod label_whiteout;
+mod offset_multipliers;
+mod skip_points;
+
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-{tag}-{}", std::process::id()));
@@ -30,7 +37,7 @@ fn start(paths: Vec<PathBuf>) -> Harness<'static, SheafApp> {
 }
 
 fn start_auto_hide(paths: Vec<PathBuf>) -> Harness<'static, SheafApp> {
-    let startup = Startup { paths, screenshot: None, show: Vec::new() };
+    let startup = Startup { paths, ..Default::default() };
     // Short frames: a double click needs both clicks within 0.3 s of simulated time, and every
     // pointer event of a click is a frame of its own.
     let mut h = Harness::builder()
@@ -452,6 +459,27 @@ fn the_axis_dialog_switches_between_the_horizontal_and_the_vertical_axis() {
 }
 
 #[test]
+fn the_grids_tab_turns_on_the_opposite_line_and_a_line_at_zero_of_the_other_axis() {
+    let mut h = start(vec![data_file("axis-additional")]);
+    open_props(&mut h, 0, PropsTab::XAxis, None);
+    click(&mut h, "Grids");
+    // Origin labels the X axis page's line "Y =" (a horizontal line at that Y) and starts it at 0.
+    click(&mut h, "Y =");
+    click(&mut h, "Opposite");
+    assert_eq!(graph(&h).layers[0].x_axis.additional_line, Some(0.0));
+    assert!(graph(&h).layers[0].x_axis.show_opposite);
+    click(&mut h, "OK");
+    open_props(&mut h, 0, PropsTab::YAxis, None);
+    click(&mut h, "Grids");
+    click(&mut h, "X =");
+    assert_eq!(graph(&h).layers[0].y_axis.additional_line, Some(0.0));
+    click(&mut h, "OK");
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert_eq!(graph(&h).layers[0].y_axis.additional_line, None, "undo the Y axis change");
+    assert_eq!(graph(&h).layers[0].x_axis.additional_line, Some(0.0), "the X axis change was its own step");
+}
+
+#[test]
 fn a_change_on_the_scale_tab_fixes_the_limit() {
     let mut h = start(vec![data_file("axis-scale")]);
     open_props(&mut h, 0, PropsTab::YAxis, None);
@@ -512,6 +540,33 @@ fn the_layer_size_speed_and_display_tabs_show_origins_controls() {
     click(&mut h, "Grid on Top of Data");
     click(&mut h, "OK");
     assert!(graph(&h).layers[0].display.grid_on_top);
+}
+
+#[test]
+fn data_on_top_of_axes_can_be_cancelled_applied_and_undone() {
+    let mut h = start(vec![data_file("data-on-top")]);
+    let open_display = |h: &mut Harness<'static, SheafApp>| {
+        open_props(h, 0, PropsTab::Plots, None);
+        click(h, "Layer 1");
+        click(h, "Display");
+    };
+    open_display(&mut h);
+    assert!(!graph(&h).layers[0].display.data_on_top);
+    click(&mut h, "Data on Top of Axes");
+    assert!(graph(&h).layers[0].display.data_on_top);
+    click(&mut h, "Cancel");
+    assert!(!graph(&h).layers[0].display.data_on_top);
+
+    open_display(&mut h);
+    click(&mut h, "Data on Top of Axes");
+    click(&mut h, "Apply");
+    click(&mut h, "Data on Top of Axes");
+    click(&mut h, "Cancel");
+    assert!(graph(&h).layers[0].display.data_on_top, "Cancel keeps the applied value");
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert!(!graph(&h).layers[0].display.data_on_top);
+    menu(&mut h, "Edit", "Redo Change graph settings");
+    assert!(graph(&h).layers[0].display.data_on_top);
 }
 
 /// Origin's Link Axes Scales tab: only for a layer after the first; Straight on the Y side links the
@@ -1235,6 +1290,50 @@ fn file_export_graphs_opens_the_export_window_and_close_closes_it() {
 }
 
 #[test]
+fn file_page_setup_changes_the_project_setup_as_an_undo_step() {
+    use sheaf_core::page_setup::Orientation;
+    let mut h = start(vec![data_file("page-setup")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Page Setup..."]);
+    assert!(h.state().page_setup.is_some(), "Page Setup is open");
+    for label in ["Paper", "Size:", "Orientation", "Portrait", "Landscape", "Margins (inches)", "OK", "Cancel"] {
+        assert!(h.query_by_label(label).is_some(), "{label}");
+    }
+    assert_eq!(project(&h).page_setup, sheaf_core::page_setup::PageSetup::default());
+    click(&mut h, "Landscape");
+    click(&mut h, "OK");
+    assert!(h.state().page_setup.is_none());
+    assert_eq!(project(&h).page_setup.orientation, Orientation::Landscape);
+    assert_eq!(h.state().doc.undo_label(), Some("Page Setup"));
+    // Cancel changes nothing.
+    menu_path(&mut h, &["File", "Page Setup..."]);
+    click(&mut h, "Portrait");
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h).page_setup.orientation, Orientation::Landscape);
+}
+
+#[test]
+fn file_print_preview_opens_for_the_active_graph_and_ctrl_p_does_not_reach_a_printer() {
+    let mut h = start(vec![data_file("print-preview")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Print Preview"]);
+    assert!(h.state().print_preview.is_some(), "Print Preview is open");
+    for label in ["Print Preview", "Print...", "Page Setup...", "Close"] {
+        assert!(h.query_by_label(label).is_some(), "{label}");
+    }
+    // Its Page Setup button opens Page Setup.
+    click(&mut h, "Page Setup...");
+    assert!(h.state().page_setup.is_some());
+    click(&mut h, "Cancel");
+    click(&mut h, "Close");
+    assert!(h.state().print_preview.is_none());
+    // Ctrl+P runs the print command; under test it stops before the system dialog.
+    ctrl(&mut h, egui::Key::P);
+    assert!(h.state().message.is_none(), "no error box");
+    assert!(h.state().status.contains("Printing is skipped"), "{}", h.state().status);
+}
+
+#[test]
 fn export_graphs_dialog_has_origins_groups_and_buttons() {
     let mut h = start(vec![data_file("export-layout")]);
     show_window(&mut h, "Graph1 - sample");
@@ -1328,7 +1427,7 @@ fn export_graphs_psd_picker_writes_rgb_grey_and_indexed_images() {
     h.state_mut().export.as_mut().unwrap().set_path(&dir);
     let mut current = "24-bit Color";
     for (name, depth, mode) in
-        [("rgb", "24-bit Color", 3), ("grey", "8-bit Grayscale", 1), ("indexed", "256 Colors", 2)]
+        [("rgb", "24-bit Color", 3), ("grey", "8-bit Gray Scale", 1), ("indexed", "256 Colors", 2)]
     {
         if depth != current {
             h.get_by_value(current).click();
@@ -1519,6 +1618,21 @@ fn ifft_opens_from_signal_processing_and_takes_the_next_column_as_the_imaginary_
 }
 
 #[test]
+fn decimation_opens_from_signal_processing_and_writes_the_kept_points_to_a_new_sheet() {
+    let mut h = start(vec![data_file("decimate")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "Decimation..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("Decimate")).expect("a result sheet");
+    assert_eq!(sheet.columns.len(), 4, "X and Y for each of the two inputs");
+    assert_eq!(sheet.columns[0].numeric().unwrap(), [1.0, 3.0], "every second row");
+    assert_eq!(sheet.columns[1].numeric().unwrap(), [2.5, 6.5]);
+    assert_eq!(h.state().doc.undo_label(), Some("Decimation"));
+}
+
+#[test]
 fn fft_filters_open_from_signal_processing_and_add_a_column_per_input() {
     let mut h = start(vec![data_file("fftfilter")]);
     show_window(&mut h, "Book1 - sample");
@@ -1529,6 +1643,69 @@ fn fft_filters_open_from_signal_processing_and_add_a_column_per_input() {
     let added = b.sheet().columns.iter().filter(|c| c.comments.starts_with("FFT low pass filter of")).count();
     assert_eq!(added, 2);
     assert_eq!(h.state().doc.undo_label(), Some("FFT filter"));
+}
+
+#[test]
+fn envelope_opens_from_signal_processing_and_puts_its_curves_in_a_new_sheet() {
+    // Two peaks and two troughs with the default two points on each side.
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-envelope-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("sample.csv");
+    let mut text = String::from(
+        "t,up,down
+",
+    );
+    for i in 0..30 {
+        let t = f64::from(i);
+        text += &format!(
+            "{t},{},{}
+",
+            (t * 0.7).sin() + t * 0.05,
+            (t * 0.7).cos()
+        );
+    }
+    std::fs::write(&path, text).unwrap();
+    let mut h = start(vec![path]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "Envelope..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets.len(), 2, "the envelopes are in a new sheet");
+    let names: Vec<_> = b.sheets[1].columns.iter().map(|c| c.long_name.as_str()).collect();
+    assert_eq!(names, ["Envelope X 1", "Envelope Y 1", "Envelope X 1", "Envelope Y 1"]);
+    assert_eq!(h.state().doc.undo_label(), Some("Envelope"));
+}
+
+#[test]
+fn coherence_opens_from_signal_processing_and_writes_a_new_sheet() {
+    let mut h = start(vec![data_file("coherence")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "Coherence..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("Coherence")).expect("a result sheet");
+    assert_eq!(sheet.columns.len(), 4, "frequency and coherence for each of the two inputs");
+    // Origin's defaults: FFT length 256, so 129 frequencies; the 4 points are one segment.
+    assert_eq!(sheet.columns[1].numeric().unwrap().len(), 129);
+    assert_eq!(h.state().doc.undo_label(), Some("Coherence"));
+}
+
+#[test]
+fn trace_interpolation_opens_from_mathematics_and_writes_a_sheet_with_its_own_x() {
+    let mut h = start(vec![data_file("traceinterp")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Trace Interpolation..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("TraceInterp")).expect("a result sheet");
+    assert_eq!(sheet.columns.len(), 4, "an X and a Y column for each of the two inputs");
+    assert_eq!(sheet.columns[0].numeric().unwrap().len(), 100, "Origin's default number of points");
+    assert!(sheet.columns[1].comments.starts_with("linear trace interpolation of"));
+    assert_eq!(h.state().doc.undo_label(), Some("Trace interpolation"));
 }
 
 #[test]
@@ -2125,7 +2302,9 @@ fn every_command_of_a_workbook_is_reachable_from_its_origin_menu() {
         &["File", "Import", "Single ASCII..."],
         &["File", "Import", "Multiple ASCII..."],
         &["File", "Import", "Comma Delimited (CSV)..."],
+        &["File", "Import", "Excel (XLS, XLSX, XLSM)..."],
         &["File", "Export", "Worksheet as ASCII..."],
+        &["File", "Export", "Worksheet as Excel..."],
         &["File", "Exit"],
         &["Edit", "Undo"],
         &["Edit", "Delete"],
@@ -4293,6 +4472,121 @@ fn the_statistics_menu_runs_a_two_way_anova_with_text_factors() {
     assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
 }
 
+/// Statistics > Descriptive Statistics > Cross Tabulation...: two text columns, counts and tests in a new sheet.
+#[test]
+fn the_descriptive_menu_runs_a_cross_tabulation_of_text_columns() {
+    let data = csv_file(
+        "crosstab",
+        "survey",
+        "treated,better\ntreated,better\ntreated,same\ncontrol,same\ncontrol,same\ncontrol,better\ncontrol,same\ntreated,better\n",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - survey");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Cross Tabulation..."]);
+    assert!(h.state().analysis.is_some(), "the cross tabulation window is open");
+    for label in
+        ["Row variable", "Column variable", "Row percent", "Column percent", "Total percent", "Expected counts"]
+    {
+        assert!(has_label(&h, label), "{label} is missing");
+    }
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    let (sheet, counts) = result_column(&h, "better");
+    assert!(sheet.starts_with("Crosstab"), "{sheet}");
+    // Rows control and treated, then the total: 1 and 3 better, 4 in all.
+    assert_eq!(counts, vec![1.0, 3.0, 4.0]);
+    let (_, value) = result_column(&h, "Value");
+    assert!((value[0] - 2.0).abs() < 1e-12, "Pearson chi-square {value:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Cross tabulation"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+}
+
+const CROSSTAB_DATA: &str = "x,u,p\ny,v,q\nx,u,r\ny,v,p\nx,v,q\ny,u,r\n";
+
+/// The "..." picker of the Cross Tabulation window sets the row and column variable, so what the Input box
+/// shows is what OK runs on; the window offers no "X from" row range (the table has no X column).
+#[test]
+fn the_cross_tabulation_input_picker_sets_the_variables_and_offers_no_x_range() {
+    let mut h = start(vec![csv_file("crosstab-picker", "survey", CROSSTAB_DATA)]);
+    show_window(&mut h, "Book1 - survey");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Cross Tabulation..."]);
+    assert!(has_label(&h, "From row") && !has_label(&h, "X from"), "no X range for a table of factors");
+    click(&mut h, "...");
+    h.get_by_label("Select Input Columns");
+    // The columns A and B are ticked: untick B, tick C (the picker is drawn last).
+    h.query_all_by_label("B").last().expect("B in the picker").click();
+    settle(&mut h);
+    h.query_all_by_label("C").last().expect("C in the picker").click();
+    settle(&mut h);
+    h.query_all_by_label("OK").last().expect("the picker's OK").click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    // Rows x, y by columns p, q, r: the third variable was used, not g2.
+    let (_, p) = result_column(&h, "p");
+    assert_eq!(p, vec![1.0, 1.0, 2.0], "x and y once each with p, then the total");
+    let (_, r) = result_column(&h, "r");
+    assert_eq!(r, vec![1.0, 1.0, 2.0]);
+}
+
+/// Apply again after the row variable changes to one with more levels: the result sheet is replaced, not added
+/// to.
+#[test]
+fn applying_a_cross_tabulation_again_with_more_levels_replaces_its_sheet() {
+    let mut h = start(vec![csv_file("crosstab-again", "survey", CROSSTAB_DATA)]);
+    show_window(&mut h, "Book1 - survey");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Cross Tabulation..."]);
+    let sheets = |h: &Harness<'static, SheafApp>| project(h).workbooks().next().unwrap().sheets.len();
+    click(&mut h, "Apply");
+    assert_eq!(sheets(&h), 2);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("B")).click();
+    settle(&mut h);
+    h.query_all_by_label("C").last().expect("C in the list").click();
+    settle(&mut h);
+    click(&mut h, "Apply");
+    assert_eq!(sheets(&h), 2, "the earlier table is gone, the new one stays");
+    let (_, q) = result_column(&h, "q");
+    assert_eq!(q.len(), 3);
+    click(&mut h, "OK");
+    assert_eq!(sheets(&h), 2);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(sheets(&h), 1, "one undo removes every run of the window");
+}
+
+/// The two-way ANOVA window has no "X from" row range either.
+#[test]
+fn the_two_way_anova_window_offers_no_x_range() {
+    let mut h = start(vec![csv_file("anova2-xrange", "design", "a,b,y\nl,1,1\nl,2,2\nh,1,3\nh,2,5\n")]);
+    show_window(&mut h, "Book1 - design");
+    menu_path(&mut h, &["Statistics", "ANOVA", "Two-Way ANOVA..."]);
+    assert!(has_label(&h, "From row") && !has_label(&h, "X from"));
+}
+
+/// Statistics > ANOVA > One-Way ANOVA...: the Holm methods and Dunnett are in the list of means comparisons; Dunnett
+/// asks for the control group.
+#[test]
+fn the_one_way_anova_window_offers_the_holm_methods_and_dunnett() {
+    let mut h = start(vec![data_file("anova-dunnett")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "ANOVA", "One-Way ANOVA..."]);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Tukey")).click();
+    settle(&mut h);
+    assert!(has_label(&h, "Bonferroni-Holm") && has_label(&h, "Sidak-Holm") && has_label(&h, "Dunnett"));
+    click(&mut h, "Dunnett");
+    assert!(has_label(&h, "Control group"), "Dunnett asks for the control group");
+    click(&mut h, "OK");
+    let ws = project(&h).workbooks().next().unwrap().sheets.last().unwrap().clone();
+    let labels =
+        ws.columns.iter().find(|c| c.long_name == "Dunnett comparison").expect("the Dunnett table").text().unwrap();
+    assert_eq!(labels, ["down - up"], "the first column is the control");
+    assert_eq!(h.state().doc.undo_label(), Some("One-way ANOVA"));
+}
+
 /// Statistics > Nonparametric Tests > Mann-Whitney Test... with the two Y columns of the sheet.
 #[test]
 fn the_nonparametric_menu_runs_a_mann_whitney_test() {
@@ -4394,6 +4688,53 @@ fn the_descriptive_menu_runs_the_outlier_tests() {
         assert!(sheet.starts_with(sheet_prefix), "{label}: {sheet}");
         assert_eq!(values.len(), 2, "{label}: one row per chosen column");
         assert_eq!(h.state().doc.undo_label(), Some(undo));
+    }
+}
+
+/// Statistics > Descriptive Statistics > Distribution Fit...: five families for each of the chosen columns.
+#[test]
+fn the_descriptive_menu_fits_distributions() {
+    let mut h = start(vec![data_file("distfit")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Distribution Fit..."]);
+    assert!(h.state().analysis.is_some(), "the distribution fit window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, aic) = result_column(&h, "AIC");
+    assert!(sheet.starts_with("DistFit"), "{sheet}");
+    assert_eq!(aic.len(), 10, "five families for each of the two columns (t is not chosen)");
+    assert!(aic.iter().all(|v| v.is_finite()), "{aic:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Distribution fit"));
+}
+
+/// Statistics > Descriptive Statistics > Probability Plot... and Q-Q Plot...: a result sheet and a graph with
+/// points and a reference line; one undo removes both.
+#[test]
+fn the_descriptive_menu_makes_probability_and_qq_plot_graphs() {
+    for (label, sheet_prefix, y_scale, undo) in [
+        ("Probability Plot...", "ProbPlot", ScaleKind::Probability, "Probability plot"),
+        ("Q-Q Plot...", "QQPlot", ScaleKind::Linear, "Q-Q plot"),
+    ] {
+        let mut h = start(vec![data_file("probplot")]);
+        show_window(&mut h, "Book1 - sample");
+        let graphs_before = project(&h).graphs().count();
+        menu_path(&mut h, &["Statistics", "Descriptive Statistics", label]);
+        assert!(h.state().analysis.is_some(), "the window of {label} is open");
+        click(&mut h, "OK");
+        let (sheet, _) = result_column(&h, "Data (ordered)");
+        assert!(sheet.starts_with(sheet_prefix), "{label}: {sheet}");
+        let p = project(&h);
+        assert_eq!(p.graphs().count(), graphs_before + 1, "{label}");
+        let l = &p.graphs().last().unwrap().layers[0];
+        assert_eq!(l.plots.len(), 4, "{label}: points and a line for each of the two columns");
+        assert_eq!(l.plots[0].kind, PlotKind::Scatter);
+        assert_eq!(l.plots[1].kind, PlotKind::Line);
+        assert_eq!(l.y_axis.scale, y_scale, "{label}");
+        assert_eq!(h.state().doc.undo_label(), Some(undo));
+        let ctx = h.ctx.clone();
+        h.state_mut().apply(Action::Undo, &ctx);
+        settle(&mut h);
+        assert_eq!(project(&h).graphs().count(), graphs_before, "{label}: undo removes the graph");
     }
 }
 
@@ -5048,6 +5389,26 @@ fn auto_apply_runs_the_tool_again_after_each_change_and_replaces_its_result() {
     assert_eq!(cols(&h), 3, "one Undo removes everything the window did");
 }
 
+/// The probability and Q-Q plots make a sheet and a graph on each run, so Auto Apply is off for them and an option
+/// change adds nothing until Apply or OK.
+#[test]
+fn auto_apply_is_not_offered_for_the_plots_that_make_a_graph() {
+    for kind in [AnalysisKind::ProbPlot, AnalysisKind::QQPlot] {
+        let mut h = start(vec![data_file("auto-apply-prob")]);
+        open_analysis_on(&mut h, kind, &["B"]);
+        let graphs = project(&h).graphs().count();
+        assert!(is_disabled(&h, "Auto Apply"), "{kind:?}");
+        h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Normal")).click();
+        settle(&mut h);
+        click(&mut h, "Weibull");
+        settle(&mut h);
+        assert_eq!(project(&h).graphs().count(), graphs, "{kind:?}: an option change makes no graph");
+        assert!(h.state().analysis.is_some());
+        click(&mut h, "OK");
+        assert_eq!(project(&h).graphs().count(), graphs + 1, "{kind:?}");
+    }
+}
+
 #[test]
 fn the_analysis_window_cancel_changes_nothing() {
     let mut h = start(vec![data_file("frame-cancel")]);
@@ -5513,7 +5874,7 @@ fn y_error_without_an_error_column_still_plots_but_says_so() {
 }
 
 #[test]
-fn add_error_bars_gives_the_plots_the_error_column_of_their_sheet() {
+fn add_error_bars_chooses_one_plot_and_commits_only_on_ok() {
     let mut h = start(vec![data_file("adderr")]);
     let (book, graph) = window_ids(&h);
     let err = h
@@ -5524,18 +5885,43 @@ fn add_error_bars_gives_the_plots_the_error_column_of_their_sheet() {
         })
         .unwrap();
     settle(&mut h);
-    // Column C is the last Y column, so only its plot has an error column after it.
+    // The selected C curve starts with the adjacent error column as a suggestion.
+    h.state_mut().graphs.get_mut(&graph).unwrap().selected = Some((0, ObjectKind::Plot(1)));
     assert!(project(&h).graph(graph).unwrap().layers[0].plots.iter().all(|p| p.y_error.is_none()));
+    let revision = h.state().doc.revision();
     menu_path(&mut h, &["Graph", "Add Error Bars..."]);
+    assert!(h.state().error_bars.is_some());
+    assert_eq!(h.state().doc.revision(), revision, "opening does not change the project");
+    click(&mut h, "OK");
     let plots = &project(&h).graph(graph).unwrap().layers[0].plots;
     assert_eq!(plots[0].y_error, None, "B has no error column");
     assert_eq!(plots[1].y_error, Some(err));
     assert_eq!(h.state().doc.undo_label(), Some("Add error bars"));
-    // Nothing left to add: no new undo step, and a message.
+    assert!(h.state().error_bars.is_none());
+    let revision = h.state().doc.revision();
+    // Confirming the same column is a no-op, rather than another undo step.
     menu_path(&mut h, &["Graph", "Add Error Bars..."]);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.revision(), revision);
+    menu(&mut h, "Edit", "Undo Add error bars");
+    assert!(project(&h).graph(graph).unwrap().layers[0].plots.iter().all(|p| p.y_error.is_none()));
+    menu(&mut h, "Edit", "Redo Add error bars");
+    assert_eq!(project(&h).graph(graph).unwrap().layers[0].plots[1].y_error, Some(err));
     assert_eq!(h.state().doc.undo_label(), Some("Add error bars"));
-    assert!(h.state().status.contains("No error bars added"));
 }
+
+#[path = "ui_tests/error_bars.rs"]
+mod error_bars;
+
+#[path = "ui_tests/clipboard_origin.rs"]
+mod clipboard_origin;
+
+#[path = "ui_tests/clipboard_formats.rs"]
+mod clipboard_formats;
+
+mod label_panels;
+#[path = "ui_tests/stack_panels.rs"]
+mod stack_panels;
 
 #[test]
 fn update_legend_keeps_custom_text_and_adds_the_plots_it_lacks() {
@@ -7376,4 +7762,290 @@ fn a_drag_over_cells_selects_the_block_whatever_the_event_timing() {
     h.step();
     settle(&mut h);
     assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 2) }, "C");
+}
+
+// ----- Plot Details: the look settings ported from the `plot-details` branch (brief T13) ----------
+
+fn edit_graph(h: &mut Harness<'static, SheafApp>, edit: impl FnOnce(&mut sheaf_core::Graph) + 'static) {
+    let (_, id) = window_ids(h);
+    h.state_mut().doc.apply("Test edit", move |p| edit(p.graph_mut(id).unwrap()));
+    settle(h);
+}
+
+/// Types `text` into the n-th number box of the dialog (a click enters its text edit).
+fn type_into_number(h: &mut Harness<'static, SheafApp>, nth: usize, text: &str) {
+    let node = h.query_all_by_role(egui::accesskit::Role::SpinButton).nth(nth).expect("a number box");
+    node.click();
+    settle(h);
+    key_with(h, egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text(text.to_string()));
+    settle(h);
+    key(h, egui::Key::Enter);
+}
+
+#[test]
+fn deleting_a_column_resets_the_data_labels_and_x_error_that_name_it() {
+    use sheaf_core::graph::LabelForm;
+    let mut p = Project::new();
+    let book = p.add_workbook("w");
+    let names = p.add_column(book, 0, Designation::X, ColumnData::text(vec!["a".into(), "b".into()])).unwrap();
+    let y1 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let ex = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.1, 0.1])).unwrap();
+    let g = p.plot_columns(Template::Line, &[y1]).unwrap();
+    {
+        let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
+        plot.decor.labels.enable = true;
+        plot.decor.labels.form = LabelForm::Column { column: names };
+        plot.x_error = Some(ex);
+        plot.y_base = Some(ex);
+    }
+    delete_columns(&mut p, &[names, ex]);
+    let graph = p.graph(g).unwrap();
+    let plot = &graph.layers[0].plots[0];
+    assert_eq!(plot.decor.labels.form, LabelForm::Y);
+    assert!(plot.decor.labels.enable, "the labels stay on");
+    assert_eq!((plot.x_error, plot.y_base), (None, None));
+    assert!(!graph.referenced_columns().contains(&names));
+}
+
+#[test]
+fn the_pattern_tab_of_columns_and_areas_sets_pattern_and_gradient_and_a_line_has_none() {
+    use sheaf_core::graph::FillPattern;
+    let mut h = start(vec![data_file("pd-pattern")]);
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    assert!(!has_label(&h, "Pattern"), "a line plot has no Pattern tab");
+    click(&mut h, "Cancel");
+    edit_graph(&mut h, |g| g.layers[0].plots[0].kind = PlotKind::Column);
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    h.query_all_by_label("Pattern").next().expect("the Pattern tab").click();
+    settle(&mut h);
+    h.get_by_value("None").click();
+    settle(&mut h);
+    click(&mut h, "Cross");
+    assert_eq!(graph(&h).layers[0].plots[0].decor.fill.pattern, FillPattern::Cross);
+    click(&mut h, "Fill with a gradient");
+    assert!(graph(&h).layers[0].plots[0].decor.fill.gradient.is_some());
+    click(&mut h, "OK");
+    // The figure draws the hatch and the bands.
+    let (_, id) = window_ids(&h);
+    let scene = sheaf_plot::graph_scene(project(&h), id).unwrap();
+    assert!(scene.layers[0].plots.len() > 8, "bands and hatch lines: {}", scene.layers[0].plots.len());
+    // An area plot has the tab too.
+    edit_graph(&mut h, |g| g.layers[0].plots[0].kind = PlotKind::Area);
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    assert!(has_label(&h, "Pattern"));
+    assert!(!has_label(&h, "Spacing"), "areas have no bar spacing");
+}
+
+#[test]
+fn the_fill_under_the_curve_has_pattern_and_transparency_controls_on_the_line_tab() {
+    let mut h = start(vec![data_file("pd-fill")]);
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    click(&mut h, "Line");
+    assert!(!has_label(&h, "Pattern Color"), "no fill, no fill controls");
+    click(&mut h, "Fill Area Under Curve");
+    assert!(has_label(&h, "Pattern Color") && has_label(&h, "Gradient Fill"));
+    click(&mut h, "Fill with a gradient");
+    assert!(graph(&h).layers[0].plots[0].decor.fill.gradient.is_some());
+}
+
+#[test]
+fn the_spacing_tab_sets_the_bar_width_in_percent() {
+    let mut h = start(vec![data_file("pd-spacing")]);
+    edit_graph(&mut h, |g| {
+        for p in &mut g.layers[0].plots {
+            p.kind = PlotKind::Column;
+        }
+    });
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    click(&mut h, "Spacing");
+    assert_eq!(graph(&h).layers[0].bars.width_pct, None);
+    click(&mut h, "Set");
+    assert_eq!(graph(&h).layers[0].bars.width_pct, Some(80.0), "starts at the width the gap gives");
+    click(&mut h, "OK");
+    let (_, id) = window_ids(&h);
+    // The bars are narrower than the default width of 80 % once the width is 40 %.
+    let widest = |h: &Harness<'static, SheafApp>| {
+        let scene = sheaf_plot::graph_scene(project(h), id).unwrap();
+        scene.layers[0]
+            .plots
+            .iter()
+            .filter_map(|i| match i {
+                sheaf_plot::scene::Item::Rect { rect, .. } => Some(rect.w),
+                _ => None,
+            })
+            .fold(0.0, f64::max)
+    };
+    let at_80 = widest(&h);
+    edit_graph(&mut h, |g| g.layers[0].bars.width_pct = Some(40.0));
+    assert!(widest(&h) < at_80 * 0.6, "{} vs {at_80}", widest(&h));
+}
+
+#[test]
+fn the_label_tab_reads_a_column_and_sets_decimals_rows_and_offsets() {
+    use sheaf_core::graph::LabelForm;
+    let mut h = start(vec![data_file("pd-label")]);
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    click(&mut h, "Label");
+    click(&mut h, "Enable");
+    for label in ["Horizontal Offset", "Vertical Offset", "Decimal Places", "Show at Specified Rows Only"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    h.get_by_value("Y").click();
+    settle(&mut h);
+    h.query_all_by_label_contains("Column Book1").next().expect("the columns are in the form list").click();
+    settle(&mut h);
+    assert!(matches!(graph(&h).layers[0].plots[0].decor.labels.form, LabelForm::Column { .. }));
+    click(&mut h, "Set");
+    assert_eq!(graph(&h).layers[0].plots[0].decor.labels.decimals, Some(2));
+}
+
+#[test]
+fn the_group_tab_has_subgrouping_and_use_this_style_copies_the_look_settings() {
+    use sheaf_core::graph::{FillPattern, Subgrouping};
+    let mut h = start(vec![data_file("pd-subgroup")]);
+    edit_graph(&mut h, |g| {
+        let p = &mut g.layers[0].plots[0];
+        p.decor.fill.pattern = FillPattern::Cross;
+        p.decor.labels.enable = true;
+        p.decor.drop.vertical.on = true;
+        // The second plot has its own fill colour under the curve.
+        g.layers[0].plots[1].decor.fill_under = Some(sheaf_core::Color::rgb(1, 2, 3));
+        g.layers[0].plots[0].decor.fill_under = Some(sheaf_core::Color::rgb(9, 9, 9));
+    });
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    click(&mut h, "Group");
+    assert!(has_label(&h, "Subgrouping") && has_label(&h, "Subgroup on Increment"));
+    click(&mut h, "By Size");
+    assert_eq!(graph(&h).layers[0].group_style.subgrouping, Subgrouping::BySize { size: 2 });
+    click(&mut h, "Use this style for all plots");
+    let g = graph(&h);
+    let second = &g.layers[0].plots[1];
+    assert_eq!(second.decor.fill.pattern, FillPattern::Cross, "the pattern goes to the other plots");
+    assert!(second.decor.labels.enable && second.decor.drop.vertical.on);
+    assert_eq!(second.decor.fill_under, Some(second.line.color), "the fill under the curve keeps its own colour");
+}
+
+#[test]
+fn the_display_tab_switches_the_x_and_y_axes_and_the_background_has_gradient_and_border() {
+    let mut h = start(vec![data_file("pd-display")]);
+    let (_, id) = window_ids(&h);
+    let texts = |h: &Harness<'static, SheafApp>| {
+        let scene = sheaf_plot::graph_scene(project(h), id).unwrap();
+        scene.layers[0].overlay.iter().filter(|i| matches!(i, sheaf_plot::scene::Item::Text(_))).count()
+    };
+    let full = texts(&h);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Display");
+    assert!(!is_disabled(&h, "X Axes") && !is_disabled(&h, "Y Axes"));
+    click(&mut h, "X Axes");
+    assert!(!graph(&h).layers[0].display.show_x_axes && graph(&h).layers[0].display.show_y_axes);
+    click(&mut h, "OK");
+    assert!(texts(&h) < full, "the X tick labels and title are gone");
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Background");
+    assert!(is_disabled(&h, "Fill with a gradient"), "a gradient needs a colour");
+    edit_graph(&mut h, |g| g.layers[0].background = Some(sheaf_core::Color::rgb(200, 220, 255)));
+    click(&mut h, "Fill with a gradient");
+    assert!(graph(&h).layers[0].background_style.gradient.is_some());
+    click(&mut h, "Draw a border line");
+    assert!(graph(&h).layers[0].background_style.border.is_some());
+}
+
+#[test]
+fn the_page_tabs_have_miscellaneous_title_and_border_and_the_layer_icons_can_be_hidden() {
+    use sheaf_core::graph::TitleDisplay;
+    let mut h = start(vec![data_file("pd-page2")]);
+    edit_graph(&mut h, |g| g.long_name = "Scan".into());
+    open_props(&mut h, 0, PropsTab::Page, None);
+    for tab in ["Print/Dimensions", "Miscellaneous", "Display", "Legends/Titles"] {
+        assert!(has_label(&h, tab), "the page tab {tab}");
+    }
+    click(&mut h, "Legends/Titles");
+    h.get_by_value("Short and long name").click();
+    settle(&mut h);
+    click(&mut h, "Short name");
+    assert_eq!(graph(&h).page.style.title_display, TitleDisplay::Name);
+    click(&mut h, "Display");
+    click(&mut h, "Draw a border line");
+    assert!(graph(&h).page.style.border.is_some());
+    click(&mut h, "Miscellaneous");
+    h.query_all_by_role(egui::accesskit::Role::MultilineTextInput).next().expect("the comments box").click();
+    settle(&mut h);
+    h.event(egui::Event::Text("a note".to_string()));
+    settle(&mut h);
+    assert_eq!(graph(&h).page.style.comments, "a note");
+    // The icons are there until the tick is taken away; then the layer icon's menu is gone.
+    let icon = graph_ui(&h).page_point(0.0, 0.0).unwrap() + egui::vec2(9.0, 9.0);
+    click(&mut h, "Show the layer icons");
+    assert!(!graph(&h).page.style.layer_icons);
+    click(&mut h, "OK");
+    right_click_at(&mut h, icon);
+    assert!(h.query_by_label_contains("Hide Layer").is_none(), "no layer icon at the corner");
+    close_menus(&mut h);
+    edit_graph(&mut h, |g| g.page.style.layer_icons = true);
+    right_click_at(&mut h, icon);
+    assert!(h.query_by_label_contains("Hide Layer").is_some(), "the layer icon is back");
+}
+
+#[test]
+fn the_comments_of_a_graph_are_the_hover_text_of_its_name_in_the_object_manager() {
+    let mut h = start(vec![data_file("pd-comments")]);
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    edit_graph(&mut h, |g| g.page.style.comments = "taken on the new cell".into());
+    let name = project(&h).graphs().next().unwrap().name.clone();
+    let at = in_right_panel(&h, &name);
+    move_pointer(&mut h, at);
+    h.run_steps(60);
+    assert!(h.query_by_label("taken on the new cell").is_some(), "the comments show as a tooltip");
+}
+
+#[test]
+fn print_dimensions_resizes_the_page_with_or_without_keeping_the_layers_the_same_size() {
+    let mut h = start(vec![data_file("pd-resize")]);
+    let (before_w, before_h) = (graph(&h).page.width_pt, graph(&h).page.height_pt);
+    let frame = graph(&h).layers[0].frame;
+    open_props(&mut h, 0, PropsTab::Page, None);
+    // The width is the first number box (in inches): double it. The layer grows with the page.
+    type_into_number(&mut h, 0, &format!("{}", before_w * 2.0 / 72.0));
+    assert!((graph(&h).page.width_pt - before_w * 2.0).abs() < 0.01, "{}", graph(&h).page.width_pt);
+    assert_eq!(graph(&h).layers[0].frame, frame, "the layers grow with the page");
+    assert_eq!(graph(&h).page.height_pt, before_h);
+    // With the tick the layer keeps its width in points.
+    click(&mut h, "Keep the size of the layers when the page is resized");
+    type_into_number(&mut h, 0, &format!("{}", before_w * 3.0 / 72.0));
+    let g = graph(&h);
+    assert!((g.page.width_pt - before_w * 3.0).abs() < 0.01, "{}", g.page.width_pt);
+    assert!((g.layers[0].frame.width * g.page.width_pt - frame.width * before_w * 2.0).abs() < 0.05);
+}
+
+#[test]
+fn the_size_tab_edits_the_layer_area_and_a_linked_layer_shows_fractions_of_its_parent() {
+    let mut h = start(vec![data_file("pd-size")]);
+    let (_, g) = window_ids(&h);
+    h.state_mut().doc.apply("Double Y", |p| {
+        p.add_right_y_layer(g, 0).unwrap();
+    });
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Size/Speed");
+    // The first number box is Left, in % of the page.
+    type_into_number(&mut h, 0, "25");
+    assert!((graph(&h).layers[0].frame.left - 0.25).abs() < 1e-9, "{:?}", graph(&h).layers[0].frame);
+    // The right Y layer follows layer 1: its values are fractions of that layer's area, in %.
+    click(&mut h, "Layer 2");
+    click(&mut h, "Size/Speed");
+    assert!(has_label_containing(&h, "This layer follows layer 1"));
+    let parent = graph(&h).layers[0].frame;
+    type_into_number(&mut h, 0, "10");
+    let child = graph(&h).layers[1].frame;
+    assert!((child.left - 0.10).abs() < 1e-9, "a fraction of the parent's area: {child:?}");
+    assert_eq!(graph(&h).layers[0].frame, parent, "the parent did not move");
+}
+
+fn has_label_containing(h: &Harness<'static, SheafApp>, text: &str) -> bool {
+    h.query_all_by_label_contains(text).next().is_some()
 }

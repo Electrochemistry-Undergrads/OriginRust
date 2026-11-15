@@ -203,7 +203,7 @@ fn the_gap_of_the_bars_comes_back_and_the_overlap_is_named() {
         for y in [5, 6] {
             p.add_plot_xy(id, 0, None, c[y], None).unwrap();
         }
-        p.graph_mut(id).unwrap().layers[0].bars = BarSpacing { gap_pct: gap, overlap_pct: 0.0 };
+        p.graph_mut(id).unwrap().layers[0].bars = BarSpacing { gap_pct: gap, overlap_pct: 0.0, width_pct: None };
         let (imp, out) = round_trip(&p);
         assert!(out.warnings.is_empty(), "gap {gap}: {:?}", out.warnings);
         assert!((imp.graphs[0].layers[0].bars.gap_pct - gap).abs() < 0.02, "gap {gap}");
@@ -212,7 +212,7 @@ fn the_gap_of_the_bars_comes_back_and_the_overlap_is_named() {
     let c = ids(&p);
     let id = p.add_graph(Template::Column);
     p.add_plot_xy(id, 0, None, c[5], None).unwrap();
-    p.graph_mut(id).unwrap().layers[0].bars = BarSpacing { gap_pct: 30.0, overlap_pct: 40.0 };
+    p.graph_mut(id).unwrap().layers[0].bars = BarSpacing { gap_pct: 30.0, overlap_pct: 40.0, width_pct: None };
     let (imp, out) = round_trip(&p);
     assert!(out.warnings.iter().any(|w| w.contains("overlap")), "{:?}", out.warnings);
     assert!(!out.warnings.iter().any(|w| w.contains("gap")), "{:?}", out.warnings);
@@ -634,4 +634,42 @@ fn plot_decorations_and_a_layer_background_are_named_in_the_save_warnings() {
     let (_, out) = round_trip(&p);
     assert!(out.warnings.iter().any(|w| w.contains("layer background")), "{:?}", out.warnings);
     assert!(out.warnings.iter().any(|w| w.contains("drop lines")), "{:?}", out.warnings);
+}
+
+#[test]
+fn the_plot_details_settings_the_file_cannot_hold_are_named_in_the_save_warnings() {
+    let mut p = one_layer(|l| {
+        l.bars.width_pct = Some(70.0);
+        l.group_style.subgrouping = Subgrouping::BySize { size: 2 };
+        l.display.show_x_axes = false;
+        l.background_style.gradient = Some(Gradient::new(Color::WHITE));
+        let d = &mut l.plots[0].decor;
+        d.fill.pattern = FillPattern::Cross;
+        d.fill_under = Some(Color::RED);
+        d.labels.enable = true;
+        d.labels.form = LabelForm::Y;
+    });
+    let id = p.graphs().next().unwrap().id;
+    p.graph_mut(id).unwrap().page.style.border = Some(BorderStyle::solid(Color::BLACK, 1.0));
+    let (_, out) = round_trip(&p);
+    for word in [
+        "pattern, transparency and gradient",
+        "width of column bars",
+        "Group tab",
+        "Display tab",
+        "gradient and border",
+        "page's border",
+    ] {
+        assert!(out.warnings.iter().any(|w| w.contains(word)), "{word}: {:?}", out.warnings);
+    }
+    // The notes say only what is true: the Group tab is not written at all (the colours of grouped
+    // plots have a warning of their own), and a column width reopens with the gap setting, not
+    // with the spacing the width gave on screen.
+    let note = |word: &str| out.warnings.iter().find(|w| w.contains(word)).cloned().unwrap();
+    assert!(!note("Group tab").contains("colours were"), "{}", note("Group tab"));
+    assert!(!note("width of column bars").contains("gap between bars was"), "{}", note("width of column bars"));
+    assert!(note("width of column bars").contains("gap setting"));
+    // A graph without them warns about none of it.
+    let (_, out) = round_trip(&one_layer(|_| {}));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
 }

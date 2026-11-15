@@ -19,6 +19,15 @@ pub enum ColumnRef {
     Long(String),
     /// `col(3)` or `wcol(3)`: 1-based position in the sheet.
     Index(usize),
+    /// `[Book]Sheet!col(A)` or `Sheet!col(A)`. Without a book, use the formula's workbook.
+    Scoped { book: Option<String>, sheet: WorksheetRef, column: Box<ColumnRef> },
+}
+
+/// A worksheet selected by its name or its 1-based position within a workbook.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum WorksheetRef {
+    Name(String),
+    Index(usize),
 }
 
 /// A built-in column header row, using Origin's label-row characters.
@@ -50,6 +59,15 @@ impl std::fmt::Display for ColumnRef {
             ColumnRef::Short(s) => write!(f, "col({s})"),
             ColumnRef::Long(s) => write!(f, "col(\"{s}\")"),
             ColumnRef::Index(n) => write!(f, "col({n})"),
+            ColumnRef::Scoped { book, sheet, column } => {
+                if let Some(book) = book {
+                    write!(f, "[{book}]")?;
+                }
+                match sheet {
+                    WorksheetRef::Name(name) => write!(f, "{name}!{column}"),
+                    WorksheetRef::Index(index) => write!(f, "{index}!{column}"),
+                }
+            }
         }
     }
 }
@@ -61,11 +79,17 @@ pub(crate) enum UnOp {
     Not,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct Node {
     pub kind: Kind,
     depth: u32,
     pos: usize,
+}
+
+impl Clone for Node {
+    fn clone(&self) -> Self {
+        crate::eval::grow_stack(|| Self { kind: self.kind.clone(), depth: self.depth, pos: self.pos })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +111,12 @@ pub(crate) enum Kind {
     Label {
         r: ColumnRef,
         label: ColumnLabel,
+        text: bool,
+    },
+    /// A user parameter row. Numeric reads are missing; use `value(...$)` to convert text.
+    Parameter {
+        r: ColumnRef,
+        name: String,
         text: bool,
     },
     Unary(UnOp, Box<Node>),
@@ -119,7 +149,12 @@ impl Node {
     /// Builds a node, rejecting trees that are nested too deeply.
     pub(crate) fn new(kind: Kind, pos: usize) -> Result<Node, ExprError> {
         let child_depth = match &kind {
-            Kind::Num(_) | Kind::Str(_) | Kind::Var { .. } | Kind::Col { .. } | Kind::Label { .. } => 0,
+            Kind::Num(_)
+            | Kind::Str(_)
+            | Kind::Var { .. }
+            | Kind::Col { .. }
+            | Kind::Label { .. }
+            | Kind::Parameter { .. } => 0,
             Kind::Unary(_, a) | Kind::Text(a) => a.depth,
             Kind::Binary(_, a, b) | Kind::Index { base: a, idx: b } => a.depth.max(b.depth),
             Kind::Cond(a, b, c) | Kind::Range { base: a, from: b, to: c, .. } => a.depth.max(b.depth).max(c.depth),
@@ -135,7 +170,12 @@ impl Node {
     pub(crate) fn walk(&self, f: &mut impl FnMut(&Node)) {
         f(self);
         match &self.kind {
-            Kind::Num(_) | Kind::Str(_) | Kind::Var { .. } | Kind::Col { .. } | Kind::Label { .. } => {}
+            Kind::Num(_)
+            | Kind::Str(_)
+            | Kind::Var { .. }
+            | Kind::Col { .. }
+            | Kind::Label { .. }
+            | Kind::Parameter { .. } => {}
             Kind::Unary(_, a) | Kind::Text(a) => a.walk(f),
             Kind::Binary(_, a, b) | Kind::Index { base: a, idx: b } => {
                 a.walk(f);
@@ -147,6 +187,43 @@ impl Node {
                 c.walk(f);
             }
             Kind::Call { args, .. } => args.iter().for_each(|n| n.walk(f)),
+        }
+    }
+
+    fn resolve_parameters(&mut self, host: &dyn crate::Host) {
+        crate::eval::grow_stack(|| self.resolve_parameters_inner(host));
+    }
+
+    fn resolve_parameters_inner(&mut self, host: &dyn crate::Host) {
+        match &mut self.kind {
+            Kind::Unary(_, a) | Kind::Text(a) => a.resolve_parameters(host),
+            Kind::Binary(_, a, b) | Kind::Index { base: a, idx: b } => {
+                a.resolve_parameters(host);
+                b.resolve_parameters(host);
+            }
+            Kind::Cond(a, b, c) | Kind::Range { base: a, from: b, to: c, .. } => {
+                a.resolve_parameters(host);
+                b.resolve_parameters(host);
+                c.resolve_parameters(host);
+            }
+            Kind::Call { args, .. } => args.iter_mut().for_each(|a| a.resolve_parameters(host)),
+            _ => {}
+        }
+        let replacement = match &self.kind {
+            Kind::Index { base, idx }
+                if let Kind::Col { r, .. } = &base.kind
+                    && let Kind::Var { name, .. } = &idx.kind
+                    && (host.column_parameter(r, name).is_some() || (name != "i" && host.variable(name).is_none())) =>
+            {
+                Some(Kind::Parameter { r: r.clone(), name: name.clone(), text: false })
+            }
+            Kind::Text(a) if let Kind::Parameter { r, name, .. } = &a.kind => {
+                Some(Kind::Parameter { r: r.clone(), name: name.clone(), text: true })
+            }
+            _ => None,
+        };
+        if let Some(kind) = replacement {
+            self.kind = kind;
         }
     }
 }
@@ -188,6 +265,34 @@ impl Expr {
     /// The text this expression was parsed from.
     pub fn source(&self) -> &str {
         &self.source
+    }
+
+    /// Checks column references without evaluating functions or allocating output rows.
+    /// Useful when a caller must report a missing source before deciding how many rows to fill.
+    pub fn validate_columns(&self, host: &dyn crate::Host) -> Result<(), ExprError> {
+        let mut error = None;
+        self.root.walk(&mut |node| {
+            let column = match &node.kind {
+                Kind::Col { r, .. } | Kind::Label { r, .. } | Kind::Parameter { r, .. } => Some(r),
+                _ => None,
+            };
+            if error.is_none()
+                && let Some(r) = column
+                && !host.has_column(r)
+            {
+                error = Some(ExprError::at(node.pos(), format!("unknown column {r}")));
+            }
+        });
+        error.map_or(Ok(()), Err)
+    }
+
+    /// Resolves named subscripts against a host before inspecting dependencies. A parameter row
+    /// takes precedence over a variable; otherwise a known variable (including `i`) still indexes
+    /// data. An unknown name is an empty parameter row, as in Origin. Evaluation does this too.
+    pub fn resolve_parameters(&self, host: &dyn crate::Host) -> Self {
+        let mut resolved = self.clone();
+        resolved.root.resolve_parameters(host);
+        resolved
     }
 
     /// The free identifiers of the expression, in order of first use, without duplicates.
@@ -252,12 +357,32 @@ impl Expr {
         self.column_refs(false, true)
     }
 
+    /// Whether this resolved expression reads user parameter rows.
+    pub fn reads_parameters(&self) -> bool {
+        let mut found = false;
+        self.root.walk(&mut |n| found |= matches!(n.kind, Kind::Parameter { .. }));
+        found
+    }
+
+    /// Columns whose user parameter rows are read, after resolving named subscripts.
+    pub fn parameter_columns(&self) -> Vec<ColumnRef> {
+        let mut out = Vec::new();
+        self.root.walk(&mut |n| {
+            if let Kind::Parameter { r, .. } = &n.kind
+                && !out.contains(r)
+            {
+                out.push(r.clone());
+            }
+        });
+        out
+    }
+
     fn column_refs(&self, data: bool, labels: bool) -> Vec<ColumnRef> {
         let mut out: Vec<ColumnRef> = Vec::new();
         self.root.walk(&mut |n| {
             let r = match &n.kind {
                 Kind::Col { r, .. } if data => Some(r),
-                Kind::Label { r, .. } if labels => Some(r),
+                Kind::Label { r, .. } | Kind::Parameter { r, .. } if labels => Some(r),
                 _ => None,
             };
             if let Some(r) = r

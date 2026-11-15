@@ -273,6 +273,9 @@ impl Writer {
         if graph.page.background != Color::WHITE {
             notes.push("the page background colour was not written (Origin's page is white)".into());
         }
+        if !graph.page.style.is_default() {
+            notes.push("the page's border, layer icons, window title choice and comments were not written".into());
+        }
         let spec = WindowSpec {
             name: &name,
             label: &label,
@@ -329,6 +332,12 @@ impl Writer {
         if layer.background.is_some() {
             notes.push("a layer background colour was not written (the companion file keeps it)".into());
         }
+        if !layer.background_style.is_default() {
+            notes.push("the gradient and border of a layer's background were not written".into());
+        }
+        if !layer.group_style.is_default() {
+            notes.push("the Group tab of a layer (edit mode, increments, subgroups) was not written".into());
+        }
         if !layer.display.is_default() {
             notes.push("the Display tab of a layer (data hidden, not clipped, grid on top) was not written".into());
         }
@@ -364,12 +373,12 @@ impl Writer {
             if p.rows.is_some() {
                 notes.push("a plot's row range was not written; all rows of its columns are plotted".into());
             }
-            if p.symbol.every != 1 && p.kind.has_symbols() {
-                notes.push("symbols on every n-th point only were not written; every point has a symbol".into());
+            if p.symbol.every > 1 && p.kind.supports_skip_points() {
+                notes.push("Skip Points (symbols, drop lines, error bars and labels on every n-th point only) was not written; the companion file keeps it".into());
             }
             if !p.decor.is_default() {
                 notes.push(
-                    "drop lines, fills under curves and data labels were not written (the companion file keeps them)"
+                    "drop lines, fills under curves (with their pattern, transparency and gradient) and data labels were not written (the companion file keeps them)"
                         .into(),
                 );
             }
@@ -1028,6 +1037,9 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
                 .into(),
         );
     }
+    if layer.plot_offsets.iter().any(|o| o.x_multiplier != 1.0 || o.y_multiplier != 1.0) {
+        notes.push("plot X/Y multipliers were not written; Origin shows the source values with offsets only (the .opj.sheaf companion keeps the multipliers)".into());
+    }
     if layer.coords.polar().is_some_and(|p| p.radar) {
         notes.push(
             "the radar layer was not written; its plots went out as plain line + symbol plots on rectangular axes"
@@ -1047,6 +1059,9 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
     if layer.bars.overlap_pct != 0.0 {
         notes.push("the overlap of column bars was not written; bars stand side by side".into());
     }
+    if layer.bars.width_pct.is_some() {
+        notes.push("the width of column bars (in percent) was not written; the bars reopen with the layer's gap setting instead".into());
+    }
     if layer.legend.visible && layer.legend.columns > 1 {
         notes.push("the number of columns of the legend was not written; its entries stand in one column".into());
     }
@@ -1065,6 +1080,9 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         }
         if axis.axis_break.is_some() {
             notes.push("an axis break was not written".into());
+        }
+        if axis.additional_line.is_some() {
+            notes.push("an additional line at a value of the other axis (Grids tab) was not written".into());
         }
         if !axis.special_ticks.is_empty() || !axis.tick_label_formula.is_empty() || axis.minor_tick_labels {
             notes.push("special ticks, tick label formulas and minor tick labels were not written".into());

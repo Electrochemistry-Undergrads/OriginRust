@@ -153,7 +153,8 @@ the default project format.
         View > Status Bar, File > Close (keeps data), Window > Duplicate (independent workbook
         columns or a graph sharing its data); interpolation menu presets (2026-11-13)
   - [ ] Peak Analyzer wizard (T04), Import Wizard pages 2-6 measured against Origin (T19 item 2),
-        remaining Plot Details/axis controls and separate Layer Contents/Plot Setup dialogs (T13)
+        remaining Plot Details/axis controls and separate Layer Contents/Plot Setup dialogs
+        (T13; Individual X/Y multipliers, Skip Points, White Out and label Frame/Margin now available)
   - [ ] Owner's click-through; remaining dialog options listed in each brief
 - [x] Write `.opj`: workbooks (names, long names, units, comments, designations, text and numbers),
       verified by opening the files in Origin and comparing every cell (`sheaf export ... -o
@@ -253,6 +254,15 @@ the default project format.
       (T05). PSD is a flattened RGB, grayscale or indexed image with resolution metadata.
       TIFF also supports indexed 256 colors with None/PackBits/LZW compression.
       Graph/dialog themes, mono and 16-color modes remain
+- [ ] Printing (T27): Windows graph print dialog, Print Preview and saved Page Setup exist;
+      `sheaf print` writes paper-sized vector PDF and submits through `lp` on macOS/Linux.
+      Workbook printing, native macOS panel and Windows CLI submission remain
+- [x] MCP server (T25 phase 1, branch `mcp-server`): `sheaf-mcp` speaks the Model Context Protocol over
+      stdio so Claude and other AI tools can import, plot, analyze, fit, export and save through the
+      shared `sheaf-ops` crate; file access is limited to `--root` folders. Phase 2 (act on the open
+      desktop app) is left; `analyze` reaches every tool of `sheaf analyze`, `plot` and `fit` accept
+      CLI-derived options, analysis can write to a new sheet, and three prompts are offered
+      (`docs/spec/mcp.md`)
 - [ ] Matrices, contour plots and heatmaps (matrix branch is not merged)
 - [x] Statistics: t-tests, one- and two-way ANOVA, Mann-Whitney, Wilcoxon, Kruskal-Wallis,
       correlation and normality tests (`148e9b1`); expanded descriptive statistics and statistics
@@ -260,8 +270,14 @@ the default project format.
       against Origin (T14 items 1-4, `c44a1a6`)
 - [x] Holm comparisons and power analysis (`d724c40`); 2D frequency counts and binning measured against
       Origin's `twoDBinning`, discrete frequency against `discfreqs` (T14 item 6, statistics.md 13, 14)
-- [ ] Statistics breadth left: cross tabulation, distribution fitting, probability plots (T14 item 6;
-      Dunnett not measurable); documented Kendall/normality
+- [x] Cross Tabulation (Statistics menu, `sheaf analyze crosstab`) and Dunnett comparisons (one-way ANOVA,
+      `--control`), checked against scipy, not Origin (T14, statistics.md 15)
+- [x] Distribution Fit (normal, lognormal, exponential, gamma, Weibull), Probability Plot and Q-Q Plot
+      (Statistics menu, `sheaf analyze distfit | probplot | qqplot`), checked against scipy, not Origin (T14,
+      statistics.md 16)
+- [ ] Statistics breadth left: Origin measurements of cross tabulation, Dunnett, distribution fit and the
+      probability plots on the Windows machine (statistics.md 15.3; Origin's library gives no Dunnett
+      statistic or p-value, so Dunnett may stay scipy-checked only); documented Kendall/normality
       p-value differences remain (T16)
 - [ ] Batch processing and analysis templates (batch file import already works)
 - [ ] Scripting through an embedded language

@@ -7,6 +7,7 @@
 //! physical proportions on screen and in every export format.
 
 use crate::color::Color;
+pub use crate::graph_style::*;
 use crate::ids::{ColumnId, WindowId};
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +24,14 @@ pub struct Graph {
 
 impl Graph {
     pub fn title(&self) -> String {
-        if self.long_name.is_empty() { self.name.clone() } else { format!("{} - {}", self.name, self.long_name) }
+        if self.long_name.is_empty() {
+            return self.name.clone();
+        }
+        match self.page.style.title_display {
+            TitleDisplay::Both => format!("{} - {}", self.name, self.long_name),
+            TitleDisplay::Name => self.name.clone(),
+            TitleDisplay::LongName => self.long_name.clone(),
+        }
     }
 
     /// Every column this graph reads.
@@ -34,6 +42,9 @@ impl Graph {
                 out.extend(p.x);
                 out.push(p.y);
                 out.extend(p.y_error);
+                if let LabelForm::Column { column } = p.decor.labels.form {
+                    out.push(column);
+                }
             }
             for axis in [&layer.x_axis, &layer.y_axis] {
                 if let TickLabelSource::Column { column } = axis.tick_label_source {
@@ -81,6 +92,24 @@ impl Graph {
             Some(_) => self.layers[index].frame,
             None => Frame::WHOLE,
         }
+    }
+
+    /// Gives the page a new size. With `keep_layer_size` the layers that stand on the page keep their
+    /// size and distance from the top left corner in points (their frames are fractions of the page,
+    /// so these are scaled back); without it they grow and shrink with the page. Layers that follow
+    /// another layer are fractions of it and need no change.
+    pub fn resize_page(&mut self, width_pt: f64, height_pt: f64, keep_layer_size: bool) {
+        if keep_layer_size && width_pt > 0.0 && height_pt > 0.0 {
+            let (kx, ky) = (self.page.width_pt / width_pt, self.page.height_pt / height_pt);
+            for layer in self.layers.iter_mut().filter(|l| l.link.is_none()) {
+                layer.frame.left *= kx;
+                layer.frame.width *= kx;
+                layer.frame.top *= ky;
+                layer.frame.height *= ky;
+            }
+        }
+        self.page.width_pt = width_pt;
+        self.page.height_pt = height_pt;
     }
 
     /// Links layer `index` to `parent`, or unlinks it with `None` (Plot Details > Link Axes Scales).
@@ -167,11 +196,14 @@ pub struct Page {
     pub width_pt: f64,
     pub height_pt: f64,
     pub background: Color,
+    /// The border line, layer icons, window title choice and notes of the page (Plot Details > graph node).
+    #[serde(default, skip_serializing_if = "PageStyle::is_default")]
+    pub style: PageStyle,
 }
 
 impl Page {
     pub fn inches(width: f64, height: f64) -> Self {
-        Page { width_pt: width * 72.0, height_pt: height * 72.0, background: Color::WHITE }
+        Page { width_pt: width * 72.0, height_pt: height * 72.0, background: Color::WHITE, style: PageStyle::default() }
     }
 }
 
@@ -264,6 +296,9 @@ pub struct Layer {
     /// "Color", None by default); `None` leaves the page showing through.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background: Option<Color>,
+    /// A gradient from that colour and a border line around the frame (the rest of the Background tab).
+    #[serde(default, skip_serializing_if = "BackgroundStyle::is_default")]
+    pub background_style: BackgroundStyle,
     /// The Group tab of the layer's plots: edit mode and increments (the colour increment is
     /// [`Layer::palette`]'s mode).
     #[serde(default, skip_serializing_if = "GroupStyle::is_default")]
@@ -284,11 +319,31 @@ pub struct LayerDisplay {
     /// Grid on Top of Data.
     #[serde(default)]
     pub grid_on_top: bool,
+    /// Data on Top of Axes. Axes remain unclipped when drawn behind the data.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub data_on_top: bool,
+    /// Show Elements: X Axes. Off hides the X axes of the layer (lines, ticks, tick labels, titles).
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub show_x_axes: bool,
+    /// Show Elements: Y Axes.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub show_y_axes: bool,
+}
+
+fn is_true(v: &bool) -> bool {
+    *v
 }
 
 impl Default for LayerDisplay {
     fn default() -> Self {
-        LayerDisplay { show_data: true, clip_data: true, grid_on_top: false }
+        LayerDisplay {
+            show_data: true,
+            clip_data: true,
+            grid_on_top: false,
+            data_on_top: false,
+            show_x_axes: true,
+            show_y_axes: true,
+        }
     }
 }
 
@@ -438,6 +493,10 @@ pub struct BarSpacing {
     /// (-100 to 100). Negative values leave a gap between them; 100 puts them on top of each other.
     #[serde(default)]
     pub overlap_pct: f64,
+    /// Plot Details > Spacing > Width (in %): the bars at one X position together take this share of the
+    /// X spacing, which is the same as a gap of `100 - width`; it overrides `gap_pct` while set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width_pct: Option<f64>,
 }
 
 /// Origin's default gap between bars, in percent.
@@ -449,7 +508,7 @@ fn default_gap_pct() -> f64 {
 
 impl Default for BarSpacing {
     fn default() -> Self {
-        BarSpacing { gap_pct: DEFAULT_BAR_GAP_PCT, overlap_pct: 0.0 }
+        BarSpacing { gap_pct: DEFAULT_BAR_GAP_PCT, overlap_pct: 0.0, width_pct: None }
     }
 }
 
@@ -527,11 +586,32 @@ pub struct PlotOffset {
     /// Offset in Y, in axis units; used in [`Stack::Individual`] mode.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub y: f64,
+    /// Scale of the original X values before adding `x`, in [`Stack::Individual`] mode.
+    #[serde(default = "unit_multiplier", skip_serializing_if = "is_unit_multiplier")]
+    pub x_multiplier: f64,
+    /// Scale of the original Y values before adding `y`, in [`Stack::Individual`] mode.
+    #[serde(default = "unit_multiplier", skip_serializing_if = "is_unit_multiplier")]
+    pub y_multiplier: f64,
     /// When set, the curve has no place of its own in the stack: it takes the offset (and the
     /// waterfall shift) of the first member whose Y column is this one. A fitted curve drawn over
     /// its data uses it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub follows: Option<ColumnId>,
+}
+
+impl PlotOffset {
+    /// Identity placement for a curve, without adding an entry to its layer.
+    pub fn new(column: ColumnId) -> Self {
+        Self { column, x: 0.0, y: 0.0, x_multiplier: 1.0, y_multiplier: 1.0, follows: None }
+    }
+}
+
+fn unit_multiplier() -> f64 {
+    1.0
+}
+
+fn is_unit_multiplier(value: &f64) -> bool {
+    *value == 1.0
 }
 
 fn default_rescale_margin() -> f64 {
@@ -619,8 +699,11 @@ impl Layer {
     /// the column template, as in Origin).
     pub fn recolor_automatic(&mut self) {
         let n = self.plots.len();
+        let g = self.group_style;
         for (i, p) in self.plots.iter_mut().enumerate().filter(|(_, p)| p.auto_color) {
-            let c = self.palette.color(i, n);
+            // With subgroups the colour list runs over the plots of a subgroup (or over the subgroups).
+            let ((ci, cn), _, _) = group_steps(g.subgrouping, g.subgroup_on, i, n);
+            let c = self.palette.color(ci, cn);
             if !p.kind.is_bar() {
                 p.line.color = c;
             }
@@ -636,15 +719,17 @@ impl Layer {
         let shape0 = SymbolShape::ALL.iter().position(|s| *s == first.symbol.shape).unwrap_or(0);
         let filled0 = first.symbol.filled;
         let g = self.group_style;
+        let n = self.plots.len();
         for (i, p) in self.plots.iter_mut().enumerate() {
+            let (_, line_step, shape_step) = group_steps(g.subgrouping, g.subgroup_on, i, n);
             if g.line_style == Increment::ByOne {
-                p.line.dash = Dash::ALL[(dash0 + i) % Dash::ALL.len()];
+                p.line.dash = Dash::ALL[(dash0 + line_step) % Dash::ALL.len()];
             }
             if g.symbol_type == Increment::ByOne {
-                p.symbol.shape = SymbolShape::ALL[(shape0 + i) % SymbolShape::ALL.len()];
+                p.symbol.shape = SymbolShape::ALL[(shape0 + shape_step) % SymbolShape::ALL.len()];
             }
             if g.symbol_interior == Increment::ByOne {
-                p.symbol.filled = if i % 2 == 0 { filled0 } else { !filled0 };
+                p.symbol.filled = if shape_step % 2 == 0 { filled0 } else { !filled0 };
             }
         }
         self.recolor_automatic();
@@ -704,7 +789,7 @@ impl Layer {
         let i = match self.plot_offsets.iter().position(|o| o.column == column) {
             Some(i) => i,
             None => {
-                self.plot_offsets.push(PlotOffset { column, x: 0.0, y: 0.0, follows: None });
+                self.plot_offsets.push(PlotOffset::new(column));
                 self.plot_offsets.len() - 1
             }
         };
@@ -873,6 +958,12 @@ pub struct Axis {
     /// One break in the axis: a region of values that is left out, with a gap in the axis line.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub axis_break: Option<AxisBreak>,
+    /// Origin's Grids tab "Additional Lines": a line across the layer at this value of the OTHER axis,
+    /// in this axis' line style (for the X axis a horizontal line at Y = value, labelled "Y =" in
+    /// Origin's dialog; for the Y axis a vertical line at X = value). `None` means off; Origin's
+    /// default value is 0 (graphing.md 3.7).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub additional_line: Option<f64>,
     /// Extra ticks at chosen values, each with its own label (the Special Ticks tab of Origin).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub special_ticks: Vec<SpecialTick>,
@@ -1040,7 +1131,8 @@ pub struct SymbolStyle {
     /// Filled with the color, or drawn as an outline.
     pub filled: bool,
     pub edge_width_pt: f64,
-    /// Draw a symbol only on every n-th point (1 = every point).
+    /// Drop Lines > Skip Points: draw point decorations (symbols, drop lines, errors and labels)
+    /// on the first of every n source points in the plot range (0 or 1 = every point).
     #[serde(default = "one")]
     pub every: u32,
 }
@@ -1106,6 +1198,11 @@ pub enum PlotKind {
 }
 
 impl PlotKind {
+    /// Kinds whose Drop Lines tab offers Skip Points. Area and bar plots keep every point.
+    pub fn supports_skip_points(&self) -> bool {
+        matches!(self, PlotKind::Line | PlotKind::Scatter | PlotKind::LineSymbol)
+    }
+
     pub fn has_line(&self) -> bool {
         matches!(self, PlotKind::Line | PlotKind::LineSymbol) || self.is_area()
     }
@@ -1255,6 +1352,10 @@ pub struct PlotDecor {
     /// bottom of the layer (measured: not Y = 0) is filled with this colour. `None` is off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fill_under: Option<Color>,
+    /// Transparency, hatch and gradient of the fill under a curve, of a bar or of an area (the
+    /// Pattern tab). Plain by default: the flat colour only.
+    #[serde(default, skip_serializing_if = "FillStyle::is_default")]
+    pub fill: FillStyle,
     /// The text written next to each point.
     #[serde(default, skip_serializing_if = "DataLabels::is_default")]
     pub labels: DataLabels,
@@ -1312,6 +1413,10 @@ pub enum LabelForm {
     Row,
     /// "(X,Y)".
     XY,
+    /// Origin's "a column": the cell of the same row in this column, as the worksheet shows it.
+    Column {
+        column: ColumnId,
+    },
 }
 
 /// Where a data label stands against its point (Origin's "Position"; Right by default).
@@ -1326,10 +1431,47 @@ pub enum LabelPosition {
     Below,
 }
 
+/// Frame around a plot's data labels (Origin's Label tab).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelFrame {
+    #[default]
+    None,
+    Box,
+    Shadow,
+}
+
+impl LabelFrame {
+    pub fn is_none(&self) -> bool {
+        *self == Self::None
+    }
+}
+
+fn label_frame_black() -> Color {
+    Color::BLACK
+}
+
+fn is_label_frame_black(color: &Color) -> bool {
+    *color == Color::BLACK
+}
+
 /// The data labels of a plot (Origin's Label tab: off, Arial 22 black, form Y, position Right).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DataLabels {
     pub enable: bool,
+    /// Origin's White Out: an opaque white background behind each displayed label.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub white_out: bool,
+    #[serde(default, skip_serializing_if = "LabelFrame::is_none")]
+    pub frame: LabelFrame,
+    /// Frame padding on all sides, as a percentage of the font height.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub margin_percent: f64,
+    /// Origin 2016 initializes the frame's border and fill to black.
+    #[serde(default = "label_frame_black", skip_serializing_if = "is_label_frame_black")]
+    pub frame_border: Color,
+    #[serde(default = "label_frame_black", skip_serializing_if = "is_label_frame_black")]
+    pub frame_fill: Color,
     #[serde(default)]
     pub form: LabelForm,
     #[serde(default)]
@@ -1338,16 +1480,39 @@ pub struct DataLabels {
     /// Counter-clockwise rotation in degrees.
     #[serde(default)]
     pub rotate_deg: f64,
+    /// Origin's Horizontal and Vertical Offset: a shift to the right and down, in points, added to
+    /// the position.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub dx_pt: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub dy_pt: f64,
+    /// Decimal places of a number (Origin's Numeric Display Format, only "Decimal Digits" here);
+    /// `None` writes the number as the worksheet does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decimals: Option<u8>,
+    /// Which rows are labelled, as a list of row numbers and ranges counted from 1 ("1,3,5-8");
+    /// empty labels every row.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub only_rows: String,
 }
 
 impl Default for DataLabels {
     fn default() -> Self {
         DataLabels {
             enable: false,
+            white_out: false,
+            frame: LabelFrame::None,
+            margin_percent: 0.0,
+            frame_border: Color::BLACK,
+            frame_fill: Color::BLACK,
             form: LabelForm::Y,
             position: LabelPosition::Right,
             font: Font::new("Arial", 22.0),
             rotate_deg: 0.0,
+            dx_pt: 0.0,
+            dy_pt: 0.0,
+            decimals: None,
+            only_rows: String::new(),
         }
     }
 }
@@ -1356,6 +1521,31 @@ impl DataLabels {
     pub fn is_default(&self) -> bool {
         *self == DataLabels::default()
     }
+
+    /// True when row `row` (counted from 0) is labelled: every row without a list, otherwise the
+    /// rows the list names. An entry that is not a number or a range is ignored.
+    pub fn labels_row(&self, row: usize) -> bool {
+        parse_row_list(&self.only_rows).is_none_or(|ranges| ranges.iter().any(|&(a, b)| (a..=b).contains(&(row + 1))))
+    }
+}
+
+/// The ranges (counted from 1) a list like `1,3,5-8` names; `None` for an empty list or one with no
+/// valid entry (all rows then count).
+pub fn parse_row_list(text: &str) -> Option<Vec<(usize, usize)>> {
+    let mut out = Vec::new();
+    for part in text.split([',', ';', ' ']).map(str::trim).filter(|p| !p.is_empty()) {
+        let range = match part.split_once('-') {
+            Some((a, b)) => a.trim().parse::<usize>().ok().zip(b.trim().parse::<usize>().ok()),
+            None => part.parse::<usize>().ok().map(|n| (n, n)),
+        };
+        if let Some((a, b)) = range
+            && a >= 1
+            && b >= a
+        {
+            out.push((a, b));
+        }
+    }
+    (!out.is_empty()).then_some(out)
 }
 
 /// Which side of the point an error bar reaches.
@@ -1523,6 +1713,12 @@ pub struct GroupStyle {
     pub symbol_type: Increment,
     #[serde(default)]
     pub symbol_interior: Increment,
+    /// Origin's Subgrouping (By Size here; the Group tab's "By Column Label" is not offered).
+    #[serde(default)]
+    pub subgrouping: Subgrouping,
+    /// The property that steps from one subgroup to the next while the others step inside it.
+    #[serde(default)]
+    pub subgroup_on: SubgroupOn,
 }
 
 impl Default for GroupStyle {
@@ -1532,6 +1728,8 @@ impl Default for GroupStyle {
             line_style: Increment::None,
             symbol_type: Increment::None,
             symbol_interior: Increment::None,
+            subgrouping: Subgrouping::None,
+            subgroup_on: SubgroupOn::Color,
         }
     }
 }
@@ -1705,7 +1903,7 @@ mod tests {
     fn plot_offsets_are_found_by_column_and_added_once() {
         let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
         let entry: PlotOffset = serde_json::from_str(r#"{"column":3}"#).unwrap();
-        assert_eq!(entry, PlotOffset { column: ColumnId(3), x: 0.0, y: 0.0, follows: None });
+        assert_eq!(entry, PlotOffset::new(ColumnId(3)));
         assert_eq!(layer.plot_offset(ColumnId(3)), None);
         layer.plot_offset_mut(ColumnId(3)).x = 1.5;
         layer.plot_offset_mut(ColumnId(3)).follows = Some(ColumnId(2));
@@ -1725,7 +1923,7 @@ mod tests {
             assert_eq!(axis.tick_label_source, TickLabelSource::Auto);
             assert_eq!(axis.tick_label_angle_deg, 0.0);
         }
-        assert_eq!(layer.bars, BarSpacing { gap_pct: 20.0, overlap_pct: 0.0 });
+        assert_eq!(layer.bars, BarSpacing { gap_pct: 20.0, overlap_pct: 0.0, width_pct: None });
         // Saved again, none of the new keys is written, and it reads back equal.
         let json = serde_json::to_string(&layer).unwrap();
         for key in ["tick_label_source", "tick_label_angle_deg", "\"bars\""] {
@@ -1749,7 +1947,7 @@ mod tests {
         assert_eq!(serde_json::from_str::<Layer>(&json).unwrap(), layer);
         // A bar entry with only one of its numbers takes the default for the other.
         let bars: BarSpacing = serde_json::from_str(r#"{"overlap_pct":-50.0}"#).unwrap();
-        assert_eq!(bars, BarSpacing { gap_pct: 20.0, overlap_pct: -50.0 });
+        assert_eq!(bars, BarSpacing { gap_pct: 20.0, overlap_pct: -50.0, width_pct: None });
         assert_eq!(serde_json::from_str::<TickLabelSource>(r#"{"kind":"auto"}"#).unwrap(), TickLabelSource::Auto);
     }
 
@@ -2040,5 +2238,165 @@ mod ternary_tests {
         assert_eq!(&back, layer);
         assert!(back.coords.polar().is_none());
         assert_eq!(Template::from_name("ternary"), Some(Template::Ternary));
+    }
+}
+
+#[cfg(test)]
+mod style_tests {
+    use super::*;
+    use crate::template::Template;
+
+    fn plot(y: u64) -> Plot {
+        Plot {
+            x: None,
+            y: ColumnId(y),
+            y_error: None,
+            rows: None,
+            kind: PlotKind::LineSymbol,
+            line: LineStyle::solid(Color::BLACK, 1.0),
+            symbol: SymbolStyle {
+                shape: SymbolShape::Square,
+                size_pt: 5.0,
+                color: Color::BLACK,
+                filled: true,
+                edge_width_pt: 0.5,
+                every: 1,
+            },
+            label: None,
+            visible: true,
+            auto_color: true,
+            group: None,
+            x_error: None,
+            y_base: None,
+            error: ErrorStyle::default(),
+            hist: Default::default(),
+            size_from: None,
+            color_from: None,
+            decor: Default::default(),
+        }
+    }
+
+    fn layer_of(n: u64) -> Layer {
+        let mut layer = Template::Line.new_graph(WindowId(1), "G").layers.remove(0);
+        layer.palette =
+            Palette { colors: vec![Color::BLACK, Color::RED, Color::BLUE, Color::WHITE], mode: PaletteMode::Cycle };
+        layer.plots = (1..=n).map(plot).collect();
+        layer
+    }
+
+    #[test]
+    fn a_graph_without_the_new_settings_is_written_as_before() {
+        let g = Template::Line.new_graph(WindowId(1), "G");
+        let json = serde_json::to_string(&g).unwrap();
+        for key in ["width_pct", "background_style", "\"style\"", "subgrouping", "show_x_axes", "\"fill\""] {
+            assert!(!json.contains(key), "{key} in {json}");
+        }
+        assert_eq!(serde_json::from_str::<Graph>(&json).unwrap(), g);
+        // And a page written without a style loads with the defaults.
+        let page: Page =
+            serde_json::from_str(r##"{"width_pt": 450.0, "height_pt": 300.0, "background": "#FFFFFF"}"##).unwrap();
+        assert_eq!(page.style, PageStyle::default());
+        assert!(page.style.layer_icons);
+    }
+
+    #[test]
+    fn the_new_settings_are_written_when_set_and_read_back() {
+        let mut g = Template::Line.new_graph(WindowId(1), "G");
+        let l = &mut g.layers[0];
+        l.plots.push(plot(1));
+        l.bars.width_pct = Some(70.0);
+        l.plots[0].decor.fill.transparency_pct = 30;
+        l.plots[0].decor.labels.form = LabelForm::Column { column: ColumnId(77) };
+        l.group_style.subgrouping = Subgrouping::BySize { size: 3 };
+        l.display.show_x_axes = false;
+        l.background_style.border = Some(BorderStyle::solid(Color::BLACK, 1.0));
+        g.page.style.comments = "notes".into();
+        let json = serde_json::to_string(&g).unwrap();
+        assert_eq!(serde_json::from_str::<Graph>(&json).unwrap(), g);
+        assert!(json.contains(r#""width_pct":70.0"#) && json.contains(r#""transparency_pct":30"#), "{json}");
+        assert_eq!(g.referenced_columns(), vec![ColumnId(1), ColumnId(77)], "a label column is read by the graph");
+    }
+
+    #[test]
+    fn the_title_follows_the_display_choice() {
+        let mut g = Template::Line.new_graph(WindowId(1), "Graph1");
+        assert_eq!(g.title(), "Graph1");
+        g.long_name = "Scan".into();
+        assert_eq!(g.title(), "Graph1 - Scan");
+        g.page.style.title_display = TitleDisplay::LongName;
+        assert_eq!(g.title(), "Scan");
+        g.page.style.title_display = TitleDisplay::Name;
+        assert_eq!(g.title(), "Graph1");
+    }
+
+    #[test]
+    fn subgroups_step_one_property_across_them_and_the_others_inside() {
+        let mut l = layer_of(4);
+        l.group_style.line_style = Increment::ByOne;
+        l.group_style.subgrouping = Subgrouping::BySize { size: 2 };
+        l.group_style.subgroup_on = SubgroupOn::LineStyle;
+        l.apply_palette();
+        l.apply_group_increments();
+        // Colours restart in each subgroup; the line style steps from one subgroup to the next.
+        let colors: Vec<Color> = l.plots.iter().map(|p| p.line.color).collect();
+        assert_eq!(colors, [Color::BLACK, Color::RED, Color::BLACK, Color::RED]);
+        let dashes: Vec<Dash> = l.plots.iter().map(|p| p.line.dash).collect();
+        assert_eq!(dashes, [Dash::Solid, Dash::Solid, Dash::ALL[1], Dash::ALL[1]]);
+        // Subgroups stepping on the colour: the colour changes from one subgroup to the next.
+        l.group_style.subgroup_on = SubgroupOn::Color;
+        l.apply_palette();
+        l.apply_group_increments();
+        let colors: Vec<Color> = l.plots.iter().map(|p| p.line.color).collect();
+        assert_eq!(colors, [Color::BLACK, Color::BLACK, Color::RED, Color::RED]);
+        let dashes: Vec<Dash> = l.plots.iter().map(|p| p.line.dash).collect();
+        assert_eq!(dashes, [Dash::Solid, Dash::ALL[1], Dash::Solid, Dash::ALL[1]]);
+    }
+
+    #[test]
+    fn resizing_the_page_can_keep_the_layers_the_same_size() {
+        let mut g = Template::Line.new_graph(WindowId(1), "G");
+        let (w, h) = (g.page.width_pt, g.page.height_pt);
+        let f = g.layers[0].frame;
+        let mut scaled = g.clone();
+        scaled.resize_page(w * 2.0, h, false);
+        assert_eq!(scaled.layers[0].frame, f, "fractions stay: the layer grows with the page");
+        g.resize_page(w * 2.0, h, true);
+        let kept = g.layers[0].frame;
+        assert!((kept.width * g.page.width_pt - f.width * w).abs() < 1e-9, "the layer keeps its width in points");
+        assert!((kept.left * g.page.width_pt - f.left * w).abs() < 1e-9);
+        assert_eq!((kept.top, kept.height), (f.top, f.height));
+    }
+
+    #[test]
+    fn a_layer_that_follows_another_is_left_alone_when_the_page_is_resized() {
+        let mut g = Template::Line.new_graph(WindowId(1), "G");
+        let l = g.layers[0].clone();
+        g.layers.push(l);
+        g.layers[1].frame = Frame { left: 0.1, top: 0.2, width: 0.5, height: 0.5 };
+        assert!(g.set_link(1, Some(0)));
+        let linked = g.layers[1].frame;
+        let (w, h) = (g.page.width_pt, g.page.height_pt);
+        let before = g.layers[0].frame;
+        g.resize_page(w * 1.5, h * 2.0, true);
+        assert_eq!(g.layers[1].frame, linked, "a fraction of its parent's frame, not of the page");
+        // The parent kept its size in points, so the linked layer did too.
+        let parent = g.layers[0].frame;
+        assert!((parent.width * g.page.width_pt - before.width * w).abs() < 1e-9);
+        assert!((parent.height * g.page.height_pt - before.height * h).abs() < 1e-9);
+        // A page with no size to give is refused quietly: nothing is scaled.
+        g.resize_page(0.0, 100.0, true);
+        assert_eq!(g.layers[0].frame, parent);
+    }
+
+    #[test]
+    fn data_labels_name_rows_by_a_list_of_numbers_and_ranges() {
+        let l = DataLabels { only_rows: "1, 3, 5-7".into(), ..Default::default() };
+        let hit: Vec<usize> = (0..10).filter(|&r| l.labels_row(r)).collect();
+        assert_eq!(hit, vec![0, 2, 4, 5, 6]);
+        // Nothing valid, or nothing: every row.
+        for text in ["", "x", "0", "5-3"] {
+            let l = DataLabels { only_rows: text.into(), ..Default::default() };
+            assert!((0..4).all(|r| l.labels_row(r)), "{text:?}");
+        }
     }
 }

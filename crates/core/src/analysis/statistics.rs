@@ -36,7 +36,7 @@ pub(super) fn run(tool: &Tool, inputs: &[Input<'_>]) -> Result<Output, AnalysisE
     }
 }
 
-fn check_alpha(alpha: f64) -> Result<(), AnalysisError> {
+pub(super) fn check_alpha(alpha: f64) -> Result<(), AnalysisError> {
     if alpha > 0.0 && alpha < 1.0 {
         Ok(())
     } else {
@@ -44,7 +44,7 @@ fn check_alpha(alpha: f64) -> Result<(), AnalysisError> {
     }
 }
 
-fn label_column(name: &str, values: Vec<String>) -> SheetColumn {
+pub(super) fn label_column(name: &str, values: Vec<String>) -> SheetColumn {
     SheetColumn {
         designation: Designation::Label,
         long_name: name.to_string(),
@@ -54,7 +54,7 @@ fn label_column(name: &str, values: Vec<String>) -> SheetColumn {
     }
 }
 
-fn number_column(name: &str, units: &str, values: Vec<f64>) -> SheetColumn {
+pub(super) fn number_column(name: &str, units: &str, values: Vec<f64>) -> SheetColumn {
     SheetColumn {
         designation: Designation::Y,
         long_name: name.to_string(),
@@ -73,7 +73,7 @@ fn shared_units(inputs: &[Input<'_>]) -> String {
 }
 
 /// A number for the plain-English lines: four significant digits, no exponent unless needed.
-fn num(v: f64) -> String {
+pub(super) fn num(v: f64) -> String {
     if v.is_nan() {
         return "--".into();
     }
@@ -334,7 +334,14 @@ fn anova(spec: &AnovaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
         num(r.grand_mean)
     ));
     if let Some(method) = spec.comparison {
-        let comparisons = r.compare(method, spec.alpha);
+        if method == MeansComparison::Dunnett && spec.control >= inputs.len() {
+            return Err(AnalysisError::BadOption(format!(
+                "Dunnett's control group is number {}, but only {} columns were chosen",
+                spec.control + 1,
+                inputs.len()
+            )));
+        }
+        let comparisons = r.compare_with_control(method, spec.control, spec.alpha);
         let stat_name = match method {
             MeansComparison::Tukey => "q",
             MeansComparison::Scheffe => "F",
@@ -359,7 +366,14 @@ fn anova(spec: &AnovaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
         }
         on_sheet.push(number_column("Significant", "", c(|c| f64::from(u8::from(c.significant)))));
         notes.push(format!("{} means comparison at the {} level:", method.label(), num(spec.alpha)));
-        if method.is_holm() {
+        if method == MeansComparison::Dunnett {
+            notes.push(format!(
+                "  Every group against the control {}; the p-values are adjusted for all {} comparisons and the limits are simultaneous at level {}.",
+                inputs[spec.control].name,
+                comparisons.len(),
+                num(1.0 - spec.alpha)
+            ));
+        } else if method.is_holm() {
             notes.push("  (sorted by p-value; each pair is judged at the level of its rank, and after the first pair that is not significant no later pair is)".to_string());
         }
         for c in &comparisons {
@@ -666,7 +680,7 @@ fn normality(spec: &NormalitySpec, inputs: &[Input<'_>]) -> Result<Output, Analy
 // ----- two-way ANOVA ---------------------------------------------------------------------------------
 
 /// A factor cell as text: the cell itself, or a number written without a trailing ".0". `None` when empty.
-fn level_text(col: &Column, row: usize) -> Option<String> {
+pub(super) fn level_text(col: &Column, row: usize) -> Option<String> {
     match &col.data {
         ColumnData::Text(v) => v.get(row).map(|s| s.trim()).filter(|s| !s.is_empty()).map(str::to_string),
         ColumnData::Mixed { .. } if col.data.text_cell(row).is_some() => {
@@ -699,6 +713,11 @@ pub(super) fn two_way_anova(
         return Err(AnalysisError::BadOption(
             "the Holm comparisons are only available in the one-way ANOVA (Origin's two-way numbers for them were not checked)"
                 .into(),
+        ));
+    }
+    if spec.comparison == Some(MeansComparison::Dunnett) {
+        return Err(AnalysisError::BadOption(
+            "Dunnett's test needs one control group; it is available in the one-way ANOVA only".to_string(),
         ));
     }
     let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
@@ -1600,6 +1619,33 @@ mod tests {
     }
 
     #[test]
+    fn anova_dunnett_comparison() {
+        let (mut p, _, ids) = project();
+        let dunnett = run(
+            &mut p,
+            &ids,
+            Tool::Anova(AnovaSpec { comparison: Some(MeansComparison::Dunnett), ..Default::default() }),
+        );
+        let ws = &p.workbook(dunnett.book).unwrap().sheets[dunnett.new_sheet.unwrap()];
+        let labels = ws.columns.iter().find(|c| c.long_name == "Dunnett comparison").unwrap().text().unwrap().to_vec();
+        assert_eq!(labels, ["B - A", "C - A"]);
+        let (lcl, ucl, d) = (cell(&p, &dunnett, "LCL"), cell(&p, &dunnett, "UCL"), cell(&p, &dunnett, "Difference"));
+        assert!(lcl[0] < d[0] && d[0] < ucl[0]);
+        assert!(dunnett.notes.iter().any(|n| n.contains("against the control A")), "{:?}", dunnett.notes);
+        // Another control group: C against A and B.
+        let c3 = run(
+            &mut p,
+            &ids,
+            Tool::Anova(AnovaSpec { comparison: Some(MeansComparison::Dunnett), control: 2, ..Default::default() }),
+        );
+        let ws = &p.workbook(c3.book).unwrap().sheets[c3.new_sheet.unwrap()];
+        let labels = ws.columns.iter().find(|c| c.long_name == "Dunnett comparison").unwrap().text().unwrap().to_vec();
+        assert_eq!(labels, ["A - C", "B - C"]);
+        let bad = AnovaSpec { comparison: Some(MeansComparison::Dunnett), control: 3, ..Default::default() };
+        assert!(p.analyze(&request(&ids, Tool::Anova(bad))).is_err());
+    }
+
+    #[test]
     fn anova_sheet_has_groups_table_and_tukey_comparisons() {
         let (mut p, _, ids) = project();
         let r = run(&mut p, &ids, Tool::Anova(AnovaSpec::default()));
@@ -1720,6 +1766,24 @@ mod tests {
         assert!(r.notes.iter().any(|n| n.contains("type III")), "{:?}", r.notes);
         // One undo step per run is the app's job (Document::edit); here the sheet is new and the input untouched.
         assert_eq!(p.workbook(r.book).unwrap().sheets[0].columns.len(), 3);
+    }
+
+    #[test]
+    fn two_way_anova_refuses_dunnett_and_an_x_range() {
+        let (mut p, ids) = two_way_project();
+        let err = p
+            .analyze(&request(
+                &ids,
+                Tool::TwoWayAnova(TwoWayAnovaSpec { comparison: Some(MeansComparison::Dunnett), ..Default::default() }),
+            ))
+            .unwrap_err();
+        assert!(err.to_string().contains("one-way ANOVA only"), "{err}");
+        let limited = Request {
+            columns: ids.clone(),
+            rows: RowRange::XBetween(0.0, 1.0),
+            tool: Tool::TwoWayAnova(TwoWayAnovaSpec::default()),
+        };
+        assert!(p.analyze(&limited).unwrap_err().to_string().contains("no X column to limit"));
     }
 
     #[test]

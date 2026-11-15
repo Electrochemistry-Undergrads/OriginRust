@@ -18,9 +18,12 @@ pub enum Command {
     Import(ImportArgs),
     /// Make a figure from a data file or a project and write it as PNG, TIFF, JPEG, BMP, GIF, TGA, PCX, SVG, PDF, EPS or EMF.
     Plot(Box<PlotArgs>),
-    /// Write a graph of a project as PNG, TIFF, JPEG, BMP, GIF, TGA, PCX, SVG, PDF, EPS or EMF.
+    /// Print a graph using the saved Page Setup, or write a paper-sized vector PDF.
+    Print(PrintArgs),
+    /// Write a graph of a project as PNG, TIFF, JPEG, BMP, GIF, TGA, PCX, SVG, PDF, EPS or EMF, or
+    /// the project (or a data file) as an Origin .opj project or an Excel .xlsx workbook.
     Export(ExportArgs),
-    /// Write a worksheet of a project as delimited text.
+    /// Write a worksheet of a project as delimited text, or as an Excel .xlsx workbook.
     ExportData(ExportDataArgs),
     /// Run an analysis tool on worksheet columns: integrate, differentiate, smooth, normalize,
     /// baseline, interpolate, peaks, stats, sort, filter.
@@ -28,6 +31,21 @@ pub enum Command {
     /// Fit a model to a column: straight line, polynomial, a built-in function, a formula or an
     /// Origin .FDF function. Prints the parameters, statistics and ANOVA table.
     Fit(FitArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct PrintArgs {
+    /// A .sheaf, .opj or .opju project containing a graph.
+    pub project: PathBuf,
+    /// The graph to print (default: the only graph).
+    #[arg(long)]
+    pub graph: Option<String>,
+    /// Submit to this printer (default: the system default printer).
+    #[arg(long, conflicts_with = "output")]
+    pub printer: Option<String>,
+    /// Write a paper-sized vector PDF to this .pdf path instead of submitting a print job.
+    #[arg(long, conflicts_with = "printer")]
+    pub output: Option<PathBuf>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -174,7 +192,7 @@ pub struct FitArgs {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Format {
-    /// Decide from the file content.
+    /// Decide from the file content; .xls, .xlsx and .xlsm files are Excel workbooks.
     Auto,
     /// CH Instruments text export.
     Chi,
@@ -222,37 +240,37 @@ pub struct ReadOptions {
     /// comma-separated list; the last width repeats for the remaining columns.
     #[arg(long, value_name = "W,W,...", value_delimiter = ',', conflicts_with = "delimiter")]
     pub fixed_width: Vec<usize>,
-    /// Delimited text: number of lines before the first data row (default: detect).
+    /// Delimited text and Excel: number of lines (rows) before the first data row (default: detect).
     #[arg(long, value_name = "N")]
     pub header_lines: Option<usize>,
-    /// Delimited text: first data row to import, counted after the header.
+    /// Delimited text and Excel: first data row to import, counted after the header.
     #[arg(long, default_value_t = 1)]
     pub first_row: usize,
-    /// Delimited text: last data row to import, inclusive (0: through the end).
+    /// Delimited text and Excel: last data row to import, inclusive (0: through the end).
     #[arg(long, default_value_t = 0)]
     pub last_row: usize,
-    /// Delimited text: rows to read per repeating read/skip pattern.
+    /// Delimited text and Excel: rows to read per repeating read/skip pattern.
     #[arg(long, default_value_t = 1)]
     pub read_rows: usize,
-    /// Delimited text: rows to skip per repeating read/skip pattern.
+    /// Delimited text and Excel: rows to skip per repeating read/skip pattern.
     #[arg(long, default_value_t = 0)]
     pub skip_rows: usize,
-    /// Delimited text: first source column to import.
+    /// Delimited text and Excel: first source column to import (Excel: counted from the first used column).
     #[arg(long, default_value_t = 1)]
     pub first_column: usize,
-    /// Delimited text: last source column to import, inclusive (0: through the end).
+    /// Delimited text and Excel: last source column to import, inclusive (0: through the end).
     #[arg(long, default_value_t = 0)]
     pub last_column: usize,
-    /// Delimited text: columns to read per repeating read/skip pattern.
+    /// Delimited text and Excel: columns to read per repeating read/skip pattern.
     #[arg(long, default_value_t = 1)]
     pub read_columns: usize,
-    /// Delimited text: columns to skip per repeating read/skip pattern.
+    /// Delimited text and Excel: columns to skip per repeating read/skip pattern.
     #[arg(long, default_value_t = 0)]
     pub skip_columns: usize,
     /// Delimited text: numbers use a comma as the decimal separator.
     #[arg(long)]
     pub decimal_comma: bool,
-    /// Delimited text: keep date and time columns as text instead of reading them as date numbers.
+    /// Delimited text and Excel: keep date and time columns as text instead of reading them as date numbers.
     #[arg(long)]
     pub dates_as_text: bool,
     /// Delimited text: read 11/12/2026 as 11 December (default: 12 November) when the file does not decide.
@@ -261,35 +279,44 @@ pub struct ReadOptions {
     /// Delimited text: the digit-grouping character of numbers.
     #[arg(long, value_enum, default_value_t = ThousandsArg::Auto)]
     pub thousands: ThousandsArg,
-    /// Delimited text: line (1-based) holding the column long names (0: none; default: detect).
+    /// Delimited text and Excel: line (row, 1-based) holding the column long names (0: none; default: detect).
     #[arg(long, value_name = "N")]
     pub long_name_line: Option<usize>,
-    /// Delimited text: line holding the units (0: none).
+    /// Delimited text and Excel: line holding the units (0: none).
     #[arg(long, value_name = "N")]
     pub units_line: Option<usize>,
-    /// Delimited text: line holding the comments (0: none).
+    /// Delimited text and Excel: line holding the comments (0: none).
     #[arg(long, value_name = "N")]
     pub comments_line: Option<usize>,
-    /// Delimited text: header lines that become named parameter rows (for example the wavelengths
+    /// Delimited text and Excel: header lines that become named parameter rows (for example the wavelengths
     /// of an ICP-OES export), as a comma-separated list. The first cell of the line is the name.
     #[arg(long, value_name = "N,N", value_delimiter = ',')]
     pub param_lines: Vec<usize>,
-    /// Delimited text: line holding the short names of the columns (default: A, B, C, ...).
+    /// Delimited text and Excel: line holding the short names of the columns (default: A, B, C, ...).
     #[arg(long, value_name = "N")]
     pub short_name_line: Option<usize>,
-    /// Delimited text: leave the long name, units and comments of the columns empty; the header
-    /// lines are still skipped.
+    /// Delimited text and Excel: leave the long name, units and comments of the columns empty; the
+    /// header lines are still skipped.
     #[arg(long)]
     pub no_rename_columns: bool,
     /// Delimited text: name the sheet Sheet1 instead of after the file.
     #[arg(long)]
     pub no_rename_sheet: bool,
-    /// Delimited text: leave the long name of the book empty instead of the file name.
+    /// Delimited text and Excel: leave the long name of the book empty instead of the file name.
     #[arg(long)]
     pub no_rename_book: bool,
     /// Delimited text: a file with several blocks of data separated by blank lines gets one sheet per block.
     #[arg(long)]
     pub blocks_as_sheets: bool,
+    /// Excel (.xls, .xlsx, .xlsm): the sheets to read, as names or 1-based positions counted over
+    /// all sheets, comma-separated (for example "Results,3"). A number is the sheet of that name if there
+    /// is one, otherwise the sheet at that position.
+    /// A sheet named here is read even when hidden. Default: every visible worksheet.
+    #[arg(long, value_name = "LIST", value_delimiter = ',')]
+    pub sheets: Vec<String>,
+    /// Excel: also read hidden sheets when --sheets is not given.
+    #[arg(long)]
+    pub hidden_sheets: bool,
 }
 
 #[derive(Args, Debug)]
@@ -303,7 +330,7 @@ pub struct InfoArgs {
 #[derive(Args, Debug)]
 pub struct ImportArgs {
     /// Data files, folders or patterns to import. A folder gives its data files (.txt, .csv, .tsv,
-    /// .dat, .asc, .prn, .tab, .bin); a name with * or ? in it (for example "exports/icp_*.csv")
+    /// .dat, .asc, .prn, .tab, .bin, .xls, .xlsx, .xlsm; an Excel file becomes one workbook with a sheet per Excel sheet); a name with * or ? in it (for example "exports/icp_*.csv")
     /// gives the matching files, in natural order (icp_2 before icp_10). An Origin .opj or .opju project adds
     /// all its workbooks.
     #[arg(required = true)]
@@ -621,12 +648,20 @@ pub struct ExportArgs {
     /// A .sheaf project or an Origin .opj project (its graphs are read) or .opju project (only its workbooks are read). For an output ending in
     /// .opj a data file (CH Instruments text, CSV or other delimited text) is also accepted.
     pub project: PathBuf,
-    /// Name of the graph (default: the only graph of the project). Not used for .opj output.
+    /// Name of the graph (default: the only graph of the project). Not used for .opj or .xlsx output.
     #[arg(long)]
     pub graph: Option<String>,
-    /// What to write: a figure (.png, .tif, .jpg, .bmp, .gif, .tga, .pcx, .psd, .svg, .pdf, .eps or .emf)
-    /// or, with .opj, the whole project as an Origin project file (workbooks and graphs;
-    /// what the file cannot hold is listed as warnings).
+    /// Excel output: name of the workbook to write (default: the first one).
+    #[arg(long)]
+    pub book: Option<String>,
+    /// Excel output: name of the sheet to write (default: the workbook's active sheet; with
+    /// --all-sheets, every sheet).
+    #[arg(long)]
+    pub sheet: Option<String>,
+    /// What to write: a figure (.png, .tif, .jpg, .bmp, .gif, .tga, .pcx, .psd, .svg, .pdf, .eps or .emf),
+    /// with .opj, the whole project as an Origin project file (workbooks and graphs;
+    /// what the file cannot hold is listed as warnings), or with .xlsx one workbook as an Excel file
+    /// (a data file is also accepted; see --book, --sheet and the Excel options).
     #[arg(short, long)]
     pub output: PathBuf,
     /// Resolution of raster output in dots per inch.
@@ -646,7 +681,31 @@ pub struct ExportArgs {
     #[command(flatten)]
     pub style: StyleArgs,
     #[command(flatten)]
+    pub xlsx: XlsxArgs,
+    #[command(flatten)]
     pub read: ReadOptions,
+}
+
+/// What an `.xlsx` output holds (`sheaf export`, `sheaf export-data`).
+#[derive(Args, Debug, Clone, Default)]
+pub struct XlsxArgs {
+    /// Excel output: write every sheet of the workbook, one Excel sheet each (default: only the
+    /// sheet picked with --sheet or the active one).
+    #[arg(long, conflicts_with = "sheet")]
+    pub all_sheets: bool,
+    /// Excel output: do not write the row of column long names.
+    #[arg(long)]
+    pub no_long_names: bool,
+    /// Excel output: do not write the row of units.
+    #[arg(long)]
+    pub no_units: bool,
+    /// Excel output: do not write the row of comments.
+    #[arg(long)]
+    pub no_comments: bool,
+    /// Excel output: write a first row with the short names of the columns (A, B, ...). Read it
+    /// back with --short-name-line 1.
+    #[arg(long)]
+    pub short_names: bool,
 }
 
 #[derive(Args, Debug)]
@@ -659,9 +718,12 @@ pub struct ExportDataArgs {
     /// Name of the sheet (default: the workbook's active sheet).
     #[arg(long)]
     pub sheet: Option<String>,
-    /// The text file to write. A .tsv or .txt extension gives tab-separated output, anything else commas.
+    /// The file to write. A .xlsx extension gives an Excel workbook; a .tsv or .txt extension gives
+    /// tab-separated text, anything else commas.
     #[arg(short, long)]
     pub output: PathBuf,
+    #[command(flatten)]
+    pub xlsx: XlsxArgs,
 }
 
 #[derive(Args, Debug)]
@@ -733,6 +795,15 @@ pub enum SignRankKindArg {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FamilyArg {
+    Normal,
+    Lognormal,
+    Exponential,
+    Gamma,
+    Weibull,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum PowerTestArg {
     OneSample,
     TwoSample,
@@ -752,6 +823,9 @@ pub enum ComparisonArg {
     HolmBonferroni,
     /// Sidak-Holm step-down (one-way ANOVA only).
     HolmSidak,
+    /// Dunnett: every group against the control group (see --control); one-way ANOVA only. Checked against
+    /// scipy, not Origin.
+    Dunnett,
     /// No means comparison.
     None,
 }
@@ -851,6 +925,20 @@ pub enum MathKind {
     Power,
 }
 
+/// Coherence window (Origin's names).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum CoherenceWindowArg {
+    Rectangle,
+    Welch,
+    Triangular,
+    Bartlett,
+    Hanning,
+    Hamming,
+    Blackman,
+    Gaussian,
+    Kaiser,
+}
+
 /// FFT filter type (Origin's names).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum FftFilterArg {
@@ -860,6 +948,32 @@ pub enum FftFilterArg {
     BandBlock,
     Threshold,
     Parabolic,
+}
+
+/// Envelope type (Origin's names).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum EnvelopeArg {
+    Upper,
+    Lower,
+    Both,
+}
+
+/// Decimation filter (Origin's names).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum DecimateFilterArg {
+    None,
+    /// Moving average, a triangle of half width `factor`.
+    Ave,
+    /// Origin's FIR filter, a triangle of half width `order`.
+    Fir,
+}
+
+/// Trace interpolation method (Origin's names).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum TraceMethodArg {
+    Linear,
+    Spline,
+    Bspline,
 }
 
 /// FFT window (Origin's names).
@@ -1174,6 +1288,72 @@ pub enum AnalyzeTool {
         #[arg(long)]
         interval: Option<f64>,
     },
+    /// The upper and/or lower envelope of each column (Origin's Signal Processing > Envelope): the
+    /// natural cubic spline through the extreme points, each envelope with its X in a new sheet.
+    Envelope {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long = "type", value_enum, default_value_t = EnvelopeArg::Upper)]
+        kind: EnvelopeArg,
+        /// Points on each side of an extreme point (cut to a whole number, at least 1).
+        #[arg(long, default_value_t = 2.0)]
+        npts: f64,
+    },
+    /// The magnitude-squared coherence of each column with a second one (Origin's Signal
+    /// Processing > Coherence): frequency and coherence in a new sheet.
+    Coherence {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The second signal (may be the same column).
+        #[arg(long = "with")]
+        other: String,
+        /// FFT length: each segment is zero padded to it.
+        #[arg(long, default_value_t = 256)]
+        fft_len: usize,
+        /// Segment length, at most the FFT length.
+        #[arg(long, default_value_t = 256)]
+        win_len: usize,
+        /// Points shared by neighbouring segments, less than the window length.
+        #[arg(long, default_value_t = 128)]
+        overlap: usize,
+        #[arg(long, value_enum, default_value_t = CoherenceWindowArg::Rectangle)]
+        window: CoherenceWindowArg,
+        /// Gaussian window: the reciprocal of the standard deviation.
+        #[arg(long, default_value_t = 0.0)]
+        alpha: f64,
+        /// Kaiser window: the beta parameter.
+        #[arg(long, default_value_t = 0.0)]
+        beta: f64,
+        /// Sampling interval (Origin: 1 unless given, not taken from the X column).
+        #[arg(long, default_value_t = 1.0)]
+        interval: f64,
+    },
+    /// Keep every n-th point of each column (Origin's Signal Processing > Decimation), with its X,
+    /// in a new sheet. A factor of 3 or more needs ten times as many points as the factor.
+    Decimate {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Keep every n-th point.
+        #[arg(long, short = 'd', default_value_t = 2)]
+        factor: usize,
+        #[arg(long, value_enum, default_value_t = DecimateFilterArg::None)]
+        filter: DecimateFilterArg,
+        /// FIR filter: half width of the smoothing, 8 to 60.
+        #[arg(long, default_value_t = 30)]
+        order: usize,
+    },
+    /// Resample each curve at evenly spaced points along its path (Origin's Mathematics > Trace
+    /// Interpolation), for curves whose X is not monotonic such as a CV loop. The results, with
+    /// their own X, go to a new sheet.
+    TraceInterp {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = TraceMethodArg::Linear)]
+        method: TraceMethodArg,
+        /// Number of points of the result.
+        #[arg(long, default_value_t = 100)]
+        points: usize,
+    },
     /// The Hilbert transform of each column (Origin's Signal Processing > Hilbert Transform), in a
     /// new column beside it.
     Hilbert {
@@ -1279,7 +1459,7 @@ pub enum AnalyzeTool {
         #[arg(long, allow_hyphen_values = true)]
         x_max: Option<f64>,
         /// B-spline smoothing factor: the allowed sum of squared residuals (matches Origin's `sf`).
-        /// 0 interpolates the points; Origin's automatic factor for 0 is not reproduced.
+        /// 0 chooses the factor from the data as Origin does.
         #[arg(long, default_value_t = 0.0)]
         smoothing: f64,
     },
@@ -1520,6 +1700,9 @@ pub enum AnalyzeTool {
         target: TargetArgs,
         #[arg(long, value_enum, default_value_t = ComparisonArg::Tukey)]
         comparison: ComparisonArg,
+        /// Dunnett's control group: its number among the --y columns, counted from 1.
+        #[arg(long, default_value_t = 1)]
+        control: usize,
         /// Significance level.
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
@@ -1738,6 +1921,28 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Cross tabulation of two categorical columns (--y ROW_VARIABLE,COLUMN_VARIABLE; text or numbers):
+    /// counts with row, column and total percentages, expected counts, Pearson and likelihood ratio
+    /// chi-square and, for a 2 x 2 table, Fisher's exact test. The tables go to a new sheet.
+    Crosstab {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Leave out the percentages of the row totals.
+        #[arg(long)]
+        no_row_percent: bool,
+        /// Leave out the percentages of the column totals.
+        #[arg(long)]
+        no_column_percent: bool,
+        /// Leave out the percentages of the grand total.
+        #[arg(long)]
+        no_total_percent: bool,
+        /// Leave out the expected counts.
+        #[arg(long)]
+        no_expected: bool,
+        /// Level for the sentence about the tests.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
     /// Discrete frequency (Origin's discfreqs): how often each distinct value of each column occurs, text or
     /// numbers; empty and missing cells count as values of their own. Writes Data and Count, and with the
     /// options the relative and cumulative frequency, to a new sheet.
@@ -1826,6 +2031,37 @@ pub enum AnalyzeTool {
         /// Significance level.
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
+    },
+    /// Fit normal, lognormal, exponential, gamma and Weibull distributions to each column by maximum
+    /// likelihood: parameters, log-likelihood, AIC, BIC, Kolmogorov-Smirnov and Anderson-Darling statistics.
+    Distfit {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The families to fit, comma separated (default: all five).
+        #[arg(long, value_enum, value_delimiter = ',')]
+        family: Vec<FamilyArg>,
+    },
+    /// Probability plot: the data against the plotting position in percent on a probability axis, with the
+    /// fitted distribution function; makes a graph.
+    Probplot {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = FamilyArg::Normal)]
+        family: FamilyArg,
+        /// Do not make a graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// Q-Q plot: the quantiles of a distribution against the ordered data, with the least-squares line; makes
+    /// a graph.
+    Qqplot {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = FamilyArg::Normal)]
+        family: FamilyArg,
+        /// Do not make a graph.
+        #[arg(long)]
+        no_graph: bool,
     },
     /// Sort the rows of the sheet by one column.
     Sort {

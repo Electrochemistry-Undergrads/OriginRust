@@ -89,9 +89,19 @@ pub struct LayerScene {
     pub plots: Vec<Item>,
     /// Axes, ticks, labels, titles, legend and free labels.
     pub overlay: Vec<Item>,
+    /// Prefix of `overlay` drawn before the clipped plots (Data on Top of Axes).
+    /// The remaining overlay, including legends and annotations, is always drawn last.
+    pub underlay_len: usize,
     /// What the items stand for, so that a click can be traced back to an object of the model
     /// (see [`crate::hit`]). Not written to any file.
     pub objects: Vec<SceneObject>,
+}
+
+impl LayerScene {
+    /// Unclipped items drawn before and after the data, respectively.
+    pub(crate) fn split_overlay(&self) -> (&[Item], &[Item]) {
+        self.overlay.split_at(self.underlay_len.min(self.overlay.len()))
+    }
 }
 
 /// An object of the model that a click can pick.

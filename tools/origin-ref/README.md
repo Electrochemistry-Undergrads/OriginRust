@@ -61,6 +61,13 @@ kept here), the case lists `cases2..5.json` and `stats3-make-fixture.py`, which 
 explicitly. Report sheets are read cell by cell (`wcol(c)[r]`) because `GetWorksheet` does not return them.
 What the runs showed is in `docs/spec/statistics.md`, section 10.
 
+## Still to measure (cross tabulation, Dunnett)
+
+`docs/spec/statistics.md` section 15.3 lists what the cross tabulation and Dunnett's comparison take from scipy and the
+textbooks and what Origin has not been asked yet (the cross tabulation X-Function and report, whether the one-way ANOVA
+tool offers Dunnett at all). Run those here on the Windows machine and write fixtures next to
+`crates/calc/tests/fixtures/scipy_stats_compare.rs`.
+
 ## 2D frequency counts and binning
 
 `stats4/g3.py`, `g4.py` and `g5.py` write the line scripts of the `twoDBinning` runs (worksheet output, each cell read

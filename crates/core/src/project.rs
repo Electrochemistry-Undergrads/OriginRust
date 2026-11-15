@@ -66,8 +66,16 @@ pub struct Project {
     /// Analysis runs whose results follow their input (Recalculate Auto or Manual).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub analysis_links: Vec<crate::analysis_link::AnalysisLink>,
+    /// Page Setup (File > Page Setup): paper, orientation and margins for printing. Saved with the
+    /// project; changing it is an undo step like any other setting.
+    #[serde(default, skip_serializing_if = "is_default_page_setup")]
+    pub page_setup: crate::page_setup::PageSetup,
     /// The next unused identifier (shared by windows and columns).
     next_id: u64,
+}
+
+fn is_default_page_setup(s: &crate::page_setup::PageSetup) -> bool {
+    *s == crate::page_setup::PageSetup::default()
 }
 
 /// The place of one window in the desktop app's workspace (ADR 0007 point 1).
@@ -131,6 +139,7 @@ impl Project {
             root: Folder { name: "Project".into(), ..Folder::default() },
             window_places: Vec::new(),
             analysis_links: Vec::new(),
+            page_setup: crate::page_setup::PageSetup::default(),
             next_id: 1,
         }
     }

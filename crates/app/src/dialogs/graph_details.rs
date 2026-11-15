@@ -12,6 +12,7 @@ use eframe::egui::{self, DragValue};
 use sheaf_core::graph::*;
 use sheaf_core::{Color, ColumnId};
 
+use super::details_look as look;
 use super::graph_props::{
     Source, color_button, connect_name, dash_ui, font_ui, grid, group_box, section, symbol_name, tab_row,
 };
@@ -39,6 +40,7 @@ pub enum DetailTab {
     Display,
     PageDisplay,
     LegendsTitles,
+    Misc,
     LayerContents,
     Background,
     Size,
@@ -52,9 +54,10 @@ pub enum DetailTab {
 
 fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
     match node {
-        // Origin's page tabs (Miscellaneous is not offered) and Sheaf's Text tab.
+        // Origin's page tabs (Miscellaneous holds Sheaf's layer icons and comments) and Sheaf's Text tab.
         Node::Graph => vec![
             (DetailTab::Page, "Print/Dimensions", true),
+            (DetailTab::Misc, "Miscellaneous", true),
             (DetailTab::PageDisplay, "Display", true),
             (DetailTab::LegendsTitles, "Legends/Titles", true),
             (DetailTab::Text, "Text", true),
@@ -90,8 +93,10 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             if curve || plot.kind.is_bar() {
                 tabs.push((DetailTab::Label, "Label", true));
             }
-            if plot.kind.is_bar() {
+            if plot.kind.is_bar() || plot.kind.is_area() {
                 tabs.push((DetailTab::Pattern, "Pattern", true));
+            }
+            if plot.kind.is_bar() {
                 tabs.push((DetailTab::Spacing, "Spacing", true));
             }
             if plot.y_error.is_some() || plot.x_error.is_some() {
@@ -241,7 +246,11 @@ pub fn dialog_body(
                                 color_button(ui, &mut graph.page.background);
                                 ui.end_row();
                             });
+                            group_box(ui, "Page border", |ui| {
+                                look::border_ui(ui, "page_border", &mut graph.page.style.border)
+                            });
                         }
+                        DetailTab::Misc => look::misc_tab(ui, graph),
                         DetailTab::LegendsTitles => {
                             section(ui, "Auto Legend");
                             let mut all = graph.layers.iter().all(|l| l.legend.scope == LegendScope::Graph);
@@ -253,6 +262,13 @@ pub fn dialog_body(
                                     l.legend.scope = if all { LegendScope::Graph } else { LegendScope::Layer };
                                 }
                             }
+                            section(ui, "Window Title");
+                            let t = &mut graph.page.style.title_display;
+                            egui::ComboBox::from_id_salt("title_display").selected_text(t.name()).show_ui(ui, |ui| {
+                                for d in TitleDisplay::ALL {
+                                    ui.selectable_value(t, d, d.name());
+                                }
+                            });
                         }
                         _ => page_tab(ui, graph),
                     },
@@ -387,6 +403,7 @@ fn plot_tab_body(
                         color_button(ui, color);
                     });
                     ui.weak("Normal: the area between the curve and the bottom of the layer.");
+                    look::fill_controls(ui, "line_fill", &mut plot.decor.fill);
                 }
             }
         }
@@ -395,31 +412,36 @@ fn plot_tab_body(
             let individual = layer.stack == Stack::Individual;
             let column = layer.plots[p].y;
             // Read without adding an entry, so that looking at the tab changes nothing.
-            let (mut x, mut y) = layer.plot_offset(column).map_or((0.0, 0.0), |o| (o.x, o.y));
-            let before = (x, y);
+            let o = layer.plot_offset(column).copied().unwrap_or_else(|| PlotOffset::new(column));
+            let (mut x, mut y, mut mx, mut my) = (o.x, o.y, o.x_multiplier, o.y_multiplier);
+            let before = (x, y, mx, my);
             ui.add_enabled_ui(individual, |ui| {
                 grid(ui, "plot_offset", |ui| {
                     ui.label("");
+                    ui.strong("Multiplier");
                     ui.strong("Offset");
                     ui.end_row();
-                    ui.label("X");
+                    let label = ui.label("X");
+                    ui.add(DragValue::new(&mut mx).speed(0.01)).labelled_by(label.id);
                     ui.add(DragValue::new(&mut x).speed(0.01));
                     ui.end_row();
-                    ui.label("Y");
+                    let label = ui.label("Y");
+                    ui.add(DragValue::new(&mut my).speed(0.01)).labelled_by(label.id);
                     ui.add(DragValue::new(&mut y).speed(0.01));
                     ui.end_row();
                 });
             });
-            if (x, y) != before {
+            if (x, y, mx, my) != before {
                 let o = layer.plot_offset_mut(column);
-                (o.x, o.y) = (x, y);
+                (o.x, o.y, o.x_multiplier, o.y_multiplier) = (x, y, mx, my);
             }
             if !individual {
                 ui.weak("Offsets of single plots are used when the layer's Stack tab is set to Individual.");
             }
         }
         DetailTab::DropLines => {
-            let drop = &mut graph.layers[l].plots[p].decor.drop;
+            let plot = &mut graph.layers[l].plots[p];
+            let drop = &mut plot.decor.drop;
             grid(ui, "plot_drop", |ui| {
                 ui.label("");
                 ui.checkbox(&mut drop.horizontal.on, "Horizontal");
@@ -441,6 +463,24 @@ fn plot_tab_body(
                 }
                 ui.end_row();
             });
+            ui.group(|ui| {
+                ui.label("Data Points Display Control");
+                ui.horizontal(|ui| {
+                    let mut skipping = plot.symbol.every > 1;
+                    if ui.checkbox(&mut skipping, "Skip Points").changed() {
+                        plot.symbol.every = if skipping { 2 } else { 1 };
+                    }
+                    let label = ui.label("Frequency");
+                    let mut frequency = plot.symbol.every.max(2);
+                    if ui
+                        .add_enabled(skipping, DragValue::new(&mut frequency).range(2..=u32::MAX))
+                        .labelled_by(label.id)
+                        .changed()
+                    {
+                        plot.symbol.every = frequency;
+                    }
+                });
+            });
         }
         DetailTab::Label => {
             let labels = &mut graph.layers[l].plots[p].decor.labels;
@@ -452,6 +492,40 @@ fn plot_tab_body(
                     ui.end_row();
                     ui.label("Size, style, color");
                     font_ui(ui, &mut labels.font);
+                    ui.end_row();
+                    ui.label("Background");
+                    ui.checkbox(&mut labels.white_out, "White Out");
+                    ui.end_row();
+                    let label = ui.label("Frame");
+                    ui.horizontal(|ui| {
+                        egui::ComboBox::from_id_salt("data_label_frame")
+                            .selected_text(match labels.frame {
+                                LabelFrame::None => "None",
+                                LabelFrame::Box => "Box",
+                                LabelFrame::Shadow => "Shadow",
+                            })
+                            .show_ui(ui, |ui| {
+                                for (frame, name) in [
+                                    (LabelFrame::None, "None"),
+                                    (LabelFrame::Box, "Box"),
+                                    (LabelFrame::Shadow, "Shadow"),
+                                ] {
+                                    ui.selectable_value(&mut labels.frame, frame, name);
+                                }
+                            })
+                            .response
+                            .labelled_by(label.id);
+                        ui.add_enabled_ui(!labels.frame.is_none(), |ui| {
+                            ui.label("Border");
+                            color_button(ui, &mut labels.frame_border);
+                            ui.label("Fill");
+                            color_button(ui, &mut labels.frame_fill);
+                        });
+                    });
+                    ui.end_row();
+                    let label = ui.label("Margin (% Font Height)");
+                    ui.add(DragValue::new(&mut labels.margin_percent).range(0.0..=500.0).speed(0.5))
+                        .labelled_by(label.id);
                     ui.end_row();
                     ui.label("Rotate (deg)");
                     ui.add(DragValue::new(&mut labels.rotate_deg).range(-360.0..=360.0).speed(1.0));
@@ -472,16 +546,10 @@ fn plot_tab_body(
                         });
                     ui.end_row();
                     ui.label("Label Form");
-                    egui::ComboBox::from_id_salt("label_form").selected_text(form_name(labels.form)).show_ui(
-                        ui,
-                        |ui| {
-                            for f in [LabelForm::X, LabelForm::Y, LabelForm::Row, LabelForm::XY] {
-                                ui.selectable_value(&mut labels.form, f, form_name(f));
-                            }
-                        },
-                    );
+                    look::label_form_ui(ui, labels, columns);
                     ui.end_row();
                 });
+                look::label_extras(ui, labels);
             });
         }
         DetailTab::Symbol => {
@@ -514,9 +582,6 @@ fn plot_tab_body(
                     plot.auto_color = false;
                 }
                 ui.end_row();
-                ui.label("Show every");
-                ui.add(DragValue::new(&mut plot.symbol.every).range(1..=100000).suffix(" th point"));
-                ui.end_row();
             });
         }
         DetailTab::Pattern => {
@@ -547,10 +612,8 @@ fn plot_tab_body(
                         plot.auto_color = false;
                     }
                     ui.end_row();
-                    ui.label("Pattern");
-                    ui.add_enabled(false, egui::Button::new("None"));
-                    ui.end_row();
                 });
+                look::fill_controls(ui, "plot_fill_style", &mut plot.decor.fill);
             });
         }
         DetailTab::Spacing => {
@@ -563,10 +626,19 @@ fn plot_tab_body(
                 ui.add(DragValue::new(&mut bars.overlap_pct).range(-100.0..=100.0).speed(0.5));
                 ui.end_row();
                 ui.label("Width (in %)");
-                ui.add_enabled(false, DragValue::new(&mut 0.0));
+                ui.horizontal(|ui| {
+                    let mut set = bars.width_pct.is_some();
+                    if ui.checkbox(&mut set, "Set").changed() {
+                        // Starts at the width the gap gives.
+                        bars.width_pct = set.then_some(100.0 - bars.gap_pct);
+                    }
+                    if let Some(w) = &mut bars.width_pct {
+                        ui.add(DragValue::new(w).range(0.0..=100.0).speed(0.5));
+                    }
+                });
                 ui.end_row();
             });
-            ui.weak("Gap and overlap are shared by all column plots of the layer.");
+            ui.weak("Gap, overlap and width are shared by all column plots of the layer; a width replaces the gap.");
         }
         DetailTab::ErrorBar => {
             let plot = &mut graph.layers[l].plots[p];
@@ -628,16 +700,6 @@ fn position_name(p: LabelPosition) -> &'static str {
         LabelPosition::Right => "Right",
         LabelPosition::Above => "Above",
         LabelPosition::Below => "Below",
-    }
-}
-
-/// Origin's names of the label forms.
-fn form_name(f: LabelForm) -> &'static str {
-    match f {
-        LabelForm::X => "X",
-        LabelForm::Y => "Y",
-        LabelForm::Row => "Row Indices",
-        LabelForm::XY => "(X,Y)",
     }
 }
 
@@ -711,6 +773,8 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
             q.kind = src.kind;
             q.line = LineStyle { color, ..src.line.clone() };
             q.symbol = SymbolStyle { color, ..src.symbol.clone() };
+            // The look settings of the other tabs go too; the fill under the curve keeps its own colour.
+            q.decor = PlotDecor { fill_under: src.decor.fill_under.map(|_| color), ..src.decor.clone() };
         }
     }
     if move_by != 0 {
@@ -777,6 +841,7 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
             row(ui, "Symbol Interior", "inc_fill", &mut layer.group_style.symbol_interior, "Solid, Open, ...");
         }
     });
+    look::subgrouping_ui(ui, &mut layer.group_style);
     if (layer.palette.mode, layer.group_style) != before || ui.button("Recolor plots").clicked() {
         layer.apply_palette();
         layer.apply_group_increments();
@@ -863,8 +928,8 @@ fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sou
         DetailTab::Display => {
             section(ui, "Show Elements");
             ui.horizontal(|ui| {
-                ui.add_enabled(false, egui::Checkbox::new(&mut true, "X Axes"));
-                ui.add_enabled(false, egui::Checkbox::new(&mut true, "Y Axes"));
+                ui.checkbox(&mut layer.display.show_x_axes, "X Axes");
+                ui.checkbox(&mut layer.display.show_y_axes, "Y Axes");
                 // Labels: the tick labels of both axes; Frame: the lines on the opposite edges.
                 let mut labels = layer.x_axis.show_tick_labels && layer.y_axis.show_tick_labels;
                 if ui.checkbox(&mut labels, "Labels").changed() {
@@ -880,7 +945,7 @@ fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sou
             });
             section(ui, "Data Drawing Options");
             ui.checkbox(&mut layer.display.clip_data, "Clip Data to Frame");
-            ui.add_enabled(false, egui::Checkbox::new(&mut false, "Data on Top of Axes"));
+            ui.checkbox(&mut layer.display.data_on_top, "Data on Top of Axes");
             ui.checkbox(&mut layer.display.grid_on_top, "Grid on Top of Data");
         }
         DetailTab::Background => {
@@ -899,7 +964,19 @@ fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sou
                     }
                 });
                 ui.end_row();
+                ui.label("Gradient");
+                let mut on = layer.background_style.gradient.is_some();
+                ui.add_enabled_ui(layer.background.is_some(), |ui| {
+                    if ui.checkbox(&mut on, "Fill with a gradient").changed() {
+                        layer.background_style.gradient = on.then(|| Gradient::new(Color::WHITE));
+                    }
+                });
+                ui.end_row();
             });
+            if let (Some(g), true) = (layer.background_style.gradient.as_mut(), layer.background.is_some()) {
+                look::gradient_ui(ui, "bg_gradient", g);
+            }
+            group_box(ui, "Border", |ui| look::border_ui(ui, "bg_border", &mut layer.background_style.border));
         }
         DetailTab::Legend => legend_ui(ui, &mut layer.legend, &legend_ids),
         _ => {
@@ -1125,7 +1202,7 @@ fn stack_tab(ui: &mut egui::Ui, layer: &mut Layer) {
                             layer.plot_offsets[k].x = x;
                             layer.plot_offsets[k].y = y;
                         }
-                        None => layer.plot_offsets.push(PlotOffset { column, x, y, follows: None }),
+                        None => layer.plot_offsets.push(PlotOffset { x, y, ..PlotOffset::new(column) }),
                     }
                 }
             }
@@ -1225,6 +1302,8 @@ fn page_tab(ui: &mut egui::Ui, graph: &mut Graph) {
     const UNITS: [(&str, f64); 4] = [("inch", 72.0), ("cm", 72.0 / 2.54), ("mm", 72.0 / 25.4), ("point", 1.0)];
     let unit_id = ui.id().with("page_unit");
     let mut unit: usize = ui.data(|d| d.get_temp(unit_id)).unwrap_or(0);
+    let keep_id = ui.id().with("page_keep_layers");
+    let mut keep: bool = ui.data(|d| d.get_temp(keep_id)).unwrap_or(false);
     section(ui, "Dimensions");
     grid(ui, "page_props", |ui| {
         ui.label("Units");
@@ -1235,7 +1314,8 @@ fn page_tab(ui: &mut egui::Ui, graph: &mut Graph) {
         });
         ui.end_row();
         let per = UNITS[unit].1;
-        for (label, v) in [("Width", &mut graph.page.width_pt), ("Height", &mut graph.page.height_pt)] {
+        let (mut w, mut h) = (graph.page.width_pt, graph.page.height_pt);
+        for (label, v) in [("Width", &mut w), ("Height", &mut h)] {
             let mut a = *v / per;
             ui.label(label);
             if ui
@@ -1246,11 +1326,19 @@ fn page_tab(ui: &mut egui::Ui, graph: &mut Graph) {
             }
             ui.end_row();
         }
+        if (w, h) != (graph.page.width_pt, graph.page.height_pt) {
+            graph.resize_page(w, h, keep);
+        }
         ui.label("Title");
         ui.add(egui::TextEdit::singleline(&mut graph.long_name).desired_width(220.0));
         ui.end_row();
     });
-    ui.data_mut(|d| d.insert_temp(unit_id, unit));
+    ui.checkbox(&mut keep, "Keep the size of the layers when the page is resized")
+        .on_hover_text("Off: the layers grow and shrink with the page");
+    ui.data_mut(|d| {
+        d.insert_temp(unit_id, unit);
+        d.insert_temp(keep_id, keep);
+    });
 }
 
 /// The text settings of the whole graph: one font family and one size factor for every text.

@@ -217,7 +217,10 @@ impl Project {
     /// The number of result columns changed, so the new columns stay and the old linked results
     /// would be left behind with a mark that no link names any more. Their columns (and a result
     /// sheet that becomes empty) are removed; columns of an `Existing` target are the user's own, so
-    /// only their mark is cleared. Old columns without a mark were never linked and are left alone.
+    /// only their mark is cleared. Old columns without a mark were never linked and are left alone,
+    /// except for the tools that always write a sheet of their own whose width follows the data
+    /// (cross tabulation, 2D binning: one column per level or bin) and are never linked: there the
+    /// old sheet is the window's own earlier run and goes.
     fn retire_outputs(
         &mut self,
         old: &[ColumnId],
@@ -226,10 +229,11 @@ impl Project {
         output: &OutputTarget,
         report: &mut Report,
     ) {
+        let own_sheet = matches!(request.tool, Tool::Crosstab(_) | Tool::Binning2D(_));
         let stale: Vec<ColumnId> = old
             .iter()
             .copied()
-            .filter(|id| !new.contains(id) && self.column(*id).is_some_and(|c| c.analysis.is_some()))
+            .filter(|id| !new.contains(id) && self.column(*id).is_some_and(|c| own_sheet || c.analysis.is_some()))
             .collect();
         if stale.is_empty() {
             return;
@@ -476,6 +480,61 @@ mod tests {
         assert_eq!(p.workbook(book).unwrap().sheets[0].columns.len(), 3);
         assert!(p.analysis_links.is_empty(), "mode None drops the link");
         assert!(p.column(first[0]).unwrap().analysis.is_none());
+    }
+
+    #[test]
+    fn applying_again_with_a_different_width_replaces_the_cross_tabulation_sheet() {
+        let mut p = Project::new();
+        let book = p.add_workbook("Book1");
+        let text = |v: &[&str]| ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+        let a = p.add_column(book, 0, Designation::Y, text(&["x", "y", "x", "y", "x", "y"])).unwrap();
+        let two = p.add_column(book, 0, Designation::Y, text(&["u", "v", "u", "v", "v", "u"])).unwrap();
+        let three = p.add_column(book, 0, Designation::Y, text(&["u", "v", "w", "u", "v", "w"])).unwrap();
+        let request = |b: ColumnId| Request {
+            columns: vec![a, b],
+            rows: RowRange::All,
+            tool: Tool::Crosstab(Default::default()),
+        };
+        let none = RecalcMode::None;
+        let (_, first) = p.analyze_linked_into(None, &request(two), &OutputTarget::NewSheet, none).unwrap();
+        assert_eq!(p.workbook(book).unwrap().sheets.len(), 2);
+        // Same width: the columns are replaced in place.
+        let (_, same) = p.analyze_linked_into(Some(&first), &request(two), &OutputTarget::NewSheet, none).unwrap();
+        assert_eq!(same, first);
+        assert_eq!(p.workbook(book).unwrap().sheets.len(), 2);
+        // A column with three levels makes a wider table: the old sheet goes, the new one stays.
+        let (report, wider) =
+            p.analyze_linked_into(Some(&first), &request(three), &OutputTarget::NewSheet, none).unwrap();
+        assert_ne!(wider.len(), first.len());
+        let sheets = &p.workbook(book).unwrap().sheets;
+        assert_eq!(sheets.len(), 2, "{:?}", sheets.iter().map(|s| &s.name).collect::<Vec<_>>());
+        assert!(first.iter().all(|c| p.column(*c).is_none()));
+        assert_eq!(report.new_sheet, Some(1));
+        assert!(wider.iter().all(|c| sheets[1].column(*c).is_some()));
+    }
+
+    #[test]
+    fn applying_again_with_a_different_bin_count_replaces_the_2d_binning_sheet() {
+        let mut p = Project::new();
+        let book = p.add_workbook("Book1");
+        let x = p.add_column(book, 0, Designation::Y, ColumnData::numeric((0..20).map(f64::from).collect())).unwrap();
+        let y = p
+            .add_column(book, 0, Designation::Y, ColumnData::numeric((0..20).map(|i| f64::from(i * i)).collect()))
+            .unwrap();
+        let request = |ny: usize| {
+            let axis = |n| sheaf_calc::AxisBins { size: sheaf_calc::BinSize::Count(n), ..Default::default() };
+            Request {
+                columns: vec![x, y],
+                rows: RowRange::All,
+                tool: Tool::Binning2D(sheaf_calc::Bin2dOptions { x: axis(4), y: axis(ny), ..Default::default() }),
+            }
+        };
+        let none = RecalcMode::None;
+        let (_, first) = p.analyze_linked_into(None, &request(5), &OutputTarget::NewSheet, none).unwrap();
+        let (_, again) = p.analyze_linked_into(Some(&first), &request(7), &OutputTarget::NewSheet, none).unwrap();
+        assert_ne!(first.len(), again.len());
+        assert_eq!(p.workbook(book).unwrap().sheets.len(), 2, "the earlier matrix sheet is gone");
+        assert!(first.iter().all(|c| p.column(*c).is_none()));
     }
 
     #[test]

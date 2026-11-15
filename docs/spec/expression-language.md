@@ -19,6 +19,7 @@ Summary. One small expression language serves two jobs: worksheet column formula
 - The conditional `c ? a : b` evaluates only the branch it takes.
 - Text strings `"abc"` (no escape sequences; cannot contain a double quote) and `col(A)$` / `col(A)[i]$` (the text of a cell) are text values; see the text section below. `col("Long Name")` also takes a quoted name.
 - `col(A)[L]$` reads a column header rather than a data row; built-in header codes `G`, `L`, `U`, `C`, `O` are supported (see below).
+- `col(A)[Temperature]$` reads a user parameter row. Use `value(col(A)[Temperature]$)` for a numeric calculation; `D1`, `D2`, ... refer to the displayed user parameter rows.
 
 ## 2. Operators, tightest first
 
@@ -101,7 +102,40 @@ How a bare column read decides between number and text: the result of the whole 
 
 Sheaf uses literal, case-sensitive, non-overlapping matches, preserving Unicode text. An absent occurrence leaves the text unchanged. An empty search or an invalid occurrence (negative, fractional, missing or nonfinite) also leaves it unchanged; these are Sheaf's guard choices for cases the reference does not specify. The first three arguments accept text columns or numbers written as text; the occurrence is numeric, so formulas can read it from another column. Text-returning function calls accept an optional `$` suffix (`upper(substitute(col(A)$,"clean","raw")$)$`); numeric functions do not. Unsuffixed calls remain accepted. Set Column Values lists `substitute` under Function > Text, and Auto recalculation tracks every source column.
 
-Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a column formula set from a script); Sheaf accepts text branches. `%()` substitution and Origin global/`@SD` format settings are not done. For a number cell `col(A)$` is Origin's displayed text (a `-1e3` typed into a cell reads back as typed); Sheaf has no per-cell typed text, so it writes the number as `text(x)` does.
+Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a column formula set from a script); Sheaf accepts text branches. String-expression `%()` substitution is described below; Origin global/`@SD` format settings remain open. For a number cell `col(A)$` is Origin's displayed text (a `-1e3` typed into a cell reads back as typed); Sheaf has no per-cell typed text, so it writes the number as `text(x)` does.
+
+### Percent string-expression substitution
+
+T08 (2026-11-14, `codex/formula-string-substitution`) supports `%(expression)` inside a quoted
+formula string, for example `"name=%(col(A)[L]$), unit=%(col(A)[U]$)"` or
+`"run:%([Book1]Sheet1!col(A)[i]$)"`. Existing text expressions, including nested function
+calls with quoted arguments, can supply the text. Numeric results use ordinary string
+conversion. `%()` outside a quoted string converts the result to a number as `value(...)`
+does: `%(col(A)[Scale]$)*i`. It retains the existing empty-text and nonnumeric-text rules.
+The infix `%` remainder operator is unchanged.
+
+Within quoted strings, `%(TAB)` inserts a tab, `%(CRLF)` inserts carriage return and line feed,
+and `%%(` leaves a literal `%(`. Keyword matching ignores ASCII case and surrounding whitespace.
+These are based on Origin's [string substitution reference](https://docs.originlab.com/labtalk/guide/string-substitution/)
+and the installed Origin 2016 probe `scratch/formula-string-substitution/strings.lines.txt`.
+Measured scalar results: `value:12.5`, `name=Voltage, unit=mV`, `VOLTAGE`, and numeric 13.5
+from a substituted `12.5` plus 1. Control characters and the literal escape are also measured.
+The row-by-row worksheet behavior is Sheaf's extension: the scripted Origin column assignment
+did not populate its target, so no direct formula/recalculation parity is claimed.
+
+Substitution uses the existing parsed expression tree. Cell and header dependencies, user
+parameters, cross-sheet references, Auto/Manual/None, cycles, explicit recalculation and undo
+follow the existing formula rules. Native saves and `.opj` companions preserve the formula
+and its links. Original UTF-8 byte offsets remain in diagnostics. Empty or malformed `%()`
+and unsupported multi-argument forms are errors; nested substitutions are bounded along with
+the existing expression depth limits.
+
+Cell/metadata text is copied as data and never reparsed. In Origin the substituted string
+`2+3` can become executable expression text and produce 5; Sheaf's standalone conversion
+returns missing for that text. Dynamic reference-name construction, session string variables,
+range-variable names, `%([Book]Sheet,column,row[,format])`, graph/legend `@` forms, script macros
+and general LabTalk statement substitution remain unsupported. Regressions in the expression,
+core and I/O `string_substitution` tests cover the supported subset and this data boundary.
 
 ### Format compatibility name
 
@@ -129,9 +163,100 @@ The built-in header reads follow Origin's [Col reference](https://docs.originlab
 | `C` | Comments | `col(A)[C]$` |
 | `O` | F(x)= formula text | `col(A)[O]$` |
 
-The result is a scalar repeated across the requested output rows. Column short names, quoted long names, column numbers and `wcol(1)` work as for data reads. `$` returns the header text; without `$`, the header is parsed as a number (missing for empty or nonnumeric text). An empty Long Name stays empty rather than falling back to the short name. A standalone built-in label code takes precedence over a variable with that name; an expression such as `col(A)[L+0]$` still indexes data rows using the variable `L`. Parameter rows, sampling intervals, categories and filter headers are not implemented.
+The result is a scalar repeated across the requested output rows. Column short names, quoted long names, column numbers and `wcol(1)` work as for data reads. `$` returns the header text; without `$`, a built-in header is parsed as a number (missing for empty or nonnumeric text). An empty Long Name stays empty rather than falling back to the short name. A standalone built-in label code takes precedence over a variable with that name; an expression such as `col(A)[L+0]$` still indexes data rows using the variable `L`. Sampling intervals, categories and filter headers are not implemented.
 
 `Host::column_label` supplies the metadata; its default is empty. An unknown column is still an error. `Expr::columns()` lists all sources; `data_columns()` and `label_columns()` separate reads of cells and headers. Only cell reads create calculation-order or cycle edges, so formulas reading their own headers remain Auto, and mutual header reads do not form a false cycle. Header edits (including units, comments and formula text) invalidate dependent Auto or Manual results within the same undo step. Header-only formulas use the current worksheet row count when recalculated; headers do not extend a formula's data-input range.
+
+### User parameter label rows
+
+Measured in installed Origin on 2026-11-14 through the shared reference lock (local probes
+`re-workspace/scratch/formula-parameter-labels/labels.out.txt` and `scalars.out.txt`), following
+Origin's [metadata guide](https://docs.originlab.com/labtalk/guide/accessing-metadata) and
+[column label row reference](https://docs.originlab.com/labtalk/ref/column-label-row-characters/):
+
+- `col(A)[Temperature]$`, lowercase `temperature`, and `col(A)[Bath Temp]$` return the named
+  parameter text. Missing and empty labels return empty text. A parameter wins over a variable
+  of the same name; a known variable without a matching parameter still indexes a data row
+  (`j=2`, `col(A)[j]$` returned `2` in the synthetic column 1, 2, 3).
+- With Temperature = `2.5`, `value(col(A)[Temperature]$)` returned 2.5 and multiplying it by
+  row 3 returned 7.5. Direct `col(A)[Temperature]` was missing: user parameters are text, and
+  callers must use `value(...$)` to convert. Nonnumeric parameter text converted to missing;
+  empty text converted to zero. Sheaf's `value("")` now follows that measured zero result.
+- `D1` and `D2` select the first and second displayed user parameter rows. Origin's probe used
+  creation order (Temperature, Sample). **Existing Sheaf model difference:** its worksheet
+  displays the union of parameter names alphabetically; aliases follow that same displayed
+  order, including rows empty in the referenced column. Use names when matching an Origin
+  sheet whose parameter rows have a different order. No new row-order field is introduced.
+
+`Host::column_parameter` provides parameter text and distinguishes an existing empty row from
+an unknown row. `Expr::resolve_parameters(host)` resolves label-versus-variable precedence
+before inspecting `variables()`, `data_columns()` or `label_columns()`; evaluation resolves it
+automatically. Worksheet dependencies use that resolved form, so self/mutual parameter reads
+do not create false data cycles. Parameter edits update Auto results and mark Manual results
+pending within the same undo step; None remains a one-time calculation. Adding/removing a row,
+even by deleting the only column containing it, refreshes aliases on other columns without
+marking unrelated data-only formulas pending.
+
+The current parser supports identifier names and names containing spaces and numbers, such as
+`[Bath Temp]` and `[Group 1]`. Names containing operator punctuation and names parsed as expression
+constants (`e`, `pi`) require a `Dn` alias. Quotes around a parameter name are not supported
+(the Origin probe also returned empty text for `["Temperature"]$`). An empty text assigned to
+a numeric worksheet column is stored as a missing cell under the existing column rules.
+Native saves and `.opj.sheaf` companions retain parameters and their formula links; the `.opj`
+writer still warns that user parameter rows themselves require the companion.
+
+Regressions: `crates/expr/tests/parameter_labels.rs`, `crates/core/tests/parameter_labels.rs`
+and `crates/io/tests/parameter_labels.rs`. These use only generated metadata and cell values.
+
+### Cross-sheet and cross-book columns
+
+T08 group 6 (2026-11-14, `codex/formula-cross-sheet`) accepts explicit references such as
+`[Book1]Sheet2!col(A)`, `Sheet2!col(A)` within the target workbook, and
+`[Book1]2!wcol(1)` using a 1-based worksheet position. A column still uses its short name,
+quoted long name, or 1-based position. Double quotes allow spaces in workbook and worksheet
+names: `["My Book"]"Raw Data"!col("Current µA")`. Workbook references prefer the actual short
+name, then accept a unique display title; ambiguous titles are refused. Workbook and worksheet
+names ignore ASCII case. Short-name precedence and ambiguity refusal are Sheaf's explicit rules.
+Ordinary unqualified columns still use the target worksheet. No active-window fallback or
+file access occurs. A missing book, sheet or column is an error.
+
+Qualified columns support the existing arithmetic, statistics, vector functions, row indices,
+text reads, display-format conversion, built-in headers and user parameter rows. `i` continues
+to refer to the output row. An initial fill without an explicit row range covers the longer of
+the target worksheet and its data sources, so a remote column can fill an empty target sheet.
+Later recalculation follows source lengths under the existing shrink/empty-source rule.
+Header-only formulas need target rows or an explicit range.
+
+The worksheet host resolves the complete `ColumnRef::Scoped`; `WorksheetRef` selects a sheet
+by name or position. Recalculation now orders data dependencies across the entire project.
+Manual columns retain their values and mark Pending until explicitly recalculated, then their
+remote dependents update. Header and parameter dependencies remain separate from data cycles;
+changing a source sheet's parameter-row order invalidates its `Dn` readers in other sheets.
+Names and positions are resolved anew after structural edits. A moved indexed sheet can change
+the source; adding an unrelated book leaves Manual formulas Current. Renaming/deleting a source
+marks its readers Broken and retains their values; restoring it repairs the link. Formula text
+is not rewritten when names change. Document edits, Undo and Redo include the entire chain.
+
+Reference basis: Origin's published [range notation](https://docs.originlab.com/labtalk/guide/range-notation/)
+and [Set Values reference rules](https://docs.originlab.com/origin-help/wks-setcolval-quickstart/).
+The latter dates direct cross-sheet formulas to Origin 2017; earlier versions require a range
+variable. Installed Origin 2016 probes in `scratch/formula-cross-sheet/ranges*.lines.txt`
+confirm `[Src]Sheet1!col(A)` via a range variable gives `6,12,24` when multiplied by 3,
+and `[src]other!col(A)` gives `11,21,31,41` after adding 1 to `10,20,30,40`.
+The follow-up confirms an unqualified `Sheet1!col(A)` within the same book, sheet position 2,
+its second value 20 and mean 25. It also records that `[Probe]` resolves a book whose actual
+short name is `Book1` and display title is `Probe`.
+The direct qualified-`col()` expression used here is Sheaf's extension of range notation;
+direct-formula syntax, recalculation, structural edits and quoted-name details are not claimed
+as measured Origin 2016 behavior. No range-variable declarations, spreadsheet `A1` shorthand,
+multi-sheet ranges are added. The supported subset of `%()` substitution is described above.
+
+Native saves retain these formulas. The `.opj` writer stores text and values but cannot write
+their cross-sheet recalculation records: its existing warning says the external file uses mode
+None, and the `.opj.sheaf` companion preserves the full mode and linkage for reopening in Sheaf.
+Expression, model and native/companion round-trip regressions are in the `cross_sheet` and
+`cross_sheet_formulas` test files. The sheet-only host used for filters and analysis conditions
+has no project scope and continues to reject qualified references.
 
 ## 4. Calling it from the program
 
@@ -148,8 +273,8 @@ The result is a scalar repeated across the requested output rows. Column short n
 
 ## 6. Differences from Origin's LabTalk
 
-- Only a single expression; no `before formula` scripts, assignments, string variables, `%()` substitution or user-defined functions. Those are separate features and are not part of this crate.
-- No parameter label rows or cross-sheet references `[Book]Sheet!col(A)` (the cells of other sheets are not visible to the evaluator), `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). The `[a:b]` range is accepted only inside statistics.
+- Only a single expression; no `before formula` scripts, assignments, session string variables, legacy multi-argument `%()` substitution, generated expression text or user-defined functions. The supported string-expression substitution subset is described above.
+- No spreadsheet cell notation (`A1`, bare cross-sheet `Sheet!A`), range-variable declarations, or `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). Explicit cross-sheet `col()` references are described above. The `[a:b]` range is accepted only inside statistics. Parameter-row ordering and the supported parameter-name syntax are described above.
 - A single `=` is not a comparison here; use `==`.
 - `e` is the constant 2.718...; a parameter literally named `e` in a fit function cannot be used (rename it).
 - `i` is read-only and always the 1-based row number of the output row.

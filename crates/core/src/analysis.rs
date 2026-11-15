@@ -39,11 +39,15 @@ pub use sheaf_calc::{
 pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, DiscSort, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode};
 pub use sheaf_calc::{
-    FftFilterOptions, FftFilterType, FftOptions, FftWindow, IfftOptions, PowerNorm, WindowCorrection,
+    CoherenceOptions, CoherenceWindow, DecimateFilter, DecimateOptions, FftFilterOptions, FftFilterType, FftOptions,
+    FftWindow, IfftOptions, PowerNorm, TraceMethod, WindowCorrection,
 };
+pub use sheaf_calc::{EnvelopeOptions, EnvelopeType};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
+pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
+pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
 
 /// The multi-peak fit of [`PeakChainSpec`]: a sum of `shape` peaks on `baseline`, one peak for
@@ -120,7 +124,7 @@ pub struct InterpSpec {
     /// X range of the result; `None` is the X range of the data.
     pub range: Option<(f64, f64)>,
     /// Smoothing factor of the B-spline method: the allowed sum of squared residuals (Origin's
-    /// `sf`). 0 gives the interpolating spline, which differs from Origin's automatic factor.
+    /// `sf`). 0 chooses the factor from the data as Origin does (`sheaf_calc::automatic_smoothing`).
     pub smoothing: f64,
     /// Interpolate onto the values of this column instead of an even grid (Mathematics >
     /// Interpolate/Extrapolate Y from X, Origin's `interp1` with `ix` given); `npts` and `range` are
@@ -258,6 +262,13 @@ pub struct IfftSpec {
     pub auto_interval: bool,
 }
 
+/// What [`Tool::Decimate`] does (Origin's Signal Processing > Decimation, `decimate`, measured;
+/// analysis-tools.md 13.4): every `factor`-th point of each input, with its X, in a new sheet.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct DecimateSpec {
+    pub options: DecimateOptions,
+}
+
 /// What [`Tool::FftFilter`] does (Origin's Signal Processing > FFT Filters, `fft_filters`,
 /// measured; analysis-tools.md 15.2).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -265,6 +276,43 @@ pub struct FftFilterSpec {
     pub options: FftFilterOptions,
     /// Sampling interval; `None`: the X step of the input (1 without an X column).
     pub interval: Option<f64>,
+}
+
+/// What [`Tool::Envelope`] does (Origin's Signal Processing > Envelope, `envelope`, measured;
+/// analysis-tools.md 13.2).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct EnvelopeSpec {
+    pub options: EnvelopeOptions,
+}
+
+/// What [`Tool::Coherence`] does (Origin's Signal Processing > Coherence, `cohere`, measured;
+/// analysis-tools.md 13.3): the magnitude-squared coherence of each input column with the other
+/// column.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CoherenceSpec {
+    /// The second signal.
+    pub other: ColumnId,
+    /// Window, segment and FFT lengths, overlap and the sampling interval (Origin: 1 unless given,
+    /// not taken from the X column).
+    pub options: CoherenceOptions,
+}
+
+/// The most points [`Tool::TraceInterp`] makes; more are refused.
+pub const MAX_TRACE_POINTS: usize = 10_000_000;
+
+/// What [`Tool::TraceInterp`] does (Origin's Mathematics > Trace Interpolation, `interp1trace`,
+/// measured; analysis-tools.md 16): the curve resampled at evenly spaced points along its path.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TraceInterpSpec {
+    pub method: TraceMethod,
+    /// Number of points of the result (Origin's `npts`, default 100).
+    pub points: usize,
+}
+
+impl Default for TraceInterpSpec {
+    fn default() -> Self {
+        Self { method: TraceMethod::Linear, points: 100 }
+    }
 }
 
 /// Which t-test [`TTestSpec`] runs.
@@ -298,13 +346,16 @@ impl Default for TTestSpec {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AnovaSpec {
     pub alpha: f64,
-    /// Means comparison of all pairs of groups; `None` leaves it out.
+    /// Means comparison of all pairs of groups (of every group against the control for Dunnett); `None`
+    /// leaves it out.
     pub comparison: Option<MeansComparison>,
+    /// Dunnett's control group, counted from 0 in the order of the chosen columns; ignored by the other methods.
+    pub control: usize,
 }
 
 impl Default for AnovaSpec {
     fn default() -> Self {
-        AnovaSpec { alpha: 0.05, comparison: Some(MeansComparison::Tukey) }
+        AnovaSpec { alpha: 0.05, comparison: Some(MeansComparison::Tukey), control: 0 }
     }
 }
 
@@ -314,6 +365,26 @@ pub struct HistogramSpec {
     pub freq: FreqOptions,
     /// Also make a graph with a column plot of the counts.
     pub graph: bool,
+}
+
+/// What [`Tool::Crosstab`] does: the first chosen column holds the levels of the row variable, the second
+/// those of the column variable (text or numbers).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CrosstabSpec {
+    /// Add each count's percentage of its row total.
+    pub row_percent: bool,
+    pub column_percent: bool,
+    pub total_percent: bool,
+    /// Add the counts expected under independence.
+    pub expected: bool,
+    /// Level for the sentence about the tests.
+    pub alpha: f64,
+}
+
+impl Default for CrosstabSpec {
+    fn default() -> Self {
+        CrosstabSpec { row_percent: true, column_percent: true, total_percent: true, expected: true, alpha: 0.05 }
+    }
 }
 
 /// What [`Tool::Normality`] does: all the normality tests on each chosen column.
@@ -629,6 +700,11 @@ pub enum Tool {
     Fft(FftSpec),
     Ifft(IfftSpec),
     FftFilter(FftFilterSpec),
+    Envelope(EnvelopeSpec),
+    Coherence(CoherenceSpec),
+    Decimate(DecimateSpec),
+    /// Mathematics > Trace Interpolation (Origin's `interp1trace`, measured; analysis-tools.md 16).
+    TraceInterp(TraceInterpSpec),
     /// Data Manipulation: subtract the straight line through two points.
     SubtractLine(SubtractLineSpec),
     /// Data Manipulation: reduce duplicate X data.
@@ -657,6 +733,7 @@ pub enum Tool {
     /// Statistics > Descriptive Statistics > Discrete Frequency.
     DiscreteFrequency(DiscreteFreqSpec),
     Normality(NormalitySpec),
+    Crosstab(CrosstabSpec),
     TwoWayAnova(TwoWayAnovaSpec),
     MannWhitney(MannWhitneySpec),
     SignedRank(SignedRankSpec),
@@ -669,6 +746,10 @@ pub enum Tool {
     Friedman(FriedmanSpec),
     Grubbs(OutlierSpec),
     Dixon(OutlierSpec),
+    /// Statistics > Descriptive Statistics > Distribution Fit (T14, `docs/spec/statistics.md` section 16).
+    DistFit(DistFitSpec),
+    /// Probability plot and Q-Q plot against a distribution family; makes a graph.
+    ProbPlot(ProbPlotSpec),
     AverageCurves(AverageSpec),
     Intersect(IntersectSpec),
     PolygonArea,
@@ -692,6 +773,10 @@ impl Tool {
             Tool::Fft(_) => "FFT",
             Tool::Ifft(_) => "IFFT",
             Tool::FftFilter(_) => "FFT filter",
+            Tool::Envelope(_) => "Envelope",
+            Tool::Coherence(_) => "Coherence",
+            Tool::Decimate(_) => "Decimation",
+            Tool::TraceInterp(_) => "Trace interpolation",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
             Tool::ReduceX(_) => "Reduce to evenly spaced X",
@@ -718,6 +803,7 @@ impl Tool {
             Tool::Binning2D(_) => "2D frequency counts",
             Tool::DiscreteFrequency(_) => "Discrete frequency",
             Tool::Normality(_) => "Normality test",
+            Tool::Crosstab(_) => "Cross tabulation",
             Tool::TwoWayAnova(_) => "Two-way ANOVA",
             Tool::MannWhitney(_) => "Mann-Whitney test",
             Tool::SignedRank(spec) => match spec.kind {
@@ -733,6 +819,11 @@ impl Tool {
             Tool::Friedman(_) => "Friedman ANOVA",
             Tool::Grubbs(_) => "Grubbs test",
             Tool::Dixon(_) => "Dixon's Q test",
+            Tool::DistFit(_) => "Distribution fit",
+            Tool::ProbPlot(spec) => match spec.kind {
+                ProbPlotKind::Probability => "Probability plot",
+                ProbPlotKind::QQ => "Q-Q plot",
+            },
             Tool::AverageCurves(_) => "Average multiple curves",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "Polygon area",
@@ -750,6 +841,10 @@ impl Tool {
             Tool::Fft(_) => "FFT",
             Tool::Ifft(_) => "IFFT",
             Tool::FftFilter(_) => "FFTFilter",
+            Tool::Envelope(_) => "Envelope",
+            Tool::Coherence(_) => "Coherence",
+            Tool::Decimate(_) => "Decimate",
+            Tool::TraceInterp(_) => "TraceInterp",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
             Tool::Translate(_) => "Translate",
@@ -763,6 +858,7 @@ impl Tool {
             Tool::Binning2D(_) => "Binning2D",
             Tool::DiscreteFrequency(_) => "DiscretFreq",
             Tool::Normality(_) => "Normality",
+            Tool::Crosstab(_) => "Crosstab",
             Tool::TwoWayAnova(_) => "ANOVA2Way",
             Tool::MannWhitney(_) => "MannWhitney",
             Tool::SignedRank(_) => "SignedRank",
@@ -774,6 +870,11 @@ impl Tool {
             Tool::Friedman(_) => "Friedman",
             Tool::Grubbs(_) => "Grubbs",
             Tool::Dixon(_) => "Dixon",
+            Tool::DistFit(_) => "DistFit",
+            Tool::ProbPlot(spec) => match spec.kind {
+                ProbPlotKind::Probability => "ProbPlot",
+                ProbPlotKind::QQ => "QQPlot",
+            },
             Tool::AverageCurves(_) => "AverageResult",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "PolygonArea",
@@ -937,6 +1038,18 @@ fn signal_values(v: &[f64], name: &str) -> Result<Vec<f64>, AnalysisError> {
         return Err(AnalysisError::BadOption(format!("column {name} has missing values")));
     }
     Ok(v.to_vec())
+}
+
+/// "2nd", "3rd", "12th" for the comment of a decimated column.
+fn ordinal(n: usize) -> String {
+    let suffix = match (n % 10, n % 100) {
+        (_, 11..=13) => "th",
+        (1, _) => "st",
+        (2, _) => "nd",
+        (3, _) => "rd",
+        _ => "th",
+    };
+    format!("{n}{suffix} point")
 }
 
 /// Origin's `<auto>` sampling interval: the mean X step of the input, 1 without a usable X.
@@ -1317,7 +1430,9 @@ fn run_peak_chain(
     Ok(t)
 }
 
+mod categorical;
 mod curves;
+mod dist;
 mod manip;
 mod power;
 mod statistics;
@@ -1355,6 +1470,42 @@ impl Project {
         graph
     }
 
+    /// A new graph with the scatter and line plots of a probability plot; the plan names columns of the
+    /// new result sheet by position.
+    fn xy_graph(&mut self, ids: &[ColumnId], plan: &dist::XyGraph) -> WindowId {
+        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.long_name.clone());
+        let graph = self.add_graph(crate::template::Template::Scatter);
+        for p in &plan.plots {
+            self.add_plot_xy(graph, 0, Some(ids[p.x]), ids[p.y], None).expect("the graph and the new columns exist");
+        }
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                for (plot, spec) in l.plots.iter_mut().zip(&plan.plots) {
+                    plot.kind = spec.kind;
+                    plot.label = Some(spec.label.clone());
+                }
+                l.apply_palette();
+                // A reference line takes the colour of the points it belongs to.
+                for (i, spec) in plan.plots.iter().enumerate() {
+                    if let Some(of) = spec.line_of {
+                        let colour = l.plots[of].symbol.color;
+                        l.plots[i].line.color = colour;
+                        l.plots[i].symbol.color = colour;
+                        l.plots[i].auto_color = false;
+                    }
+                }
+                l.x_axis.scale = plan.x_scale;
+                l.y_axis.scale = plan.y_scale;
+                l.x_axis.title = Some(plan.x_title.clone());
+                l.y_axis.title = Some(plan.y_title.clone());
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        graph
+    }
+
     /// Runs an analysis tool on worksheet columns. See the module text for
     /// where the results go. On error nothing is changed.
     pub fn analyze(&mut self, request: &Request) -> Result<Report, AnalysisError> {
@@ -1375,7 +1526,7 @@ impl Project {
 
         let mut inputs = Vec::with_capacity(request.columns.len());
         // The two-way ANOVA reads its columns itself: the factor columns may hold text.
-        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_) | Tool::DiscreteFrequency(_));
+        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_) | Tool::Crosstab(_) | Tool::DiscreteFrequency(_));
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
                 if self.column(*id).is_some() {
@@ -1417,10 +1568,18 @@ impl Project {
         let mut notes: Vec<String> = Vec::new();
         // Plots of a new graph: indices into `on_sheet` of the X and the Y column.
         let mut graph_plots: Vec<(usize, usize)> = Vec::new();
+        // A graph of scatter and line plots (probability plots).
+        let mut xy_graph: Option<dist::XyGraph> = None;
 
         match &request.tool {
             Tool::TwoWayAnova(spec) => {
                 let out = statistics::two_way_anova(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::Crosstab(spec) => {
+                let out = categorical::crosstab(spec, sheet, &request.columns, request.rows)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;
@@ -1450,6 +1609,13 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 graph_plots = out.plots;
+            }
+            Tool::DistFit(_) | Tool::ProbPlot(_) => {
+                let out = dist::run(&request.tool, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
             }
             Tool::AverageCurves(_) | Tool::Intersect(_) | Tool::PolygonArea => {
                 let out = curves::run(&request.tool, &inputs)?;
@@ -1771,6 +1937,153 @@ impl Project {
                         units: inp.units.clone(),
                         comments: format!("FFT {word} filter of {}{}", inp.short, inp.range_note()),
                         data: inp.aligned(&calc::fft_filter(&y, dt, &spec.options)),
+                    });
+                }
+            }
+            Tool::Envelope(spec) => {
+                for inp in &inputs {
+                    // Rows without an X or a Y value drop out before the extremes are searched.
+                    let (x, y): (Vec<f64>, Vec<f64>) =
+                        inp.xs().iter().zip(inp.ys()).filter(|(x, y)| x.is_finite() && y.is_finite()).unzip();
+                    let env = calc::envelope(&x, &y, &spec.options).map_err(|e| {
+                        AnalysisError::BadOption(match e {
+                            calc::EnvelopeError::BadNpts => "Points on each side cannot be negative".to_string(),
+                            calc::EnvelopeError::TooFewExtremes => format!(
+                                "column {} has fewer than two upper or two lower extreme points for {} points on each side",
+                                inp.short, spec.options.npts
+                            ),
+                            calc::EnvelopeError::RepeatedX => {
+                                format!("column {} has extreme points with the same X", inp.short)
+                            }
+                        })
+                    })?;
+                    let quoted = if inp.name == inp.short { inp.short.clone() } else { format!("\"{}\"", inp.name) };
+                    for (k, (word, values)) in [("Upper", env.upper), ("Lower", env.lower)].into_iter().enumerate() {
+                        let Some(values) = values else { continue };
+                        let comments = format!("{word} Envelope of {quoted}{}", inp.range_note());
+                        on_sheet.push(SheetColumn {
+                            designation: Designation::X,
+                            long_name: format!("Envelope X {}", k + 1),
+                            units: String::new(),
+                            comments: comments.clone(),
+                            data: ColumnData::numeric(x.clone()),
+                        });
+                        on_sheet.push(SheetColumn {
+                            designation: Designation::Y,
+                            long_name: format!("Envelope Y {}", k + 1),
+                            units: String::new(),
+                            comments,
+                            data: ColumnData::numeric(values),
+                        });
+                    }
+                }
+            }
+            Tool::Coherence(spec) => {
+                let (_, _, ocol) = self.locate(spec.other).ok_or(AnalysisError::NoSuchColumn(spec.other))?;
+                let oshort = ocol.short_name.clone();
+                let ovalues = ocol.numeric().ok_or_else(|| AnalysisError::NotNumeric(oshort.clone()))?;
+                for inp in &inputs {
+                    // Origin: the shorter signal is padded with zeros and a missing value is 0.
+                    let trim = |v: &[f64]| {
+                        let end = v.iter().rposition(|a| !a.is_nan()).map_or(0, |i| i + 1);
+                        v[..end].to_vec()
+                    };
+                    let x = trim(inp.ys());
+                    let y_end = (inp.last + 1).min(ovalues.len());
+                    let y = trim(ovalues.get(inp.first.min(y_end)..y_end).unwrap_or(&[]));
+                    if x.is_empty() {
+                        return Err(AnalysisError::TooFewPoints(inp.short.clone()));
+                    }
+                    if y.is_empty() {
+                        return Err(AnalysisError::TooFewPoints(oshort.clone()));
+                    }
+                    let r = calc::coherence(&x, &y, &spec.options).map_err(AnalysisError::BadOption)?;
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::X,
+                        long_name: "Frequency".into(),
+                        units: String::new(),
+                        comments: String::new(),
+                        data: ColumnData::numeric(r.frequency),
+                    });
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: format!("{} coherence with {}", inp.name, ocol.display_name()),
+                        units: String::new(),
+                        comments: format!("Coherence of {} and {oshort}{}", inp.short, inp.range_note()),
+                        data: ColumnData::numeric(r.coherence),
+                    });
+                }
+            }
+            Tool::Decimate(spec) => {
+                for inp in &inputs {
+                    let y = signal_values(inp.ys(), &inp.short)?;
+                    let x = &inp.xs()[..y.len()];
+                    if x.iter().step_by(spec.options.factor.max(1)).any(|v| !v.is_finite()) {
+                        return Err(AnalysisError::BadOption(format!("column {}: X has missing values", inp.short)));
+                    }
+                    let (dx, dy) = calc::decimate(x, &y, &spec.options)
+                        .map_err(|e| AnalysisError::BadOption(format!("column {}: {e}", inp.short)))?;
+                    let o = &spec.options;
+                    let how = match o.filter {
+                        DecimateFilter::None => String::new(),
+                        DecimateFilter::MovingAverage => ", moving average filter".to_string(),
+                        DecimateFilter::Fir => format!(", FIR filter of order {}", o.order),
+                    };
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::X,
+                        long_name: format!("Decimated {}", inp.x_name),
+                        units: inp.x_units.clone(),
+                        comments: String::new(),
+                        data: ColumnData::numeric(dx),
+                    });
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: format!("Decimated {}", inp.name),
+                        units: inp.units.clone(),
+                        comments: format!("Every {} of {}{}{how}", ordinal(o.factor), inp.short, inp.range_note()),
+                        data: ColumnData::numeric(dy),
+                    });
+                }
+            }
+            Tool::TraceInterp(spec) => {
+                if spec.points < 2 {
+                    return Err(AnalysisError::BadOption(format!(
+                        "{} points are too few, a trace needs at least 2",
+                        spec.points
+                    )));
+                }
+                if spec.points > MAX_TRACE_POINTS {
+                    return Err(AnalysisError::BadOption(format!(
+                        "{} points are too many, the most is {MAX_TRACE_POINTS}",
+                        spec.points
+                    )));
+                }
+                let word = match spec.method {
+                    TraceMethod::Linear => "linear",
+                    TraceMethod::CubicSpline => "cubic spline",
+                    TraceMethod::CubicBSpline => "cubic B-spline",
+                };
+                for inp in &inputs {
+                    let (x, y) = calc::trace_interp(inp.xs(), inp.ys(), spec.method, spec.points).ok_or_else(|| {
+                        let need = if spec.method == TraceMethod::CubicBSpline { 4 } else { 2 };
+                        AnalysisError::BadOption(format!(
+                            "{} needs at least {need} points that differ in X and in Y next to each other",
+                            inp.short
+                        ))
+                    })?;
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::X,
+                        long_name: inp.x_name.clone(),
+                        units: inp.x_units.clone(),
+                        comments: String::new(),
+                        data: ColumnData::numeric(x),
+                    });
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: format!("{} trace", inp.name),
+                        units: inp.units.clone(),
+                        comments: format!("{word} trace interpolation of {}{}", inp.short, inp.range_note()),
+                        data: ColumnData::numeric(y),
                     });
                 }
             }
@@ -2332,6 +2645,9 @@ impl Project {
         }
         if !graph_plots.is_empty() {
             new_graph = Some(self.histogram_graph(&sheet_column_ids, &graph_plots));
+        }
+        if let Some(plan) = &xy_graph {
+            new_graph = Some(self.xy_graph(&sheet_column_ids, plan));
         }
         let columns = if count == 1 { "1 column".to_string() } else { format!("{count} columns") };
         // Name the added columns, so that the result can be found without opening the sheet.
@@ -3178,6 +3494,46 @@ mod tests {
     }
 
     #[test]
+    fn coherence_writes_frequency_and_coherence_to_a_new_sheet() {
+        let (mut p, book, flat, ramp) = sample();
+        let options = CoherenceOptions { fft_len: 8, win_len: 8, overlap: 4, interval: 0.5, ..Default::default() };
+        let r = p.analyze(&request(&[ramp], Tool::Coherence(CoherenceSpec { other: flat, options }))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(rs.name.starts_with("Coherence"), "{}", rs.name);
+        assert_eq!(rs.columns.len(), 2);
+        let f = rs.columns[0].numeric().unwrap();
+        assert_eq!((f.len(), f[1], f[4]), (5, 0.25, 1.0));
+        assert_eq!(rs.columns[1].comments, "Coherence of C and B");
+        assert_eq!(r.message.split(':').next(), Some("Coherence"));
+        // A window longer than the FFT is refused.
+        let options = CoherenceOptions { win_len: 16, ..options };
+        assert!(matches!(
+            p.analyze(&request(&[ramp], Tool::Coherence(CoherenceSpec { other: flat, options }))),
+            Err(AnalysisError::BadOption(_))
+        ));
+    }
+
+    #[test]
+    fn coherence_cuts_both_signals_to_the_row_range() {
+        let (mut p, book, _, ramp) = sample();
+        let sq: Vec<f64> = (0..11).map(|i| f64::from(i * i % 7)).collect();
+        let flat = p.add_column(book, 0, Designation::Y, ColumnData::numeric(sq)).unwrap();
+        let options = CoherenceOptions { fft_len: 8, win_len: 4, overlap: 0, ..Default::default() };
+        let mut req = request(&[ramp], Tool::Coherence(CoherenceSpec { other: flat, options }));
+        req.rows = RowRange::Rows(3, 6);
+        let r = p.analyze(&req).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        let got = rs.columns[1].numeric().unwrap().to_vec();
+        let x = p.locate(ramp).unwrap().2.numeric().unwrap()[2..=5].to_vec();
+        let y = p.locate(flat).unwrap().2.numeric().unwrap()[2..=5].to_vec();
+        let want = calc::coherence(&x, &y, &options).unwrap().coherence;
+        assert_eq!(got.len(), want.len());
+        for (a, b) in got.iter().zip(&want) {
+            assert!((a.is_nan() && b.is_nan()) || (a - b).abs() < 1e-12);
+        }
+    }
+
+    #[test]
     fn the_fft_writes_origins_eight_columns_with_frequencies_from_the_x_step() {
         let (mut p, book, _, ramp) = sample();
         let r = p.analyze(&request(&[ramp], Tool::Fft(FftSpec { auto_interval: true, ..Default::default() }))).unwrap();
@@ -3218,6 +3574,43 @@ mod tests {
     }
 
     #[test]
+    fn decimation_writes_every_dth_point_with_its_x_to_a_new_sheet() {
+        let (mut p, book, _, ramp) = sample();
+        let options = DecimateOptions { factor: 2, ..Default::default() };
+        let r = p.analyze(&request(&[ramp], Tool::Decimate(DecimateSpec { options }))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(rs.name.starts_with("Decimate"), "{}", rs.name);
+        assert_eq!(rs.columns[0].numeric().unwrap(), [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]);
+        assert_eq!((rs.columns[0].units.as_str(), rs.columns[0].long_name.as_str()), ("s", "Decimated Time"));
+        assert_eq!(rs.columns[1].numeric().unwrap(), [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]);
+        assert_eq!(rs.columns[1].comments, "Every 2nd point of C");
+        assert!(r.message.starts_with("Decimation"), "{}", r.message);
+        // Origin refuses a factor of 3 on 11 points.
+        let big = DecimateOptions { factor: 3, ..Default::default() };
+        assert!(matches!(
+            p.analyze(&request(&[ramp], Tool::Decimate(DecimateSpec { options: big }))),
+            Err(AnalysisError::BadOption(_))
+        ));
+    }
+
+    #[test]
+    fn decimation_refuses_a_missing_x_in_a_kept_row_only() {
+        let mut p = Project::new();
+        let book = p.add_workbook("gaps");
+        let mut x: Vec<f64> = (0..40).map(f64::from).collect();
+        x[4] = f64::NAN;
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 40])).unwrap();
+        let run = |p: &mut Project, factor| {
+            let options = DecimateOptions { factor, ..Default::default() };
+            p.analyze(&request(&[y], Tool::Decimate(DecimateSpec { options })))
+        };
+        // Row 4 is kept by a factor of 2 but skipped by a factor of 3.
+        assert!(matches!(run(&mut p, 2), Err(AnalysisError::BadOption(_))));
+        assert!(run(&mut p, 3).is_ok());
+    }
+
+    #[test]
     fn an_fft_filter_goes_beside_its_column() {
         let (mut p, book, flat, ramp) = sample();
         // The automatic low pass keeps a constant as it is.
@@ -3232,6 +3625,69 @@ mod tests {
         let r = p.analyze(&request(&[flat], Tool::FftFilter(FftFilterSpec { options, interval: None }))).unwrap();
         assert!(p.numeric(r.new_columns[0]).unwrap().iter().all(|v| v.abs() < 1e-12));
         assert!(r.message.starts_with("FFT filter"), "{}", r.message);
+    }
+
+    #[test]
+    fn an_envelope_goes_to_a_new_sheet_with_its_own_x() {
+        let (mut p, book, _, _) = sample();
+        let y = [0.0, 2.0, 1.0, 3.0, 0.5, 4.0, 0.2, 2.0, 1.0, 5.0, 4.0, 3.0];
+        let x: Vec<f64> = (0..y.len()).map(|i| i as f64).collect();
+        let xc = p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+        let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y.to_vec())).unwrap();
+        let options = EnvelopeOptions { kind: EnvelopeType::Both, npts: 1.0 };
+        let r = p.analyze(&request(&[yc], Tool::Envelope(EnvelopeSpec { options }))).unwrap();
+        assert!(r.message.starts_with("Envelope"), "{}", r.message);
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        let names: Vec<_> = rs.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["Envelope X 1", "Envelope Y 1", "Envelope X 2", "Envelope Y 2"]);
+        assert_eq!(rs.columns[1].comments, "Upper Envelope of E");
+        let upper = rs.columns[1].numeric().unwrap();
+        // Origin printed 1.6138392857142858 at the first row and passes through the extremes.
+        assert!((upper[0] - 1.6138392857142858).abs() < 1e-12 && (upper[9] - 5.0).abs() < 1e-12, "{upper:?}");
+        let _ = xc;
+        // A missing value drops its row (Origin: 11 rows, extremes searched without it).
+        let mut with_gap = y.to_vec();
+        with_gap[5] = f64::NAN;
+        let gc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(with_gap)).unwrap();
+        let r = p.analyze(&request(&[gc], Tool::Envelope(EnvelopeSpec { options }))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(rs.columns[1].numeric().unwrap().len(), 11);
+        // Too few extremes are refused with a message.
+        let tiny = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        assert!(p.analyze(&request(&[tiny], Tool::Envelope(EnvelopeSpec { options }))).is_err());
+    }
+
+    #[test]
+    fn a_trace_interpolation_goes_to_a_new_sheet_with_its_own_x() {
+        let mut p = Project::new();
+        let book = p.add_workbook("loop");
+        let x = [0.0, 2.0, 3.0, 2.0, 0.0, -1.0];
+        let y = [0.0, 0.0, 1.0, 2.0, 2.0, 1.0];
+        let xc = p.add_column(book, 0, Designation::X, ColumnData::numeric(x.to_vec())).unwrap();
+        let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y.to_vec())).unwrap();
+        p.column_mut(xc).unwrap().units = "V".into();
+        p.column_mut(yc).unwrap().units = "A".into();
+        let spec = TraceInterpSpec { method: TraceMethod::Linear, points: 10 };
+        let r = p.analyze(&request(&[yc], Tool::TraceInterp(spec))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(rs.name.starts_with("TraceInterp"), "{}", rs.name);
+        // Origin's numbers for this loop (analysis-tools.md 16): the diamond (1,0) (3,1) (1,2) (-1,1)
+        let (ox, oy) = (rs.columns[0].numeric().unwrap(), rs.columns[1].numeric().unwrap());
+        assert_eq!((ox.len(), oy.len()), (10, 10));
+        assert_eq!((ox[0], oy[0], ox[3], oy[3], ox[9], oy[9]), (1.0, 0.0, 3.0, 1.0, -1.0, 1.0));
+        assert_eq!((rs.columns[0].units.as_str(), rs.columns[1].units.as_str()), ("V", "A"));
+        assert_eq!(rs.columns[1].comments, "linear trace interpolation of B");
+        assert!(r.message.starts_with("Trace interpolation"), "{}", r.message);
+        // The B-spline needs four points after merging; the diamond has four.
+        let spline = TraceInterpSpec { method: TraceMethod::CubicBSpline, points: 10 };
+        assert!(p.analyze(&request(&[yc], Tool::TraceInterp(spline))).is_ok());
+        // A trace of fewer than two points, or with too few distinct points, is refused.
+        let one = TraceInterpSpec { points: 1, ..spec };
+        assert!(matches!(p.analyze(&request(&[yc], Tool::TraceInterp(one))), Err(AnalysisError::BadOption(_))));
+        let huge = TraceInterpSpec { points: MAX_TRACE_POINTS + 1, ..spec };
+        assert!(matches!(p.analyze(&request(&[yc], Tool::TraceInterp(huge))), Err(AnalysisError::BadOption(_))));
+        let flat = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 6])).unwrap();
+        assert!(matches!(p.analyze(&request(&[flat], Tool::TraceInterp(spec))), Err(AnalysisError::BadOption(_))));
     }
 
     #[test]

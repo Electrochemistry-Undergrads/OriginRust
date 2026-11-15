@@ -10,6 +10,7 @@
 //! on a smaller front frame and draws each later curve moved right and up.
 
 use crate::data::{self, Dim, LayerData, PlotData};
+use crate::fill;
 use crate::fonts::TextMeasurer;
 use crate::hit;
 use crate::legend;
@@ -61,6 +62,12 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
             );
             hit::record(&mut last.objects, &last.overlay, start, ObjectKind::Legend, i, ItemList::Overlay, &[], m);
         }
+    }
+    // The page's border line, over everything, inside the page edge.
+    if let (Some(border), Some(last)) = (g.page.style.border.as_ref().filter(|b| b.width_pt > 0.0), layers.last_mut()) {
+        let inset = border.width_pt / 2.0;
+        let rect = Rect { x: inset, y: inset, w: g.page.width_pt - 2.0 * inset, h: g.page.height_pt - 2.0 * inset };
+        last.overlay.push(Item::Rect { rect, fill: None, stroke: Some(fill::border_stroke(border)) });
     }
     Ok(Scene { width: g.page.width_pt, height: g.page.height_pt, background: g.page.background, layers })
 }
@@ -550,12 +557,17 @@ fn layer_scene(
     m: &dyn TextMeasurer,
 ) -> LayerScene {
     let layer = &g.layers[index];
-    let mut scene =
-        LayerScene { clip: geom.clip, grid: Vec::new(), plots: Vec::new(), overlay: Vec::new(), objects: Vec::new() };
+    let mut scene = LayerScene {
+        clip: geom.clip,
+        grid: Vec::new(),
+        plots: Vec::new(),
+        overlay: Vec::new(),
+        underlay_len: 0,
+        objects: Vec::new(),
+    };
     // The layer's Background colour fills the frame behind the grid and the data.
-    if let Some(fill) = layer.background {
-        scene.grid.push(Item::Rect { rect: geom.frame, fill: Some(fill), stroke: None });
-    }
+    fill::draw_background(&mut scene.grid, layer.background, &layer.background_style, geom.frame);
+    let background_items = scene.grid.len();
     let plot_index = |pd: &PlotData| layer.plots.iter().position(|p| std::ptr::eq(p, pd.plot)).unwrap_or(0);
     let waterfall = stack::waterfall(g, index);
     // A waterfall draws no grid and no lines or ticks on the opposite edges: they would cut
@@ -581,7 +593,7 @@ fn layer_scene(
         None => {
             for pd in drawn {
                 let start = scene.plots.len();
-                draw_plot(&mut scene.plots, pd, geom);
+                draw_plot(&mut scene.plots, pd, geom, m);
                 let kind = ObjectKind::Plot(plot_index(pd));
                 hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
             }
@@ -594,7 +606,7 @@ fn layer_scene(
                 moved.frame.x += k * sx * geom.frame.w;
                 moved.frame.y -= k * sy * geom.frame.h;
                 let start = scene.plots.len();
-                draw_plot(&mut scene.plots, pd, &moved);
+                draw_plot(&mut scene.plots, pd, &moved, m);
                 let kind = ObjectKind::Plot(plot_index(pd));
                 hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
             }
@@ -602,7 +614,7 @@ fn layer_scene(
     }
     // Grid on Top of Data: the grid lines (not the background) are drawn after the plots.
     if layer.display.grid_on_top {
-        let keep = usize::from(layer.background.is_some()).min(scene.grid.len());
+        let keep = background_items.min(scene.grid.len());
         let lines = scene.grid.split_off(keep);
         scene.plots.extend(lines);
     }
@@ -613,6 +625,22 @@ fn layer_scene(
     let objects = &mut scene.objects;
     let out = &mut scene.overlay;
     let f = geom.frame;
+    fill::draw_border(out, &layer.background_style, f);
+    // Display tab: X Axes or Y Axes off draws nothing of that axis (line, ticks, labels, title).
+    let (hidden_x, hidden_y);
+    let hide = |a: &Axis| Axis { side: AxisSide::Hidden, show_opposite: false, opposite_ticks: false, ..a.clone() };
+    let xa = if layer.display.show_x_axes {
+        xa
+    } else {
+        hidden_x = hide(xa);
+        &hidden_x
+    };
+    let ya = if layer.display.show_y_axes {
+        ya
+    } else {
+        hidden_y = hide(ya);
+        &hidden_y
+    };
     let first_color = plot_color(pds);
     let (xp, yp) = (AxisPaint::new(xa, first_color), AxisPaint::new(ya, first_color));
     let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
@@ -622,6 +650,9 @@ fn layer_scene(
         let start = out.len();
         ternary::draw_axes(out, project, layer, pds, geom, m);
         rec(objects, out, start, ObjectKind::XAxis, &[]);
+        if layer.display.data_on_top {
+            scene.underlay_len = out.len();
+        }
         draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
         return scene;
     }
@@ -632,6 +663,9 @@ fn layer_scene(
         let start = out.len();
         polar::draw_radius_axis(out, ya, &yp, geom, m);
         rec(objects, out, start, ObjectKind::YAxis, &[]);
+        if layer.display.data_on_top {
+            scene.underlay_len = out.len();
+        }
         draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
         return scene;
     }
@@ -640,6 +674,7 @@ fn layer_scene(
     let y_line = Rect { x: if ya.side == AxisSide::Opposite { f.x + f.w } else { f.x }, w: 0.0, ..f };
     let gaps = (geom.x.gap.map(|g| g.span(geom.x.reversed)), geom.y.gap.map(|g| g.span(geom.y.reversed)));
     draw_axis_lines(out, xa, ya, f, xp.line, yp.line, gaps);
+    draw_additional_lines(out, xa, ya, geom, xp.line, yp.line);
     let start = out.len();
     draw_ticks(out, xa, &geom.x, f, true, xp.line);
     if xa.side != AxisSide::Hidden {
@@ -678,6 +713,9 @@ fn layer_scene(
         }
     }
     rec(objects, out, start, ObjectKind::YTitle, &[]);
+    if layer.display.data_on_top {
+        scene.underlay_len = out.len();
+    }
     draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
     scene
 }
@@ -870,6 +908,40 @@ fn draw_axis_lines(
     }
     if shown(ya) && ya.show_opposite {
         line(out, (y_other, t), (y_other, b), ya, yc, gap_y);
+    }
+}
+
+/// Origin's "Additional Lines" (Grids tab): the X axis' line repeated across the layer at a Y value
+/// and the Y axis' line at an X value, in that axis' width and colour. A value outside the axis
+/// range draws nothing.
+fn draw_additional_lines(out: &mut Vec<Item>, xa: &Axis, ya: &Axis, geom: &LayerGeometry, xc: Color, yc: Color) {
+    let f = geom.frame;
+    let stroke = |a: &Axis, color: Color| Stroke {
+        color,
+        width: a.line_width_pt,
+        dash: Vec::new(),
+        cap: Cap::Butt,
+        join: Join::Miter,
+    };
+    if let Some(v) = xa.additional_line {
+        let u = geom.y.to_unit(v);
+        if u.is_finite() && (0.0..=1.0).contains(&u) {
+            let y = f.y + (1.0 - u) * f.h;
+            let mut d = String::new();
+            move_to(&mut d, f.x, y);
+            line_to(&mut d, f.x + f.w, y);
+            out.push(Item::Path { d, fill: None, stroke: Some(stroke(xa, xc)) });
+        }
+    }
+    if let Some(v) = ya.additional_line {
+        let u = geom.x.to_unit(v);
+        if u.is_finite() && (0.0..=1.0).contains(&u) {
+            let x = f.x + u * f.w;
+            let mut d = String::new();
+            move_to(&mut d, x, f.y);
+            line_to(&mut d, x, f.y + f.h);
+            out.push(Item::Path { d, fill: None, stroke: Some(stroke(ya, yc)) });
+        }
     }
 }
 
@@ -1350,12 +1422,13 @@ fn draw_legend(
                     } else if plot.kind.is_bar() || plot.kind.is_area() {
                         // A small bar: as long as a line sample, one font size high, filled and
                         // outlined like the bars (an area plot is shown the same way).
-                        out.push(Item::Rect {
-                            rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
-                            fill: Some(plot.symbol.color),
-                            stroke: (plot.line.width_pt > 0.0)
-                                .then(|| Stroke::solid(plot.line.color, plot.line.width_pt)),
-                        });
+                        fill::fill_rect(
+                            out,
+                            Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                            plot.symbol.color,
+                            &plot.decor.fill,
+                            (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt)),
+                        );
                     }
                     x = sx1;
                     after_symbol = true;

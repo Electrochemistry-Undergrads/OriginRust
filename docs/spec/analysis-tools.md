@@ -15,9 +15,8 @@ regenerates the same data.
 Status by tool: integrate, differentiate, normalize, interpolate (linear, cubic spline, Akima),
 baseline, peak finding (local maximum) and statistics are done and checked. Smooth: adjacent
 averaging, Savitzky-Golay, percentile filter and the FFT filter are done and checked. Cubic
-B-spline interpolation: the smoothing spline for a smoothing factor above 0 is done and matches
-Origin; the default factor 0 is implemented as the interpolating spline and does NOT match Origin
-inside the data (Origin's automatic factor was not found, see section 5).
+B-spline interpolation: done and checked, both for a smoothing factor above 0 and for Origin's default
+factor 0 (an automatic factor from the data, found 2026-11-14, see section 5).
 
 ## 1. Integrate (`integ1`)
 
@@ -204,30 +203,46 @@ x = 0..10, impulses, polynomials, random numbers; scripts `interp-bspline.labtal
   it also agrees with SciPy's `splrep` on 300 random cases (checked once, not kept as a test). A very
   small `sf` ends with one knot per data point (the interpolating spline); a large one with a single
   cubic polynomial.
-* (observed) `sf = 0` (the default) is not an interpolating spline: Origin then uses an automatic
-  factor that depends on the data in a way we did not find. Measured values of this factor for
-  unit impulses on x = 0..10: 1/12, 0.1245, 19/120, 0.1799, 0.1843, 1/6, 1/12, 0.0422, 1/120, 9/680,
-  3/170 for the impulse at x = 0, 1, ..., 10; it is proportional to the square of the data scale and
-  for other data (sin x, random numbers) it is 4 % to 14 % of the sum of squares of y. It is not a
-  quadratic form in y, not the residual of a polynomial fit, and it does not come from limiting the
-  number of knots. Consequently Origin's default B-spline moves up to 0.27 away from the data points
-  of a unit impulse and about 0.2 from sin x on 11 points. Data that already lie on a cubic
-  polynomial (for example y = x^2) are reproduced exactly.
+* (observed) `sf = 0` (the default) is not an interpolating spline: Origin chooses the factor from
+  the data and then runs the same Dierckx fit. The rule (found 2026-11-14 by matching the Dierckx fit
+  to Origin's curve, which pins the factor to about 1e-9, then decoding it from unit impulses and all
+  pairs `e_i + e_j`, `e_i - e_j` on 5, 8 and 11 points; scripts `re-workspace/scratch/t16/gen1.py` to
+  `gen4.py`, raw outputs `probe1-4.out.txt` there):
+  1. Drop rows with a missing X or Y. Keep the rows in worksheet order (do not sort, do not merge
+     repeated X yet).
+  2. With `m` rows, take `L = min(5, m - 1)` lags and the starts `i = 0 .. m - L - 1` (the SAME
+     `m - L` starts for every lag, so the last rows enter fewer pairs: this is why the factor is not
+     symmetric when the data are reversed).
+  3. For each lag `d = 1 .. L`: `h_d` = mean over the starts of `(x[i+d] - x[i])^2`, `g_d` = mean over
+     the starts of `(y[i+d] - y[i])^2 / 2` (a semivariogram against squared distance).
+  4. Fit `g = a + b h` to the `L` points by ordinary least squares; the factor is `|a|`, the nugget,
+     an estimate of the noise variance. The absolute value matters: the intercept is negative for
+     some data (an impulse near the end), and Origin then uses its magnitude.
+  On equally spaced X this is `|sum_i sum_d (89 - 5 d^2) (y[i+d] - y[i])^2| / (340 (m - 5))` for
+  `m >= 6`: a unit impulse inside long data gets `1/(m - 5)`, one at the first row half of that.
+  The factor scales with the square of Y, ignores a constant added to Y and the scale of X, and
+  changes when the rows are reordered (checked: reversed data, unsorted X). With the factor, the
+  Dierckx fit on the sorted points (repeated X merged to their mean, as for `sf > 0`) reproduced
+  Origin's curve on all 236 data sets measured (impulses, pairs, random numbers, noisy sine, uneven
+  and unsorted X, repeated X, missing values, 5 to 200 points) to 6e-15. A factor of 0 (constant
+  Y) gives the interpolating spline. With 4 points any factor gives the interpolating cubic, so
+  nothing there is measurable. Not measured: equal `h_d` at every lag (impossible for distinct X
+  seen so far; Sheaf then uses `a` = mean of `g`), an Origin fit whose knot search stops early.
 * (observed) Outside the data range with the default option Origin continues with the straight
   line through the two nearest data points (not the end slope of the curve), whatever `sf` is.
   `miss` and `repeat` work as for the other methods.
 * (observed) Repeated X values: Origin replaces them by one point with the mean Y (checked for
   `sf` = 0.2 on x = 0 1 2 2 3 4 4; the output equals the fit of the merged points to 1e-9). We do the
-  same for the B-spline method. For the default factor the curve at a repeated X then differs from
-  the mean, which is the same automatic smoothing that is not understood. Fewer than four different
+  same for the B-spline method. With the default factor the merge happens after the factor is
+  computed on the unmerged rows (measured, data set `dupx` of probe 3). Fewer than four different
   X values give no result.
 * Our implementation (`InterpMethod::BSpline`): `smoothing` above 0 is the Dierckx smoothing spline
-  inside the data; 0 is the interpolating (not-a-knot) cubic spline, which agrees with Origin's
-  default only for data that lie on a cubic polynomial; both continue outside the data with Origin's
-  straight line. At least four different X values. A negative or missing factor is refused. The
-  dialog and the command line say that factor 0 is not Origin's automatic smoothing.
+  inside the data; 0 computes Origin's factor (`sheaf_calc::automatic_smoothing`, the rule above) and
+  fits with it; both continue outside the data with Origin's straight line. At least four different
+  X values. A negative or missing factor is refused. Tests: `crates/calc/tests/origin_bspline.rs`
+  and `origin_bspline_auto.rs` (16 Origin data sets at 15 positions each, 1e-10).
 
-Unsorted X: we sort and drop pairs with a missing value (not compared with Origin).
+Unsorted X and missing values: pairs with a missing value are dropped and the points sorted, as in Origin (measured for the B-spline, where the automatic factor is computed before sorting; section 5).
 
 ## 6. Baseline subtraction
 
@@ -282,6 +297,20 @@ oright` and the `_x`, `_y` outputs of each). Runs of 2026-11-13 (scripts `pkfind
   `second` 40 and `residue` exactly the four gaussians; on the clean curve `first` finds 15 including shoulders, `win`
   7); their rules were not worked out, Sheaf's Peak Analyzer methods (section 11) are not calibrated against them.
   An explicit `option:=r height:=10 width:=5` call returned an error for both curves.
+* (observed 2026-11-14, `re-workspace/scratch/pkm`, probes 1 and 2: 15 data sets, 360 calls; rules still not found,
+  these facts narrow them down) `npts` changes nothing for `first`, `second`, `residue` and `win` (1, 2, 3 and 5 give
+  the same rows), and neither does the X spacing (0.5 and 1.0 give the same rows). On a single unit impulse in the
+  middle of N points, `first` reports the impulse and the points `floor(N/10)` rows on either side (N = 21, 41, 81,
+  101: offsets 2, 4, 8, 10), so its derivative window grows with the length of the data; `second` reports offsets
+  2, 4, 6 on both sides for N = 41 (and an uneven set for N = 81, 101); `residue` reports every second row within
+  4 rows for N = 41; `win` reports only the impulse. The rows reported by `first` and `second` include points whose
+  value is 0 or tiny (gaussian tails), so no sign or height test applies, and on a gaussian the side points lie 10
+  rows away for N = 41, not `floor(N/10)`. `win` behaves like the local maximum with a fixed window of about two
+  points, but finds nothing on a gaussian raised by 5 (it measures height from a baseline). `residue` on a cubic
+  returned row 1 repeated for every row (a degenerate result). Tried and failed against all 15 sets: zero crossings
+  of a Savitzky-Golay derivative (windows 3 to 41, orders 1 to 5, five edge modes, three picking rules) and of a
+  slope or span derivative with half window `floor(N/10)` (three edge rules, five picking rules). Origin's own
+  `smooth` (FFT, adjacent averaging, Savitzky-Golay defaults) does not give these rows either.
 Sheaf: `PeakOptions { smooth_points, foot_height, max_half_width }`, `PeakResult { left, right }`; the Find Peaks
 window has Smoothing points, Foot height and a limit for the distance of the feet; the result sheet has Left foot and
 Right foot columns (X values). `sheaf analyze peaks` keeps its own smoothing of the peak chain.
@@ -725,8 +754,7 @@ Observed (Origin, `re-workspace/scratch/signal/sig1.out.txt` and `sig2.out.txt`;
   `sum_j a[(j - k - 1) mod N] b[j]`, that is the plain circular correlation read from the far end.
   Checked on two data sets and both argument orders.
 - Normalize (correlation): divided by sqrt(sum a^2 * sum b^2).
-- Decimation (`decimate`) was probed as well, but Origin refused factors 3, 4 and 5 on 11 and 12
-  points and its moving-average filter gave values not explained yet; not built.
+- Decimation (`decimate`) is section 13.4.
 
 Sheaf: `sheaf_calc::convolve`, `correlate`; `Tool::Convolution(ConvolutionSpec)` and
 `Tool::SignalCorrelation(SignalCorrelationSpec)`. The results go to a new sheet `Convolution<n>`
@@ -747,6 +775,149 @@ discrete one, the imaginary part of the analytic signal made by FFT (positive fr
 negative removed, zero and, for an even length, the middle frequency kept); the analytic signal is a
 complex column whose real part is the input. Sheaf writes the transform only, in a new column beside
 each input (no complex columns); `Tool::Hilbert`, `sheaf analyze hilbert FILE --y B`.
+
+### 13.2 Envelope (`envelope`)
+
+Analysis > Signal Processing > Envelope. Options (from the X-Function file): `iy` (the input XY
+range), `type` (`upper` Upper Envelope, the default, `lower`, `both`), `method` (one choice, By Spline
+of Extreme Pts; giving `method:=spline` or `0` made Origin refuse the call, so it is left out),
+`npts` (default 2) and the report sheet `rd` (without it Origin makes a new workbook named after the
+input). Observed (`re-workspace/scratch/envelope/p1..p11.out.txt`, 12 to 30 points; Rust tests
+`origin_smooth_curve`, `origin_shuffled_x`, `origin_up_then_down_x`, `origin_falling_x` in
+`calc/src/envelope.rs`, 1e-9, and `an_envelope_goes_to_a_new_sheet_with_its_own_x` in core):
+
+- Extreme points: a point is an upper extreme when it is the first largest value of the window of
+  `npts` points on each side of it (itself included): the values on its left are strictly smaller,
+  those on its right smaller or equal, so a flat top counts once, at its first point; the lower
+  extreme is the same with the smallest value (p2, p3: flat tops and flat bottoms of two and three
+  points). A point whose window does not fit in the data is never an extreme, so the first and last
+  `npts` points are not (p2: `npts` 5 left out a peak at row 5 that `npts` 3 kept). `npts` is cut to its
+  integer part and 0 acts as 1 (p4, p5: 0, 1.2 and 1.7 gave the output of 1); a negative value is
+  refused; `npts` so large that nothing is an extreme is refused.
+- The envelope is the natural cubic spline through the extremes, evaluated at every X of the
+  input; before the first and after the last extreme the end pieces of the spline continue (p1:
+  three upper extremes at 4, 12, 23 gave 0.6758 at X 0 and 2.7439 at X 29; with two extremes the
+  spline is the straight line through them). At least two extremes of each kind asked for are
+  needed: with `both`, a single lower extreme refuses the call even though the upper envelope would
+  be fine; `upper` alone needs only two upper extremes, whatever the lower ones are (p2, p3).
+- Rows with a missing X or Y are dropped before anything else: the report has fewer rows and the
+  extremes are searched in the shortened data, so the neighbours of the gap become neighbours (p11:
+  a missing Y at row 6 gave 11 rows; a missing X likewise; missing first and last Y gave 10).
+- X order: data whose X rises or falls monotonically are used as they are (a falling X gave the
+  same curve per row as the rising one, p8). For any other order the extremes are still searched
+  in the row order of the data, but the spline goes through the points of the X-sorted data at those
+  positions, so one position swapped between rows (X 5 before 4) swaps the point used (p3, p9: three
+  shuffles matched this to 1e-14). The report keeps the input row order.
+- Report sheet: for `both`, four columns `Envelope X 1`, `Envelope Y 1` (upper), `Envelope X 2`,
+  `Envelope Y 2` (lower); with `upper` or `lower` alone only that pair, and the lower pair keeps the
+  numbers 2 (p6). The X columns repeat the input X. The comments read `Upper Envelope of "Name"`,
+  `Lower Envelope of "Name"` with the long name of the input in quotes, or the short name without
+  quotes when it has no long name (p5, p6). No units.
+
+Sheaf: `sheaf_calc::envelope` (`extreme_points`, `natural_spline`), `Tool::Envelope(EnvelopeSpec)`, the
+curves of each input (X and Y of each envelope) in a new sheet named `Envelope...`; the Envelope
+window has Type, Method (fixed) and the points on each side. Command line: `sheaf analyze envelope
+FILE --y B [--type upper|lower|both] [--npts N]`. Not measured or not built: other methods (Origin has
+only the spline one in this version), repeated X values at two extremes (refused by Sheaf, not
+tried in Origin), the default workbook name of a call without `rd`, non-numeric input, several input columns (each
+pair is named Envelope X 1/Y 1 again) and row ranges.
+
+### 13.3 Coherence (`cohere`)
+
+Analysis > Signal Processing > Coherence. Options (from the X-Function file): `ix1` and `ix2` (the two
+signals), `interval`, `fftlen` (combo 256, 512, 1024; default 256), `win` (rect, welch, tri, bartlett,
+hanning, hamming, blackman, gauss, kaiser), `winlen` (default 256), `overlap` (default 128), `alpha`
+(Gaussian) and `beta` (Kaiser), and `oy` (an X and a Y column). Observed (probe files in
+`re-workspace/scratch/coherence/`: `c1` to `c5` with the `.lines.txt` scripts and `.out.txt`
+printouts; 64 points of two correlated random signals, a few 20 point signals for missing values;
+Rust tests in `calc/coherence.rs`, all to 1e-9, in practice 1e-15):
+
+- The result is the magnitude-squared coherence `|Sxy|^2 / (Sxx Syy)` with the spectra summed over
+  the segments (Welch's method, no averaging factor needed). Rows: `fftlen / 2 + 1` (odd lengths:
+  `fftlen / 2` rounded down plus 1; 15 gave 8, 31 gave 16) with the frequency `k / (fftlen * interval)`.
+- Segments of `winlen` points start every `winlen - overlap` points; only whole segments are used
+  (64 points, window 20, overlap 7: four segments, the partial fifth dropped). Each is multiplied by
+  the window, zero padded to `fftlen`, transformed; no detrending. Data shorter than one segment is one
+  zero padded segment, so the coherence is exactly 1 (the default 256/256/128 on 64 points gave 129 rows
+  of 1).
+- Windows are the symmetric ones of the FFT tool (Welch, triangular, Bartlett, Hanning, Hamming,
+  Blackman, 16 points checked), the Gaussian `exp(-(alpha (i - c) / c)^2 / 2)` with `c = (winlen - 1) / 2`
+  (alpha 1, 2.5 and 3; alpha 0 is flat), and the Kaiser `I0(beta sqrt(1 - (2i/(winlen-1) - 1)^2)) /
+  I0(beta)` (beta 4; beta 0 is flat).
+- Signals of unequal length: the shorter one is padded with zeros to the longer (41 against 64 points,
+  both ways round). A missing value counts as 0 (inside or at the start; dropping them or compacting
+  the column gave other numbers).
+- The interval defaults to 1 and is not taken from the X column, even as an XY range or with
+  `interval:=<auto>` (the frequency step stayed 1 / fftlen for an X step of 0.5). Only a given interval
+  scales the frequencies.
+- Where a spectrum is zero (a signal of zeros) the coherence is missing (NaN in the output). A signal
+  with itself gives 1.
+- Refused: `winlen` above `fftlen`, `winlen` of 1, `overlap` of `winlen` or more, a negative overlap.
+  `winlen` of 2, overlap 0 and overlap `winlen - 1` work.
+
+Sheaf: `sheaf_calc::coherence`, `Tool::Coherence(CoherenceSpec)`: each input column against a second
+column (chosen in the window; may be an input), the frequency and the coherence in a new sheet. The
+second column is cut to the same rows as the input range. Command line: `sheaf analyze coherence
+FILE --y B --with C [--fft-len N] [--win-len N] [--overlap N] [--window rectangle|welch|triangular|
+bartlett|hanning|hamming|blackman|gaussian|kaiser] [--alpha A] [--beta B] [--interval D]`.
+
+Not measured or not built: the Origin result graph, the output into existing columns, the
+interval taken from X (Sheaf follows what Origin does, 1), other detrending, and the phase or the
+cross spectrum.
+### 13.4 Decimation (`decimate`)
+
+Analysis > Signal Processing > Decimation. Options (from the X-Function file): `iy` (X and Y
+range), `d` (Resample Factor, default 2; smaller factors work),
+`filter` (`none` No Filter, `ave` Moving Average Filter, `fir` FIR Filter; default none), `order`
+(FIR order, default 30), `plot` (preview, no data), `oy` (new X and Y columns, "Decimated X1" and
+"Decimated Y1" by default) and `newsize` (an output value: assigning it from LabTalk is refused).
+Observed (`re-workspace/scratch/decimation/p1..p11.out.txt`; p1/p2/p3 which factors are refused on
+10 to 200 points, p4 the three filters, p5 and p6 impulse responses, p7 to p9 the FIR order, p11 the
+fixture; earlier `re-workspace/scratch/signal/sig1.out.txt` and `sig2.out.txt`; Rust tests in
+`crates/calc/src/decimate.rs`, 1e-12):
+
+- Result: `ceil(n / d)` points, point `k` is row `k * d` of the input, X and Y both (X values need
+  not be even). Factor 1 copies the data.
+- Refused (the X-Function returns false, no output): fewer than 2 points; a factor of 3 or more with
+  fewer than `10 * d` points (30 points allow 3, 29 do not; 59 points allow 5, not 6; 120 allow 12,
+  119 do not); a FIR order below 8 or above 60 (8 and 60 accepted, 7 and 61 refused, at 5 to 200
+  points; the points do not matter). Factors 1 and 2 are accepted from 2 points up. This is why the
+  earlier 11 and 12 point probes refused 3, 4 and 5, and why the values seen after the refused
+  calls were the leftovers of the call before.
+- `ave`: the triangle with weights `1, 2, .., d + 1, .., 2, 1` over `(d + 1)^2` centred on the kept
+  row (impulse responses, d = 2 and 3, 60 points: 1/9, 2/9, 3/9 and 1/16, 2/16, 3/16, 4/16), that
+  is the moving average of `d + 1` points applied twice; rows before the start count as 0 (the
+  first value of the ramp 1..20 at d = 2 is 1.111, the middle ones are exact). The filter is not
+  centred at the end: the kept row whose window reaches past the last row loses the weight of the
+  missing rows (60 points, d = 3: the last value has weights 1, 2, 3, 3, 2, 1 over 16 on the last
+  six rows, a total of 12/16, not 1, 2, 3, 4, 3, 2, 1). Equivalent: the second moving average reads
+  the first only up to the last row, `a[t] = 0` for `t >= n`. Checked on 61 to 100 points with
+  factors 3 to 7, where the last kept row is anywhere in a window.
+- `fir`: the same triangle with half width `order` instead of `d`, whatever the factor (impulse
+  response for d = 1, 2, 3, 5 at order 30: peak `31 / 961`; order 10: peak `11 / 121`), same start
+  and end rule. Checked against Origin for orders 8 to 12, 50, 58 to 60 and the default 30 on up to
+  100 points. The name FIR is Origin's; the filter it computes is this triangle, there is no
+  designed low pass in the numbers.
+- `fir` with `d` times the X step at 0.5 or below (probes p12 to p18; fresh books, the first call,
+  default order and `order:=30`, and an output sheet made beforehand all agree, so the earlier p4
+  values were not a leftover): Origin does not return the triangle. For 60 points at X step 0.5,
+  `d = 1`, the values start 3.8274402148869662, 5.6599095268221635, 7.2131135270130722 (the
+  triangle: 4.999, 5.297, 5.570). The kernel is symmetric over the same 61 rows, sums to 1, has a
+  non-negative frequency response above 1 in places, and a centre weight of 5/31 at step 0.5, 13/31
+  at 0.25, 33/31 at 0.1 (31/961 = 1/31 at step 1 and above); it depends on `d` times the step (`d = 2`
+  at 0.25 gives the same values as `d = 1` at 0.5 at every other row). Above 0.5 (0.501, 0.51, up to
+  2, `d` 1 to 3) the result is the triangle exactly. The moving average has no such case. The
+  oscillating kernel is not worked out, so Sheaf refuses FIR there (an error, no values) instead of
+  returning the triangle; the dialog and command line show the same message.
+- Not measured: missing values inside the input (the probes could not make a blank cell through
+  LabTalk; Sheaf refuses them, as in section 13), and `plot`.
+
+Sheaf: `sheaf_calc::decimate` (`DecimateOptions`, `DecimateFilter`, `DecimateError`),
+`Tool::Decimate(DecimateSpec)`. The result goes to a new sheet `Decimate<n>` with the kept X (the
+input's X name with "Decimated " in front, same unit) and Y per input; the Y comment says which point
+and filter. Origin's refusals are reported as errors with the same limits. Window: Analysis > Signal
+Processing > Decimation... (Resample Factor, Filter Type, Order). Command line: `sheaf analyze
+decimate FILE --y B [--factor D] [--filter none|ave|fir] [--order N]`.
 
 ## 14. Level crossing (`levelcrossing`)
 
@@ -893,6 +1064,41 @@ Sheaf: `sheaf_calc::fft_filter`, `Tool::FftFilter(FftFilterSpec)`, a new column 
 (or a new sheet or existing columns, the Output node). Command line: `sheaf analyze fft-filter FILE
 --y B [--type low-pass|high-pass|band-pass|band-block|threshold|parabolic] [--cutoff F] [--freq1 F
 --freq2 F] [--threshold T] [--pass F --stop F] [--no-offset] [--interval D]`.
+
+## 16. Trace Interpolation (`interp1trace`)
+
+Analysis > Mathematics > Trace Interpolation. The X-Function has `iy` (the XY range), `method`
+(`linear`, `spline` Cubic Spline, `bspline` Cubic B-Spline; default linear), `npts` (number of
+points, default 100) and `oy` (new X and Y columns). Observed (probe files in
+`re-workspace/scratch/trace-interp/`: `p1`, `p2`, `p3`, `p4`, `p5`, `q1..q3`, `r1`, `s1..s3`, `t1..t3`
+and `p_nan3`, each a `.lines.txt` script and its `.out.txt`; Rust tests in `calc/src/trace.rs` hold
+Origin's printed numbers):
+
+- The result has `npts` points evenly spaced along the path of the curve, the first and last being
+  the first and last points of the (cleaned) data. The path parameter is the cumulative chord
+  length. Linear joins the points with straight lines; Cubic Spline is a natural cubic spline of X
+  and of Y against the path length; Cubic B-Spline is the interpolating cubic spline with
+  not-a-knot ends (equal to scipy's `make_interp_spline`; the two spline kinds agree to 1e-15 with
+  the computation, all three methods on a loop of eight points).
+- Origin cleans the data first, and this is what makes a loop with straight X or Y runs look odd:
+  rows with a missing X or Y are dropped; then neighbouring points with the same X are replaced by
+  one point at the mean of X and Y; then neighbouring points with the same Y likewise (X first;
+  (3,0),(3,2) became (3,1) and only then (0,0),(1,0) became (0.5,0); a merge by Y that makes a new
+  equal X is not merged again). Only neighbours merge: the same X far apart in the path stays.
+  "The same" has a tolerance of 1e-8 times the range of that column (5e-8 apart in a range of 9
+  merged, 1e-7 did not; 5e-6 in a range of 504 merged, 1e-5 did not; the range is not the data's
+  magnitude: shifting the data by 1000 changed nothing).
+- No result (the sheet is not made) for `npts` of 0 or 1, for fewer than two points after the
+  cleaning (a constant Y column becomes one point), and for the B-spline with fewer than four
+  points. Cubic Spline with two points is the line, with three it is the natural spline. A
+  non-integer `npts` (5.7) is cut to 5.
+- Not measured: a constant-X (vertical) curve, which Sheaf merges to one point and refuses;
+  whether the tolerance compares with the previous point or the first of a run; and an X range
+  given with a row range.
+
+Sheaf: `sheaf_calc::trace_interp`, `Tool::TraceInterp(TraceInterpSpec)`: the X and Y of each input
+in a new sheet (`TraceInterp`), the Y labelled "linear trace interpolation of B". Command line:
+`sheaf analyze trace-interp FILE --y B [--method linear|spline|bspline] [--points N]`.
 
 ## Files
 

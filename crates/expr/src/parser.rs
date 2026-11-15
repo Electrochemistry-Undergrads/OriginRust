@@ -14,15 +14,17 @@
 //! primary  := number | "text" | name | name '(' args ')' | col-reference | '(' ternary ')'
 //! ```
 
-use crate::ast::{ColumnLabel, ColumnRef, Kind, Node, UnOp};
+use crate::ast::{ColumnLabel, ColumnRef, Kind, Node, UnOp, WorksheetRef};
 use crate::error::ExprError;
 use crate::funcs::{Agg, BinOp, Func, Resolved, resolve};
 use crate::lexer::{Tok, Token, lex};
+use crate::text::StrFn;
 
 /// How deeply parentheses, signs and `?:` may nest before the parser gives up.
 const MAX_NESTING: u32 = 64;
 
 struct Parser {
+    source: String,
     toks: Vec<Token>,
     at: usize,
     nesting: u32,
@@ -33,7 +35,7 @@ pub(crate) fn parse_root(src: &str) -> Result<Node, ExprError> {
     if toks.len() == 1 {
         return Err(ExprError::at(0, "the expression is empty"));
     }
-    let mut p = Parser { toks, at: 0, nesting: 0 };
+    let mut p = Parser { source: src.to_string(), toks, at: 0, nesting: 0 };
     let node = p.ternary()?;
     let t = p.peek();
     if t.tok != Tok::End {
@@ -223,6 +225,23 @@ impl Parser {
             let Kind::Col { r, .. } = node.kind else { unreachable!("checked above") };
             return Node::new(Kind::Label { r, label, text }, pos);
         }
+        // Origin permits bare parameter names containing spaces, e.g. [Bath Temp]$.
+        // A single identifier remains an index until the host resolves label/variable precedence.
+        let start = self.at;
+        let mut end = start;
+        while self.toks.get(end).is_some_and(|t| matches!(t.tok, Tok::Ident(_) | Tok::Num(_))) {
+            end += 1;
+        }
+        if matches!(self.peek_tok(), Tok::Ident(_))
+            && end > start + 1
+            && self.toks.get(end).is_some_and(|t| t.tok == Tok::RBracket)
+        {
+            let name = self.source[self.toks[start].pos..self.toks[end].pos].trim_end().to_string();
+            self.at = end + 1;
+            let text = self.eat(&Tok::Dollar);
+            let Kind::Col { r, .. } = node.kind else { unreachable!("checked above") };
+            return Node::new(Kind::Parameter { r, name, text }, pos);
+        }
         let first = self.ternary()?;
         if self.eat(&Tok::Colon) {
             let last = self.ternary()?;
@@ -242,6 +261,25 @@ impl Parser {
     fn primary(&mut self) -> Result<Node, ExprError> {
         let t = self.advance();
         match t.tok {
+            Tok::Percent => {
+                self.expect(Tok::LParen, "after '%' string substitution")?;
+                let value = self.ternary()?;
+                self.expect(Tok::RParen, "after the substituted expression")?;
+                Node::new(Kind::Call { func: Func::Str(StrFn::Value), args: vec![value] }, t.pos)
+            }
+            Tok::LBracket => {
+                let book = self.reference_name("workbook")?;
+                self.expect(Tok::RBracket, "after the workbook name")?;
+                let sheet = self.worksheet_ref()?;
+                self.scoped_column(Some(book), sheet, t.pos)
+            }
+            Tok::Ident(name) | Tok::Str(name) if matches!(self.peek_tok(), Tok::Not) => {
+                self.scoped_column(None, WorksheetRef::Name(name), t.pos)
+            }
+            Tok::Num(index) if matches!(self.peek_tok(), Tok::Not) => {
+                let sheet = Self::worksheet_index(index, t.pos)?;
+                self.scoped_column(None, sheet, t.pos)
+            }
             Tok::Num(v) => Node::new(Kind::Num(v), t.pos),
             Tok::Ident(name) => {
                 if matches!(self.peek_tok(), Tok::LParen) {
@@ -264,6 +302,45 @@ impl Parser {
             Tok::End => Err(ExprError::at(t.pos, "unexpected end of expression; expected a value")),
             other => Err(ExprError::at(t.pos, format!("expected a value, found {}", other.describe()))),
         }
+    }
+
+    fn reference_name(&mut self, what: &str) -> Result<String, ExprError> {
+        let token = self.advance();
+        match token.tok {
+            Tok::Ident(name) | Tok::Str(name) if !name.is_empty() => Ok(name),
+            _ => Err(ExprError::at(token.pos, format!("expected a {what} name or a quoted name"))),
+        }
+    }
+
+    fn worksheet_index(value: f64, pos: usize) -> Result<WorksheetRef, ExprError> {
+        if value >= 1.0 && value.fract() == 0.0 && value < 1e9 {
+            Ok(WorksheetRef::Index(value as usize))
+        } else {
+            Err(ExprError::at(pos, "a worksheet number must be a whole number, 1 or more"))
+        }
+    }
+
+    fn worksheet_ref(&mut self) -> Result<WorksheetRef, ExprError> {
+        if let Tok::Num(value) = self.peek_tok() {
+            let value = *value;
+            let pos = self.advance().pos;
+            Self::worksheet_index(value, pos)
+        } else {
+            self.reference_name("worksheet").map(WorksheetRef::Name)
+        }
+    }
+
+    fn scoped_column(&mut self, book: Option<String>, sheet: WorksheetRef, pos: usize) -> Result<Node, ExprError> {
+        self.expect(Tok::Not, "between the worksheet and column")?;
+        let token = self.advance();
+        if !matches!(&token.tok, Tok::Ident(name) if name.eq_ignore_ascii_case("col") || name.eq_ignore_ascii_case("wcol"))
+        {
+            return Err(ExprError::at(token.pos, "expected col(...) or wcol(...) after the worksheet"));
+        }
+        self.expect(Tok::LParen, "after col or wcol")?;
+        let node = self.column_ref(pos)?;
+        let Kind::Col { r, .. } = node.kind else { unreachable!("column_ref creates a column") };
+        Node::new(Kind::Col { r: ColumnRef::Scoped { book, sheet, column: Box::new(r) }, pos }, pos)
     }
 
     /// Parses after `name (`.

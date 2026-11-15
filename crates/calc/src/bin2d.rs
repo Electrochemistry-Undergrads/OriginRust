@@ -378,4 +378,22 @@ mod tests {
         assert_eq!(edge_text(1234567.0), "1234567");
         assert_eq!(edge_text(2e15), "2e+15");
     }
+
+    #[test]
+    fn infinite_values_are_left_out_and_do_not_disturb_the_layout() {
+        let x = [1.0, 2.0, f64::INFINITY, 4.0, 5.0, f64::NAN];
+        let y = [1.0, 2.0, 3.0, f64::NEG_INFINITY, 5.0, 1.0];
+        let o = Bin2dOptions {
+            x: AxisBins { size: BinSize::Count(2), ..Default::default() },
+            y: AxisBins { size: BinSize::Count(2), ..Default::default() },
+            ..Default::default()
+        };
+        let r = bin2d(&x, &y, &o).unwrap();
+        // Only (1,1), (2,2) and (5,5) are finite pairs; the layout comes from them (1 to 5, two bins), and
+        // the point on the last edge is not counted, as in Origin.
+        assert_eq!((r.x.bins[0].lo, r.x.bins[1].hi), (1.0, 5.0));
+        assert_eq!(r.binned, 2, "{r:?}");
+        assert_eq!(r.cells, vec![vec![2.0, 0.0], vec![0.0, 0.0]]);
+        assert!(bin2d(&[f64::INFINITY], &[1.0], &o).is_none());
+    }
 }

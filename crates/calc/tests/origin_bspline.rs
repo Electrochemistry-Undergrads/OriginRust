@@ -3,16 +3,13 @@
 //! Reference script: `tools/origin-ref/interp-bspline.labtalk.txt` (run with
 //! `run-labtalk-data.ps1`); data x = 0..10 step 1, evaluated at -1..11 step 0.25.
 //!
-//! What can be checked: Origin's B-spline is a Dierckx smoothing spline. With a smoothing factor
-//! `sf > 0` we reproduce it (tests `smoothing_factor_*`, Origin numbers from the impulse at x = 5
-//! with `sf` = 0.5 and 2, tolerance 1e-9). For the default `sf = 0` Origin chooses an automatic
-//! factor that we did not find; our `InterpMethod::BSpline` with `smoothing = 0` is the
-//! interpolating cubic spline. The two agree where Origin's smoothing has nothing to remove: data
-//! that already lie on a cubic polynomial (a line and a parabola below), and outside the data,
-//! where Origin continues with the straight line through the two nearest data points whatever the
-//! smoothing. Inside the data for other inputs Origin's default curve differs from ours (by up to
-//! 0.27 for a unit impulse); that is documented in `docs/spec/analysis-tools.md`, not tested here.
-//! Tolerance: 1e-10 relative unless stated.
+//! Origin's B-spline is a Dierckx smoothing spline. With a smoothing factor `sf > 0` we reproduce
+//! it (tests `smoothing_factor_*`, Origin numbers from the impulse at x = 5 with `sf` = 0.5 and 2,
+//! tolerance 1e-9). For the default `sf = 0` Origin's automatic factor (the semivariogram nugget,
+//! `automatic_smoothing`) is reproduced too: impulses, a line and a parabola below, and more data
+//! sets in `origin_bspline_auto.rs`. Outside the data Origin continues with the straight line
+//! through the two nearest data points whatever the smoothing. Tolerance: 1e-10 relative unless
+//! stated.
 
 use sheaf_calc::{InterpMethod, InterpOptions, interp1};
 
@@ -254,21 +251,14 @@ const GRID_OUT: &[(&str, &[f64])] = &[
 ];
 
 #[test]
-fn polynomial_data_and_the_straight_continuation_match_origin() {
+fn the_default_factor_and_the_straight_continuation_match_origin() {
     let x: Vec<f64> = (0..11).map(f64::from).collect();
     let at: Vec<f64> = (0..49).map(|i| -1.0 + 0.25 * f64::from(i)).collect();
     for &(name, want) in GRID_OUT {
         let y = data(name);
         let got = interp1(&x, &y, &at, &bspline());
-        let polynomial = name.starts_with("y =");
         for (i, (&t, (&g, &w))) in at.iter().zip(got.iter().zip(want)).enumerate() {
-            let outside = !(0.0..=10.0).contains(&t);
-            if polynomial || outside {
-                assert!(
-                    (g - w).abs() <= TOL * w.abs().max(1.0),
-                    "{name} at {t} (row {i}): got {g:?}, Origin gave {w:?}"
-                );
-            }
+            assert!((g - w).abs() <= TOL * w.abs().max(1.0), "{name} at {t} (row {i}): got {g:?}, Origin gave {w:?}");
         }
     }
 }
@@ -288,12 +278,14 @@ fn missing_and_repeat_options_apply_outside_the_data() {
 }
 
 #[test]
-fn the_data_points_are_reproduced_and_unsupported_inputs_give_nan() {
+fn cubic_data_are_reproduced_and_unsupported_inputs_give_nan() {
     let x: Vec<f64> = (0..8).map(f64::from).collect();
-    let y = [2.0, -1.0, 0.5, 4.0, 3.0, 3.5, -2.0, 1.0];
-    for (g, w) in interp1(&x, &y, &x, &bspline()).iter().zip(&y) {
-        assert!((g - w).abs() < 1e-12);
+    // data on a cubic polynomial: nothing to smooth, whatever the automatic factor
+    let cubic: Vec<f64> = x.iter().map(|v| v * v * v - 4.0 * v + 1.0).collect();
+    for (g, w) in interp1(&x, &cubic, &x, &bspline()).iter().zip(&cubic) {
+        assert!((g - w).abs() < 1e-9 * w.abs().max(1.0), "{g} {w}");
     }
+    let y = [2.0, -1.0, 0.5, 4.0, 3.0, 3.5, -2.0, 1.0];
     // a negative or missing smoothing factor is refused
     for bad in [-0.3, f64::NAN] {
         let smooth = InterpOptions { smoothing: bad, ..bspline() };

@@ -468,6 +468,159 @@ fn fft_filter_adds_a_column() {
 }
 
 #[test]
+fn envelope_writes_both_curves_to_a_new_sheet() {
+    let dir = scratch("envelope");
+    let y = [0.0, 2.0, 1.0, 3.0, 0.5, 4.0, 0.2, 2.0, 1.0, 5.0, 4.0, 3.0];
+    let mut text = String::from("t,y\n");
+    for (i, v) in y.iter().enumerate() {
+        text.push_str(&format!("{i},{v}\n"));
+    }
+    let data = dir.join("peaks.csv");
+    std::fs::write(&data, text).unwrap();
+    let out = dir.join("env.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "envelope",
+        data.to_str().unwrap(),
+        "--y",
+        "y",
+        "--type",
+        "both",
+        "--npts",
+        "1",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Envelope"), "{stdout}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    let rows: Vec<&str> = text.lines().filter(|l| l.starts_with("0,") || l.starts_with("9,")).collect();
+    // Origin: the upper curve starts at 1.6138392857142858 and passes through the peak 5 at row 9.
+    assert!(rows[0].starts_with("0,1.61383928571429,0,1.5"), "{text}");
+    assert!(rows[1].starts_with("9,5,9,"), "{text}");
+    // Too few extremes: refused.
+    let (ok, _, stderr) = sheaf(&["analyze", "envelope", data.to_str().unwrap(), "--y", "y", "--npts", "10"]);
+    assert!(!ok && stderr.contains("extreme"), "{stderr}");
+}
+
+#[test]
+fn coherence_writes_frequency_and_coherence() {
+    let dir = scratch("coherence");
+    let data = data_file(&dir);
+    let out = dir.join("coherence.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "coherence",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--with",
+        "ramp",
+        "--fft-len",
+        "8",
+        "--win-len",
+        "8",
+        "--overlap",
+        "4",
+        "--window",
+        "hanning",
+        "--interval",
+        "0.5",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Coherence"), "{stdout}");
+    // A signal with itself has coherence 1 at every frequency: 0 to 1 in steps of 0.25.
+    let text = std::fs::read_to_string(&out).unwrap();
+    let rows: Vec<&str> =
+        text.lines().filter(|l| l.contains(',') && l.starts_with(|c: char| c.is_ascii_digit())).collect();
+    assert_eq!(rows.len(), 5, "{text}");
+    assert_eq!(rows[0], "0,1", "{text}");
+    assert_eq!(rows[4], "1,1", "{text}");
+    // A window longer than the FFT is refused.
+    let (ok, _, _) = sheaf(&[
+        "analyze",
+        "coherence",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--with",
+        "flat",
+        "--fft-len",
+        "8",
+        "--win-len",
+        "16",
+    ]);
+    assert!(!ok);
+}
+
+#[test]
+fn decimate_writes_every_nth_point_to_a_new_sheet() {
+    let dir = scratch("decimate");
+    let data = data_file(&dir);
+    let out = dir.join("decimated.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "decimate",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--factor",
+        "2",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Decimation"), "{stdout}");
+    let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(3).map(str::to_string).collect();
+    assert_eq!(rows, ["0,0", "2,2", "4,4", "6,6", "8,8", "10,10"]);
+    // Origin refuses a factor of 3 on 11 points.
+    let (ok, _, stderr) = sheaf(&["analyze", "decimate", data.to_str().unwrap(), "--y", "ramp", "--factor", "3"]);
+    assert!(!ok && stderr.contains("at least 30 points"), "{stderr}");
+}
+
+#[test]
+fn trace_interp_resamples_a_loop_into_a_new_sheet() {
+    let dir = scratch("trace-interp");
+    // Origin's loop: equal Y neighbours merge, leaving the diamond (1,0) (3,1) (1,2) (-1,1)
+    let data = dir.join("loop.csv");
+    std::fs::write(
+        &data,
+        "v,i
+V,A
+0,0
+2,0
+3,1
+2,2
+0,2
+-1,1
+",
+    )
+    .unwrap();
+    let out = dir.join("trace.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "trace-interp",
+        data.to_str().unwrap(),
+        "--y",
+        "i",
+        "--points",
+        "10",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Trace interpolation"), "{stdout}");
+    let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(3).map(str::to_string).collect();
+    assert_eq!(rows.len(), 10);
+    assert_eq!((rows[0].as_str(), rows[3].as_str(), rows[9].as_str()), ("1,0", "3,1", "-1,1"));
+    // One point is no trace.
+    let (ok, _, stderr) = sheaf(&["analyze", "trace-interp", data.to_str().unwrap(), "--y", "i", "--points", "1"]);
+    assert!(!ok && !stderr.is_empty());
+}
+
+#[test]
 fn hilbert_adds_a_column() {
     let dir = scratch("hilbert");
     let data = data_file(&dir);
@@ -878,6 +1031,112 @@ fn rank_tests_and_correlation_run_from_the_command_line() {
     assert!(!ok && err.contains("at least two columns"), "{err}");
     let (ok, _, err) = sheaf(&["analyze", "corr", file, "--y", "a,b", "--no-pearson"]);
     assert!(!ok && err.contains("at least one of Pearson"), "{err}");
+}
+
+/// Distribution fit and probability plots (spec `statistics.md` section 16). The numbers of the calc crate are
+/// checked against scipy in `crates/calc/tests/scipy_stats_dist.rs`; here the wiring.
+#[test]
+fn distribution_fit_and_probability_plots_run_from_the_command_line() {
+    let dir = scratch("distfit");
+    let path = dir.join("sample.csv");
+    std::fs::write(&path, "x\n1.2\n2.3\n2.9\n3.1\n4.4\n5.0\n6.8\n7.7\n9.1\n12.5\n").unwrap();
+    let file = path.to_str().unwrap();
+
+    let (ok, out, err) = sheaf(&["analyze", "distfit", file, "--y", "x"]);
+    assert!(ok, "{err}");
+    for name in ["Normal", "Lognormal", "Exponential", "Gamma", "Weibull", "Log-likelihood", "AIC", "BIC"] {
+        assert!(out.contains(name), "{name}: {out}");
+    }
+    assert!(out.contains("DistFit1") && out.contains("lowest AIC"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "distfit", file, "--y", "x", "--family", "gamma,weibull"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Gamma") && out.contains("Weibull") && !out.contains("Lognormal"), "{out}");
+
+    let project = dir.join("pp.sheaf");
+    let (ok, out, err) = sheaf(&["analyze", "probplot", file, "--y", "x", "--save", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Probability plot") && out.contains("ProbPlot1"), "{out}");
+    let (ok, info, err) = sheaf(&["info", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(info.contains("Data (ordered)") && info.contains("Percent"), "{info}");
+    let (ok, out, err) = sheaf(&["analyze", "qqplot", file, "--y", "x", "--family", "weibull", "--no-graph"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Q-Q plot") && out.contains("Slope"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "qqplot", file, "--y", "x", "--family", "bogus"]);
+    assert!(!ok && err.contains("bogus"), "{err}");
+}
+
+fn dunnett_groups_file(dir: &Path) -> PathBuf {
+    let g = [
+        [24.0, 26.5, 23.1, 25.9, 27.2, 25.0],
+        [28.1, 30.2, 27.7, 29.9, 31.0, 28.4],
+        [24.5, 25.0, 26.1, 23.8, 25.5, 27.0],
+        [33.0, 31.5, 34.2, 32.2, 30.9, 33.3],
+    ];
+    let mut text = String::from("ctrl,drugA,drugB,drugC\n");
+    for (((a, b), c), d) in g[0].iter().zip(&g[1]).zip(&g[2]).zip(&g[3]) {
+        text.push_str(&format!("{a},{b},{c},{d}\n"));
+    }
+    let path = dir.join("groups.csv");
+    std::fs::write(&path, text).unwrap();
+    path
+}
+
+#[test]
+fn anova_with_dunnett_comparison() {
+    let dir = scratch("holm-dunnett");
+    let data = dunnett_groups_file(&dir);
+    let file = data.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "anova", file, "--y", "A,B,C,D", "--comparison", "dunnett"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Dunnett means comparison") && out.contains("against the control ctrl"), "{out}");
+    assert!(out.contains("drugC - ctrl") && !out.contains("drugB - drugA"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "anova", file, "--y", "A,B,C,D", "--comparison", "dunnett", "--control", "4"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("ctrl - drugC") && out.contains("against the control drugC"), "{out}");
+    let (ok, _, err) =
+        sheaf(&["analyze", "anova", file, "--y", "A,B,C,D", "--comparison", "dunnett", "--control", "9"]);
+    assert!(!ok && err.contains("control"), "{err}");
+    let (ok, _, err) =
+        sheaf(&["analyze", "anova", file, "--y", "A,B,C,D", "--comparison", "dunnett", "--control", "0"]);
+    assert!(!ok && err.contains("from 1"), "{err}");
+}
+
+#[test]
+fn crosstab_counts_percents_and_tests() {
+    let dir = scratch("crosstab");
+    let path = dir.join("survey.csv");
+    std::fs::write(&path, "treated,better\ntreated,better\ntreated,same\ncontrol,same\ncontrol,same\ncontrol,better\ncontrol,same\ntreated,better\n").unwrap();
+    let export = dir.join("crosstab.csv");
+    let (ok, out, err) =
+        sheaf(&["analyze", "crosstab", path.to_str().unwrap(), "--y", "A,B", "--export", export.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Pearson chi-square(1) = 2") && out.contains("Fisher's exact test"), "{out}");
+    assert!(out.contains("Crosstab1"), "{out}");
+    let exported = std::fs::read_to_string(&export).unwrap();
+    assert!(
+        exported.contains("control") && exported.contains("Row %") && exported.contains("Odds ratio"),
+        "{exported}"
+    );
+    let (ok, _, err) = sheaf(&["analyze", "crosstab", path.to_str().unwrap(), "--y", "A"]);
+    assert!(!ok && err.contains("exactly two columns"), "{err}");
+    // There is no X column to limit: refused before anything runs.
+    let (ok, _, err) = sheaf(&["analyze", "crosstab", path.to_str().unwrap(), "--y", "A,B", "--x-range", "1:3"]);
+    assert!(!ok && err.contains("no X column to limit") && err.contains("--rows"), "{err}");
+    let (ok, out, err) = sheaf(&["analyze", "crosstab", path.to_str().unwrap(), "--y", "A,B", "--rows", "1:6"]);
+    assert!(ok && out.contains("Crosstab1"), "{err}");
+}
+
+#[test]
+fn anova2_refuses_dunnett_and_an_x_range() {
+    let dir = scratch("anova2-dunnett");
+    let data = design_file(&dir);
+    let file = data.to_str().unwrap();
+    let (ok, _, err) = sheaf(&["analyze", "anova2", file, "--y", "dose,batch,response", "--comparison", "dunnett"]);
+    assert!(!ok && err.contains("one-way ANOVA only"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "anova2", file, "--y", "dose,batch,response", "--x-range", "1:3"]);
+    assert!(!ok && err.contains("no X column to limit"), "{err}");
 }
 
 #[test]

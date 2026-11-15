@@ -72,7 +72,7 @@ impl Integrator {
     /// Draws the range, the shaded area and the value, and handles dragging and the menu. Returns
     /// the range's rectangle on the screen.
     /// `geom` is the layout of the gadget's layer, `to_screen` maps page points to the screen,
-    /// `offset` is the stack offset the plot is drawn with.
+    /// `placement` maps the source values to their displayed multipliers and offsets.
     #[allow(clippy::too_many_arguments)]
     pub fn show(
         &mut self,
@@ -82,13 +82,13 @@ impl Integrator {
         geom: &LayerGeometry,
         fit: f32,
         to_screen: &dyn Fn((f64, f64)) -> Pos2,
-        offset: (f64, f64),
+        placement: sheaf_core::stack::Place,
         c: &MenuContext,
         actions: &mut Vec<Action>,
     ) -> Option<Rect> {
         let (x, y) = plot_xy(project, graph, self.layer, self.plot)?;
         let f = geom.frame;
-        let page_x = |v: f64| geom.data_to_page(v + offset.0, 0.0).0;
+        let page_x = |v: f64| geom.data_to_page(placement.x(v), 0.0).0;
         let (sx0, sx1) = (to_screen((page_x(self.x0), f.y)).x, to_screen((page_x(self.x1), f.y)).x);
         let top = to_screen((f.x, f.y)).y;
         let bottom = to_screen((f.x, f.y + f.h)).y;
@@ -108,7 +108,7 @@ impl Integrator {
             };
             let step = (b - a).div_ceil(2000).max(1);
             let fill = Color32::from_rgba_unmultiplied(120, 120, 255, 90);
-            let pt = |xv: f64, yv: f64| to_screen(geom.data_to_page(xv + offset.0, yv + offset.1));
+            let pt = |xv: f64, yv: f64| to_screen(geom.data_to_page(placement.x(xv), placement.y(yv)));
             let mut i = a;
             while i < b {
                 let j = (i + step).min(b);
@@ -178,7 +178,7 @@ impl Integrator {
         // The data X under a screen x (inverse of `page_x`).
         let to_x = |sx: f32| {
             let page = f64::from((sx - to_screen((0.0, 0.0)).x) / fit);
-            geom.page_to_data(page, f.y).0 - offset.0
+            placement.source_x(geom.page_to_data(page, f.y).0)
         };
         let clamp = |sx: f32| sx.clamp(to_screen((f.x, f.y)).x, to_screen((f.x + f.w, f.y)).x);
         let moved = |r: &egui::Response| r.dragged().then(|| r.interact_pointer_pos()).flatten();

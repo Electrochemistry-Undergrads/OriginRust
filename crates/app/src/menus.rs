@@ -69,6 +69,8 @@ pub enum Cmd {
     ImportMultiple,
     ImportCsv,
     ImportWizard,
+    /// File > Import > Excel (XLS, XLSX, XLSM)...
+    ImportExcel,
     /// Edit > Go to... (Ctrl+G, in a workbook; in a graph the same keys export).
     GoToCell,
     /// Statistics > Power and Sample Size > one of the tests.
@@ -79,6 +81,14 @@ pub enum Cmd {
     ReplaceInSheets,
     ExportGraph,
     ExportWorksheet,
+    /// File > Export > Worksheet as Excel...
+    ExportExcel,
+    /// File > Print... (Ctrl+P): the active graph page.
+    Print,
+    /// File > Print Preview.
+    PrintPreview,
+    /// File > Page Setup...
+    PageSetup,
     Exit,
     Undo,
     Redo,
@@ -121,6 +131,8 @@ pub enum Cmd {
         rows: usize,
         cols: usize,
     },
+    StackPanels,
+    LabelPanels,
     /// Graph > Add Error Bars... on the active layer.
     AddErrorBars,
     /// Window > Refresh (F5).
@@ -216,6 +228,8 @@ pub enum Cmd {
     Gadget(GadgetOp),
     /// View > Toolbars: the window that shows and hides the bars.
     Toolbars,
+    /// Tools > Autosave...: the window for the autosave switch and interval.
+    Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
     /// File > Close: close (hide) the active window, as its title bar's close button does.
@@ -467,9 +481,9 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         grey("Save Project without Data..."),
         grey("Duplicate Project without Data"),
         sep(),
-        grey_keyed("&Print...", ctrl(Key::P)),
-        grey("Print Pre&view"),
-        grey("Page Setup..."),
+        keyed("&Print...", ctrl(Key::P), Cmd::Print),
+        item("Print Pre&view", Cmd::PrintPreview),
+        item("Page Setup...", Cmd::PageSetup),
         sep(),
         sub(
             "&Import",
@@ -479,8 +493,9 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                     keyed("Single &ASCII...", ctrl(Key::K), Cmd::Import),
                     item("&Multiple ASCII...", Cmd::ImportMultiple),
                     item("Comma &Delimited (CSV)...", Cmd::ImportCsv),
+                    item("&Excel (XLS, XLSX, XLSM)...", Cmd::ImportExcel),
                 ],
-                greys(&["Excel (XLS, XLSX, XLSM)...", "Image...", "Binary 2D Array..."]),
+                greys(&["Image...", "Binary 2D Array..."]),
                 // Origin's graph File menu has no Re-Import items.
                 if kind == WindowKind::Graph {
                     Vec::new()
@@ -500,7 +515,11 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(sub(
             "E&xport",
             [
-                vec![item("&Graphs...", Cmd::ExportGraph), item("&Worksheet as ASCII...", Cmd::ExportWorksheet)],
+                vec![
+                    item("&Graphs...", Cmd::ExportGraph),
+                    item("&Worksheet as ASCII...", Cmd::ExportWorksheet),
+                    item("Worksheet as E&xcel...", Cmd::ExportExcel),
+                ],
                 greys(&["Graph as Image...", "Worksheet as Image...", "Multi-Page PDF...", "Recent Exports"]),
             ]
             .concat(),
@@ -714,7 +733,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("4 Panel", Cmd::PlotPanels { rows: 2, cols: 2 }),
                     item("9 Panel", Cmd::PlotPanels { rows: 3, cols: 3 }),
                 ],
-                greys(&["Stack...", "Multiple Panels by Label..."]),
+                vec![item("Stack...", Cmd::StackPanels), item("Multiple Panels by Label...", Cmd::LabelPanels)],
             ]
             .concat(),
         ),
@@ -946,7 +965,7 @@ fn analysis_menu() -> Vec<Entry> {
                 sep(),
                 item("Interpolate/Extrapolate...", Cmd::Analyze(AnalysisKind::Interpolate)),
                 item("Interpolate/Extrapolate Y from X...", Cmd::InterpolateFromColumn),
-                grey("Trace Interpolation..."),
+                item("Trace Interpolation...", Cmd::Analyze(AnalysisKind::TraceInterp)),
                 item("Linear Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::Linear)),
                 item("Spline Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::CubicSpline)),
                 item("B-Spline Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::BSpline)),
@@ -1016,9 +1035,9 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Convolution...", Cmd::Analyze(AnalysisKind::Convolution)),
                 grey("Deconvolution..."),
                 item("Correlation...", Cmd::Analyze(AnalysisKind::SignalCorrelation)),
-                grey("Coherence..."),
-                grey("Decimation..."),
-                grey("Envelope..."),
+                item("Coherence...", Cmd::Analyze(AnalysisKind::Coherence)),
+                item("Decimation...", Cmd::Analyze(AnalysisKind::Decimate)),
+                item("Envelope...", Cmd::Analyze(AnalysisKind::Envelope)),
                 item("Hilbert Transform...", Cmd::Analyze(AnalysisKind::Hilbert)),
                 grey("IIR Filter..."),
                 grey("STFT..."),
@@ -1051,13 +1070,15 @@ fn statistics_menu() -> Vec<Entry> {
                 item("Statistics on &Columns...", Cmd::Analyze(AnalysisKind::Statistics)),
                 item("Statistics on &Rows...", Cmd::Analyze(AnalysisKind::RowStatistics)),
                 sep(),
-                grey("Cross Tabulation..."),
+                item("Cross Tabulation...", Cmd::Analyze(AnalysisKind::Crosstab)),
                 sep(),
                 item("Discrete Frequency...", Cmd::Analyze(AnalysisKind::DiscreteFreq)),
                 item("Frequency Counts...", Cmd::Analyze(AnalysisKind::Histogram)),
                 item("2D Frequency Counts/Binning...", Cmd::Analyze(AnalysisKind::Binning2D)),
                 sep(),
-                grey("Distribution Fit..."),
+                item("Distribution Fit...", Cmd::Analyze(AnalysisKind::DistFit)),
+                item("Probability Plot...", Cmd::Analyze(AnalysisKind::ProbPlot)),
+                item("Q-Q Plot...", Cmd::Analyze(AnalysisKind::QQPlot)),
                 item("Normality Test...", Cmd::Analyze(AnalysisKind::Normality)),
                 sep(),
                 item("Correlation Coefficient...", Cmd::Analyze(AnalysisKind::Correlation)),
@@ -1211,6 +1232,7 @@ pub fn integrate_gadget_menu(end_point_baseline: bool) -> Vec<Entry> {
 fn tools_menu() -> Vec<Entry> {
     vec![
         grey_keyed("&Options...", ctrl(Key::U)),
+        item("&Autosave...", Cmd::Autosave),
         grey("System Variables..."),
         grey("3D OpenGL Settings..."),
         grey_sub("Protection", &["Protect Project...", "Audit Log"]),
@@ -1870,12 +1892,17 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ImportMultiple => Action::ImportPick(ImportPick::Multiple),
         Cmd::ImportCsv => Action::ImportPick(ImportPick::Csv),
         Cmd::ImportWizard => Action::ImportWizard,
+        Cmd::ImportExcel => Action::ImportPick(ImportPick::Excel),
         Cmd::GoToCell => Action::GoToCell(book?),
         Cmd::Power(kind) => Action::Power(*kind),
         Cmd::FindInSheets => Action::FindInSheets(book?),
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
+        Cmd::ExportExcel => Action::ExportExcel(book?),
+        Cmd::Print => Action::Print(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::PrintPreview => Action::PrintPreview(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::PageSetup => Action::PageSetup,
         Cmd::Exit => Action::Quit,
         Cmd::Undo => {
             c.undo.ok_or(NO_UNDO)?;
@@ -1968,6 +1995,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::PlotPanels { rows, cols } => {
             Action::PlotPanels { book: book?, columns: c.selected.to_vec(), rows: *rows, cols: *cols }
         }
+        Cmd::StackPanels => Action::StackPanels { book: book?, columns: c.selected.to_vec() },
+        Cmd::LabelPanels => Action::LabelPanels { book: book?, columns: c.selected.to_vec() },
         Cmd::AddErrorBars => Action::AddErrorBars { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::Refresh => Action::Refresh(c.active),
         Cmd::UpdateLegend => {
@@ -2065,6 +2094,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,
+        Cmd::Autosave => Action::Autosave,
         Cmd::ToggleStatusBar => Action::ToggleStatusBar,
         Cmd::CloseWindow => Action::HideWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::DuplicateWindow => Action::DuplicateWindow(c.active.ok_or(NEED_WINDOW)?),
@@ -2112,6 +2142,7 @@ pub fn works_while_typing(cmd: &Cmd) -> bool {
             | Cmd::ImportMultiple
             | Cmd::ImportCsv
             | Cmd::ImportWizard
+            | Cmd::ImportExcel
             | Cmd::Exit
     )
 }

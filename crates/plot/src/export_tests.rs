@@ -42,6 +42,7 @@ fn scene_with(items: Vec<Item>) -> Scene {
             grid: vec![],
             plots: items,
             overlay: vec![],
+            underlay_len: 0,
             objects: vec![],
         }],
     }
@@ -49,6 +50,61 @@ fn scene_with(items: Vec<Item>) -> Scene {
 
 fn eps_text(scene: &Scene) -> String {
     String::from_utf8(eps::write_eps(scene, 1.0).bytes).unwrap()
+}
+
+#[test]
+fn data_on_top_keeps_axes_outside_the_data_clip_and_annotations_above_it_in_vector_exports() {
+    let mut scene = scene_with(vec![Item::Text(text("DATA", Anchor::Start))]);
+    scene.layers[0].overlay = vec![Item::Text(text("AXIS", Anchor::Start)), Item::Text(text("LEGEND", Anchor::Start))];
+    for enabled in [false, true] {
+        scene.layers[0].underlay_len = usize::from(enabled);
+        let svg = svg::write_svg(&scene);
+        let axis = svg.find(">AXIS<").unwrap();
+        let data = svg.find(">DATA<").unwrap();
+        let legend = svg.find(">LEGEND<").unwrap();
+        assert_eq!(axis < data, enabled, "{svg}");
+        assert!(legend > axis && legend > data);
+        let doc = roxmltree::Document::parse(&svg).unwrap();
+        let group = |label: &str| {
+            doc.descendants().find(|n| n.has_tag_name("text") && n.text() == Some(label)).unwrap().parent().unwrap()
+        };
+        assert!(group("AXIS").attribute("clip-path").is_none());
+        assert!(group("LEGEND").attribute("clip-path").is_none());
+        assert!(group("DATA").attribute("clip-path").is_some());
+
+        let eps = eps_text(&scene);
+        let axis = eps.find("(AXIS)").unwrap();
+        let data = eps.find("(DATA)").unwrap();
+        let legend = eps.find("(LEGEND)").unwrap();
+        let clip = eps.find("rectclip\n").unwrap();
+        assert_eq!(axis < clip, enabled);
+        assert_eq!(axis < data, enabled);
+        assert!(legend > axis && legend > data);
+
+        let bytes = emf::write_emf(&scene, 1.0, &FixedMetrics);
+        let records = emf_records(&bytes);
+        let labels: Vec<(usize, String)> = records
+            .iter()
+            .enumerate()
+            .filter_map(|(i, (kind, r))| {
+                if *kind != 84 {
+                    return None;
+                }
+                let len = i32_at(r, 44) as usize;
+                let offset = i32_at(r, 48) as usize;
+                let units: Vec<u16> =
+                    r[offset..offset + len * 2].as_chunks::<2>().0.iter().copied().map(u16::from_le_bytes).collect();
+                Some((i, String::from_utf16(&units).unwrap()))
+            })
+            .collect();
+        let at = |label: &str| labels.iter().find(|(_, s)| s == label).unwrap().0;
+        let clip = records.iter().position(|(kind, _)| *kind == 30).unwrap();
+        let restore = records.iter().position(|(kind, _)| *kind == 34).unwrap();
+        assert_eq!(at("AXIS") < clip, enabled);
+        assert_eq!(at("AXIS") < at("DATA"), enabled);
+        assert!(clip < at("DATA") && at("DATA") < restore);
+        assert!(at("LEGEND") > restore && at("LEGEND") > at("AXIS"));
+    }
 }
 
 #[test]
@@ -454,7 +510,9 @@ fn indexed_tiff_preserves_palette_indices_resolution_and_each_compression() {
         assert_eq!(palette.len(), 768);
         for channel in 0..3 {
             for index in 0..256 {
-                assert_eq!(palette[channel * 256 + index], u16::from(expected_palette[index * 3 + channel]) * 257);
+                // a picture with few colours has a short PNG palette; TIFF pads its table with zeros
+                let want = expected_palette.get(index * 3 + channel).map_or(0, |&c| u16::from(c) * 257);
+                assert_eq!(palette[channel * 256 + index], want);
             }
         }
         // This tiff crate can decompress 8-bit samples but cannot expand a palette. In a
@@ -497,4 +555,154 @@ fn tiff_compression_choice_is_written_in_the_file() {
         raster_bytes("tif", &RasterOptions { tiff_compression: TiffCompression::None, ..RasterOptions::default() });
     let lzw = raster_bytes("tif", &RasterOptions::default());
     assert!(lzw.len() < none.len(), "LZW is smaller than no compression");
+}
+
+#[test]
+fn rows_are_packed_high_bits_first_and_padded_to_a_byte() {
+    assert_eq!(raster::pack_row(&[1, 0, 1, 1, 0, 0, 0, 1, 1], 1), vec![0b1011_0001, 0b1000_0000]);
+    assert_eq!(raster::pack_row(&[0xA, 0x3, 0xF], 4), vec![0xA3, 0xF0]);
+    assert_eq!(raster::pack_row(&[7, 8], 8), vec![7, 8]);
+}
+
+/// Decodes a PNG into (bit depth, palette, one index per pixel, width, height).
+fn png_indices(bytes: &[u8]) -> (png::BitDepth, Vec<u8>, Vec<u8>, usize, usize) {
+    let mut reader = png::Decoder::new(std::io::Cursor::new(bytes)).read_info().unwrap();
+    let info = reader.info().clone();
+    let mut buf = vec![0; reader.output_buffer_size().unwrap()];
+    let frame = reader.next_frame(&mut buf).unwrap();
+    let (w, h) = (info.width as usize, info.height as usize);
+    let bits = match info.bit_depth {
+        png::BitDepth::One => 1,
+        png::BitDepth::Four => 4,
+        _ => 8,
+    };
+    let mut idx = Vec::with_capacity(w * h);
+    for y in 0..h {
+        let row = &buf[y * frame.line_size..(y + 1) * frame.line_size];
+        for x in 0..w {
+            let bit = x * bits;
+            idx.push((row[bit / 8] >> (8 - bits - bit % 8)) & ((1 << bits) - 1) as u8);
+        }
+    }
+    (info.bit_depth, info.palette.map(|p| p.to_vec()).unwrap_or_default(), idx, w, h)
+}
+
+#[test]
+fn mono_and_16_colour_png_are_packed_palette_images() {
+    let mono = raster_bytes("png", &RasterOptions { depth: ColorDepth::Mono, ..RasterOptions::default() });
+    let (depth, palette, idx, w, h) = png_indices(&mono);
+    assert_eq!(depth, png::BitDepth::One);
+    assert_eq!(palette, vec![0, 0, 0, 255, 255, 255]);
+    assert_eq!(idx.len(), w * h);
+    assert!(idx.contains(&0) && idx.contains(&1), "black lines on white");
+    // Each pixel is the ordered dither (8 x 8 Bayer, Origin's) of the 8-bit grey export of the graph.
+    let grey = raster_bytes("png", &RasterOptions { depth: ColorDepth::Grey8, ..RasterOptions::default() });
+    let mut reader = png::Decoder::new(std::io::Cursor::new(&grey[..])).read_info().unwrap();
+    let mut g = vec![0; reader.output_buffer_size().unwrap()];
+    reader.next_frame(&mut g).unwrap();
+    let bayer = |x: usize, y: usize| -> u16 { u16::from(raster::BAYER8[y % 8][x % 8]) };
+    assert!(
+        idx.iter().zip(&g).enumerate().all(|(k, (&i, &v))| i == u8::from(4 * bayer(k % w, k / w) + 2 < u16::from(v)))
+    );
+    // A mid grey of 128 is half white: 32 of each 8 x 8 cell.
+    let half = raster::mono_dither_for_test(&[128; 64 * 3], 8);
+    assert_eq!(half.iter().filter(|&&i| i == 1).count(), 32);
+
+    let c16 = raster_bytes("png", &RasterOptions { depth: ColorDepth::Colors16, ..RasterOptions::default() });
+    let (depth, palette, idx, _, _) = png_indices(&c16);
+    assert_eq!(depth, png::BitDepth::Four);
+    assert_eq!(palette.len(), 48, "16 palette entries");
+    assert!(idx.iter().all(|&i| i < 16));
+    // the white background and the black axes keep palette entries close to white and black
+    let near = |c: [u8; 3]| palette.chunks(3).any(|p| p.iter().zip(c).all(|(&a, b)| a.abs_diff(b) <= 12));
+    assert!(near([255, 255, 255]) && near([0, 0, 0]), "{palette:?}");
+}
+
+#[test]
+fn mono_and_16_colour_bmp_have_1_and_4_bits_per_pixel() {
+    for (depth, bpp, colours) in [(ColorDepth::Mono, 1usize, 2usize), (ColorDepth::Colors16, 4, 16)] {
+        let bmp = raster_bytes("bmp", &RasterOptions { depth, ..RasterOptions::default() });
+        let u32_at = |at: usize| u32::from_le_bytes(bmp[at..at + 4].try_into().unwrap()) as usize;
+        let (w, h) = (u32_at(18), u32_at(22));
+        assert_eq!(u16::from_le_bytes([bmp[28], bmp[29]]) as usize, bpp, "{depth:?}");
+        assert_eq!(u32_at(46), colours, "{depth:?}: colours used");
+        assert_eq!(u32_at(10), 14 + 40 + 4 * colours, "{depth:?}: pixel offset after the palette");
+        let stride = (w * bpp).div_ceil(32) * 4;
+        assert_eq!(bmp.len(), 14 + 40 + 4 * colours + stride * h, "{depth:?}: file length");
+        assert_eq!(u32_at(2), bmp.len());
+    }
+    let mono = raster_bytes("bmp", &RasterOptions { depth: ColorDepth::Mono, ..RasterOptions::default() });
+    assert_eq!(&mono[54..62], &[0, 0, 0, 0, 255, 255, 255, 0], "black, then white (BGR0)");
+}
+
+#[test]
+fn formats_without_small_depths_store_mono_and_16_colours_as_8_bit_indices() {
+    for depth in [ColorDepth::Mono, ColorDepth::Colors16] {
+        let top = if depth == ColorDepth::Mono { 2 } else { 16 };
+        let tga = raster_bytes("tga", &RasterOptions { depth, ..RasterOptions::default() });
+        assert_eq!((tga[1], tga[2], tga[16]), (1, 1, 8), "{depth:?}: colour-mapped TGA");
+        assert!(tga[18 + 768..].iter().all(|&i| i < top), "{depth:?}: indices within the small palette");
+        let psd = raster_bytes("psd", &RasterOptions { depth, ..RasterOptions::default() });
+        assert_eq!(u16::from_be_bytes([psd[24], psd[25]]), 2, "{depth:?}: indexed PSD");
+        assert!(psd[68 + 768..].iter().all(|&i| i < top), "{depth:?}");
+        let pcx = raster_bytes("pcx", &RasterOptions { depth, ..RasterOptions::default() });
+        assert_eq!(pcx[pcx.len() - 769], 0x0C, "{depth:?}: PCX palette marker");
+        let tif = raster_bytes("tif", &RasterOptions { depth, ..RasterOptions::default() });
+        assert!(tif.starts_with(b"II*\0") || tif.starts_with(b"MM\0*"), "{depth:?}: TIFF header");
+    }
+}
+
+#[test]
+fn gif_mono_16_colour_and_grey_keep_their_exact_palettes() {
+    for (depth, size) in [(ColorDepth::Mono, 2usize), (ColorDepth::Colors16, 16), (ColorDepth::Grey8, 256)] {
+        let gif = raster_bytes("gif", &RasterOptions { depth, ..RasterOptions::default() });
+        let mut opts = gif::DecodeOptions::new();
+        opts.set_color_output(gif::ColorOutput::Indexed);
+        let mut dec = opts.read_info(std::io::Cursor::new(&gif[..])).unwrap();
+        let palette = dec.global_palette().unwrap().to_vec();
+        let frame = dec.read_next_frame().unwrap().unwrap();
+        assert!(palette.len() >= 3 * size, "{depth:?}: {} palette bytes", palette.len());
+        assert!(frame.buffer.iter().all(|&i| usize::from(i) < size), "{depth:?}");
+        match depth {
+            ColorDepth::Mono => assert_eq!(&palette[..6], &[0, 0, 0, 255, 255, 255]),
+            ColorDepth::Colors16 => assert!(palette.len() >= 48),
+            _ => assert_eq!(&palette[3 * 200..3 * 201], &[200, 200, 200]),
+        }
+    }
+}
+
+#[test]
+fn sixteen_bit_bmp_and_tga_store_five_bits_per_channel_like_origin() {
+    let o = RasterOptions { depth: ColorDepth::Bit16, ..RasterOptions::default() };
+    let bmp = raster_bytes("bmp", &o);
+    let u32_at = |b: &[u8], at: usize| u32::from_le_bytes(b[at..at + 4].try_into().unwrap()) as usize;
+    let (w, h) = (u32_at(&bmp, 18), u32_at(&bmp, 22));
+    assert_eq!(u16::from_le_bytes([bmp[28], bmp[29]]), 16);
+    assert_eq!((u32_at(&bmp, 30), u32_at(&bmp, 10), u32_at(&bmp, 46)), (0, 54, 0), "BI_RGB, no palette");
+    let stride = (w * 2).div_ceil(4) * 4;
+    assert_eq!(bmp.len(), 54 + stride * h);
+    // The white page is 0x7FFF: five bits of each channel, the top bit clear.
+    assert_eq!(u16::from_le_bytes([bmp[54], bmp[55]]), 0x7FFF);
+    let tga = raster_bytes("tga", &o);
+    assert_eq!((tga[1], tga[2], tga[16], tga[17]), (0, 2, 16, 0), "true colour, 16 bits, rows bottom to top");
+    let (tw, th) = (u16::from_le_bytes([tga[12], tga[13]]) as usize, u16::from_le_bytes([tga[14], tga[15]]) as usize);
+    assert_eq!(tga.len(), 18 + 2 * tw * th);
+    assert!(tga[18..].chunks(2).all(|p| u16::from_le_bytes([p[0], p[1]]) & 0x8000 == 0));
+    // The same picture in both: BMP rows are bottom to top as well, so the first rows agree.
+    assert_eq!(&tga[18..18 + 2 * tw], &bmp[54..54 + 2 * w]);
+    // Formats without a 16-bit form write 24-bit colour.
+    assert_eq!(raster_bytes("png", &o), raster_bytes("png", &RasterOptions::default()));
+}
+
+#[test]
+fn few_colours_keep_their_exact_values_in_a_palette() {
+    // red, white and black only: the 256-colour and 16-colour palettes hold exactly these
+    let rgb = [255, 0, 0, 255, 255, 255, 0, 0, 0, 255, 0, 0];
+    let r = Raster { width: 2, height: 2, rgba: rgb.chunks(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect() };
+    for depth in [ColorDepth::Colors256, ColorDepth::Colors16] {
+        let png = raster::encode_raster(&r, "png", 72.0, &RasterOptions { depth, ..RasterOptions::default() }).unwrap();
+        let (_, palette, idx, _, _) = png_indices(&png);
+        assert_eq!(palette, vec![255, 0, 0, 255, 255, 255, 0, 0, 0], "{depth:?}");
+        assert_eq!(idx, vec![0, 1, 2, 0], "{depth:?}");
+    }
 }

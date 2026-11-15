@@ -12,7 +12,7 @@ the raw output of the runs (`stats2-*.out.txt`, `stats2-*.cases.json`).
 
 The numerics are in `crates/calc` (`hypothesis`, `anova`, `anova2`, `nonparam`, `correlation`, `freq`,
 `normality`), the operations in `crates/core/src/analysis.rs` and its `statistics` submodule, the command line
-is `sheaf analyze ttest | anova | anova2 | mannwhitney | signrank | kruskal | corr | histogram | normality`, and
+is `sheaf analyze ttest | anova | anova2 | mannwhitney | signrank | kruskal | corr | histogram | normality | crosstab | bin2d`, and
 the app has a Statistics menu with one window.
 
 ## 1 t-tests
@@ -171,7 +171,7 @@ the standard error `sqrt(MSE (1/n_i + 1/n_j))` with MSE and its degrees of freed
 marginal means are not adjusted for the other factor, which only matters in unbalanced designs). The statistic of
 the t methods keeps the sign of the difference, the Tukey q and the Scheffe F do not. Origin's library numbers
 the methods 1 Tukey, 2 Bonferroni, 3 Sidak, 4 Fisher, 5 Scheffe, which differs from the order in its header comment.
-Holm methods are in the one-way ANOVA only (section 11); Dunnett is not built. For constant data Origin's 0/0 turns into p = 0 and "significant" for
+Holm methods (section 11) and Dunnett (section 15) are in the one-way ANOVA only. For constant data Origin's 0/0 turns into p = 0 and "significant" for
 equal means; Sheaf says p = 1.
 
 **Sheet.** `ANOVA2Way1`: one table of N, mean, SD and SEM for each level of A, each level of B, each cell (with the
@@ -372,7 +372,7 @@ tables, 386 pairs.
   analyze anova --comparison holm-bonferroni | holm-sidak`) and refuses it in the two-way ANOVA.
 - **Dunnett** (method 6): the same call returns the differences and standard errors but no statistic, p-value or
   limits for any input, in the one-way and the two-way library functions, and the library has no way to name the
-  control group. The installed Origin gave nothing to copy, so Dunnett is not built.
+  control group. The installed Origin gave nothing to copy; Sheaf's Dunnett is the textbook test checked against scipy (section 15).
 
 ## 12 Power and sample size
 
@@ -504,11 +504,186 @@ on columns we wrote (`tools/origin-ref/stats5/g1.py`, parsed by `parse1.py`; `ma
   Statistics > Descriptive Statistics > Discrete Frequency...; `sheaf analyze discfreq FILE --y COLS [--relative]
   [--cumulative] [--percent] [--no-count] [--case-sensitive] [--sort cdesc|casc|vasc|vdesc]`.
 
+## 15 Dunnett comparisons and cross tabulation (scipy-checked, not Origin)
+
+Sources: textbook definitions and scipy 1.18.1 (`stats.dunnett`, `chi2_contingency`, `fisher_exact`). Nothing in
+this section was measured against Origin. The fixtures are named `scipy_stats_compare` and say scipy everywhere; the
+generator is `tools/scipy_stats_compare.py`, which prints `crates/calc/tests/fixtures/scipy_stats_compare.rs`; the
+tests are `crates/calc/tests/scipy_stats_compare.rs`. Every Origin detail below that is a guess is listed under "Not
+measured". (Holm comparisons, 2D frequency counts and discrete frequency are measured against Origin: sections 11,
+13 and 14.)
+
+### 15.1 Dunnett in One-Way ANOVA
+
+Dunnett is an option of "Means comparison" next to Tukey, Bonferroni, Sidak, Fisher LSD, Scheffe and the two Holm
+methods of section 11 (menu: Statistics > ANOVA > One-Way ANOVA; `sheaf analyze anova --comparison dunnett
+[--control N]`). It is refused in the two-way ANOVA because it needs one control group. Origin's library has a
+method number for Dunnett (6) but the call gave only differences and standard errors, no statistic, p-value or interval (section 11), so what follows is the textbook
+definition checked against scipy.
+
+- **Dunnett** (`MeansComparison::Dunnett`, `calc::dunnett`, `compare_to_control`): each group other than the control is compared with the
+  control group (the first chosen column, or the one named by `--control` / "Control group"). Rows are listed in the
+  order of the groups, labelled "group - control"; `diff = mean(group) - mean(control)`, `SE = sqrt(MSE (1/n_g +
+  1/n_c))`, `t = diff / SE` (shown as `|t|`). The p-value is two-sided and adjusted for the whole family:
+  `P(max_j |T_j| >= |t|)` for the multivariate t with `df` error degrees of freedom whose correlations are
+  `corr(T_i, T_j) = l_i l_j`, `l_j = sqrt(n_j / (n_j + n_c))` (this holds for unequal group sizes too). The simultaneous
+  confidence limits are `diff -/+ d SE` where `d` solves `P(max_j |T_j| <= d) = 1 - alpha` (one `d` for all rows).
+  The family is the groups other than the control, so with one treatment Dunnett equals the two-sided t-test.
+- **The multivariate t integral** is evaluated by a double Gauss-Legendre integral, not by Monte Carlo. The
+  one-factor structure turns the `m`-dimensional integral into
+  `Int f_S(s) Int phi(x) Prod_j [Phi((c s - l_j x)/r_j) - Phi((-c s - l_j x)/r_j)] dx ds` with `r_j = sqrt(1 - l_j^2)`
+  and `f_S` the density of `sqrt(chi-square(df)/df)` (Dunnett 1955; Genz and Bretz 2009 for the same reduction). Above
+  5000 degrees of freedom `s = 1` (the density of `s` is then a spike at 1; the test
+  `large_degrees_of_freedom_use_the_normal_limit` bounds the jump across 5000 degrees of freedom by 1e-4, and no
+  scipy fixture reaches that range: the largest has 156). The error of the panels used is below 1e-12.
+- **Tolerances** (`scipy_stats_compare.rs`): scipy integrates the same distribution by quasi Monte Carlo, with an
+  error of about 1e-4 in the p-value (fixed by a seed, but not reproducible to more digits, and poor in relative
+  terms below 1e-5); our p-values are compared with scipy's to 5e-4 absolute and their confidence limits to 0.02. To pin
+  the integration to 1e-9 the generator also evaluates the same double integral with its own, much finer
+  vectorised rule (different nodes, 64-point panels) and the tests compare p-values and the critical value `d` with
+  that to 1e-9 absolute. That second reference checks our implementation of the formula; the formula itself is
+  validated by the agreement with scipy's independent Monte Carlo. Dunnett statistics agree with scipy to 1e-9.
+
+### 15.2 Cross tabulation
+
+Statistics > Descriptive Statistics > Cross Tabulation; `sheaf analyze crosstab --y ROW_COLUMN,COLUMN_COLUMN`. Two
+columns of any type (text or numbers); each distinct value is a level. Rows where one of the two cells is empty are
+left out (and counted in a note). Levels are listed sorted: numbers from small to large when all are numbers,
+otherwise text by character order ignoring case (A before a).
+
+The result sheet has three blocks next to each other: the table of counts with a "Total" row and column; one row per
+cell with Count, Expected (`row total * column total / N`), Row %, Column % and Total % (each can be switched off);
+and Statistic/Value pairs of the tests:
+
+| Test | Statistic | df | p |
+|---|---|---|---|
+| Pearson chi-square | `sum (O - E)^2 / E` | `(r - 1)(c - 1)` | upper tail of chi-square |
+| Likelihood ratio | `2 sum O ln(O / E)` (empty cells add 0) | same | same |
+| Yates (2 x 2 only) | Pearson with each count moved 0.5 (at most to E) towards E | 1 | same |
+| Fisher exact (2 x 2 only) | odds ratio `a d / (b c)` (infinite where `b c = 0`) | | two-sided, left (`P(X <= a)`), right (`P(X >= a)`) |
+
+Fisher's two-sided p-value adds the probabilities of all tables with the same margins that are no more likely than
+the observed one (relative tolerance 1e-9 on ties). A note warns when cells have an expected count below 5. A table
+with fewer than two levels in a variable is refused, and so is a variable with more than 200 distinct levels (a column
+of numbers or identifiers is not a category). Rows hidden by the sheet filter and masked cells are left out, as in the
+other tools; the cross tabulation has no X column, so the "X from ... to" row range is refused (the window does not
+offer it). Agreement with scipy `chi2_contingency` (`correction=False`,
+`lambda_="log-likelihood"`) and `fisher_exact`: 1e-9 relative on 9 tables, including zero cells.
+
+### 15.3 Not measured against Origin
+
+To check on the Windows machine with `tools/origin-ref` before these are called Origin behaviour:
+
+- Dunnett: whether Origin's one-way ANOVA tool offers it at all (the library call gave no statistic, p-value or interval),
+  the order and labelling of its rows, how it chooses the control group, its p-values and limits (Origin may use a
+  different integration accuracy, as it does for the t quantile), and the statistic column it shows.
+- The layout of Origin's cross tabulation report (we write three blocks in one sheet), the order of the levels,
+  the percentage definitions, whether it shows the expected counts, Yates' correction, Fisher's two-sided rule, the
+  odds ratio (sample ratio here), and which rows it leaves out for missing cells.
+- Whether Origin's cross tabulation leaves out filtered rows and masked cells as we do, and whether it limits the
+  number of levels of a variable (we refuse more than 200).
+- Origin's X-Function name for the cross tabulation window (the title shows the tool name alone).
+
+## 16 Distribution fit, probability plot and Q-Q plot (scipy-checked, not Origin)
+
+**Source of the numbers: scipy, not Origin.** Nothing in this section was measured against Origin (this was
+built on a machine without it). The reference numbers are from scipy 1.18 (`scipy.stats.<dist>.fit`, `probplot`,
+`kstest`), written by `tools/stats-dist-ref.py` into
+`crates/calc/tests/fixtures/scipy_stats_dist.rs` and checked by `crates/calc/tests/scipy_stats_dist.rs`. Every
+rule below is the textbook one; where Origin may differ the item is listed under "Not measured".
+
+The numerics are in `crates/calc` (`distfit`), the tools in `crates/core/src/analysis/dist.rs`, the command line is
+`sheaf analyze distfit | probplot | qqplot`, and the app has Statistics > Descriptive Statistics > Distribution
+Fit, Probability Plot and Q-Q Plot (options in `dialogs/dist_options.rs`). Power and sample size is section 12
+(measured against Origin's library); this branch's own scipy-only power code was dropped in its favour.
+
+### 16.1 Distribution fit
+
+Five families, each fitted to each chosen column by maximum likelihood (missing values are ignored; at least two
+numbers with some spread). Lognormal, exponential, gamma and Weibull have their threshold fixed at 0, as
+`scipy.stats.<dist>.fit(x, floc=0)` does, so they need positive numbers (the exponential accepts 0). A family that
+cannot take a column is left out for that column with a note; if none can, the run is refused.
+
+Data without spread are refused, not fitted: numbers that are all equal, or so close together that the estimate
+would not be a finite number (for the gamma, a shape above 1e10, a coefficient of variation below about 1e-5, is
+taken as no spread), give "no spread"; an estimate that is not finite or not above zero where it must be (numbers
+of the order of 1e300 or 1e-300) gives "cannot be fitted". The fit never panics and always terminates, and
+`cdf` of the fitted distribution returns NaN for parameters outside its domain.
+
+| Family | Parameters | Estimate |
+|---|---|---|
+| Normal | mean, SD | sample mean; SD with divisor n (computed scaled by the largest deviation, so that squares neither underflow nor overflow) |
+| Lognormal | mu, sigma of the logarithm | mean and SD (divisor n) of ln x |
+| Exponential | scale (the mean) | sample mean |
+| Gamma | shape k, scale | k solves `ln k - digamma(k) = ln(mean) - mean(ln x)` (Newton), scale = mean / k |
+| Weibull | shape c, scale | c solves the likelihood equation (bisection on ln c), scale from c |
+
+Reported per row: N, the parameters, log-likelihood `ln L`, `AIC = 2k - 2 ln L`, `BIC = k ln n - 2 ln L` (k = number
+of fitted parameters, the fixed threshold not counted), Kolmogorov-Smirnov D and p, Anderson-Darling A2 (and an
+approximate p for normal and lognormal). The notes name the family with the lowest AIC. KS p is for a distribution
+known in advance (as `scipy.stats.kstest`), so it is too large when the parameters were estimated from the same
+data; this is said in the note. A2 is `-n - (1/n) sum (2i-1) (ln F(x_i) + ln(1 - F(x_(n+1-i))))` against the fitted
+distribution; for an exponential fit to data that contain 0 it is infinite (F(0) = 0 under the fit), not a finite number
+from a floor. The A2 p-value uses the D'Agostino-Stephens formula for estimated mean and SD, applied to the
+normal and to the lognormal (on the logarithm). That formula is for A2 computed with the sample SD (divisor n - 1),
+as the Normality Test does, while the reported A2 uses the maximum likelihood SD (divisor n); the p-value is
+therefore taken from A2 recomputed with the n - 1 SD, so it equals the p-value the Normality Test gives for the
+same column (tested). No p is given for the other families. The KS p-value is exact (the matrix method) up to
+n = 1000 and, above that, the asymptotic series with Stephens' correction (measured against scipy's `kstwo.sf`: off by up to 0.0042
+at n = 1001, 0.0030 at n = 2000 and 0.0014 at n = 10000, worst near `sqrt(n) d` = 0.67); for a p-value below 1e-7
+the series is used from n = 140 on (accurate to 1e-9 there).
+
+Result sheet `DistFit1`: columns Data, Distribution, N, Parameter 1 (name), Value 1, Parameter 2 (name),
+Value 2 (empty for the exponential), Log-likelihood, AIC, BIC, KS D, KS Prob, Anderson-Darling A2 and Prob.
+
+### 16.2 Probability plot and Q-Q plot
+
+Both use the plotting positions of `scipy.stats.probplot` (Filliben's medians of the uniform order statistics:
+`(i - 0.3175) / (n + 0.365)`, with `1 - 0.5^(1/n)` and `0.5^(1/n)` at the ends).
+
+- **Q-Q plot** (`QQPlot1`): X is the theoretical quantile at the plotting position, Y the ordered data; the
+  reference line is the least-squares line through the points (slope estimates the scale, intercept the location,
+  `r` printed). Families with a shape (lognormal sigma, gamma, Weibull) take the shape fitted by maximum
+  likelihood; the quantiles are those of the standard form, as `probplot(..., sparams=shape)`. The gamma quantile is solved by bisection on ln x when the library routine cannot reach the lower tail (shape below about 1 with a small p; tested for shapes 0.05 to 2). A linear graph.
+- **Probability plot** (`ProbPlot1`): X is the ordered data, Y the plotting position in percent; the Y axis is a
+  probability axis (normal and lognormal use the normal probability scale, Weibull and exponential the Weibull
+  scale; gamma the normal one), the X axis is logarithmic for lognormal, Weibull and (positive data) exponential.
+  The reference line is the distribution function of the maximum likelihood fit over the range of the data, kept
+  to 0.01 % to 99.99 %.
+
+Both make a new graph (a scatter plot and a line plot per column, the line in the colour of its points) unless
+"Make a graph" is off, plus the result sheet with the plotted columns and a table (N, parameters or slope,
+intercept, r). One undo step removes sheet and graph.
+
+Auto Apply is not offered for these two windows (the checkbox is disabled): each run makes a new sheet and a new
+graph, so running at every option change would pile them up; they run on OK and Apply.
+
+### 16.3 Checked against scipy, tolerances
+
+Normal, lognormal and exponential estimates, log-likelihood, AIC, BIC, KS D, A2, probability plot quantiles, slope,
+intercept and r: 1e-9 relative. Gamma shape: 1e-9 against `scipy.stats.gamma.fit`. Weibull: scipy's general
+optimizer stops 1e-5 to 2.5e-5 short of the maximum, so against its fit the parameters agree to 1e-4; against the
+same equation solved with `scipy.optimize.brentq` to machine precision they agree to 1e-9, and the quantities
+computed from the parameters are compared with scipy's for those parameters. KS p: 1e-7 (Marsaglia-Tsang-Wang
+against scipy's exact algorithm).
+
+### 16.4 Not measured (Origin), to check on the Windows machine with `tools/origin-ref`
+
+- Whether Origin's Distribution Fit uses the same parameterizations and a free threshold (three-parameter
+  lognormal, gamma, Weibull), its list of families (it has many more), and whether it reports AIC, BIC, KS and
+  Anderson-Darling the same way (divisor of the normal SD, p-values with estimated parameters).
+- Origin's plotting positions for its probability plot, its axis scales and tick percentages, whether its Q-Q plot
+  plots data or quantiles on X, and its reference line (through the quartiles or a fit).
+- The window titles, option labels and defaults of the three windows, the sheet and graph names (`DistFit1`,
+  `ProbPlot1`, `QQPlot1`), and the menu order of the new entries.
+- Not built: fitting a threshold, censored data, other families, a probability plot of several families on one
+  graph.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",
 "One-way ANOVA", "Histogram", "Normality test", "Two-way ANOVA", "Mann-Whitney test", "One-sample Wilcoxon signed
-rank test", "Paired Wilcoxon signed rank test", "Kruskal-Wallis test", "Correlation coefficients"). Results go to a new
+rank test", "Paired Wilcoxon signed rank test", "Kruskal-Wallis test", "Correlation coefficients"; section 16 adds "Distribution fit", "Probability plot" and "Q-Q plot"). Results go to a new
 sheet of the workbook of the input (`TTest1`, `ANOVA1`, `Histogram1`, `Normality1`, `ANOVA2Way1`, `MannWhitney1`,
 `SignedRank1`, `KruskalWallis1`, `Correlation1`); the histogram graph is a new graph window. The input
 columns must be in one sheet and are the Y columns chosen (for the two-sample and paired test exactly
@@ -543,7 +718,7 @@ Not verified or not done:
   distribution curve on the histogram, normal probability plot) are not copied.
 - No test of equal variance (Levene, F test) next to the two-sample t-test, no t-test from summary data, no row-wise t-tests.
 - Power and sample size: only the t tests and the one-way ANOVA (section 12); no tests of proportions or variances, no power curve.
-- Three-way and repeated measures ANOVA, Dunnett comparisons and means plots of the
+- Three-way and repeated measures ANOVA and means plots of the
   ANOVA, partial correlation, scatter matrices and confidence ellipses, outlier tests other than Grubbs and
   Dixon, Chen-Shapiro and Cramer-von Mises are not built (the Friedman, median, sign and two-sample
   Kolmogorov-Smirnov tests and the Grubbs and Dixon tests are in section 10).
@@ -555,3 +730,4 @@ Not verified or not done:
 - Several of the new Origin numbers were produced with a normal tail that returned 0 at 8.5 standard
   deviations; those are compared with an absolute tolerance.
 - The app window was checked with automated click tests, not looked at by the owner.
+- Section 15 (Dunnett, cross tabulation) is checked against scipy, not Origin.

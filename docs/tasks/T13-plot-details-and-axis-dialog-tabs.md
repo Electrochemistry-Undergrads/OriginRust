@@ -1,8 +1,85 @@
 # T13: Missing Plot Details tabs and controls
 
-**Status:** item 1 mostly done (Drop Lines and Label tabs, line Transparency, Fill Area Under Curve in the Normal mode, measured, graphing spec 18) and the layer Background colour (item 3); item 2 in part (Group tab with Edit Mode, increments and members for the layer as one group, measured, spec 18.1), item 4 in part (Print/Dimensions, Display, Legends/Titles page tabs, spec 18), item 5 done (the tree names plots `[Book1]Sheet1! A(X), B(Y) [1*:11*]`, `Project::plot_data_name`); left: the Offset tab's Multiplier, the other fill modes and Pattern tab for fills, several groups per layer and subgrouping, item 3 (Display tab done except X/Y Axes and Data on Top of Axes; Size/Speed with Origin's units; its X:Y ratio, caching and speed mode left; Link Axes Scales done 2026-11-14 with None and Straight, Align and Custom greyed, spec 18.4; Stack tab in Origin's layout, spec 13.14), item 4 (Miscellaneous not offered), item 6 done (Layer Contents and Plot Setup windows, spec 18.2, 18.3), item 7 done (the Workbook button and the ">>" button, spec 18.5). Origin's tab lists and defaults are measured (spec 18), on `main`. **Size:** M. **Model:** Sonnet.
+**Status:** base tabs merged from `plot-details` (2026-11-14); Data on Top of Axes, Skip Points, Label White Out, Offset multipliers and Label Frame/Margin completed in the follow-ups below. The measured parts were already on `main`. Measured against Origin (graphing spec 18, 18.1 to 18.5): Drop Lines and Label tabs, line Transparency, Fill Area Under Curve (Normal), the layer Background colour, the Group tab (Edit Mode, increments, members), Offset (X and Y offsets), Display, Size/Speed (units), Link Axes Scales, Stack, the page tabs Print/Dimensions, Display and Legends/Titles, the tree names, Layer Contents and Plot Setup as Origin's own windows, the Workbook and ">>" buttons. Ported from the branch onto those dialogs, **Sheaf's own and not measured** (spec 18.6): a hatch, gradient and transparency for the fill of columns, bars, areas and the fill under a curve (Pattern tab; for areas too); bar Width (in %) on Spacing; Label by a column of the project, a list of rows, decimals and offsets; subgroups by size on the Group tab; the layer Background gradient and border; the X Axes and Y Axes switches of Display; the page's border, layer icons switch, comments (hover text in the Object Manager), window title choice, Miscellaneous tab, and Print/Dimensions keeping the layers' size; the right Y layer no longer copies its parent's background; drop lines are drawn only for the kinds whose tab offers them; deleting a column resets the X error, base and data labels that name it; "Use this style for all plots" copies the look settings. Not taken from the branch because main's measured version replaced it: the second Layer Contents and Plot Setup dialogs, the second Group, Drop Lines, Label and Link tabs, its tree text, its Workbook button and side panel, line transparency as a percentage field. **Left:** the other fill modes and Origin's pattern list, several groups per layer, subgrouping by column label, Binned, Size/Speed X:Y ratio, caching and speed mode, label leader lines, No Line Break / Gap to Symbol, print margins, writing the new settings to `.opj` (the writer names them in its save warnings). **Unmeasured:** everything in spec 18.6 (compare with Origin on the Windows machine). **Size:** M. **Model:** Sonnet.
 **Detail:** audit B "Plot Details", "Layer Contents (F12) and Plot Setup".
 **Spec:** `docs/spec/gui-look.md` (Plot Details), `docs/spec/ui-command-map.md` D1/D3.
+
+## Data on Top of Axes follow-up (2026-11-14)
+
+Done: the Display checkbox is enabled, with the unchecked default recorded in the Origin 2016
+capture. The shared scene draws axes before data when enabled, while retaining clipping,
+independent grid ordering, legends and annotations. Screen/raster, SVG/PDF, EPS and EMF use
+that order; picking follows visible data/axis overlap. Tests cover overlap pixels, clipping,
+vector record order, polar/ternary scene branches, old project settings and Apply/Cancel/Undo/Redo.
+The native/companion representation stores the setting; `.opj` alone still warns, as for the other
+Display settings. Other T13 leftovers listed above remain open.
+
+Validation: formatting and strict workspace all-target Clippy pass; `cargo test --workspace`
+passes 1,916 tests (two ignored), including all six new regressions. The parity row remains partial
+(48 done / 136 partial / 54 missing of 238 rows).
+
+## Skip Points follow-up (2026-11-14)
+
+Implemented the Drop Lines Data Points Display Control using the existing saved symbol frequency.
+Skip Points now selects the same rows for drop lines, symbols, error bars and data labels.
+Origin 2016 PNG measurements establish the frequency, plot-range phase and absence of a forced
+last point. Native/companion saves preserve the setting, and the `.opj` warning includes line plots
+with skipped errors. The full-data connecting line and axes remain unchanged. No Line Break /
+Gap to Symbol and modern Smart Skip modes remain open; filtered-row frequency is Sheaf's existing
+compacted display order, not yet Origin-measured. See graphing section 18.
+
+Validation after incorporating origin/main `2b16f6b`: formatting, strict all-target workspace
+Clippy and 1,957 workspace tests pass (two ignored). All seven new regressions pass. The newly
+merged MCP test fixture also needed a separate Windows-only dead-field portability fix.
+
+## Label White Out follow-up (2026-11-14)
+
+The Label tab now offers White Out (off by default), drawing an opaque white background for each
+visible nonempty data label. Rotation, anchors, offsets, row selection and Skip Points are
+retained. Origin 2016 exported examples confirm the white fill and rotation (graphing section 18);
+exact font-box padding outside the measured Arial example remains approximate. Old settings
+load with White Out off; native and `.opj` companion saves retain enabled settings. The existing
+export-format smoke test exercises it, and six focused pixel/geometry/model/UI/IO regressions
+cover the behavior. Label frames, editable margins and leader lines remain open.
+
+Validation on integrated `756d12d`: formatting, strict workspace all-target Clippy and 1,968
+workspace tests pass (two ignored), including all six new regressions.
+
+## Offset multipliers follow-up (2026-11-14)
+
+The Offset tab now offers X and Y multipliers (default 1) beside its existing offsets, enabled
+in Individual mode. Positive factors scale source values before the offsets. Origin 2016
+measurements confirm fractional factors, unchanged error magnitudes and source label values;
+stored zero/negative factors render as 1. Nonfinite factors also render as 1. Source data,
+analysis and fit results remain unchanged. Followers inherit the leader's complete placement.
+The Data Reader follows displayed points while reporting source values; the Integrate gadget's
+range, shading and dragging follow placement while its area stays in source units.
+Native and companion saves preserve the factors. The `.opj` writer explicitly warns that
+multipliers are omitted, retaining the original data and its existing offset writing.
+Separate Individual X/Y switches and specialized-coordinate parity remain open (graphing 18.1).
+
+Validation on integrated `f14e20f` plus the docs-only T01 claim `89473a2`: formatting, strict
+workspace all-target Clippy and 1,993 workspace tests pass (two ignored). Ten new regressions
+cover model compatibility, Origin placements/error lengths/labels, raster and picking, log/range
+handling, native/companion saves, dialog history, Data Reader and gadget source-unit behavior.
+
+## Label Frame and Margin follow-up (2026-11-14)
+
+The Label tab offers None, Box and Shadow, frame border/fill colors and Margin (% Font Height).
+Origin 2016 exports establish the black initial colors, frame/margin versus White Out paint order,
+page-aligned enclosing frame for rotated text and fixed lower-right shadow at two font sizes.
+The shared screen/vector scene retains row selection, Skip Points, empty-text handling and clipping.
+Existing approximate font metrics remain explicit in graphing 18; exact padding for other fonts
+is not claimed. Old settings load with None/zero margin; native and companion saves preserve all
+fields even while labels are disabled. The `.opj` writer already warns for unsupported label styles.
+Leader lines, automatic repositioning and other remaining T13 controls stay open.
+
+Validation on integrated `bf3dddd` plus the docs-only print/recovery claims: formatting, strict
+workspace all-target Clippy and 2,142 workspace tests pass (three existing ignored). Seven new
+core/plot/UI/IO regressions pass, including raster paint order, rotation/shadow geometry and all
+vector backends. The full suite exposed a separate upstream autosave UI fixture collision;
+`planted` now gives each recovery case its own input fixture, and all 25 autosave tests pass with
+16 test threads. No autosave implementation changed.
 
 ## Today
 

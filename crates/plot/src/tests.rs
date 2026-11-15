@@ -322,7 +322,7 @@ fn symbols_every_nth_and_error_bars() {
     // Error bars first, then symbols (no line for a scatter plot).
     assert_eq!(plots.len(), 2);
     let bars = plots[0].attribute("d").unwrap();
-    assert_eq!(bars.matches('M').count(), 3 * 10);
+    assert_eq!(bars.matches('M').count(), 3 * 4, "errors follow the same selected points as symbols");
     assert_eq!(plots[0].attribute("stroke-width"), Some("0.5")); // half the line width, at least 0.5 pt
     let symbols = plots[1].attribute("d").unwrap();
     assert_eq!(symbols.matches('Z').count(), 4, "points 0, 3, 6, 9");
@@ -518,6 +518,40 @@ fn raster_has_a_red_line_on_white() {
     // Inside the frame but far from the line.
     let (qx, qy) = geom.data_to_page(9.0, 1.0);
     assert_eq!(pixel(&r, (qx * 2.0) as u32, (qy * 2.0) as u32), [255, 255, 255, 255]);
+}
+
+#[test]
+fn data_on_top_changes_overlap_pixels_and_picking_without_changing_clipping() {
+    let (mut p, g) = red_line_project();
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    layer.x_axis.min = Some(0.0);
+    layer.x_axis.max = Some(10.0);
+    layer.y_axis.min = Some(0.0);
+    layer.y_axis.max = Some(10.0);
+    layer.x_axis.line_width_pt = 4.0;
+    layer.y_axis.line_width_pt = 4.0;
+    // A wide red line along the bottom axis, intersecting a black axis well away from ticks.
+    let y = layer.plots[0].y;
+    p.column_mut(y).unwrap().data = ColumnData::numeric(vec![0.0; 11]);
+    let geom = layout_geometry(&p, g).unwrap().remove(0);
+    let point = geom.data_to_page(5.5, 0.0);
+    let sample = |p: &Project, point: (f64, f64)| {
+        let raster = render_raster(p, g, 2.0).unwrap();
+        pixel(&raster, (point.0 * 2.0) as u32, (point.1 * 2.0 - 1.0) as u32)
+    };
+    assert_eq!(sample(&p, point), [0, 0, 0, 255], "axes initially cover the data");
+    let before = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    assert_eq!(hit::hit_test(&before, point, 0.1), hit::Hit::Object { layer: 0, kind: scene::ObjectKind::XAxis });
+
+    p.graph_mut(g).unwrap().layers[0].display.data_on_top = true;
+    assert_eq!(sample(&p, point), [255, 0, 0, 255], "data now covers the axis");
+    let after = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    assert_eq!(before.layers[0].clip, after.layers[0].clip);
+    assert_eq!(hit::hit_test(&after, point, 0.1), hit::Hit::Object { layer: 0, kind: scene::ObjectKind::Plot(0) });
+    let below = (point.0, point.1 + 4.0);
+    assert_eq!(sample(&p, below), [255, 255, 255, 255], "data is still clipped at the frame");
+    p.graph_mut(g).unwrap().layers[0].display.clip_data = false;
+    assert_eq!(sample(&p, below), [255, 0, 0, 255], "the independent clipping switch still works");
 }
 
 #[test]
@@ -1791,6 +1825,54 @@ fn several_column_plots_stand_side_by_side() {
     set(&mut p, 20.0, -300.0);
     let got = row1(&p);
     assert!(near_all(&got, &[(0.6, 0.6 + 0.8 / 3.0), (1.4 - 0.8 / 3.0, 1.4)]), "{got:?}");
+}
+
+#[test]
+fn the_bar_width_in_percent_sets_the_share_of_the_spacing_the_bars_take() {
+    let ys = vec![five_values(), vec![0.5, 0.9, 1.4, 0.7, 1.1]];
+    let (mut p, g) = names_project(Template::Column, &FIVE, ys);
+    // The first row of each plot, in data units (the spacing between rows is 1).
+    let row1 = |p: &Project| -> Vec<(f64, f64)> {
+        let geom = fixed_geometry(p, g)[0].clone();
+        let bars = bars_of(p, g);
+        let per_plot = bars.len() / 2;
+        bars.iter().step_by(per_plot).map(|(r, _, _)| bar_in_data(&geom, *r)).map(|(l, r, _, _)| (l, r)).collect()
+    };
+    let set = |p: &mut Project, gap: f64, width: Option<f64>| {
+        let bars = &mut p.graph_mut(g).unwrap().layers[0].bars;
+        bars.gap_pct = gap;
+        bars.width_pct = width;
+    };
+    let near_all = |got: &[(f64, f64)], want: &[(f64, f64)]| {
+        got.len() == want.len() && got.iter().zip(want).all(|(a, b)| close9(a.0, b.0) && close9(a.1, b.1))
+    };
+    // 70 %: the two bars together are 0.7 wide, centred on the row: 0.35 each.
+    set(&mut p, 20.0, Some(70.0));
+    let got = row1(&p);
+    assert!(near_all(&got, &[(0.65, 1.0), (1.0, 1.35)]), "{got:?}");
+    // It wins over the gap while set; with it cleared the gap rules again (gap 50 = width 50).
+    set(&mut p, 50.0, Some(70.0));
+    assert!(near_all(&row1(&p), &[(0.65, 1.0), (1.0, 1.35)]));
+    set(&mut p, 50.0, None);
+    assert!(near_all(&row1(&p), &[(0.75, 1.0), (1.0, 1.25)]));
+    // 100 %: no gap between the groups.
+    set(&mut p, 50.0, Some(100.0));
+    assert!(near_all(&row1(&p), &[(0.5, 1.0), (1.0, 1.5)]));
+    // 0 % and out-of-range values are clamped: bars without width, and 250 is 100.
+    set(&mut p, 50.0, Some(0.0));
+    assert!(near_all(&row1(&p), &[(1.0, 1.0), (1.0, 1.0)]));
+    set(&mut p, 50.0, Some(250.0));
+    assert!(near_all(&row1(&p), &[(0.5, 1.0), (1.0, 1.5)]));
+    set(&mut p, 50.0, Some(-30.0));
+    assert!(near_all(&row1(&p), &[(1.0, 1.0), (1.0, 1.0)]));
+    // A value that is not a number falls back to Origin's default width (100 - 20 = 80 %).
+    set(&mut p, 50.0, Some(f64::NAN));
+    assert!(near_all(&row1(&p), &[(0.6, 1.0), (1.0, 1.4)]));
+    // Histogram bars always touch, whatever the width.
+    let (mut p, g) = single_column_project(Template::Histogram, HIST_PROBE.to_vec());
+    p.graph_mut(g).unwrap().layers[0].bars.width_pct = Some(30.0);
+    let bar = layer_data(&p, g).plots[0].bar.unwrap();
+    assert!((bar.width - 7.0).abs() < 1e-9, "{}", bar.width);
 }
 
 #[test]
@@ -3874,4 +3956,78 @@ fn the_display_tab_hides_data_unclips_it_and_puts_the_grid_on_top() {
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     assert!(scene.layers[0].plots.is_empty());
     assert!(!scene.layers[0].overlay.is_empty());
+}
+
+#[test]
+fn print_svg_uses_saved_asymmetric_margins_and_rejects_invalid_setup() {
+    use sheaf_core::page_setup::{Margins, Orientation, Paper};
+    let (mut p, g) = project(Template::Line, vec![0., 1.], vec![vec![0., 1.]]);
+    let page = &mut p.graph_mut(g).unwrap().page;
+    page.width_pt = 400.;
+    page.height_pt = 200.;
+    p.page_setup.paper = Paper::Letter;
+    p.page_setup.orientation = Orientation::Auto;
+    p.page_setup.margins = Margins { left: 36., right: 72., top: 100., bottom: 80. };
+    // 792x612 landscape; available 684x432; the 2:1 graph is 684x342 at (36,145).
+    let svg = print_svg(&p, g).unwrap();
+    let d = doc(&svg);
+    let root = d.root_element();
+    assert_eq!(root.attribute("viewBox"), Some("0 0 792 612"));
+    let placement = root.descendants().find(|n| n.has_tag_name("g") && n.attribute("transform").is_some()).unwrap();
+    assert_eq!(placement.attribute("transform"), Some("translate(36 145) scale(1.71)"));
+    assert!(render_print_pdf(&p, g).unwrap().starts_with(b"%PDF-"));
+    for m in [Margins::all(-1.), Margins::all(f64::NAN), Margins::all(f64::INFINITY), Margins::all(1000.)] {
+        p.page_setup.margins = m;
+        assert!(render_print_pdf(&p, g).is_err(), "{m:?}");
+    }
+    p.page_setup.margins = Margins::all(72.);
+    for width in [0., -1., f64::NAN, f64::INFINITY] {
+        p.graph_mut(g).unwrap().page.width_pt = width;
+        assert!(render_print_pdf(&p, g).is_err(), "{width}");
+    }
+}
+
+#[test]
+fn additional_lines_cross_the_layer_at_a_value_of_the_other_axis() {
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let y: Vec<f64> = x.iter().map(|v| (v - 5.0) / 5.0).collect();
+    let (mut p, g) = project(Template::Line, x, vec![y]);
+    let lines = |p: &Project| -> Vec<String> {
+        let scene = layout::build_scene(p, g, &FixedMetrics).unwrap();
+        scene.layers[0]
+            .overlay
+            .iter()
+            .filter_map(|it| match it {
+                scene::Item::Path { d, stroke: Some(_), fill: None } => Some(d.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    let before = lines(&p);
+    {
+        let layer = &mut p.graph_mut(g).unwrap().layers[0];
+        layer.x_axis.additional_line = Some(0.0); // Origin's "Y = 0" on the X axis page
+        layer.y_axis.additional_line = Some(5.0); // "X = 5" on the Y axis page
+    }
+    let geom = fixed_geometry(&p, g)[0].clone();
+    let f = geom.frame;
+    let after = lines(&p);
+    assert_eq!(after.len(), before.len() + 2, "two more lines");
+    // "M x0 y0 L x1 y1" as four numbers
+    let nums = |d: &str| -> Vec<f64> {
+        d.split(['M', 'L', ' ']).filter(|t| !t.is_empty()).filter_map(|t| t.parse().ok()).collect()
+    };
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-2;
+    let y0 = f.y + (1.0 - geom.y.to_unit(0.0)) * f.h;
+    let x5 = f.x + geom.x.to_unit(5.0) * f.w;
+    let is = |d: &String, want: [f64; 4]| {
+        let n = nums(d);
+        n.len() == 4 && n.iter().zip(want).all(|(&a, b)| near(a, b))
+    };
+    let horizontal = after.iter().any(|d| is(d, [f.x, y0, f.x + f.w, y0]));
+    let vertical = after.iter().any(|d| is(d, [x5, f.y, x5, f.y + f.h]));
+    assert!(horizontal && vertical, "{after:?}\ny0 {y0} x5 {x5} frame {f:?}");
+    // a value outside the axis range draws nothing
+    p.graph_mut(g).unwrap().layers[0].x_axis.additional_line = Some(99.0);
+    assert_eq!(lines(&p).len(), before.len() + 1);
 }

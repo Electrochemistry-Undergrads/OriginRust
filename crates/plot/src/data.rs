@@ -4,7 +4,8 @@ use crate::{Rect, stack};
 use sheaf_core::datetime::DatePattern;
 use sheaf_core::format::NumberFormat;
 use sheaf_core::graph::{
-    Axis, BarSpacing, ErrorDirection, Frame, Layer, Page, Plot, PlotKind, ScaleKind, TickFormat, TickLabelSource,
+    Axis, BarSpacing, ErrorDirection, Frame, LabelForm, Layer, Page, Plot, PlotKind, ScaleKind, TickFormat,
+    TickLabelSource,
 };
 use sheaf_core::{Column, Project};
 use std::borrow::Cow;
@@ -52,6 +53,9 @@ pub(crate) struct PlotData<'a> {
     /// Offsets of a stacked layer, in axis units, added to every point (graphing spec 13).
     pub ox: f64,
     pub oy: f64,
+    /// Individual plot multipliers, applied before offsets. Errors and label values stay unscaled.
+    pub mx: f64,
+    pub my: f64,
     /// The plot's place in the stack, for the waterfall shift.
     pub member: Option<usize>,
     /// Where the bars of a column plot stand; `None` for other kinds.
@@ -69,6 +73,8 @@ pub(crate) struct PlotData<'a> {
     /// Source row repeated at the end to close a radar polygon. The line runs to the synthetic
     /// point, but no extra symbol, label or mask belongs to it.
     pub closing: Option<usize>,
+    /// The cells of the label column of a plot whose data labels come from a column, one per row.
+    pub label_texts: Option<Vec<String>>,
 }
 
 /// The numbers of one box of a box chart (Origin's defaults: the box runs from the 25th to the
@@ -150,6 +156,19 @@ impl PlotData<'_> {
         (self.start..self.end).filter(|&r| self.row_shown(r))
     }
 
+    /// Display frequency for point decorations. Lines, ranges and analysis still read every row.
+    pub fn point_interval(&self) -> usize {
+        if self.plot.kind.supports_skip_points() { self.plot.symbol.every.max(1) as usize } else { 1 }
+    }
+
+    /// Points selected by Drop Lines > Skip Points, retaining original worksheet row indices.
+    /// Missing values count toward the frequency; filtered rows retain the existing compacted
+    /// display order. A synthetic radar closing point has no extra symbol, error or label.
+    pub fn point_rows(&self) -> impl Iterator<Item = usize> + Clone + '_ {
+        let end = self.end - usize::from(self.closing.is_some());
+        self.rows().take_while(move |&row| row < end).step_by(self.point_interval())
+    }
+
     fn visible_values(&self) -> Cow<'_, [f64]> {
         if self.filters.is_empty() {
             Cow::Borrowed(&self.y[self.start..self.end])
@@ -176,31 +195,45 @@ impl PlotData<'_> {
         if self.transposed() { self.cat_at(i) } else { self.val_at(i) }
     }
 
-    /// The position of row `i` along the X column (the row number without one), with its offset.
-    pub fn cat_at(&self, i: usize) -> f64 {
-        let x = match &self.x {
+    /// The original X value (or row number), before display scaling and offsets.
+    pub fn source_x_at(&self, i: usize) -> f64 {
+        match &self.x {
             None => (i + 1) as f64,
             Some(x) => x.get(i).copied().unwrap_or(f64::NAN),
-        };
-        // Adding 0 would turn -0 into +0; leave unstacked values exactly as they are.
+        }
+    }
+
+    /// The position of row `i` along the X column, with its multiplier and offset.
+    pub fn cat_at(&self, i: usize) -> f64 {
+        self.display_x(self.source_x_at(i))
+    }
+
+    pub fn display_x(&self, x: f64) -> f64 {
+        let x = if self.mx == 1.0 { x } else { x * self.mx };
+        // Adding 0 would turn -0 into +0; leave identity placements exactly as they are.
         if self.ox == 0.0 { x } else { x + self.ox }
+    }
+
+    pub fn display_y(&self, y: f64) -> f64 {
+        let y = if self.my == 1.0 { y } else { y * self.my };
+        if self.oy == 0.0 { y } else { y + self.oy }
     }
 
     /// The value of row `i` as drawn: the Y value with the stack offset, or the top of a stacked bar.
     pub fn val_at(&self, i: usize) -> f64 {
         if let Some((_, hi)) = &self.stack {
-            return hi.get(i).copied().unwrap_or(f64::NAN);
+            return self.display_y(hi.get(i).copied().unwrap_or(f64::NAN));
         }
-        if self.oy == 0.0 { self.y[i] } else { self.y[i] + self.oy }
+        self.display_y(self.y[i])
     }
 
     /// The lower end of a bar of a stacked or floating column plot at row `i`, when it has one.
     pub fn base_at(&self, i: usize) -> Option<f64> {
         if let Some((lo, _)) = &self.stack {
-            return lo.get(i).copied();
+            return lo.get(i).map(|&v| self.display_y(v));
         }
         let b = self.base?.get(i).copied()?;
-        Some(if self.oy == 0.0 { b } else { b + self.oy })
+        Some(self.display_y(b))
     }
 
     pub fn xerr_at(&self, i: usize) -> f64 {
@@ -266,6 +299,8 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             end,
             ox: place.ox,
             oy: place.oy,
+            mx: place.mx,
+            my: place.my,
             member: place.member,
             bar: None,
             boxed: None,
@@ -274,6 +309,10 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             color_z: plot.color_from.and_then(|id| project.numeric(id)),
             spokes: None,
             closing: None,
+            label_texts: match plot.decor.labels.form {
+                LabelForm::Column { column } if plot.decor.labels.enable => project.column(column).map(cell_texts),
+                _ => None,
+            },
         };
         match plot.kind {
             PlotKind::Histogram => {
@@ -423,6 +462,9 @@ fn place_bars(plots: &mut [PlotData], bars: &BarSpacing) {
     // Histogram bars touch.
     let gap = if plots[first].plot.kind == PlotKind::Histogram {
         0.0
+    } else if let Some(w) = bars.width_pct {
+        // Width (in %) replaces the gap: the bars together take that share of the spacing.
+        1.0 - percent(w, 0.0, 100.0, 100.0 - sheaf_core::graph::DEFAULT_BAR_GAP_PCT) / 100.0
     } else {
         percent(bars.gap_pct, 0.0, 100.0, sheaf_core::graph::DEFAULT_BAR_GAP_PCT) / 100.0
     };
@@ -580,14 +622,14 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
     for pd in pds {
         if let Some(b) = &pd.boxed {
             if dim == Dim::X {
-                add(b.pos - BOX_WIDTH / 2.0);
-                add(b.pos + BOX_WIDTH / 2.0);
+                add(pd.display_x(b.pos - BOX_WIDTH / 2.0));
+                add(pd.display_x(b.pos + BOX_WIDTH / 2.0));
             } else {
-                add(b.whisker_low);
-                add(b.whisker_high);
-                b.outliers.iter().for_each(|v| add(*v));
-                add(b.q1);
-                add(b.q3);
+                add(pd.display_y(b.whisker_low));
+                add(pd.display_y(b.whisker_high));
+                b.outliers.iter().for_each(|v| add(pd.display_y(*v)));
+                add(pd.display_y(b.q1));
+                add(pd.display_y(b.q3));
             }
             continue;
         }

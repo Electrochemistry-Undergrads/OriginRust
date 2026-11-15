@@ -34,7 +34,7 @@
   <tr>
     <td width="50%" valign="top">
       <h3>Bring your data</h3>
-      Import CH Instruments text and binary files, CSV, and other delimited text into workbooks.
+      Import CH Instruments text and binary files, CSV, other delimited text and Excel workbooks (.xls, .xlsx, .xlsm) into workbooks.
     </td>
     <td width="50%" valign="top">
       <h3>Make your figures</h3>
@@ -71,12 +71,44 @@ cargo run --release -p sheaf-cli -- plot run1.txt -o figure.png --dpi 300
 cargo run --release -p sheaf-cli -- analyze integrate run1.txt
 cargo run --release -p sheaf-cli -- fit run1.txt --model linear
 
+# Make a paper-sized PDF using the project's Page Setup
+cargo run --release -p sheaf-cli -- print experiment.sheaf --output print.pdf
+
 # Explore the available commands
 cargo run --release -p sheaf-cli -- --help
 ```
 
 Projects save as `.sheaf` or Origin `.opj`; see the
 [project format documentation](docs/spec/project-file-format.md).
+
+## Use Sheaf from Claude or other AI tools
+
+`sheaf-mcp` is a Model Context Protocol server. An assistant can import data, read columns, plot,
+analyze (every tool of `sheaf analyze`), fit, export figures and save projects, and offers three
+prompts (plot CV files, integrate a peak, fit a curve). It works on a project held by the server and sees
+only the folders you give with `--root`; with no `--root` every file path is refused.
+
+```sh
+cargo build --release -p sheaf-mcp
+
+# Claude Code
+claude mcp add sheaf -- /path/to/target/release/sheaf-mcp --root /path/to/my/data
+```
+
+For Claude Desktop, add this to `claude_desktop_config.json` and restart the app:
+
+```json
+{
+  "mcpServers": {
+    "sheaf": {
+      "command": "/path/to/target/release/sheaf-mcp",
+      "args": ["--root", "/path/to/my/data"]
+    }
+  }
+}
+```
+
+The tools and their limits are listed in [docs/spec/mcp.md](docs/spec/mcp.md).
 
 ## Under the hood
 
@@ -90,6 +122,14 @@ Projects save as `.sheaf` or Origin `.opj`; see the
 ## Get started
 
 Requires Git and [Rust](https://www.rust-lang.org/tools/install) 1.90 or newer.
+
+### Windows executable icon
+
+Windows builds embed Sheaf's existing multi-size icon in `sheaf-app.exe`, so Explorer and
+shortcuts can display it. Install the Windows C++ build tools and Windows SDK (including `rc.exe`).
+Build with `cargo build --release -p sheaf-app`; verify the actual executable with
+`python tools/check-windows-icon.py target/release/sheaf-app.exe`. Details are in
+[Windows packaging](docs/spec/windows-packaging.md).
 
 ### First time: download, build, and run
 
@@ -111,6 +151,21 @@ cargo run --release -p sheaf-app
 ```
 
 Cargo reuses the existing build when the code and dependencies have not changed.
+
+### Add Sheaf to Applications (macOS)
+
+To start Sheaf like any other app, without a terminal, build its app bundle once from the
+`OriginRust` folder:
+
+```sh
+tools/make-macos-app.sh --install
+```
+
+This puts **Sheaf.app**, with its icon, in your `Applications` folder (the one in your home
+folder). Find it with Spotlight (Cmd+Space, type "Sheaf"), in Launchpad, or in Finder, and drag it
+to the Dock to keep it there. Run the command again after `git pull` to update the app. Open files
+from inside Sheaf (File > Open, or drag a file onto the window); double-clicking a data file in
+Finder does not open it in Sheaf yet.
 
 ### Open a data file
 

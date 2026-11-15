@@ -12,12 +12,18 @@ pub mod anova;
 pub mod anova2;
 pub mod baseline;
 pub mod bin2d;
+pub mod coherence;
 pub mod correlation;
+pub mod crosstab;
 pub mod curvemath;
 pub mod curves;
+pub mod decimate;
 pub mod dierckx;
 pub mod differentiate;
 pub mod discfreq;
+pub mod distfit;
+pub mod dunnett;
+pub mod envelope;
 pub mod fft;
 pub mod freq;
 pub mod hypothesis;
@@ -36,22 +42,33 @@ pub mod power;
 pub mod signal;
 pub mod smooth;
 pub mod stats;
+pub mod trace;
 mod util;
 
 pub use anova::{
-    Anova, AnovaError, AnovaRow, Comparison, MeansComparison, anova_one_way, compare_means, ptukey, qtukey,
+    Anova, AnovaError, AnovaRow, Comparison, MeansComparison, anova_one_way, compare_means, compare_to_control, ptukey,
+    qtukey,
 };
 pub use anova2::{TwoWayAnova, TwoWayError, TwoWayRow, anova_two_way};
 pub use baseline::{BaselineMethod, subtract_baseline, subtract_constant, subtract_line};
 pub use bin2d::{AxisBins, AxisLayout, Bin, Bin2d, Bin2dOptions, Bin2dStat, axis_layout, bin2d};
+pub use coherence::{CoherenceOptions, CoherenceResult, CoherenceWindow, coherence, coherence_window};
 pub use correlation::{Corr, CorrKind, CorrMatrix, correlation, correlation_matrix};
+pub use crosstab::{ChiSquareTest, Crosstab, CrosstabError, Fisher};
 pub use curvemath::{CurveMathResult, CurveOp, column_math, curve_math_const, curve_math_ref};
 pub use curves::{
     AverageMethod, AverageOptions, AverageResult, CommonX, CurveError, Intersection, MeetKind, PolygonArea, XRange,
     average_curves, intersections, polygon_area,
 };
+pub use decimate::{DecimateError, DecimateFilter, DecimateOptions, decimate};
 pub use differentiate::{DiffOptions, differentiate};
 pub use discfreq::{Category, DiscSort, DiscreteFreq, DiscreteRow, discrete_frequency};
+pub use distfit::{
+    DistFit, Family, FitError, ProbPlot, cdf as dist_cdf, estimate as dist_estimate, fit as dist_fit,
+    log_likelihood as dist_log_likelihood, plotting_positions, probplot, standard_quantile,
+};
+pub use dunnett::{dunnett_cdf, dunnett_critical, dunnett_loadings, dunnett_p};
+pub use envelope::{Envelope, EnvelopeError, EnvelopeOptions, EnvelopeType, envelope, extreme_points, natural_spline};
 pub use fft::{
     FftFilterOptions, FftFilterType, FftOptions, FftResult, FftWindow, IfftOptions, IfftResult, PowerNorm,
     WindowCorrection, fft_filter, fft_spectrum, fft_window, ifft_spectrum,
@@ -59,7 +76,7 @@ pub use fft::{
 pub use freq::{BinSize, Freq, FreqOptions, FreqRow, auto_bin_range, auto_bin_size, freq_counts};
 pub use hypothesis::{SampleStats, TTest, Tail, ttest_one, ttest_paired, ttest_two};
 pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};
-pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, interp1, interp1xy};
+pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, automatic_smoothing, interp1, interp1xy};
 pub use levelcross::{Crossing, CrossingIndex, level_crossings};
 pub use manip::{
     DUP_TOL, DupMethod, EvenGrid, LinePoint, MedianEdge, REDUCE_AUTO_FACTOR, REDUCE_EVEN_TOLERANCE_PCT, ReduceGroup,
@@ -71,8 +88,8 @@ pub use nonparam::{
     mann_whitney, midranks, signed_rank, signed_rank_one, signed_rank_paired,
 };
 pub use normality::{
-    DAgostino, TestResult, anderson_darling, dagostino, kolmogorov_cdf, kolmogorov_smirnov, ks_distance, lilliefors,
-    shapiro_wilk,
+    DAgostino, KS_EXACT_MAX_N, TestResult, anderson_darling, dagostino, kolmogorov_cdf, kolmogorov_smirnov,
+    ks_distance, lilliefors, shapiro_wilk,
 };
 pub use normalize::{NormalizeMethod, normalize};
 pub use nptests::{
@@ -92,3 +109,4 @@ pub use power::{
 pub use signal::{convolve, correlate, hilbert};
 pub use smooth::{Boundary, LocalSpan, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{RowStats, Stats, mean_confidence_limits, quantile_origin, row_stats, stats};
+pub use trace::{TraceMethod, trace_interp, trace_points};

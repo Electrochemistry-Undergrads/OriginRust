@@ -1,0 +1,16 @@
+newbook;
+col(1) = {2, 4, 4, 7, 9, 11, 11, 14, 16, 19, 23, 23};
+wks.addcol(); col(2) = {0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1};
+kaplanmeier irng:=(1,2) censor:=1 quartile:=1 mean:=1 rd:=<new name:=SF4> rt:=<new name:=RT4>;
+#[Book1]RT4
+newbook;
+col(1) = {2, 4, 4, 7, 9, 11, 11, 14, 16, 19, 23, 23};
+wks.addcol(); col(2) = {0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0};
+kaplanmeier irng:=(1,2) censor:=1 quartile:=1 mean:=1 rd:=<new name:=SF5> rt:=<new name:=RT5>;
+#[Book2]RT5
+newbook;
+col(1) = {2, 4, 4, 7, 9, 11, 11, 14, 16, 19, 23, 23, 5, 6, 10, 12, 12, 18, 21};
+wks.addcol(); col(2) = {0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0};
+wks.addcol(); col(3) = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3};
+kaplanmeier irng:=(1,2,3) censor:=1 quartile:=1 mean:=1 logrank:=1 breslow:=1 tarone:=1 rd:=<new name:=SF6> rt:=<new name:=RT6>;
+#[Book3]RT6

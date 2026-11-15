@@ -679,6 +679,245 @@ against scipy's exact algorithm).
 - Not built: fitting a threshold, censored data, other families, a probability plot of several families on one
   graph.
 
+## 17 Principal component analysis (measured against Origin 2016)
+
+Statistics > Multivariate Analysis > Principal Component Analysis. Origin's X-Function is `pca`
+(`irng` input columns, `mtype` 0 correlation / 1 covariance, `npc` number of components, `missing` 0 listwise /
+1 pairwise, `std` standardize scores, `stat` descriptive statistics; outputs `rt` report sheet and `rd` score sheet).
+Runs: `tools/origin-ref/pca-suite1.lines.txt` (10 rows, 4 complete columns: correlation, covariance, standardized
+scores, descriptive statistics) and `pca-suite2.lines.txt` (12 rows, 5 columns with 3 missing numbers: the four
+combinations of correlation or covariance and listwise or pairwise). Raw outputs are local
+(`re-workspace/scratch/t29/pca*.out.txt`). The numerics are `crates/calc/src/pca.rs` (`nalgebra`'s symmetric
+eigen-decomposition), the tool `crates/core/src/analysis/multivariate.rs`, the command line
+`sheaf analyze pca`, the window Statistics > Multivariate Analysis > Principal Component Analysis...
+(`dialogs/multivariate_options.rs`).
+
+### 17.1 What Origin does (measured)
+
+- **Matrix.** Correlation matrix (default) or covariance matrix with divisor n - 1. Eigenvalues in descending
+  order, percent of variance `100 lambda / sum(lambda)` (Origin prints two decimals), cumulative percent.
+- **Missing values.** Listwise: a row with a missing number in any column is left out entirely; N, mean and SD of
+  every column are over the complete rows (the "missing" count is still per column). Pairwise: N, mean and SD are per
+  column over all its numbers, and each matrix entry uses the rows where both columns have a number, with the means
+  of those rows. The scores of a row that is not used are empty (listwise); with pairwise exclusion rows with a gap
+  also have empty scores (the run shows scores only for complete rows).
+- **Loadings are the eigenvectors** (unit length), not eigenvectors times sqrt of the eigenvalue.
+- **Sign.** Origin makes the components of each eigenvector add up to a positive number (checked on 8 data sets,
+  4 or 5 variables, both matrices); Sheaf does the same. A component whose sum is zero up to rounding would be
+  ambiguous; none occurred.
+- **Scores** are `(x - mean)` (covariance) or `(x - mean) / SD` (correlation) times the eigenvectors; `std` divides
+  each score column by `sqrt(eigenvalue)`, giving unit variance.
+- **Equality of eigenvalues, covariance analysis only.** For each k, the test that the last `p - k + 1` eigenvalues
+  are equal: Bartlett's chi-square `(n - 1 - (2p + 5)/6) (q ln(mean) - sum ln lambda)` over the `q` eigenvalues
+  left, `(q + 2)(q - 1)/2` degrees of freedom; the last row is 0, 0, 0. `n` is the largest column count (also with
+  pairwise exclusion).
+- **Origin also draws** three graphs (scree plot, loading plot, biplot) with the report.
+
+### 17.2 What Sheaf does
+
+The chosen columns are the variables (at least two), the chosen rows the cases. Options: correlation or covariance,
+listwise or pairwise, number of components (default 2, at most the number of columns), standardize scores, write
+scores, scree plot. Result sheet `PCA1` (one row per variable, the rows beyond that only for the scores): Variable,
+N, Missing, Mean, SD, Component, Component number, Eigenvalue, Percent of variance, Cumulative percent (and
+Chi-square, DF, Prob>Chi-square for a covariance analysis), Loading PC1..PCk, Correlation with each variable, Score
+PC1..PCk (the scores are in the rows of the input). The table printed on the command line is the eigenvalue
+table; the loadings are in the notes. The scree plot (eigenvalue against component number) is a new graph; one
+undo removes sheet and graph. A column without spread, fewer than two columns or fewer than two usable rows is refused.
+
+### 17.3 Fixtures and tolerances
+
+`crates/calc/tests/origin_pca.rs`: N, missing, mean and SD to 1e-12 relative; eigenvalues, loadings, scores and
+the equality tests to 1e-5 relative (Origin prints the eigenvalues and test statistics with six digits); percent of
+variance to 0.005 (two decimals printed). Hand-worked tests in `pca.rs` (two columns: eigenvalues `1 +- r`).
+
+### 17.4 Not measured
+
+- Origin's report sheet layout (Sheaf's is its own), the loading plot and biplot (not built: only the scree plot),
+  the dialog's labels and defaults, other output options (the component-number selection by Kaiser or percent
+  rule, the "Quantities to Compute" ticks), the behaviour of Origin on a column without spread or with fewer
+  rows than columns, and a sign rule for a component whose sum is exactly zero.
+
+## 18 K-means cluster analysis (measured against Origin 2016)
+
+Statistics > Multivariate Analysis > K-Means Cluster Analysis. Origin's X-Function is `kmeans` (`ir` input columns,
+`num` number of clusters, `iter`, `anova` and `distance` ticks; outputs `rt` report sheet and `rd` membership
+sheet). Runs: `tools/origin-ref/kmeans-suite1.lines.txt` (12 cases, two variables, two and three clusters, with the
+analysis of variance and the membership sheet) and `kmeans-suite2.lines.txt` (ten cases in one variable with two,
+three and four clusters and the same cases in reverse order; 15 cases in two variables with three, four and five
+clusters and with `iter:=1`). Nine runs gave initial centres, final centres and sizes that fix the algorithm. Raw
+outputs are local (`re-workspace/scratch/t29/km2.out`, `km4.out`). The numerics are `crates/calc/src/kmeans.rs`, the
+tool `crates/core/src/analysis/multivariate.rs`, the command line `sheaf analyze kmeans`, the window Statistics >
+Multivariate Analysis > K-Means Cluster Analysis... (`dialogs/multivariate_options.rs`).
+
+### 18.1 What Origin does (measured)
+
+- **Initial centres are cases**, picked by a replacement rule in sheet order (the SPSS quick-cluster rule): the
+  first `k` cases start as the centres; a later case `x` replaces the nearer of the two closest centres if its
+  distance to its nearest centre exceeds the smallest distance between two centres, otherwise it replaces its nearest
+  centre `m` if its distance to its second-nearest centre exceeds the distance of `m` to the centre nearest to `m`. This
+  gave Origin's initial centres, in Origin's cluster order, in all nine runs; pure "first k cases", "farthest points"
+  and "maximin" rules did not. Cluster numbers follow the order of the rows (the reversed ten cases give clusters in a
+  different order).
+- **Iteration.** The final centres are not what Lloyd's iterations give from those starts in six of the nine
+  runs (for example ten cases with k = 3: Origin ends with 3.25, 9.75 and 17.5, Lloyd's with 4, 11.75 and 20): they are a local optimum under single-case moves, the
+  Hartigan-Wong criterion, which Sheaf uses after the first nearest-centre assignment. Ties go to the lower cluster.
+  `iter:=1` gave the same result as the default (the meaning of the option was not worked out).
+- **Distances** are Euclidean on the raw values. **Report sheet** (columns side by side): per variable the mean, SD, N
+  and missing count; per cluster the initial centre and the final centre (one value per variable), N, the sum of squared
+  distances to the centre, and the mean and the largest distance to the centre, then the `k x k` table of distances
+  between the final centres; with `anova:=1` per variable the degrees of freedom (`k - 1`), the between mean square,
+  the error degrees of freedom (`n - k`), the error mean square, `F` and its probability. **Membership sheet** (`rd`):
+  the cluster number and, with `distance:=1`, the distance to the centre, one row per case.
+- The probability of `F` agrees with the exact `F` tail to 1e-9.
+
+### 18.2 What Sheaf does
+
+The chosen columns are the variables, the chosen rows the cases; a row with a missing number in any column is left out
+(not measured). Options: number of clusters (default 3, at least 2, at most the rows), maximum passes of single-case
+moves (default 100), analysis of variance, write the cluster of every row and its distance, scatter graph. Result sheet
+`KMeans1`: Variable, N, Missing, Mean, SD; Cluster, Initial centre and Centre per variable, Cluster N, Sum of squares,
+Mean distance, Max distance, Distance to Cluster 1..k; ANOVA variable, DF between, MS between, DF error, MS error, F,
+Prob>F; Cluster number and Distance to centre (rows of the input, empty for a left-out row). The scatter graph shows the
+first two variables with one plot per cluster (not made for one variable); one undo removes sheet and graph. Fewer than
+two clusters, more clusters than rows, an infinite number, or two identical rows among the initial centres (a cluster
+would stay empty) are refused.
+
+### 18.3 Fixtures and tolerances
+
+`crates/calc/tests/origin_kmeans.rs`: every run above; centres, SS and distances to 1e-12 relative, the probability of
+`F` to 1e-9, sizes and initial centres exact. Hand-worked tests in `kmeans.rs`.
+
+### 18.4 Not measured
+
+- Missing values, the iteration limit (`iter`) and Origin's convergence test, standardized variables, k-means with a
+  user-chosen set of initial centres (Origin's dialog offers other initial-centre choices that were not run), a case
+  that ties between two centres at the first assignment other than the ones in the runs, k-medians, the report
+  layout and graph that Origin draws, and the behaviour for more clusters than distinct rows.
+
+## 19 ROC curve (scipy-checked, not Origin)
+
+**Source of the numbers: scipy, not Origin.** Statistics > ROC Curve is an Origin X-Function (`ROCCurve`) that is
+only for the menu: `ROCCurve;` from LabTalk returns false, and its definition file lists no usable LabTalk context.
+Its dialog was opened through the menu with `tools/origin-ref/origin-dialog.ps1 -MenuClicks "300,300;K:^a;K:%s;K:R"`
+(Alt+S, then R, on a selected worksheet; one run, 2026-11-14, picture in `re-workspace/scratch/t29/rocdlg`, local).
+Later attempts to drive it (typing the ranges, picking the positive value, OK) did not get the dialog up again while
+other sessions held the Origin lock, so **no Origin number was measured**. The numbers are from scipy 1.17 through
+`tools/roc-ref.py` into `crates/calc/tests/scipy_roc.rs`; the rules are the textbook ones.
+
+The numerics are `crates/calc/src/roc.rs` (the rules are in its header), the tool
+`crates/core/src/analysis/roc.rs`, the command line `sheaf analyze roc`, the window Statistics > ROC Curve...
+(`dialogs/multivariate_options.rs`).
+
+### 19.1 What Origin's dialog shows (measured: the control list of that one run)
+
+Window "ROCCurve" with the usual Recalculate row, then **Input Data** (Range 1: **Data**, the test variable column(s),
+and **State**, the state column; with the selection A:C the dialog proposed Data A:C and State C, so the state is the last
+selected column), **Computation Control** (**Positive State Value**, an editable list of the values found in the state
+column; **Threshold Method**: "Interpolation of data points" (default) or "Speed Mode"; **Test Direction**: "Positive
+v.s. High" (default) or "Positive v.s. Low"; a ticked **ROC Curve** group, which holds a hidden "With Diagonal Reference
+Line" setting; a ticked **Standard Error and Confidence Interval** group with a hidden "Confidence Levels in %"), and
+**Output** (Graph, an "Arrange Plots of Same Type in One Graph" setting, dataset identifier). The OK button stays off with
+the message "Please choose at least one value for the STATE Values" until a positive value is chosen.
+
+### 19.2 What Sheaf does
+
+The chosen columns are the test variables, then the state column last (numbers or text). The positive state is the
+value in "Positive state value" (default 1; a text cell "1" equals a numeric 1); rows with a missing state or test value
+are left out; "Positive v.s. High" (default) or "Positive v.s. Low" sets which end of the test variable is positive.
+
+- Curve: one point per distinct test value (a case is called positive at or above the cut-off, at or below it for
+  "Low"), from (0, 0) at an infinite cut-off to (1, 1). Sensitivity is the fraction of positives called positive,
+  specificity that of negatives called negative. Origin's "Interpolation of data points" is taken as one point per data
+  value; "Speed Mode" is not built.
+- Area: the trapezoid area, which equals the Mann-Whitney statistic U / (m n) with ties counting one half.
+- Standard error: DeLong's (DeLong, DeLong and Clarke-Pearce 1988), variance `S10 / m + S01 / n` from the placements of
+  the positives and of the negatives. Interval: area -/+ z SE (z from the confidence level, default 95 %), kept within
+  0 and 1; Z = (area - 0.5) / SE and its two-sided p-value (0 when SE = 0 and the area is not 0.5).
+- Best cut-off: the largest sensitivity + specificity - 1 (Youden), the highest cut-off among equal ones.
+
+Result sheet `ROC1`: Data, Positive, Negative, Area, Standard error, Lower limit, Upper limit, Z, Prob>|Z|, Best
+cut-off, Best sensitivity, Best specificity (one row per test variable), then per test variable Cut-off, 1 -
+Specificity and Sensitivity (the curve), then the two points of the diagonal. A new graph (a line plot per curve and
+the diagonal) unless "ROC curve" is off; one undo removes sheet and graph. All cases in one state, an unknown positive
+value, one column or a confidence level outside 0 to 100 are refused.
+
+### 19.3 Checked against scipy, tolerances
+
+Area, standard error, lower limit, curve points: 1e-12 relative; p-value 1e-8 (the normal tail of `statrs` differs from
+scipy's in the 11th digit); best cut-off exact. Three data sets (ties inside and across the states, a perfect
+separation, an overlap). Hand-worked tests in `roc.rs`.
+
+### 19.4 Not measured (Origin)
+
+- Everything numeric: whether Origin's standard error is DeLong's or Hanley-McNeil's, whether its interval is
+  asymptotic normal and clipped, its p-value (and its null hypothesis), its curve points (interpolated thresholds), and
+  its choice of the best cut-off. To measure: run the dialog on the data of `scipy_roc.rs` (the dialog is the only way)
+  and read the report sheet.
+- The positive state when the state column holds text, the report sheet and graph layout, the sheet and graph names,
+  and the default confidence level.
+- Not built: Speed Mode, several state ranges, comparing curves, partial area.
+
+## 20 Kaplan-Meier estimator (measured against Origin 2016)
+
+Statistics > Survival Analysis > Kaplan-Meier Estimator. Origin's X-Function is `kaplanmeier` (`irng` time, censor
+and optional group columns, `censor` the censoring value, `quartile`, `mean`, `logrank`, `breslow`, `tarone`;
+outputs `rt` report sheet and `rd` survival-function sheet). Runs: `tools/origin-ref/kaplan-suite1.lines.txt` (14
+cases with ties and 4 censored, one sample and two interleaved groups, with the three rank tests) and
+`kaplan-suite2.lines.txt` (12 cases whose last two are censored or events, and 19 cases in three groups, one of
+them a single case); `kaplan-probe.lines.txt` was a first look. Raw outputs are local
+(`re-workspace/scratch/t29/km1.out`, `km3.out`). The numerics are `crates/calc/src/survival.rs` (the rules are in its
+header), the tool `crates/core/src/analysis/survival.rs`, the command line `sheaf analyze kaplan-meier`, the window
+Statistics > Survival Analysis > Kaplan-Meier Estimator... (`dialogs/multivariate_options.rs`).
+
+### 20.1 What Origin does (measured)
+
+- **Table.** One row per case, sorted by time; at tied times the events come before the censored cases (a case censored
+  at `t` is at risk at `t`). The survival estimate and its standard error are printed on the last of the tied event rows
+  only (other rows show `--`), a `+` marks censored cases, and the running number of events and the number of cases
+  left at risk after the row follow.
+- **Estimate.** `S(t) = prod (1 - d/n)`; standard error Greenwood's `S sqrt(sum d / (n (n - d)))`, 0 once `S` is 0.
+  The `rd` sheet holds the step function (time and survival, the start `(0, 1)` first).
+- **Quartiles** (25, 50, 75 %): the estimate is the smallest event time with `S <= 1 - p`. Its lower and upper limits are
+  the smallest event times at which the **linear** limits `S -/+ z se` are at or below `1 - p` (lower limit of the quartile
+  from the lower limit of `S`, upper limit from the upper one; z for 95 %). When the upper limit is never reached Origin
+  gives the largest event time (seen once, for a quartile whose estimate is reached; for a quartile never reached Sheaf gives no limits, unmeasured).
+- **Mean** is the area under the curve up to the largest time, **censored or not**. Standard error `sqrt(f sum A^2 d /
+  (n (n - d)))`, `A` the area to the right of each event time, with `f = D / (D - 1)` (`D` the number of events) **only when
+  the curve reaches 0** (the largest time is an event); with a censored largest time `f = 1` (six runs). Limits mean -/+ z se.
+- **Tests of groups** (two or more groups): log-rank (weight 1), Breslow (generalised Wilcoxon, weight `n`) and
+  Tarone-Ware (weight `sqrt(n)`); chi-square with `groups - 1` degrees of freedom, hypergeometric variance. Measured with
+  two and three groups; the probability agrees with the exact chi-square tail to 4e-8 (Origin's own tail routine).
+- The confidence limits of the curve itself and the plot: Origin offers them with its survival plot, which the scripting
+  interface refused to draw, so they were not read.
+
+### 20.2 What Sheaf does
+
+The chosen columns are the time, the censor column and, optionally, a grouping column (numbers or text), in that order.
+A case is censored where its censor cell equals the censoring value (default 1; numbers compare by value, text as text);
+rows with a missing time, censor or group cell are left out. Options: censoring value, confidence level (default 95 %),
+quartiles, mean, the three tests, a graph and the confidence limits in it. Result sheet `KaplanMeier1`: one row per
+group (Group, N, Events, Censored, Percent censored, the quartiles with limits, Mean, Mean SE, Mean lower, Mean upper),
+the tests (Test, Chi-square, DF, Prob>Chi-square), and per group the case table (Time, Status, Survival, Standard error,
+Events, At risk), the curve (starting at `(0, 1)`, running to the largest time), the censored cases at their survival
+(and optionally the limits, `S -/+ z se` inside 0 and 1, a choice of Sheaf made from the quartile limits). The graph has
+one step line per group and a symbol at every censored case; one undo removes sheet and graph. Tests with fewer than
+two groups say so in the notes. A time that is negative or infinite, a confidence level outside 0 to 100, or other than two
+or three columns is refused.
+
+### 20.3 Fixtures and tolerances
+
+`crates/calc/tests/origin_survival.rs`: survival, standard errors, per-case events and at-risk columns, quartiles with
+limits, means with standard errors and limits, and the test statistics, to 1e-12 relative (Origin prints 14 digits in the
+table cells, so those use 1e-13); probabilities to 1e-6. Hand-worked tests in `survival.rs`.
+
+### 20.4 Not measured
+
+- Confidence limits of the survival curve (the formula, and the choice among linear, log and arcsine), the quartile
+  limits when the estimate itself or the lower limit is never reached (Sheaf gives none), the mean variance factor when
+  there is exactly one event, more than three groups, stratified and trend tests, left-truncated data, the plot Origin
+  draws and its report layout, text censor values, and the default confidence level.
+
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

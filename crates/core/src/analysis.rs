@@ -47,8 +47,11 @@ pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
+pub use multivariate::{KmeansSpec, PcaSpec};
+pub use roc::RocSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
+pub use survival::KaplanMeierSpec;
 
 /// The multi-peak fit of [`PeakChainSpec`]: a sum of peaks on `baseline`, one peak for every peak
 /// the search found, started at the found centre, width and height. Peak `k` (0-based) has the
@@ -765,6 +768,15 @@ pub enum Tool {
     DistFit(DistFitSpec),
     /// Probability plot and Q-Q plot against a distribution family; makes a graph.
     ProbPlot(ProbPlotSpec),
+    /// Statistics > Multivariate Analysis > Principal Component Analysis (T29, `docs/spec/statistics.md` section 17).
+    Pca(PcaSpec),
+    /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (T29, `docs/spec/statistics.md` section 18).
+    Kmeans(KmeansSpec),
+    /// Statistics > ROC Curve (T29, `docs/spec/statistics.md` section 19): test variables, then the state column.
+    Roc(RocSpec),
+    /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
+    /// censor and, optionally, group columns.
+    KaplanMeier(KaplanMeierSpec),
     AverageCurves(AverageSpec),
     Intersect(IntersectSpec),
     PolygonArea,
@@ -839,6 +851,10 @@ impl Tool {
                 ProbPlotKind::Probability => "Probability plot",
                 ProbPlotKind::QQ => "Q-Q plot",
             },
+            Tool::Pca(_) => "Principal component analysis",
+            Tool::Kmeans(_) => "K-means cluster analysis",
+            Tool::Roc(_) => "ROC curve",
+            Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::AverageCurves(_) => "Average multiple curves",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "Polygon area",
@@ -890,6 +906,10 @@ impl Tool {
                 ProbPlotKind::Probability => "ProbPlot",
                 ProbPlotKind::QQ => "QQPlot",
             },
+            Tool::Pca(_) => "PCA",
+            Tool::Kmeans(_) => "KMeans",
+            Tool::Roc(_) => "ROC",
+            Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::AverageCurves(_) => "AverageResult",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "PolygonArea",
@@ -1456,8 +1476,11 @@ mod categorical;
 mod curves;
 mod dist;
 mod manip;
+mod multivariate;
 mod power;
+mod roc;
 mod statistics;
+mod survival;
 pub use manip::{
     MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
 };
@@ -1548,7 +1571,10 @@ impl Project {
 
         let mut inputs = Vec::with_capacity(request.columns.len());
         // The two-way ANOVA reads its columns itself: the factor columns may hold text.
-        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_) | Tool::Crosstab(_) | Tool::DiscreteFrequency(_));
+        let own_columns = matches!(
+            request.tool,
+            Tool::TwoWayAnova(_) | Tool::Crosstab(_) | Tool::DiscreteFrequency(_) | Tool::Roc(_) | Tool::KaplanMeier(_)
+        );
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
                 if self.column(*id).is_some() {
@@ -1634,6 +1660,27 @@ impl Project {
             }
             Tool::DistFit(_) | Tool::ProbPlot(_) => {
                 let out = dist::run(&request.tool, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::Roc(spec) => {
+                let out = roc::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::KaplanMeier(spec) => {
+                let out = survival::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::Pca(_) | Tool::Kmeans(_) => {
+                let out = multivariate::run(&request.tool, &inputs)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

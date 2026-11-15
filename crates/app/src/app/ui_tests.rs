@@ -4802,6 +4802,63 @@ fn the_descriptive_menu_fits_distributions() {
     assert_eq!(h.state().doc.undo_label(), Some("Distribution fit"));
 }
 
+/// Statistics > Multivariate Analysis > Principal Component Analysis...: eigenvalues and loadings in a result
+/// sheet, a scree plot as a graph; one undo removes both.
+#[test]
+fn the_multivariate_menu_runs_a_principal_component_analysis() {
+    let mut h = start(vec![data_file("pca")]);
+    show_window(&mut h, "Book1 - sample");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Multivariate Analysis", "Principal Component Analysis..."]);
+    assert!(h.state().analysis.is_some(), "the PCA window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, eigen) = result_column(&h, "Eigenvalue");
+    assert!(sheet.starts_with("PCA"), "{sheet}");
+    // Two columns that are perfectly anti-correlated: eigenvalues 2 and 0, loadings of equal size.
+    assert_eq!(eigen.len(), 2);
+    assert!((eigen[0] - 2.0).abs() < 1e-9 && eigen[1].abs() < 1e-9, "{eigen:?}");
+    let (_, l1) = result_column(&h, "Loading PC1");
+    assert!((l1[0].abs() - 0.5f64.sqrt()).abs() < 1e-9 && (l1[0].abs() - l1[1].abs()).abs() < 1e-9, "{l1:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Principal component analysis"));
+}
+
+/// Statistics > ROC Curve...: the test variable and the state column (last) give the area, the curve and a graph;
+/// one undo removes both.
+#[test]
+fn the_statistics_menu_draws_a_roc_curve() {
+    // Positives 3, 4, 5 against negatives 1, 2, 4: the area is 5/6.
+    let data = csv_file(
+        "roc",
+        "marker",
+        "id,score,state
+1,3,1
+2,4,1
+3,5,1
+4,1,0
+5,2,0
+6,4,0
+",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - marker");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "ROC Curve..."]);
+    assert!(h.state().analysis.is_some(), "the ROC window is open");
+    assert!(has_label(&h, "Positive state value"), "the positive state box is missing");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, area) = result_column(&h, "Area");
+    assert!(sheet.starts_with("ROC"), "{sheet}");
+    assert!((area[0] - 5.0 / 6.0).abs() < 1e-9, "{area:?}");
+    let (_, sens) = result_column(&h, "Sensitivity");
+    assert_eq!(sens.first().copied(), Some(0.0));
+    assert!(sens.contains(&1.0), "the curve ends at (1, 1)");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("ROC curve"));
+}
+
 /// Statistics > Descriptive Statistics > Probability Plot... and Q-Q Plot...: a result sheet and a graph with
 /// points and a reference line; one undo removes both.
 #[test]
@@ -8151,4 +8208,72 @@ fn the_size_tab_edits_the_layer_area_and_a_linked_layer_shows_fractions_of_its_p
 
 fn has_label_containing(h: &Harness<'static, SheafApp>, text: &str) -> bool {
     h.query_all_by_label_contains(text).next().is_some()
+}
+
+/// Statistics > Survival Analysis > Kaplan-Meier Estimator...: time, censor and group columns give the survival
+/// table and a graph with the curves; one undo removes both.
+#[test]
+fn the_survival_menu_runs_the_kaplan_meier_estimator() {
+    // Two, 3+, 4, 4, 6+ in group 1: S(4) = 4/15 (hand worked in `calc::survival`).
+    let data = csv_file(
+        "km",
+        "survival",
+        "id,time,censor,group
+1,2,0,1
+2,3,1,1
+3,4,0,1
+4,4,0,1
+5,6,1,1
+6,1,0,2
+7,5,0,2
+8,7,1,2
+9,8,0,2
+10,9,0,2
+",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - survival");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Survival Analysis", "Kaplan-Meier Estimator..."]);
+    assert!(h.state().analysis.is_some(), "the Kaplan-Meier window is open");
+    assert!(has_label(&h, "Censoring value"), "the censoring value box is missing");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, events) = result_column(&h, "Events");
+    assert!(sheet.starts_with("KaplanMeier"), "{sheet}");
+    assert_eq!(events.first().copied(), Some(3.0), "{events:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Kaplan-Meier estimator"));
+}
+
+/// Statistics > Multivariate Analysis > K-Means Cluster Analysis...: the cluster table and the cluster of every row
+/// in a result sheet and a scatter graph; one undo removes both.
+#[test]
+fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
+    // Two clear groups of three rows.
+    let data = csv_file(
+        "kmeans",
+        "clusters",
+        "id,a,b
+1,1,1
+2,1.5,2
+3,2,1.5
+4,9,9
+5,9.5,8.5
+6,10,9.5
+",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - clusters");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Multivariate Analysis", "K-Means Cluster Analysis..."]);
+    assert!(h.state().analysis.is_some(), "the k-means window is open");
+    assert!(has_label(&h, "Number of clusters"), "the cluster count box is missing");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "the window closed after OK");
+    let (sheet, n) = result_column(&h, "Cluster N");
+    assert!(sheet.starts_with("KMeans"), "{sheet}");
+    assert_eq!(n.iter().sum::<f64>() as usize, 6, "{n:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("K-means cluster analysis"));
 }

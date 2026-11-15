@@ -2087,6 +2087,102 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Principal component analysis of the --y columns (the variables): eigenvalues, percent of variance,
+    /// loadings and scores; makes a scree plot as a graph.
+    Pca {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Analyze the covariance matrix instead of the correlation matrix.
+        #[arg(long)]
+        covariance: bool,
+        /// Leave missing values out pairwise instead of dropping the whole row.
+        #[arg(long)]
+        pairwise: bool,
+        /// Number of components whose loadings and scores are written.
+        #[arg(long, default_value_t = 2)]
+        components: usize,
+        /// Divide each column of scores by the square root of its eigenvalue.
+        #[arg(long)]
+        standardize_scores: bool,
+        /// Do not write the scores.
+        #[arg(long)]
+        no_scores: bool,
+        /// Do not make the scree plot.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// ROC curve: the --y columns are the test variables followed, last, by the state column. Area under the
+    /// curve with standard error (DeLong) and confidence interval, the curve and the best cut-off; makes a graph.
+    Roc {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The value of the state column that is the positive state (a number or a text).
+        #[arg(long, default_value = "1")]
+        positive: String,
+        /// Lower test values point to the positive state (default: higher values do).
+        #[arg(long)]
+        lower_is_positive: bool,
+        /// Confidence level of the interval of the area, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// K-means cluster analysis of the --y columns (the variables): cluster centres, sizes and distances, analysis
+    /// of variance by variable and the cluster of every row; makes a scatter graph of the first two variables.
+    Kmeans {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Number of clusters.
+        #[arg(long, default_value_t = 3)]
+        clusters: usize,
+        /// Upper limit of the passes of single-case moves.
+        #[arg(long, default_value_t = 100)]
+        max_passes: usize,
+        /// Leave out the analysis of variance.
+        #[arg(long)]
+        no_anova: bool,
+        /// Do not write the cluster of every row.
+        #[arg(long)]
+        no_membership: bool,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// Kaplan-Meier estimator: the --y columns are time, censor and, optionally, group. Survival table, quartile
+    /// and mean survival times, tests of groups; makes a graph of the curves.
+    KaplanMeier {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The value of the censor column that marks a censored case (a number or a text).
+        #[arg(long, default_value = "1")]
+        censor: String,
+        /// Confidence level of the quartile and mean limits, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
+        /// Leave out the quartile estimates.
+        #[arg(long)]
+        no_quartiles: bool,
+        /// Leave out the mean estimate.
+        #[arg(long)]
+        no_mean: bool,
+        /// Log-rank test of the groups.
+        #[arg(long)]
+        log_rank: bool,
+        /// Breslow test of the groups.
+        #[arg(long)]
+        breslow: bool,
+        /// Tarone-Ware test of the groups.
+        #[arg(long)]
+        tarone_ware: bool,
+        /// Add the confidence limits of the curves to the graph.
+        #[arg(long)]
+        band: bool,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Sort the rows of the sheet by one column.
     Sort {
         #[command(flatten)]

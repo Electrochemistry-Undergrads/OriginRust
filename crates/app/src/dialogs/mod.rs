@@ -26,6 +26,7 @@ pub mod label_panels;
 pub mod layer_contents;
 pub mod manip_options;
 pub mod math_curves;
+pub mod multivariate_options;
 pub mod plot_setup;
 pub mod power;
 pub mod printing;

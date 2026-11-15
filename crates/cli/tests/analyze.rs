@@ -1237,3 +1237,101 @@ fn discfreq_counts_the_distinct_values() {
     let (ok, _, err) = sheaf(&["analyze", "discfreq", file, "--y", "kind", "--no-count"]);
     assert!(!ok && err.contains("at least one"), "{err}");
 }
+
+/// Principal component analysis (spec `statistics.md` section 17). The numbers are checked against Origin in
+/// `crates/calc/tests/origin_pca.rs`; here the wiring.
+#[test]
+fn principal_component_analysis_runs_from_the_command_line() {
+    let dir = scratch("pca");
+    let path = dir.join("table.csv");
+    std::fs::write(&path, "a,b,c\n1,2.3,3\n2,3.9,1\n3,6.4,4\n4,7.8,1\n5,10.4,5\n6,11.9,9\n7,14.2,2\n8,15.8,6\n")
+        .unwrap();
+    let file = path.to_str().unwrap();
+    let project = dir.join("pca.sheaf");
+    let (ok, out, err) = sheaf(&["analyze", "pca", file, "--y", "a,b,c", "--save", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    for name in ["Eigenvalue", "Percent of variance", "PC1", "PC3", "PCA1", "Loadings of PC1"] {
+        assert!(out.contains(name), "{name}: {out}");
+    }
+    assert!(!out.contains("Chi-square"), "{out}");
+    let (ok, info, err) = sheaf(&["info", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(info.contains("Score PC1") && info.contains("Loading PC2"), "{info}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "pca", file, "--y", "a,b,c", "--covariance", "--components", "3", "--no-graph"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Chi-square") && out.contains("covariance"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "pca", file, "--y", "a"]);
+    assert!(!ok && err.contains("at least two columns"), "{err}");
+}
+
+/// ROC curve (spec `statistics.md` section 19): the --y columns are the test variables, the state column last.
+#[test]
+fn roc_curve_runs_from_the_command_line() {
+    let dir = scratch("roc");
+    let path = dir.join("marker.csv");
+    std::fs::write(&path, "score,state\n3,yes\n4,yes\n5,yes\n1,no\n2,no\n4,no\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "roc", file, "--y", "score,state", "--positive", "yes"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Area") && out.contains("0.8333") && out.contains("ROC1") && out.contains("DeLong"), "{out}");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "roc",
+        file,
+        "--y",
+        "score,state",
+        "--positive",
+        "yes",
+        "--lower-is-positive",
+        "--no-graph",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("lower test values") && out.contains("0.1667"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "roc", file, "--y", "score,state", "--positive", "maybe"]);
+    assert!(!ok && err.contains("one state"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "roc", file, "--y", "score"]);
+    assert!(!ok && err.contains("at least two columns"), "{err}");
+}
+
+/// Kaplan-Meier estimator (spec `statistics.md` section 20): time, censor and group columns.
+#[test]
+fn kaplan_meier_runs_from_the_command_line() {
+    let dir = scratch("kaplan");
+    let path = dir.join("surv.csv");
+    // Origin's measured example, `tools/origin-ref/kaplan-suite1.lines.txt`: 14 cases, 4 censored (1), two groups.
+    std::fs::write(
+        &path,
+        "time,censor,group\n3,0,1\n5,0,2\n5,1,1\n6,0,2\n8,0,1\n8,0,2\n9,1,2\n12,0,1\n12,0,2\n15,1,1\n17,0,2\n20,0,1\n22,1,2\n25,0,1\n",
+    )
+    .unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "kaplan-meier", file, "--y", "time,censor"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("KaplanMeier1") && out.contains("14.10"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "kaplan-meier", file, "--y", "time,censor,group", "--log-rank", "--breslow", "--no-graph"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Log-rank test: chi-square 0.2542") && out.contains("Breslow test"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "kaplan-meier", file, "--y", "time"]);
+    assert!(!ok && err.contains("two or three columns"), "{err}");
+}
+
+/// K-means cluster analysis (spec `statistics.md` section 18): Origin's measured 12-case example in two variables.
+#[test]
+fn kmeans_runs_from_the_command_line() {
+    let dir = scratch("kmeans");
+    let path = dir.join("points.csv");
+    std::fs::write(&path, "a,b\n1,1\n1.5,2\n3,4\n5,7\n3.5,5\n4.5,5\n3.5,4.5\n6,8\n7.5,7\n8,9\n7,6.5\n9,8.5\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "kmeans", file, "--y", "a,b", "--clusters", "2"]);
+    assert!(ok, "{err}");
+    // Origin: two clusters of six, sums of squares 23.0417 and 15.0417.
+    assert!(out.contains("KMeans1") && out.contains("23.04") && out.contains("15.04"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "kmeans", file, "--y", "a,b", "--clusters", "3", "--no-graph", "--no-anova"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Cluster 3: 4 cases"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "kmeans", file, "--y", "a,b", "--clusters", "20"]);
+    assert!(!ok && err.contains("cannot be made"), "{err}");
+}

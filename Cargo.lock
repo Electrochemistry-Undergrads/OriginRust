@@ -3245,6 +3245,7 @@ dependencies = [
 name = "sheaf-calc"
 version = "0.1.0"
 dependencies = [
+ "nalgebra",
  "rustfft",
  "serde",
  "statrs",

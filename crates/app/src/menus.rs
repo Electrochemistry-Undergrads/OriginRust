@@ -1119,8 +1119,14 @@ fn statistics_menu() -> Vec<Entry> {
                 item("Paired Sample Sign Test...", Cmd::Analyze(AnalysisKind::SignTest)),
             ],
         ),
-        grey_sub("&Survival Analysis", &["Kaplan-Meier Estimator..."]),
-        grey_sub("&Multivariate Analysis", &["Principal Component Analysis...", "K-Means Cluster Analysis..."]),
+        sub("&Survival Analysis", vec![item("Kaplan-Meier Estimator...", Cmd::Analyze(AnalysisKind::KaplanMeier))]),
+        sub(
+            "&Multivariate Analysis",
+            vec![
+                item("Principal Component Analysis...", Cmd::Analyze(AnalysisKind::Pca)),
+                item("K-Means Cluster Analysis...", Cmd::Analyze(AnalysisKind::Kmeans)),
+            ],
+        ),
         sub(
             "&Power and Sample Size",
             vec![
@@ -1131,7 +1137,7 @@ fn statistics_menu() -> Vec<Entry> {
             ],
         ),
         sep(),
-        grey("&ROC Curve..."),
+        item("&ROC Curve...", Cmd::Analyze(AnalysisKind::Roc)),
         sep(),
         grey("Most Recently Used Items"),
     ]

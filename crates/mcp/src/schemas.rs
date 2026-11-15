@@ -113,10 +113,13 @@ pub fn defs() -> Vec<Def> {
             (
                 "sheets",
                 strs(
-                    "Excel files: sheets to read, as names or 1-based positions (a number is a sheet's name if one has it, otherwise a position; default: every visible sheet). The header and row settings of ascii apply to Excel too.",
+                    "Excel files: sheets to read, as names or 1-based positions (a number is a sheet's name if one has it, otherwise a position; default: every worksheet, hidden ones too, as Origin). The header and row settings of ascii apply to Excel too.",
                 ),
             ),
-            ("include_hidden", b("Excel files: also read hidden sheets when sheets is not given.")),
+            (
+                "include_hidden",
+                b("Excel files: read hidden sheets when sheets is not given (they are read by default)."),
+            ),
         ],
         &[],
     );

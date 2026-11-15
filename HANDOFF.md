@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-11-14. This file is short on purpose. **To start work, read this
+Last updated: 2026-11-15. This file is short on purpose. **To start work, read this
 file, then `docs/tasks/README.md`, then one brief `docs/tasks/Txx-*.md`.** Do not read
 `docs/audit/origin-differences-2026-11-12.md` or whole specs up front; the brief names the section to
 open. History of what was merged when is in `git log` (not repeated here).
@@ -19,9 +19,21 @@ open. History of what was merged when is in `git log` (not repeated here).
 - **Two or more sessions** often share this repo. Claim work in `re-workspace/scratch/peer-notes.md`
   (local only, read its last 40 lines on start); merge to `main` one branch at a time, after
   `git fetch`. See LESSONS "Two sessions on one repository need a written split".
+- **Inactive task claims:** If a task has had no edits for at least 48 consecutive hours,
+  another agent may take ownership. Check the task brief, its branch and worktree when
+  available, and the latest peer notes for evidence of newer work. Record the takeover in
+  `re-workspace/scratch/peer-notes.md` with the date, new owner, branch and scope, and preserve
+  earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## State of `main`
 
+- T02 Go To picker/name lookup (2026-11-15, Windows): the flyout lists short names,
+  designations and long names, fills an unambiguous short-name/quoted-long-name reference,
+  and Reset clears only the column. Typed names ignore ASCII case; repeated long names
+  choose the first column. Escape closes the flyout before the dialog. Origin 2016 UI
+  probes, four new UI regressions and a parser fixture cover these rules. Formatting,
+  strict all-target Clippy and 2276 workspace tests pass (three existing ignored). The
+  separate project-wide Column Browser remains unimplemented (gui-look section 5).
 - T13 Draw Line in Front/Behind (2026-11-15, Windows): the Line + Symbol choice controls
   both plotted curves and legend samples, defaulting to Behind. Gap to Symbol disables the
   radios and overrides the retained choice, as Origin 2016 controls/PNG exports confirm.
@@ -67,13 +79,13 @@ open. History of what was merged when is in `git log` (not repeated here).
 - FFT/IFFT CI portability: phase unwrapping treats half-turn roundoff consistently across FFT backends; the original Origin fixtures remain unchanged (analysis-tools.md 15.1). The Linux-only failure is covered by an adjacent-representable-value regression.
 - CI repair (`4b048d1`): the repeated engineering-format failure (`1.0e-24` instead of `1e-24` with one significant digit) is fixed by parsing the decimal scaling power. Strict formatting expectations remain, with a regression across positive and negative decimal powers. The full macOS workspace at that commit passed 1576 tests (one ignored), formatting, and all-target Clippy. Pushes to `main` cancel older CI runs; use pull-request CI for verification while other sessions are pushing frequently.
 
-## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
+## In flight (check for recent edits before claiming)
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t02-find-replace` | Codex Windows, t02-find-replace | T02 existing Find in Sheets/Replace layout, defaults and options measured against Origin; find dialog and focused UI tests | claimed 2026-11-15; no Find in Project, grid/Go To, core/expr/history, plot, statistics, printing or other sessions' scopes |
 | `axis-breaks` | Claude Windows, "axis-breaks" | T11 more than one axis break (Origin's 1-7 breaks, per-break position), measured Origin break layout; core Axis break list, plot axis/tick drawing, graph_axis.rs Breaks tab, persistence and focused tests | claimed 2026-11-15; Axis fields only, no PLOT/plots.rs draw_plot, graph_details, navigation, stats or other sessions' scopes |
-| `codex/t13-fill-sidelines` | Codex Windows, t13-fill-sidelines | T13 Fill Area Sidelines only / Sidelines and Base; plot fill-mode/group copy, draw_fill_under, graph_details selector and focused tests | claimed 2026-11-15; no Axis/layout/PDF, mask policy/color, navigation, labels, stats or other sessions scopes |
-| `codex/t02-go-to-picker` | Codex Windows, t02-go-to-picker | T02 Go To column picker and typed/duplicate column-name behavior only; go_to dialog/resolver and focused tests | claimed 2026-11-15; no grid/filtered handlers, app lifecycle/history, core/model/formula, plot or other sessions' scopes |
+| `codex/t13-fill-sidelines` | Codex Windows, t13-fill-sidelines | T13 Fill Area Sidelines only / Sidelines and Base; plot fill-mode/group copy, draw_fill_under/draw_line boundaries, draw_legend sample, graph_details selector and focused tests | claimed 2026-11-15; no Axis/layout geometry/PDF, mask policy/color, navigation, labels, stats or other sessions scopes |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `mac-print-panel` | Codex macOS, no Origin | T27 native macOS graph print panel via PDFKit; app print_graph/macprint, macOS dependencies and no-spool validation example | claimed 2026-11-14; no workbook printing, Windows CLI, Excel/imports or other sessions’ scope |
 | `saved-state-recovery` | Codex macOS, no Origin | T28 undo/redo saved-state checkpoints and recovery cleanup; core/history.rs, app save/recovery hooks, autosave and focused UI tests | claimed 2026-11-14; no Excel dialogs/imports, axis/labels, backup settings or other sessions’ scope |
@@ -125,7 +137,7 @@ double-clicked in Finder (Apple open-document events; the bundle declares no doc
 
 **T27 Print, Windows half merged (2026-11-14, session "continue all tasks"):** File > Print... (Ctrl+P) prints the active graph page through the system dialog as vector EMF placed by `PageSetup::place` (Letter, Automatic orientation, 1 inch margins by default, as Origin's Page Setup showed); Print Preview draws the same placement; Page Setup is saved in `.sheaf` and the `.opj.sheaf` companion (graphing.md 19). A headless print to Microsoft Print to PDF matched the placement exactly. Left (T27 Status): workbook printing, the macOS print panel (the `lp` fallback is untested), `sheaf print`, Origin's own Print and Print Preview windows (unmeasured).
 
-**T30 Excel merged (2026-11-14 night, macOS session "mac-excel"):** File > Import > Excel (XLS, XLSX, XLSM)... (sheets, hidden sheets, header rows as the ASCII import, import modes, partial import, preview), Export > Worksheet as Excel..., drag-and-drop, `sheaf import/info/export/export-data` with `--sheets`/`--hidden-sheets`, MCP `import_files`; `calamine` and `rust_xlsxwriter` (ADR 0012). Origin's Excel behaviour is unmeasured; every choice is labelled in `docs/spec/import-excel.md` with the measurements to make on Windows. The owner's workbooks were not on the macOS machine (brief step 6 left).
+**T30 Excel merged (2026-11-14 night, macOS session "mac-excel"):** File > Import > Excel (XLS, XLSX, XLSM)... (sheets, hidden sheets, header rows as the ASCII import, import modes, partial import, preview), Export > Worksheet as Excel..., drag-and-drop, `sheaf import/info/export/export-data` with `--sheets`/`--hidden-sheets`, MCP `import_files`; `calamine` and `rust_xlsxwriter` (ADR 0012). **Measured on Windows (2026-11-15, session "t30-origin")** against Origin 2016's `impExcel` (probes in `re-workspace/scratch/t30/`, import-excel.md 2) and copied where Sheaf differed: hidden sheets are read by default (`--skip-hidden-sheets`, untick in the window), the book long name keeps the extension, leading empty columns are kept, dates among text stay dates in a Text & Numeric column; Sheaf still detects header rows (Origin reads none) and keeps Excel's dates before 1900-03-01 (Origin's are a day early). Brief step 6 done: three workbooks on the Windows machine agree cell by cell with `openpyxl`. Left: Origin's import window and export (import-excel.md 10).
 
 
 **T27 CLI graph printing (macOS, no Origin, 2026-11-14):** `sheaf print PROJECT

@@ -98,6 +98,7 @@ pub(crate) fn read_settings(r: &ReadOptions) -> ReadSettings {
         blocks_as_sheets: r.blocks_as_sheets,
         sheets: r.sheets.clone(),
         hidden_sheets: r.hidden_sheets,
+        skip_hidden_sheets: r.skip_hidden_sheets,
     }
 }
 

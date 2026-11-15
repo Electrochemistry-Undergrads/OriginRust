@@ -6,9 +6,17 @@ logic shared, not copied; cached formula values; 1900/1904 dates; size and zip g
 errors, not panics) and writes xlsx through `rust_xlsxwriter`; File > Import > Excel and Export >
 Worksheet as Excel, drag-and-drop, `sheaf import/info/export/export-data`, MCP `import_files`. Synthetic
 fixtures from `tools/make-excel-fixtures.py`. Reviewed by three agents with each finding checked; 12 fixed.
-Left: every Origin measurement in import-excel.md (Windows, `tools/origin-ref`); step 6 (the owner's
-workbooks were not on the macOS machine); `.xlsb`/`.ods` untested; MCP `import_files` offers only the
-books/sheets layouts for Excel; Open Excel stays grey (out of scope).
+Origin measured on Windows (2026-11-14/15, Origin 2016 `impExcel`, probes p1 to p11 in
+`re-workspace/scratch/t30/`; import-excel.md 2) and copied where Sheaf differed: hidden sheets are read
+(`--skip-hidden-sheets` leaves them out), the book long name is the file name with its extension,
+leading empty columns are kept (Excel's column letters), and dates among text keep their dates in a
+Text & Numeric column; booleans, error cells, merged cells, text among numbers, 1904 dates and date
+numbers already matched (fixture `origin-kinds.xlsx` compares Sheaf's numbers with Origin's). Kept as
+Sheaf's own: header rows detected (Origin reads none), dates before 1900-03-01 as Excel shows them
+(Origin's are one day early). Left (import-excel.md 10): Origin's import window, export (not
+reachable from LabTalk in Origin 2016), display of Excel format codes, user parameter rows, `.xlsb`/`.ods` tests (step 6 done: three
+workbooks on the Windows machine agree cell by cell with `openpyxl`, import-excel.md 10); MCP `import_files` has no switch to leave hidden sheets out
+and offers only the books/sheets layouts for Excel; Open Excel stays grey (out of scope).
 **Size:** L (import M, export S, Open Excel window out of scope). **Branch:** `excel-io`. **Model:** Sonnet.
 **Detail:** audit A (File menu greyed items) and E (import/export); parity rows "Excel import" (P1),
 "Write xlsx" (P1), "Open Excel, sample project, Close" (P1).

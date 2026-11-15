@@ -646,7 +646,7 @@ Origin 2016's `dlgRowColGoto -d;` opens **Go To: dlgRowColGoto**. The clear scre
 dump in `re-workspace/scratch/t02-go-to/explicit-dialog/` show size/current-selection information,
 a zero/end hint, **Go to Column**, **Go to Row**, **Extend Selection** (unchecked), then OK/Cancel.
 Both input fields start blank, with the caret in Column. The worksheet chooser is hidden. The
-column input has a picker button; its flyout was not measured. Direct `dlgRowColGoto;` does not
+column input has a picker button. Direct `dlgRowColGoto;` does not
 open a window, and the separate shortcut-capture attempt found no dialog; neither is UI evidence.
 The [published shortcut reference](https://docs.originlab.com/origin-help/hotkey-in-origin/)
 identifies this function as the workbook Ctrl+G command.
@@ -680,16 +680,32 @@ columns selected. Thus the explicit destination column, or the first selected co
 the end; the worksheet-wide maximum does not. Column 999 is refused, leaving C7 untouched. The headless column-name string goes
 through integer conversion, so no GUI name-resolution rule is inferred from that diagnostic.
 
+The follow-up UI captures in `re-workspace/scratch/t02-go-to-picker/` set the actual Column and
+Row edit controls, then click OK (each command returned true). On a four-column sheet with long
+names Time, Shared current, Potential, Shared current, column `b` and row 10 select B10;
+`Potential` and `potential` both select C10; `Shared current` selects the first duplicate, B10.
+The flyout capture lists A(X): Time, B(Y): Shared current, C(Y): Potential and D(Y): Shared current,
+followed by Reset and Select Columns. These captures, rather than numeric X-Function argument
+conversion, establish the tested short-name, ASCII case and duplicate-long-name behavior.
+The verified menu batch chooses D and row 0, reaching D3 despite B having the same long name;
+the native picker fills the Column field with `D"Shared current"`. Reset clears an entered B
+without clearing row 10, so OK reaches C10 from C7. Escape closes the flyout first and leaves
+the Go To dialog open. The earlier all-black choose/reset images are excluded as visual evidence;
+the clear `verified-menu/` captures and post-OK coordinates supersede them.
+Select Columns opens a separate Column Browser, defaulting to Current Sheet and offering project,
+folder, recursive folder and book scopes, a column table and Add/Remove controls. That general
+browser remains unimplemented in Sheaf; its menu entry stays disabled.
+
 Sheaf's Go To now follows the measured input order/focus, right-aligned OK/Cancel and optional-coordinate, zero/end,
 extension and clamping behavior. Its capacity remains data length plus 30 spare view rows;
-there is no new stored worksheet row count. Short column names remain supported, ignoring ASCII
-case; Origin's long/duplicate-name resolution is still unmeasured. Rows use nonnegative 32-bit
+there is no new stored worksheet row count. Short names and the first matching long name are
+accepted, ignoring ASCII case; numeric input keeps its index meaning. Rows use nonnegative 32-bit
 integer input; the exact native upper bound was not stress-tested. The size/current hint reports
 Sheaf's actual view and first selected coordinate. No project data or undo state is
 changed by navigation, empty OK, Cancel or Escape. A fresh reveal target clears stale cell
 geometry so the selected blank row can actually scroll into view. Explicit far-column jumps use
 the full horizontal distance rather than stopping after four viewport-sized steps; the column
-picker is present but disabled. Six new UI tests cover the
+picker lists column names, designations and long names. Six navigation UI tests cover the
 measured axis/range cases, forward/backward/inside extension, capacity/end navigation, visibility,
 keyboard continuation, far-column jumps in both directions, invalid entries and cancel/history; parser fixtures include the 100-row,
 four-populated-row distinction and a new unequal-column end fixture. `--show go-to` supports native screenshots.

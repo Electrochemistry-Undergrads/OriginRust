@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 48 | 141 | 49 | 238 |
+| All rows | 49 | 140 | 49 | 238 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 16 | 72 | 49 | 137 |
+| P1 and P2 together | 17 | 71 | 49 | 137 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
@@ -61,7 +61,7 @@ Cross-cutting findings:
 | Preferences | Tools > Options, Ctrl+U | none | ✗ | no settings stored | P1 |
 | Panels | Results Log, Command Window, Object Manager, Quick Help, Data Display | Object Manager (right edge: layers and plots of the active graph with tick boxes that show or hide plots), Messages Log and Results Log (left edge, with Clear), status bar with hints, Average, Sum and Count of the selected cells, AU : ON, active sheet, Radian | ◐ | no Command Window, Code Builder, Quick Help, Smart Hint Log or Data Display; Results Log holds only the analysis and fit summaries; Object Manager has no plot groups and no layer-level settings | P1 |
 | Graph view modes and zoom | Page, Print, Window, Draft view; zoom commands | page fitted to window; Axis Zoom In and Axis Zoom Out in an axis right-click menu; Rescale to Show All | ◐ | no Page, Print, Window or Draft view; no zoom tool, whole-page zoom or pan (the Zoom In and Zoom Out buttons are grey) | P1 |
-| Find, replace, go to | Ctrl+F, Ctrl+H, F3, Ctrl+G | Edit > Find in Sheets (Ctrl+F: shown text, wrapping, match case/whole cell), Replace (Ctrl+H: cursor or all, one undo, formula columns left alone); Go to (Ctrl+G: optional coordinates, zero/end, capacity bounds and Extend Selection; Origin 2016 measured, gui-look section 5) | ◐ | active-sheet search only, no Find in Project (F3); Find/Replace options and Go To's column-picker/name-resolution details remain unmeasured | P1 |
+| Find, replace, go to | Ctrl+F, Ctrl+H, F3, Ctrl+G | Edit > Find in Sheets (Ctrl+F: shown text, wrapping, match case/whole cell), Replace (Ctrl+H: cursor or all, one undo, formula columns left alone); Go to (Ctrl+G: optional coordinates, zero/end, capacity bounds, Extend Selection, column picker/Reset, short/long names and first duplicate; Origin 2016 measured, gui-look section 5) | ◐ | active-sheet search only, no Find in Project (F3); Find/Replace options remain unmeasured; Go To's general project-wide Column Browser is missing | P1 |
 | Set As Begin, End, Reset | Edit menu | none | ✗ | analysis dialogs take row ranges individually | P1 |
 | Copy graph page to clipboard | Edit > Copy Page, Ctrl+J | Edit > Copy Page, Ctrl+J and the graph's right-click menu put the page on the clipboard as a 300 dpi picture at 40 % size (Origin's size factor) with the Auto margin, and on Windows an enhanced metafile next to the bitmap | ✓ | no WMF, no OLE object; the 40 % and the margin are read from the docs, not measured; pasting into another program was not tried | P1 |
 | Copy and paste format between graphs | Edit > Copy Format | "Use this style for all plots" button | ◐ | | P1 |
@@ -89,7 +89,7 @@ Cross-cutting findings:
 | Encoding | none in Origin | BOMs, UTF-8, Windows-1252 | ✓ | no manual choice | P1 |
 | Import filters and saved settings | .oif, Import Filters Manager | none | ✗ | | P1 |
 | Import wizard, re-import | Ctrl+3, Ctrl+4 | the Import Wizard (File > Import > Import Wizard, Ctrl+3) with the pages Source, Header Lines, Column Names, File Name Options, Data Columns and Save Filters (grey) and Cancel, Back, Next, Finish; the options of the import window as a tree of option groups with a preview; source path recorded; the wizard lists the files (preview one, remove, add) and shows the header entries on the Header Lines page | ◐ | Binary, User Defined and Clipboard sources are grey; no saved import filters (page greyed); the File Name Options page has two ticks only; no re-import command (Ctrl+4), no remembered settings | P1 |
-| Excel import | File > Import > Excel | File > Import > Excel (XLS, XLSX, XLSM)... (sheet choice, hidden sheets, header rows, import modes, partial import, preview), drag-and-drop and command-line files, `sheaf import`/`info` with `--sheets`/`--hidden-sheets`, MCP `import_files`; `calamine` (ADR 0012); cached formula values, Excel dates (1900/1904), one book per file and one sheet per Excel sheet (import-excel.md) | ◐ | Origin's Excel import unmeasured (header defaults, merged cells, empty leading rows); `.xlsb`/`.ods` read but untested; no live Open Excel window | P1 |
+| Excel import | File > Import > Excel | File > Import > Excel (XLS, XLSX, XLSM)... (sheet choice, hidden sheets, header rows, import modes, partial import, preview), drag-and-drop and command-line files, `sheaf import`/`info` with `--sheets`/`--skip-hidden-sheets`, MCP `import_files`; `calamine` (ADR 0012); cached formula values, Excel dates (1900/1904), one book per file and one sheet per Excel sheet; measured against Origin 2016's `impExcel` and copied: hidden sheets read, book long name with extension, leading empty columns kept, merged cells, booleans, error cells, dates and dates among text (import-excel.md 2) | ✓ | header rows detected (Origin reads none unless told); dates before 1900-03-01 as Excel shows them (Origin's are a day early); Origin's import window unseen; `.xlsb`/`.ods` read but untested; no live Open Excel window | P1 |
 | Drag and drop | drop on window | projects open, data goes to dialog | ✓ | | P1 |
 | Other importers, image, database | HDF5, NetCDF, JCAMP-DX, SPC, WAV, ODBC and more | none | ✗ | | P2 |
 | Sparklines, auto width, write protection on import | ASCII options | none | ✗ | | P2 |

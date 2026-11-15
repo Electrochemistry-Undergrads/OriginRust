@@ -1,6 +1,6 @@
 # T02: Menu labels, shortcuts and context menus that differ from Origin
 
-**Status:** done, merged (`bbdb60a`) (items 1-7, 9, 10 done; 8 kept; see Result); Go To layout and selection rules measured and updated (2026-11-14, gui-look section 5). **Size:** M. **Branch:** `menu-diffs`. **Model:** Sonnet.
+**Status:** done, merged (`bbdb60a`) (items 1-7, 9, 10 done; 8 kept; see Result); Go To layout/selection (2026-11-14) and column-picker/name lookup (2026-11-15) measured and updated, gui-look section 5. The project-wide Column Browser remains. **Size:** M. **Branch:** `menu-diffs`. **Model:** Sonnet.
 **Detail:** audit section A, bullet "Different" (`docs/audit/origin-differences-2026-11-12.md`).
 **Spec:** `docs/spec/gui-look.md` sections 1 and 3, `docs/spec/ui-command-map.md`.
 
@@ -84,8 +84,14 @@ past the last is refused. Selection changes create no document edit or undo entr
 preserve the selection. The viewport clears stale reveal geometry before scrolling and reveals
 explicit far-column jumps in one step; OK/Cancel sit at the right edge.
 
-Source probes and exceptions are recorded in gui-look.md's Go To subsection. Sheaf keeps short-name
-column lookup; Origin's long-name/duplicate-name lookup and column-picker flyout remain unmeasured.
+Source probes and exceptions are recorded in gui-look.md's Go To subsection. The 2026-11-15 UI
+follow-up measures the flyout, Reset and typed names: short names and long names ignore ASCII
+case, and duplicate long names choose the first column. The picker displays short names,
+designations and long names, allowing a later duplicate to be chosen; navigation still waits for
+OK. Reset clears only the column, and Escape closes the flyout before the dialog. A parser fixture
+and four UI regressions cover name lookup, duplicate picking, Reset, Escape and unchanged history.
+Origin's separate project-wide Column Browser was captured but remains unimplemented; Select
+Columns stays disabled.
 Sheet row capacity is still Sheaf's data length plus 30 spare rows, rather than a persisted Origin
 allocation. Six new UI regressions, a new unequal-column parser fixture and the expanded existing
 parser regression cover this follow-up.

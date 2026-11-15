@@ -51,7 +51,8 @@ fn warned(r: &ExcelImport, needle: &str) -> bool {
 fn a_workbook_with_header_rows_imports_numbers_text_ints_and_dates() {
     let r = read("basic.xlsx");
     let book = &r.workbook;
-    assert_eq!(book.long_name, "basic");
+    // As Origin names the book: the file name with its extension.
+    assert_eq!(book.long_name, "basic.xlsx");
     assert_eq!(book.source.as_ref().unwrap().importer, "excel");
     let names: Vec<&str> = book.sheets.iter().map(|s| s.name.as_str()).collect();
     assert_eq!(names, ["Data", "Cached", "Uncached"]);
@@ -158,20 +159,22 @@ fn merged_cells_keep_their_top_left_value_and_a_merged_title_is_not_a_label_row(
 }
 
 #[test]
-fn hidden_sheets_are_skipped_unless_asked_for() {
-    let r = read("hidden.xlsx");
-    assert_eq!(r.workbook.sheets.len(), 1);
-    assert!(warned(&r, "sheet 'Hidden' is hidden"));
-    assert!(r.sheets.iter().filter(|s| s.hidden).all(|s| !s.imported));
-
-    let all =
-        read_workbook(&fixture("hidden.xlsx"), &ExcelOptions { include_hidden: true, ..Default::default() }).unwrap();
+fn hidden_sheets_are_read_as_origin_reads_them_unless_left_out() {
+    // Origin's impExcel imports hidden sheets (import-excel.md 2, probe p4 a3).
+    let all = read("hidden.xlsx");
     let names: Vec<&str> = all.workbook.sheets.iter().map(|s| s.name.as_str()).collect();
     assert_eq!(names, ["Visible", "Hidden", "Secret"]);
     assert!(all.warnings.is_empty());
 
+    let r =
+        read_workbook(&fixture("hidden.xlsx"), &ExcelOptions { include_hidden: false, ..Default::default() }).unwrap();
+    assert_eq!(r.workbook.sheets.len(), 1);
+    assert!(warned(&r, "sheet 'Hidden' is hidden"));
+    assert!(r.sheets.iter().filter(|s| s.hidden).all(|s| !s.imported));
+
     // A sheet that is asked for by name is read although it is hidden.
-    let one = ExcelOptions { sheets: vec![SheetRef::Name("hidden".into())], ..Default::default() };
+    let one =
+        ExcelOptions { sheets: vec![SheetRef::Name("hidden".into())], include_hidden: false, ..Default::default() };
     let r = read_workbook(&fixture("hidden.xlsx"), &one).unwrap();
     assert_eq!(numbers(&r.workbook.sheets[0].columns[0]), [10.0, 20.0, 30.0]);
 }
@@ -209,10 +212,15 @@ fn text_among_numbers_stays_text_and_booleans_errors_and_big_integers_are_mapped
     let ratio = numbers_of_mixed(&s.columns[3]);
     assert!(ratio[1].is_nan() && ratio[2] == 4.0);
     assert!(warned(&r, "1 cells hold errors"));
-    // Dates among other values become text, with a warning.
-    assert_eq!(s.columns[4].text().unwrap()[0], "2026-03-01");
-    assert_eq!(s.columns[4].text().unwrap()[1], "not a date");
-    assert!(warned(&r, "column E mixes dates"));
+    // Dates among text keep their numbers and the date display, the text stays text (as Origin,
+    // probe p11): a Text & Numeric column.
+    let stamp = &s.columns[4];
+    assert!(matches!(stamp.format, NumberFormat::Date(_)), "{:?}", stamp.format);
+    assert_eq!(stamp.data.text_cell(1), Some("not a date"));
+    let days = numbers_of_mixed(stamp);
+    assert_eq!((days[0], days[2], days[3]), (2_461_100.0, 2_461_102.0, 2_461_103.0));
+    assert!(days[1].is_nan());
+    assert!(!warned(&r, "column E mixes dates"));
     // Integers up to 2^53 are exact.
     assert_eq!(numbers_of_mixed(&s.columns[5])[0], 9_007_199_254_740_992.0);
     assert_eq!(numbers_of_mixed(&s.columns[5])[1], 12_345_678_901.0);
@@ -227,16 +235,96 @@ fn numbers_of_mixed(col: &Column) -> Vec<f64> {
 }
 
 #[test]
-fn data_that_starts_below_and_right_of_the_corner_drops_the_empty_rows_and_columns() {
+fn data_that_starts_below_and_right_of_the_corner_keeps_the_empty_columns_as_origin() {
+    // Origin keeps the empty columns left of the data (import-excel.md 2, probe p4 a2), so the
+    // column letters are Excel's; the empty rows above the header are not data.
     let r = read("leading.xlsx");
     let s = &r.workbook.sheets[0];
-    assert_eq!(s.columns.len(), 2);
-    assert_eq!((s.columns[0].short_name.as_str(), s.columns[0].long_name.as_str()), ("A", "Time"));
-    assert_eq!(s.columns[1].units, "mV");
-    assert_eq!(numbers_of_mixed(&s.columns[0]), [0.0, 0.5, 1.0, 1.5]);
+    assert_eq!(s.columns.len(), 4);
+    let shorts: Vec<&str> = s.columns.iter().map(|c| c.short_name.as_str()).collect();
+    assert_eq!(shorts, ["A", "B", "C", "D"]);
+    for c in &s.columns[..2] {
+        assert!(c.long_name.is_empty() && numbers_of_mixed(c).iter().all(|v| v.is_nan()), "{c:?}");
+    }
+    assert_eq!(s.columns[2].long_name, "Time");
+    assert_eq!(s.columns[3].units, "mV");
+    assert_eq!(numbers_of_mixed(&s.columns[2]), [0.0, 0.5, 1.0, 1.5]);
     let layout = r.sheets[0].layout.as_ref().unwrap();
-    // Row numbers are Excel's; the first imported column is C.
-    assert_eq!((layout.long_name_line, layout.units_line, layout.header_lines, layout.first_column), (4, 5, 5, 3));
+    // Row numbers are Excel's; the first imported column is A.
+    assert_eq!((layout.long_name_line, layout.units_line, layout.header_lines, layout.first_column), (4, 5, 5, 1));
+}
+
+#[test]
+fn a_merged_title_over_data_right_of_column_a_is_still_a_title() {
+    // Origin's probe a2: a title merged over C2:D2, names in C4:D4, data below; A and B are empty.
+    let mut range: Range<Data> = Range::new((1, 2), (6, 3));
+    range.set_value((1, 2), Data::String("merged title".into()));
+    range.set_value((3, 2), Data::String("X".into()));
+    range.set_value((3, 3), Data::String("Y".into()));
+    for (i, (x, y)) in [(1.0, 10.0), (2.0, 20.0), (3.0, 30.0)].into_iter().enumerate() {
+        range.set_value((4 + i as u32, 2), Data::Float(x));
+        range.set_value((4 + i as u32, 3), Data::Float(y));
+    }
+    let done = read_sheet(&range, None, None, "Lead", &ExcelOptions::default().ascii()).unwrap();
+    let cols = &done.sheet.columns;
+    assert_eq!(cols.len(), 4);
+    assert_eq!((cols[2].long_name.as_str(), cols[3].long_name.as_str()), ("X", "Y"));
+    assert_eq!(numbers_of_mixed(&cols[2]), [1.0, 2.0, 3.0]);
+    assert_eq!(numbers_of_mixed(&cols[3]), [10.0, 20.0, 30.0]);
+    assert!(done.warnings.iter().any(|w| w.contains("1 header line was not imported")), "{:?}", done.warnings);
+    assert_eq!((done.layout.long_name_line, done.layout.first_column), (4, 1));
+}
+
+#[test]
+fn a_sheet_counted_from_column_a_above_the_cell_limit_is_refused() {
+    // One column at XFD with 3000 rows spans 16384 x 3000 cells from column A: more than the limit.
+    let mut range: Range<Data> = Range::new((0, 16_383), (2_999, 16_383));
+    for r in 0..3_000 {
+        range.set_value((r, 16_383), Data::Float(f64::from(r)));
+    }
+    let why = read_sheet(&range, None, None, "Far", &ExcelOptions::default().ascii()).err().unwrap();
+    assert!(why.contains("counted from column A"), "{why}");
+}
+
+#[test]
+fn booleans_errors_dates_and_times_give_the_numbers_origin_gives() {
+    // Origin 2016's impExcel on the same cells (import-excel.md 2, probes p9 and p10, file b1).
+    let r = read("origin-kinds.xlsx");
+    let s = &r.workbook.sheets[0];
+    let long: Vec<&str> = s.columns.iter().map(|c| c.long_name.as_str()).collect();
+    assert_eq!(long, ["B", "E", "D", "T", "DT", "Dur"]);
+    let close = |got: Vec<f64>, want: &[f64]| {
+        assert_eq!(got.len(), want.len(), "{got:?}");
+        for (g, w) in got.iter().zip(want) {
+            assert!(if w.is_nan() { g.is_nan() } else { (g - w).abs() <= 2e-8 }, "{got:?} against Origin's {want:?}");
+        }
+    };
+    close(numbers_of_mixed(&s.columns[0]), &[1.0, 0.0, 1.0]);
+    // Error cells are missing values in both.
+    close(numbers_of_mixed(&s.columns[1]), &[f64::NAN, f64::NAN, 7.0]);
+    assert!(warned(&r, "2 cells hold errors"));
+    // Origin dates 1900-01-01 one day early (2415019, 12/31/1899): it ignores Excel's missing
+    // 1900-02-29. Sheaf keeps the date Excel shows (2415020); later dates agree.
+    close(numbers_of_mixed(&s.columns[2]), &[2_461_041.0, 2_415_020.0, 2_461_099.0]);
+    close(numbers_of_mixed(&s.columns[3]), &[0.25, 0.770_833_333_333_333_4, 1.157_407_407_407_407e-5]);
+    close(numbers_of_mixed(&s.columns[4]), &[2_461_100.521_006_944_6, 2_451_543.999_988_426, 2_461_100.0]);
+    close(numbers_of_mixed(&s.columns[5]), &[1.5, 0.25, 2.0]);
+}
+
+#[test]
+fn dates_among_plain_numbers_become_text_with_a_warning() {
+    // Sheaf has no per-cell display format, so a date beside a plain number cannot keep its date;
+    // Origin keeps both as numbers (section 2). Dates among text are covered by the mixed fixture.
+    let mut range: Range<Data> = Range::new((0, 0), (2, 0));
+    range.set_value((0, 0), Data::String("When".into()));
+    let day = calamine::ExcelDateTime::new(46_023.0, calamine::ExcelDateTimeType::DateTime, false);
+    range.set_value((1, 0), Data::DateTime(day));
+    range.set_value((2, 0), Data::Float(5.0));
+    let done = read_sheet(&range, None, None, "S", &ExcelOptions::default().ascii()).unwrap();
+    let col = &done.sheet.columns[0];
+    assert_eq!(col.data.text_cell(0), Some("2026-01-01"));
+    assert_eq!(numbers_of_mixed(col)[1], 5.0);
+    assert!(done.warnings.iter().any(|w| w.contains("mixes dates or times with numbers")), "{:?}", done.warnings);
 }
 
 // ----- options ------------------------------------------------------------------------
@@ -435,8 +523,8 @@ fn sheets_are_listed_and_previewed_for_a_dialog() {
     assert!(list_sheets(&fixture("hidden.xlsx")).unwrap()[1].hidden);
 
     let p = preview_sheet(&fixture("leading.xlsx"), &SheetRef::Index(1), &ExcelOptions::default(), 4).unwrap();
-    assert_eq!((p.first_row, p.first_column), (4, 3));
-    assert_eq!(p.rows[0], ["Time", "Value"]);
+    assert_eq!((p.first_row, p.first_column), (4, 1));
+    assert_eq!(p.rows[0], ["", "", "Time", "Value"]);
     assert_eq!(p.rows.len(), 4);
     assert_eq!(p.layout.unwrap().units_line, 5);
     let p =
@@ -731,7 +819,7 @@ fn import_file_reads_an_excel_file_by_its_extension_unless_a_kind_is_forced() {
     let a = import_file(&fixture("basic.xlsx"), ImportKind::Auto, &chi, &ascii).unwrap();
     assert_eq!(a.format, "excel");
     assert_eq!(a.workbook.sheets.len(), 3);
-    assert_eq!(a.workbook.long_name, "basic");
+    assert_eq!(a.workbook.long_name, "basic.xlsx");
     assert_eq!(a.workbook.source.as_ref().unwrap().importer, "excel");
     assert_eq!(a.meta, [("Sheets".to_string(), "Data, Cached, Uncached".to_string())]);
     assert_eq!(a.suggested_template, sheaf_core::template::Template::Line);
@@ -759,14 +847,14 @@ fn excel_files_go_through_the_batch_modes_like_text_files() {
     assert!(r.errors.is_empty(), "{:?}", r.errors);
     assert_eq!(r.items.iter().map(|i| i.format).collect::<Vec<_>>(), ["excel", "excel", "ascii"]);
     assert_eq!(p.workbook(r.items[0].book).unwrap().sheets.len(), 2);
-    assert!(r.items[1].warnings.iter().any(|w| w.contains("hidden")));
+    assert_eq!(p.workbook(r.items[1].book).unwrap().sheets.len(), 3, "hidden sheets are read, as in Origin");
 
     // One sheet per file: an Excel file adds all its sheets.
     let mut p = Project::new();
     let r = import_batch(&mut p, &files, &BatchOptions { layout: BatchLayout::Sheets, ..Default::default() });
     let book = p.workbook(r.items[0].book).unwrap();
     let names: Vec<&str> = book.sheets.iter().map(|s| s.name.as_str()).collect();
-    assert_eq!(names, ["Old", "Second", "Visible", "c"]);
+    assert_eq!(names, ["Old", "Second", "Visible", "Hidden", "Secret", "c"]);
 
     // New columns: only the first Excel sheet is added, with a warning.
     let mut p = Project::new();

@@ -164,12 +164,18 @@ fn draw_drop_lines(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, nex
         }
         // Segments in page coordinates with the data value that Plus-Minus looks at.
         let mut segs: Vec<((f64, f64), (f64, f64), f64)> = Vec::new();
+        // The rows the next plot draws a symbol at (row range, row filters, skip points): a
+        // segment ends only at a point that is drawn.
+        let partner_rows: std::collections::BTreeSet<usize> = match next {
+            Some(n) if l.target == DropTarget::NextDataPlot => n.point_rows().collect(),
+            _ => Default::default(),
+        };
         for i in pd.point_rows() {
             let Some((x, y)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
             if l.target == DropTarget::NextDataPlot {
                 let Some(n) = next else { continue };
                 let masked = |d: &PlotData| d.mask.is_some_and(|m| m.contains(&i));
-                if i >= n.end || i >= n.y.len() || masked(pd) || masked(n) {
+                if !partner_rows.contains(&i) || i >= n.y.len() || masked(pd) || masked(n) {
                     continue;
                 }
                 let Some((nx, ny)) = geom.checked_data_to_page(n.x_at(i), n.y_at(i)) else { continue };

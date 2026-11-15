@@ -153,3 +153,39 @@ fn the_default_drop_to_axis_is_unchanged() {
     // Every drop ends on the bottom edge of the frame: one common end height.
     assert!(segs.iter().all(|s| near(s.3, segs[0].3)));
 }
+
+/// Three plots with one worksheet each (X 1..=3); the next plot of a lollipop is on its own sheet.
+fn two_books(a: Vec<f64>, b: Vec<f64>) -> (Project, WindowId, WindowId) {
+    let mut p = Project::new();
+    let mut plots = Vec::new();
+    let mut books = Vec::new();
+    for ys in [a, b] {
+        let bk = p.add_workbook("d");
+        let n = ys.len();
+        let x = p.add_column(bk, 0, Designation::X, ColumnData::numeric((1..=n).map(|i| i as f64).collect())).unwrap();
+        let y = p.add_column(bk, 0, Designation::Y, ColumnData::numeric(ys)).unwrap();
+        plots.push((x, y));
+        books.push(bk);
+    }
+    let g = p.add_graph(Template::Scatter);
+    for (x, y) in plots {
+        p.add_plot_xy(g, 0, Some(x), y, None).unwrap();
+    }
+    p.graph_mut(g).unwrap().layers[0].plots[0].decor.drop.vertical.on = true;
+    p.graph_mut(g).unwrap().layers[0].plots[0].decor.drop.vertical.target = DropTarget::NextDataPlot;
+    (p, g, books[1])
+}
+
+#[test]
+fn no_segment_ends_at_a_row_the_next_plot_does_not_draw() {
+    let (mut p, g, b2) = two_books(vec![1.0, 2.0, 3.0], vec![3.0, 1.0, 2.0]);
+    assert_eq!(segments(&p, g).len(), 3);
+    // A row filter on the next plot's worksheet hides row 2 (X = 2).
+    p.set_row_filter(b2, 0, "col(A) != 2").unwrap();
+    let segs = segments(&p, g);
+    assert_eq!(segs.len(), 2, "{segs:?}");
+    // A row range on the next plot that starts after row 1 drops that row's segment too.
+    p.remove_row_filter(b2, 0);
+    p.graph_mut(g).unwrap().layers[0].plots[1].rows = Some((1, 3));
+    assert_eq!(segments(&p, g).len(), 2);
+}

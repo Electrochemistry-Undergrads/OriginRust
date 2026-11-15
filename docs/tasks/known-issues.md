@@ -1,0 +1,101 @@
+# Known issues and worksheet verification
+
+Preserved from HANDOFF.md on 2026-11-15. These are recorded results, not a new validation run.
+Update the relevant brief/spec when resolving one; the historical snapshot is in
+[the archived handoff](../archive/HANDOFF-2026-11-15.md).
+
+## Known issues
+
+- T01 sorting: Sort Range and range Custom respect selected cell/row bounds. Sort Columns
+  Ascending/Descending move selected rows together; Each Column modes sort independently.
+  Sort Columns and column-header Custom now use the existing nested-sort dialog. Masks,
+  outside rows/columns and Undo/Redo are covered; see workbook-model.md 13.1.
+
+- Filtered table navigation: keyboard movement, edit commits and Enter/Tab within blocks skip
+  hidden rows/columns. New/imported-table regressions ensure hidden values are not edited;
+  filter changes repair the active cell (workbook-model.md 13.3).
+
+- T10 filtered plots: graphs, exports, automatic axes/offsets and histogram/box/pie summaries
+  skip worksheet-filtered rows. Masks, labels and error bars retain source-row references;
+  the Data Reader skips hidden points. Filter Disable/Remove and Undo/Redo restore the view.
+  Category/spoke compression, filter overrides and graph gadgets remain open (workbook-model 13.2a).
+
+- T07 clipboard: quoted table fields keep commas within one cell and preserve tabs, line breaks
+  and quotes through Copy/Cut/Paste. Both new and imported-table UI paths cover Undo/Redo.
+  External CSV/TSV paste detects separators outside quotes; Origin Copy defaults and pasting
+  into other applications remain unmeasured (workbook-model.md 13.4).
+
+- T05 PSD graph export: Export Graphs > Photoshop Document and CLI/API `.psd` output support
+  RGB, grayscale and 256 colors with DPI metadata. The image is flattened onto white, without
+  editable graph layers. PSD dimensions are limited before pixel allocation; graphing.md 9.4
+  records the published references and limits. TIFF now also offers 256 Colors, with the
+  selected None/PackBits/LZW compression and DPI retained; Monochrome, 16 Colors and 16-bit Color (BMP, TGA) added 2026-11-14 with Origin's per-format lists, ordered dither and 5-5-5 layout (graphing 9.4).
+
+- T19 import separators: **Other** reads a set of delimiter characters, with optional
+  **Treat Consecutive Delimiters as One**; **Multiple Characters** reads a whole sequence.
+  CLI equivalents: `--delimiter-chars` / `--combine-delimiters` and `--delimiter` respectively.
+  Explicit modes handle custom-delimiter quoted multiline fields; quoting, empty-field choices
+  and the remaining Auto-detection bootstrap limitation are in import-ascii.md section 2.
+  Partial Import now selects first/last rows and columns plus repeating read/skip patterns, with
+  source labels and parameter values preserved (shared wizard controls and CLI; section 9).
+  Batch scope **All files except first** (CLI `--partial-except-first`) keeps the first data file
+  full while selecting later files; preview and final import share the same options. Custom
+  range lists remain open.
+
+- T08 text substitution: `substitute(s,new,find[,n])$` follows Origin's documented argument order;
+  omitted/zero occurrence replaces all, a positive integer chooses one. Function > Text exposes it.
+  Text-returning functions accept `$`; worksheet regressions cover Auto recalculation and undo.
+  Built-in column headers (`G/L/U/C/O`, e.g. `col(A)[U]$`) now support text/numeric reads,
+  Auto/Manual recalculation after header edits, and self-label references without false cycles.
+  `char(n)$` and `code(s)` create characters and read code points (Function > Text); the
+  published references, Unicode bounds and unmeasured edge choices are in expression-language.md section 3.
+  Typed `format(x,fmt)$` shares Text's explicit formatter; formatting columns work with both names.
+  `text(col(A))$` and indexed-cell Text calls use the numeric source column format and update after
+  format edits. Origin global/`@SD` defaults remain open; explicit empty formats stay general.
+
+- [x] **Single yellow-cell selection** (fixed 2026-11-13): labels have their own `Sel::Label`
+      selection, with a border around just that cell; column letters still select columns.
+      Typing/F2, navigation, clipboard/clear, Escape, and undo work without targeting data beneath
+      the label. Formula cells keep Set Column Values. See workbook-model 13.3 and `owner_regression_*`.
+
+- [x] **Cell shortcuts and interaction logic across all tables** (fixed 2026-11-13):
+      shared label/data selection and focus handling is covered through both File > New and CSV
+      import. Regressions exercise empty-cell mouse selection, typing, Enter/Tab/Shift+Tab,
+      navigation, clipboard/paste growth, clear, and undo on both paths. Specific newly reported
+      interactions can be added to this coverage; the unconfirmed drag observation stays below.
+
+- [x] **Reversed typing (`a` then `b` became `ba`)** (reported/reproduced/fixed 2026-11-13):
+      a replacement edit reused an old caret at zero. Each new data/label edit now has a fresh,
+      cell-specific editor state with the caret after the initial text. Tests cover both table
+      creation paths, stale carets after Home/Escape, Unicode input, and cursor movement during an edit.
+
+### Table UI walkthrough (2026-11-13)
+
+Scope: table interactions only, using synthetic data in a separate Sheaf instance. Checked the
+running release build; its exact commit was not verified and it was not rebuilt for this pass.
+
+- [x] **Fixed: Tab after editing loses worksheet keyboard focus.** Reproduction: click A1
+      in a new table, type `8`, press Tab, then type `9`. A1 commits as 8 and the selection
+      outline moves to B1, but the next digit is ignored. Shift+Tab and arrow navigation also
+      stop controlling the table until a cell is clicked again. Reproduced twice in the new
+      table and also in an imported CSV table (click A1, type `6`, Tab, then `9`). Expected:
+      committing with Tab leaves keyboard focus in the next cell so entry and navigation continue.
+      Reproduced in the UI harness and fixed: both editors retain Tab instead of letting egui's
+      widget traversal steal focus. Regression checks successive typing after Tab and Shift+Tab
+      on new and imported tables.
+- [ ] **Needs confirmation: mouse drag selects only the final cell.** In an imported table,
+      dragging from A1 to B3, then from A1 to B5, left only B3 or B5 selected rather than the
+      rectangular range. Observed in two automated drag attempts; confirm with a manual drag
+      before treating it as an application defect, since input timing could be involved.
+      2026-11-13: the UI harness selects the block with every event timing tried (one jump, jump and
+      release in one frame, press and jump in one frame; `a_drag_over_cells_selects_the_block_whatever_the_event_timing`),
+      so the automated drags were most likely the cause; still worth one manual drag by the owner.
+      Fast press-and-move frames select the correct block in new/imported-table UI regressions;
+      the original release-build observation was not reproduced as an application defect.
+- [x] With grid focus, Shift+arrow keys select a rectangular block in the imported table.
+      Ctrl+C/Ctrl+V copied and pasted a 2-by-2 block; Ctrl+Z removed the paste in one step
+      and Ctrl+Shift+Z restored it. Typing in a new-table data cell and committing with Tab
+      worked up to the subsequent focus failure described above.
+- [ ] Continue table UI coverage: row/column operations, sheet controls and switching, and
+      the remaining new-table/imported-table shortcut cases. These were not completed.
+

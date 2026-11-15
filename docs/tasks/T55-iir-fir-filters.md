@@ -1,6 +1,6 @@
 # T55: IIR Filter and FIR Filter
 
-**Status:** done 2026-11-15 (session "violin", Claude macOS, no Origin), branch `digital-filters`, ready to merge; documented in analysis-tools.md 17. Review fixes 2026-11-15: finite gains at high IIR orders (scaled products), non-finite FIR windows refused with Scale Passband off, dialog start values from the real Fs, scipy fixtures for high orders, window parameters, least squares of every response (even taps against a numpy optimum) and minimum-order assemblies; main merged and the parity counts recomputed (249 rows).
+**Status:** done 2026-11-15 (session "violin", Claude macOS, no Origin), branch `digital-filters`, merged 2026-11-15 (`23ac847`); documented in analysis-tools.md 17. Review fixes 2026-11-15: finite gains at high IIR orders (scaled products), non-finite FIR windows refused with Scale Passband off, dialog start values from the real Fs, scipy fixtures for high orders, window parameters, least squares of every response (even taps against a numpy optimum) and minimum-order assemblies; main merged and the parity counts recomputed (249 rows).
 **Size:** L. **Source:** the greyed Analysis > Signal Processing > IIR Filter... (Origin 2016's
 `iirfilter`, T18 backlog "IIR remain") and `origin-2026-2027-gaps.md` (Analysis: FIR filter design
 and application, Origin 2027 app).

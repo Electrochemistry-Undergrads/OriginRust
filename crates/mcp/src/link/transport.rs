@@ -183,6 +183,8 @@ impl Listener {
     /// Binds a new endpoint of `kind`. A Unix socket is made in `dir` with mode 0600 (the folder is 0700
     /// already); TCP takes a free port on 127.0.0.1 and a new random token. Nothing else is bound.
     pub fn bind(kind: Kind, dir: &Path) -> Result<(Listener, Endpoint), String> {
+        #[cfg(not(unix))]
+        let _ = dir;
         match kind {
             #[cfg(unix)]
             Kind::Unix => {

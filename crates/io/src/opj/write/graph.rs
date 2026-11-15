@@ -695,6 +695,9 @@ impl Writer {
         if has(&|k| k == PlotKind::Histogram || k == PlotKind::Box || is_pie(k)) {
             notes.push("histogram, box and pie plots were written as plain columns of their data".into());
         }
+        if has(&|k| k.is_violin()) {
+            notes.push("violin plots were written as plain columns of their data".into());
+        }
         if plots
             .iter()
             .any(|r| (r.plot.size_from.is_some() && layer.coords.ternary().is_none()) || r.plot.color_from.is_some())
@@ -735,6 +738,12 @@ impl Writer {
                 | PlotKind::FloatingBar
                 | PlotKind::Histogram
                 | PlotKind::Box
+                | PlotKind::Violin
+                | PlotKind::ViolinBox
+                | PlotKind::ViolinPoint
+                | PlotKind::ViolinQuartile
+                | PlotKind::ViolinStick
+                | PlotKind::HalfViolin
                 | PlotKind::Pie
                 | PlotKind::Pie3D
                 | PlotKind::PieBw => CurveKind::Column,

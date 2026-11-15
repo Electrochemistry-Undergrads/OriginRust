@@ -571,7 +571,9 @@ pub struct PlotArgs {
     /// side by side, with sample names from a text X column under the bars; double-y puts the 1st,
     /// 3rd, ... Y column on the left axis and the 2nd, 4th, ... on a right axis; stacked moves each
     /// curve above the one before it; lollipop (two or more Y columns) joins each Y column's points
-    /// to the next column's at the same row with drop lines, X and Y exchanged.
+    /// to the next column's at the same row with drop lines, X and Y exchanged; violin draws each
+    /// Y column as a mirrored kernel density silhouette, like box (also violin-box, violin-point,
+    /// violin-quartile, violin-stick and half-violin, which differ in the marks inside).
     #[arg(short, long)]
     pub template: Option<String>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).

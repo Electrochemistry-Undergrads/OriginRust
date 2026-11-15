@@ -762,6 +762,7 @@ impl Layer {
             q.decor.symbol_line = src.decor.symbol_line;
             q.decor.labels = src.decor.labels.clone();
             q.decor.fill_under = src.decor.fill_under.map(|_| q.line.color);
+            q.decor.fill_under_mode = src.decor.fill_under_mode;
             if same_color {
                 q.line.color = src.line.color;
                 q.symbol.color = src.symbol.color;
@@ -1240,6 +1241,25 @@ pub enum PlotKind {
     /// A box chart of the plot's Y column (Origin's plot type 206): one box per plot, standing at
     /// 1, 2, 3, ... in plot order, with the median, the mean, whiskers and outliers.
     Box,
+    /// Origin's violin plot (2019, template Violin.otpu): each plot's Y column as a mirrored
+    /// kernel density silhouette standing at 1, 2, 3, ... in plot order like [`PlotKind::Box`],
+    /// with the median marked inside.
+    Violin,
+    /// Origin's "Violin with Box" (ViolinBox.otpu): the silhouette with a narrow box, whiskers
+    /// and median inside.
+    ViolinBox,
+    /// Origin's "Violin with Point" (ViolinData.otpu): the silhouette with every observation
+    /// drawn as a point inside it.
+    ViolinPoint,
+    /// Origin's "Violin with Quartile" (ViolinQuartile.otpu): the silhouette with lines at the
+    /// quartiles and the median inside.
+    ViolinQuartile,
+    /// Origin's "Violin with Stick" (ViolinStick.otpu): the silhouette with every observation
+    /// drawn as a line across it.
+    ViolinStick,
+    /// Origin's "Half Violin" (HalfViolin.otpu): one half of the silhouette, with a half box on
+    /// the other side.
+    HalfViolin,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,
@@ -1250,7 +1270,49 @@ pub enum PlotKind {
     PieBw,
 }
 
+/// What a violin plot draws inside (or beside) its silhouette.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ViolinInner {
+    /// A marker at the median.
+    Median,
+    /// A narrow box from the first to the third quartile with whiskers and the median.
+    Box,
+    /// Lines at the quartiles and the median.
+    Quartile,
+    /// Every observation as a point.
+    Point,
+    /// Every observation as a line across the silhouette.
+    Stick,
+}
+
 impl PlotKind {
+    /// True for the six violin kinds.
+    pub fn is_violin(&self) -> bool {
+        self.violin_inner().is_some()
+    }
+
+    /// True for the kinds drawn as a distribution per plot at 1, 2, 3, ...: box chart and violins.
+    pub fn is_distribution(&self) -> bool {
+        *self == PlotKind::Box || self.is_violin()
+    }
+
+    /// What a violin kind draws inside its silhouette; `None` for other kinds.
+    pub fn violin_inner(&self) -> Option<ViolinInner> {
+        match self {
+            PlotKind::Violin => Some(ViolinInner::Median),
+            PlotKind::ViolinBox | PlotKind::HalfViolin => Some(ViolinInner::Box),
+            PlotKind::ViolinPoint => Some(ViolinInner::Point),
+            PlotKind::ViolinQuartile => Some(ViolinInner::Quartile),
+            PlotKind::ViolinStick => Some(ViolinInner::Stick),
+            _ => None,
+        }
+    }
+
+    /// True for [`PlotKind::HalfViolin`]: only the right half of the silhouette is drawn.
+    pub fn is_half_violin(&self) -> bool {
+        *self == PlotKind::HalfViolin
+    }
+
     /// Kinds whose Drop Lines tab offers Skip Points. Area and bar plots keep every point.
     pub fn supports_skip_points(&self) -> bool {
         matches!(self, PlotKind::Line | PlotKind::Scatter | PlotKind::LineSymbol)
@@ -1404,10 +1466,13 @@ pub struct PlotDecor {
     /// Lines from each point to the Y axis (Origin's "Horizontal") and to the X axis ("Vertical").
     #[serde(default, skip_serializing_if = "DropLines::is_default")]
     pub drop: DropLines,
-    /// Origin's "Fill Area Under Curve" in its "Normal" mode: the area between the curve and the
-    /// bottom of the layer (measured: not Y = 0) is filled with this colour. `None` is off.
+    /// Enables Fill Area Under Curve. Normal fills to the layer bottom with this colour;
+    /// sidelines use the line style instead. `None` disables both fills and sidelines.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fill_under: Option<Color>,
+    /// The selected fill/outline mode is retained while Fill Area Under Curve is disabled.
+    #[serde(default, skip_serializing_if = "FillUnderMode::is_normal")]
+    pub fill_under_mode: FillUnderMode,
     /// Transparency, hatch and gradient of the fill under a curve, of a bar or of an area (the
     /// Pattern tab). Plain by default: the flat colour only.
     #[serde(default, skip_serializing_if = "FillStyle::is_default")]
@@ -1415,6 +1480,31 @@ pub struct PlotDecor {
     /// The text written next to each point.
     #[serde(default, skip_serializing_if = "DataLabels::is_default")]
     pub labels: DataLabels,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FillUnderMode {
+    #[default]
+    Normal,
+    SidelinesOnly,
+    SidelinesAndBase,
+}
+
+impl FillUnderMode {
+    pub const ALL: [Self; 3] = [Self::Normal, Self::SidelinesOnly, Self::SidelinesAndBase];
+
+    pub fn is_normal(&self) -> bool {
+        *self == Self::Normal
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Normal => "Normal",
+            Self::SidelinesOnly => "Sidelines only",
+            Self::SidelinesAndBase => "Sidelines and Base",
+        }
+    }
 }
 
 /// How a Line + Symbol connecting line meets its point symbols. Other plot kinds ignore these

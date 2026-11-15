@@ -506,7 +506,8 @@ fn an_extension_less_xlsx_export_reports_the_file_that_was_written() {
         ok(&c.call("import_files", json!({"files": ["a.csv"]})));
         let out = ok(&c.call("export_data", json!({"path": name, "format": "xlsx"})));
         let reported = PathBuf::from(out["path"].as_str().unwrap());
-        assert_eq!(reported, d.root.join(format!("{name}.xlsx")), "attached: {attached}");
+        let expected = sheaf_mcp::roots::plain(d.root.join(format!("{name}.xlsx")));
+        assert_eq!(reported, expected, "attached: {attached}");
         assert!(reported.exists());
         // The name the writer would have made is checked like any other: it exists now.
         if attached {

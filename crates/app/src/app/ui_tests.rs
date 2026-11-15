@@ -12,6 +12,7 @@ use sheaf_plot::scene::ObjectKind;
 mod autosave;
 mod cond_format;
 mod excel;
+mod fill_sidelines;
 mod frozen_panes;
 mod label_frames;
 mod label_whiteout;
@@ -22,6 +23,7 @@ mod skip_points;
 mod symbol_line_gaps;
 mod symbol_line_order;
 mod toolbar_print;
+mod violin;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {

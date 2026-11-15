@@ -399,8 +399,9 @@ fn the_proxy_sends_absolute_roots_only() {
     let roots = Roots::new(&[PathBuf::from("."), PathBuf::from("src")]).unwrap();
     let cfg = ProxyConfig::new(&roots);
     assert_eq!(cfg.roots.len(), 2);
+    let expected_root = sheaf_mcp::roots::plain(here.canonicalize().unwrap());
     for r in &cfg.roots {
-        assert!(Path::new(r).is_absolute() && Path::new(r).starts_with(here.canonicalize().unwrap()), "{r}");
+        assert!(Path::new(r).is_absolute() && Path::new(r).starts_with(&expected_root), "{r}");
     }
     drop(scratch);
 }

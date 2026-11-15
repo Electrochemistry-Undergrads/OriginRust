@@ -156,6 +156,8 @@ pub enum ProjectError {
     LollipopNeedsTwoColumns(usize),
     #[error("a lollipop plot cannot have a right Y axis; use one Y axis or another template")]
     LollipopNoRightAxis,
+    #[error("a violin plot cannot have a right Y axis; use one Y axis or another template")]
+    ViolinNoRightAxis,
 }
 
 impl Project {
@@ -811,6 +813,9 @@ impl Project {
         if template == Template::Lollipop {
             return Err(ProjectError::LollipopNoRightAxis);
         }
+        if template.is_violin() {
+            return Err(ProjectError::ViolinNoRightAxis);
+        }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
         }
@@ -1031,6 +1036,15 @@ mod tests {
         let graphs = p.graphs().count();
         let r = p.plot_columns_double_y(crate::template::Template::Lollipop, &[y], &[y]);
         assert!(matches!(r, Err(ProjectError::LollipopNoRightAxis)));
+        assert_eq!(p.graphs().count(), graphs, "no graph is left behind");
+    }
+
+    #[test]
+    fn a_violin_is_refused_a_right_y_axis() {
+        let (mut p, _, _, y) = sample();
+        let graphs = p.graphs().count();
+        let r = p.plot_columns_double_y(crate::template::Template::Violin, &[y], &[y]);
+        assert!(matches!(r, Err(ProjectError::ViolinNoRightAxis)));
         assert_eq!(p.graphs().count(), graphs, "no graph is left behind");
     }
 

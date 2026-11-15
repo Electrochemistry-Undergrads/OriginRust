@@ -1436,6 +1436,15 @@ fn draw_legend(
                             fill: None,
                             stroke: Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
                         });
+                    } else if plot.kind.is_violin() {
+                        // A small filled box like the silhouette: the tinted fill, outlined in the plot colour.
+                        fill::fill_rect(
+                            out,
+                            Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                            crate::violin::violin_fill_color(plot),
+                            &plot.decor.fill,
+                            Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
+                        );
                     } else if plot.kind.is_bar() || plot.kind.is_area() {
                         // A small bar: as long as a line sample, one font size high, filled and
                         // outlined like the bars (an area plot is shown the same way).

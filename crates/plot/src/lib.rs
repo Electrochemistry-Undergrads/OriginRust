@@ -36,6 +36,7 @@ mod text;
 pub mod ticks;
 mod ticks_scales;
 mod vector;
+mod violin;
 
 #[cfg(test)]
 mod detail_tests;
@@ -63,6 +64,8 @@ mod symbol_gap_tests;
 mod symbol_line_order_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod violin_tests;
 
 pub use eps::EpsOutput;
 pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextMeasurer};

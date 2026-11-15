@@ -30,19 +30,19 @@ fn project(template: Template, x: Vec<f64>, ys: Vec<Vec<f64>>) -> (Project, Wind
     (p, g)
 }
 
-fn svg_of(p: &Project, g: WindowId) -> String {
+pub(crate) fn svg_of(p: &Project, g: WindowId) -> String {
     render_svg_with(p, g, &FixedMetrics).unwrap()
 }
 
-fn doc(svg: &str) -> roxmltree::Document<'_> {
+pub(crate) fn doc(svg: &str) -> roxmltree::Document<'_> {
     roxmltree::Document::parse(svg).expect("well-formed XML")
 }
 
-fn with_class<'a, 'b>(d: &'b roxmltree::Document<'a>, class: &str) -> Vec<roxmltree::Node<'a, 'b>> {
+pub(crate) fn with_class<'a, 'b>(d: &'b roxmltree::Document<'a>, class: &str) -> Vec<roxmltree::Node<'a, 'b>> {
     d.descendants().filter(|n| n.attribute("class") == Some(class)).collect()
 }
 
-fn texts(d: &roxmltree::Document) -> Vec<String> {
+pub(crate) fn texts(d: &roxmltree::Document) -> Vec<String> {
     d.descendants().filter(|n| n.has_tag_name("text")).map(|n| n.text().unwrap_or("").to_string()).collect()
 }
 
@@ -722,7 +722,7 @@ fn check_golden(name: &str, template: Template) {
     compare_golden(name, &svg_of(&p, g));
 }
 
-fn compare_golden(name: &str, svg: &str) {
+pub(crate) fn compare_golden(name: &str, svg: &str) {
     let path =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("golden").join(format!("{name}.svg"));
     if std::env::var_os("SHEAF_UPDATE_GOLDEN").is_some() {

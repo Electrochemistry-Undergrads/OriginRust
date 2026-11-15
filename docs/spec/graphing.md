@@ -2812,10 +2812,21 @@ Sheaf's choices (all unmeasured):
   Exponential `y = a e^(bx)` and Logarithmic `y = a + b ln x` are least squares on the transformed data
   (`ln y` on `ln x`, `ln y` on `x`, `y` on `ln x`), as spreadsheets do, not nonlinear fits of y. Points that
   cannot be transformed are skipped: Power needs x > 0 and y > 0, Exponential y > 0, Logarithmic x > 0.
-  A fit needs more than `order` usable points (more than 1 for the others) with distinct X.
+  A fit needs more than `order` usable points (more than 1 for the others) and at least `order + 1`
+  distinct finite X among them (counted after the same filtering, on the transformed X); with fewer
+  (for example `x = 1,1,1,2,2` for order 2) there is no curve and no label.
+- Power and Exponential are evaluated in log space from the centred fit, `exp(c0 + c1 (ln x - lx0))` and
+  `exp(c0 + c1 (x - x0))`, never as `a * exp(bx)`, so x on a large offset (years 2000 to 2030) does not
+  under- or overflow. The label prints `a = e^intercept` in the usual form when it is a usable number
+  (1e-290 to 1e290); otherwise it prints the same curve in centred form: `y = 1e^(0.5(x - 2015))`
+  (A is the curve at the mean x) for Exponential and `y = A(x/G)^b` (G the geometric mean of x) for Power.
 - R-squared is `1 - SSres/SStot` in the space that was fitted: on y for Linear, Polynomial and Logarithmic,
   on `ln y` for Power and Exponential (the Excel convention). The label says "R2" for Linear too (the square
-  of Pearson's r; Origin's Pearson's R is not shown). It is absent when SStot is 0.
+  of Pearson's r; Origin's Pearson's R is not shown). It is absent when SStot is 0 or only float noise
+  (at most 1e-24 of the sum of squares of the fitted values, in the fitted space): such a constant y is
+  fitted as the exact constant line (all other coefficients 0), so the label reads `y = 0.3` (a zero
+  term is left out of the equation; a zero exponent prints `y = a`) rather than noise slopes like
+  `-5.45e-18x`, and the curve is flat.
 - Moving average: the trailing mean of `window` consecutive points taken in increasing X (stable for equal X),
   drawn through the point at the last X of each window, so the curve starts at the window-th point. Origin's
   choice (trailing or centred) is unknown. No equation or R-squared.
@@ -2824,7 +2835,9 @@ Sheaf's choices (all unmeasured):
   reciprocal axes get an even curve; reversed axes work), through the layer transform; a value that cannot
   be placed (ln of a non-positive number) breaks the curve, and page coordinates are limited to
   +-100000 pt. The moving average joins its points with straight segments.
-- Label: one line per trendline in the layer, from the top-left corner of the frame (6 pt in) down, in the
+- Label: one line per trendline in the layer, from the top-left corner of the frame (6 pt in) down (layers
+  that share a frame, a layer and its right Y layer, continue the line count of the earlier layers, so
+  the right layer's labels sit below the left layer's and never overlap them), in the
   legend's font at its size, coloured like the curve, plus the trendline's label offset. Text is
   `y = 1.234x + 0.56` (4 significant digits, trailing zeros dropped, scientific outside 1e-3 .. 1e6 as
   `1.235x10^-5`; polynomial terms highest power first with `\+(n)` superscripts; power `y = 2.566x^0.9951`;

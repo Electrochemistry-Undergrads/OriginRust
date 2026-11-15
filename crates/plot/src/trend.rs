@@ -73,21 +73,52 @@ fn clamp(p: (f64, f64)) -> (f64, f64) {
     (p.0.clamp(-LIMIT, LIMIT), p.1.clamp(-LIMIT, LIMIT))
 }
 
+fn has_trendlines(pd: &PlotData) -> bool {
+    !(pd.plot.decor.trendlines.is_empty()
+        || pd.pie.is_some()
+        || pd.boxed.is_some()
+        || pd.violin.is_some()
+        || pd.hist_raw.is_some())
+}
+
+/// The number of label lines a layer's trendlines write (the layers that share a frame stack their
+/// labels, so a later layer starts below this many lines).
+pub(crate) fn label_lines(pds: &[PlotData], geom: &LayerGeometry) -> usize {
+    if geom.polar.is_some() || geom.ternary.is_some() {
+        return 0;
+    }
+    let mut n = 0;
+    for pd in pds.iter().filter(|pd| has_trendlines(pd)) {
+        let (xs, ys) = points(pd);
+        n += pd
+            .plot
+            .decor
+            .trendlines
+            .iter()
+            .filter(|t| curve(t, &xs, &ys, geom).is_some_and(|(_, text)| !text.is_empty()))
+            .count();
+    }
+    n
+}
+
 /// Draws the trendlines of every plot of a layer after the data, and their labels one line per
-/// trendline from the top left corner of the frame down.
-pub(crate) fn draw(out: &mut Vec<Item>, layer: &Layer, pds: &[PlotData], geom: &LayerGeometry, m: &dyn TextMeasurer) {
+/// trendline from the top left corner of the frame down, below the `first_line` lines that the
+/// earlier layers of the same frame wrote.
+pub(crate) fn draw(
+    out: &mut Vec<Item>,
+    layer: &Layer,
+    pds: &[PlotData],
+    geom: &LayerGeometry,
+    first_line: usize,
+    m: &dyn TextMeasurer,
+) {
     if geom.polar.is_some() || geom.ternary.is_some() {
         return;
     }
     let font = &layer.legend.font;
-    let mut line = 0usize;
+    let mut line = first_line;
     for pd in pds {
-        if pd.plot.decor.trendlines.is_empty()
-            || pd.pie.is_some()
-            || pd.boxed.is_some()
-            || pd.violin.is_some()
-            || pd.hist_raw.is_some()
-        {
+        if !has_trendlines(pd) {
             continue;
         }
         let (xs, ys) = points(pd);

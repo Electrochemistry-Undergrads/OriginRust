@@ -7,10 +7,15 @@
 //!   tools use; the coefficients are reported as powers of x).
 //! * Power `y = a x^b`, exponential `y = a e^(bx)`, logarithmic `y = a + b ln x`: least squares on
 //!   the transformed data (`ln y` against `ln x`, `ln y` against `x`, `y` against `ln x`), the
-//!   method of spreadsheet trendlines. It is not a nonlinear fit of `y`.
+//!   method of spreadsheet trendlines. It is not a nonlinear fit of `y`. Power and exponential curves
+//!   are evaluated in log space from the centred fit (`exp(c0 + c1 (x - x0))`), so x on a large
+//!   offset (years 2000 to 2030) neither under- nor overflows.
 //! * R-squared is `1 - SSres / SStot` in the space that was fitted: on `y` for linear, polynomial
 //!   and logarithmic, on `ln y` for power and exponential (Excel-style). It is `None` when the
-//!   total sum of squares is zero.
+//!   total sum of squares is zero or only float noise (at most 1e-24 of the sum of squares of the
+//!   fitted values): a constant `y` has no R-squared, and its fit is snapped to the exact constant
+//!   (`y = c`, a flat curve) instead of showing noise slopes.
+//! * A polynomial of order `m` needs `m + 1` distinct x among the points that enter the fit.
 //! * Moving average: the trailing mean of `window` consecutive points taken in increasing X order
 //!   (stable for equal X), reported at the X of the last point of each window.
 
@@ -91,7 +96,9 @@ impl TrendKind {
 pub struct TrendFit {
     pub kind: TrendKind,
     /// Linear and polynomial: coefficients of `1, x, x^2, ...`. Power, exponential, logarithmic:
-    /// `[a, b]` of the equation in the [`TrendKind`] docs.
+    /// `[a, b]` of the equation in the [`TrendKind`] docs (`a` can under- or overflow to 0 or
+    /// infinity for power and exponential fits far from the origin; the curve and the equation
+    /// do not use it then).
     pub coeffs: Vec<f64>,
     /// R-squared in the fitted space, see the module docs.
     pub r2: Option<f64>,
@@ -107,21 +114,31 @@ impl TrendFit {
     /// The fitted curve at `x` (NaN where the curve is undefined: `ln x` for x <= 0).
     pub fn eval(&self, x: f64) -> f64 {
         match self.kind {
-            TrendKind::Linear | TrendKind::Polynomial { .. } => {
-                let u = (x - self.x0) / self.scale;
-                self.ucoeffs.iter().rev().fold(0.0, |acc, c| acc * u + c)
+            TrendKind::Linear | TrendKind::Polynomial { .. } => self.eval_u(x),
+            // In log space from the centred fit: exp(c0 + c1 (ln x - lx0)) and exp(c0 + c1 (x - x0)).
+            TrendKind::Power => {
+                if x > 0.0 {
+                    self.eval_u(x.ln()).exp()
+                } else {
+                    f64::NAN
+                }
             }
-            TrendKind::Power => self.coeffs[0] * x.powf(self.coeffs[1]),
-            TrendKind::Exponential => self.coeffs[0] * (self.coeffs[1] * x).exp(),
+            TrendKind::Exponential => self.eval_u(x).exp(),
             TrendKind::Logarithmic => {
                 if x > 0.0 {
-                    self.coeffs[0] + self.coeffs[1] * x.ln()
+                    self.eval_u(x.ln())
                 } else {
                     f64::NAN
                 }
             }
             TrendKind::MovingAverage { .. } => f64::NAN,
         }
+    }
+
+    /// The fitted polynomial at `t`, `t` being x or the transformed x of the fit.
+    fn eval_u(&self, t: f64) -> f64 {
+        let u = (t - self.x0) / self.scale;
+        self.ucoeffs.iter().rev().fold(0.0, |acc, c| acc * u + c)
     }
 
     /// The equation in the label markup (`\+(..)` superscript), numbers to `sig` significant digits.
@@ -140,8 +157,7 @@ impl TrendFit {
                 }
                 format!("y = {}", join_terms(&terms, sig))
             }
-            TrendKind::Power => format!("y = {}x\\+({})", sig_str(c[0], sig), sig_str(c[1], sig)),
-            TrendKind::Exponential => format!("y = {}e\\+({}x)", sig_str(c[0], sig), sig_str(c[1], sig)),
+            TrendKind::Power | TrendKind::Exponential => self.exp_equation(sig),
             TrendKind::Logarithmic => {
                 format!("y = {}", join_terms(&[(c[1], "ln(x)".to_string()), (c[0], String::new())], sig))
             }
@@ -150,9 +166,48 @@ impl TrendFit {
     }
 }
 
+impl TrendFit {
+    /// Power and exponential equations. `a = e^intercept` is printed when it is a usable number;
+    /// when it under- or overflows (x far from 0) the centred form is printed instead, which
+    /// is the same curve: `y = A e^(b(x - x0))` with `A` the curve at the mean x (exponential) and
+    /// `y = A(x/G)^b` with `A` the curve at the geometric mean `G` (power). A zero exponent
+    /// (a constant y) prints `y = a`.
+    fn exp_equation(&self, sig: usize) -> String {
+        let (a, b) = (self.coeffs[0], self.coeffs[1]);
+        let power = self.kind == TrendKind::Power;
+        let usable = a.is_finite() && (1e-290..=1e290).contains(&a);
+        if b == 0.0 {
+            return format!("y = {}", sig_str(self.ucoeffs[0].exp(), sig));
+        }
+        if usable {
+            return if power {
+                format!("y = {}x\\+({})", sig_str(a, sig), sig_str(b, sig))
+            } else {
+                format!("y = {}e\\+({}x)", sig_str(a, sig), sig_str(b, sig))
+            };
+        }
+        let at_centre = sig_str(self.ucoeffs[0].exp(), sig);
+        let digits = sig.max(8);
+        if power {
+            format!("y = {at_centre}(x/{})\\+({})", sig_str(self.x0.exp(), digits), sig_str(b, sig))
+        } else {
+            let shift = if self.x0 < 0.0 {
+                format!("x + {}", sig_str(-self.x0, digits))
+            } else {
+                format!("x - {}", sig_str(self.x0, digits))
+            };
+            format!("y = {at_centre}e\\+({}({shift}))", sig_str(b, sig))
+        }
+    }
+}
+
 fn join_terms(terms: &[(f64, String)], sig: usize) -> String {
     let mut s = String::new();
-    for (i, (v, body)) in terms.iter().enumerate() {
+    // Terms that are exactly zero (a snapped constant fit) are left out, but the constant stays.
+    let last = terms.len() - 1;
+    let terms: Vec<&(f64, String)> =
+        terms.iter().enumerate().filter(|(i, t)| t.0 != 0.0 || *i == last).map(|(_, t)| t).collect();
+    for (i, (v, body)) in terms.into_iter().enumerate() {
         let num = sig_str(v.abs(), sig);
         let neg = *v < 0.0 && num != "0";
         if i == 0 {
@@ -191,10 +246,20 @@ pub fn sig_str(v: f64, sig: usize) -> String {
     }
 }
 
-fn r_squared(y: &[f64], pred: impl Fn(usize) -> f64) -> Option<f64> {
+/// Sum of squares about the mean.
+fn total_ss(y: &[f64]) -> f64 {
     let mean = y.iter().sum::<f64>() / y.len() as f64;
-    let sstot: f64 = y.iter().map(|v| (v - mean).powi(2)).sum();
-    if sstot <= 0.0 || sstot.is_nan() {
+    y.iter().map(|v| (v - mean).powi(2)).sum()
+}
+
+/// True when `y` is constant up to float noise: SStot at most 1e-24 of the sum of squares.
+fn is_degenerate(y: &[f64]) -> bool {
+    total_ss(y) <= 1e-24 * y.iter().map(|v| v * v).sum::<f64>()
+}
+
+fn r_squared(y: &[f64], pred: impl Fn(usize) -> f64) -> Option<f64> {
+    let sstot = total_ss(y);
+    if is_degenerate(y) || sstot.is_nan() {
         return None;
     }
     let ssres: f64 = y.iter().enumerate().map(|(i, v)| (v - pred(i)).powi(2)).sum();
@@ -246,14 +311,30 @@ pub fn fit(kind: TrendKind, x: &[f64], y: &[f64]) -> Option<TrendFit> {
     }
     let xs: Vec<f64> = t.iter().map(|p| p.0).collect();
     let ys: Vec<f64> = t.iter().map(|p| p.1).collect();
+    let mut distinct = xs.clone();
+    distinct.sort_by(f64::total_cmp);
+    distinct.dedup();
+    if distinct.len() <= order {
+        return None;
+    }
     let x0 = xs.iter().sum::<f64>() / xs.len() as f64;
-    let (uc, scale) = polyfit_centered(&xs, &ys, x0, order)?;
+    let (mut uc, scale) = polyfit_centered(&xs, &ys, x0, order)?;
     if uc.iter().any(|v| !v.is_finite()) {
         return None;
     }
+    let flat = is_degenerate(&ys);
+    if flat {
+        // A constant (up to noise): the exact constant line, not noise coefficients.
+        let mean = ys.iter().sum::<f64>() / ys.len() as f64;
+        uc = vec![0.0; order + 1];
+        uc[0] = mean;
+    }
     let eval_u = |x: f64| uc.iter().rev().fold(0.0, |acc, c| acc * ((x - x0) / scale) + c);
     let r2 = r_squared(&ys, |i| eval_u(xs[i]));
-    let pw = to_powers(&uc, x0, scale);
+    let mut pw = to_powers(&uc, x0, scale);
+    if flat {
+        pw = uc.clone();
+    }
     let coeffs = match kind {
         TrendKind::Linear | TrendKind::Polynomial { .. } => pw,
         TrendKind::Power | TrendKind::Exponential => vec![pw[0].exp(), pw[1]],
@@ -416,5 +497,61 @@ mod tests {
         assert!(TrendKind::parse("poly:11").is_err());
         assert!(TrendKind::parse("ma:1").is_err());
         assert!(TrendKind::parse("cubic").is_err());
+    }
+
+    #[test]
+    fn constant_y_has_no_r2_and_a_flat_exact_line() {
+        let x: Vec<f64> = (1..=10).map(f64::from).collect();
+        for kind in [TrendKind::Linear, TrendKind::Polynomial { order: 3 }, TrendKind::Logarithmic] {
+            let f = fit(kind, &x, &[0.3; 10]).unwrap();
+            assert_eq!(f.r2, None, "{kind:?}");
+            assert_eq!(f.equation(4), "y = 0.3", "{kind:?}");
+            for xv in [1.0, 4.5, 10.0] {
+                assert!((f.eval(xv) - 0.3).abs() < 1e-15);
+            }
+        }
+        let x7: Vec<f64> = (1..=7).map(|i| f64::from(i) * 0.37).collect();
+        let f = fit(TrendKind::Linear, &x7, &[0.7; 7]).unwrap();
+        assert_eq!((f.r2, f.equation(4).as_str()), (None, "y = 0.7"));
+        let e = fit(TrendKind::Exponential, &x, &[0.3; 10]).unwrap();
+        assert_eq!((e.r2, e.equation(4).as_str()), (None, "y = 0.3"));
+        let p = fit(TrendKind::Power, &x, &[0.3; 10]).unwrap();
+        assert_eq!((p.r2, p.equation(4).as_str()), (None, "y = 0.3"));
+        // all zero
+        assert_eq!(fit(TrendKind::Linear, &x, &[0.0; 10]).unwrap().equation(4), "y = 0");
+        // a real trend keeps its R-squared and slope
+        assert!(fit(TrendKind::Linear, &X, &Y).unwrap().r2.is_some());
+    }
+
+    #[test]
+    fn polynomial_needs_enough_distinct_x() {
+        let y = [1.0, 2.0, 3.0, 4.0, 5.0];
+        assert!(fit(TrendKind::Polynomial { order: 2 }, &[1.0, 1.0, 1.0, 2.0, 2.0], &y).is_none());
+        assert!(fit(TrendKind::Polynomial { order: 2 }, &[1.0, 1.0, 3.0, 2.0, 2.0], &y).is_some());
+        assert!(fit(TrendKind::Linear, &[4.0; 5], &y).is_none());
+    }
+
+    #[test]
+    fn exponential_and_power_are_stable_far_from_the_origin() {
+        let x: Vec<f64> = (2000..=2030).map(f64::from).collect();
+        let y: Vec<f64> = x.iter().map(|x| (0.5_f64 * (x - 2015.0)).exp()).collect();
+        let f = fit(TrendKind::Exponential, &x, &y).unwrap();
+        for &xv in &[2000.0, 2010.0, 2015.0, 2030.0] {
+            let want = (0.5_f64 * (xv - 2015.0)).exp();
+            let got = f.eval(xv);
+            assert!(got.is_finite() && (got - want).abs() <= 1e-6 * want, "{xv}: {got} vs {want}");
+        }
+        let eq = f.equation(4);
+        assert_eq!(eq, "y = 1e\\+(0.5(x - 2015))");
+        assert!(!eq.contains("NaN") && !eq.contains("inf"));
+        // power on a large offset: y = (x / 2015)^40 spans many decades without a finite a
+        let yp: Vec<f64> = x.iter().map(|x| (x / 2015.0).powf(300.0)).collect();
+        let p = fit(TrendKind::Power, &x, &yp).unwrap();
+        let want = (2030.0_f64 / 2015.0).powf(300.0);
+        assert!((p.eval(2030.0) - want).abs() <= 1e-6 * want);
+        assert!(p.equation(4).starts_with("y = "));
+        assert!(!p.equation(4).contains("NaN"));
+        // an ordinary fit keeps the plain form
+        assert_eq!(fit(TrendKind::Exponential, &X, &Y).unwrap().equation(4), "y = 2.12e\\+(0.3152x)");
     }
 }

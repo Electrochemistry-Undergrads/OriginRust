@@ -209,3 +209,36 @@ fn graphs_without_trendlines_export_byte_identically() {
     p.graph_mut(g).unwrap().layers[0].plots[0].decor.trendlines.clear();
     assert_eq!(render_svg(&p, g).unwrap(), before);
 }
+
+#[test]
+fn labels_of_layers_sharing_a_frame_stack_instead_of_overlapping() {
+    let (mut p, g) = project(&XS, &YS, Template::DoubleY);
+    let r = p.add_right_y_layer(g, 0).unwrap();
+    let b = p.add_workbook("Right");
+    let x = p.add_column(b, 0, Designation::X, ColumnData::numeric(XS.to_vec())).unwrap();
+    let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(YS.map(|v| v * 100.0).to_vec())).unwrap();
+    p.add_plot_xy(g, r, Some(x), y, None).unwrap();
+    for layer in [0, r] {
+        let plot = &mut p.graph_mut(g).unwrap().layers[layer].plots[0];
+        let mut t = Trendline::new(TrendKind::Linear);
+        t.color = Some(CURVE);
+        t.show_r2 = false;
+        plot.decor.trendlines.push(t);
+    }
+    let s = scene(&p, g);
+    let label_ys = |layer: usize| -> Vec<f64> {
+        let mut out: Vec<f64> = Vec::new();
+        for i in &s.layers[layer].plots {
+            if let Item::Text(t) = i
+                && t.color == CURVE
+                && !out.iter().any(|y| (y - t.y).abs() < 1e-9)
+            {
+                out.push(t.y);
+            }
+        }
+        out
+    };
+    let (left, right) = (label_ys(0), label_ys(r));
+    assert_eq!((left.len(), right.len()), (1, 1));
+    assert!(right[0] > left[0] + 5.0, "right layer label {} below left {}", right[0], left[0]);
+}

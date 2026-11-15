@@ -1317,6 +1317,48 @@ fn file_page_setup_changes_the_project_setup_as_an_undo_step() {
 }
 
 #[test]
+fn print_preview_of_a_workbook_pages_through_the_sheet() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-print-sheet-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("long.csv");
+    let mut text = String::from(
+        "t,up
+",
+    );
+    for i in 1..=120 {
+        text.push_str(&format!(
+            "{i},{}
+",
+            f64::from(i) * 0.5
+        ));
+    }
+    std::fs::write(&path, text).unwrap();
+    let mut h = start(vec![path]);
+    show_window(&mut h, "Book1 - long");
+    menu_path(&mut h, &["File", "Print Preview"]);
+    assert!(h.state().print_preview.is_some(), "Print Preview is open for the workbook");
+    // Letter portrait, 1 inch margins: 49 body rows per page, so 120 rows are 3 pages.
+    assert!(h.query_by_value("Page 1 of 3").is_some());
+    assert!(h.query_by_label("Print...").is_some());
+    click(&mut h, "Next >");
+    assert!(h.query_by_value("Page 2 of 3").is_some());
+    assert_eq!(h.state().print_preview.as_ref().unwrap().page(), 1);
+    click(&mut h, "Next >");
+    click(&mut h, "Next >");
+    assert!(h.query_by_value("Page 3 of 3").is_some(), "the last page stays the last");
+    click(&mut h, "< Prev");
+    assert!(h.query_by_value("Page 2 of 3").is_some());
+    // The page picture is drawn: the preview has a texture for the table page.
+    click(&mut h, "Close");
+    assert!(h.state().print_preview.is_none());
+    // Ctrl+P on the workbook stops before the system dialog under test.
+    ctrl(&mut h, egui::Key::P);
+    assert!(h.state().message.is_none(), "no error box");
+    assert!(h.state().status.contains("Printing is skipped"), "{}", h.state().status);
+}
+
+#[test]
 fn file_print_preview_opens_for_the_active_graph_and_ctrl_p_does_not_reach_a_printer() {
     let mut h = start(vec![data_file("print-preview")]);
     show_window(&mut h, "Graph1 - sample");
@@ -2493,8 +2535,12 @@ fn menu_items_sheaf_lacks_are_greyed_with_origins_name_and_a_tooltip() {
     assert!(h.query_by_label_contains("Not available in Sheaf yet").is_some(), "the tooltip says why");
     close_menus(&mut h);
     // A greyed item with a shortcut still shows the key.
+    click(&mut h, "View");
+    assert!(!entry_enabled(&h, "Command Window Alt+3"));
+    close_menus(&mut h);
+    // Print is live with a workbook active (it prints the sheet).
     click(&mut h, "File");
-    assert!(!entry_enabled(&h, "Print... Ctrl+P"));
+    assert!(entry_enabled(&h, "Print... Ctrl+P"));
 }
 
 #[test]

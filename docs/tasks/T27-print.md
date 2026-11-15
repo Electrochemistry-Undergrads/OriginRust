@@ -1,6 +1,6 @@
 # T27: Print, Print Preview, Page Setup
 
-**Status:** Windows graph printing merged (2026-11-14): Page Setup model and window, Print, Print Preview, headless print check, graphing 19. Left: workbook printing, macOS panel, Origin's Print/Print Preview windows (unmeasured). (Brief written 2026-11-14 from T18's "Print" row and parity row "Print, Print Preview,
+**Status:** Windows graph printing merged (2026-11-14): Page Setup model and window, Print, Print Preview, headless print check, graphing 19. Workbook printing done on branch `print-workbook` (2026-11-15, graphing 19.8): the active sheet prints as a table through the same EMF/PDF path, pure tested page breaking, Print Preview with page navigation, headless 3-page check; Origin's workbook Print dialog was measured (ranges, Selection, Options...), its printed layout was not (unmeasured, Sheaf's own layout). Left: macOS panel, Origin's Print Preview window and worksheet Options..., column/row range and selection printing, CLI workbook printing. (Brief written 2026-11-14 from T18's "Print" row and parity row "Print, Print Preview,
 Page Setup", P1).
 CLI graph printing added on macOS without Origin (`cli-print`, 2026-11-14):
 `sheaf print PROJECT [--graph NAME] --output FILE.pdf` writes a vector PDF on the saved paper size,

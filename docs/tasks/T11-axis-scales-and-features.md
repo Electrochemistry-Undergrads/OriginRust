@@ -1,6 +1,6 @@
 # T11: More axis scales and axis features
 
-**Status:** items 1-2 merged (`3e9f619`); items 3-6 done on branch `axis-scales` (one break per axis, not measured in Origin; special ticks, tick label formula, minor tick labels, tick colour and thickness; Exchange X-Y Axes; Apply To..., Bottom/Top/Left/Right list, Tick Labels sub-tabs). Left: more than one break, reference lines, the reciprocal default step (fits 2 of 3), Origin picture comparison, .opj storage of the new axis fields (named in the save warnings). **Size:** L, one
+**Status:** items 1-2 merged (`3e9f619`); items 3-6 done on branch `axis-scales` (one break per axis, not measured in Origin; special ticks, tick label formula, minor tick labels, tick colour and thickness; Exchange X-Y Axes; Apply To..., Bottom/Top/Left/Right list, Tick Labels sub-tabs). Reciprocal default step/range now follows 57 Origin 2016 measurements (graphing 3.8; finite positive nonconstant data, default 8% margin); explicit increment still overrides it. Left: more than one break, reference lines, Origin picture comparison, .opj storage of the new axis fields (named in the save warnings). **Size:** L, one
 commit per feature. **Branch:** `axis-more`. **Model:** Sonnet.
 **Detail:** audit C "Missing scales", "Missing axis features"; B "Axis dialog".
 **Spec:** `docs/spec/graphing.md` sections 3-4 (axes, ticks), 12 (linked layers).

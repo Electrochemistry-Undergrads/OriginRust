@@ -392,6 +392,7 @@ mod tests {
             layer_icons: false,
             title_display: TitleDisplay::LongName,
             comments: "notes".into(),
+            connect_across_breaks: true,
         };
         let json = serde_json::to_string(&page).unwrap();
         assert_eq!(serde_json::from_str::<PageStyle>(&json).unwrap(), page);

@@ -891,7 +891,7 @@ fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sou
             });
             section(ui, "Data Drawing Options");
             ui.checkbox(&mut layer.display.clip_data, "Clip Data to Frame");
-            ui.add_enabled(false, egui::Checkbox::new(&mut false, "Data on Top of Axes"));
+            ui.checkbox(&mut layer.display.data_on_top, "Data on Top of Axes");
             ui.checkbox(&mut layer.display.grid_on_top, "Grid on Top of Data");
         }
         DetailTab::Background => {

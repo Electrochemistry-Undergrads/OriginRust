@@ -557,8 +557,14 @@ fn layer_scene(
     m: &dyn TextMeasurer,
 ) -> LayerScene {
     let layer = &g.layers[index];
-    let mut scene =
-        LayerScene { clip: geom.clip, grid: Vec::new(), plots: Vec::new(), overlay: Vec::new(), objects: Vec::new() };
+    let mut scene = LayerScene {
+        clip: geom.clip,
+        grid: Vec::new(),
+        plots: Vec::new(),
+        overlay: Vec::new(),
+        underlay_len: 0,
+        objects: Vec::new(),
+    };
     // The layer's Background colour fills the frame behind the grid and the data.
     fill::draw_background(&mut scene.grid, layer.background, &layer.background_style, geom.frame);
     let background_items = scene.grid.len();
@@ -644,6 +650,9 @@ fn layer_scene(
         let start = out.len();
         ternary::draw_axes(out, project, layer, pds, geom, m);
         rec(objects, out, start, ObjectKind::XAxis, &[]);
+        if layer.display.data_on_top {
+            scene.underlay_len = out.len();
+        }
         draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
         return scene;
     }
@@ -654,6 +663,9 @@ fn layer_scene(
         let start = out.len();
         polar::draw_radius_axis(out, ya, &yp, geom, m);
         rec(objects, out, start, ObjectKind::YAxis, &[]);
+        if layer.display.data_on_top {
+            scene.underlay_len = out.len();
+        }
         draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
         return scene;
     }
@@ -700,6 +712,9 @@ fn layer_scene(
         }
     }
     rec(objects, out, start, ObjectKind::YTitle, &[]);
+    if layer.display.data_on_top {
+        scene.underlay_len = out.len();
+    }
     draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
     scene
 }

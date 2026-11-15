@@ -1777,8 +1777,23 @@ Display tab (measured, section 18 list): Sheaf offers Labels (the tick labels of
 (`LayerDisplay::show_data`), Frame (the opposite-edge lines of both axes), Clip Data to Frame (off: the
 data may run over the whole page), Grid on Top of Data (the grid lines are drawn after the plots), and
 X Axes and Y Axes (off hides that axis: line, ticks, tick labels and title; the grid stays; what Origin
-hides is not measured); Data on Top of Axes is shown greyed, and Scale Elements and Clipping Margins are
-not offered. The `.opj` writer names a changed Display tab in its save warnings.
+hides is not measured). Data on Top of Axes (`LayerDisplay::data_on_top`, default off) draws the
+axes, ticks and axis text before the data; legends, free labels and drawn annotations remain above
+the data. The axes remain unclipped; Clip Data to Frame still applies only to the plots. Grid on
+Top of Data remains independent. Picking a data/axis overlap follows the chosen order. The same
+scene order is used on screen and in SVG, raster, PDF, EPS and EMF exports.
+
+Reference for Data on Top of Axes (2026-11-14): Origin 2016's Display tab starts unchecked.
+Clicking the control changes its state from 0 to 1 and back to 0, without changing Grid on Top of
+Data (0 throughout). Setup, steps, screenshots and control lists are in
+`re-workspace/scratch/t13-data-on-top/dialog/{display,enabled,disabled}.controls.txt`.
+Origin's [Display/Speed documentation](https://docs.originlab.com/origin-help/pd-dialog-display-speed-tab/)
+describes data and symbols superimposed on the axes; its
+[axis/grid overlap example](https://docs.originlab.com/quick-help/axis-ontop/) explains the independent
+grid switch. Its general default statement differs from the captured template; Sheaf keeps the
+measured template's unchecked default. Scale Elements and Clipping Margins are not offered.
+The `.opj` writer names a changed Display tab in its save warnings; the companion preserves the
+setting. Older projects that omit the new field load with data behind the axes.
 
 Size/Speed tab (measured): Layer Area Left, Top, Width, Height with Units % of Page (default), inch, cm,
 mm, pixel and point; Link Axis Length to Scale with X:Y Ratio; Graphic Image Caching None or Raster;

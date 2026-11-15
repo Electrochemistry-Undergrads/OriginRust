@@ -319,6 +319,9 @@ pub struct LayerDisplay {
     /// Grid on Top of Data.
     #[serde(default)]
     pub grid_on_top: bool,
+    /// Data on Top of Axes. Axes remain unclipped when drawn behind the data.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub data_on_top: bool,
     /// Show Elements: X Axes. Off hides the X axes of the layer (lines, ticks, tick labels, titles).
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub show_x_axes: bool,
@@ -333,7 +336,14 @@ fn is_true(v: &bool) -> bool {
 
 impl Default for LayerDisplay {
     fn default() -> Self {
-        LayerDisplay { show_data: true, clip_data: true, grid_on_top: false, show_x_axes: true, show_y_axes: true }
+        LayerDisplay {
+            show_data: true,
+            clip_data: true,
+            grid_on_top: false,
+            data_on_top: false,
+            show_x_axes: true,
+            show_y_axes: true,
+        }
     }
 }
 

@@ -47,6 +47,11 @@ pub struct MergeOptions {
     pub margin_bottom: f64,
     /// Keep the source graphs (Origin's default). When false they are deleted after the merge.
     pub keep_sources: bool,
+    /// "Rearrange Layout" (on by default). Off, every layer keeps its frame on the page as it is in
+    /// its source (so the layers of different sources lie on top of each other) and the text is not
+    /// scaled; the grid settings are not used (measured: a 2 x 2 merge with it off gave the layers the
+    /// source's (17.91, 11.58, 68.17, 71.82) and factor 1).
+    pub rearrange: bool,
     /// A portrait page: width and height of [`MergeOptions::page_in`] swapped.
     pub portrait: bool,
     /// The page size in inches, landscape (the longer side first); `None` is Origin's 11.41 x 7.973.
@@ -80,6 +85,7 @@ impl Default for MergeOptions {
             margin_top: 10.0,
             margin_bottom: 15.0,
             keep_sources: true,
+            rearrange: true,
             portrait: false,
             page_in: None,
             keep_aspect: false,
@@ -224,7 +230,7 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
     }
     let layout = opts.layout(sources.len());
     let cells = layout.frames()?;
-    if sources.len() > cells.len() {
+    if opts.rearrange && sources.len() > cells.len() {
         return Err(MergeError::TooManyGraphs { rows: layout.rows, cols: layout.cols, graphs: sources.len() });
     }
     let (page_w, page_h) = opts.page_pt()?;
@@ -237,7 +243,8 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
         layers: Vec::new(),
     };
     let link = opts.link || opts.share_x;
-    for (k, (src, &cell)) in sources.iter().zip(&cells).enumerate() {
+    for (k, src) in sources.iter().enumerate() {
+        let cell = cells.get(k).copied().unwrap_or(Frame::WHOLE);
         if src.layers.is_empty() {
             return Err(MergeError::Empty(src.name.clone()));
         }
@@ -247,7 +254,9 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
         // fractions of its parent's.
         let roots: Vec<usize> = (0..src.layers.len()).filter(|&i| src.link_parent(i).is_none()).collect();
         let bbox = bounds(&roots.iter().map(|&i| src.layers[i].frame).collect::<Vec<_>>());
-        let target = if opts.keep_aspect && bbox.width > 0.0 && bbox.height > 0.0 {
+        let target = if !opts.rearrange {
+            bbox
+        } else if opts.keep_aspect && bbox.width > 0.0 && bbox.height > 0.0 {
             // the ratio is kept in percent of each page, as Origin does
             let ratio = bbox.width / bbox.height;
             let width = cell.width.min(cell.height * ratio);
@@ -256,6 +265,7 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
             cell
         };
         let factor = match opts.text_scale {
+            _ if !opts.rearrange => 1.0,
             MergeTextScale::Auto => auto_text_factor((100.0 * target.width, 100.0 * target.height)),
             MergeTextScale::Fixed(f) => f,
             MergeTextScale::Keep => 1.0,
@@ -294,7 +304,7 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
             }
         }
     }
-    if opts.hide_inner {
+    if opts.hide_inner && opts.rearrange {
         hide_inner_axes(&mut g, &layout, sources);
     }
     Ok(g)

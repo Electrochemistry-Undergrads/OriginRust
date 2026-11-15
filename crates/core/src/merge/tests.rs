@@ -270,3 +270,17 @@ fn a_merged_graph_saves_and_loads() {
     let back: Graph = serde_json::from_str(&serde_json::to_string(g).unwrap()).unwrap();
     assert_eq!(&back, g);
 }
+
+#[test]
+fn without_rearranging_the_layers_keep_their_source_frames() {
+    let (mut p, gs, _) = project(3);
+    let src = p.graph(gs[0]).unwrap().layers[0].clone();
+    let o = MergeOptions { rearrange: false, rows: Some(1), cols: Some(1), ..opts(&gs) };
+    let id = p.merge_graphs(&o).unwrap();
+    let m = p.graph(id).unwrap();
+    assert_eq!(m.layers.len(), 3, "a 1 x 1 grid is not used when the layout is not rearranged");
+    for l in &m.layers {
+        assert_eq!(l.frame, src.frame);
+        assert_eq!(l.x_axis.tick_font.size_pt, src.x_axis.tick_font.size_pt);
+    }
+}

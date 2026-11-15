@@ -3135,7 +3135,6 @@ dependencies = [
  "serde_json",
  "sheaf-core",
  "sheaf-io",
- "sheaf-mcp",
  "sheaf-ops",
  "sheaf-plot",
 ]
@@ -3204,6 +3203,7 @@ name = "sheaf-ops"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "serde",
  "serde_json",
  "sheaf-core",

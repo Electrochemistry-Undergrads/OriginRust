@@ -473,6 +473,8 @@ pub enum Action {
     About,
     /// Open the window of View > Toolbars.
     Toolbars,
+    /// Open the window of Tools > Autosave.
+    Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
     Quit,

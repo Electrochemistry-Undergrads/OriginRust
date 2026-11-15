@@ -264,6 +264,21 @@ Pictures: `gr-plain.png` area, `wb-*.png`, `rc-*.png`, `wb-m04-column.png`; seco
   second box "Before Formula Scripts" with its own grey hint. The dialog is small (about 425 x
   335 px), has minimise, a disabled maximise and a close X (no "?"); the formula box has the
   text cursor on opening [seen 2].
+- **Sheaf Set Values function search (T09, 2026-11-14).** Find beside the column navigation,
+  or Function > Search Functions, opens Search and Insert Functions. Keyword matches cover
+  the names, categories, arguments and descriptions in the existing Function-menu catalog;
+  multiple words must all match, without case sensitivity. A selected entry shows Sheaf's
+  own description and example. Add Function, a double click, or Enter from the search field
+  inserts through the same formula-cursor path as the Function menu. Cancel, Escape and the
+  search window's close button keep the staged formula and worksheet data. Choosing a
+  function stages an edit; only Set Values Apply/OK changes the worksheet, with undo.
+  The parent dialog is disabled while search is open. An empty result list disables insertion.
+  This follows Origin's published [Search and Insert Functions behavior](https://docs.originlab.com/origin-help/wks-setcolval-menuopt-dialog/).
+  The installed-2016 capture attempts (local `scratch/t09-function-search`: Ctrl+Q found no
+  dialog, and `csetvalue -d` returned false) did not produce a usable control capture. The
+  search-window layout and the multi-keyword matching rule are Sheaf choices; no new installed
+  Origin layout/default measurement is claimed. Formula-search UI tests live in
+  `dialogs/set_values.rs`, separately from other sessions' app UI regressions.
 - **Workbook File menu** [seen 2, `wb-file.png`, `wb-file-more.png`]. Short form: Open... (Ctrl+O),
   Open Sample Projects (submenu), Save Project As..., Save Template As..., Save Workbook As Analysis
   Template..., Add Word Bookmarks to Analysis Template..., Import (submenu), Recent Books,

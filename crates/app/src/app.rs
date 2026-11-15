@@ -3,7 +3,9 @@
 //! project.
 
 use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp};
+use crate::autosave::{Autosave, Due};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
+use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
@@ -18,6 +20,7 @@ use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::label_panels::{LabelPanelsDialog, Outcome as LabelPanelsOutcome};
 use crate::dialogs::power::{PowerDialog, PowerOutcome};
 use crate::dialogs::printing::{PageSetupDialog, PageSetupOutcome, PreviewOutcome, PrintPreview};
+use crate::dialogs::recovery::{RecoveryChoice, RecoveryOffer};
 use crate::dialogs::reshape::{ReshapeDialog, ReshapeOutcome};
 use crate::dialogs::row_filter::RowFilterDialog;
 use crate::dialogs::set_values::SetValuesDialog;
@@ -45,6 +48,7 @@ use sheaf_core::template::Template;
 use sheaf_core::{ColumnData, ColumnId, Designation, Document, Project, WindowId};
 use sheaf_io::batch::{ImportMode, PlaceOptions, Target, place_workbook_with};
 use sheaf_io::project_file;
+use sheaf_io::recovery::{self, AutosaveSettings, Session};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -60,6 +64,11 @@ pub struct Startup {
     pub screenshot: Option<PathBuf>,
     /// Things to open before the picture is taken, for example `graph-settings:x`.
     pub show: Vec<String>,
+    /// The folder of the recovery files. `None` runs without recovery: nothing is scanned, written or
+    /// removed (the tests, `--no-recovery`).
+    pub recovery_dir: Option<PathBuf>,
+    /// Where the autosave switch and interval are kept; `None` keeps the defaults and writes nothing.
+    pub settings_path: Option<PathBuf>,
 }
 
 /// Something that needs an answer about unsaved changes first.
@@ -69,6 +78,8 @@ enum Pending {
     Open,
     /// Open the project in `pending_path` (dropped onto the window or given at start-up).
     OpenFile,
+    /// Open the newest recovery of an earlier run (the Recover button).
+    Recover,
     Quit,
 }
 
@@ -158,6 +169,13 @@ pub struct SheafApp {
     shown_title: String,
     startup: Startup,
     frame: u64,
+    /// The timer and worker that write the recovery file.
+    autosave: Autosave,
+    autosave_dialog: Option<AutosaveDialog>,
+    /// Work that an earlier run left behind, offered at start-up.
+    recovery_offer: Option<RecoveryOffer>,
+    /// The file the recovered project belonged to: suggested by Save, since the project has no name.
+    recovered_from: Option<PathBuf>,
 }
 
 impl SheafApp {
@@ -220,12 +238,171 @@ impl SheafApp {
             shown_title: String::new(),
             startup,
             frame: 0,
+            autosave: Autosave::new(None, AutosaveSettings::default(), None),
+            autosave_dialog: None,
+            recovery_offer: None,
+            recovered_from: None,
         };
+        app.start_recovery();
         let paths = std::mem::take(&mut app.startup.paths);
         app.open_paths(paths, false);
         app.sync_windows();
         app.run_startup_show();
         app
+    }
+
+    // ----- autosave and recovery -----------------------------------------
+
+    /// Reads the autosave settings, drops recovery files older than 30 days, lists what earlier runs
+    /// left behind and starts this run's own session. Without a recovery folder nothing is done.
+    fn start_recovery(&mut self) {
+        let settings_path = self.startup.settings_path.clone();
+        let settings = settings_path.as_deref().map(AutosaveSettings::load).unwrap_or_default();
+        let mut session = None;
+        let mut orphans = Vec::new();
+        if let Some(dir) = self.startup.recovery_dir.clone() {
+            let dropped = recovery::prune(&dir, recovery::MAX_AGE, std::time::SystemTime::now());
+            if dropped > 0 {
+                self.logs.info(format!("Dropped {dropped} recovery file(s) older than 30 days"));
+            }
+            orphans = recovery::list_orphans(&dir);
+            match Session::start(&dir) {
+                Ok(s) => session = Some(s),
+                Err(e) => self.warn(format!("Autosave is off, the recovery folder cannot be used: {e}")),
+            }
+        }
+        self.autosave = Autosave::new(session, settings, settings_path);
+        if !orphans.is_empty() {
+            self.say(format!("Found {} project(s) from an earlier run that was not closed normally", orphans.len()));
+            self.recovery_offer = Some(RecoveryOffer::new(orphans));
+        }
+    }
+
+    /// The Recover button: opens the newest recovery as a new, modified project that has no file
+    /// name. This run's own recovery copy is written first and only then is the old one removed, so
+    /// the work is never held by nothing.
+    fn recover_newest(&mut self) {
+        let Some(newest) = self.recovery_offer.as_ref().and_then(|o| o.orphans.first().cloned()) else { return };
+        let project = match recovery::load(&newest) {
+            Ok(p) => p,
+            Err(e) => {
+                self.message = Some(("Could not recover the project".to_string(), e.to_string()));
+                return;
+            }
+        };
+        let original = newest.sidecar.as_ref().and_then(|s| s.original_path());
+        self.doc.replace(project);
+        self.doc.dirty = true;
+        self.reset_views();
+        self.path = None;
+        // A project that came from an Origin file keeps its `.bak` copy when it is saved over it.
+        self.foreign_source =
+            original.clone().filter(|p| p.exists() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("opj")));
+        self.recovered_from = original;
+        let copy = self.autosave.write_now(self.doc.project(), self.recovered_from.as_deref(), self.doc.revision());
+        let name = crate::dialogs::recovery::name(&newest);
+        match copy.and_then(|()| recovery::discard(&newest).map_err(|e| e.to_string())) {
+            Ok(()) => self.say(format!("Recovered {name}; it has no file name yet, so Save asks for one")),
+            Err(e) => {
+                self.warn(format!("Recovered {name}, but the old recovery file stays in the recovery folder: {e}"))
+            }
+        }
+        let others = self.recovery_offer.take().map_or(0, |o| o.orphans.len().saturating_sub(1));
+        if others > 0 {
+            self.logs.info(format!("{others} more recovery file(s) are kept and offered at the next start"));
+        }
+    }
+
+    /// The Discard button: removes the newest recovery; the next one, if any, is offered.
+    fn discard_newest(&mut self) {
+        let Some(offer) = &mut self.recovery_offer else { return };
+        if offer.orphans.is_empty() {
+            return;
+        }
+        let newest = offer.orphans.remove(0);
+        if offer.orphans.is_empty() {
+            self.recovery_offer = None;
+        }
+        let name = crate::dialogs::recovery::name(&newest);
+        match recovery::discard(&newest) {
+            Ok(()) => self.say(format!("Discarded the recovery of {name}")),
+            Err(e) => self.warn(format!("Could not discard the recovery of {name}: {e}")),
+        }
+    }
+
+    /// Once per frame: shows what a finished write said, removes the recovery files when the
+    /// project is clean, and starts a write when the interval has passed.
+    fn autosave_step(&mut self, ctx: &egui::Context) {
+        match self.autosave.poll() {
+            Some(Ok(())) => self.autosave.report_success(),
+            Some(Err(e)) => self.autosave_failed(&e),
+            None => {}
+        }
+        if !self.doc.dirty {
+            if let Err(e) = self.autosave.clear() {
+                self.autosave_failed(&e);
+            }
+            return;
+        }
+        match self.autosave.due(self.doc.dirty, self.doc.revision()) {
+            Due::Never => {}
+            Due::In(wait) => ctx.request_repaint_after(wait),
+            Due::Now => {
+                let project = self.autosave_snapshot();
+                let original = self.recovery_original();
+                self.autosave.start_write(project, original.as_deref(), self.doc.revision());
+                ctx.request_repaint_after(std::time::Duration::from_millis(100));
+            }
+        }
+    }
+
+    /// A copy of the project with the current window places, for the recovery file. It adds no undo
+    /// step and does not change the modified flag.
+    fn autosave_snapshot(&self) -> Project {
+        let mut project = self.doc.project().clone();
+        project.window_places = self.workspace.places();
+        project
+    }
+
+    /// The file the recovery should name as the project's own.
+    fn recovery_original(&self) -> Option<PathBuf> {
+        self.path.clone().or_else(|| self.foreign_source.clone()).or_else(|| self.recovered_from.clone())
+    }
+
+    fn autosave_failed(&mut self, error: &str) {
+        if self.autosave.report_error() {
+            self.warn(format!("Autosave could not write the recovery file: {error}"));
+        }
+    }
+
+    /// The Autosave window's OK: applies the settings now and keeps them in the settings file.
+    fn apply_autosave_settings(&mut self, settings: AutosaveSettings) {
+        self.autosave.settings = settings;
+        if let Some(path) = self.autosave.settings_path.clone()
+            && let Err(e) = settings.save(&path)
+        {
+            self.message = Some(("Could not keep the autosave settings".to_string(), e.to_string()));
+        }
+        if settings.enabled {
+            self.say(format!("Autosave is on, every {} minute(s)", settings.minutes));
+        } else {
+            self.say("Autosave is off");
+        }
+    }
+
+    /// The end of this run: a normal exit removes the recovery files. Closing while changes are
+    /// unsaved and nobody was asked (the system ended the program) writes them one last time and
+    /// leaves them for the next start.
+    fn end_autosave(&mut self) {
+        let clean = !self.doc.dirty || self.quit_confirmed;
+        if !clean && self.autosave.settings.enabled {
+            let project = self.autosave_snapshot();
+            let original = self.recovery_original();
+            let _ = self.autosave.write_now(&project, original.as_deref(), self.doc.revision());
+        }
+        if let Err(e) = self.autosave.end(clean) {
+            eprintln!("could not remove the recovery files: {e}");
+        }
     }
 
     // ----- files ---------------------------------------------------------
@@ -301,6 +478,7 @@ impl SheafApp {
             Ok(opened) => {
                 self.doc.replace(opened.project);
                 self.reset_views();
+                self.recovered_from = None;
                 self.foreign_source = opened.foreign.then(|| path.clone());
                 if opened.foreign {
                     // Not saved back to the Origin file by itself (Sheaf reads only part of what
@@ -365,16 +543,15 @@ impl SheafApp {
         let path = match (&self.path, ask) {
             (Some(p), false) => p.clone(),
             _ => {
-                let suggested = self
-                    .path
-                    .as_ref()
+                // A recovered project has no file name; it suggests the one it had.
+                let named = self.path.as_ref().or(self.recovered_from.as_ref());
+                let suggested = named
                     .and_then(|p| p.file_name())
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| "Untitled.opj".to_string());
                 // The default format is .opj; a project that came from a .sheaf file offers
                 // .sheaf first because it keeps saving there.
-                let keeps_sheaf =
-                    self.path.as_ref().and_then(|p| p.extension()).is_some_and(|e| e.eq_ignore_ascii_case("sheaf"));
+                let keeps_sheaf = named.and_then(|p| p.extension()).is_some_and(|e| e.eq_ignore_ascii_case("sheaf"));
                 let origin = ("Origin project (*.opj)", "opj");
                 let sheaf = ("Sheaf project (*.sheaf)", project_file::EXTENSION);
                 let (first, second) = if keeps_sheaf { (sheaf, origin) } else { (origin, sheaf) };
@@ -434,6 +611,7 @@ impl SheafApp {
                 }
                 self.say(said);
                 self.path = Some(path);
+                self.recovered_from = None;
                 if let Some(text) = outcome.details() {
                     let title = if outcome.refusal.is_some() {
                         "The Origin project could not be written"
@@ -455,6 +633,9 @@ impl SheafApp {
     fn folder(&self) -> Option<PathBuf> {
         if let Some(p) = &self.path {
             return p.parent().map(Path::to_path_buf);
+        }
+        if let Some(dir) = self.recovered_from.as_ref().and_then(|p| p.parent()).filter(|d| d.is_dir()) {
+            return Some(dir.to_path_buf());
         }
         if self.import_folder.is_some() {
             return self.import_folder.clone();
@@ -1293,6 +1474,9 @@ impl SheafApp {
             Action::TileVertically => self.workspace.tile_vertically(),
             Action::About => self.about = true,
             Action::Toolbars => self.toolbars.dialog = true,
+            Action::Autosave => {
+                self.autosave_dialog = Some(AutosaveDialog::new(self.autosave.settings, self.autosave.has_session()));
+            }
             Action::ToggleStatusBar => self.status_bar_hidden = !self.status_bar_hidden,
             Action::Quit => {
                 if self.doc.dirty {
@@ -1309,6 +1493,7 @@ impl SheafApp {
             Pending::New => {
                 self.doc.replace(Project::new());
                 self.path = None;
+                self.recovered_from = None;
                 self.reset_views();
                 self.say("New project".to_string());
             }
@@ -1331,6 +1516,7 @@ impl SheafApp {
                     self.load_project(path);
                 }
             }
+            Pending::Recover => self.recover_newest(),
             Pending::Quit => {
                 self.quit_confirmed = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -2056,6 +2242,8 @@ impl SheafApp {
             || self.about
             || self.message.is_some()
             || self.pending.is_some()
+            || self.autosave_dialog.is_some()
+            || self.recovery_offer.is_some()
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
@@ -2695,6 +2883,36 @@ impl SheafApp {
                 self.message = None;
             }
         }
+        if let Some(d) = &mut self.autosave_dialog {
+            match d.show(ctx) {
+                AutosaveOutcome::Open => {}
+                AutosaveOutcome::Cancelled => self.autosave_dialog = None,
+                AutosaveOutcome::Done(settings) => {
+                    self.autosave_dialog = None;
+                    self.apply_autosave_settings(settings);
+                }
+            }
+        }
+        // The offer waits while the question about unsaved changes is open.
+        if self.pending.is_none()
+            && let Some(offer) = &self.recovery_offer
+        {
+            match offer.show(ctx, std::time::SystemTime::now()) {
+                RecoveryChoice::Open => {}
+                RecoveryChoice::Later => {
+                    self.recovery_offer = None;
+                    self.say("The recovered project is kept for the next start");
+                }
+                RecoveryChoice::Discard => self.discard_newest(),
+                RecoveryChoice::Recover => {
+                    if self.doc.dirty {
+                        self.pending = Some(Pending::Recover);
+                    } else {
+                        self.recover_newest();
+                    }
+                }
+            }
+        }
         if let Some(pending) = self.pending {
             let mut answer = None;
             egui::Modal::new(egui::Id::new("unsaved")).show(ctx, |ui| {
@@ -2774,6 +2992,10 @@ impl SheafApp {
                         self.doc
                             .apply("Hide plot", |p| objects::set_plot_visible(p, graph, 0, n.saturating_sub(1), false));
                     }
+                }
+                "autosave" => {
+                    self.autosave_dialog =
+                        Some(AutosaveDialog::new(self.autosave.settings, self.autosave.has_session()));
                 }
                 "focus" => {
                     if let Some(id) = named {
@@ -3180,6 +3402,7 @@ impl eframe::App for SheafApp {
             self.apply(action, ctx);
         }
         self.sync_windows();
+        self.autosave_step(ctx);
         match &self.message {
             Some(m) if self.logged_message.as_ref() != Some(m) => {
                 self.logs.warn(format!("{}: {}", m.0, m.1.replace('\n', " ")));
@@ -3202,6 +3425,10 @@ impl eframe::App for SheafApp {
             self.shown_title = title;
         }
         self.screenshot_step(ctx);
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.end_autosave();
     }
 }
 

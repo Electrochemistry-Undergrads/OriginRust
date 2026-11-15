@@ -236,3 +236,158 @@ fn a_long_name_that_two_columns_share_is_refused_not_resolved_to_the_first() {
     // A short name works.
     ok(&call(&mut s, "read_columns", json!({"columns": ["B"]})));
 }
+
+#[test]
+fn plot_and_fit_options_are_parsed_with_structured_fields_and_confined() {
+    let d = Dirs::new("plot-fit-options");
+    let mut s = d.server();
+    import(&mut s, &d, "a.csv", "X,Y,Z\n0,1,2\n1,3,4\n2,5,6\n3,7,8\n4,9,10\n");
+    ok(&call(
+        &mut s,
+        "plot",
+        json!({"panels": {"shape": "stack", "order": "bottom_up"}, "options": {"line_width": 2.0}}),
+    ));
+    ok(&call(&mut s, "plot", json!({"options": {"panels": "stack", "panel_order": "bottom-up", "y": ["B", "C"]}})));
+    let r = call(&mut s, "plot", json!({"style": {"line_width": 1.0}, "options": {"line-width": 2.0}}));
+    assert_eq!(r["isError"], true, "{r}");
+    let r = call(&mut s, "plot", json!({"options": {"output": "outside.png"}}));
+    assert_eq!(r["isError"], true, "{r}");
+    let r = call(&mut s, "fit", json!({"formula": "a*x+b", "options": {"params": ["a", "b"], "y": ["B"]}}));
+    assert_eq!(r["isError"], false, "{r}");
+    ok(&call(&mut s, "fit", json!({"scale_errors": null, "options": {"model": "linear"}})));
+    let r = call(&mut s, "fit", json!({"options": {"fdf": "../outside.fdf"}}));
+    assert_eq!(r["isError"], true, "{r}");
+    for value in ["10000001", "18446744073709551615", "999999999999999999999999999999999999999999999999999"] {
+        let result = call(&mut s, "fit", json!({"options": {"max_iterations": value}}));
+        assert_eq!(result["isError"], true, "{value}: {result}");
+        let result = call(&mut s, "plot", json!({"options": {"panels": "stack", "per_panel": [value, "2"]}}));
+        assert_eq!(result["isError"], true, "{value}: {result}");
+    }
+    for key in ["list", "save", "export", "plot", "input"] {
+        let r = call(&mut s, "fit", json!({"options": {key: "outside"}}));
+        assert_eq!(r["isError"], true, "{key}: {r}");
+    }
+}
+
+#[test]
+fn fit_options_match_legacy_fields() {
+    let d = Dirs::new("fit-parity");
+    let mut a = d.server();
+    import(&mut a, &d, "a.csv", "X,Y\n0,1\n1,3\n2,5\n3,7\n4,9\n");
+    let mut b = d.server();
+    import(&mut b, &d, "a.csv", "X,Y\n0,1\n1,3\n2,5\n3,7\n4,9\n");
+    let legacy = ok(&call(&mut a, "fit", json!({"model": "linear", "y": ["B"], "rows": "2:5", "confidence": 0.9})));
+    let bridged =
+        ok(&call(&mut b, "fit", json!({"options": {"model": "linear", "y": ["B"], "rows": "2:5", "confidence": 0.9}})));
+    assert_eq!(legacy["outcomes"][0]["parameters"], bridged["outcomes"][0]["parameters"]);
+    assert_eq!(legacy["outcomes"][0]["statistics"], bridged["outcomes"][0]["statistics"]);
+}
+
+#[test]
+fn mixed_fit_selection_is_checked_in_the_selected_book() {
+    let d = Dirs::new("fit-selected-book");
+    let mut s = d.server();
+    std::fs::write(d.root.join("first.csv"), "X,Special,Special\n0,1,2\n1,3,4\n2,5,6\n3,7,8\n").unwrap();
+    std::fs::write(d.root.join("second.csv"), "X,Special\n0,1\n1,3\n2,5\n3,7\n").unwrap();
+    for file in ["first.csv", "second.csv"] {
+        ok(&call(&mut s, "import_files", json!({"files": [file], "ascii": {"header_lines": 1, "long_name_line": 1}})));
+    }
+    let contents = ok(&call(&mut s, "list_contents", json!({})));
+    let book = contents["workbooks"][1]["name"].as_str().unwrap();
+    let result = call(&mut s, "fit", json!({"y": ["Special"], "options": {"book": book}}));
+    assert_eq!(result["isError"], false, "{result}");
+}
+
+#[test]
+fn tool_schemas_show_session_options_but_not_cli_file_operations() {
+    let d = Dirs::new("plot-fit-schemas");
+    let mut s = d.server();
+    let line = json!({"jsonrpc":"2.0", "id": 1, "method":"tools/list"});
+    let reply: Value = serde_json::from_str(&s.handle_line(&line.to_string()).unwrap()).unwrap();
+    let tools = reply["result"]["tools"].as_array().unwrap();
+    for (name, present, absent) in [("plot", "panel_order", "output"), ("fit", "fdf", "save")] {
+        let tool = tools.iter().find(|t| t["name"] == name).unwrap();
+        let options = &tool["inputSchema"]["properties"]["options"];
+        assert!(options["properties"].get(present).is_some(), "{tool}");
+        assert!(options["properties"].get(absent).is_none(), "{tool}");
+        assert_eq!(options["additionalProperties"], false);
+    }
+}
+
+#[test]
+fn cli_plot_and_fit_specs_match_protocol_results() {
+    use clap::Parser;
+    use sheaf_ops::args::{Cli, Command};
+    let d = Dirs::new("cli-parity");
+    let csv = "X,Y,Z\n0,1,2\n1,3,4\n2,5,6\n3,7,8\n4,9,10\n";
+    let mut server = d.server();
+    import(&mut server, &d, "a.csv", csv);
+    ok(&call(
+        &mut server,
+        "plot",
+        json!({"options": {"template": "line", "y": ["B"], "x_title": "Potential", "line_width": 2.0}}),
+    ));
+    ok(&call(&mut server, "save_project", json!({"path": "plot.sheaf"})));
+    let saved = sheaf_ops::session::load_project(&d.root.join("plot.sheaf")).unwrap().project;
+    let mut direct = sheaf_core::Project::new();
+    let request = sheaf_ops::import::ImportRequest { files: vec![d.root.join("a.csv")], ..Default::default() };
+    sheaf_ops::import::import_files(&mut direct, &request).unwrap();
+    let Command::Plot(cli) = Cli::try_parse_from([
+        "sheaf",
+        "plot",
+        "a.csv",
+        "-o",
+        "a.png",
+        "--template",
+        "line",
+        "--y",
+        "B",
+        "--x-title",
+        "Potential",
+        "--line-width",
+        "2",
+    ])
+    .unwrap()
+    .command
+    else {
+        panic!()
+    };
+    let spec = sheaf_ops::cli_plot::plot_spec(&cli);
+    sheaf_ops::plot::build_graph(&mut direct, &spec, sheaf_core::template::Template::Line).unwrap();
+    assert_eq!(
+        serde_json::to_value(saved.graphs().next().unwrap()).unwrap(),
+        serde_json::to_value(direct.graphs().next().unwrap()).unwrap()
+    );
+    let response = ok(&call(
+        &mut server,
+        "fit",
+        json!({"options": {"model": "linear", "y": ["B"], "rows": "2:5", "confidence": 0.9}}),
+    ));
+    let Command::Fit(cli) = Cli::try_parse_from([
+        "sheaf",
+        "fit",
+        "a.csv",
+        "--model",
+        "linear",
+        "--y",
+        "B",
+        "--rows",
+        "2:5",
+        "--confidence",
+        "0.9",
+    ])
+    .unwrap()
+    .command
+    else {
+        panic!()
+    };
+    let spec = sheaf_ops::cli_fit::fit_spec(&cli);
+    let prepared = sheaf_ops::fit::prepare(&spec).unwrap();
+    let result = sheaf_ops::fit::run(&mut direct, &spec, &prepared).unwrap();
+    let sheaf_ops::fit::FitRun::Fits { outcomes, .. } = result.run else { panic!() };
+    for (actual, expected) in
+        response["outcomes"][0]["parameters"].as_array().unwrap().iter().zip(&outcomes[0].report.params)
+    {
+        assert!((actual["value"].as_f64().unwrap() - expected.value).abs() < 1e-12);
+    }
+}

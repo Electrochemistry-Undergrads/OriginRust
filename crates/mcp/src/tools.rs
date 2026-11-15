@@ -885,6 +885,7 @@ struct PlotArgs {
     graph: Option<String>,
     panels: Option<PanelArgs>,
     overlay_files: Vec<String>,
+    options: Option<Map<String, Value>>,
     style: Option<Map<String, Value>>,
     size: Option<SizeArgs>,
 }
@@ -962,8 +963,163 @@ fn panels_from(p: PanelArgs) -> Result<PanelsSpec, ToolError> {
     })
 }
 
-fn plot(s: &mut Server, a: &Value) -> Res {
-    let a: PlotArgs = args(a)?;
+// Combine the structured interface with CLI option names before clap checks conflicts and requirements.
+fn bridge_insert(map: &mut Map<String, Value>, key: &str, value: Value) -> Result<(), ToolError> {
+    if value.is_null() {
+        return Ok(());
+    }
+    map.retain(|k, v| k.replace('-', "_") != key || !v.is_null());
+    if map.keys().any(|k| k.replace('-', "_") == key) {
+        return Err(ToolError::new(format!("option '{key}' is given in both options and a structured argument")));
+    }
+    map.insert(key.to_string(), value);
+    Ok(())
+}
+
+fn session_options(raw: &Value, command: &str) -> Result<Map<String, Value>, ToolError> {
+    let obj = raw.as_object().ok_or_else(|| ToolError::new("arguments must be an object"))?;
+    let mut map = match obj.get("options") {
+        None | Some(Value::Null) => Map::new(),
+        Some(Value::Object(m)) => m.clone(),
+        _ => return Err(ToolError::new("options must be an object")),
+    };
+    let common: &[&str] = if command == "plot" {
+        &["template", "book", "sheet", "y", "y2", "graph"]
+    } else {
+        &[
+            "model",
+            "formula",
+            "params",
+            "fdf",
+            "book",
+            "sheet",
+            "y",
+            "rows",
+            "x_range",
+            "yerr",
+            "xerr",
+            "confidence",
+            "bands",
+            "max_iterations",
+            "tolerance",
+            "rank",
+            "regress",
+        ]
+    };
+    for key in common {
+        if let Some(v) = obj.get(*key) {
+            let normalized = if command == "fit" && *key == "bands" {
+                v.as_str().map(|x| Value::String(x.trim().to_ascii_lowercase())).unwrap_or_else(|| v.clone())
+            } else {
+                v.clone()
+            };
+            bridge_insert(&mut map, key, normalized)?;
+        }
+    }
+    if command == "plot" {
+        if let Some(Value::Object(style)) = obj.get("style") {
+            let converted = style_from(Some(style.clone()), None)?;
+            let converted = serde_json::to_value(converted).map_err(|e| ToolError::new(e.to_string()))?;
+            for key in style.keys() {
+                let dest = if key == "text_labels" { "label" } else { key };
+                bridge_insert(&mut map, dest, converted[dest].clone())?;
+            }
+        }
+        if let Some(Value::Object(size)) = obj.get("size") {
+            for (from, to) in [("width_in", "width"), ("height_in", "height")] {
+                if let Some(v) = size.get(from) {
+                    bridge_insert(&mut map, to, v.clone())?;
+                }
+            }
+        }
+        if let Some(Value::Object(p)) = obj.get("panels") {
+            for (from, to) in [
+                ("shape", "panels"),
+                ("per_panel", "per_panel"),
+                ("gap", "panel_gap"),
+                ("margins", "panel_margins"),
+                ("order", "panel_order"),
+                ("link", "panel_link"),
+            ] {
+                if let Some(v) = p.get(from) {
+                    let v = if from == "order" || from == "link" {
+                        v.as_str()
+                            .map(|s| Value::String(s.trim().to_ascii_lowercase().replace('_', "-")))
+                            .unwrap_or_else(|| v.clone())
+                    } else {
+                        v.clone()
+                    };
+                    bridge_insert(&mut map, to, v)?;
+                }
+            }
+            if let Some(Value::Array(groups)) = p.get("y") {
+                let groups = groups
+                    .iter()
+                    .map(|g| {
+                        g.as_array()
+                            .map(|a| a.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(","))
+                            .map(Value::String)
+                            .unwrap_or_else(|| g.clone())
+                    })
+                    .collect();
+                bridge_insert(&mut map, "panel_y", Value::Array(groups))?;
+            }
+        }
+    } else {
+        for (from, to) in [("weighting", "weight"), ("band_level", "level"), ("compare_with", "compare")] {
+            if let Some(v) = obj.get(from) {
+                let normalized = if from == "weighting" {
+                    v.as_str().map(|x| Value::String(x.trim().to_ascii_lowercase())).unwrap_or_else(|| v.clone())
+                } else {
+                    v.clone()
+                };
+                bridge_insert(&mut map, to, normalized)?;
+            }
+        }
+        if let Some(v) = obj.get("scale_errors").filter(|v| !v.is_null()) {
+            bridge_insert(
+                &mut map,
+                "no_scale_errors",
+                Value::Bool(!v.as_bool().ok_or_else(|| ToolError::new("scale_errors must be boolean"))?),
+            )?;
+        }
+        for key in ["init", "fix", "bounds"] {
+            if let Some(Value::Object(entries)) = obj.get(key) {
+                let mut values = Vec::new();
+                for (name, value) in entries {
+                    let text = if key == "bounds" {
+                        let a = value.as_array().filter(|a| a.len() == 2).ok_or_else(|| {
+                            ToolError::new(format!("bounds of \"{name}\" must be [low, high], with null for no bound"))
+                        })?;
+                        let side = |v: &Value| if v.is_null() { String::new() } else { v.to_string() };
+                        format!("{}:{}", side(&a[0]), side(&a[1]))
+                    } else {
+                        value.to_string()
+                    };
+                    values.push(Value::String(format!("{name}={text}")));
+                }
+                bridge_insert(&mut map, key, Value::Array(values))?;
+            }
+        }
+        if let Some(Value::Object(global)) = obj.get("global") {
+            bridge_insert(&mut map, "global", json!(true))?;
+            if let Some(v) = global.get("share") {
+                bridge_insert(&mut map, "share", v.clone())?;
+            }
+        }
+    }
+    Ok(map)
+}
+
+fn session_cli(s: &Server, command: &str, raw: &Value) -> Result<sheaf_ops::args::Cli, ToolError> {
+    let options = session_options(raw, command)?;
+    let roots = s.roots.clone();
+    let mut resolve = |p: &str| roots.check(p).map(|p| p.to_string_lossy().into_owned()).map_err(|e| anyhow!("{e}"));
+    Ok(bridge::parse_session(command, &options, &mut resolve)?)
+}
+
+fn plot(s: &mut Server, a_raw: &Value) -> Res {
+    let a: PlotArgs = args(a_raw)?;
     if !a.overlay_files.is_empty() && (a.book.is_some() || a.sheet.is_some() || a.graph.is_some()) {
         return Err(ToolError::new("overlay_files cannot be combined with book, sheet or graph"));
     }
@@ -972,6 +1128,12 @@ fn plot(s: &mut Server, a: &Value) -> Res {
             "with graph, plot only restyles that graph; template, y and y2 are not used. Leave graph out to make a new graph",
         ));
     }
+    let bridged = if a.options.is_some() {
+        let sheaf_ops::args::Command::Plot(cli) = session_cli(s, "plot", a_raw)?.command else { unreachable!() };
+        Some(sheaf_ops::cli_plot::plot_spec(&cli))
+    } else {
+        None
+    };
     let mut spec = PlotSpec {
         template: a.template.clone(),
         y: a.y.clone(),
@@ -984,8 +1146,19 @@ fn plot(s: &mut Server, a: &Value) -> Res {
         overlay_books: Vec::new(),
         style: style_from(a.style, a.size.as_ref())?,
     };
-    let mut ys = a.y.clone();
-    ys.extend(a.y2.iter().cloned());
+    if let Some(mut parsed) = bridged {
+        parsed.book = book_name(&s.project, parsed.book.as_deref())?;
+        parsed.overlay = !a.overlay_files.is_empty();
+        spec = parsed;
+    }
+    if !a.overlay_files.is_empty() && (spec.book.is_some() || spec.sheet.is_some() || spec.graph.is_some()) {
+        return Err(ToolError::new("overlay_files cannot be combined with book, sheet or graph"));
+    }
+    if spec.graph.is_some() && (spec.template.is_some() || !spec.y.is_empty() || !spec.y2.is_empty()) {
+        return Err(ToolError::new("with graph, plot only restyles that graph; template, y and y2 are not used"));
+    }
+    let mut ys = spec.y.clone();
+    ys.extend(spec.y2.iter().cloned());
     check_names(&s.project, spec.book.as_deref(), spec.sheet.as_deref(), &ys)?;
     spec.validate()?;
     let overlay_files = a.overlay_files;
@@ -1398,6 +1571,7 @@ struct FitArgs {
     global: Option<GlobalArgs>,
     regress: Vec<String>,
     plot: Option<String>,
+    options: Option<Map<String, Value>>,
 }
 
 fn fit_spec(a: &FitArgs, project: &Project, fdf: Option<PathBuf>) -> Result<FitSpec, ToolError> {
@@ -1506,11 +1680,19 @@ fn fit_json(project: &Project, o: &sheaf_core::fitting::FitOutcome) -> Value {
     })
 }
 
-fn fit(s: &mut Server, a: &Value) -> Res {
-    let a: FitArgs = args(a)?;
+fn fit(s: &mut Server, a_raw: &Value) -> Res {
+    let a: FitArgs = args(a_raw)?;
     let fdf = a.fdf.as_deref().map(|p| s.roots.check(p)).transpose()?;
     let plot_path = a.plot.as_deref().map(|p| s.roots.check(p)).transpose()?;
-    let spec = fit_spec(&a, &s.project, fdf)?;
+    let spec = if a.options.is_some() {
+        let sheaf_ops::args::Command::Fit(cli) = session_cli(s, "fit", a_raw)?.command else { unreachable!() };
+        let mut spec = sheaf_ops::cli_fit::fit_spec(&cli);
+        spec.book = book_name(&s.project, spec.book.as_deref())?;
+        check_names(&s.project, spec.book.as_deref(), spec.sheet.as_deref(), &spec.y)?;
+        spec
+    } else {
+        fit_spec(&a, &s.project, fdf)?
+    };
     if plot_path.is_some() && (spec.compare.is_some() || !spec.rank.is_empty() || !spec.regress.is_empty()) {
         return Err(ToolError::new("plot applies to a fit of a model, not to compare_with, rank or regress"));
     }

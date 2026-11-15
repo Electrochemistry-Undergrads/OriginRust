@@ -9,6 +9,7 @@ use egui_kittest::kittest::{By, NodeT, Queryable};
 use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
+mod autosave;
 mod label_whiteout;
 mod offset_multipliers;
 mod skip_points;
@@ -34,7 +35,7 @@ fn start(paths: Vec<PathBuf>) -> Harness<'static, SheafApp> {
 }
 
 fn start_auto_hide(paths: Vec<PathBuf>) -> Harness<'static, SheafApp> {
-    let startup = Startup { paths, screenshot: None, show: Vec::new() };
+    let startup = Startup { paths, ..Default::default() };
     // Short frames: a double click needs both clicks within 0.3 s of simulated time, and every
     // pointer event of a click is a frame of its own.
     let mut h = Harness::builder()

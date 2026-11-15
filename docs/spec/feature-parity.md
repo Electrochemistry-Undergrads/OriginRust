@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 48 | 136 | 54 | 238 |
+| All rows | 48 | 138 | 52 | 238 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 16 | 67 | 54 | 137 |
+| P1 and P2 together | 16 | 69 | 52 | 137 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
@@ -67,7 +67,7 @@ Cross-cutting findings:
 | Copy and paste format between graphs | Edit > Copy Format | "Use this style for all plots" button | ◐ | | P1 |
 | Save or duplicate project without data | File menu | none | ✗ | | P2 |
 | Other window types | Matrix, layout, notes, image, Excel windows; matrix operations, image processing, gridding, 3D | Window enum is workbook and graph only; project note text exists | ✗ | no matrix, layout, notes, image windows; no per-type menus | P2 |
-| Autosave and recovery | Tools > Options | atomic save only | ✗ | | P2 |
+| Autosave and recovery | Tools > Options | Tools > Autosave... (on, every 10 minutes by default; Sheaf's choice) writes the modified project as `.sheaf` to the platform recovery folder on a worker thread; at start-up a Recover / Discard / Later dialog offers what a crashed run left; a clean exit and a normal save remove it; recoveries older than 30 days are dropped (autosave.md) | ◐ | Origin's defaults and start-up prompt unmeasured; no "backup project before saving" switch; setting not yet in a Tools > Options dialog | P2 |
 | Tools managers and protection | Theme, Function Builder, Import Filters, Package, Custom Menu | none | ✗ | | P2 |
 | Help | Help menu | About only | ◐ | no help pages | P2 |
 
@@ -113,9 +113,9 @@ Cross-cutting findings:
 | Sampling interval, Show X Column | Column menu | none | ◐ | no Set Sampling Interval, no Show X Column | P0 |
 | Cell selection, editing, copy, cut, paste, clear, fill | grid and Edit menu | double-click/F2/type to edit with undo; select column, row, block, all or one label cell; keyboard navigation, fill a block with Ctrl+Enter, Insert/Delete cells/rows/columns; Ctrl+C, X, V and Delete as one undo step each; quoted fields preserve separators; Origin 2016 numeric missing/F(x) rows; Windows displayed/15-digit external Unicode text and private lossless data, native modifiers, CRLF text and exact numeric paste (workbook-model 13.3-13.4b) | ◐ | no Paste Transpose, Paste Special or Select... dialog; other platforms retain lossless text fallback; user-parameter creation order, unquoted commas, formatted/link clipboard types and label detection on paste remain open | P0 |
 | Multiple sheets per book | tabs menu | sheet tabs; right-click a tab: Insert, Delete, Add, Duplicate, Name and Comments; analysis adds result sheets | ◐ | a sheet cannot be moved; no Add Graph as Sheet, Duplicate Without Data or Navigate | P0 |
-| Set Column Values | Ctrl+Q | Ctrl+Q dialog with formula, rows from and to, and the Recalculate choice (None, Auto, Manual) | ◐ | no function picker; no before-formula script or multi-column set | P0 |
+| Set Column Values | Ctrl+Q | Ctrl+Q dialog with formula, row range, None/Auto/Manual, Function menu and Find/search; explicit cross-sheet/book col() references (T08/T09) | ◐ | no before-formula script or multi-column set; direct qualified col() syntax is Sheaf's range-notation extension | P0 |
 | Built-in functions | Origin function list | about 50 (estimate) in `crates/expr` | ◐ | no string, date, random, cumsum, diff, rank, lookup; no user functions | P0 |
-| Recalculation (None, Auto, Manual) | Set Column Values | mode stored with the formula; Auto columns follow their inputs inside the same undo step, Manual ones show `pending` until Recalculate; cycles refused; spec in workbook-model.md 10a | ◐ | a coloured word in the header instead of the lock icon; same-sheet inputs only; analysis and fit results are not linked | P0 |
+| Recalculation (None, Auto, Manual) | Set Column Values | mode stored with the formula; Auto columns follow local and explicit cross-sheet/book inputs inside the same undo step, Manual ones show `pending` until Recalculate; project-wide cycles refused; spec in workbook-model.md 10a | ◐ | a coloured word in the header instead of the lock icon; .opj cross-sheet links need the companion; analysis and fit results are not linked | P0 |
 | Simple math on curves | Analysis > Mathematics > Simple Math | Simple Math window, `analyze math`, `Tool::CurveMath` | ✓ | add, subtract, multiply, divide, power with a constant or a reference; checked against Origin (spec section 9); no graph rescale | P0 |
 | Simple math on columns | Analysis > Mathematics > Simple Column Math | Simple Column Math window, `analyze column-math`, `Tool::ColumnMath` | ✓ | row by row with a constant or a column, result into the input column by default; checked against Origin (analysis-tools 9.1) | P1 |
 | Row filter | Column > Filter | live sheet filter: a condition in the formula language with presets (above/below average, within 3 sigma, not missing); Enable/Disable, Reapply, Remove; the grid, plots, automatic ranges, analysis and fits skip filtered rows; the Data Reader skips them while retaining source row numbers; sorts and row edits reapply it; Filter Rows (in place or new sheet) remains | ◐ | one filter per sheet, not per column; no date or text filters; no Ignore Hidden Rows override or compression of categorical ticks/spokes | P1 |
@@ -341,7 +341,7 @@ Cross-cutting findings:
 | Generic analysis dialog frame | input and output ranges, Preview, Auto Apply, theme, recalculate | one shared frame for every analysis and Statistics tool: Dialog Theme row (grey), Description, Recalculate (None, Manual, Auto for Smooth, Integrate and Find Peaks), Auto Apply, a tree with Input (range text and a "..." picker for the columns, rows), the tool's options and Output, Auto Preview and Preview with a preview pane for the tools that write curves (Smooth, Differentiate, Integrate, Normalize, Baseline, Interpolate, reference and simple math), OK, Cancel, Apply (runs and keeps the window) | ◐ | no saved themes, Recalculate links only Smooth, Integrate and Find Peaks, the output can be a new sheet or existing columns for the column-writing tools only, the preview is a small own drawing, not drawn on the source graph | P0 |
 | Column Properties dialog | Format dialog | Origin's layout: Prev and Next, Short Name (18 characters), Long Name, Units, Comments, Options (Plot Designation, Format with Text, Text & Numeric, Month and Day of Week, Display, per-column Column Width, Apply to all columns to the right), OK, Cancel, Apply | ◐ | label-row options remain | P0 |
 | Context menus | header, cell, row, corner, graph objects | worksheet menus for column header, cell, row, sheet tab and corner in the long form of Origin; graph menu | ◐ | Fill, Mask, Filter, Sparklines and more are greyed; no short form with chevron; graph objects only partly | P0 |
-| Set Column Values dialog extras | function list, descriptions | Function menu with every sheaf-expr function, its description and example (T09) | ◐ | scripts box read-only, Set Multiple Columns Values missing | P1 |
+| Set Column Values dialog extras | function list, descriptions | Function menu and Find / Search Functions with every sheaf-expr function, its description and example, insertion at the formula cursor (T09) | ◐ | scripts box read-only, Set Multiple Columns Values missing; search layout is Sheaf's own, based on published Origin behavior | P1 |
 
 ## Order of work
 

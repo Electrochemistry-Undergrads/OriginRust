@@ -36,6 +36,12 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T13 Inclusive fill mode (2026-11-15, Windows): finite runs fill and outline to their own
+  endpoint chords; missing rows separate polygons, and isolated points keep round stroke caps.
+  Three corrected Origin 2016 captures verify the sloping/missing/closed-polygon cases. Filled
+  styling/legends and native/companion saves retain the mode. Formatting, strict workspace
+  all-target Clippy and 2,616 tests pass (seven existing ignored), with four new regressions.
+
 - T13 sidelines fill modes (2026-11-15, Windows): Sidelines only and Sidelines and Base
   use the connecting stroke to the frame bottom, with no fill or internal missing-run sidelines.
   Origin 2016 controls/exports confirm geometry and line legends; group/history and native/companion
@@ -136,7 +142,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t13-fill-inclusive` | Codex Windows, t13-fill-inclusive | T13 Inclusive broken by missing values only: FillUnderMode variant/classification, draw_fill_under/draw_line finite-run closure and connecting stroke, legend mode predicate, graph_details fill controls, focused tests/docs | claimed 2026-11-15; private t13-skip-points tree/target; no Axis/breaks/geometry/PDF, mask policy/reader, navigation/formulas, stats or other sessions scope |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/t02-find-replace` | Codex Windows, t02-find-replace | T02 existing Find in Sheets/Replace layout, defaults and options measured against Origin; find dialog and focused UI tests | claimed 2026-11-15; no Find in Project, grid/Go To, core/expr/history, plot, statistics, printing or other sessions' scopes |
 | `axis-breaks` | Claude Windows, "axis-breaks" | T11 more than one axis break (Origin's 1-7 breaks, per-break position), measured Origin break layout; core Axis break list, plot axis/tick drawing, graph_axis.rs Breaks tab, persistence and focused tests | claimed 2026-11-15; Axis fields only, no PLOT/plots.rs draw_plot, graph_details, navigation, stats or other sessions' scopes |

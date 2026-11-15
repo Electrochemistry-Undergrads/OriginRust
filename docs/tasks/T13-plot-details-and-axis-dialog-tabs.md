@@ -157,6 +157,8 @@ modes, alternate baselines and specialised-coordinate parity remain open.
 Validation on integrated `b66251e` plus the docs-only scope update: formatting, strict workspace
 all-target Clippy and all 2,616 workspace tests pass (seven existing ignored). All four new
 regressions and the extended all-mode model/save cases pass.
+All three corrected Origin cases have verified applied controls and exports; all reference
+workflows and builders exited before merge.
 
 ## Today
 

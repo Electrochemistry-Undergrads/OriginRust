@@ -2068,6 +2068,8 @@ a red 6 pt line through (1,1), (5,3), (10,2), on Y=-1..4. Only the endpoint-chor
 with a red closing chord and blue filled legend. In `verified_missing`, rows 4/8/10 of a 13-row
 series are explicitly missing (`0/0`, each `ISNA` result 1): three finite runs become three closed
 filled triangles, without bridging the gaps; the isolated ninth row remains a red round cap.
+The `verified_closed` control repeats X=(2,2,6,6,2), Y=(1,3,3,1,1): the closed rectangle is
+blue with a red outline and no fill down to the frame bottom.
 The initial `sloping`/`missing`/`closed` attempts failed to open Plot Details (setup/command false)
 and are excluded as mode evidence. The verified controls, actions, raw worksheet reads and
 exports remain local. The [published Line-tab reference](https://docs.originlab.com/origin-help/pd-dialog-line-tab/)

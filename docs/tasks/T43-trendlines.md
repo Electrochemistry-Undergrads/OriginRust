@@ -1,6 +1,6 @@
 # T43: On-graph trendlines
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `trendlines`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `trendlines`: `PlotDecor::trendlines`, `sheaf_calc::trend`, plot drawing, plot menu + dialog, `plot --trendline`, MCP `style.trendline`, `.opj` warns (graphing 18.11). Left: Mini Toolbar, mouse-dragged label, Origin's fit method/R-squared/averaging unmeasured.
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Graphing: On-graph trendlines, Origin 2025b).
 
 ## Goal

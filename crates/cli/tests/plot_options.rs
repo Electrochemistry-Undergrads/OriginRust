@@ -131,3 +131,35 @@ fn sort_x_connects_an_unsorted_curve_in_increasing_x_and_leaves_it_alone_without
     assert_eq!(xs_on.len(), 5);
     assert!(xs_on.windows(2).all(|w| w[0] < w[1]), "increasing X with --sort-x: {xs_on:?}");
 }
+
+#[test]
+fn trendline_adds_curves_and_a_label_and_refuses_bad_kinds() {
+    let dir = scratch("trend");
+    let data = dir.join("noisy.csv");
+    std::fs::write(&data, "t,v\ns,A\n1,2.1\n2,3.9\n3,6.2\n4,7.8\n5,10.1\n6,12.2\n").unwrap();
+    let data = data.to_str().unwrap();
+    let (plain, with) = (dir.join("plain.svg"), dir.join("with.svg"));
+    let base = ["plot", data, "--template", "scatter", "--colors", "#ff0000"];
+    let (ok, _, e) = sheaf(&[&base[..], &["-o", plain.to_str().unwrap()]].concat());
+    assert!(ok, "{e}");
+    let (ok, _, e) =
+        sheaf(&[&base[..], &["--trendline", "linear", "--trendline", "ma:3", "-o", with.to_str().unwrap()]].concat());
+    assert!(ok, "{e}");
+    let (plain, with) = (std::fs::read_to_string(&plain).unwrap(), std::fs::read_to_string(&with).unwrap());
+    // Curves in the plot colour: the two trendline paths are new; the label is written.
+    let paths = |s: &str| s.matches("stroke=\"#FF0000\"").count();
+    assert_eq!(paths(&with), paths(&plain) + 2);
+    assert!(with.contains("y = 2.02") && with.contains("R"), "label text missing");
+    assert!(!plain.contains("y = 2.02"));
+    let (ok, _, e) =
+        sheaf(&[&base[..], &["--trendline", "poly:11", "-o", dir.join("x.svg").to_str().unwrap()]].concat());
+    assert!(!ok && e.contains("--trendline") && e.contains("2 to 10"), "{e}");
+    let (ok, _, e) = sheaf(&[&base[..], &["--trendline", "cubic", "-o", dir.join("x.svg").to_str().unwrap()]].concat());
+    assert!(!ok && e.contains("cubic"), "{e}");
+    // Without the label.
+    let bare = dir.join("bare.svg");
+    let (ok, _, e) =
+        sheaf(&[&base[..], &["--trendline", "linear", "--no-trendline-label", "-o", bare.to_str().unwrap()]].concat());
+    assert!(ok, "{e}");
+    assert!(!std::fs::read_to_string(&bare).unwrap().contains("y = 2.02"));
+}

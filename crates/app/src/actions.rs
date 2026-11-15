@@ -83,6 +83,8 @@ pub enum GraphOp {
     MovePlotToAxis { layer: usize, plot: usize, right: bool },
     /// Hide Data Plot.
     HidePlot { layer: usize, plot: usize },
+    /// Remove Trendline: the plot's last trendline goes.
+    RemoveTrendline { layer: usize, plot: usize },
     /// Hide Axis (`y` false for the X axis).
     HideAxis { layer: usize, y: bool },
     /// Hide Grids, or show the major grid lines again.
@@ -344,6 +346,13 @@ pub enum Action {
     LabelPanels {
         book: WindowId,
         columns: Vec<ColumnId>,
+    },
+    /// A plot's menu: Add Trendline... or Edit Trendline... (the plot's last one).
+    Trendline {
+        graph: WindowId,
+        layer: usize,
+        plot: usize,
+        edit: bool,
     },
     /// Graph > Add Error Bars: choose an existing Y-error column for one plot of the layer.
     AddErrorBars {

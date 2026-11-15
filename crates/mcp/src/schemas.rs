@@ -69,6 +69,13 @@ fn style_schema() -> Value {
                     "Connect line and line+symbol plots in increasing X order without sorting the worksheet (Origin 2023 LabTalk line.sortx).",
                 ),
             ),
+            (
+                "trendline",
+                strs(
+                    "Trendlines added to every curve (replacing its own), each linear, poly:N (order 2-10), power, log, exp or ma:N (moving average, window 2-10). Fitted ones write their equation and R-squared at the top left.",
+                ),
+            ),
+            ("no_trendline_label", t("boolean", "Leave the equation and R-squared label off the trendlines.")),
             ("colors", strs("Plot colors in legend order: names or #RRGGBB.")),
             ("labels", strs("Legend text of the plots, in legend order.")),
             ("no_legend", t("boolean", "Hide the legend.")),

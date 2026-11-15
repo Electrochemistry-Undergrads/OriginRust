@@ -63,7 +63,7 @@ outputs or UI behavior.
 | Extract data from regions on a graph | 2024b | Draw one or more rectangular, oval or freeform regions and output the enclosed observations to a worksheet. | [2024b][o24b] |
 | Graph Slicer | 2025 / 2025b | Filter plots from a common source sheet at page, layer or plot scope and extract the selected subset. | [2025][o25] · [2025b][o25b] |
 | Treemap | 2025b | Show hierarchical magnitudes as nested rectangles sized by values. | [2025b][o25b] |
-| On-graph trendlines | 2025b | Add a fitted trend or moving average directly to a plot with its own editable label and curve settings. | [2025b][o25b] |
+| On-graph trendlines | 2025b | Done (T43). Add a fitted trend or moving average directly to a plot with its own editable label and curve settings. | [2025b][o25b] |
 | Cause-and-effect and nested frequency charts | 2026 | Draw a fishbone diagram or summarize frequency counts as columns, bars, pie or doughnut sections, including nested categories. | [2026][o26] |
 | Slope Annotation | 2026b | Mark a slope directly on a graph with a data-linked annotation. | [2026b][o26b] |
 | Hexbin, binned scatter and UpSet plots | 2027 | Summarize dense XY data in hexagonal bins or binned scatter points. Visualize sizes of set intersections. | [2027][o27] |

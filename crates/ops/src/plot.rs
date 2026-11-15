@@ -6,7 +6,7 @@
 use crate::pick::*;
 use anyhow::{Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
-use sheaf_core::graph::{Graph, LineStyle, Stack, TextLabel, TickDirection, TickLabelSource};
+use sheaf_core::graph::{Graph, LineStyle, Stack, TextLabel, TickDirection, TickLabelSource, TrendKind, Trendline};
 use sheaf_core::panels::{MAX_PANELS, PanelLayout, PanelOrder};
 use sheaf_core::template::{STACK_AUTO_DEFAULT, Template};
 use sheaf_core::{Color, ColumnId, Project, WindowId};
@@ -63,6 +63,10 @@ pub struct Style {
     /// Connect the points of line and line+symbol plots in increasing X order (the worksheet is
     /// not sorted).
     pub sort_x: bool,
+    /// Trendlines for every curve: linear, poly:N, power, log, exp or ma:N (replaces the curve's own).
+    pub trendline: Vec<String>,
+    /// Leave the equation and R-squared label off the trendlines.
+    pub no_trendline_label: bool,
     pub colors: Vec<String>,
     pub labels: Vec<String>,
     pub no_legend: bool,
@@ -232,6 +236,11 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
     let colors: Vec<Color> =
         s.colors.iter().map(|c| c.parse::<Color>().map_err(|e| anyhow!("{e}"))).collect::<Result<_>>()?;
     let stack = stack_option(s)?;
+    let trends: Vec<TrendKind> = s
+        .trendline
+        .iter()
+        .map(|t| TrendKind::parse(t).map_err(|e| anyhow!("--trendline: {e}")))
+        .collect::<Result<_>>()?;
     require_range("--x-label-angle", s.x_label_angle, -90.0, 90.0)?;
     require_range("--bar-gap", s.bar_gap, 0.0, 100.0)?;
     require_range("--bar-overlap", s.bar_overlap, -100.0, 100.0)?;
@@ -279,7 +288,7 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
         bars.gap_pct = s.bar_gap.unwrap_or(bars.gap_pct);
         bars.overlap_pct = s.bar_overlap.unwrap_or(bars.overlap_pct);
     }
-    style_plots(g, &styled, s, &colors);
+    style_plots(g, &styled, s, &colors, &trends);
     for &i in &mains {
         let layer = &mut g.layers[i];
         if let Some(t) = &s.x_title {
@@ -484,14 +493,27 @@ fn check_stack_fits(g: &Graph, s: &Style, panels: usize) -> Result<()> {
 
 /// Line widths, colors, labels and `--no-legend` for the plots of the layers in `group`, counted
 /// in legend order (layer by layer, plots in order).
-fn style_plots(g: &mut Graph, group: &[usize], s: &Style, colors: &[Color]) {
+fn style_plots(g: &mut Graph, group: &[usize], s: &Style, colors: &[Color], trends: &[TrendKind]) {
     let mut i = 0;
     for &li in group {
         let layer = &mut g.layers[li];
         if s.no_legend {
             layer.legend.visible = false;
         }
-        for plot in &mut layer.plots {
+        let followers: Vec<bool> = layer.plots.iter().map(|p| layer.follows(p.y).is_some()).collect();
+        for (k, plot) in layer.plots.iter_mut().enumerate() {
+            // A fitted curve drawn over its data gets no trendline of its own.
+            if !trends.is_empty() && !followers[k] {
+                plot.decor.trendlines = trends
+                    .iter()
+                    .map(|&kind| {
+                        let mut t = Trendline::new(kind);
+                        t.show_equation = !s.no_trendline_label;
+                        t.show_r2 = !s.no_trendline_label;
+                        t
+                    })
+                    .collect();
+            }
             if let Some(w) = s.line_width {
                 plot.line = LineStyle { width_pt: w, ..plot.line.clone() };
             }

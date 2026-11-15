@@ -154,6 +154,12 @@ pub enum Cmd {
     },
     StackPanels,
     LabelPanels,
+    /// Add / Edit Trendline... on a plot of the active layer.
+    Trendline {
+        layer: usize,
+        plot: usize,
+        edit: bool,
+    },
     /// Graph > Add Error Bars... on the active layer.
     AddErrorBars,
     /// Window > Refresh (F5).
@@ -1626,6 +1632,7 @@ pub fn graph_plot_menu(
     kind: PlotKind,
     on_right: bool,
     book: Option<(WindowId, String)>,
+    trendlines: usize,
 ) -> Vec<Entry> {
     let change = |label: &str, to: PlotKind| {
         if to == kind {
@@ -1654,7 +1661,13 @@ pub fn graph_plot_menu(
             Cmd::GraphEdit(GraphOp::MovePlotToAxis { layer, plot, right: !on_right }),
         ),
         item("Hide Data Plot", Cmd::GraphEdit(GraphOp::HidePlot { layer, plot })),
+        sep(),
+        item("Add Trendline...", Cmd::Trendline { layer, plot, edit: false }),
     ];
+    if trendlines > 0 {
+        v.push(item("Edit Trendline...", Cmd::Trendline { layer, plot, edit: true }));
+        v.push(item("Remove Trendline", Cmd::GraphEdit(GraphOp::RemoveTrendline { layer, plot })));
+    }
     match book {
         Some((id, name)) => v.push(item(&format!("Go to {name}"), Cmd::GoTo(id))),
         None => v.push(grey("Go to Book")),
@@ -2126,6 +2139,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::StackPanels => Action::StackPanels { book: book?, columns: c.selected.to_vec() },
         Cmd::LabelPanels => Action::LabelPanels { book: book?, columns: c.selected.to_vec() },
+        Cmd::Trendline { layer, plot, edit } => {
+            Action::Trendline { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, plot: *plot, edit: *edit }
+        }
         Cmd::AddErrorBars => Action::AddErrorBars { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::Refresh => Action::Refresh(c.active),
         Cmd::UpdateLegend => {

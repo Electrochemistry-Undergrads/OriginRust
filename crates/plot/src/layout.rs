@@ -39,7 +39,16 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
     let x_titles = title_places(project, g, &geoms, &pds, Dim::X, m);
     let y_titles = title_places(project, g, &geoms, &pds, Dim::Y, m);
     let mut layers: Vec<LayerScene> = (0..g.layers.len())
-        .map(|i| layer_scene(project, g, i, &geoms[i], &pds[i].plots, (x_titles[i], y_titles[i]), m))
+        .map(|i| {
+            // Trendline labels of the layers in one frame (a layer and its right Y layer) stack.
+            let first_line: usize = g
+                .same_frame(i)
+                .into_iter()
+                .filter(|&j| j < i && g.layers[j].display.show_data)
+                .map(|j| crate::trend::label_lines(&pds[j].plots, &geoms[j]))
+                .sum();
+            layer_scene(project, g, i, &geoms[i], &pds[i].plots, (x_titles[i], y_titles[i]), first_line, m)
+        })
         .collect();
     // A legend that lists the plots of every layer drawn in its frame (a layer and its right Y
     // layer) is drawn after all layers, so that no layer's curves cover it.
@@ -597,6 +606,7 @@ fn layer_scene(
     geom: &LayerGeometry,
     pds: &[PlotData],
     (x_title, y_title): (TitlePlace, TitlePlace),
+    first_label_line: usize,
     m: &dyn TextMeasurer,
 ) -> LayerScene {
     let layer = &g.layers[index];
@@ -661,6 +671,9 @@ fn layer_scene(
                 hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
             }
         }
+    }
+    if waterfall.is_none() {
+        crate::trend::draw(&mut scene.plots, layer, drawn, geom, first_label_line, m);
     }
     // Grid on Top of Data: the grid lines (not the background) are drawn after the plots.
     if layer.display.grid_on_top {

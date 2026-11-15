@@ -49,6 +49,7 @@ pub mod smooth;
 pub mod stats;
 pub mod survival;
 pub mod trace;
+pub mod trend;
 mod util;
 pub mod vartest;
 

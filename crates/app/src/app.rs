@@ -33,6 +33,7 @@ use crate::dialogs::shape_object::ShapeDialog;
 use crate::dialogs::sort::{SortDialog, SortOutcome};
 use crate::dialogs::stack_panels::{Outcome as StackPanelsOutcome, StackPanelsDialog};
 use crate::dialogs::text_object::TextDialog;
+use crate::dialogs::trendline::{Outcome as TrendlineOutcome, TrendlineDialog};
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi, Sel};
 use crate::live::{self, Live, Note};
@@ -129,6 +130,7 @@ pub struct SheafApp {
     layer_contents: Option<crate::dialogs::layer_contents::LayerContentsDialog>,
     plot_setup: Option<crate::dialogs::plot_setup::PlotSetupDialog>,
     error_bars: Option<ErrorBarsDialog>,
+    trendline: Option<TrendlineDialog>,
     stack_panels: Option<StackPanelsDialog>,
     label_panels: Option<LabelPanelsDialog>,
     column_props: Option<ColumnPropsDialog>,
@@ -218,6 +220,7 @@ impl SheafApp {
             layer_contents: None,
             plot_setup: None,
             error_bars: None,
+            trendline: None,
             stack_panels: None,
             label_panels: None,
             column_props: None,
@@ -564,6 +567,7 @@ impl SheafApp {
         self.graphs.clear();
         self.graph_props = None;
         self.error_bars = None;
+        self.trendline = None;
         self.stack_panels = None;
         self.label_panels = None;
         self.column_props = None;
@@ -977,6 +981,7 @@ impl SheafApp {
             GraphOp::HideOtherLayers { .. } => "Hide other layers",
             GraphOp::MovePlotToAxis { right: true, .. } => "Move plot to right Y axis",
             GraphOp::MovePlotToAxis { .. } => "Move plot to left Y axis",
+            GraphOp::RemoveTrendline { .. } => "Remove trendline",
             GraphOp::HidePlot { .. } => unreachable!("handled above"),
         };
         // The present axis ranges, for the zoom (an automatic axis has no stored limits).
@@ -1428,6 +1433,9 @@ impl SheafApp {
                 }
             }
             Action::AddErrorBars { graph, layer } => self.add_error_bars(graph, layer),
+            Action::Trendline { graph, layer, plot, edit } => {
+                self.trendline = TrendlineDialog::new(&self.doc, graph, layer, plot, edit);
+            }
             Action::Refresh(active) => self.refresh(active),
             Action::RowFilterDialog { book, column } => {
                 self.row_filter = RowFilterDialog::new(&self.doc, book, column);
@@ -2581,6 +2589,7 @@ impl SheafApp {
             || self.layer_contents.is_some()
             || self.plot_setup.is_some()
             || self.error_bars.is_some()
+            || self.trendline.is_some()
             || self.stack_panels.is_some()
             || self.label_panels.is_some()
             || self.column_props.is_some()
@@ -2822,6 +2831,13 @@ impl SheafApp {
                     self.error_bars = None;
                     self.say("Updated Y error bars for the selected plot");
                 }
+            }
+        }
+        if let Some(d) = &mut self.trendline {
+            match d.show(ctx, &mut self.doc) {
+                TrendlineOutcome::Open => {}
+                TrendlineOutcome::Closed => self.trendline = None,
+                TrendlineOutcome::Done => self.trendline = None,
             }
         }
         if let Some(d) = &mut self.stack_panels {

@@ -109,6 +109,8 @@ pub enum Cmd {
     RowFilterDialog,
     ToggleRowFilter,
     ReapplyRowFilter,
+    /// View > Freeze/Unfreeze Panes.
+    FreezePanes,
     /// Insert rows or columns at the selection (Edit > Insert and the cell menus).
     InsertCells,
     /// Delete the selected rows or columns (Edit > Delete and the cell menus).
@@ -621,7 +623,11 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
     v.push(keyed("Messages Log", alt(Key::Num6), Cmd::Panel(PanelId::Messages)));
     v.push(grey_keyed("Smart Hint Log", alt(Key::Num7)));
     match kind {
-        WindowKind::Workbook => v.extend(greys(&["-", "Actively Update Plots", "Page Break Preview Lines"])),
+        WindowKind::Workbook => {
+            v.push(sep());
+            v.push(keyed("&Freeze/Unfreeze Panes", ctrl_shift(Key::F), Cmd::FreezePanes));
+            v.extend(greys(&["Actively Update Plots", "Page Break Preview Lines"]));
+        }
         WindowKind::Graph => {
             v.push(sep());
             v.push(grey_keyed("Print View", ctrl(Key::Num2)));
@@ -2007,6 +2013,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::RowFilterDialog => Action::RowFilterDialog { book: book?, column: c.selected.first().copied() },
         Cmd::ToggleRowFilter => Action::ToggleRowFilter(book?),
         Cmd::ReapplyRowFilter => Action::ReapplyRowFilter(book?),
+        Cmd::FreezePanes => Action::FreezePanes(book?),
         // On a graph the tools take the active data plot, as Origin's Analysis menu does; the
         // results go to its workbook (ADR 0005), and a fit draws its curve on the graph (ADR 0006).
         Cmd::Analyze(kind) => match (c.book, c.curve) {

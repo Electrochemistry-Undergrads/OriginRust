@@ -284,6 +284,9 @@ pub enum Action {
     },
     /// Column > Filter > Enable/Disable Filter.
     ToggleRowFilter(WindowId),
+    /// View > Freeze/Unfreeze Panes (a toggle): freezes the rows above and the columns left of the
+    /// selection, or unfreezes what is frozen.
+    FreezePanes(WindowId),
     /// Column > Filter > Reapply Filter.
     ReapplyRowFilter(WindowId),
     /// Open the window that keeps only the rows matching a condition.

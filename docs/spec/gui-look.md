@@ -327,6 +327,48 @@ Pictures: `gr-plain.png` area, `wb-*.png`, `rc-*.png`, `wb-m04-column.png`; seco
   `wb-file-more.png`]. Menus that showed no chevron in these pictures: the Window menu and the
   right-click menu of the sheet tab.
 
+### Frozen panes (T34)
+
+Origin facts (from the help pages, not measured; no Origin was available) [W:origin-help/freeze-rows-columns,
+W:labtalk/ref/wks-obj, W:originlab.com/2023]:
+
+- Origin 2023 added View > Freeze/Unfreeze Panes (a toggle, Ctrl+Shift+F, also a Mini Toolbar button
+  "Freeze Panes"). It keeps the first n rows and/or columns in view while the rest scrolls.
+- Select a row, a column or one cell whose index is between 1 and 10 and choose it. To unfreeze, click
+  the upper-left cell and choose Unfreeze Panes, or use the View toggle again.
+- Frozen row and column headers are shaded darker.
+- LabTalk `wks.frozen$="C 3"` freezes columns A to C and rows 1 to 3, the same as selecting cell D4 and
+  clicking Freeze Panes; `wks.frozen$=""` unfreezes. So the frozen part is everything above and left of
+  the selected cell; a whole row freezes rows only and a whole column columns only (inferred).
+
+Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
+
+- **Counting.** Rows count in displayed rows (with a filter, the first n rows that pass) and columns in
+  visible columns (hidden ones are skipped), both in sheet order. The label rows are not counted: they
+  always stay on top, above the frozen rows. Spare entry rows are never frozen. A filter or hide change
+  therefore changes which data is frozen.
+- **Index.** n = index - 1, as in the LabTalk example (D4 freezes 3 and 3). An index above 10 (n above 9)
+  is refused with a status message, as is A1 (nothing above or left) and a selection of a label cell, the
+  whole sheet or nothing.
+- **Toggle.** The one command freezes from the selection when nothing is frozen and unfreezes whatever is
+  frozen otherwise, whatever the selection. It is one undo step, "Freeze panes" or "Unfreeze panes". The
+  shortcut does not work while a cell or label is being edited.
+- **State.** Per sheet, saved in `.sheaf` (`frozen`: rows, columns; absent when nothing is frozen). The
+  `.opj` writer cannot store it: saving to `.opj` warns and the companion keeps it.
+- **Clamping.** The setting is never changed by the window size; when drawing, the frozen rows leave at
+  least three body rows and the frozen block (row header and columns) takes at most half of the width.
+  What does not fit is shown as scrolling cells.
+- **Look.** The heads of frozen columns and the row numbers of frozen rows are a darker grey; a 2 px dark
+  line separates the frozen block from the scrolling cells (right of the frozen columns, under the frozen
+  rows). With frozen columns the row numbers stay with them; with frozen rows only they scroll sideways.
+- **Scrolling.** The wheel over the frozen columns scrolls the body; over the head and frozen rows it
+  scrolls the body up and down. Dragging a selection out of the body into the frozen block scrolls back
+  toward the start; a drag that began in a frozen column (row) never scrolls that axis.
+- **Navigation.** Keys, Go To and typing never scroll to a frozen target (it is always in view); a
+  target in the scrolling part is revealed below and right of the frozen block.
+- **Width.** A frozen column keeps the width it had; dragging the right edge of its head (a 6 px strip)
+  changes it, and the width survives unfreezing and freezing again.
+
 ## 4. Graph window
 
 Pictures: `gr-plain.png`, `gr-graph.png`, `grc-*.png`, `gdlg-*.png`; second study

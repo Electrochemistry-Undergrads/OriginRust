@@ -52,6 +52,11 @@ open. History of what was merged when is in `git log` (not repeated here).
   native/companion saves retain the behavior; `.opj` warns. Formatting, strict all-target
   workspace Clippy and 2,226 tests pass (three existing ignored), including eight new regressions.
 
+- T34 worksheet frozen panes (2026-11-15, macOS, no Origin): View > Freeze/Unfreeze Panes (Ctrl+Shift+F),
+  a toggle from a cell, row or column selection (D4 freezes 3 rows and 3 columns, index up to 10); per sheet
+  `Worksheet.frozen`, saved in `.sheaf`, `.opj` warns. grid.rs draws frozen rows as extra head rows of the one
+  table and frozen columns as an overlay over empty placeholder columns (exact scroll sync, hit guard
+  `visible_part`); darker heads, 2 px divider, resizable frozen columns. Rules unmeasured (gui-look.md 3).
 - T33 lollipop plot (2026-11-15, macOS, no Origin): Plot > Symbol > Lollipop Plot and `sheaf plot -t
   lollipop` (two or more Y columns, X/Y exchanged, drop lines from each plot to the next at the same
   row, the last back to the first); Plot Details Drop Lines "Drop To" (Axis / Next Data Plot) and "Y
@@ -97,7 +102,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `stats-multi` | Claude Windows, "continue all tasks" | T29 PCA, ROC, Kaplan-Meier, k-means: calc pca/roc/survival/kmeans.rs, core statistics tools, Statistics menu items, ops analyze | claimed 2026-11-14 |
 | `mcp-attach` | Claude macOS, "mac-attach" | T25 phase 2: ADR 0013, app live link (local socket, off by default, menu + `--mcp`), `sheaf-mcp --attach` forwarding, one undo step per forwarded change, status-bar note; new crates/app module + mcp attach client, docs | claimed 2026-11-14 night; no print, recovery/history internals, Excel, Go To, symbol gaps, stats or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
-| `frozen-panes` | Claude macOS, "mac-multipdf" | T34 worksheet frozen panes (Origin 2023 View: Freeze/Unfreeze Panes, Ctrl+Shift+F): core sheet frozen rows/cols, grid.rs frozen drawing/scroll/hit-testing, workbook View menu item | claimed 2026-11-15; grid.rs, core worksheet field, menus/app action, UI tests; no filter/mask/Go To resolver, formulas, plot or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

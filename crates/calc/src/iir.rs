@@ -2,7 +2,7 @@
 //! (`dfilter`, OriginPro; `docs/spec/analysis-tools.md` 17). Nothing here is measured in Origin:
 //! the design chain follows Origin's documentation (an analog low pass prototype, the frequency
 //! transform to the response type, the bilinear transform) and the numbers are checked against
-//! `scipy.signal` (`crates/calc/tests/scipy_iir.rs`, made by `tools/iir-fir-ref.py`).
+//! `scipy.signal` (`crates/calc/tests/scipy_filters.rs`, made by `tools/iir-fir-ref.py`).
 //!
 //! Documented by Origin: the four methods (Butterworth, Chebyshev I, Chebyshev II, elliptic), the
 //! four response types, the order (an integer, or the minimum that meets the pass and stop
@@ -321,6 +321,44 @@ fn arc_jac_sn(w: C, m: f64) -> C {
 
 type Zpk = (Vec<C>, Vec<C>, f64);
 
+/// The real part of `prod(num) / prod(den)` without forming either product on its own.
+///
+/// A running mantissa is kept near one and the powers of two are counted apart, so a high order
+/// design (whose products pass 1e308 long before their ratio does) keeps a finite, exact gain. A
+/// naive complex division would square the denominator and overflow around 1e154. The result is
+/// `0` or infinite only when the true ratio is out of range.
+fn ratio_re(num: impl Iterator<Item = C>, den: impl Iterator<Item = C>) -> f64 {
+    let mut m = C::new(1.0, 0.0);
+    let mut exp: i32 = 0;
+    let settle = |m: &mut C, exp: &mut i32| {
+        let mag = m.re.abs().max(m.im.abs());
+        if mag > 1e100 || (mag < 1e-100 && mag > 0.0) {
+            let e = mag.log2().floor() as i32;
+            *m *= 2f64.powi(-e);
+            *exp += e;
+        }
+    };
+    let mut num = num.fuse();
+    let mut den = den.fuse();
+    loop {
+        let (a, b) = (num.next(), den.next());
+        if a.is_none() && b.is_none() {
+            break;
+        }
+        if let Some(a) = a {
+            m *= a;
+            settle(&mut m, &mut exp);
+        }
+        if let Some(b) = b {
+            m /= b;
+            settle(&mut m, &mut exp);
+        }
+    }
+    // 2^exp in two steps, so that an exponent past 1023 is infinite only if the value is.
+    let half = exp / 2;
+    m.re * 2f64.powi(half) * 2f64.powi(exp - half)
+}
+
 fn neg_prod(v: &[C]) -> C {
     v.iter().fold(C::new(1.0, 0.0), |a, b| a * (-b))
 }
@@ -379,7 +417,7 @@ fn cheb2ap(n: usize, rs: f64) -> Zpk {
             C::new(1.0, 0.0) / p
         })
         .collect();
-    let k = (neg_prod(&p) / neg_prod(&z)).re;
+    let k = ratio_re(p.iter().map(|c| -c), z.iter().map(|c| -c));
     (z, p, k)
 }
 
@@ -419,7 +457,7 @@ fn ellipap(n: usize, rp: f64, rs: f64) -> Zpk {
         let pc: Vec<C> = p.iter().map(|c| c.conj()).collect();
         p.extend(pc);
     }
-    let mut k = (neg_prod(&p) / neg_prod(&z)).re;
+    let mut k = ratio_re(p.iter().map(|c| -c), z.iter().map(|c| -c));
     if n.is_multiple_of(2) {
         k /= (1.0 + eps_sq).sqrt();
     }
@@ -439,7 +477,7 @@ fn lp2hp(z: &[C], p: &[C], k: f64, wo: f64) -> Zpk {
     let mut zh: Vec<C> = z.iter().map(|c| C::new(wo, 0.0) / c).collect();
     let ph: Vec<C> = p.iter().map(|c| C::new(wo, 0.0) / c).collect();
     zh.extend(std::iter::repeat_n(C::new(0.0, 0.0), degree));
-    let kh = k * (neg_prod(z) / neg_prod(p)).re;
+    let kh = k * ratio_re(z.iter().map(|c| -c), p.iter().map(|c| -c));
     (zh, ph, kh)
 }
 
@@ -469,7 +507,7 @@ fn lp2bs(z: &[C], p: &[C], k: f64, wo: f64, bw: f64) -> Zpk {
         zb.push(C::new(0.0, wo));
         zb.push(C::new(0.0, -wo));
     }
-    let kb = k * (neg_prod(z) / neg_prod(p)).re;
+    let kb = k * ratio_re(z.iter().map(|c| -c), p.iter().map(|c| -c));
     (zb, split(p), kb)
 }
 
@@ -480,9 +518,8 @@ fn bilinear(z: &[C], p: &[C], k: f64, fs: f64) -> Zpk {
     let map = |v: &[C]| -> Vec<C> { v.iter().map(|c| (fs2 + c) / (fs2 - c)).collect() };
     let mut zz = map(z);
     zz.extend(std::iter::repeat_n(C::new(-1.0, 0.0), degree));
-    let num = z.iter().fold(C::new(1.0, 0.0), |a, c| a * (fs2 - c));
-    let den = p.iter().fold(C::new(1.0, 0.0), |a, c| a * (fs2 - c));
-    (zz, map(p), k * (num / den).re)
+    let ratio = ratio_re(z.iter().map(|c| fs2 - c), p.iter().map(|c| fs2 - c));
+    (zz, map(p), k * ratio)
 }
 
 /// Coefficients (highest power first) of the polynomial with the given roots.
@@ -666,7 +703,7 @@ pub fn iir_filter(
         FilterResponse::BandStop => lp2bs(&z, &p, k, (warped[0] * warped[1]).sqrt(), warped[1] - warped[0]),
     };
     let (z, p, k) = bilinear(&z, &p, k, fs);
-    if !k.is_finite() || z.iter().chain(p.iter()).any(|c| !c.re.is_finite() || !c.im.is_finite()) {
+    if !k.is_finite() || k == 0.0 || z.iter().chain(p.iter()).any(|c| !c.re.is_finite() || !c.im.is_finite()) {
         return Err(FilterError::NotFinite);
     }
     let sos = zpk2sos(&z, &p, k);

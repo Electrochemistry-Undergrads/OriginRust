@@ -1,7 +1,7 @@
 //! FIR filter design and application as Origin's FIR Filter app (OriginPro, Origin 2027, File
 //! Exchange; `docs/spec/analysis-tools.md` 17). Nothing here is measured in Origin: the app's page
 //! lists the controls and no formulas, so the numbers follow `scipy.signal` (`firwin`, `firls`,
-//! `kaiserord`, `get_window`; `crates/calc/tests/scipy_fir.rs`, made by `tools/iir-fir-ref.py`).
+//! `kaiserord`, `get_window`; `crates/calc/tests/scipy_filters.rs`, made by `tools/iir-fir-ref.py`).
 //!
 //! Documented by Origin: response types low pass, high pass, band pass and band stop; the methods
 //! Least Squares and Window; the filter order (an integer; for the Window method a Minimum that
@@ -299,7 +299,7 @@ pub fn window(kind: FirWindow, m: usize, param: Option<f64>) -> Result<Vec<f64>,
     let p = param.unwrap_or_else(|| kind.default_param());
     let mf = m as f64;
     let idx = || (0..m).map(|i| i as f64);
-    Ok(match kind {
+    let w: Vec<f64> = match kind {
         FirWindow::Rectangle => vec![1.0; m],
         FirWindow::Bartlett => idx()
             .map(|n| if n <= (mf - 1.0) / 2.0 { 2.0 * n / (mf - 1.0) } else { 2.0 - 2.0 * n / (mf - 1.0) })
@@ -360,6 +360,9 @@ pub fn window(kind: FirWindow, m: usize, param: Option<f64>) -> Result<Vec<f64>,
             w
         }
         FirWindow::Tukey => {
+            if p.is_nan() {
+                return Err(FilterError::BadMagnitude("the Tukey window needs a taper fraction from 0 to 1".into()));
+            }
             if p <= 0.0 {
                 vec![1.0; m]
             } else if p >= 1.0 {
@@ -451,7 +454,12 @@ pub fn window(kind: FirWindow, m: usize, param: Option<f64>) -> Result<Vec<f64>,
             let scale = 1.0 / w((mf - 1.0) / 2.0);
             idx().map(|n| w(n) * scale).collect()
         }
-    })
+    };
+    // a huge parameter overflows the window (Kaiser's Bessel function, Chebyshev's cosh) to inf or NaN
+    if w.iter().any(|v| !v.is_finite()) {
+        return Err(FilterError::NotFinite);
+    }
+    Ok(w)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -536,6 +544,9 @@ pub fn firwin(
             0.5 * (left + right)
         };
         scale_to_unit(&mut h, sf)?;
+    }
+    if h.iter().any(|v| !v.is_finite()) {
+        return Err(FilterError::NotFinite);
     }
     Ok(h)
 }
@@ -665,6 +676,9 @@ impl FirSpec {
                 let mut h = firls(numtaps, &bands, &desired, &weight)?;
                 if self.scale_passband {
                     scale_to_unit(&mut h, scale_frequency(r, wp))?;
+                }
+                if h.iter().any(|v| !v.is_finite()) {
+                    return Err(FilterError::NotFinite);
                 }
                 let mut edges = wp.clone();
                 edges.extend(ws.iter());

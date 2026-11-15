@@ -20,8 +20,8 @@ mod fixtures;
 
 use fixtures::*;
 use sheaf_calc::{
-    FilterResponse, FirFilter, FirMethod, FirSpec, FirWindow, FreqUnit, IirMethod, fir_window, firls, firwin,
-    iir_filter, iir_order, kaiser_beta, kaiserord,
+    FilterError, FilterResponse, FirFilter, FirMethod, FirSpec, FirWindow, FreqUnit, IirMethod, MagnitudeUnit,
+    fir_window, firls, firwin, iir_filter, iir_order, kaiser_beta, kaiserord,
 };
 
 const METHODS: [IirMethod; 4] =
@@ -168,4 +168,144 @@ fn the_spec_designs_what_firwin_does() {
     let f = spec.design(None).unwrap();
     let want = firwin(41, &[0.3], FilterResponse::LowPass, FirWindow::Hamming, None, true).unwrap();
     near_vec("spec", &f.coefficients, &want, 1e-15);
+}
+
+#[test]
+fn high_order_iir_designs_match_scipy() {
+    // the gain is a ratio of products that pass 1e154; a naive complex division gave 0 or NaN here
+    for c in HIGH {
+        let f = iir_filter(c.order, c.wn, RESP[c.response], METHODS[c.method], c.rp, c.rs)
+            .unwrap_or_else(|e| panic!("{}: {e}", c.name));
+        assert!(f.gain.is_finite() && f.gain != 0.0, "{}: gain {}", c.name, f.gain);
+        assert!((f.gain - c.gain).abs() <= 1e-9 * c.gain.abs(), "{}: gain {} vs {}", c.name, f.gain, c.gain);
+        let got: Vec<f64> = MAG_W.iter().map(|w| f.magnitude(*w)).collect();
+        near_vec(&format!("{} magnitude", c.name), &got, c.magnitude, 1e-6);
+        let one = f.apply(SIGNAL, false).unwrap();
+        near_vec(&format!("{} one way", c.name), &one, c.one_way, 1e-6 * scale(SIGNAL));
+    }
+}
+
+#[test]
+fn window_parameters_match_scipy_and_reach_firwin() {
+    for c in WINDOW_PARAMS {
+        let kind = FirWindow::ALL[c.window];
+        let got = fir_window(kind, c.m, Some(c.param)).unwrap();
+        near_vec(&format!("{} {} param {}", c.name, c.m, c.param), &got, c.values, 1e-10);
+        let h = firwin(41, &[0.3], FilterResponse::LowPass, kind, Some(c.param), true).unwrap();
+        near_vec(&format!("{} firwin param {}", c.name, c.param), &h, c.lowpass, 1e-10);
+        // and through the dialog's spec
+        let spec = FirSpec {
+            order: Some(40),
+            cutoff: Some(0.3),
+            unit: FreqUnit::Normalized,
+            window: kind,
+            window_param: Some(c.param),
+            ..FirSpec::default()
+        };
+        near_vec(
+            &format!("{} spec param {}", c.name, c.param),
+            &spec.design(None).unwrap().coefficients,
+            c.lowpass,
+            1e-10,
+        );
+    }
+}
+
+fn ls_spec(c_response: usize, numtaps: usize, wp: &[f64], ws: &[f64], pw: f64, sw: f64, scale: bool) -> FirSpec {
+    FirSpec {
+        response: RESP[c_response],
+        method: FirMethod::LeastSquares,
+        order: Some(numtaps - 1),
+        unit: FreqUnit::Normalized,
+        pass: Some(wp[0]),
+        pass2: wp.get(1).copied(),
+        stop: Some(ws[0]),
+        stop2: ws.get(1).copied(),
+        pass_weight: pw,
+        stop_weight: sw,
+        scale_passband: scale,
+        ..FirSpec::default()
+    }
+}
+
+#[test]
+fn least_squares_designs_of_every_response_match_scipy_firls() {
+    for c in LS_DESIGN {
+        let plain = ls_spec(c.response, c.numtaps, c.wp, c.ws, c.pass_weight, c.stop_weight, false);
+        near_vec(&format!("{} plain", c.name), &plain.design(None).unwrap().coefficients, c.plain, 1e-8);
+        let scaled = ls_spec(c.response, c.numtaps, c.wp, c.ws, c.pass_weight, c.stop_weight, true);
+        near_vec(&format!("{} scaled", c.name), &scaled.design(None).unwrap().coefficients, c.scaled, 1e-8);
+    }
+}
+
+#[test]
+fn even_tap_least_squares_matches_the_weighted_optimum() {
+    for c in LS_EVEN {
+        let spec = ls_spec(c.response, c.numtaps, c.wp, c.ws, c.pass_weight, c.stop_weight, false);
+        near_vec(c.name, &spec.design(None).unwrap().coefficients, c.plain, 1e-8);
+    }
+}
+
+#[test]
+fn a_larger_pass_weight_lowers_the_passband_error() {
+    let worst = |pw: f64| {
+        let f = ls_spec(0, 41, &[0.2], &[0.3], pw, 1.0, true).design(None).unwrap();
+        (0..=40).map(|i| (f.magnitude(0.2 * i as f64 / 40.0) - 1.0).abs()).fold(0.0f64, f64::max)
+    };
+    assert!(worst(20.0) < worst(1.0));
+}
+
+fn min_order_spec(c: &MinOrderCase) -> FirSpec {
+    FirSpec {
+        response: RESP[c.response],
+        order: None,
+        window: FirWindow::Kaiser,
+        unit: FreqUnit::Normalized,
+        pass: Some(c.wp[0]),
+        pass2: c.wp.get(1).copied(),
+        stop: Some(c.ws[0]),
+        stop2: c.ws.get(1).copied(),
+        passband_ripple: c.ripple_db,
+        stopband_attenuation: c.attenuation_db,
+        ..FirSpec::default()
+    }
+}
+
+#[test]
+fn minimum_order_window_designs_match_scipy() {
+    for c in MIN_ORDER {
+        let f = min_order_spec(c).design(None).unwrap();
+        assert_eq!(f.coefficients.len(), c.numtaps, "{} taps", c.name);
+        near_vec(c.name, &f.coefficients, c.h, 1e-10);
+        assert!((c.beta - 5.0).abs() > 0.5, "{}: the computed beta ({}) differs from the default 5", c.name, c.beta);
+        // the linear deviations of the same design give the same filter
+        let linear = FirSpec {
+            magnitude_unit: MagnitudeUnit::Linear,
+            passband_ripple: c.dev_p,
+            stopband_attenuation: c.dev_s,
+            ..min_order_spec(c)
+        };
+        near_vec(&format!("{} linear", c.name), &linear.design(None).unwrap().coefficients, c.h, 1e-10);
+    }
+}
+
+#[test]
+fn a_parameter_that_overflows_the_window_is_an_error_with_or_without_scaling() {
+    for scale in [true, false] {
+        for (kind, p) in [(FirWindow::Kaiser, 800.0), (FirWindow::Chebyshev, 7000.0), (FirWindow::Tukey, f64::NAN)] {
+            let r = firwin(41, &[0.3], FilterResponse::LowPass, kind, Some(p), scale);
+            assert!(r.is_err(), "{kind:?} {p} scale {scale}: {r:?}");
+            let spec = FirSpec {
+                order: Some(40),
+                cutoff: Some(0.3),
+                unit: FreqUnit::Normalized,
+                window: kind,
+                window_param: Some(p),
+                scale_passband: scale,
+                ..FirSpec::default()
+            };
+            assert!(spec.design(None).is_err(), "{kind:?} {p} scale {scale}");
+        }
+    }
+    assert_eq!(fir_window(FirWindow::Kaiser, 41, Some(800.0)), Err(FilterError::NotFinite));
 }

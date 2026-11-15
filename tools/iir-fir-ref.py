@@ -248,3 +248,227 @@ for name, nt, cut in [('hamming 21', 21, 0.3), ('hamming 20', 20, 0.25), ('hammi
     zero = signal.filtfilt(h, [1.0], X)
     print('    ApplyCase { name: "%s", h: %s, one_way: %s, zero_phase: %s },' % (name, arr(h), arr(one), arr(zero)))
 print('];')
+
+# ---------------------------------------------------------------------------------------------
+# Added after review: high orders, non-default window parameters, design-level Least Squares and
+# minimum-order assemblies.
+
+# high order IIR designs: the gain and what the sections compute (the zeros and poles are not listed)
+print('''
+/// High order designs (where the products of the zeros and poles pass 1e154 and a naive complex division
+/// overflows): scipy's gain, its magnitude response (`sosfreqz`) and its one way output (`sosfilt`).
+pub struct HighCase {
+    pub name: &'static str,
+    pub method: usize,
+    pub response: usize,
+    pub order: usize,
+    pub wn: &'static [f64],
+    pub rp: f64,
+    pub rs: f64,
+    pub gain: f64,
+    pub magnitude: &'static [f64],
+    pub one_way: &'static [f64],
+}
+
+pub const HIGH: &[HighCase] = &[''')
+for method, resp, order, wn, rp, rs in [
+    ('butter', 'bandpass', 100, [0.3, 0.6], 1.0, 40.0),
+    ('butter', 'bandpass', 110, [0.3, 0.6], 1.0, 40.0),
+    ('butter', 'bandstop', 100, [0.3, 0.6], 1.0, 40.0),
+    ('butter', 'bandstop', 104, [0.3, 0.6], 1.0, 40.0),
+    ('butter', 'bandpass', 142, [0.3, 0.6], 1.0, 40.0),
+    ('cheby1', 'bandpass', 150, [0.3, 0.6], 1.0, 40.0),
+    ('cheby2', 'bandpass', 94, [0.3, 0.6], 1.0, 80.0),
+    ('cheby2', 'lowpass', 190, [0.3], 1.0, 80.0),
+    ('ellip', 'bandstop', 24, [0.3, 0.6], 1.0, 80.0),
+]:
+    kw = dict(btype=resp, ftype=method)
+    if method in ('cheby1', 'ellip'):
+        kw['rp'] = rp
+    if method in ('cheby2', 'ellip'):
+        kw['rs'] = rs
+    w = wn if len(wn) > 1 else wn[0]
+    z, p, k = signal.iirfilter(order, w, output='zpk', **kw)
+    sos = signal.iirfilter(order, w, output='sos', **kw)
+    _, h = signal.sosfreqz(sos, worN=np.array(MAG_W) * np.pi)
+    one = signal.sosfilt(sos, X)
+    print('    HighCase { name: "%s %s %d", method: %d, response: %d, order: %d, wn: %s, rp: %s, rs: %s,' % (
+        method, resp, order, METHODS.index(method), RESP.index(resp), order, arr(wn), f(rp), f(rs)))
+    print('        gain: %s, magnitude: %s, one_way: %s },' % (f(k), arr(np.abs(h)), arr(one)))
+print('];')
+
+# windows with a parameter other than the default (`FirWindow::ALL` index, as above)
+WINP = [('Chebyshev', 5, 80.0), ('Chebyshev', 5, 50.0), ('Gaussian', 7, 1.5), ('Gaussian', 7, 4.0),
+        ('Kaiser', 10, 0.0), ('Kaiser', 10, 10.0), ('Taylor', 14, 20.0), ('Taylor', 14, 45.0),
+        ('Tukey', 16, 0.0), ('Tukey', 16, 0.25), ('Tukey', 16, 1.0)]
+
+
+def getwinp(name, m, p):
+    if name == 'Chebyshev':
+        return signal.get_window(('chebwin', p), m, fftbins=False)
+    if name == 'Gaussian':
+        return signal.get_window(('gaussian', (m - 1) / (2 * p)), m, fftbins=False)
+    if name == 'Kaiser':
+        return signal.get_window(('kaiser', p), m, fftbins=False)
+    if name == 'Taylor':
+        return signal.windows.taylor(m, nbar=4, sll=p, norm=True, sym=True)
+    return signal.get_window(('tukey', p), m, fftbins=False)
+
+
+print('''
+/// A symmetric window of `m` points with the parameter `param`, and `firwin(41, 0.3, window)` with it.
+pub struct WindowParamCase {
+    pub name: &'static str,
+    pub window: usize,
+    pub m: usize,
+    pub param: f64,
+    pub values: &'static [f64],
+    pub lowpass: &'static [f64],
+}
+
+pub const WINDOW_PARAMS: &[WindowParamCase] = &[''')
+for name, wi, p in WINP:
+    for m in (21, 20):
+        # firwin takes no window array: the boxcar design times the window, scaled to unit gain at DC
+        h41 = signal.firwin(41, 0.3, window='boxcar', pass_zero=True, scale=False) * getwinp(name, 41, p)
+        h41 = h41 / h41.sum()
+        print('    WindowParamCase { name: "%s", window: %d, m: %d, param: %s, values: %s, lowpass: %s },' % (
+            name, wi, m, f(p), arr(getwinp(name, m, p)), arr(h41)))
+print('];')
+
+# design-level Least Squares: scipy firls with the band and weight mapping of the dialog, scaled or not
+print('''
+/// The Least Squares design of `FirSpec` for `response` (index as above) with the pass and stop edges
+/// `wp` and `ws`, the weights, and the coefficients scipy's `firls` gives for the same bands (`scaled`: divided by
+/// the gain at the scaling frequency, as `scale_to_unit`). Odd tap counts only (scipy refuses even ones).
+pub struct LsDesignCase {
+    pub name: &'static str,
+    pub response: usize,
+    pub numtaps: usize,
+    pub wp: &'static [f64],
+    pub ws: &'static [f64],
+    pub pass_weight: f64,
+    pub stop_weight: f64,
+    pub plain: &'static [f64],
+    pub scaled: &'static [f64],
+}
+
+pub const LS_DESIGN: &[LsDesignCase] = &[''')
+
+
+def ls_bands(r, wp, ws):
+    if r == 0:
+        return [0, wp[0], ws[0], 1], [1, 0], 'pw sw'
+    if r == 1:
+        return [0, ws[0], wp[0], 1], [0, 1], 'sw pw'
+    if r == 2:
+        return [0, ws[0], wp[0], wp[1], ws[1], 1], [0, 1, 0], 'sw pw sw'
+    return [0, wp[0], ws[0], ws[1], wp[1], 1], [1, 0, 1], 'pw sw pw'
+
+
+def scale_freq(r, wp):
+    return 1.0 if r == 1 else 0.5 * (wp[0] + wp[1]) if r == 2 else 0.0
+
+
+for name, r, nt, wp, ws, pw, sw in [
+    ('lowpass 41 weights 1 8', 0, 41, [0.2], [0.3], 1.0, 8.0),
+    ('highpass 41 weights 1 8', 1, 41, [0.4], [0.3], 1.0, 8.0),
+    ('highpass 41 weights 6 1', 1, 41, [0.4], [0.3], 6.0, 1.0),
+    ('bandpass 51 weights 1 5', 2, 51, [0.3, 0.5], [0.2, 0.6], 1.0, 5.0),
+    ('bandpass 51 weights 4 1', 2, 51, [0.3, 0.5], [0.2, 0.6], 4.0, 1.0),
+    ('bandstop 51 weights 1 7', 3, 51, [0.2, 0.7], [0.3, 0.6], 1.0, 7.0),
+    ('bandstop 51 weights 5 1', 3, 51, [0.2, 0.7], [0.3, 0.6], 5.0, 1.0),
+]:
+    bands, des, order = ls_bands(r, wp, ws)
+    wts = [pw if t == 'pw' else sw for t in order.split()]
+    h = signal.firls(nt, bands, np.repeat(des, 2), weight=np.array(wts), fs=2)
+    alpha = 0.5 * (nt - 1)
+    s = np.sum(h * np.cos(np.pi * scale_freq(r, wp) * (np.arange(nt) - alpha)))
+    print('    LsDesignCase { name: "%s", response: %d, numtaps: %d, wp: %s, ws: %s, pass_weight: %s, stop_weight: %s,' % (
+        name, r, nt, arr(wp), arr(ws), f(pw), f(sw)))
+    print('        plain: %s, scaled: %s },' % (arr(h), arr(h / s)))
+print('];')
+
+# even tap counts: scipy refuses them, so the reference is the weighted least squares optimum of the type II
+# amplitude A(w) = 2 sum_k h[M + k] cos(pi w (k + 1/2)) solved here by Gauss-Legendre quadrature of the
+# normal equations (exact for these trigonometric integrands), independent of the Rust code.
+print('''
+/// Even tap counts (low pass and band pass only): the weighted least squares optimum by quadrature in numpy.
+pub struct LsEvenCase {
+    pub name: &'static str,
+    pub response: usize,
+    pub numtaps: usize,
+    pub wp: &'static [f64],
+    pub ws: &'static [f64],
+    pub pass_weight: f64,
+    pub stop_weight: f64,
+    pub plain: &'static [f64],
+}
+
+pub const LS_EVEN: &[LsEvenCase] = &[''')
+gx, gw = np.polynomial.legendre.leggauss(300)
+for name, r, nt, wp, ws, pw, sw in [
+    ('lowpass 40 weights 1 1', 0, 40, [0.2], [0.3], 1.0, 1.0),
+    ('lowpass 40 weights 1 10', 0, 40, [0.2], [0.3], 1.0, 10.0),
+    ('lowpass 30 weights 5 1', 0, 30, [0.25], [0.4], 5.0, 1.0),
+    ('bandpass 36 weights 1 4', 2, 36, [0.3, 0.5], [0.2, 0.6], 1.0, 4.0),
+]:
+    bands, des, order = ls_bands(r, wp, ws)
+    wts = [pw if t == 'pw' else sw for t in order.split()]
+    M = nt // 2
+    nu = np.arange(M) + 0.5
+    Q = np.zeros((M, M))
+    rhs = np.zeros(M)
+    for bi in range(len(des)):
+        lo, hi = bands[2 * bi], bands[2 * bi + 1]
+        w = 0.5 * (hi - lo) * gx + 0.5 * (hi + lo)
+        wt = 0.5 * (hi - lo) * gw * wts[bi]
+        B = np.cos(np.pi * np.outer(w, nu))
+        Q += B.T @ (wt[:, None] * B)
+        rhs += B.T @ (wt * des[bi])
+    b = np.linalg.solve(Q, rhs)
+    h = np.concatenate([b[::-1] / 2, b / 2])
+    print('    LsEvenCase { name: "%s", response: %d, numtaps: %d, wp: %s, ws: %s, pass_weight: %s, stop_weight: %s, plain: %s },' % (
+        name, r, nt, arr(wp), arr(ws), f(pw), f(sw), arr(h)))
+print('];')
+
+# minimum order window designs: the assembly of FirSpec::design from scipy's kaiserord and firwin
+print('''
+/// A minimum-order Kaiser window design: `firwin(n, cut, window=("kaiser", beta))` with `n`, `beta` from
+/// `kaiserord(-20 log10(min(dev_p, dev_s)), narrowest gap)`, the cutoffs at the midpoints of each pass and stop
+/// edge, `n` made odd for a high pass and a band stop. `dev_p` and `dev_s` are the linear deviations.
+pub struct MinOrderCase {
+    pub name: &'static str,
+    pub response: usize,
+    pub wp: &'static [f64],
+    pub ws: &'static [f64],
+    pub ripple_db: f64,
+    pub attenuation_db: f64,
+    pub dev_p: f64,
+    pub dev_s: f64,
+    pub numtaps: usize,
+    pub beta: f64,
+    pub h: &'static [f64],
+}
+
+pub const MIN_ORDER: &[MinOrderCase] = &[''')
+for name, r, wp, ws, rp_db, rs_db in [
+    ('lowpass 100 dB', 0, [0.2], [0.3], 0.5, 100.0),
+    ('lowpass 40 dB narrow ripple', 0, [0.3], [0.36], 0.1, 40.0),
+    ('highpass 80 dB', 1, [0.4], [0.3], 0.5, 80.0),
+    ('bandpass 70 dB', 2, [0.3, 0.5], [0.2, 0.62], 0.2, 70.0),
+    ('bandstop 90 dB', 3, [0.15, 0.8], [0.25, 0.6], 0.3, 90.0),
+]:
+    g = 10 ** (rp_db / 20)
+    dp, ds = (g - 1) / (g + 1), 10 ** (-rs_db / 20)
+    a = -20 * np.log10(min(dp, ds))
+    width = min(abs(p - s) for p, s in zip(wp, ws))
+    cut = [0.5 * (p + s) for p, s in zip(wp, ws)]
+    nt, beta = signal.kaiserord(a, width)
+    if r in (1, 3) and nt % 2 == 0:
+        nt += 1
+    h = signal.firwin(nt, cut if len(cut) > 1 else cut[0], window=('kaiser', beta), pass_zero=r in (0, 3), scale=True)
+    print('    MinOrderCase { name: "%s", response: %d, wp: %s, ws: %s, ripple_db: %s, attenuation_db: %s, dev_p: %s, dev_s: %s, numtaps: %d, beta: %s,' % (
+        name, r, arr(wp), arr(ws), f(rp_db), f(rs_db), f(dp), f(ds), nt, f(beta)))
+    print('        h: %s },' % arr(h))
+print('];')

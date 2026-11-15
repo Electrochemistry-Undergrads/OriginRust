@@ -786,7 +786,7 @@ impl SheafApp {
 
     /// File > Print... (Ctrl+P): the graph page, as a vector drawing, through the system's print
     /// dialog, scaled into the paper of Page Setup as File > Print Preview shows. Windows plays the
-    /// page's metafile into the printer; elsewhere the page's PDF goes to `lp`.
+    /// page's metafile into the printer; macOS uses PDFKit and other systems use `lp`.
     fn print_graph(&mut self, graph: WindowId) {
         let project = self.doc.project();
         let Some((page, title)) = project.graph(graph).map(|g| ((g.page.width_pt, g.page.height_pt), g.name.clone()))
@@ -808,7 +808,16 @@ impl SheafApp {
             },
             Err(e) => self.warn(format!("Could not print the graph: {e}")),
         }
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        match sheaf_plot::render_print_pdf(project, graph) {
+            Ok(pdf) => match crate::macprint::print_with_dialog(&pdf, &setup, page, &title) {
+                Ok(crate::macprint::Outcome::Printed) => self.say(format!("Printed {title}")),
+                Ok(crate::macprint::Outcome::CancelledOrFailed) => {}
+                Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
+            },
+            Err(e) => self.warn(format!("Could not print the graph: {e}")),
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
         match sheaf_plot::render_pdf(project, graph) {
             Ok(pdf) => match crate::winprint::print_pdf(&pdf, &setup, page, &title) {
                 Ok(()) => self.say(format!("Sent {title} to the default printer")),

@@ -18,10 +18,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 - **Codex continuous work:** the owner requested an ongoing queue: finish, review, verify and
   merge/push one suitable task, then find and claim another. Do not stop merely because one task
   is complete. Refresh GitHub and the handoff before selecting the next task; respect active claims.
-- **Codex on the owner's current Mac:** this computer has no access to Origin. Choose tasks that
-  need no new Origin measurements (Sheaf's own interfaces/mechanisms or already specified behavior).
-  Preserve measured behavior and explicitly document anything still unmeasured; leave new Origin
-  probes to a machine that has Origin.
 - **No co-author line:** never add `Co-Authored-By: Claude ...` or "Generated with Claude Code" to
   commits or PRs; say so in every subagent prompt. (History was rewritten on 2026-11-12 to remove
   them; branches older than that must be rebased onto `main`, matching commits by tree.)

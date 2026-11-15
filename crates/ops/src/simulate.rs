@@ -11,8 +11,9 @@ use sheaf_core::column::{ColumnData, Designation};
 use sheaf_core::{ColumnId, Project, WindowId};
 use sheaf_fit::{library, simulate as sim};
 
-/// What to simulate. The defaults are those of the Simulate Curve tool: Gauss at its starting values, 100
-/// points from 1 to 10, linear spacing.
+/// What to simulate. The defaults are those of Origin's Simulate Curve window: Gauss at its starting values,
+/// and for each function the X range Origin shows (Gauss -1 to 5; 1 to 10 for a function Origin was not
+/// measured on), 200 points, linear spacing (`sheaf_fit::simulate::default_range`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SimulateSpec {
@@ -20,11 +21,11 @@ pub struct SimulateSpec {
     pub function: String,
     /// Parameter values, each "NAME=VALUE"; the others keep their starting values.
     pub params: Vec<String>,
-    /// First X (default 1).
+    /// First X (default: the function's, see `default_range`).
     pub from: Option<f64>,
-    /// Last X (default 10).
+    /// Last X (default: the function's).
     pub to: Option<f64>,
-    /// Number of X values (default 100).
+    /// Number of X values (default 200).
     pub points: Option<usize>,
     /// Spread the X values evenly on a logarithmic scale.
     pub log: bool,
@@ -82,7 +83,8 @@ impl SimulateRun {
         let Some(ws) = project.workbook(self.book).and_then(|b| b.sheets.get(self.result_sheet)) else {
             return self.report.message.clone();
         };
-        let function = ws.columns.get(1).map_or("curve", |c| c.long_name.as_str());
+        // The Y column's comment is the function's name (as Origin writes it, fitting.md 13.1).
+        let function = ws.columns.get(1).map(|c| c.comments.as_str()).filter(|c| !c.is_empty()).unwrap_or("curve");
         let mut text = format!("Simulated {function}: {} points, results in sheet {}", ws.row_count(), ws.name);
         if let Some(g) = self.report.new_graph.and_then(|g| project.graph(g)) {
             text.push_str(&format!("; graph {}", g.name));
@@ -113,9 +115,9 @@ pub fn tool_spec(spec: &SimulateSpec, x_of: Option<ColumnId>) -> Result<Simulate
             SimulateX::OfColumn(id)
         }
         None => SimulateX::Range {
-            from: spec.from.unwrap_or(1.0),
-            to: spec.to.unwrap_or(10.0),
-            points: spec.points.unwrap_or(100),
+            from: spec.from.unwrap_or(sim::default_range(&function).0),
+            to: spec.to.unwrap_or(sim::default_range(&function).1),
+            points: spec.points.unwrap_or(sim::default_range(&function).2),
             spacing: if spec.log { SimulateSpacing::Log } else { SimulateSpacing::Linear },
         },
     };

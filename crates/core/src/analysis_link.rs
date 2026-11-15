@@ -6,13 +6,13 @@
 //! edit) and a Manual link is marked pending until [`Project::recalculate_analysis`] is called. The
 //! results are replaced in place, so graphs and formulas that refer to the result columns keep working.
 //! Smooth, Integrate, Find Peaks, Average Multiple Curves, Intersect, Polygon Area, the data
-//! manipulation tools (T23) and Simulate Curve (T47, which follows the column its X values come from)
-//! can be linked; the other tools run once.
+//! manipulation tools (T23), Simulate Curve (T47, which follows the column its X values come from) and
+//! the IIR and FIR filters (T55) can be linked; the other tools run once.
 
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
-use sheaf_calc::{PeakOptions, ReduceOptions, SmoothOptions};
+use sheaf_calc::{FirSpec, IirSpec, PeakOptions, ReduceOptions, SmoothOptions};
 
 use crate::analysis::{
     AnalysisError, AverageSpec, IntegrateSpec, IntersectSpec, MedianFilterSpec, OutputTarget, ReduceDupSpec, Report,
@@ -36,6 +36,8 @@ pub enum LinkTool {
     Translate(TranslateSpec),
     MedianFilter(MedianFilterSpec),
     SimulateCurve(SimulateCurveSpec),
+    IirFilter(IirSpec),
+    FirFilter(FirSpec),
 }
 
 impl LinkTool {
@@ -54,6 +56,8 @@ impl LinkTool {
             Tool::MedianFilter(s) => Some(LinkTool::MedianFilter(*s)),
             // The graph of the first run stays; a repeated run does not draw another.
             Tool::SimulateCurve(s) => Some(LinkTool::SimulateCurve(SimulateCurveSpec { plot: false, ..s.clone() })),
+            Tool::IirFilter(s) => Some(LinkTool::IirFilter(*s)),
+            Tool::FirFilter(s) => Some(LinkTool::FirFilter(*s)),
             _ => None,
         }
     }
@@ -72,6 +76,8 @@ impl LinkTool {
             LinkTool::Translate(s) => Tool::Translate(*s),
             LinkTool::MedianFilter(s) => Tool::MedianFilter(*s),
             LinkTool::SimulateCurve(s) => Tool::SimulateCurve(s.clone()),
+            LinkTool::IirFilter(s) => Tool::IirFilter(*s),
+            LinkTool::FirFilter(s) => Tool::FirFilter(*s),
         }
     }
 }
@@ -323,7 +329,7 @@ impl Project {
     }
 
     /// Brings the links up to date after an edit that turned `before` into `self`: Auto links whose
-    /// input columns changed run again, Manual links are marked pending. Used by
+    /// input columns changed (their values or their mask) run again, Manual links are marked pending. Used by
     /// [`crate::Document`] inside the undo step of the edit. Returns what could not run.
     pub fn update_analysis_links(&mut self, before: &Project) -> Vec<String> {
         if self.analysis_links.is_empty() {
@@ -333,7 +339,10 @@ impl Project {
         for b in self.workbooks() {
             for s in &b.sheets {
                 for c in &s.columns {
-                    if before.column(c.id).is_some_and(|o| o.data != c.data) {
+                    if before
+                        .column(c.id)
+                        .is_some_and(|o| o.data != c.data || o.mask != c.mask || o.mask_disabled != c.mask_disabled)
+                    {
                         changed.insert(c.id);
                     }
                 }

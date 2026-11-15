@@ -16,7 +16,6 @@ use sheaf_calc::trend::sig_str;
 use sheaf_core::graph::{Dash, Font, Layer, LineStyle, ScaleKind};
 use sheaf_core::{Color, Project};
 
-
 /// Gap between the middle of the segment and the label, in points.
 const LABEL_GAP: f64 = 8.0;
 

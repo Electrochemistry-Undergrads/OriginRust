@@ -262,7 +262,25 @@ Name derivation from file name (group `Names`):
 | FNameToUDL | write file name to a user parameter row named `SourceFile` | 0 | [W] |
 | FPathToComm | include path and extension in appended names | 0 | [W] |
 
-Sheaf's naming options (`rename_sheet`, `rename_book` in `AsciiOptions`, both default on like Origin's "Rename Sheet with (Partial) Filename" and "Rename Book with (Partial) Filename"; CLI `--no-rename-sheet`, `--no-rename-book`): off gives the sheet the name `Sheet1` (`Sheet<n>` for a new sheet or a later block; a replaced sheet keeps its own name) and the book an empty long name. File name trimming (`Trim Filename From/To`), "Rename Long Name for Book only", "Include File Path when Renaming Book", "Auto Rename Using Filename" and the three "Append Filename to ... Comment" options are not offered.
+Sheaf's naming options (`rename_sheet`, `rename_book` in `AsciiOptions`, both default on like Origin's "Rename Sheet with (Partial) Filename" and "Rename Book with (Partial) Filename"; CLI `--no-rename-sheet`, `--no-rename-book`): off gives the sheet the name `Sheet1` (`Sheet<n>` for a new sheet or a later block; a replaced sheet keeps its own name) and the book an empty long name. **File name trimming, measured 2026-11-15** (Origin 2016, `impasc` on `abcdefgh.csv` with `AutoNames:=0`,
+`FNameToSht:=1`, `FNameToBk:=1` and the same From/To for both; `re-workspace/scratch/fntrim`):
+
+- The sheet name is cut from the file name **without** its extension (`abcdefgh`, 8 characters); the book long name
+  from the file name **with** it (`abcdefgh.csv`, 12 characters). With From 1, To 0 the long name is `abcdefgh.csv`
+  (Sheaf's long name has no extension today: a difference, left for a decision because it changes every imported
+  book's title).
+- From and To are 1-based character positions, both included: (2, 5) gives `bcde` for both names; (3, 3) gives `c`.
+- A negative number counts from the end, `len + n`: To -4 gives the sheet `abcd` (8 - 4) and the long name
+  `abcdefgh` (12 - 4, which drops `.csv`); From -6 gives the sheet `bcdefgh` (from 8 - 6 = 2) and the long name
+  `fgh.csv` (from 6); (-6, -4) gives `bcd` and `fgh`.
+- From 0, or a From before the first character (-20), means the first character; To 0, a To past the end (20), or a
+  To before From (5, 2) means the last character.
+- A range that leaves nothing (From 9 on the 8-character sheet name) keeps the default sheet name (`Sheet2` in that
+  run) and the default book short name (`Book1`); the long name still takes its own range (`.csv`).
+- The book short name follows the sheet's text (the range applied to the name without extension), numbered when the
+  name is taken (`abcdefgh1`, `abcdefgh2`).
+
+File name trimming (`Trim Filename From/To`; not offered yet, rules above), "Rename Long Name for Book only", "Include File Path when Renaming Book", "Auto Rename Using Filename" and the three "Append Filename to ... Comment" options are not offered.
 
 ### The impASC window, measured in Origin (2026-11-13)
 

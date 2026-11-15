@@ -102,7 +102,8 @@ fn the_defaults_log_spacing_and_the_x_of_a_column() {
     let mut s = server(&dir);
     let r = payload(&call(&mut s, "simulate_curve", json!({})));
     let x = numbers(&r["x"]);
-    assert_eq!((x.len(), x[0], x[99]), (100, 1.0, 10.0));
+    // Origin's window for Gauss: 200 points from -1 to 5 (fitting.md 13.1).
+    assert_eq!((x.len(), x[0], x[199]), (200, -1.0, 5.0));
 
     let r = payload(&call(
         &mut s,

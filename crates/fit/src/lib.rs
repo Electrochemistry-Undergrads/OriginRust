@@ -22,6 +22,7 @@ pub mod multipeak;
 pub mod nlsf;
 pub mod report;
 pub mod simulate;
+pub mod surface;
 pub mod xerr;
 
 pub use bands::Bands;

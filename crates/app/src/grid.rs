@@ -406,6 +406,8 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         windows: Vec::new(),
         open: None,
         recent_projects: &[],
+        recent_books: &[],
+        recent_graphs: &[],
         recent_imports: &[],
         panels: [true; 4],
         ai_link: false,

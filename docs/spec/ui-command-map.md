@@ -64,7 +64,8 @@ The ids 507, 510, 511, 532 are assigned by guess from their contents (INFER).
 - Open... [Ctrl+O]; Open Excel... [Ctrl+E]; Open Sample OPJ; Append... (merge another project in);
   Close.
 - Save Project [Ctrl+S]; Save Project As...
-- Save Window As...; Save Template As...: write the active window alone or as a template.
+- Save Window As... (works, T54: a workbook or a graph with its books to a `.sheafbook` or `.sheafgraph`);
+  Save Template As...: writes the active window as a template (still greyed).
 - Save Workbook As Analysis Template...; Add Word Bookmarks to Analysis Template...;
   Batch Processing... (run a saved analysis template over many files).
 - Save Project without Data...; Duplicate Project without Data.
@@ -74,8 +75,9 @@ The ids 507, 510, 511, 532 are assigned by guess from their contents (INFER).
   Database Import: New / saved queries.
 - **Export** (dyn): see section B4. Recent Exports submenu.
 - Recent Books, Recent Graphs, Recent Projects; Exit. Recent Projects and Recent Imports work (T38,
-  `docs/spec/recent-files.md`; 10 entries per list, the numbering and the path display are Sheaf's
-  choices, not measured in Origin). Recent Books, Recent Graphs and Recent Exports stay greyed.
+  `docs/spec/recent-files.md`; 15 entries per list (Origin measured, T38), the numbering and the path display are Sheaf's
+  choices, not measured in Origin). Recent Books and Recent Graphs work too (T54, `docs/spec/window-files.md`):
+  they list the window files saved with Save Window As or opened. Recent Exports stays greyed.
 - Graph windows additionally have Export Page... in the Layout version and the graph File menu
   carries Batch Processing but no "Re-Import".
 
@@ -257,7 +259,7 @@ Labels by folder (paraphrased lists of the English labels, P-tags in brackets):
   unmeasured); the others of this folder not named in their own task stay grey.
 - **Signal Processing**: Smooth [P0], FFT Filters, FFT (submenu FFT: FFT, IFFT, 2D FFT, 2D IFFT),
   Convolution, Deconvolution, Correlation, 2D Correlation, Coherence, Decimation, Envelope,
-  Hilbert Transform, IIR Filter, STFT, Wavelet submenu (Decompose, Reconstruction, Denoise,
+  Hilbert Transform, IIR Filter (live, T55; Sheaf adds FIR Filter after it, the FIR app's own menu place unknown), STFT, Wavelet submenu (Decompose, Reconstruction, Denoise,
   Smooth, Continuous Wavelet, Multi-Scale DWT, 2D Decompose/Reconstruction, Wavelet
   Functions). [Smooth P0, rest P1/P2]
 - **Fitting**: Linear Fit, Polynomial Fit, Multiple Linear Regression, Exponential Fit,

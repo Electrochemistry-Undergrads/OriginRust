@@ -111,6 +111,8 @@ pub enum GraphOp {
     DeleteShape { layer: usize, shape: usize },
     /// Delete on a slope annotation.
     DeleteSlope { layer: usize, slope: usize },
+    /// Move a drawn object to the top or bottom of its own layer's shape stack.
+    OrderShape { layer: usize, shape: usize, front: bool },
     /// Hide Layer (every plot of the layer is hidden).
     HideLayer { layer: usize },
     /// Hide Other Layers.
@@ -130,6 +132,31 @@ pub enum GraphTool {
     Draw(sheaf_core::shape::ShapeKind),
     /// The Slope tool: two clicks on data points of one plot mark the slope between them.
     Slope,
+    /// One of the Data menu's tools (Mask, Move, Remove Bad Data Points).
+    Data(DataTool),
+}
+
+/// The tools of a graph's Data menu that act on the points of a plot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataTool {
+    /// Data > Mask Data Points: a drag masks the points in a rectangle, a click on a masked point
+    /// unmasks it.
+    Mask,
+    /// Data > Move Data Points: a drag moves a point, changing its X and Y cells.
+    Move,
+    /// Data > Remove Bad Data Points: a click sets the Y cell of a point missing.
+    RemoveBad,
+}
+
+/// A change of worksheet cells made from a graph's Data menu tools (one undo step each).
+#[derive(Debug, Clone, PartialEq)]
+pub enum DataEdit {
+    /// Masks or unmasks the Y cells of points.
+    Mask { cells: Vec<sheaf_core::DataCell>, masked: bool },
+    /// Sets the Y cells of points missing.
+    RemoveBad { cells: Vec<sheaf_core::DataCell> },
+    /// Moves a point: its Y cell and, when the plot has an X column, its X cell.
+    Move { y: (sheaf_core::DataCell, f64), x: Option<(sheaf_core::DataCell, f64)> },
 }
 
 /// Which File > Import item opened the file chooser.
@@ -151,6 +178,9 @@ pub enum Action {
     OpenProject,
     SaveProject,
     SaveProjectAs,
+    /// File > Save Window As...: ask for a name and write this window (a workbook, or a graph with
+    /// the workbooks it reads) to a window file.
+    SaveWindowAs(WindowId),
     /// Ask for files and open the import dialog; with a path, skip the file chooser.
     Import(Option<PathBuf>),
     /// File > Import > Single ASCII, Multiple ASCII or Comma Delimited: the file chooser for that item.
@@ -215,6 +245,8 @@ pub enum Action {
     },
     ColumnProperties(ColumnId),
     SetColumnValues(ColumnId),
+    /// The Set Values window for several columns of one sheet at once (Ctrl+Shift+Q).
+    SetMultipleColumnsValues(Vec<ColumnId>),
     /// Recalculate these columns now. Columns without a recalculating formula are skipped.
     Recalculate(Vec<ColumnId>),
     /// Open the window of an analysis tool for these columns of a workbook; without columns,
@@ -397,6 +429,8 @@ pub enum Action {
         graph: WindowId,
         tool: GraphTool,
     },
+    /// A change that a Data menu tool made to the cells of a plot's worksheet.
+    DataEdit(DataEdit),
     /// Add Text: opens the text window for a new label in a layer (the active one when `layer`
     /// is `None`) at a point given as fractions of the layer frame (the middle when `None`).
     AddText {
@@ -497,11 +531,11 @@ pub enum Action {
     AppendProject(Option<std::path::PathBuf>),
     /// The File menu was opened: read the recent files again.
     ReloadRecent,
-    /// File > Recent Projects: open this entry the way Open does.
-    OpenRecent(std::path::PathBuf),
+    /// File > Recent Projects, Recent Books or Recent Graphs: open this entry the way Open does.
+    OpenRecent(std::path::PathBuf, crate::recent::RecentKind),
     /// File > Import > Recent Imports: import this entry again with the default settings.
     ImportRecent(std::path::PathBuf),
-    /// Clear Recent Projects / Clear Recent Imports.
+    /// Clear Recent Projects / Imports / Books / Graphs.
     ClearRecent(crate::recent::RecentKind),
     /// Remove a window from the project.
     DeleteWindow(WindowId),

@@ -1,6 +1,6 @@
 # T48: Graph Data menu tools: Mask, Remove Bad and Move Data Points
 
-**Status:** claimed 2026-11-15 (branch `graph-data-tools`, Claude macOS "mac-datatools"). Brief written from
+**Status:** done, merged 2026-11-15 (Claude macOS "mac-datatools"; graphing.md 20): core `Document::mask_points`/`remove_bad_points`/`move_point`, the three Data menu modes with Data Reader hit-testing (offsets, multipliers, log axes, waterfall, Skip Points, clipping), analysis links follow masks. Reviewed by three agents with each finding checked; nine fixed. Left: Origin measurements (graphing.md 20.4); acting on the active plot only (Sheaf has no active plot); display range and markers. Brief written from
 parity row "Data menu" (P1, ✗: every item of the graph's Data menu is grey) and T10's leftover "masking
 from the graph".
 **Size:** M. **Branch:** `graph-data-tools`. **Model:** Sonnet. No Origin needed for the mechanism; cursor

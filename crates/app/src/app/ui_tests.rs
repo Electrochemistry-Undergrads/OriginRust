@@ -16,6 +16,7 @@ mod excel;
 mod fill_inclusive;
 mod fill_sidelines;
 mod frozen_panes;
+mod graph_data_tools;
 mod hexbin;
 mod import_themes;
 mod label_frames;
@@ -27,11 +28,15 @@ mod offset_multipliers;
 mod parallel;
 mod recent;
 mod rug;
+mod save_window;
+mod set_multiple;
+mod shape_ordering;
 mod simulate;
 mod skip_points;
 mod slope;
 mod sort_x;
 mod sunburst;
+mod surface_fit;
 mod switcher;
 mod symbol_line_gaps;
 mod symbol_line_order;
@@ -1760,6 +1765,49 @@ fn fft_filters_open_from_signal_processing_and_add_a_column_per_input() {
     let added = b.sheet().columns.iter().filter(|c| c.comments.starts_with("FFT low pass filter of")).count();
     assert_eq!(added, 2);
     assert_eq!(h.state().doc.undo_label(), Some("FFT filter"));
+}
+
+/// A sheet of 60 rows (X 0..59, two signals), enough for the default FIR order.
+fn long_data_file(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("sample.csv");
+    let mut text = String::from("t,up,down\n");
+    for i in 0..60 {
+        let t = f64::from(i);
+        text += &format!("{t},{},{}\n", (t * 0.05).sin() + 2.0, (t * 2.0).sin());
+    }
+    std::fs::write(&path, text).unwrap();
+    path
+}
+
+#[test]
+fn iir_filter_opens_from_signal_processing_and_adds_a_column_per_input() {
+    let mut h = start(vec![data_file("iirfilter")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "IIR Filter..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let added =
+        b.sheet().columns.iter().filter(|c| c.comments.starts_with("Butterworth low pass IIR filter of")).count();
+    assert_eq!(added, 2);
+    assert_eq!(h.state().doc.undo_label(), Some("IIR filter"));
+}
+
+#[test]
+fn fir_filter_opens_from_signal_processing_and_adds_a_column_per_input() {
+    let mut h = start(vec![long_data_file("firfilter")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "FIR Filter..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let added =
+        b.sheet().columns.iter().filter(|c| c.comments.starts_with("Hamming window low pass FIR filter of")).count();
+    assert_eq!(added, 2);
+    assert_eq!(h.state().doc.undo_label(), Some("FIR filter"));
 }
 
 #[test]
@@ -7688,6 +7736,9 @@ fn a_drawn_arrow_is_moved_and_deleted_with_undo() {
     assert_eq!(h.state().doc.undo_label(), Some("Move drawn object"));
     menu(&mut h, "Edit", "Undo Move drawn object");
     assert_eq!(shapes(&h)[0], before);
+    // Undo clears a shape selection whose layer changed; select the restored arrow again.
+    let at = frame_point(&h, 0.4, 0.2);
+    click_at(&mut h, at);
     // Delete removes the selected object; Undo brings it back.
     h.key_press(egui::Key::Delete);
     settle(&mut h);

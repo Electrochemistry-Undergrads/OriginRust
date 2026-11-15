@@ -65,7 +65,16 @@ fn slope_on_a_plot_without_one_point_per_row_is_an_error() {
     let data = dir.join("d.csv");
     std::fs::write(&data, "X,A\n0,0\n1,2\n2,4\n3,6\n").unwrap();
     let svg = dir.join("o.svg");
-    let (ok, err) = sheaf(&["plot", data.to_str().unwrap(), "--template", "histogram", "-o", svg.to_str().unwrap(), "--slope", "1,2"]);
+    let (ok, err) = sheaf(&[
+        "plot",
+        data.to_str().unwrap(),
+        "--template",
+        "histogram",
+        "-o",
+        svg.to_str().unwrap(),
+        "--slope",
+        "1,2",
+    ]);
     assert!(!ok && err.contains("Slopes need a plot with one point per row"), "{err}");
     assert!(!svg.exists());
 }
@@ -89,7 +98,16 @@ fn slope_is_tied_to_the_x_column_of_the_plot() {
     let data = dir.join("d.csv");
     std::fs::write(&data, "X,A\n0,0\n1,2\n2,4\n").unwrap();
     let (svg, saved) = (dir.join("o.svg"), dir.join("p.sheaf"));
-    let (ok, err) = sheaf(&["plot", data.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--save", saved.to_str().unwrap(), "--slope", "1,3"]);
+    let (ok, err) = sheaf(&[
+        "plot",
+        data.to_str().unwrap(),
+        "-o",
+        svg.to_str().unwrap(),
+        "--save",
+        saved.to_str().unwrap(),
+        "--slope",
+        "1,3",
+    ]);
     assert!(ok, "{err}");
     let p: Project = sheaf_io::project_file::load(&saved).unwrap();
     let l = &p.graphs().next().unwrap().layers[0];

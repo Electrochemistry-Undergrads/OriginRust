@@ -15,7 +15,7 @@
 //! underlined, and Alt plus the letter of a top-level menu opens that menu. Letters inside the
 //! open menus are not handled (egui has no way to pick an item by letter).
 
-use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, DataTool, GraphOp, GraphTool, ImportPick, SheetOp};
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
@@ -43,6 +43,7 @@ const NEED_GRAPH: &str = "Activate a graph window first";
 const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
 const NEED_CELLS: &str = "Select cells, columns or rows first";
+const NEED_TWO_COLUMNS: &str = "Select two or more columns first";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
 const NO_UNDO: &str = "Nothing to undo";
@@ -68,6 +69,8 @@ pub enum Cmd {
     OpenProject,
     SaveProject,
     SaveProjectAs,
+    /// File > Save Window As...: the active workbook or graph to a window file of its own (T54).
+    SaveWindowAs,
     /// File > Import > Single ASCII (Ctrl+K).
     Import,
     ImportMultiple,
@@ -168,6 +171,8 @@ pub enum Cmd {
     Refresh,
     SetAs(Designation),
     SetColumnValues,
+    /// Column > Set Multiple Columns Values... (Ctrl+Shift+Q): two or more selected columns.
+    SetMultipleColumnsValues,
     Recalculate,
     AddColumns,
     ColumnProperties,
@@ -235,6 +240,8 @@ pub enum Cmd {
     Pointer,
     /// The Data Reader tool of the Tools toolbar.
     DataReader,
+    /// A tool of the Data menu (Mask, Move or Remove Bad Data Points).
+    DataTool(DataTool),
     /// The Text tool of the Tools toolbar.
     TextTool,
     /// The Slope tool of the Tools toolbar.
@@ -281,7 +288,7 @@ pub enum Cmd {
     WindowSwitcher,
     /// File > Append...: bring the windows of another project into this one.
     AppendProject,
-    /// Clear Recent Projects / Clear Recent Imports.
+    /// Clear Recent Projects / Imports / Books / Graphs.
     ClearRecent(RecentKind),
     /// View > Project Explorer and the other panels.
     Panel(PanelId),
@@ -299,7 +306,8 @@ pub enum Entry {
     Submenu(Submenu),
     /// The numbered list of the windows of the project, with a tick on the active one.
     Windows,
-    /// The entries of File > Recent Projects or File > Import > Recent Imports, from the context.
+    /// The entries of File > Recent Projects, Recent Books, Recent Graphs or File > Import > Recent
+    /// Imports, from the context.
     Recent(RecentKind),
 }
 
@@ -353,9 +361,12 @@ pub struct MenuContext<'a> {
     /// A top-level menu to hold open (`--show menu:Plot`, for pictures of the menus); `File>Recent
     /// Projects` holds that submenu of File open too.
     pub open: Option<&'a str>,
-    /// The recent projects and imports, newest first (stored text; no file is touched to draw them).
+    /// The recent projects, imports, workbook files and graph files, newest first (stored text; no
+    /// file is touched to draw them).
     pub recent_projects: &'a [PathBuf],
     pub recent_imports: &'a [PathBuf],
+    pub recent_books: &'a [PathBuf],
+    pub recent_graphs: &'a [PathBuf],
     /// Which side panels are shown, in the order of `PanelId::ALL` (the ticks of the View menu).
     pub panels: [bool; 4],
     /// The AI link is on (the tick of Tools > AI Assistants (MCP)).
@@ -372,6 +383,18 @@ pub struct MenuContext<'a> {
     /// worksheet as `curve`, the active plot first, then the others in plot order. The tools that
     /// compare curves (Average Multiple Curves, Intersect) start from these.
     pub layer_curves: Vec<ColumnId>,
+}
+
+impl<'a> MenuContext<'a> {
+    /// The entries of one recent list.
+    pub fn recent(&self, kind: RecentKind) -> &'a [PathBuf] {
+        match kind {
+            RecentKind::Projects => self.recent_projects,
+            RecentKind::Imports => self.recent_imports,
+            RecentKind::Books => self.recent_books,
+            RecentKind::Graphs => self.recent_graphs,
+        }
+    }
 }
 
 // ----- the table ---------------------------------------------------------------------------
@@ -495,6 +518,11 @@ fn plain_key(key: Key) -> KeyboardShortcut {
     KeyboardShortcut::new(Modifiers::NONE, key)
 }
 
+/// A submenu of one recent list: the entries, a separator and Clear.
+fn recent_submenu(label: &str, kind: RecentKind) -> Entry {
+    sub(label, vec![Entry::Recent(kind), sep(), item(&format!("Clear {label}"), Cmd::ClearRecent(kind))])
+}
+
 fn file_menu(kind: WindowKind) -> Vec<Entry> {
     let mut v = vec![
         sub(
@@ -524,7 +552,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     }
     if kind != WindowKind::None {
         v.push(sep());
-        v.push(grey("Save Window As..."));
+        v.push(item("Save &Window As...", Cmd::SaveWindowAs));
         v.push(grey("Save Template As..."));
         if kind == WindowKind::Workbook {
             v.push(grey("Save Workbook As Analysis Template..."));
@@ -589,22 +617,11 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         ));
     }
     v.push(sep());
-    v.push(grey("Recent Books"));
+    v.push(recent_submenu("Recent Books", RecentKind::Books));
     if kind == WindowKind::Graph {
-        v.push(grey("Recent Graphs"));
+        v.push(recent_submenu("Recent Graphs", RecentKind::Graphs));
     }
-    v.extend([
-        sub(
-            "Recent Projects",
-            vec![
-                Entry::Recent(RecentKind::Projects),
-                sep(),
-                item("Clear Recent Projects", Cmd::ClearRecent(RecentKind::Projects)),
-            ],
-        ),
-        sep(),
-        item("Exi&t", Cmd::Exit),
-    ]);
+    v.extend([recent_submenu("Recent Projects", RecentKind::Projects), sep(), item("Exi&t", Cmd::Exit)]);
     v
 }
 
@@ -959,7 +976,7 @@ fn column_menu() -> Vec<Entry> {
         item("Set as Categorical", Cmd::SetCategorical),
         sep(),
         keyed("Set Column &Values...", ctrl(Key::Q), Cmd::SetColumnValues),
-        grey_keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q)),
+        keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q), Cmd::SetMultipleColumnsValues),
         // Origin has this as a toolbar button and in the column's right-click menu.
         item("Re&calculate", Cmd::Recalculate),
         grey_sub(
@@ -1136,7 +1153,7 @@ fn analysis_menu() -> Vec<Entry> {
                 sep(),
                 keyed("Nonlinear Curve Fit...", ctrl(Key::Y), Cmd::Fit(FitKind::BuiltIn)),
                 grey("Nonlinear Implicit Curve Fit..."),
-                grey("Nonlinear Surface Fit..."),
+                item("Nonlinear Surface Fit...", Cmd::Fit(FitKind::Surface)),
                 sep(),
                 item("Simulate Curve...", Cmd::SimulateCurve),
                 grey("Simulate Surface..."),
@@ -1171,7 +1188,8 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Decimation...", Cmd::Analyze(AnalysisKind::Decimate)),
                 item("Envelope...", Cmd::Analyze(AnalysisKind::Envelope)),
                 item("Hilbert Transform...", Cmd::Analyze(AnalysisKind::Hilbert)),
-                grey("IIR Filter..."),
+                item("IIR Filter...", Cmd::Analyze(AnalysisKind::IirFilter)),
+                item("FIR Filter...", Cmd::Analyze(AnalysisKind::FirFilter)),
                 grey("STFT..."),
                 grey_sub(
                     "Wavelet",
@@ -1339,9 +1357,9 @@ fn data_menu() -> Vec<Entry> {
         grey_sub("Analysis Markers", &["Hide", "Show Partial Ranges", "Show All", "Tiny", "Small", "Medium", "Large"]),
         grey_sub("Lock Position", &["Layer Icon", "First Point", "Last Point"]),
         sep(),
-        grey("Mask Data Points"),
-        grey("Move Data Points"),
-        grey("Remove Bad Data Points"),
+        item("Mask Data Points", Cmd::DataTool(DataTool::Mask)),
+        item("Move Data Points", Cmd::DataTool(DataTool::Move)),
+        item("Remove Bad Data Points", Cmd::DataTool(DataTool::RemoveBad)),
     ]
 }
 
@@ -1540,7 +1558,7 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(item("Set As Categorical", Cmd::SetCategorical));
     v.push(sep());
     v.push(keyed("Set Column Values...", ctrl(Key::Q), Cmd::SetColumnValues));
-    v.push(grey_keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q)));
+    v.push(keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q), Cmd::SetMultipleColumnsValues));
     v.push(item("Recalculate", Cmd::Recalculate));
     v.push(item("Add New Columns...", Cmd::AddColumns));
     v.push(sep());
@@ -1790,8 +1808,8 @@ pub fn graph_shape_menu(layer: usize, shape: usize) -> Vec<Entry> {
         grey_keyed("Copy", ctrl(Key::C)),
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteShape { layer, shape })),
         sep(),
-        grey("Bring to the front"),
-        grey("Push to the back"),
+        item("Bring to the front", Cmd::GraphEdit(GraphOp::OrderShape { layer, shape, front: true })),
+        item("Push to the back", Cmd::GraphEdit(GraphOp::OrderShape { layer, shape, front: false })),
         sep(),
         item("Properties...", Cmd::EditShape { layer, shape }),
     ]
@@ -2077,6 +2095,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::OpenProject => Action::OpenProject,
         Cmd::SaveProject => Action::SaveProject,
         Cmd::SaveProjectAs => Action::SaveProjectAs,
+        Cmd::SaveWindowAs => Action::SaveWindowAs(c.active.ok_or(NEED_WINDOW)?),
         Cmd::Import => Action::ImportPick(ImportPick::Single),
         Cmd::ImportMultiple => Action::ImportPick(ImportPick::Multiple),
         Cmd::ImportCsv => Action::ImportPick(ImportPick::Csv),
@@ -2154,6 +2173,13 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SetColumnValues => {
             book?;
             Action::SetColumnValues(one()?)
+        }
+        Cmd::SetMultipleColumnsValues => {
+            book?;
+            match c.selected {
+                [_, _, ..] => Action::SetMultipleColumnsValues(c.selected.to_vec()),
+                _ => return Err(NEED_TWO_COLUMNS),
+            }
         }
         Cmd::Recalculate => {
             book?;
@@ -2305,6 +2331,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::GoTo(id) => Action::Focus(*id),
         Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pointer },
         Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Reader },
+        Cmd::DataTool(tool) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Data(*tool) },
         Cmd::TextTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Text },
         Cmd::ShapeTool(kind) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Draw(*kind) },
         Cmd::SlopeTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Slope },
@@ -2330,8 +2357,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::WindowSwitcher => Action::OpenSwitcher,
         Cmd::AppendProject => Action::AppendProject(None),
         Cmd::ClearRecent(kind) => {
-            let list = if *kind == RecentKind::Projects { c.recent_projects } else { c.recent_imports };
-            if list.is_empty() {
+            if c.recent(*kind).is_empty() {
                 return Err("The list is empty");
             }
             Action::ClearRecent(*kind)
@@ -2536,7 +2562,7 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
 /// without its extension shortened to 80 characters, the full path as the tooltip. An empty list
 /// shows a greyed "(none)".
 fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &mut Vec<Action>) {
-    let list = if kind == RecentKind::Projects { c.recent_projects } else { c.recent_imports };
+    let list = c.recent(kind);
     if list.is_empty() {
         ui.add_enabled(false, egui::Button::new(label_job(ui, "(none)", true)));
         return;
@@ -2550,7 +2576,7 @@ fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &m
         }
         if response.clicked() {
             actions.push(match kind {
-                RecentKind::Projects => Action::OpenRecent(path.clone()),
+                RecentKind::Projects | RecentKind::Books | RecentKind::Graphs => Action::OpenRecent(path.clone(), kind),
                 RecentKind::Imports => Action::ImportRecent(path.clone()),
             });
             ui.close();
@@ -2738,6 +2764,7 @@ mod tests {
         let find = |ks: KeyboardShortcut| keys.iter().find(|(k, _)| *k == ks).map(|(_, c)| c.clone());
         assert_eq!(find(ctrl(Key::K)), Some(Cmd::Import), "Ctrl+K imports, as in Origin");
         assert_eq!(find(ctrl(Key::Q)), Some(Cmd::SetColumnValues));
+        assert_eq!(find(ctrl_shift(Key::Q)), Some(Cmd::SetMultipleColumnsValues));
         assert_eq!(find(ctrl(Key::D)), Some(Cmd::AddColumns));
         assert_eq!(find(ctrl(Key::Y)), Some(Cmd::Fit(FitKind::BuiltIn)), "Ctrl+Y is Origin's, not redo");
         assert_eq!(find(ctrl(Key::N)), Some(Cmd::NewProject));
@@ -2765,6 +2792,8 @@ mod tests {
             open: None,
             recent_projects: &[],
             recent_imports: &[],
+            recent_books: &[],
+            recent_graphs: &[],
             panels: [true; 4],
             ai_link: false,
             layer: 0,
@@ -2793,6 +2822,14 @@ mod tests {
         let c = MenuContext { kind: WindowKind::Workbook, book: Some(WindowId(1)), graph: None, selected: &sel, ..c };
         assert!(matches!(resolve(&Cmd::SetColumnValues, &c), Ok(Action::SetColumnValues(x)) if x == id));
         assert_eq!(resolve(&Cmd::ExportGraph, &c).unwrap_err(), NEED_GRAPH);
+        // Several columns need two or more.
+        assert_eq!(resolve(&Cmd::SetMultipleColumnsValues, &c).unwrap_err(), NEED_TWO_COLUMNS);
+        let two = [ColumnId(7), ColumnId(8)];
+        let c = MenuContext { selected: &two, ..c };
+        assert!(
+            matches!(resolve(&Cmd::SetMultipleColumnsValues, &c), Ok(Action::SetMultipleColumnsValues(x)) if x == two)
+        );
+        assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_ONE_COLUMN);
     }
 
     #[test]

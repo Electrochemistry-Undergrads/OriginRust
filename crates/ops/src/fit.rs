@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use sheaf_core::analysis::RowRange;
 use sheaf_core::fitting::{
     BandChoice, CompareOutcome, FitModel, FitOutcome, FitRequest, FitWeighting, MultiRegOutcome, MultiRegRequest,
-    ParamSetting, RankOutcome, builtin_functions,
+    ParamSetting, RankOutcome, SurfaceColumns, builtin_functions, surface_functions,
 };
 use sheaf_core::{ColumnId, Project, WindowId};
 use std::path::PathBuf;
@@ -78,6 +78,10 @@ pub struct FitSpec {
     pub sheet: Option<String>,
     pub rows: Option<String>,
     pub x_range: Option<String>,
+    /// A surface fit `z = f(x, y)`: the Z column. `y` then holds the Y column (first entry) and
+    /// `x` the X column; either one left out is the sheet's own (fitting.md section 15).
+    pub z: Option<String>,
+    pub x: Option<String>,
 }
 
 impl Default for FitSpec {
@@ -109,6 +113,8 @@ impl Default for FitSpec {
             sheet: None,
             rows: None,
             x_range: None,
+            z: None,
+            x: None,
         }
     }
 }
@@ -204,6 +210,7 @@ pub struct ModelInfo {
 /// The built-in fit functions, sorted by priority, category and name.
 pub fn list_models() -> Vec<ModelInfo> {
     let mut functions = builtin_functions();
+    functions.extend(surface_functions());
     functions.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.category.cmp(&b.category)).then(a.name.cmp(&b.name)));
     functions
         .into_iter()
@@ -301,6 +308,12 @@ pub fn run(project: &mut Project, a: &FitSpec, prepared: &Prepared) -> Result<Fi
         bail!("--params names the parameters of --formula; add --formula, or drop --params");
     }
     let weighting = prepared.weighting;
+    if a.z.is_some() {
+        return run_surface(project, a, prepared);
+    }
+    if a.x.is_some() {
+        bail!("--x names the X column of a surface fit; add --z with the Z column, or drop --x");
+    }
     let book = pick_book(project, a.book.as_deref())?;
     let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
     let errors = named_columns(project, book, sheet, &a.yerr)?;
@@ -370,6 +383,52 @@ pub fn run(project: &mut Project, a: &FitSpec, prepared: &Prepared) -> Result<Fi
     Ok(FitResult { book, run: FitRun::Fits { summary, outcomes, columns } })
 }
 
+/// A surface fit `z = f(x, y)`: --z is the Z column, --y (first entry) the Y column and --x the X
+/// column; the two left out are the sheet's own (the X column to the left of Z, the nearest Y
+/// column to its left).
+fn run_surface(project: &mut Project, a: &FitSpec, prepared: &Prepared) -> Result<FitResult> {
+    let unsupported = [
+        (a.global, "--global"),
+        (!a.regress.is_empty(), "--regress"),
+        (a.compare.is_some(), "--compare"),
+        (!a.rank.is_empty(), "--rank"),
+        (a.xerr.is_some(), "--xerr"),
+        (prepared.bands != BandChoice::None, "--bands"),
+    ];
+    if let Some((_, name)) = unsupported.iter().find(|(on, _)| *on) {
+        bail!("{name} does not work with a surface fit (--z)");
+    }
+    if a.y.len() > 1 {
+        bail!("a surface fit takes one --y column, the Y column of the surface");
+    }
+    let book = pick_book(project, a.book.as_deref())?;
+    let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
+    let one = |name: &Option<String>| -> Result<Option<ColumnId>> {
+        match name {
+            Some(n) => Ok(named_columns(project, book, sheet, std::slice::from_ref(n))?.first().copied()),
+            None => Ok(None),
+        }
+    };
+    let z = one(&a.z)?.expect("--z is set");
+    let (x, y) = (one(&a.x)?, named_columns(project, book, sheet, &a.y)?.first().copied());
+    let errors = named_columns(project, book, sheet, &a.yerr)?;
+    if !errors.is_empty() && !matches!(prepared.weighting, FitWeighting::Instrumental | FitWeighting::Direct) {
+        bail!("--yerr names the error or weight columns of --weight instrumental or direct; add one of them");
+    }
+    let mut request = FitRequest::new(z, prepared.model.clone());
+    request.surface = Some(SurfaceColumns { x, y });
+    request.rows = prepared.rows;
+    request.params = prepared.params.clone();
+    request.weighting = prepared.weighting;
+    request.y_error = errors.first().copied();
+    request.confidence_level = a.confidence;
+    request.max_iterations = a.max_iterations;
+    request.tolerance = a.tolerance;
+    request.scale_errors = !a.no_scale_errors;
+    let outcome = project.fit(&request)?;
+    Ok(FitResult { book, run: FitRun::Fits { summary: None, outcomes: vec![outcome], columns: vec![z] } })
+}
+
 fn regress(project: &mut Project, a: &FitSpec, book: WindowId, sheet: usize, y: ColumnId) -> Result<MultiRegOutcome> {
     let xs = named_columns(project, book, sheet, &a.regress)?;
     let mut request = MultiRegRequest::new(y, xs);
@@ -386,6 +445,11 @@ fn regress(project: &mut Project, a: &FitSpec, book: WindowId, sheet: usize, y: 
 
 /// The graph of a fit: the one it made, or a new one showing the data and the fitted curve.
 pub fn fit_graph(project: &mut Project, outcome: &FitOutcome, source: ColumnId) -> Result<WindowId> {
+    if outcome.surface {
+        bail!(
+            "a surface fit has no 2D graph (--plot is for curve fits); the fitted surface is in the FitSurfaceCurve sheet"
+        );
+    }
     Ok(match outcome.graphs.first() {
         Some(g) => *g,
         None => project.plot_fit(outcome, source)?,

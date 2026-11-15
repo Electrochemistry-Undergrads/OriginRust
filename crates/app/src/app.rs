@@ -2,7 +2,7 @@
 //! workbook and graph child windows, dialogs, and the one place where user actions change the
 //! project.
 
-use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, DataEdit, DataTool, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp};
 use crate::autosave::{Autosave, Due};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
@@ -60,6 +60,7 @@ use sheaf_core::{ColumnData, ColumnId, Designation, Document, Project, WindowId}
 use sheaf_io::batch::{ImportMode, PlaceOptions, Target, place_workbook_with};
 use sheaf_io::project_file;
 use sheaf_io::recovery::{self, AutosaveSettings, Session};
+use sheaf_io::window_file::{self, WindowFileKind};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -97,7 +98,6 @@ pub struct Startup {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum Pending {
     New,
-    Open,
     /// Open the project in `pending_path` (dropped onto the window or given at start-up).
     OpenFile,
     /// Open the newest recovery of an earlier run (the Recover button).
@@ -195,6 +195,8 @@ pub struct SheafApp {
     next_token: u64,
     pending: Option<Pending>,
     pending_path: Option<PathBuf>,
+    /// Window files that came with the project in `pending_path`; they join it once it is open.
+    pending_windows: Vec<PathBuf>,
     /// Folder of the last imported Origin project, used as the start folder of file choosers.
     import_folder: Option<PathBuf>,
     quit_confirmed: bool,
@@ -217,6 +219,8 @@ pub struct SheafApp {
     /// The Window Switcher (Ctrl+Tab) while it is open.
     switcher: Option<crate::switcher::Switcher>,
 }
+
+type ShapeLayerSnapshot = (WindowId, usize, Option<Vec<sheaf_core::shape::Shape>>);
 
 impl SheafApp {
     pub fn new(cc: &eframe::CreationContext<'_>, startup: Startup) -> Self {
@@ -282,6 +286,7 @@ impl SheafApp {
             next_token: 1,
             pending: None,
             pending_path: None,
+            pending_windows: Vec::new(),
             import_folder: None,
             quit_confirmed: false,
             open_menu: None,
@@ -472,13 +477,24 @@ impl SheafApp {
         if paths.is_empty() {
             return;
         }
+        // A window file (T54) never replaces the project: its windows are added, as File > Append does.
+        // It is routed before the project check, which refuses a window file.
+        let (windows, paths): (Vec<PathBuf>, Vec<PathBuf>) =
+            paths.into_iter().partition(|p| window_file::is_window_file(p));
         if let Some(project) = paths.iter().find(|p| sheaf_io::is_project_file(p)) {
             if self.doc.dirty {
                 self.pending_path = Some(project.clone());
+                self.pending_windows = windows;
                 self.pending = Some(Pending::OpenFile);
             } else {
-                self.load_project(project.clone());
+                if self.load_project(project.clone()) {
+                    self.append_window_files(&windows);
+                }
             }
+            return;
+        }
+        self.append_window_files(&windows);
+        if paths.is_empty() {
             return;
         }
         // Excel workbooks have their own import window and are not graphed on their own.
@@ -518,8 +534,12 @@ impl SheafApp {
 
     /// Opens a `.sheaf` project or imports an Origin `.opj` project, replacing the current one.
     /// File > Append: the windows of the project in `path` join this project in a folder named
-    /// after the file, in one undo step.
+    /// after the file, in one undo step. A window file goes to [`SheafApp::append_window_file`].
     fn append_project_file(&mut self, path: &Path) {
+        if window_file::is_window_file(path) {
+            self.append_window_file(path);
+            return;
+        }
         match sheaf_io::open_project(path) {
             Ok(opened) => {
                 let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Appended").to_string();
@@ -544,7 +564,111 @@ impl SheafApp {
         }
     }
 
-    fn load_project(&mut self, path: PathBuf) {
+    fn append_window_files(&mut self, paths: &[PathBuf]) {
+        for path in paths {
+            self.append_window_file(path);
+        }
+    }
+
+    /// Opening a window file (`.sheafbook`, `.sheafgraph`; `docs/spec/window-files.md`): its windows join
+    /// the project in the root folder in one undo step, renamed where a name is taken, and the saved
+    /// window comes to the front. Never replaces the project. The file goes to the top of Recent
+    /// Books or Recent Graphs.
+    fn append_window_file(&mut self, path: &Path) {
+        let file = match window_file::load_window(path) {
+            Ok(file) => file,
+            Err(e) => {
+                self.warn(format!("Could not open the window file: {}", path.display()));
+                self.message = Some(("Could not open the window file".to_string(), e.to_string()));
+                return;
+            }
+        };
+        let wanted: Vec<String> = file.project.windows.iter().map(|w| w.name().to_string()).collect();
+        let primary = file.primary;
+        let kind = file.kind;
+        let mut added = (Vec::new(), 0);
+        self.doc.apply("Open window file", |p| added = p.append_windows(file.project));
+        let (ids, dropped) = added;
+        if let Some(id) = ids.get(primary) {
+            self.focus(*id);
+        }
+        let mut notes = Vec::new();
+        for (id, was) in ids.iter().zip(&wanted) {
+            if let Some(now) = self.doc.project().window(*id).map(|w| w.name().to_string())
+                && now != *was
+            {
+                notes.push(format!("{was} is renamed {now}, because the project already has a window of that name."));
+            }
+        }
+        if dropped > 0 {
+            notes.push(format!("{dropped} analysis result(s) no longer recalculate; their values are kept."));
+        }
+        self.say(format!("Opened {} window(s) from {}", ids.len(), path.display()));
+        self.note_window(kind, path);
+        for note in &notes {
+            self.logs.warn(note.clone());
+        }
+        if !notes.is_empty() {
+            self.message = Some(("Notes about the opened window file".to_string(), notes.join("\n\n")));
+        }
+    }
+
+    /// File > Save Window As...: asks for a name (the extension of the window's kind, the window's
+    /// name to start with) and writes the window.
+    fn save_window_as(&mut self, id: WindowId) {
+        let Some(window) = self.doc.project().window(id) else { return };
+        let kind = WindowFileKind::of_window(window);
+        let (title, filter) = match kind {
+            WindowFileKind::Book => ("Save workbook as", "Sheaf workbook (*.sheafbook)"),
+            WindowFileKind::Graph => ("Save graph as", "Sheaf graph (*.sheafgraph)"),
+        };
+        let suggested = format!("{}.{}", window.name(), kind.extension());
+        let mut chooser =
+            rfd::FileDialog::new().set_title(title).add_filter(filter, &[kind.extension()]).set_file_name(suggested);
+        if let Some(dir) = self.folder() {
+            chooser = chooser.set_directory(dir);
+        }
+        if let Some(path) = chooser.save_file() {
+            self.save_window_to(id, path);
+        }
+    }
+
+    /// Writes window `id` to `path`. A name without the window kind's extension gets it added (so the
+    /// file of another kind, a project among them, is never written over by a mistyped name). Returns
+    /// `true` when the file was written; then it is at the top of Recent Books or Recent Graphs.
+    fn save_window_to(&mut self, id: WindowId, path: PathBuf) -> bool {
+        let Some(window) = self.doc.project().window(id) else { return false };
+        let kind = WindowFileKind::of_window(window);
+        let path = window_file::default_extension(&path, kind);
+        match window_file::save_window(self.doc.project(), id, &path) {
+            Ok(saved) => {
+                self.say(format!("Saved {} window(s) to {}", saved.windows, path.display()));
+                self.note_window(kind, &path);
+                for note in &saved.notes {
+                    self.logs.warn(note.clone());
+                }
+                if !saved.notes.is_empty() {
+                    self.message = Some(("Notes about the saved window".to_string(), saved.notes.join("\n\n")));
+                }
+                true
+            }
+            Err(e) => {
+                self.message = Some(("Could not save the window".to_string(), e.to_string()));
+                false
+            }
+        }
+    }
+
+    /// A window file was opened or saved: it goes to the top of Recent Books or Recent Graphs.
+    fn note_window(&mut self, kind: WindowFileKind, path: &Path) {
+        if let Some(why) = self.recent.push_window(kind, path) {
+            self.logs.warn(why);
+        }
+    }
+
+    /// Replaces the project with the one in `path`. Returns `false` (and keeps the project) when the
+    /// file cannot be opened.
+    fn load_project(&mut self, path: PathBuf) -> bool {
         match sheaf_io::open_project(&path) {
             Ok(opened) => {
                 self.note_project(&path);
@@ -578,8 +702,51 @@ impl SheafApp {
                         ),
                     ));
                 }
+                true
             }
-            Err(e) => self.message = Some(("Could not open the project".to_string(), e.to_string())),
+            Err(e) => {
+                self.message = Some(("Could not open the project".to_string(), e.to_string()));
+                false
+            }
+        }
+    }
+
+    /// File > Open's chooser: projects and window files.
+    fn choose_project_file(&self) -> Option<PathBuf> {
+        let mut chooser = rfd::FileDialog::new()
+            .set_title("Open project")
+            .add_filter(
+                "Projects and window files",
+                &[
+                    project_file::EXTENSION,
+                    "opj",
+                    "opju",
+                    WindowFileKind::Book.extension(),
+                    WindowFileKind::Graph.extension(),
+                ],
+            )
+            .add_filter("Projects (Sheaf, Origin)", &[project_file::EXTENSION, "opj", "opju"])
+            .add_filter("Sheaf window files", &[WindowFileKind::Book.extension(), WindowFileKind::Graph.extension()])
+            .add_filter("Sheaf project", &[project_file::EXTENSION])
+            .add_filter("Origin project", &["opj"])
+            .add_filter("Origin Unicode project (workbooks only)", &["opju"]);
+        if let Some(dir) = self.folder() {
+            chooser = chooser.set_directory(dir);
+        }
+        chooser.pick_file()
+    }
+
+    /// A file picked in File > Open. A window file is added and never asks about unsaved changes (it
+    /// does not replace the project); a project asks first when the project has changes.
+    fn open_picked(&mut self, path: PathBuf) {
+        if window_file::is_window_file(&path) {
+            self.append_window_file(&path);
+        } else if self.doc.dirty {
+            self.pending_path = Some(path);
+            self.pending_windows.clear();
+            self.pending = Some(Pending::OpenFile);
+        } else {
+            self.load_project(path);
         }
     }
 
@@ -732,6 +899,8 @@ impl SheafApp {
                 let title = match kind {
                     RecentKind::Projects => "Could not open the project",
                     RecentKind::Imports => "Could not import the file",
+                    RecentKind::Books => "Could not open the workbook file",
+                    RecentKind::Graphs => "Could not open the graph file",
                 };
                 self.warn(format!("{title}: {}", path.display()));
                 if let Some(failed) = self.recent.forget(&path) {
@@ -1043,6 +1212,8 @@ impl SheafApp {
             GraphOp::DeleteLabel { .. } => "Delete text",
             GraphOp::DeleteShape { .. } => "Delete drawn object",
             GraphOp::DeleteSlope { .. } => "Delete slope annotation",
+            GraphOp::OrderShape { front: true, .. } => "Bring drawn object to front",
+            GraphOp::OrderShape { front: false, .. } => "Push drawn object to back",
             GraphOp::HideLayer { .. } => "Hide layer",
             GraphOp::HideOtherLayers { .. } => "Hide other layers",
             GraphOp::MovePlotToAxis { right: true, .. } => "Move plot to right Y axis",
@@ -1053,8 +1224,55 @@ impl SheafApp {
         // The present axis ranges, for the zoom (an automatic axis has no stored limits).
         let resolved = sheaf_plot::layout_geometry(self.doc.project(), graph).ok();
         let shapes = self.shape_dialog_shapes();
+        let selected = self.snapshot_shape_interactions();
         self.doc.apply(label, |p| graph_view::apply_op(p, graph, op, resolved.as_deref()));
+        // Keep the moved object selected at its new index; clear any other selection in a changed
+        // shape stack, whose old index may now identify a different object.
+        let mut preserved = None;
+        if let GraphOp::OrderShape { layer, shape, front } = op
+            && let Some((_, _, Some(before))) = selected.iter().find(|(id, l, _)| *id == graph && *l == layer)
+            && let Some(after) = self.doc.project().graph(graph).and_then(|g| g.layers.get(layer)).map(|l| &l.shapes)
+            && before != after
+            && shape < before.len()
+            && let Some(state) = self.graphs.get_mut(&graph)
+            && state.selected == Some((layer, sheaf_plot::scene::ObjectKind::Shape(shape)))
+        {
+            state.selected =
+                Some((layer, sheaf_plot::scene::ObjectKind::Shape(if front { after.len() - 1 } else { 0 })));
+            preserved = Some((graph, layer));
+        }
+        self.clear_changed_shape_selections(selected, preserved);
         self.close_shape_dialog_if_changed(shapes);
+    }
+
+    /// Snapshot layers with index-based shape interactions so a changed layer cannot leave an
+    /// index pointing at a different object.
+    fn snapshot_shape_interactions(&self) -> Vec<ShapeLayerSnapshot> {
+        self.graphs
+            .iter()
+            .flat_map(|(id, state)| {
+                state.shape_interaction_layers().into_iter().map(move |layer| {
+                    let shapes =
+                        self.doc.project().graph(*id).and_then(|g| g.layers.get(layer)).map(|l| l.shapes.clone());
+                    (*id, layer, shapes)
+                })
+            })
+            .collect()
+    }
+
+    fn clear_changed_shape_selections(
+        &mut self,
+        before: Vec<ShapeLayerSnapshot>,
+        preserved: Option<(WindowId, usize)>,
+    ) {
+        for (id, layer, shapes) in before {
+            let current = self.doc.project().graph(id).and_then(|g| g.layers.get(layer)).map(|l| &l.shapes);
+            if shapes.as_ref() != current
+                && let Some(state) = self.graphs.get_mut(&id)
+            {
+                state.invalidate_shape_interaction(layer, preserved == Some((id, layer)));
+            }
+        }
     }
 
     /// The drawn objects of the layer the drawn-object window edits, if it is open.
@@ -1128,6 +1346,23 @@ impl SheafApp {
                 self.workspace.add(id, graph, false);
             }
             self.workspace.activate(id);
+        }
+    }
+
+    /// A change from a graph's Data menu tools. A column that a formula keeps up to date refuses it, as the
+    /// worksheet refuses a typed value.
+    fn data_edit(&mut self, edit: DataEdit) {
+        let result = match edit {
+            DataEdit::Mask { cells, masked } => self.doc.mask_points(&cells, masked),
+            DataEdit::RemoveBad { cells } => self.doc.remove_bad_points(&cells),
+            DataEdit::Move { y, x } => self.doc.move_point(y, x),
+        };
+        match result {
+            Ok(report) if report.locked > 0 => {
+                self.warn("That column is calculated from a formula; change the formula in Set Column Values");
+            }
+            Ok(_) => {}
+            Err(e) => self.warn(format!("Could not change the data: {e}")),
         }
     }
 
@@ -1229,10 +1464,9 @@ impl SheafApp {
                 }
             }
             Action::OpenProject => {
-                if self.doc.dirty {
-                    self.pending = Some(Pending::Open);
-                } else {
-                    self.do_pending(Pending::Open, ctx);
+                // The chooser comes first: only a project replaces this one, so only a project asks.
+                if let Some(path) = self.choose_project_file() {
+                    self.open_picked(path);
                 }
             }
             Action::SaveProject => {
@@ -1259,18 +1493,22 @@ impl SheafApp {
                 }
             }
             Action::Undo => {
+                let selected = self.snapshot_shape_interactions();
                 let shapes = self.shape_dialog_shapes();
                 if let Some(label) = self.doc.undo() {
                     self.say(format!("Undone: {label}"));
                 }
                 self.close_shape_dialog_if_changed(shapes);
+                self.clear_changed_shape_selections(selected, None);
             }
             Action::Redo => {
+                let selected = self.snapshot_shape_interactions();
                 let shapes = self.shape_dialog_shapes();
                 if let Some(label) = self.doc.redo() {
                     self.say(format!("Redone: {label}"));
                 }
                 self.close_shape_dialog_if_changed(shapes);
+                self.clear_changed_shape_selections(selected, None);
             }
             Action::UndoAiChanges => self.undo_ai_changes(ctx),
             Action::NewWorkbook => {
@@ -1426,6 +1664,12 @@ impl SheafApp {
             }
             Action::SetColumnValues(column) => {
                 self.set_values = SetValuesDialog::new(self.doc.project(), column);
+            }
+            Action::SetMultipleColumnsValues(columns) => {
+                self.set_values = SetValuesDialog::new_multiple(self.doc.project(), &columns);
+                if self.set_values.is_none() {
+                    self.say("Select two or more columns of one sheet first");
+                }
             }
             Action::PlotColumns { book, columns, template } => self.plot_columns(book, columns, template),
             Action::PlotYError { book, columns, x } => self.plot_y_error(book, columns, x),
@@ -1647,6 +1891,10 @@ impl SheafApp {
                     GraphTool::Draw(kind) => Some(kind),
                     _ => None,
                 };
+                state.data_tool = match tool {
+                    GraphTool::Data(t) => Some(t),
+                    _ => None,
+                };
                 state.reader_point = None;
                 match tool {
                     GraphTool::Reader => {
@@ -1657,9 +1905,11 @@ impl SheafApp {
                     GraphTool::Draw(kind) => {
                         self.say(format!("{}: drag on the graph (Shift constrains); Esc ends", kind.name()))
                     }
+                    GraphTool::Data(tool) => self.say(crate::data_tools::hint(tool)),
                     GraphTool::Pointer => {}
                 }
             }
+            Action::DataEdit(edit) => self.data_edit(edit),
             Action::AddText { graph, layer, at } => {
                 let state = self.graphs.entry(graph).or_default();
                 state.text_tool = false;
@@ -1737,9 +1987,16 @@ impl SheafApp {
             Action::HideWindow(id) => self.workspace.hide(id),
             Action::AppendProject(path) => {
                 let path = path.or_else(|| {
-                    let mut chooser = rfd::FileDialog::new()
-                        .set_title("Append project")
-                        .add_filter("Projects (Sheaf, Origin)", &[project_file::EXTENSION, "opj", "opju"]);
+                    let mut chooser = rfd::FileDialog::new().set_title("Append project").add_filter(
+                        "Projects and window files",
+                        &[
+                            project_file::EXTENSION,
+                            "opj",
+                            "opju",
+                            WindowFileKind::Book.extension(),
+                            WindowFileKind::Graph.extension(),
+                        ],
+                    );
                     if let Some(dir) = self.folder() {
                         chooser = chooser.set_directory(dir);
                     }
@@ -1749,16 +2006,19 @@ impl SheafApp {
                     self.append_project_file(&path);
                 }
             }
+            Action::SaveWindowAs(id) => self.save_window_as(id),
             Action::ReloadRecent => {
                 self.recent.reload();
                 ctx.request_repaint();
             }
-            Action::OpenRecent(path) => self.follow_recent(path, RecentKind::Projects),
+            Action::OpenRecent(path, kind) => self.follow_recent(path, kind),
             Action::ImportRecent(path) => self.follow_recent(path, RecentKind::Imports),
             Action::ClearRecent(kind) => {
                 let failed = match kind {
                     RecentKind::Projects => self.recent.clear_projects(),
                     RecentKind::Imports => self.recent.clear_imports(),
+                    RecentKind::Books => self.recent.clear_books(),
+                    RecentKind::Graphs => self.recent.clear_graphs(),
                 };
                 if let Some(why) = failed {
                     self.logs.warn(why);
@@ -1907,23 +2167,12 @@ impl SheafApp {
                 self.reset_views();
                 self.say("New project".to_string());
             }
-            Pending::Open => {
-                let mut chooser = rfd::FileDialog::new()
-                    .set_title("Open project")
-                    .add_filter("Projects (Sheaf, Origin)", &[project_file::EXTENSION, "opj", "opju"])
-                    .add_filter("Sheaf project", &[project_file::EXTENSION])
-                    .add_filter("Origin project", &["opj"])
-                    .add_filter("Origin Unicode project (workbooks only)", &["opju"]);
-                if let Some(dir) = self.folder() {
-                    chooser = chooser.set_directory(dir);
-                }
-                if let Some(path) = chooser.pick_file() {
-                    self.load_project(path);
-                }
-            }
             Pending::OpenFile => {
                 if let Some(path) = self.pending_path.take() {
-                    self.load_project(path);
+                    let windows = std::mem::take(&mut self.pending_windows);
+                    if self.load_project(path) {
+                        self.append_window_files(&windows);
+                    }
                 }
             }
             Pending::Recover => self.recover_newest(),
@@ -2570,6 +2819,8 @@ impl SheafApp {
             open: self.open_menu.as_deref(),
             recent_projects: self.recent.projects(),
             recent_imports: self.recent.imports(),
+            recent_books: self.recent.books(),
+            recent_graphs: self.recent.graphs(),
             panels: self.panels.shown_flags(),
             ai_link: self.live.active(),
             layer: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer),
@@ -3594,7 +3845,10 @@ impl SheafApp {
                     self.pending = None;
                     self.do_pending(pending, ctx);
                 }
-                Some(_) => self.pending = None,
+                Some(_) => {
+                    self.pending = None;
+                    self.pending_windows.clear();
+                }
                 None => {}
             }
         }
@@ -3661,6 +3915,35 @@ impl SheafApp {
                         let state = self.graphs.entry(id).or_default();
                         state.reader = true;
                         state.reader_point = Some(crate::reader::Point { layer: 0, plot: 0, row: 2 });
+                    }
+                }
+                // data-tool:mask, data-tool:move or data-tool:remove turns that Data menu tool on in the
+                // first graph; mask-points:1,2 masks those rows (from 1) of its first plot.
+                "data-tool" => {
+                    let tool = match arg {
+                        "mask" => Some(DataTool::Mask),
+                        "move" => Some(DataTool::Move),
+                        "remove" => Some(DataTool::RemoveBad),
+                        _ => None,
+                    };
+                    if let (Some(id), Some(tool)) = (first_graph, tool) {
+                        self.graphs.entry(id).or_default().data_tool = Some(tool);
+                        self.say(crate::data_tools::hint(tool));
+                        self.focus(id);
+                    }
+                }
+                "mask-points" => {
+                    let y = first_graph
+                        .and_then(|g| project.graph(g))
+                        .and_then(|g| g.layers.first()?.plots.first())
+                        .map(|p| p.y);
+                    if let Some(y) = y {
+                        let cells: Vec<_> = arg
+                            .split(',')
+                            .filter_map(|r| r.trim().parse::<usize>().ok())
+                            .map(|r| sheaf_core::DataCell::new(y, r.saturating_sub(1)))
+                            .collect();
+                        self.data_edit(DataEdit::Mask { cells, masked: true });
                     }
                 }
                 // text:N opens the Text window of the N-th label (from 1) of the first graph's
@@ -3774,6 +4057,19 @@ impl SheafApp {
                 "set-values" => {
                     if let Some(c) = first_column {
                         self.set_values = SetValuesDialog::new(self.doc.project(), c);
+                    }
+                }
+                // set-values-multiple or set-values-multiple:B,C,D opens Set Multiple Columns Values
+                // on those columns of the first workbook (every column but the first by default).
+                "set-values-multiple" => {
+                    if let Some(book) = project.workbooks().next() {
+                        let sheet = book.sheet();
+                        let columns: Vec<ColumnId> = if arg.is_empty() {
+                            sheet.columns.iter().skip(1).map(|c| c.id).collect()
+                        } else {
+                            arg.split(',').filter_map(|n| sheet.column_by_name(n.trim())).map(|c| c.id).collect()
+                        };
+                        self.set_values = SetValuesDialog::new_multiple(self.doc.project(), &columns);
                     }
                 }
                 "analysis" => {

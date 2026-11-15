@@ -388,3 +388,98 @@ fn two_non_text_paths_that_print_alike_are_not_mistaken_for_one() {
         assert_ne!(key(&a, false), key(&b, false));
     }
 }
+
+#[test]
+fn the_newest_book_and_the_newest_graph_come_first_in_lists_of_their_own() {
+    let dir = scratch("windows");
+    let (b1, b2) = (touch(&dir, "a.sheafbook"), touch(&dir, "b.sheafbook"));
+    let (g1, g2) = (touch(&dir, "a.sheafgraph"), touch(&dir, "b.sheafgraph"));
+    let mut list = RecentList::default();
+    for (kind, p) in [
+        (WindowFileKind::Book, &b1),
+        (WindowFileKind::Graph, &g1),
+        (WindowFileKind::Book, &b2),
+        (WindowFileKind::Graph, &g2),
+        (WindowFileKind::Book, &b1),
+    ] {
+        list.push_window(kind, p);
+    }
+    assert_eq!(names(&list.books), ["a.sheafbook", "b.sheafbook"], "a repeat moves to the top");
+    assert_eq!(names(&list.graphs), ["b.sheafgraph", "a.sheafgraph"]);
+    assert!(list.projects.is_empty() && list.imports.is_empty());
+}
+
+#[test]
+fn the_books_and_graphs_keep_fifteen_entries_each() {
+    let dir = scratch("windowcap");
+    let mut list = RecentList::default();
+    for i in 0..20 {
+        list.push_window(WindowFileKind::Book, &touch(&dir, &format!("b{i}.sheafbook")));
+        list.push_window(WindowFileKind::Graph, &touch(&dir, &format!("g{i}.sheafgraph")));
+    }
+    assert_eq!((list.books.len(), list.graphs.len()), (MAX_ENTRIES, MAX_ENTRIES));
+    assert_eq!(names(&list.books)[0], "b19.sheafbook");
+}
+
+#[test]
+fn the_books_and_graphs_survive_a_round_trip_through_the_file() {
+    let dir = scratch("windowround");
+    let file = dir.join(FILE_NAME);
+    let b = touch(&dir, "a.sheafbook");
+    let g = touch(&dir, "a.sheafgraph");
+    record_window(&file, WindowFileKind::Book, &b).unwrap();
+    let list = record_window(&file, WindowFileKind::Graph, &g).unwrap();
+    assert_eq!(RecentList::load(&file), list);
+    assert_eq!(names(&list.books), ["a.sheafbook"]);
+    assert_eq!(names(&list.graphs), ["a.sheafgraph"]);
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.contains("\"books\"") && text.contains("\"graphs\""), "{text}");
+}
+
+#[test]
+fn an_older_file_without_books_and_graphs_still_loads_and_keeps_its_lists_when_rewritten() {
+    let dir = scratch("older");
+    let file = dir.join(FILE_NAME);
+    let (p, csv) = (touch(&dir, "a.sheaf"), touch(&dir, "d.csv"));
+    let old = serde_json::json!({ "projects": [p.to_str().unwrap()], "imports": [csv.to_str().unwrap()] });
+    std::fs::write(&file, old.to_string()).unwrap();
+    let list = RecentList::load(&file);
+    assert_eq!(names(&list.projects), ["a.sheaf"]);
+    assert_eq!(names(&list.imports), ["d.csv"]);
+    assert!(list.books.is_empty() && list.graphs.is_empty());
+    let after = record_window(&file, WindowFileKind::Book, &touch(&dir, "x.sheafbook")).unwrap();
+    assert_eq!(names(&after.projects), ["a.sheaf"]);
+    assert_eq!(names(&after.books), ["x.sheafbook"]);
+}
+
+#[test]
+fn remove_and_clear_treat_the_books_and_graphs_like_the_other_lists() {
+    let dir = scratch("windowremove");
+    let file = dir.join(FILE_NAME);
+    let (b, g) = (touch(&dir, "a.sheafbook"), touch(&dir, "a.sheafgraph"));
+    record_window(&file, WindowFileKind::Book, &b).unwrap();
+    record_window(&file, WindowFileKind::Graph, &g).unwrap();
+    let list = clear_books(&file).unwrap();
+    assert!(list.books.is_empty() && list.graphs.len() == 1, "clearing the books leaves the graphs");
+    let list = forget(&file, &g).unwrap();
+    assert!(list.graphs.is_empty());
+    record_window(&file, WindowFileKind::Graph, &g).unwrap();
+    record_window(&file, WindowFileKind::Book, &b).unwrap();
+    std::fs::remove_file(&b).unwrap();
+    assert!(forget(&file, &b).unwrap().books.is_empty(), "a deleted file is still forgotten");
+    let list = clear_graphs(&file).unwrap();
+    assert!(list.graphs.is_empty());
+}
+
+#[test]
+fn a_damaged_books_entry_is_skipped_and_the_other_lists_are_kept() {
+    let dir = scratch("windowdamaged");
+    let file = dir.join(FILE_NAME);
+    let (p, g) = (touch(&dir, "a.sheaf"), touch(&dir, "a.sheafgraph"));
+    let text = serde_json::json!({ "projects": [p.to_str().unwrap()], "books": 5, "graphs": [7, g.to_str().unwrap(), "relative.sheafgraph"] });
+    std::fs::write(&file, text.to_string()).unwrap();
+    let list = RecentList::load(&file);
+    assert_eq!(names(&list.projects), ["a.sheaf"]);
+    assert!(list.books.is_empty());
+    assert_eq!(names(&list.graphs), ["a.sheafgraph"]);
+}

@@ -99,7 +99,8 @@ public static class DlgWin {
     }
     return "button " + text + " not found";
   }
-  public static string Text(IntPtr h) { var s = new StringBuilder(512); GetWindowText(h, s, 512); return s.ToString(); }
+  // WM_GETTEXT, which (unlike GetWindowText) also reads the contents of another process's edit boxes.
+  public static string Text(IntPtr h) { var s = new StringBuilder(512); SendMessage(h, 0x000D, (IntPtr)512, s); return s.ToString(); }
   public static string Cls(IntPtr h) { var s = new StringBuilder(128); GetClassName(h, s, 128); return s.ToString(); }
 }
 "@

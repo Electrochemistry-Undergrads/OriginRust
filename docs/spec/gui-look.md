@@ -264,6 +264,24 @@ Pictures: `gr-plain.png` area, `wb-*.png`, `rc-*.png`, `wb-m04-column.png`; seco
   second box "Before Formula Scripts" with its own grey hint. The dialog is small (about 425 x
   335 px), has minimise, a disabled maximise and a close X (no "?"); the formula box has the
   text cursor on opening [seen 2].
+- **Sheaf Set Multiple Columns Values (T53, 2026-11-15).** Column > Set Multiple Columns Values...
+  (Ctrl+Shift+Q; the Column menu and the column right-click menu) is enabled when two or more
+  columns of the sheet are selected and greyed with the hint "Select two or more columns first"
+  otherwise; Set Column Values (Ctrl+Q) stays one-column only. It opens the same Set Values
+  window with these differences, all Sheaf choices and not measured in Origin: the title reads
+  "Set Multiple Columns Values - [Book1]Sheet1!Col(B:D)" (`B:D` for three or more side-by-side
+  columns, otherwise the short names with commas, such as `Col(B, D)`); the `Col(B:D)=` label
+  has no first/previous/next/last buttons (the window edits the selection together); the
+  Formula menu starts with "Scale by column position" (`col(A)*j`) and "Double the column to the
+  left" (`wcol(j-1)*2`); the `wcol(1)` menu starts with `wcol(j-1)` and `wcol(j+1)`; the Variables
+  menu lists `j` (the column position in the sheet, counted from 1). The row range and Recalculate
+  apply to every column and OK or Apply is one undo step, "Set multiple columns values". The
+  fields start from what the columns share (formula, rows, recalculation); columns that differ
+  start empty and Manual. An error (an unknown column, a loop) keeps the window open with the
+  message and changes nothing. `--show set-values-multiple[:B,C,D]` opens it for a screenshot.
+  Windows measurements still to make with `tools/origin-ref`: the window title, whether the
+  navigation buttons are hidden or step through the selection, and the label text beside the
+  row range (see `docs/spec/expression-language.md` section 7 for the `j` measurements).
 - **Sheaf Set Values function search (T09, 2026-11-14).** Find beside the column navigation,
   or Function > Search Functions, opens Search and Insert Functions. Keyword matches cover
   the names, categories, arguments and descriptions in the existing Function-menu catalog;

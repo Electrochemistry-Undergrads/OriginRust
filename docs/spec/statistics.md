@@ -871,9 +871,9 @@ result sheet in `multivariate.rs`.
   Origin draws (`plot`, `iy`: not run, the call needs a range of plot variables), the Input Data and Notes tables
   (not written by Sheaf), and the behaviour for more clusters than distinct rows.
 
-## 19 ROC curve (scipy-checked, not Origin)
+## 19 ROC curve (measured against Origin 2016, 19.5)
 
-**Source of the numbers: scipy, not Origin.** Statistics > ROC Curve is an Origin X-Function (`ROCCurve`) that is
+**Source of the numbers: Origin 2016 since 2026-11-15 (19.5); before that scipy.** Statistics > ROC Curve is an Origin X-Function (`ROCCurve`) that is
 only for the menu: `ROCCurve;` from LabTalk returns false, and its definition file lists no usable LabTalk context.
 Its dialog was opened through the menu with `tools/origin-ref/origin-dialog.ps1 -MenuClicks "300,300;K:^a;K:%s;K:R"`
 (Alt+S, then R, on a selected worksheet; one run, 2026-11-14, picture in `re-workspace/scratch/t29/rocdlg`, local).
@@ -904,12 +904,13 @@ are left out; "Positive v.s. High" (default) or "Positive v.s. Low" sets which e
 
 - Curve: one point per distinct test value (a case is called positive at or above the cut-off, at or below it for
   "Low"), from (0, 0) at an infinite cut-off to (1, 1). Sensitivity is the fraction of positives called positive,
-  specificity that of negatives called negative. Origin's "Interpolation of data points" is taken as one point per data
-  value; "Speed Mode" is not built.
+  specificity that of negatives called negative. Origin's "Interpolation of data points" is one point per data value
+  with the cut-offs between values (19.5); "Speed Mode" is not built.
 - Area: the trapezoid area, which equals the Mann-Whitney statistic U / (m n) with ties counting one half.
-- Standard error: DeLong's (DeLong, DeLong and Clarke-Pearce 1988), variance `S10 / m + S01 / n` from the placements of
-  the positives and of the negatives. Interval: area -/+ z SE (z from the confidence level, default 95 %), kept within
-  0 and 1; Z = (area - 0.5) / SE and its two-sided p-value (0 when SE = 0 and the area is not 0.5).
+- Standard error, interval, Z and p-value: Origin's (19.5): the curve-integrated Hanley-McNeil form, area -/+ z SE not
+  limited to [0, 1] (z from the confidence level, default 95 %), Z = (area - 0.5) / SE0 with SE0 the standard error of
+  an area of 0.5, and its two-sided p-value. (Until 2026-11-15: DeLong's standard error, a clipped interval and Z from
+  the observed SE.)
 - Best cut-off: the largest sensitivity + specificity - 1 (Youden), the highest cut-off among equal ones.
 
 Result sheet `ROC1`: Data, Positive, Negative, Area, Standard error, Lower limit, Upper limit, Z, Prob>|Z|, Best
@@ -920,19 +921,52 @@ value, one column or a confidence level outside 0 to 100 are refused.
 
 ### 19.3 Checked against scipy, tolerances
 
-Area, standard error, lower limit, curve points: 1e-12 relative; p-value 1e-8 (the normal tail of `statrs` differs from
-scipy's in the 11th digit); best cut-off exact. Three data sets (ties inside and across the states, a perfect
-separation, an overlap). Hand-worked tests in `roc.rs`.
+Area and curve points against scipy: 1e-12 relative, three data sets (ties inside and across the states, a perfect
+separation, an overlap; `scipy_roc.rs`). The standard error, interval, p-value and cut-offs are checked against Origin
+(19.5, `origin_roc.rs`). Hand-worked tests in `roc.rs`.
 
 ### 19.4 Not measured (Origin)
 
-- Everything numeric: whether Origin's standard error is DeLong's or Hanley-McNeil's, whether its interval is
+- Settled by 19.5: the standard error, interval, p-value and curve cut-offs. Before that this read: whether Origin's
+  standard error is DeLong's or Hanley-McNeil's, whether its interval is
   asymptotic normal and clipped, its p-value (and its null hypothesis), its curve points (interpolated thresholds), and
   its choice of the best cut-off. To measure: run the dialog on the data of `scipy_roc.rs` (the dialog is the only way)
   and read the report sheet.
 - The positive state when the state column holds text, the report sheet and graph layout, the sheet and graph names,
   and the default confidence level.
 - Not built: Speed Mode, several state ranges, comparing curves, partial area.
+
+### 19.5 Measured in Origin 2016 (2026-11-15)
+
+Run through the window (Statistics > ROC Curve > Open Dialog..., the columns selected by dragging over their
+heads, Data set to the test column, the positive value picked from its list with a click, OK) with
+`tools/origin-ref/origin-dialog.ps1` (`re-workspace/scratch/t29roc`, local only). The report numbers were
+read at full precision by copying the report sheet's cells into a dataset (`wcol(c)[r]`). Four data sets:
+the three of `scipy_roc.rs` and one with 4 against 5 cases; in two of them Origin's list offered the state
+column's first value first, so 0 was the positive value. Fixtures: `crates/calc/tests/origin_roc.rs`; every
+number matches (the p-value to 1e-9 relative, the normal tail of `statrs`).
+
+- **Report** "ROC Curve1": Notes, Input Data, Case Processing Summary (Positive and Negative counts, "Larger
+  test measurement values indicates more positive test", "The positive actual state is 1"), Area Under the
+  Curve (Area, Std. Error, Asymptotic Prob, 95% LCL, 95% UCL) and the ROC Curve graph; no best cut-off
+  (Sheaf's best cut-off is its own). A second sheet "ROCValues1" holds the curve.
+- **Area**: the trapezoid area (the Mann-Whitney statistic, ties one half), as Sheaf already had.
+- **Standard error**: neither DeLong's nor Hanley and McNeil's exponential approximation. It is
+  `sqrt((A (1 - A) + (n_neg - 1) (Q1 - A^2) + (n_pos - 1) (Q2 - A^2)) / (n_pos n_neg))` with
+  `Q1 = integral of sensitivity^2 d(1 - specificity)` and `Q2 = integral of specificity^2 d(sensitivity)` along
+  the straight segments of the curve, so a segment of tied values counts `dx (y0^2 + y0 y1 + y1^2) / 3`. It
+  reproduces all four to the last digit (0.077493787947229317 with ties, 0.10327314252246217,
+  0.18708286933869706 and 0 without). Sheaf now uses it.
+- **Interval**: `A -/+ 1.96 SE`, **not limited to [0, 1]** (UCL 1.0503 and 1.0419, LCL -0.0667). Copied.
+- **Asymptotic Prob**: two-sided normal p-value of `(A - 0.5) / SE0` with `SE0 = sqrt((n_pos + n_neg + 1) /
+  (12 n_pos n_neg))`, the standard error when the area is 0.5 (0.0074055 where the observed SE would give
+  2e-7). Copied; Sheaf's `Z` is that statistic.
+- **Curve** ("Interpolation of data points"): one row per distinct value plus one, from (1, 1) to (0, 0),
+  columns cut-off, 1 - specificity, sensitivity. The cut-offs are the midpoints between neighbouring
+  distinct values (0.15 between 0.1 and 0.2) and, at the ends, the smallest value - 1 and the largest + 1
+  (-0.3 and 5.8 for data from 0.7 to 4.8), or 0 and 1 when every value lies in [0, 1]. Copied (Sheaf keeps
+  its order from (0, 0) to (1, 1)); with "Positive v.s. Low" the same rule mirrored (not measured).
+- Not measured: Speed Mode, "Positive v.s. Low", text states, several data columns, other confidence levels.
 
 ## 20 Kaplan-Meier estimator (measured against Origin 2016)
 

@@ -5,6 +5,8 @@
 
 use crate::gadget::plot_xy;
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke};
+use sheaf_core::graph::PlotKind;
+use sheaf_core::stack::Place;
 use sheaf_core::{Project, WindowId};
 use sheaf_plot::LayerGeometry;
 
@@ -19,8 +21,12 @@ pub struct Point {
 /// How far from the pointer, in screen points, a data point is still picked.
 const SNAP: f32 = 30.0;
 
+/// How far outside the frame, in page points, a point still counts as drawn (a symbol on the axis
+/// limit sits on the frame edge).
+const CLIP_TOLERANCE: f64 = 0.5;
+
 /// Where a data point is on the screen, and its values.
-fn place(
+pub fn place(
     project: &Project,
     graph: WindowId,
     geometry: &[LayerGeometry],
@@ -41,13 +47,111 @@ fn place(
     if !(xv.is_finite() && yv.is_finite()) {
         return None;
     }
+    let geom = geometry.get(p.layer)?;
     let placement = placement(project, graph, p.layer, p.plot);
-    let at = to_screen(geometry.get(p.layer)?.data_to_page(placement.x(xv), placement.y(yv)));
+    let shift = sheaf_plot::waterfall_shift(project, graph, p.layer, &placement, geom);
+    let at = to_screen(page_of(geom, &placement, shift, xv, yv));
     (at.x.is_finite() && at.y.is_finite()).then_some((at, xv, yv))
 }
 
-fn placement(project: &Project, graph: WindowId, layer: usize, plot: usize) -> sheaf_core::stack::Place {
+/// Where a value of a plot is on the page: the plot's place in the stack, the layer's axes and the
+/// plot's waterfall shift.
+fn page_of(geom: &LayerGeometry, place: &Place, shift: (f64, f64), xv: f64, yv: f64) -> (f64, f64) {
+    let (px, py) = geom.data_to_page(place.x(xv), place.y(yv));
+    (px + shift.0, py + shift.1)
+}
+
+/// How far the plot of a point is moved on the page from its layer's frame: the waterfall shift of
+/// its member, `(0, 0)` outside a waterfall.
+pub fn shift(project: &Project, graph: WindowId, geometry: &[LayerGeometry], p: Point) -> (f64, f64) {
+    let Some(geom) = geometry.get(p.layer) else { return (0.0, 0.0) };
+    sheaf_plot::waterfall_shift(project, graph, p.layer, &placement(project, graph, p.layer, p.plot), geom)
+}
+
+pub fn placement(project: &Project, graph: WindowId, layer: usize, plot: usize) -> Place {
     sheaf_plot::stack_places(project, graph, layer).ok().and_then(|o| o.get(plot).copied()).unwrap_or_default()
+}
+
+/// Which points of a graph a tool can pick.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Pick {
+    /// The Data Reader: every shown point.
+    Reader,
+    /// The Data menu tools (Mask, Move, Remove Bad): the points the graph draws, of line, scatter and
+    /// line + symbol plots of rectangular layers. Not picked: layers with Show Elements Data off,
+    /// rows that Skip Points leaves without a symbol, masked points that Hide Masked Points does not
+    /// draw, and points the frame clips (outside the axis range).
+    Edit,
+}
+
+/// Calls `f` with the screen position and the point of every point of the graph that `pick` allows.
+fn each_point(
+    project: &Project,
+    graph: WindowId,
+    geometry: &[LayerGeometry],
+    to_screen: &dyn Fn((f64, f64)) -> Pos2,
+    pick: Pick,
+    mut f: impl FnMut(Pos2, Point),
+) {
+    let Some(g) = project.graph(graph) else { return };
+    for (li, layer) in g.layers.iter().enumerate() {
+        let Some(geom) = geometry.get(li) else { continue };
+        if pick == Pick::Edit && (geom.polar.is_some() || geom.ternary.is_some() || !layer.display.show_data) {
+            continue;
+        }
+        // Data outside the clip rectangle is not drawn; with Clip Data to Frame off it is.
+        let clip = geom.clip;
+        let clipped = |(px, py): (f64, f64)| {
+            pick == Pick::Edit
+                && layer.display.clip_data
+                && !(px >= clip.x - CLIP_TOLERANCE
+                    && px <= clip.x + clip.w + CLIP_TOLERANCE
+                    && py >= clip.y - CLIP_TOLERANCE
+                    && py <= clip.y + clip.h + CLIP_TOLERANCE)
+        };
+        for (pi, plot) in layer.plots.iter().enumerate() {
+            if !plot.visible {
+                continue;
+            }
+            if pick == Pick::Edit && !matches!(plot.kind, PlotKind::Line | PlotKind::Scatter | PlotKind::LineSymbol) {
+                continue;
+            }
+            let Some((x, y)) = plot_xy(project, graph, li, pi) else { continue };
+            let filters = project.plot_row_filters(plot);
+            let (start, end) = sheaf_core::stack::row_range(plot, x.len().min(y.len()));
+            let placement = placement(project, graph, li, pi);
+            let shift = sheaf_plot::waterfall_shift(project, graph, li, &placement, geom);
+            let hidden = if pick == Pick::Edit && project.hide_masked {
+                project.column(plot.y).and_then(|c| c.active_mask())
+            } else {
+                None
+            };
+            // Skip Points draws a symbol on every n-th shown row (missing values count), from the first.
+            let every = if pick == Pick::Edit && plot.kind.supports_skip_points() {
+                plot.symbol.every.max(1) as usize
+            } else {
+                1
+            };
+            let mut shown = 0_usize;
+            for (row, (xv, yv)) in x.iter().zip(&y).enumerate().take(end).skip(start) {
+                if !filters.iter().all(|f| f.passes(row)) {
+                    continue;
+                }
+                shown += 1;
+                if !(shown - 1).is_multiple_of(every)
+                    || !(xv.is_finite() && yv.is_finite())
+                    || hidden.is_some_and(|m| m.contains(&row))
+                {
+                    continue;
+                }
+                let page = page_of(geom, &placement, shift, *xv, *yv);
+                let at = to_screen(page);
+                if at.x.is_finite() && at.y.is_finite() && !clipped(page) {
+                    f(at, Point { layer: li, plot: pi, row });
+                }
+            }
+        }
+    }
 }
 
 /// The data point of a shown plot nearest to `pointer`, if one is within reach.
@@ -58,7 +162,39 @@ pub fn nearest(
     to_screen: &dyn Fn((f64, f64)) -> Pos2,
     pointer: Pos2,
 ) -> Option<Point> {
-    nearest_in(project, graph, geometry, to_screen, pointer, None)
+    nearest_of(project, graph, geometry, to_screen, Pick::Reader, pointer)
+}
+
+/// Like [`nearest`] for the points that `pick` allows.
+pub fn nearest_of(
+    project: &Project,
+    graph: WindowId,
+    geometry: &[LayerGeometry],
+    to_screen: &dyn Fn((f64, f64)) -> Pos2,
+    pick: Pick,
+    pointer: Pos2,
+) -> Option<Point> {
+    nearest_where(project, graph, geometry, to_screen, pick, pointer, |_| true)
+}
+
+/// The nearest point within reach among those that `pick` allows and `keep` accepts.
+pub fn nearest_where(
+    project: &Project,
+    graph: WindowId,
+    geometry: &[LayerGeometry],
+    to_screen: &dyn Fn((f64, f64)) -> Pos2,
+    pick: Pick,
+    pointer: Pos2,
+    keep: impl Fn(Point) -> bool,
+) -> Option<Point> {
+    let mut best: Option<(f32, Point)> = None;
+    each_point(project, graph, geometry, to_screen, pick, |at, p| {
+        let d = at.distance(pointer);
+        if d <= SNAP && best.is_none_or(|(b, _)| d < b) && keep(p) {
+            best = Some((d, p));
+        }
+    });
+    best.map(|(_, p)| p)
 }
 
 /// Where a data point is on the screen (`None` when it is not shown or not a number).
@@ -82,31 +218,28 @@ pub fn nearest_in(
     pointer: Pos2,
     only: Option<(usize, usize)>,
 ) -> Option<Point> {
-    let g = project.graph(graph)?;
-    let mut best: Option<(f32, Point)> = None;
-    for (li, layer) in g.layers.iter().enumerate() {
-        let Some(geom) = geometry.get(li) else { continue };
-        for (pi, plot) in layer.plots.iter().enumerate() {
-            if !plot.visible || only.is_some_and(|o| o != (li, pi)) {
-                continue;
-            }
-            let Some((x, y)) = plot_xy(project, graph, li, pi) else { continue };
-            let filters = project.plot_row_filters(plot);
-            let (start, end) = sheaf_core::stack::row_range(plot, x.len().min(y.len()));
-            let placement = placement(project, graph, li, pi);
-            for (row, (xv, yv)) in x.iter().zip(&y).enumerate().take(end).skip(start) {
-                if !(filters.iter().all(|f| f.passes(row)) && xv.is_finite() && yv.is_finite()) {
-                    continue;
-                }
-                let at = to_screen(geom.data_to_page(placement.x(*xv), placement.y(*yv)));
-                let d = at.distance(pointer);
-                if d <= SNAP && best.is_none_or(|(b, _)| d < b) {
-                    best = Some((d, Point { layer: li, plot: pi, row }));
-                }
-            }
+    nearest_where(project, graph, geometry, to_screen, Pick::Reader, pointer, |p| {
+        only.is_none_or(|o| o == (p.layer, p.plot))
+    })
+}
+
+/// The points that `pick` allows whose screen position is inside `area` (edges included), with
+/// their positions.
+pub fn inside(
+    project: &Project,
+    graph: WindowId,
+    geometry: &[LayerGeometry],
+    to_screen: &dyn Fn((f64, f64)) -> Pos2,
+    pick: Pick,
+    area: Rect,
+) -> Vec<(Pos2, Point)> {
+    let mut found = Vec::new();
+    each_point(project, graph, geometry, to_screen, pick, |at, p| {
+        if area.contains(at) {
+            found.push((at, p));
         }
-    }
-    best.map(|(_, p)| p)
+    });
+    found
 }
 
 /// The next row of the pinned plot in direction `step` (+1 or -1) that has a value.

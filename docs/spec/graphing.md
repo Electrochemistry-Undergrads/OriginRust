@@ -3703,7 +3703,7 @@ Plotting into a new layer: `plotxy iy:=[Book]Sheet!(1,3) plot:=200 ogl:=[Graph1]
 7. separator; Axis...; Layer Properties...; Layer Management...
 8. separator; one row per plot of the layer ("1  [DQ]Sheet1! A(X), B(Y) [1*:21*]", ticked)
 
-(Origin's "Set Active Layer By Layer Icon Only" is a toggle of Graph > ... that makes a click inside the graph no longer change the active layer; its effect was not measured beyond its existence in both the icon menu and the Graph menu. "Show Active Layer Only" and "Hide Other Layers" were not run.)
+(The effects of "Set Active Layer By Layer Icon Only", "Show Active Layer Only" and "Hide Other Layers" were **unmeasured**; only their presence in the icon menu, and for the first also in the Graph menu, is known.)
 
 **Hide Layer** hides everything the layer draws: its curves and its axes, ticks and labels disappear from the window (the other layers keep their positions); it is a toggle on the same menu item. It does not delete anything. It did not add an Undo entry (the Edit menu still said "Undo Create" from the layer added before; weak evidence).
 
@@ -3721,7 +3721,7 @@ The dialog has OK, Cancel and Apply and a ">>" button; Apply is disabled until s
 
 ### 21.4 Deleting a layer
 
-Right-click icon > Delete Layer deletes the layer at once (no question). LabTalk: `layer -d;` deletes the **active** layer; `layer -d N;` deletes layer N. Undo text in the Edit menu afterwards: **"Undelete frame"** (Ctrl+Z). The window layout does not shift the other layers' pictures; the icons renumber (4 layers: delete 2 left icons 1 2 3).
+Right-click icon > Delete Layer deletes the layer at once (no question). LabTalk: `layer -d;` deletes the **active** layer; `layer -d N;` deletes layer N. Undo text in the Edit menu afterwards: **"Undelete frame"** (Ctrl+Z). The icons renumber (4 layers: deleting layer 2 left icons 1 2 3).
 
 Measured on the 3Ys templates (layers linked to each other, all `x.link` straight):
 
@@ -3735,3 +3735,34 @@ Measured on the 3Ys templates (layers linked to each other, all `x.link` straigh
 So Origin has no refusal and no re-parenting: deleting a parent turns every child into an independent layer that keeps the parent's rectangle, and links of other layers are renumbered. The legend text is **not** rewritten: a four-layer graph whose legend lists layer 1 to 4 plots showed "B, D, E, ???" after deleting layer 2 (the entries are references by layer index, so the one pointing at the removed layer index 4 shows "???").
 
 Not measured: deleting through the icon menu a layer that is a parent (the LabTalk `layer -d` behaviour above is taken as the same command), deleting the only layer, and the effect on `layer.y.link`.
+
+### 21.5 The multi-Y templates (Plot > Multi-Y)
+
+**Menu.** Plot > Multi-Y has: Double-Y, 3Ys Y-YY, 3Ys Y-Y-Y, 4Ys Y-YYY, 4Ys YY-YY, Multiple Y Axes... (21.6). The templates are `3Ys_Y-YY.otp`, `3Ys_Y-Y-Y.otp`, `4Ys_Y-YYY.otp`, `4Ys_YY-YY.otp` (and `DOUBLEY.OTP`) in the program folder. LabTalk: select the Y columns, `worksheet -s 2 0 4 0; worksheet -p 200 3Ys_Y-YY;` (the Plot > Multi-Y item is this call; columns 2 to 4 = three Y columns, column 1 is X). `plotxy ... template:=` was not used.
+
+**Layer count and Y assignment.** The number of layers is fixed by the template (3, 3, 4, 4) **whatever the number of columns**: one Y column still makes all three layers (the two empty layers show a 0 to 1 scale and their axes); the GUI menu item behaved the same for one selected column (no refusal, no message). Y column *i* of the selection (1-based, in column order) goes to layer ((*i* - 1) mod *N*) + 1, so the first *N* columns go one per layer and the next ones go round again: with five Y columns in a 3-layer template layers 1 and 2 hold two plots each and layer 3 one (measured for both 3Ys and 4Ys, 1 to 5 columns). Plots added to a layer that already has one are drawn in the next colour of that layer's sequence (a second curve in layer 1 came out red after a black one; legend line colours in the PNG did not always agree with the curve colours, so legend colours here are **unmeasured**).
+
+**Common to all four templates** (measured with exactly *N* Y columns):
+- Layer 1 is the root (`layer.link` 0), shows the bottom X axis with labels and one left Y axis. Every other layer is linked with `x.link` = 1 (straight), `y.link` = 0 (own scale), frame `0 0 100 100` in % of the linked layer (unit 7), shows no X axis (`x.showAxes` 0) and one Y axis. The X range is shared (-1 to 11 for X = 0..10, the template's autoscale margin 8 %), each Y scale fits its own layer's data.
+- The box is open: no top line and no right line on layer 1 (the right-hand axes belong to the other layers).
+- Every axis (line, ticks and tick labels) uses the "automatic" colour = the colour of its layer's first plot (`layer.y.color` / `y2.color` read -9), thickness 1.5, ticks Out, major length 8. Axis titles: none (the Y title text objects hold " "), so the Y axes are identified by colour and by the legend only; the X title is layer 1's (here "Time (s)").
+- One legend in layer 1 lists every plot of every layer, one row per plot as "long name (units)", in layer order; it sits above the frame (outside it). No other layer has a legend. Approximate positions in the 800 px PNG: 3Ys at the top-left (left edge about 19 % of the width), 4Ys Y-YYY at the top-right corner, 4Ys YY-YY at the top-left (about 18 %).
+- Plot colours are fixed by the template (below), not by the default colour list. The PNG exporter quantises to a palette, so the greens and oranges read as (0, 132, 0) and (255, 132, 0); they are taken as Origin's (0, 128, 0) and (255, 128, 0).
+- Frames are template values, not computed: the frame of layer 1 as % of the page (left / top / width / height) is given per template.
+
+| template | layers | layer 1 frame | layer 1 | layer 2 | layer 3 | layer 4 |
+|---|---|---|---|---|---|---|
+| 3Ys Y-YY | 3 | 9.593 / 19.89 / 75.73 / 66.52 | left axis at the frame, black (0, 0, 0) | right axis at the frame (posType 0, offset 0), red (255, 0, 0); link 1 | right axis `% From Right` **10**, blue (0, 0, 255); **linked to layer 2** (`layer.link` 2) | none |
+| 3Ys Y-Y-Y | 3 | 9.764 / 15.7 / 81.69 / 68.84 | left axis, black | **left** axis `% From Left` **-50** (the axis stands in the middle of the plot, tick labels on its left), red; link 1 | right axis at the frame, blue; link 1 | none |
+| 4Ys Y-YYY | 4 | 6.856 / 21.47 / 67.72 / 64.07 | left, blue (0, 0, 255) | right at the frame, green (0, 128, 0) | right `% From Right` **12**, orange (255, 128, 0) | right `% From Right` **23**, magenta (255, 0, 255) |
+| 4Ys YY-YY | 4 | 14.91 / 21.25 / 68.5 / 63.48 | left, blue | **left** `% From Left` **11**, green | right at the frame, magenta | right `% From Right` **11**, orange |
+
+All of layers 2 to 4 are linked to layer 1 (link 1) except layer 3 of Y-YY. The offsets are in % of the X axis length as in 21.3; in the 800 px pictures the outer axes stand 62 px (Y-YY, 10.2 % of the frame width), 66 and 128 px (Y-YYY, 12.2 and 23.6 %), 59 px (YY-YY left, 10.8 %) from the frame edge, which agrees with the stored 10, 12, 23 and 11 % within the picture's resolution. The 3Ys templates reserve no extra page margin of their own beyond the frame values above; Origin does not shrink the frame when axes are added.
+
+**Colour of the data in the templates.** The plot of layer *k* has colour index 1, 2, 4 (3Ys: black, red, blue) or 4, 12, 15, 6 (4Ys Y-YYY: blue, green, orange, magenta) or 4, 12, 6, 15 (YY-YY: blue, green, magenta, orange) in LabTalk's `get %C -c`, which are 1-based entries of Origin's colour list (1 black, 2 red, 4 blue are certain; 12 green, 15 orange and 6 magenta read from the pixels, not from the list). Layer 1's axes and plot in 3Ys are black (the colour is the plot's).
+
+**PNG per template**: `re-workspace/scratch/t61/png/C_3Ys_Y_YY_3.png`, `C_3Ys_Y_Y_Y_3.png`, `C_4Ys_Y_YYY_4.png`, `C_4Ys_YY_YY_4.png` (800 px wide, local only); Double-Y and the Y-YYY/YY-YY comparison pictures follow the table above.
+
+**Other properties** (measured, all four): `layer.x.color`, `y.thickness` 1.5; `layer.y.ticks` 10 (the minor-tick count 1); no layer has a name; the layer icons show 1 2 3 (4).
+
+**Unmeasured**: the number of columns the GUI warns about (none observed), the effect of selecting columns with two X columns, grouped column selections of several sheets, legend position values in page units, the exact text of any message for too many columns.

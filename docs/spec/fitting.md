@@ -221,3 +221,59 @@ Sheaf's own layout until the window of Origin is measured; every control below i
 2. Output: workbook and sheet names, column names, long names, comments and units of the X and Y columns, whether parameters are recorded, what "create a graph" draws.
 3. The numbers: simulated values of Gauss, ExpDec1 and Boltzmann (and Voigt and a branch function such as Bigaussian) against `simcurve` for typed parameters, linear and logarithmic X, compared to 1e-12; store as a fixture in `crates/fit/tests/data/` and add a test.
 4. Whether `simcurve` offers a logarithmic spacing and how it names it; behaviour for a function with no value at some X (missing value or error); whether parameter bounds are enforced; whether it applies to user-defined functions; whether the curve is live on a preview graph.
+
+## 14. Surface fits on XYZ worksheet columns (T15 item 7, engine and library)
+
+Scope: `z = f(x, y)` fitted to three worksheet columns. Matrices and 3D plotting are not part of this. The engine pieces are
+`nlsf::FitFunction::from_formula_xy` and `x2_name`, `nlsf::fit_xyz` / `Fitter::new_xyz`, the table in `crates/fit/src/surface.rs`
+(22 functions; `library::get` also finds them, `library::list` does not list them) and the FDF import of files with two
+independent variables (`fdf::FdfFunction::to_fit_function`; three or more are still refused). A one-variable fit of a surface
+function, and the reverse, is an error. Points with a missing x, y or z (or weight) are dropped, as for curves. The fitting
+algorithm, statistics and report numbers are the ones of section 3 and 4 with no change.
+
+### Measured in Origin 2016 (`tools/origin-ref/nlfit-surface-suite.lines.txt`, made by `nlfit-surface-gen.py`)
+
+* Command: `nlbeginz iz:=(1,2,3) func:=<name> nltree:=tt`, then `nlfit`, `nlend output:=1` (the plain `nlbegin` refuses
+  XYZ ranges). The tree holds the parameters (`tt.<name>`, read before `nlfit` they are the initial values) and `tt.niter`.
+  The report is the sheet `FitSurface1` (layout as the curve report: parameter table in columns 7 to 11, statistics column 12,
+  ANOVA from column 21 or later; `tools/origin-ref/nlfit-surface-make-fixture.py` reads it). It also makes `FitSurfaceCurve1`.
+  The statistics are the curve ones: n, DOF, reduced chi-square, RSS, R-square, adjusted R-square, ANOVA, `Succeeded(100)`.
+* Data: 11 x 11 grids (9 x 9 for the last case) of `z` plus a fixed sine noise term, made inside Origin; fits of Plane,
+  Parabola2D, Poly2D, Gauss2D (also with 5 missing z), Lorentz2D, Voigt2D, Gaussian2D (rotated), Exponential2D, Rational2D and
+  Plane with 3 missing x or z values. A missing cell is made with the assignment of `-1.23456789E-300`; the constant `NANUM`
+  does nothing in a cell assignment.
+* Origin's iterations on these were 3 to 11 (Plane 4, Parabola2D 3, Poly2D 3, Gauss2D 6, Lorentz2D 5, Voigt2D 6, Gaussian2D 7,
+  Exponential2D 11, Rational2D 8).
+* The 22 functions in Origin's FDF files (category Surface Fitting) and their formulas, parameter names and bounds are in
+  `surface.rs`: Plane, Parabola2D, Poly2D, Polynomial2D, Gauss2D, Gaussian2D, Lorentz2D, Voigt2D, Voigt2DMod, Exponential2D,
+  Extreme2D, LogNormal2D, Power2D, Rational2D, RationalTaylor, DoseResp, GaussCum, LogisticCum, ExtremeCum, Chebyshev2D, Cosine,
+  Fourier2D (our names carry a `2D` suffix for DoseResp, GaussCum, LogisticCum, ExtremeCum and Cosine, which in Origin share the
+  name of a one-variable function). Bounds on by default: widths `w1`, `w2` (and `C`, `E` of DoseResp) above 0, `mu` of Voigt in [0, 1].
+  A parameter named `E` is a parameter here, not Euler's number (internally written `E__` in the formula).
+
+### Starting values
+
+Origin's rules (from the function files): Plane, Parabola2D, Poly2D start from polynomial fits of z against x and of z against y
+(after sort and smoothing; Poly2D has `f = 0`); the peak surfaces take position, width, base and height from two slice curves
+interpolated from the data, `w1`, `w2` are the slice widths times 0.85 (Gauss2D, Gaussian2D, Voigt2D) or divided by 2 (Lorentz2D),
+`mu = 0`, `theta = 0`; Exponential2D uses the extremes of z and the x and y extent. The slices come from a native
+scattered-data interpolation that is not reproduced: ours are the grid lines through the highest point. Measured Origin
+starts against ours (Gauss2D: Origin `z0 0.683, A 2.673, xc 2.653, w1 1.637, yc 2.245, w2 1.320`; ours `0.577, 2.76, 2.5, 2.10,
+2.0, 1.79`) agree to a few percent for the polynomial surfaces and are rougher for the peak surfaces. From our starts every measured
+case reaches Origin's result (test `surface_fits_from_own_starting_values_reach_origin_results`).
+
+### Test and tolerances (`crates/fit/tests/origin_surface.rs`, data `tests/data/origin_surface.json`)
+
+From Origin's starting values our engine takes the same number of iterations in every case but Rational2D and agrees in
+parameters, standard errors, t, dependency, statistics and ANOVA to 1e-7 (relative). Rational2D (dependencies near 1) stops at
+a slightly different point of its flat valley: values agree to 1e-2, standard errors to 1e-1 relative. From our own starting
+values the tolerance is 1e-4 (values) and 1e-3 (statistics).
+
+### Unmeasured
+
+Origin's fits of Polynomial2D, Voigt2DMod, Extreme2D, LogNormal2D, Power2D, RationalTaylor, DoseResp, GaussCum, LogisticCum,
+ExtremeCum, Chebyshev2D, Cosine and Fourier2D (our formulas are copied from the files, no run); the starting values of those and of
+Exponential2D beyond the case above; the scaling applied by Chebyshev2D and Cosine (the files say x and y are scaled to -1..1 and
+0..pi, we apply none); weighted surface fits; fits with fixed parameters, user-set bounds or the simplex algorithm; whether
+`nlbeginz` accepts a worksheet range with a column of errors; the dialog and the report sheet layout in the application
+(part 2).

@@ -250,6 +250,8 @@ pub fn fit_global(func: &FitFunction, datasets: &[GlobalDataset], opts: &GlobalO
         params: specs,
         model: Model::Closure(model),
         init: None,
+        x2_name: None,
+        init2: None,
     };
 
     let positions: Vec<f64> = (0..stack_x.len()).map(|k| k as f64).collect();

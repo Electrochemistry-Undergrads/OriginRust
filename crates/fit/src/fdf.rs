@@ -218,7 +218,7 @@ pub fn parse_fdf(text: &str) -> Result<FdfFunction, FitError> {
 }
 
 impl FdfFunction {
-    /// A fit function ready to use. Fails if the file has several independent variables or the
+    /// A fit function ready to use (one or two independent variables). Fails if the file has more or the
     /// formula could not be translated.
     pub fn to_fit_function(&self) -> Result<FitFunction, FitError> {
         let Some(formula) = &self.formula else {
@@ -236,24 +236,27 @@ impl FdfFunction {
                 self.dependent.join(", ")
             )));
         }
-        if self.independent.len() != 1 {
+        if self.independent.is_empty() || self.independent.len() > 2 {
             return Err(FitError::BadFunction(format!(
-                "{}: {} independent variables; only one is supported",
+                "{}: {} independent variables; one (y = f(x)) or two (z = f(x, y)) are supported",
                 self.name,
                 self.independent.len()
             )));
         }
         let x = &self.independent[0];
-        crate::nlsf::check_param_names(x, self.params.iter().map(|p| p.name.as_str()))
-            .map_err(|why| FitError::BadFunction(format!("{}: {why}", self.name)))?;
+        for v in &self.independent {
+            crate::nlsf::check_param_names(v, self.params.iter().map(|p| p.name.as_str()))
+                .map_err(|why| FitError::BadFunction(format!("{}: {why}", self.name)))?;
+        }
         // The position would point into the translated text, not into the file, so leave it out.
         let expr =
             Expr::parse(formula).map_err(|e| FitError::BadFunction(format!("{}: {}", self.name, e.message())))?;
         for v in expr.variables() {
-            if &v != x && v != "i" && !self.params.iter().any(|p| p.name == v) {
+            if !self.independent.contains(&v) && v != "i" && !self.params.iter().any(|p| p.name == v) {
                 return Err(FitError::BadFunction(format!(
-                    "{}: the formula uses '{v}', which is neither a parameter nor the variable {x}",
-                    self.name
+                    "{}: the formula uses '{v}', which is neither a parameter nor an independent variable ({})",
+                    self.name,
+                    self.independent.join(", ")
                 )));
             }
         }
@@ -274,6 +277,8 @@ impl FdfFunction {
                 .collect(),
             model: Model::Formula(expr),
             init: None,
+            x2_name: self.independent.get(1).cloned(),
+            init2: None,
         })
     }
 }
@@ -602,6 +607,34 @@ Lower Bounds=--(X,Off),--(X,Off),0.0(X,ON)\r\nUpper Bounds=--,--,--\r\nInitial V
         assert_eq!(ff.params[0].lower, None);
         let v = ff.eval(&[1.0, 2.0, 3.0], 0.0);
         assert!((v - 3.0).abs() < 1e-12);
+    }
+
+    const SURF: &str = "[General Information]\r\nFunction Name=MySurf\r\nNumber Of Independent Variables=2\r\n\
+[Fitting Parameters]\r\nNames=z0,a,b\r\nLower Bounds=--,--,--\r\nUpper Bounds=--,--,--\r\n\
+[Formula]\r\nz = z0 + a*x + b*y*y;\r\n\
+[Independent Variables]\r\nx=\r\ny=\r\n[Dependent Variables]\r\nz=\r\n";
+
+    #[test]
+    fn two_independent_variables_import_as_a_surface_function() {
+        let f = parse_fdf(SURF).unwrap();
+        assert_eq!(f.independent, ["x", "y"]);
+        let ff = f.to_fit_function().unwrap();
+        assert_eq!(ff.x2_name.as_deref(), Some("y"));
+        assert!((ff.eval2(&[1.0, 2.0, 3.0], 4.0, 5.0) - (1.0 + 8.0 + 75.0)).abs() < 1e-12);
+        let (mut x, mut y, mut z) = (vec![], vec![], vec![]);
+        for i in 0..6 {
+            for j in 0..6 {
+                x.push(i as f64);
+                y.push(j as f64 * 0.5);
+                z.push(1.0 + 2.0 * i as f64 + 3.0 * (j as f64 * 0.5).powi(2));
+            }
+        }
+        let r = crate::nlsf::fit_xyz(&ff, &x, &y, &z, &FitOptions::default()).unwrap();
+        assert!((r.param("a").unwrap().value - 2.0).abs() < 1e-6 && (r.param("b").unwrap().value - 3.0).abs() < 1e-6);
+        // Three independent variables are still refused, and a one-variable fit refuses a surface.
+        let three = SURF.replace("y=\r\n[Dep", "y=\r\nw=\r\n[Dep");
+        assert!(parse_fdf(&three).unwrap().to_fit_function().is_err());
+        assert!(fit(&ff, &x, &z, &FitOptions::default()).is_err());
     }
 
     #[test]

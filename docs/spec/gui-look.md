@@ -327,6 +327,104 @@ Pictures: `gr-plain.png` area, `wb-*.png`, `rc-*.png`, `wb-m04-column.png`; seco
   `wb-file-more.png`]. Menus that showed no chevron in these pictures: the Window menu and the
   right-click menu of the sheet tab.
 
+### Frozen panes (T34)
+
+Origin facts (from the help pages, not measured; no Origin was available) [W:origin-help/freeze-rows-columns,
+W:labtalk/ref/wks-obj, W:originlab.com/2023]:
+
+- Origin 2023 added View > Freeze/Unfreeze Panes (a toggle, Ctrl+Shift+F, also a Mini Toolbar button
+  "Freeze Panes"). It keeps the first n rows and/or columns in view while the rest scrolls.
+- Select a row, a column or one cell whose index is between 1 and 10 and choose it. To unfreeze, click
+  the upper-left cell and choose Unfreeze Panes, or use the View toggle again.
+- Frozen row and column headers are shaded darker.
+- LabTalk `wks.frozen$="C 3"` freezes columns A to C and rows 1 to 3, the same as selecting cell D4 and
+  clicking Freeze Panes; `wks.frozen$=""` unfreezes. So the frozen part is everything above and left of
+  the selected cell; a whole row freezes rows only and a whole column columns only (inferred).
+
+Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
+
+- **Counting.** Rows count in displayed rows (with a filter, the first n rows that pass) and columns in
+  visible columns (hidden ones are skipped), both in sheet order. The label rows are not counted: they
+  always stay on top, above the frozen rows. Spare entry rows are never frozen. A filter or hide change
+  therefore changes which data is frozen.
+- **Index.** n = index - 1, as in the LabTalk example (D4 freezes 3 and 3). An index above 10 (n above 9)
+  is refused with a status message, as is A1 (nothing above or left) and a selection of a label cell, the
+  whole sheet or nothing.
+- **Toggle.** The one command freezes from the selection when nothing is frozen and unfreezes whatever is
+  frozen otherwise, whatever the selection. It is one undo step, "Freeze panes" or "Unfreeze panes". The
+  shortcut does not work while a cell or label is being edited.
+- **State.** Per sheet, saved in `.sheaf` (`frozen`: rows, columns; absent when nothing is frozen). The
+  `.opj` writer cannot store it: saving to `.opj` warns and the companion keeps it.
+- **Clamping.** The setting is never changed by the window size; when drawing, the frozen rows leave at
+  least three body rows and the frozen block (row header and columns) takes at most half of the width.
+  What does not fit is shown as scrolling cells.
+- **Look.** The heads of frozen columns and the row numbers of frozen rows are a darker grey; a 2 px dark
+  line separates the frozen block from the scrolling cells (right of the frozen columns, under the frozen
+  rows). With frozen columns the row numbers stay with them; with frozen rows only they scroll sideways.
+- **Scrolling.** The wheel over the frozen columns scrolls the body; over the head and frozen rows it
+  scrolls the body up and down. Dragging a selection out of the body into the frozen block scrolls back
+  toward the start; a drag that began in a frozen column (row) never scrolls that axis.
+- **Navigation.** Keys, Go To and typing never scroll to a frozen target (it is always in view); a
+  target in the scrolling part is revealed below and right of the frozen block.
+- **Width.** A frozen column keeps the width it had; dragging the right edge of its head (a 6 px strip)
+  changes it, and the width survives unfreezing and freezing again. The drag is clamped so that the
+  frozen block never goes over the half-width cap above: the column stops growing there instead of
+  dropping out of the block.
+
+### Conditional formatting (T35)
+
+Origin facts (from the help pages and X-Function reference, not measured; no Origin was available)
+[W:originlab.com/2025b, W:origin-help/conditional-format, W:x-function/ref/wcolorbycr]:
+
+- Origin 2025b: "conditional formatting to highlight min/max column-wise or row-wise".
+- Worksheet > Conditional Formatting (also on the right-click menu of selected cells) holds Highlight
+  Min Max, Highlight Top Bottom, Conditional Highlight, Conditional Heatmap, Conditional Pareto,
+  Conditional Outliers, Remove Conditional Format and Conditional Format Manager.
+- A rule's Name defaults to the first and last cell of its range, `C<c1>R<r1>-C<c2>R<r2>`, R0 meaning
+  "to the end" (example `C1R1-C4R0`). Where rules overlap, the upper rule in the Manager wins.
+- Highlight Min Max is `wcolorbycr rng name dir max.fill max.font min.fill min.font`; `dir` 0 is
+  row-wise (the default), 1 column-wise, each row or column on its own. Defaults (0x01BBGGRR ints):
+  max fill 30067455 = RGB(255,202,202), max font 20132812 = RGB(204,51,51), min fill 33085116 =
+  RGB(188,214,248), min font 26692113 = RGB(17,74,151).
+- Highlight Top Bottom is `wcolortb`: Top N Items, Top N%, Bottom N Items, Bottom N%, on the selected
+  columns. Its default N and colours are not documented.
+
+Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
+
+- **Rules.** Per sheet (`cond_formats`, saved in `.sheaf`, absent when empty), a list: name, range
+  (columns by id plus first row and an optional last row, none meaning to the end of the data), rule
+  and colours. A selection of whole columns, rows or the sheet, or a block of cells, gives the range;
+  a block that reaches the last data row follows the data from then on. A label cell or nothing
+  selected gives a status message and no window (the menu items are greyed without a selection).
+- **Evaluation.** Live: the grid shows the rules on the current values, with no stored colours. Only
+  numbers count; text, empty and NaN cells are ignored, and so are masked cells (they take no part in
+  the ranking and keep the red mask look). Ties: every cell equal to the maximum (minimum, or to the
+  N-th value for Top Bottom) is highlighted. A row or column with one number counts as its maximum.
+  Max takes precedence over min where they coincide (all values equal).
+- **Min Max.** Window with Name, Row-wise / Column-wise radio buttons and a Fill and a Font colour (each
+  switchable off) for the maximum and the minimum, Origin's defaults above, row-wise.
+- **Top Bottom.** Window with Name, Mode (Top N Items, Top N%, Bottom N Items, Bottom N%), N (default
+  10, so "Top 10 Items") and one Fill/Font pair, defaulting to the Min Max maximum colours for Top and
+  the minimum colours for Bottom (Sheaf's own). Each column of the selection is ranked on its own. N %
+  is taken of the numbers in the column and rounds up (at least one item).
+- **Order.** A new rule goes to the top of the list; the earlier rule wins the whole cell, so a cell
+  coloured by a rule is not touched by a later one. Filtered (hidden) rows are ranked like the others.
+- **Remove.** Remove Conditional Format removes every rule whose range touches the selection, whole
+  rules and not just the selected part; with none it says so in the status bar. Each command is one
+  undo step ("Highlight min max", "Highlight top bottom", "Remove conditional format").
+- **Copies and edits.** Window > Duplicate, Worksheet > Duplicate sheet and File > Append keep the rules,
+  pointing at the copy's own columns. Deleting columns takes them out of every rule and drops a rule
+  left with no column (in the same undo step as the delete). Inserting rows at or above a rule's first
+  row moves it down, inside it makes it longer; deleting rows moves or shortens it, and a rule whose
+  whole row span is deleted is dropped; a rule that runs to the end stays open. Only operations on a
+  column of the rule count.
+- **Cost.** The styles are computed once per change of the document (not per frame or per cell) and
+  read per drawn cell; a 1,000,000-row column takes about 3 ms (Min Max) to 10 ms (Top N %) in a
+  release build.
+- **Left out.** Conditional Highlight, Heatmap, Pareto, Outliers and the Manager (greyed); renaming a
+  rule after creation. The `.opj` writer cannot store the rules: saving to `.opj` warns and the
+  companion keeps them.
+
 ## 4. Graph window
 
 Pictures: `gr-plain.png`, `gr-graph.png`, `grc-*.png`, `gdlg-*.png`; second study

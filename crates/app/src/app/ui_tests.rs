@@ -10,7 +10,9 @@ use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
 mod autosave;
+mod cond_format;
 mod excel;
+mod frozen_panes;
 mod label_frames;
 mod label_whiteout;
 mod lollipop;

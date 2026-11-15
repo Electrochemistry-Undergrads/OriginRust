@@ -508,7 +508,15 @@ fn hidden_columns_and_column_widths_are_named_in_the_warnings() {
     b.sheets[0].columns[3].designation = sheaf_core::Designation::Group;
     b.sheets[0].filter =
         Some(sheaf_core::rowfilter::RowFilter { condition: "col(A) > 0".into(), enabled: true, keep: vec![true] });
+    b.sheets[0].frozen = sheaf_core::Frozen { rows: 1, columns: 0 };
+    b.sheets[0].cond_formats = vec![sheaf_core::condformat::CondFormat {
+        name: "C1R1-C1R0".into(),
+        range: sheaf_core::condformat::CondRange::whole_columns(vec![b.sheets[0].columns[0].id]),
+        rule: sheaf_core::condformat::Rule::min_max(),
+    }];
     let all = written(&p).warnings.join(" | ");
+    assert!(all.contains("1 sheet(s) have frozen panes"), "{all}");
+    assert!(all.contains("1 sheet(s) have conditional formatting"), "{all}");
     assert!(all.contains("1 hidden column(s)"), "{all}");
     assert!(all.contains("1 column(s) have their own width"), "{all}");
     assert!(all.contains("1 column(s) have masked cells"), "{all}");

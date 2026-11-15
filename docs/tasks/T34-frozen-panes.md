@@ -1,6 +1,8 @@
 # T34: Worksheet frozen panes
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `frozen-panes`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `frozen-panes`. Sheaf's
+choices (unmeasured) are in `docs/spec/gui-look.md` section 3 "Frozen panes (T34)". Left: check Origin's
+counting (label rows, filtered rows), the limit of 10, the divider look and the unfreeze rules on Windows.
 **Size:** L. **Source:** `origin-2026-2027-gaps.md` (Worksheets: Worksheet frozen panes, Origin 2023).
 
 ## Goal

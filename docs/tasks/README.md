@@ -84,7 +84,9 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T31](T31-windows-executable-icon.md) | Embed the existing app icon in Windows executable resources | S | done; all seven built-PE icon frames match the source and Windows extracts both sizes |
 | [T32](T32-multipage-pdf-export.md) | Several graphs in one multi-page PDF (Export Graphs, CLI, MCP) | M | done 2026-11-15 (graphing 9.7); left: Origin's label, file name and page sizing unmeasured |
 | [T33](T33-lollipop-plot.md) | Lollipop plot: drop lines to the next data plot, Plus-Minus colour | M | done 2026-11-15 (graphing 18.8); left: Origin's defaults unmeasured; chord and rug plots |
-| [T34](T34-frozen-panes.md) | Worksheet frozen panes (View: Freeze/Unfreeze Panes) | L | claimed 2026-11-15 (`frozen-panes`, macOS) |
+| [T34](T34-frozen-panes.md) | Worksheet frozen panes (View: Freeze/Unfreeze Panes) | L | done 2026-11-15 (gui-look.md 3 "Frozen panes"); left: Origin's counting, limit, divider look and unfreeze rules unmeasured |
+| [T35](T35-conditional-highlight.md) | Conditional formatting: highlight min/max, top/bottom | M | done 2026-11-15; left: Heatmap, Pareto, Outliers, custom highlight, Manager |
+| [T36](T36-cell-notes.md) | Worksheet cell notes (add, hover, edit, delete) | M | claimed 2026-11-15 (`cell-notes`, macOS) |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

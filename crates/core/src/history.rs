@@ -37,7 +37,8 @@ impl Default for Document {
 }
 
 impl Document {
-    pub fn new(project: Project) -> Self {
+    pub fn new(mut project: Project) -> Self {
+        project.apply_mask_switch();
         Document { project, undo: Vec::new(), redo: Vec::new(), dirty: false, limit: 100, revision: 0 }
     }
 
@@ -80,6 +81,7 @@ impl Document {
                 // restores the source and everything computed from it together.
                 self.project.recalculate_since(&before);
                 self.project.update_analysis_links(&before);
+                self.project.apply_mask_switch();
                 if self.project != before {
                     let merge = token != 0 && self.undo.last().is_some_and(|s| s.merge_token == token);
                     if !merge {
@@ -146,7 +148,8 @@ impl Document {
     }
 
     /// Replaces the project (for example after opening a file) and clears the history.
-    pub fn replace(&mut self, project: Project) {
+    pub fn replace(&mut self, mut project: Project) {
+        project.apply_mask_switch();
         self.project = project;
         self.undo.clear();
         self.redo.clear();

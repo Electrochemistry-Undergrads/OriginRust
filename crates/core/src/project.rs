@@ -75,6 +75,11 @@ pub struct Project {
     /// there; saved with the project here).
     #[serde(default = "default_mask_color", skip_serializing_if = "is_default_mask_color")]
     pub mask_color: u8,
+    /// Column > Mask > Disable Masking, one switch for the whole project as in Origin (`@MM`). The
+    /// columns carry a copy ([`crate::column::Column::mask_disabled`], what the readers use), which
+    /// [`Project::apply_mask_switch`] brings back in line after every edit, so new columns follow it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    masking_off: bool,
     /// The next unused identifier (shared by windows and columns).
     next_id: u64,
 }
@@ -163,14 +168,22 @@ impl Project {
         self.mask_color = if self.mask_color > 22 { 1 } else { self.mask_color + 1 };
     }
 
-    /// Whether masking is disabled (Column > Mask > Disable Masking): true when any column has it
-    /// switched off, so the menu then offers Enable Masking.
+    /// Whether masking is disabled (Column > Mask > Disable Masking); the menu then offers Enable
+    /// Masking.
     pub fn masking_disabled(&self) -> bool {
-        self.workbooks().flat_map(|b| &b.sheets).flat_map(|s| &s.columns).any(|c| c.mask_disabled)
+        self.masking_off
     }
 
-    /// Switches masking off or on for every column of the project.
+    /// Switches masking off or on for the whole project.
     pub fn set_masking_disabled(&mut self, disabled: bool) {
+        self.masking_off = disabled;
+        self.apply_mask_switch();
+    }
+
+    /// Gives every column the project's masking switch (columns made after the switch, by an import,
+    /// Unstack or a new sheet, start with masking on). Called after each edit and on loading.
+    pub fn apply_mask_switch(&mut self) {
+        let disabled = self.masking_off;
         for w in &mut self.windows {
             if let Window::Workbook(b) = w {
                 for c in b.sheets.iter_mut().flat_map(|s| &mut s.columns) {
@@ -188,6 +201,7 @@ impl Project {
             analysis_links: Vec::new(),
             page_setup: crate::page_setup::PageSetup::default(),
             mask_color: default_mask_color(),
+            masking_off: false,
             next_id: 1,
         }
     }

@@ -330,8 +330,9 @@ Sort Columns > Custom and the column-header context menu now open the existing n
   with Use Absolute Values `|y|` is compared with `|value|` (`|y| > -1` leaves 0 and 1 unmasked); without Keep Existing
   Mask the column's old mask is replaced, with it the new cells are added.
 Sheaf: `Project::mask_color` (saved with the project, Origin keeps it as a setting) and `cycle_mask_color`; Disable
-Masking sets `Column::mask_disabled` on every column of the project (`Column::active_mask` is what analysis, plots and
-the categorical tools read); `sheetops::MaskCondition` and `Worksheet::mask_by_condition`. The worksheet still shows
+Masking is one project switch (`Project::set_masking_disabled`) copied into every column after each edit, so columns
+made later follow it (`Column::active_mask` is what analysis, plots, the categorical tools and conditional formatting
+read); `sheetops::MaskCondition` and `Worksheet::mask_by_condition`. The worksheet still shows
 masked cells in its mask colours while masking is disabled (Origin's sheet colours were not measured). The worksheet shows a masked cell with red text on a light red fill; Origin's own cell colour was not measured.
 
 ### 13.2 Worksheet operations in Sheaf (T10)

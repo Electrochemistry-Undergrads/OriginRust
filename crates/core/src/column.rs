@@ -265,8 +265,8 @@ pub struct Column {
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub mask: BTreeSet<usize>,
     /// Column > Mask > Disable Masking: the mask is kept but not applied, so analysis reads the
-    /// masked cells and graphs draw them as ordinary points (Origin's `@MM = 1`). The menu sets it on
-    /// every column of the project at once (Origin's switch is global).
+    /// masked cells and graphs draw them as ordinary points (Origin's `@MM = 1`). A copy of the
+    /// project's switch ([`crate::project::Project::masking_disabled`]), kept in line after every edit.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub mask_disabled: bool,
     /// Column > Set as Categorical: the values are categories (groups), not quantities. Tools

@@ -528,6 +528,29 @@ mod tests {
     }
 
     #[test]
+    fn disable_masking_is_one_switch_that_new_columns_follow() {
+        let mut doc = crate::history::Document::new(Project::new());
+        let (book, a) = doc.apply("data", |p| {
+            let book = p.add_workbook("");
+            let a = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+            p.column_mut(a).unwrap().mask.insert(0);
+            (book, a)
+        });
+        doc.apply("off", |p| p.set_masking_disabled(true));
+        assert!(doc.project().masking_disabled());
+        assert!(doc.project().column(a).unwrap().active_mask().is_none());
+        // a column made later (as by Unstack or an import) follows the switch too
+        let b = doc.apply("new column", |p| {
+            let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 4.0])).unwrap();
+            p.column_mut(b).unwrap().mask.insert(1);
+            b
+        });
+        assert!(doc.project().column(b).unwrap().active_mask().is_none(), "new columns follow the switch");
+        doc.apply("on", |p| p.set_masking_disabled(false));
+        assert!(doc.project().column(b).unwrap().numeric_unmasked().unwrap()[1].is_nan());
+    }
+
+    #[test]
     fn mask_by_condition_follows_origins_colmask() {
         // Origin 2016 `colmask` on 2 4 9 3 5 -7 1 6 8 0 (rows as Origin reported, 0-based here).
         let y = [2.0, 4.0, 9.0, 3.0, 5.0, -7.0, 1.0, 6.0, 8.0, 0.0];

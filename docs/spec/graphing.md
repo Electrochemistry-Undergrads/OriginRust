@@ -1747,16 +1747,29 @@ Origin's documented facts (Origin 2027 help, not measured; no Origin was at hand
   binning with the real frame and the resolved axis spans, taking `a (yrange / xrange) = (W / H)(Y span / X span)`, so
   the hexagons are regular on the page for any frame shape, not only a square one (an extension of Origin's 1:1
   rule); a first pass with the nominal frame sets the axis range. "Derive X from Y" solves the same equation for X.
-  Non-linear axes bin in data units, so the hexagons are not regular there.
+  The colour scale narrows the real frame, so the drawn hexagons can reach past the first pass' range: when they do,
+  `layout::graph_geometry` widens the range to the extent of the hexagons as drawn and resolves the axes again (at
+  most six passes, the extent only grows), so every hexagon corner lies inside the layer's clip (fixed Min/Max of an
+  axis still clip, as for any plot).
+- Non-linear axes (log10, ln, log2, reciprocal, probability, ...): the points are mapped through the axis scale's
+  `forward`, the lattice is built and the points assigned in those coordinates, and the corners are mapped back through
+  `inverse`; the hexagons are regular on the page (the aspect uses the axes' scale spans), no corner leaves the domain
+  and no bin is dropped. A point the scale cannot place (<= 0 on a log axis) is skipped and counted in
+  `HexData::excluded`, not in a bin. Min/Max Center are data values (mapped through the scale); a Bin Spacing is in scale
+  units (decades on log10); Number of Bins is unchanged.
 - Drawing (`crates/plot/src/hexbin.rs`): each non-empty bin is a filled hexagon in data coordinates through the layer
   transform, clipped to the layer; no outline, only a 0.25 pt stroke in the fill colour to hide seams. Colour =
   `ramp(count / max count)`, linear from 0, with the colour mapped scatter's ramp (`plots::map_color`: blue, cyan, green,
   yellow, red, unchanged); empty bins are not drawn. The axis range covers the hexagons.
+- Several hexbin plots in one layer (added through Layer Contents, Plot Setup or Plot Details) overlap: that is the
+  user's choice, they are not placed side by side. All of them are coloured against one shared maximum (the largest
+  count of any bin of any hexbin plot of the layer), and the colour scale shows that maximum.
 - Colour scale: a 14 pt wide bar 14 pt right of the frame (gradient of 64 strips, red at the top), title "Count" above
   it in the Y title font, ticks at 0 and nice counts (1, 2 or 5 x 10^k steps, about four intervals) up to the maximum,
   labelled in the Y tick font. The frame leaves room for it at the right (`scale_reserve`).
 - Plot Details "Bins" tab: Prefer Regular Hexagons, Derive Y from X / Derive X from Y, per axis Min Center, Max Center
-  (Auto or a value) and Number of Bins or Bin Spacing; the axis that is derived is greyed. Undo works as for other
+  (Auto or a value) and Number of Bins or Bin Spacing; of the derived axis only the Binning and Number of Bins / Bin
+  Spacing controls are greyed (its Min and Max Center still apply and stay editable). Undo works as for other
   settings. Menu: Plot > Contour/Heat Map > Hexbin (the other items of that submenu stay greyed).
 - CLI `-t hexbin`, `--hex-bins N` (2 to 1000; both axes); MCP template text and `hex_bins`. No right Y axis and no panels
   (CLI, MCP, `plot_columns_double_y` refuse). `.opj`: written as a scatter plot of the data, the save warns ("hexbin plots
@@ -1764,7 +1777,7 @@ Origin's documented facts (Origin 2027 help, not measured; no Origin was at hand
 - Tests: `crates/calc/tests/mpl_hexbin.rs` (counts cell by cell against matplotlib `Axes.hexbin`, fixture made by
   `tools/hexbin-ref.py`, which also checks a numpy brute force; matplotlib 3.11.2, numpy 2.5.4; these are not Origin
   numbers) and hand cases in `hexbin.rs`; `hexbin_tests.rs` (regular hexagons on a square and a wide frame, colours,
-  colour scale, autoscale); core template/serde test; CLI test; UI menu and Plot Details tests; `.opj` warning test.
+  colour scale, autoscale, corners inside the clip over seeds and bin counts, log axis, shared colour scale); core template/serde test; CLI test; UI menu, Plot Details and derived-axis tests; `.opj` warning test.
 - Not done: XYZ and matrix input, Binned Scatter, UpSet, a hexbin toolbar button, colour map choice, a tick count
   setting, Origin's real defaults, outlines, hover read-out of bin counts.
 

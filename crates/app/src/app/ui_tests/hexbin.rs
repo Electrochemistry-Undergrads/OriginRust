@@ -50,3 +50,33 @@ fn plot_details_has_the_hexbin_bin_controls_with_undo() {
     menu(&mut h, "Edit", "Undo Change graph settings");
     assert_eq!(style(&h), HexbinStyle::default());
 }
+
+#[test]
+fn the_derived_axis_keeps_its_min_and_max_center_editable() {
+    let mut h = start(vec![data_file("hexbin-derived")]);
+    let id = make_hexbin(&mut h);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::GraphProperties { graph: id, layer: 0, tab: PropsTab::Plots, plot: Some(0) }, &ctx);
+    settle(&mut h);
+    click(&mut h, "Bins");
+    // Derive Y from X (the default): the four Auto boxes (Min and Max Center of X and of Y) are all live.
+    let autos: Vec<bool> = h.query_all_by_label("Auto").map(|n| n.accesskit_node().is_disabled()).collect();
+    assert_eq!(autos, vec![false; 4]);
+    // The binning of X is live, that of Y (derived) is not: exactly one of the two "Number of Bins" combo
+    // boxes is disabled.
+    let combos: Vec<bool> = h
+        .query_all_by_role(egui::accesskit::Role::ComboBox)
+        .filter(|n| n.accesskit_node().value().is_some_and(|v| v == "Number of Bins"))
+        .map(|n| n.accesskit_node().is_disabled())
+        .collect();
+    assert_eq!(combos, vec![false, true], "X binning live, Y binning disabled");
+    click(&mut h, "Derive X from Y");
+    let autos: Vec<bool> = h.query_all_by_label("Auto").map(|n| n.accesskit_node().is_disabled()).collect();
+    assert_eq!(autos, vec![false; 4]);
+    let combos: Vec<bool> = h
+        .query_all_by_role(egui::accesskit::Role::ComboBox)
+        .filter(|n| n.accesskit_node().value().is_some_and(|v| v == "Number of Bins"))
+        .map(|n| n.accesskit_node().is_disabled())
+        .collect();
+    assert_eq!(combos, vec![true, false]);
+}

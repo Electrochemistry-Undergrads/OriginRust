@@ -481,7 +481,8 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             }
             PlotKind::Hexbin => {
                 // The nominal frame is not known here (`collect_graph` refits it); a square one for now.
-                pd.hex = Some(crate::hexbin::HexData::new(&pd, &plot.hexbin, 1.0));
+                pd.hex =
+                    Some(crate::hexbin::HexData::new(&pd, &plot.hexbin, 1.0, layer.x_axis.scale, layer.y_axis.scale));
             }
             _ => {}
         }

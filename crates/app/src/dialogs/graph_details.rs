@@ -1698,19 +1698,20 @@ fn auto_value(ui: &mut egui::Ui, v: &mut Option<f64>, fallback: f64) {
     });
 }
 
-/// One axis of the Bins tab: Min Center, Max Center and Bin Spacing or Number of Bins.
-fn hexbin_axis(ui: &mut egui::Ui, name: &str, a: &mut HexbinAxis, active: bool) {
-    ui.add_enabled_ui(active, |ui| {
-        ui.strong(name);
-        grid(ui, name, |ui| {
-            ui.label("Min Center");
-            auto_value(ui, &mut a.min_center, 0.0);
-            ui.end_row();
-            ui.label("Max Center");
-            auto_value(ui, &mut a.max_center, 1.0);
-            ui.end_row();
-            ui.label("Binning");
-            let bins = matches!(a.by, HexbinBy::Bins(_));
+/// One axis of the Bins tab: Min Center, Max Center and Bin Spacing or Number of Bins. The spacing controls
+/// of the derived axis are disabled (its spacing follows the other axis); its Min and Max Center still apply.
+fn hexbin_axis(ui: &mut egui::Ui, name: &str, a: &mut HexbinAxis, derived: bool) {
+    ui.strong(name);
+    grid(ui, name, |ui| {
+        ui.label("Min Center");
+        auto_value(ui, &mut a.min_center, 0.0);
+        ui.end_row();
+        ui.label("Max Center");
+        auto_value(ui, &mut a.max_center, 1.0);
+        ui.end_row();
+        ui.label("Binning");
+        let bins = matches!(a.by, HexbinBy::Bins(_));
+        ui.add_enabled_ui(!derived, |ui| {
             egui::ComboBox::from_id_salt((name, "by"))
                 .selected_text(if bins { "Number of Bins" } else { "Bin Spacing" })
                 .show_ui(ui, |ui| {
@@ -1721,14 +1722,14 @@ fn hexbin_axis(ui: &mut egui::Ui, name: &str, a: &mut HexbinAxis, active: bool) 
                         a.by = HexbinBy::Spacing(1.0);
                     }
                 });
-            ui.end_row();
-            ui.label(if bins { "Number of Bins" } else { "Bin Spacing" });
-            match &mut a.by {
-                HexbinBy::Bins(n) => ui.add(DragValue::new(n).range(2..=10_000)),
-                HexbinBy::Spacing(s) => ui.add(DragValue::new(s).range(1e-12..=1e12).speed(0.01)),
-            };
-            ui.end_row();
         });
+        ui.end_row();
+        ui.label(if bins { "Number of Bins" } else { "Bin Spacing" });
+        ui.add_enabled_ui(!derived, |ui| match &mut a.by {
+            HexbinBy::Bins(n) => ui.add(DragValue::new(n).range(2..=10_000)),
+            HexbinBy::Spacing(s) => ui.add(DragValue::new(s).range(1e-12..=1e12).speed(0.01)),
+        });
+        ui.end_row();
     });
 }
 
@@ -1741,7 +1742,7 @@ fn hexbin_tab(ui: &mut egui::Ui, h: &mut HexbinStyle) {
         ui.radio_value(&mut h.derive_y_from_x, false, "Derive X from Y");
     });
     let y_from_x = h.derive_y_from_x;
-    hexbin_axis(ui, "X", &mut h.x, y_from_x);
-    hexbin_axis(ui, "Y", &mut h.y, !y_from_x);
-    ui.weak("The other axis' spacing makes the hexagons regular on the page; its Min and Max Center still apply.");
+    hexbin_axis(ui, "X", &mut h.x, !y_from_x);
+    hexbin_axis(ui, "Y", &mut h.y, y_from_x);
+    ui.weak("The other axis' spacing makes the hexagons regular on the page; its Min and Max Center still apply (only its spacing is disabled).");
 }

@@ -152,3 +152,128 @@ fn a_single_point_and_a_missing_value_still_draw() {
     let (p, g) = hex(&[1.0, f64::NAN], &[2.0, 3.0], (4.0, 4.0));
     assert_eq!(hexagons(&p, g).len(), 1);
 }
+
+/// A deterministic generator in `[0, 1)`.
+struct Lcg(u64);
+impl Lcg {
+    fn next(&mut self) -> f64 {
+        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        ((self.0 >> 11) as f64) / (1u64 << 53) as f64
+    }
+    fn normal(&mut self) -> f64 {
+        let (a, b) = (self.next().max(1e-12), self.next());
+        (-2.0 * a.ln()).sqrt() * (std::f64::consts::TAU * b).cos()
+    }
+}
+
+fn set_bins(p: &mut Project, g: WindowId, n: u32) {
+    for pl in &mut p.graph_mut(g).unwrap().layers[0].plots {
+        pl.hexbin.x.by = sheaf_core::graph::HexbinBy::Bins(n);
+    }
+}
+
+fn assert_inside_clip(p: &Project, g: WindowId) -> usize {
+    let scene = layout::build_scene(p, g, &FixedMetrics).unwrap();
+    let c = scene.layers[0].clip;
+    let mut n = 0;
+    for it in &scene.layers[0].plots {
+        if let scene::Item::Path { d, fill: Some(_), .. } = it {
+            n += 1;
+            for (x, y) in numbers(d) {
+                let e = 1e-6;
+                assert!(
+                    x.is_finite()
+                        && y.is_finite()
+                        && x >= c.x - e
+                        && x <= c.x + c.w + e
+                        && y >= c.y - e
+                        && y <= c.y + c.h + e,
+                    "corner ({x}, {y}) outside the clip {c:?}"
+                );
+            }
+        }
+    }
+    n
+}
+
+#[test]
+fn every_corner_of_the_drawn_hexagons_is_inside_the_layer_clip() {
+    for seed in 1..=12u64 {
+        let mut r = Lcg(seed * 7919);
+        let x: Vec<f64> = (0..3000).map(|_| 3.0 + r.next()).collect();
+        let y: Vec<f64> = (0..3000).map(|_| 5.0 * r.normal()).collect();
+        for bins in 2..=6 {
+            for page in [(4.0, 4.0), (3.0, 5.0), (7.0, 3.0)] {
+                let (mut p, g) = hex(&x, &y, page);
+                set_bins(&mut p, g, bins);
+                assert!(assert_inside_clip(&p, g) > 0, "seed {seed} bins {bins} page {page:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn on_a_log_axis_no_bin_is_dropped_and_the_hexagons_stay_in_the_domain() {
+    // 0.1 .. 1000 geometrically, plus values the log axis cannot place.
+    let mut x: Vec<f64> = (0..400).map(|i| 0.1 * 10f64.powf(4.0 * i as f64 / 399.0)).collect();
+    let positive = x.len();
+    x.extend([0.0, -3.0, -0.5]);
+    let y: Vec<f64> = (0..x.len()).map(|i| ((i * 29) % 83) as f64).collect();
+    let (mut p, g) = hex(&x, &y, (4.0, 4.0));
+    p.graph_mut(g).unwrap().layers[0].x_axis.scale = sheaf_core::graph::ScaleKind::Log10;
+    set_bins(&mut p, g, 20);
+    let drawn = assert_inside_clip(&p, g);
+    let gr = p.graph(g).unwrap();
+    let d = data::collect_graph(&p, gr);
+    let hex = d[0].plots[0].hex.as_ref().unwrap();
+    assert_eq!(hex.excluded, 3);
+    let geom = &layout::graph_geometry(&p, gr, &d, &FixedMetrics)[0];
+    let f = geom.frame;
+    let h = hex.bin_for(&d[0].plots[0].plot.hexbin, f.w, f.h, geom.x.scale_span(), geom.y.scale_span()).unwrap();
+    assert_eq!(drawn, h.bins.len(), "no bin is dropped");
+    assert_eq!(h.counted, positive);
+    assert_eq!(h.bins.iter().map(|b| b.count).sum::<usize>(), positive);
+    for b in &h.bins {
+        for (cx, cy) in hex.corners(&h, b) {
+            assert!(cx > 0.0 && cx.is_finite() && cy.is_finite());
+        }
+    }
+    // Regular on the page: the hexagons are as wide as they are tall by the lattice, whatever the decade.
+    for (pts, _) in hexagons(&p, g) {
+        let sides: Vec<f64> = (0..6).map(|i| side(pts[i], pts[(i + 1) % 6])).collect();
+        for s in &sides {
+            assert!((s - sides[0]).abs() < 0.05 * sides[0] + 0.02, "{sides:?}");
+        }
+    }
+}
+
+#[test]
+fn several_hexbin_plots_share_one_colour_scale() {
+    let (x, y) = points(400);
+    let (mut p, g) = hex(&x, &y, (4.0, 4.0));
+    set_bins(&mut p, g, 20);
+    let mut second = p.graph(g).unwrap().layers[0].plots[0].clone();
+    second.hexbin.x.by = sheaf_core::graph::HexbinBy::Bins(3);
+    p.graph_mut(g).unwrap().layers[0].plots.push(second);
+    let gr = p.graph(g).unwrap();
+    let d = data::collect_graph(&p, gr);
+    assert_eq!(d[0].plots.len(), 2);
+    let geom = &layout::graph_geometry(&p, gr, &d, &FixedMetrics)[0];
+    let f = geom.frame;
+    let bin = |k: usize| {
+        let pd = &d[0].plots[k];
+        pd.hex.as_ref().unwrap().bin_for(&pd.plot.hexbin, f.w, f.h, geom.x.scale_span(), geom.y.scale_span()).unwrap()
+    };
+    let (a, b) = (bin(0), bin(1));
+    assert!(a.max_count < b.max_count, "the coarse plot has the larger counts");
+    let max = b.max_count;
+    let hs = hexagons(&p, g);
+    assert_eq!(hs.len(), a.bins.len() + b.bins.len());
+    for (hexagon, bin) in hs.iter().zip(a.bins.iter().chain(&b.bins)) {
+        assert_eq!(hexagon.1, hexbin::bin_color(bin.count, max));
+    }
+    // The scale ends at the shared maximum.
+    let t = texts(&doc(&svg_of(&p, g)));
+    let last = hexbin::scale_ticks(max).last().unwrap().to_string();
+    assert!(t.contains(&last), "{t:?} lacks {last}");
+}

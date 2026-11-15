@@ -102,6 +102,27 @@ pub(crate) fn graph_geometry(
     pds: &[LayerData],
     m: &dyn TextMeasurer,
 ) -> Vec<LayerGeometry> {
+    let mut geoms = graph_geometry_once(project, g, pds, m);
+    // Hexbin: the axis range comes from the binning for the nominal frame, the drawing bins for the real
+    // one (narrowed by the colour scale). Widen the range to the hexagons as drawn until they fit.
+    for _ in 0..6 {
+        let mut grew = false;
+        for (d, geom) in pds.iter().zip(&geoms) {
+            for pd in &d.plots {
+                if let Some(h) = &pd.hex {
+                    grew |= h.grow_to_drawn(&pd.plot.hexbin, geom);
+                }
+            }
+        }
+        if !grew {
+            break;
+        }
+        geoms = graph_geometry_once(project, g, pds, m);
+    }
+    geoms
+}
+
+fn graph_geometry_once(project: &Project, g: &Graph, pds: &[LayerData], m: &dyn TextMeasurer) -> Vec<LayerGeometry> {
     let mut out: Vec<Option<LayerGeometry>> = vec![None; g.layers.len()];
     for root in 0..g.layers.len() {
         if g.root_of(root) == root {
@@ -659,6 +680,7 @@ fn layer_scene(
     };
     // Display tab: Show Elements Data off draws no plot.
     let drawn: &[PlotData] = if layer.display.show_data { pds } else { &[] };
+    crate::hexbin::share_max(drawn, geom);
     match waterfall {
         None => {
             // Ridgelines are drawn back to front: the highest baseline first, so that nearer ridges

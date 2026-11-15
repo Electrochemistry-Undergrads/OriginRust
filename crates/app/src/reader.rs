@@ -234,7 +234,7 @@ pub fn nearest_in(
     pointer: Pos2,
     only: Option<(usize, usize)>,
 ) -> Option<Point> {
-    nearest_where(project, graph, geometry, to_screen, Pick::Reader, pointer, |p| {
+    nearest_where(project, graph, geometry, to_screen, Pick::Reader, pointer, false, |p| {
         only.is_none_or(|o| o == (p.layer, p.plot))
     })
 }

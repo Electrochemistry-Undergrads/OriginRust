@@ -791,46 +791,76 @@ impl SheafApp {
         }
     }
 
-    /// File > Print... (Ctrl+P): the graph page, as a vector drawing, through the system's print
-    /// dialog, scaled into the paper of Page Setup as File > Print Preview shows. Windows plays the
-    /// page's metafile into the printer; macOS uses PDFKit and other systems use `lp`.
-    fn print_graph(&mut self, graph: WindowId) {
+    /// File > Print... (Ctrl+P): the active window printed as a vector drawing through the
+    /// system's print dialog. A graph page is scaled into the paper of Page Setup as File > Print
+    /// Preview shows; a workbook's active sheet prints as a table, split over as many pages as it
+    /// needs (graphing.md 19.8). Windows plays the metafiles into the printer; macOS shows PDFKit's panel for a graph; elsewhere,
+    /// and for a sheet on macOS, the PDF goes to `lp`.
+    fn print_graph(&mut self, window: WindowId) {
         let project = self.doc.project();
-        let Some((page, title)) = project.graph(graph).map(|g| ((g.page.width_pt, g.page.height_pt), g.name.clone()))
-        else {
+        let mut setup = project.page_setup;
+        // (title, page size in points, the pages as metafiles, the same as one PDF)
+        let (title, page, what) = if let Some(g) = project.graph(window) {
+            (g.name.clone(), (g.page.width_pt, g.page.height_pt), "graph")
+        } else if let Some(b) = project.workbook(window) {
+            // A sheet's orientation follows the paper (Automatic means portrait, as in Print
+            // Preview), never the printed area, which can be wider than tall.
+            setup.orientation = setup.orientation_for(0.0, 1.0);
+            let area = sheaf_plot::sheet_pages(b.sheet(), &setup).map(|p| p.area).unwrap_or((0.0, 0.0));
+            (b.name.clone(), area, "sheet")
+        } else {
             return;
         };
-        let setup = project.page_setup;
         if cfg!(test) {
             // Tests never reach a printer.
             self.say("Printing is skipped under test");
             return;
         }
+        let is_graph = what == "graph";
         #[cfg(windows)]
-        match sheaf_plot::render_emf(project, graph) {
-            Ok(emf) => match crate::winprint::print_with_dialog(&emf, page, &setup, &title) {
-                Ok(crate::winprint::Outcome::Printed) => self.say(format!("Printed {title}")),
-                Ok(crate::winprint::Outcome::Cancelled) => {}
-                Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
-            },
-            Err(e) => self.warn(format!("Could not print the graph: {e}")),
+        {
+            let pages = if is_graph {
+                sheaf_plot::render_emf(project, window).map(|e| vec![e])
+            } else {
+                project
+                    .workbook(window)
+                    .map_or(Ok(Vec::new()), |b| sheaf_plot::render_sheet_emf_pages(b.sheet(), &setup))
+            };
+            match pages {
+                Ok(pages) => match crate::winprint::print_with_dialog(&pages, page, &setup, &title) {
+                    Ok(crate::winprint::Outcome::Printed) => self.say(format!("Printed {title}")),
+                    Ok(crate::winprint::Outcome::Cancelled) => {}
+                    Err(e) => self.message = Some((format!("Could not print the {what}"), e)),
+                },
+                Err(e) => self.warn(format!("Could not print the {what}: {e}")),
+            }
         }
         #[cfg(target_os = "macos")]
-        match sheaf_plot::render_print_pdf(project, graph) {
-            Ok(pdf) => match crate::macprint::print_with_dialog(&pdf, &setup, page, &title) {
-                Ok(crate::macprint::Outcome::Printed) => self.say(format!("Printed {title}")),
-                Ok(crate::macprint::Outcome::CancelledOrFailed) => {}
-                Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
-            },
-            Err(e) => self.warn(format!("Could not print the graph: {e}")),
+        if is_graph {
+            match sheaf_plot::render_print_pdf(project, window) {
+                Ok(pdf) => match crate::macprint::print_with_dialog(&pdf, &setup, page, &title) {
+                    Ok(crate::macprint::Outcome::Printed) => self.say(format!("Printed {title}")),
+                    Ok(crate::macprint::Outcome::CancelledOrFailed) => {}
+                    Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
+                },
+                Err(e) => self.warn(format!("Could not print the graph: {e}")),
+            }
+            return;
         }
-        #[cfg(not(any(windows, target_os = "macos")))]
-        match sheaf_plot::render_pdf(project, graph) {
-            Ok(pdf) => match crate::winprint::print_pdf(&pdf, &setup, page, &title) {
-                Ok(()) => self.say(format!("Sent {title} to the default printer")),
-                Err(e) => self.message = Some(("Could not print the graph".to_string(), e)),
-            },
-            Err(e) => self.warn(format!("Could not print the graph: {e}")),
+        #[cfg(not(windows))]
+        {
+            let pdf = if is_graph {
+                sheaf_plot::render_pdf(project, window)
+            } else {
+                project.workbook(window).map_or(Ok(Vec::new()), |b| sheaf_plot::render_sheet_pdf(b.sheet(), &setup))
+            };
+            match pdf {
+                Ok(pdf) => match crate::winprint::print_pdf(&pdf, &setup, page, &title) {
+                    Ok(()) => self.say(format!("Sent {title} to the default printer")),
+                    Err(e) => self.message = Some((format!("Could not print the {what}"), e)),
+                },
+                Err(e) => self.warn(format!("Could not print the {what}: {e}")),
+            }
         }
     }
 

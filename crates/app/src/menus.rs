@@ -38,6 +38,7 @@ use std::sync::OnceLock;
 pub const NOT_YET: &str = "Not available in Sheaf yet";
 const NEED_BOOK: &str = "Activate a workbook window first";
 const NEED_GRAPH: &str = "Activate a graph window first";
+const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
 const NEED_CELLS: &str = "Select cells, columns or rows first";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
@@ -1975,8 +1976,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::ExportExcel => Action::ExportExcel(book?),
-        Cmd::Print => Action::Print(c.graph.ok_or(NEED_GRAPH)?),
-        Cmd::PrintPreview => Action::PrintPreview(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::Print => Action::Print(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
+        Cmd::PrintPreview => Action::PrintPreview(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
         Cmd::PageSetup => Action::PageSetup,
         Cmd::Exit => Action::Quit,
         Cmd::Undo => {

@@ -608,21 +608,7 @@ fn label_text(column: &Column, row: &LabelRow) -> String {
 /// The name in the grey row of the head: the letter and, in brackets, the kind of data and the
 /// number of the data set it belongs to ("A(X1)", "B(Y1)", "C(Y1)", "D(X2)").
 pub fn head_name(sheet: &Worksheet, position: usize) -> String {
-    use sheaf_core::Designation;
-    let column = &sheet.columns[position];
-    let tag = column.designation.tag();
-    if tag.is_empty() {
-        return column.short_name.clone();
-    }
-    match column.designation {
-        Designation::Label => format!("{}({tag})", column.short_name),
-        _ => {
-            // The data set number counts the X columns up to this one; columns before the first
-            // X belong to set 1.
-            let group = sheet.columns[..=position].iter().filter(|c| c.designation == Designation::X).count().max(1);
-            format!("{}({tag}{group})", column.short_name)
-        }
-    }
+    sheaf_core::sheet_print::head_name(sheet, position)
 }
 
 // ----- the window --------------------------------------------------------------------------

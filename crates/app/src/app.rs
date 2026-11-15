@@ -1762,6 +1762,18 @@ impl SheafApp {
                     }
                 });
             }
+            Action::ResizeShape { graph, layer, shape, before, after } => {
+                let dialogs = self.shape_dialog_shapes();
+                self.doc.apply("Resize drawn object", |p| {
+                    if let Some(s) =
+                        p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)).and_then(|l| l.shapes.get_mut(shape))
+                        && *s == before
+                    {
+                        *s = after;
+                    }
+                });
+                self.close_shape_dialog_if_changed(dialogs);
+            }
             Action::EditShape { graph, layer, shape } => {
                 self.shape_dialog = ShapeDialog::edit(&self.doc, graph, layer, shape);
             }

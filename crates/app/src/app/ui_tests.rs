@@ -30,6 +30,7 @@ mod recent;
 mod rug;
 mod set_multiple;
 mod shape_ordering;
+mod shape_resize;
 mod simulate;
 mod skip_points;
 mod sort_x;

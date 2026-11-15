@@ -56,7 +56,7 @@ impl Graph {
     }
 
     /// Renumbers every column id stored anywhere in this graph through `f`: the plots' X, Y, error,
-    /// base, size and colour columns, label columns, treemap categories and order column, the
+    /// base, size and colour columns, label columns, treemap and sunburst categories, the treemap order column, the
     /// parallel colour/group column, the plot offsets and their follows, the tick-label columns of
     /// the axes and the plot choice of the rugs. Every path that renumbers columns (File > Append,
     /// ...) goes through this; a new field that holds a [`ColumnId`] is added here.
@@ -76,6 +76,9 @@ impl Graph {
                     *c = f(*c);
                 }
                 p.treemap.order_column = p.treemap.order_column.map(f);
+                for c in &mut p.sunburst.categories {
+                    *c = f(*c);
+                }
             }
             for o in &mut layer.plot_offsets {
                 o.column = f(o.column);
@@ -779,6 +782,11 @@ impl Layer {
         self.plots.iter().find(|p| p.kind.is_parallel()).map(|p| p.parallel).unwrap_or_default()
     }
 
+    /// The sunburst settings a plot added to this layer starts with: those of its first sunburst plot, else the defaults.
+    pub fn inherited_sunburst(&self) -> SunburstStyle {
+        self.plots.iter().find(|p| p.kind == PlotKind::Sunburst).map(|p| p.sunburst.clone()).unwrap_or_default()
+    }
+
     /// The treemap settings a plot added to this layer starts with: those of its first treemap plot, else the defaults.
     pub fn inherited_treemap(&self) -> TreemapStyle {
         self.plots.iter().find(|p| p.kind == PlotKind::Treemap).map(|p| p.treemap.clone()).unwrap_or_default()
@@ -1445,6 +1453,9 @@ pub enum PlotKind {
     /// Origin's Treemap plot (2025b, treemap.otpu): the plot's Y column is the value, the category columns of its
     /// [`TreemapStyle`] the nested levels (graphing spec 14.26).
     Treemap,
+    /// Origin's Sunburst plot (2022, Sunburst.OTP): the plot's Y column is the value, the category columns of its
+    /// [`SunburstStyle`] the rings, the first innermost (graphing spec 14.27).
+    Sunburst,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,
@@ -1656,6 +1667,9 @@ pub struct Plot {
     /// The settings of a treemap plot (graphing spec 14.26).
     #[serde(default, skip_serializing_if = "TreemapStyle::is_default")]
     pub treemap: TreemapStyle,
+    /// The settings of a sunburst plot (graphing spec 14.27).
+    #[serde(default, skip_serializing_if = "SunburstStyle::is_default")]
+    pub sunburst: SunburstStyle,
     /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's
     /// Z column of a Bubble plot).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2516,6 +2530,7 @@ mod tests {
             hexbin: Default::default(),
             parallel: Default::default(),
             treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2560,6 +2575,7 @@ mod tests {
             hexbin: Default::default(),
             parallel: Default::default(),
             treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2681,6 +2697,7 @@ mod tests {
             hexbin: Default::default(),
             parallel: Default::default(),
             treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2875,6 +2892,7 @@ mod style_tests {
             hexbin: Default::default(),
             parallel: Default::default(),
             treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),

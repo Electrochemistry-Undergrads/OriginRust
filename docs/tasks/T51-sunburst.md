@@ -1,6 +1,6 @@
 # T51: Sunburst plot
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `sunburst`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `sunburst`. Spec graphing.md 14.27. Left: Origin's real defaults and colours (unmeasured), hover and Collapse/Expand drilling, a depth setting, Radius/Center settings, tangential labels for thin rings.
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Graphing: Sunburst and ridgeline plots, Origin
 2022; the sunburst half; ridgeline is T44).
 

@@ -31,7 +31,7 @@ use sheaf_core::graph::{Font, Layer, TreemapOrder, TreemapStyle};
 use sheaf_core::{Color, Project};
 
 /// Padding between a label and the edge of its rectangle, in font sizes.
-const PAD_EM: f64 = 0.3;
+pub(crate) const PAD_EM: f64 = 0.3;
 /// Height of a header band, in text heights (ascent plus descent).
 const HEADER_EM: f64 = 1.55;
 /// Blend towards white per level: level `L` is `1 - TINT^L` of the way.
@@ -135,7 +135,7 @@ pub(crate) fn value_text(v: f64) -> String {
 }
 
 /// Black or white text, whichever contrasts better with `fill`.
-fn text_color(fill: Color) -> Color {
+pub(crate) fn text_color(fill: Color) -> Color {
     let lum = 0.299 * f64::from(fill.r) + 0.587 * f64::from(fill.g) + 0.114 * f64::from(fill.b);
     if lum > 140.0 { Color::BLACK } else { Color::WHITE }
 }

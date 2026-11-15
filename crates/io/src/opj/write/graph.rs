@@ -735,6 +735,12 @@ impl Writer {
                     .into(),
             );
         }
+        if has(&|k| k == PlotKind::Sunburst) {
+            notes.push(
+                "sunburst plots were written as column plots of their value column; their categories and rings were not written"
+                    .into(),
+            );
+        }
         if has(&|k| k.is_ridgeline()) {
             notes.push("ridgeline charts were written as plain columns of their data".into());
         }
@@ -786,6 +792,7 @@ impl Writer {
                 | PlotKind::HalfViolin
                 | PlotKind::Ridgeline
                 | PlotKind::Treemap
+                | PlotKind::Sunburst
                 | PlotKind::Pie
                 | PlotKind::Pie3D
                 | PlotKind::PieBw => CurveKind::Column,

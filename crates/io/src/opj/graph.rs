@@ -873,6 +873,7 @@ fn read_curve(
         hexbin: Default::default(),
         parallel: Default::default(),
         treemap: Default::default(),
+        sunburst: Default::default(),
         size_from: None,
         color_from: None,
         decor: Default::default(),

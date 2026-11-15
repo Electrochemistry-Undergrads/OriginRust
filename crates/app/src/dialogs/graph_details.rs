@@ -46,6 +46,8 @@ pub enum DetailTab {
     Parallel,
     /// A treemap's Layout tab (graphing spec 14.26).
     TreemapLayout,
+    /// A sunburst's Pie Geometry tab: start angle, hole, ring gap, labels (graphing spec 14.27).
+    SunburstGeometry,
     Display,
     PageDisplay,
     LegendsTitles,
@@ -108,6 +110,9 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             if plot.kind == PlotKind::Treemap {
                 tabs.push((DetailTab::TreemapLayout, "Layout", true));
             }
+            if plot.kind == PlotKind::Sunburst {
+                tabs.push((DetailTab::SunburstGeometry, "Pie Geometry", true));
+            }
             let curve = plot.kind.has_line() || plot.kind.has_symbols();
             if curve && !plot.kind.is_bar() && !plot.kind.is_area() {
                 tabs.push((DetailTab::DropLines, "Drop Lines", true));
@@ -140,6 +145,7 @@ fn first_tab(tabs: &[(DetailTab, &str, bool)]) -> DetailTab {
         DetailTab::HexBins,
         DetailTab::Parallel,
         DetailTab::TreemapLayout,
+        DetailTab::SunburstGeometry,
         DetailTab::Line,
         DetailTab::Pattern,
         DetailTab::Symbol,
@@ -176,6 +182,7 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::Parallel => "Parallel Plot",
         PlotKind::ParallelIndex => "Parallel Index",
         PlotKind::Treemap => "Treemap",
+        PlotKind::Sunburst => "Sunburst",
         PlotKind::Pie => "Pie",
         PlotKind::Pie3D => "3D Color Pie",
         PlotKind::PieBw => "2D B&W Pie",
@@ -268,6 +275,7 @@ pub fn dialog_body(
                                 PlotKind::Parallel,
                                 PlotKind::ParallelIndex,
                                 PlotKind::Treemap,
+                                PlotKind::Sunburst,
                                 PlotKind::Pie,
                                 PlotKind::Pie3D,
                                 PlotKind::PieBw,
@@ -777,6 +785,7 @@ fn plot_tab_body(
             parallel_tab(ui, &mut graph.layers[l].plots[p].parallel, kind, columns, numeric)
         }
         DetailTab::TreemapLayout => treemap_tab(ui, &mut graph.layers[l].plots[p].treemap, columns),
+        DetailTab::SunburstGeometry => sunburst_tab(ui, &mut graph.layers[l].plots[p].sunburst),
         DetailTab::Spacing => {
             let bars = &mut graph.layers[l].bars;
             grid(ui, "plot_spacing", |ui| {
@@ -1248,6 +1257,7 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 hexbin: layer.inherited_hexbin(),
                 parallel: layer.inherited_parallel(),
                 treemap: layer.inherited_treemap(),
+                sunburst: layer.inherited_sunburst(),
                 size_from: None,
                 color_from: None,
                 decor: Default::default(),
@@ -1894,6 +1904,45 @@ fn treemap_tab(ui: &mut egui::Ui, s: &mut TreemapStyle, columns: &[(ColumnId, St
         });
     }
     ui.weak("Squarified layouts sort the rectangles by size and ignore the Order.");
+}
+
+/// Origin's Plot Details Pie Geometry and Labels tabs of a sunburst plot (Rotation, Doughnut hole, label contents;
+/// graphing spec 14.27), in one tab. The ring gap, the border and the order are Sheaf's.
+fn sunburst_tab(ui: &mut egui::Ui, s: &mut SunburstStyle) {
+    grid(ui, "sunburst_tab", |ui| {
+        ui.label("Start Angle");
+        ui.add(DragValue::new(&mut s.start_angle_deg).range(-360.0..=360.0).speed(1.0).suffix(" \u{b0}"));
+        ui.end_row();
+        ui.label("Hole");
+        let mut pct = s.hole * 100.0;
+        if ui.add(DragValue::new(&mut pct).range(0.0..=90.0).speed(0.5).suffix(" %")).changed() {
+            s.hole = pct / 100.0;
+        }
+        ui.end_row();
+        ui.label("Ring Gap");
+        ui.add(DragValue::new(&mut s.ring_gap_pt).range(0.0..=20.0).speed(0.05).suffix(" pt"));
+        ui.end_row();
+        ui.label("Border Width");
+        ui.add(DragValue::new(&mut s.border_pt).range(0.0..=10.0).speed(0.05).suffix(" pt"));
+        ui.end_row();
+        ui.label("Order");
+        egui::ComboBox::from_id_salt("sunburst_order")
+            .selected_text(match s.order {
+                SunburstOrder::Worksheet => "Worksheet Order",
+                SunburstOrder::BySize => "By Size",
+            })
+            .width(150.0)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut s.order, SunburstOrder::Worksheet, "Worksheet Order");
+                ui.selectable_value(&mut s.order, SunburstOrder::BySize, "By Size");
+            });
+        ui.end_row();
+    });
+    ui.separator();
+    ui.label("Labels");
+    ui.checkbox(&mut s.show_names, "Names");
+    ui.checkbox(&mut s.show_values, "Values");
+    ui.weak("A label is left out when it does not fit its wedge.");
 }
 
 /// The columns the Parallel tab offers: any column to group a Parallel Index by, only numeric ones to colour a

@@ -91,6 +91,16 @@ pub struct Style {
     pub treemap_depth: Option<usize>,
     /// Treemaps: the gap between rectangles in pt (default 1.5).
     pub treemap_gap: Option<f64>,
+    /// Sunburst plots: the start angle in degrees counter-clockwise from 3 o'clock (default 90).
+    pub sunburst_start: Option<f64>,
+    /// Sunburst plots: the hole as a percentage of the radius, 0 to 90 (default 30).
+    pub sunburst_hole: Option<f64>,
+    /// Sunburst plots: the gap between rings in pt, 0 to 20 (default 0).
+    pub sunburst_gap: Option<f64>,
+    /// Sunburst plots: names, values, both or none.
+    pub sunburst_labels: Option<String>,
+    /// Sunburst plots: worksheet or size.
+    pub sunburst_order: Option<String>,
     /// Text labels, each "TEXT@X,Y".
     pub label: Vec<String>,
     /// Shapes, each "KIND@X1,Y1,X2,Y2".
@@ -192,6 +202,25 @@ impl PlotSpec {
         } else if treemap_option {
             bail!("--treemap-layout, --treemap-order, --treemap-depth and --treemap-gap need -t treemap");
         }
+        let sunburst_option = st.sunburst_start.is_some()
+            || st.sunburst_hole.is_some()
+            || st.sunburst_gap.is_some()
+            || st.sunburst_labels.is_some()
+            || st.sunburst_order.is_some();
+        if self.template.as_deref().and_then(Template::from_name) == Some(Template::Sunburst) {
+            if !self.y2.is_empty() {
+                bail!("a sunburst plot cannot have a right Y axis; leave out --y2 or choose another template");
+            }
+            if self.panels.is_some() || self.graph.is_some() || self.overlay {
+                bail!(
+                    "a sunburst plot cannot be made in panels, as an overlay or by styling a graph; leave those options out"
+                );
+            }
+        } else if sunburst_option {
+            bail!(
+                "--sunburst-start, --sunburst-hole, --sunburst-gap, --sunburst-labels and --sunburst-order need -t sunburst"
+            );
+        }
         if self.group.is_some() && (self.graph.is_some() || self.panels.is_some()) {
             bail!("--group cannot be combined with --graph or --panels");
         }
@@ -225,8 +254,10 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
             parallel_graph(project, book, sheet, template, &ys, a.group.as_deref())?
         } else if template == Template::Treemap {
             treemap_graph(project, book, sheet, &ys, a.group.as_deref(), &a.style)?
+        } else if template == Template::Sunburst {
+            sunburst_graph(project, book, sheet, &ys, a.group.as_deref(), &a.style)?
         } else if a.group.is_some() {
-            bail!("--group needs -t parallel, -t parallel-index or -t treemap");
+            bail!("--group needs -t parallel, -t parallel-index, -t treemap or -t sunburst");
         } else if a.y2.is_empty() && template != Template::DoubleY {
             project.plot_columns(template, &ys)?
         } else {
@@ -334,6 +365,80 @@ fn treemap_graph(
         t.order_column = order_column.or(t.order_column);
         t.depth = style.treemap_depth.map(|d| d as u32).or(t.depth);
         t.gap_pt = style.treemap_gap.unwrap_or(t.gap_pt);
+    }
+    Ok(graph)
+}
+
+/// A sunburst plot: the last numeric column among `ys` is the value, the category columns (first = innermost ring)
+/// are those named by `group` (comma-separated), else the text columns among `ys`, else every text column of the sheet.
+fn sunburst_graph(
+    project: &mut Project,
+    book: WindowId,
+    sheet: usize,
+    ys: &[ColumnId],
+    group: Option<&str>,
+    style: &Style,
+) -> Result<WindowId> {
+    use sheaf_core::graph::SunburstOrder;
+    let value = ys.iter().rev().copied().find(|y| project.numeric(*y).is_some()).ok_or_else(|| {
+        anyhow!(
+            "a sunburst plot needs a numeric value column (the last numeric --y column; default: the last Y column)"
+        )
+    })?;
+    let mut categories: Vec<ColumnId> = match group {
+        Some(g) => {
+            let names: Vec<String> = g.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect();
+            if names.is_empty() {
+                bail!("--group needs one or more category column names, comma-separated");
+            }
+            named_columns(project, book, sheet, &names)?
+        }
+        None => ys.iter().copied().filter(|y| project.numeric(*y).is_none()).collect(),
+    };
+    if categories.is_empty() {
+        categories = project.treemap_default_categories(value);
+    }
+    if categories.contains(&value) {
+        bail!("the value column of a sunburst plot cannot also be a category column");
+    }
+    if let Some(s) = style.sunburst_start
+        && !s.is_finite()
+    {
+        bail!("--sunburst-start must be a number of degrees");
+    }
+    if let Some(h) = style.sunburst_hole
+        && !(h.is_finite() && (0.0..=90.0).contains(&h))
+    {
+        bail!("--sunburst-hole must be between 0 and 90 percent (got {h})");
+    }
+    if let Some(g) = style.sunburst_gap
+        && !(g.is_finite() && (0.0..=20.0).contains(&g))
+    {
+        bail!("--sunburst-gap must be between 0 and 20 pt (got {g})");
+    }
+    let (names, values) = match style.sunburst_labels.as_deref().map(str::trim) {
+        None => (None, None),
+        Some(l) if l.eq_ignore_ascii_case("names") => (Some(true), Some(false)),
+        Some(l) if l.eq_ignore_ascii_case("values") => (Some(false), Some(true)),
+        Some(l) if l.eq_ignore_ascii_case("both") => (Some(true), Some(true)),
+        Some(l) if l.eq_ignore_ascii_case("none") => (Some(false), Some(false)),
+        Some(l) => bail!("--sunburst-labels {l}: choose names, values, both or none"),
+    };
+    let order = match style.sunburst_order.as_deref().map(str::trim) {
+        None => None,
+        Some(o) if o.eq_ignore_ascii_case("worksheet") => Some(SunburstOrder::Worksheet),
+        Some(o) if o.eq_ignore_ascii_case("size") => Some(SunburstOrder::BySize),
+        Some(o) => bail!("--sunburst-order {o}: choose worksheet or size"),
+    };
+    let graph = project.plot_sunburst(&categories, value)?;
+    if let Some(p) = project.graph_mut(graph).and_then(|g| g.layers.first_mut()).and_then(|l| l.plots.first_mut()) {
+        let s = &mut p.sunburst;
+        s.start_angle_deg = style.sunburst_start.unwrap_or(s.start_angle_deg);
+        s.hole = style.sunburst_hole.map_or(s.hole, |h| h / 100.0);
+        s.ring_gap_pt = style.sunburst_gap.unwrap_or(s.ring_gap_pt);
+        s.show_names = names.unwrap_or(s.show_names);
+        s.show_values = values.unwrap_or(s.show_values);
+        s.order = order.unwrap_or(s.order);
     }
     Ok(graph)
 }

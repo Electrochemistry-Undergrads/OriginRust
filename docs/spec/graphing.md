@@ -2454,6 +2454,16 @@ page-fitting that otherwise keeps labels on the page. Not offered for a layer th
 and ternary layers, or while an axis has breaks (then the link is ignored). Undo restores both. `.opj`
 saves name it among the settings not written.
 
+### 18.7b Connect line across Missing Data (measured)
+
+Origin 2016's page Display tab has "Connect line across Missing Data", unticked by default. Measured 2026-11-15
+(`re-workspace/scratch/missing-lines`, a line + symbol plot of 2x for x = 0..10 with rows 5, 6 and 9 (x = 4, 5, 8)
+set missing): unticked, the line stops at x = 3 and 7 and restarts at 6 and 9 (three pieces); ticked, it runs
+straight from the point at 3 to the one at 6 and from 7 to 9 (one line). Symbols are the same either way.
+Sheaf: `PageStyle::connect_across_missing` (page Display tab check box); `draw_line` skips rows whose X or Y
+value is missing instead of ending the piece. A value that cannot be placed (zero or negative on a log
+axis, inside an axis break) still breaks the line; fill areas under the curve are unchanged (unmeasured).
+
 ### 18.7 Not done
 
 Speed mode of Size/Speed, attach-to,

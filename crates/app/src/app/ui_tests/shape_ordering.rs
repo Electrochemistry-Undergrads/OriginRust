@@ -127,3 +127,17 @@ fn ordering_closes_properties_and_undo_invalidates_an_open_shape_menu() {
     assert_eq!(graph_ui(&h).selected, None);
     assert!(h.query_by_label("Properties...").is_none(), "the context menu cannot use the old index");
 }
+
+#[test]
+fn undo_ai_changes_also_clears_shape_selection_when_the_stack_changes() {
+    let mut h = setup();
+    let id = graph(&h).id;
+    let original = shapes(&h);
+    h.state_mut().doc.apply("AI: shape change", |p| p.graph_mut(id).unwrap().layers[0].shapes.reverse());
+    h.state_mut().graphs.get_mut(&id).unwrap().selected = Some((0, ObjectKind::Shape(0)));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::UndoAiChanges, &ctx);
+    assert_eq!(shapes(&h), original);
+    assert_eq!(graph_ui(&h).selected, None, "Undo AI uses the ordinary shape selection cleanup");
+    assert!(h.state().status.contains("Undone 1 AI change"));
+}

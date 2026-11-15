@@ -1332,7 +1332,10 @@ fn roc_curve_runs_from_the_command_line() {
     let file = path.to_str().unwrap();
     let (ok, out, err) = sheaf(&["analyze", "roc", file, "--y", "score,state", "--positive", "yes"]);
     assert!(ok, "{err}");
-    assert!(out.contains("Area") && out.contains("0.8333") && out.contains("ROC1") && out.contains("DeLong"), "{out}");
+    assert!(
+        out.contains("Area") && out.contains("0.8333") && out.contains("ROC1") && out.contains("as Origin's"),
+        "{out}"
+    );
     let (ok, out, err) = sheaf(&[
         "analyze",
         "roc",

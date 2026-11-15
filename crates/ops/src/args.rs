@@ -2344,7 +2344,7 @@ pub enum AnalyzeTool {
         y_component: usize,
     },
     /// ROC curve: the --y columns are the test variables followed, last, by the state column. Area under the
-    /// curve with standard error (DeLong) and confidence interval, the curve and the best cut-off; makes a graph.
+    /// curve with standard error and confidence interval (as Origin's), the curve and the best cut-off; makes a graph.
     Roc {
         #[command(flatten)]
         target: TargetArgs,

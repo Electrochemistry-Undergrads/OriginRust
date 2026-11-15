@@ -2,7 +2,7 @@
 //! workbook and graph child windows, dialogs, and the one place where user actions change the
 //! project.
 
-use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, DataEdit, DataTool, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp};
 use crate::autosave::{Autosave, Due};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
@@ -110,6 +110,10 @@ const MAX_TABS_AT_ONCE: usize = 8;
 struct RenameDialog {
     window: WindowId,
     long_name: String,
+    /// The window's short name (Origin's Window Properties have both); cleaned by Origin's rule on OK.
+    short_name: String,
+    /// Why the last OK was refused (a short name another window has).
+    error: Option<String>,
     /// Set when a folder is renamed instead of a window: its path.
     folder: Option<Vec<usize>>,
 }
@@ -1123,6 +1127,23 @@ impl SheafApp {
         }
     }
 
+    /// A change from a graph's Data menu tools. A column that a formula keeps up to date refuses it, as the
+    /// worksheet refuses a typed value.
+    fn data_edit(&mut self, edit: DataEdit) {
+        let result = match edit {
+            DataEdit::Mask { cells, masked } => self.doc.mask_points(&cells, masked),
+            DataEdit::RemoveBad { cells } => self.doc.remove_bad_points(&cells),
+            DataEdit::Move { y, x } => self.doc.move_point(y, x),
+        };
+        match result {
+            Ok(report) if report.locked > 0 => {
+                self.warn("That column is calculated from a formula; change the formula in Set Column Values");
+            }
+            Ok(_) => {}
+            Err(e) => self.warn(format!("Could not change the data: {e}")),
+        }
+    }
+
     /// Shows a message in the status bar and keeps it in the Messages Log.
     fn say(&mut self, text: impl Into<String>) {
         let text = text.into();
@@ -1637,6 +1658,10 @@ impl SheafApp {
                     GraphTool::Draw(kind) => Some(kind),
                     _ => None,
                 };
+                state.data_tool = match tool {
+                    GraphTool::Data(t) => Some(t),
+                    _ => None,
+                };
                 state.reader_point = None;
                 match tool {
                     GraphTool::Reader => {
@@ -1646,9 +1671,11 @@ impl SheafApp {
                     GraphTool::Draw(kind) => {
                         self.say(format!("{}: drag on the graph (Shift constrains); Esc ends", kind.name()))
                     }
+                    GraphTool::Data(tool) => self.say(crate::data_tools::hint(tool)),
                     GraphTool::Pointer => {}
                 }
             }
+            Action::DataEdit(edit) => self.data_edit(edit),
             Action::AddText { graph, layer, at } => {
                 let state = self.graphs.entry(graph).or_default();
                 state.text_tool = false;
@@ -1780,8 +1807,13 @@ impl SheafApp {
             }
             Action::RenameFolder(path) => {
                 if let Some(f) = explorer::folder_at(&self.doc.project().root, &path).filter(|_| !path.is_empty()) {
-                    self.rename =
-                        Some(RenameDialog { window: WindowId(0), long_name: f.name.clone(), folder: Some(path) });
+                    self.rename = Some(RenameDialog {
+                        window: WindowId(0),
+                        long_name: f.name.clone(),
+                        short_name: String::new(),
+                        error: None,
+                        folder: Some(path),
+                    });
                 }
             }
             Action::DeleteFolder(path) => {
@@ -1846,7 +1878,8 @@ impl SheafApp {
                         Window::Workbook(b) => b.long_name.clone(),
                         Window::Graph(g) => g.long_name.clone(),
                     };
-                    self.rename = Some(RenameDialog { window: id, long_name, folder: None });
+                    let short_name = w.name().to_string();
+                    self.rename = Some(RenameDialog { window: id, long_name, short_name, error: None, folder: None });
                 }
             }
             Action::Cascade => self.workspace.cascade(),
@@ -2245,12 +2278,38 @@ impl SheafApp {
     }
 
     fn plot_columns(&mut self, book: WindowId, columns: Vec<ColumnId>, template: Template) {
+        // A Parallel Index is grouped by the selected column of text (else the first text column of the sheet).
+        let group = if template == Template::ParallelIndex {
+            columns.iter().copied().find(|id| self.doc.project().column(*id).is_some_and(|c| !c.data.is_numeric()))
+        } else {
+            None
+        };
+        // A Treemap (or Sunburst plot) nests by the selected columns of text (in selection order; else every text column of the
+        // sheet) and sizes by the last numeric one.
+        let categories: Vec<ColumnId> = if matches!(template, Template::Treemap | Template::Sunburst) {
+            let project = self.doc.project();
+            columns.iter().copied().filter(|id| project.column(*id).is_some_and(|c| !c.data.is_numeric())).collect()
+        } else {
+            Vec::new()
+        };
         let ys = self.plot_y_columns(book, columns, template);
         if ys.is_empty() {
-            self.warn("Nothing to plot: select one or more numeric Y columns".to_string());
+            let what = if matches!(template, Template::Treemap | Template::Sunburst) {
+                "Nothing to plot: select one or more text category columns and a numeric value column"
+            } else {
+                "Nothing to plot: select one or more numeric Y columns"
+            };
+            self.warn(what.to_string());
             return;
         }
-        match self.doc.edit("Plot columns", |p| p.plot_columns(template, &ys)) {
+        let made = self.doc.edit("Plot columns", |p| match group {
+            Some(g) => p.plot_parallel(template, &ys, Some(g)),
+            None if matches!(template, Template::Treemap | Template::Sunburst) => {
+                p.plot_columns(template, &[categories.as_slice(), &ys].concat())
+            }
+            None => p.plot_columns(template, &ys),
+        });
+        match made {
             Ok(_) => self.say(format!("Plotted {} column(s)", ys.len())),
             Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
         }
@@ -3353,9 +3412,20 @@ impl SheafApp {
                     ui.label(label);
                     ui.add(egui::TextEdit::singleline(&mut d.long_name).desired_width(260.0));
                 });
+                if d.folder.is_none() {
+                    ui.horizontal(|ui| {
+                        ui.label("Short Name");
+                        ui.add(egui::TextEdit::singleline(&mut d.short_name).desired_width(200.0));
+                    });
+                    ui.weak("Letters and digits, at most 13 characters (as in Origin).");
+                    if let Some(e) = &d.error {
+                        ui.colored_label(ui.visuals().error_fg_color, e);
+                    }
+                }
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {
                         let (id, name) = (d.window, d.long_name.clone());
+                        let short = d.short_name.clone();
                         if let Some(path) = d.folder.clone() {
                             let name = name.trim().to_string();
                             if !name.is_empty() {
@@ -3365,16 +3435,26 @@ impl SheafApp {
                                     }
                                 });
                             }
+                            done = true;
                         } else {
-                            self.doc.apply("Rename window", move |p| {
+                            // The short name first: a name another window has keeps the window open.
+                            let result = self.doc.edit("Rename window", move |p| {
+                                let current = p.window(id).map(|w| w.name().to_string()).unwrap_or_default();
+                                if short.trim() != current {
+                                    p.rename_window(id, &short)?;
+                                }
                                 if let Some(b) = p.workbook_mut(id) {
                                     b.long_name = name;
                                 } else if let Some(g) = p.graph_mut(id) {
                                     g.long_name = name;
                                 }
+                                Ok::<(), String>(())
                             });
+                            match result {
+                                Ok(()) => done = true,
+                                Err(e) => d.error = Some(e),
+                            }
                         }
-                        done = true;
                     }
                     if ui.button("Cancel").clicked() {
                         done = true;
@@ -3579,6 +3659,35 @@ impl SheafApp {
                         let state = self.graphs.entry(id).or_default();
                         state.reader = true;
                         state.reader_point = Some(crate::reader::Point { layer: 0, plot: 0, row: 2 });
+                    }
+                }
+                // data-tool:mask, data-tool:move or data-tool:remove turns that Data menu tool on in the
+                // first graph; mask-points:1,2 masks those rows (from 1) of its first plot.
+                "data-tool" => {
+                    let tool = match arg {
+                        "mask" => Some(DataTool::Mask),
+                        "move" => Some(DataTool::Move),
+                        "remove" => Some(DataTool::RemoveBad),
+                        _ => None,
+                    };
+                    if let (Some(id), Some(tool)) = (first_graph, tool) {
+                        self.graphs.entry(id).or_default().data_tool = Some(tool);
+                        self.say(crate::data_tools::hint(tool));
+                        self.focus(id);
+                    }
+                }
+                "mask-points" => {
+                    let y = first_graph
+                        .and_then(|g| project.graph(g))
+                        .and_then(|g| g.layers.first()?.plots.first())
+                        .map(|p| p.y);
+                    if let Some(y) = y {
+                        let cells: Vec<_> = arg
+                            .split(',')
+                            .filter_map(|r| r.trim().parse::<usize>().ok())
+                            .map(|r| sheaf_core::DataCell::new(y, r.saturating_sub(1)))
+                            .collect();
+                        self.data_edit(DataEdit::Mask { cells, masked: true });
                     }
                 }
                 // text:N opens the Text window of the N-th label (from 1) of the first graph's

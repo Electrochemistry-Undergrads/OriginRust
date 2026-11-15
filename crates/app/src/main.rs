@@ -29,6 +29,7 @@
 mod actions;
 mod app;
 mod autosave;
+mod data_tools;
 mod dialogs;
 mod gadget;
 mod graph_view;

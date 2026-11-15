@@ -20,11 +20,11 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 152 | 42 | 243 |
+| All rows | 49 | 156 | 41 | 246 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 83 | 42 | 142 |
+| P1 and P2 together | 17 | 87 | 41 | 145 |
 
-By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
+By priority alone: 101 rows are P0, 87 are P1 and 57 are P2.
 
 Reading the counts: the P0 rows are mostly present but often only partly (69 of 101 are partial). No P0 row is missing altogether any more: the analysis dialogs now share one frame with Preview and Auto Preview, and the Analysis menu works on a graph's data plot. Since 2026-11-11 the former holes of .opj saving, the Origin look, Double-Y graphs, offset and waterfall plots and graph gadgets have become partial rows: they work for the owner's cases but lack Origin's breadth (three or more Y axes, colour-mapped waterfalls, more gadgets, saving the newer graph features into .opj without the companion file).
 
@@ -62,7 +62,7 @@ Cross-cutting findings:
 | Preferences | Tools > Options, Ctrl+U | none | ✗ | no settings stored | P1 |
 | Panels | Results Log, Command Window, Object Manager, Quick Help, Data Display | Object Manager (right edge: layers and plots of the active graph with tick boxes that show or hide plots), Messages Log and Results Log (left edge, with Clear), status bar with hints, Average, Sum and Count of the selected cells, AU : ON, active sheet, Radian | ◐ | no Command Window, Code Builder, Quick Help, Smart Hint Log or Data Display; Results Log holds only the analysis and fit summaries; Object Manager has no plot groups and no layer-level settings | P1 |
 | Graph view modes and zoom | Page, Print, Window, Draft view; zoom commands | page fitted to window; Axis Zoom In and Axis Zoom Out in an axis right-click menu; Rescale to Show All | ◐ | no Page, Print, Window or Draft view; no zoom tool, whole-page zoom or pan (the Zoom In and Zoom Out buttons are grey) | P1 |
-| Find, replace, go to | Ctrl+F, Ctrl+H, F3, Ctrl+G | Find/Replace tabs (Ctrl+F/H): Numeric comparisons/missing/relative tolerance/sign options, displayed-text String search/wildcards, reverse search, selected-range restriction, one undo per replacement, formula columns protected; Go to (Ctrl+G): optional coordinates, zero/end, capacity bounds, extension, picker/Reset, names and a project Column Browser (Origin 2016 measured, gui-look section 5) | ◐ | active-sheet data search only; no Find in Project (F3), wider scopes, label rows, cell links or saved dialog history; Column Browser Exclude, block add, row-range editing and top-table multiple selection are missing | P1 |
+| Find, replace, go to | Ctrl+F, Ctrl+H, F3, Ctrl+G | Find/Replace tabs (Ctrl+F/H): Numeric comparisons/missing/relative tolerance/sign options, displayed-text String search/wildcards, reverse search, selected-range restriction, one undo per replacement, formula columns protected; Go to (Ctrl+G): optional coordinates, zero/end, capacity bounds, extension, picker/Reset, names and a project Column Browser with multiple selection/block add (Origin 2016 measured, gui-look section 5) | ◐ | active-sheet data search only; no Find in Project (F3), wider scopes, label rows, cell links or saved dialog history; Column Browser Exclude and row-range editing are missing | P1 |
 | Set As Begin, End, Reset | Edit menu | none | ✗ | analysis dialogs take row ranges individually | P1 |
 | Copy graph page to clipboard | Edit > Copy Page, Ctrl+J | Edit > Copy Page, Ctrl+J and the graph's right-click menu put the page on the clipboard as a 300 dpi picture at 40 % size (Origin's size factor) with the Auto margin, and on Windows an enhanced metafile next to the bitmap | ✓ | no WMF, no OLE object; the 40 % and the margin are read from the docs, not measured; pasting into another program was not tried | P1 |
 | Copy and paste format between graphs | Edit > Copy Format | "Use this style for all plots" button | ◐ | | P1 |
@@ -213,7 +213,7 @@ Cross-cutting findings:
 |---|---|---|---|---|---|
 | Gadgets and data cursors | integrate, statistics, quick fit, quick peaks, FFT, rise time on a graph region | Gadgets > Integrate on the active graph; the Data Reader tool snaps to the nearest data point, a click pins it and the arrow keys step through rows | ◐ | Statistics, Quick Fit, Quick Sigmoidal Fit, Quick Peaks, Differentiate, Interpolate, Intersect, Rise Time, Cluster, FFT, Vertical Cursor and Go To are grey | P0 |
 | Analysis menu on the active graph | graph Analysis menu | with a graph active, the Analysis menu's tools and fits run on the selected data plot, or else the active layer's first plot (`MenuContext::curve`); results go to its workbook, and a fit draws its curve on the graph | ◐ | results of tools other than fits are not drawn on the graph; one plot at a time; the Integrate gadget is the other tool that runs on a graph | P0 |
-| Data menu | display range, markers, mask points, remove bad points | the graph's menu bar has a Data menu; every item is grey | ✗ |  | P1 |
+| Data menu | display range, markers, mask points, remove bad points | Data > Mask Data Points (drag a rectangle; click a masked point to unmask), Remove Bad Data Points (the Y cell becomes missing, rows kept) and Move Data Points (X and Y follow the drag), each one undo step on the source worksheet, following formula-column rules and analysis links (graphing.md 20) | ◐ | Set Display Range, Reset to Full Range, data markers, Analysis Markers and Lock Position grey (no column display range yet); tools act on the plot under the pointer (no active plot); Origin's behaviour unmeasured | P1 |
 
 ## 9 Fitting
 
@@ -287,6 +287,9 @@ Cross-cutting findings:
 | Stock | Plot > Stock | none | ✗ | | P2 |
 | Vector | Plot > Vector | none | ✗ | | P2 |
 | 3D plots | Plot > 3D | none | ✗ | no 3D renderer | P2 |
+| Parallel plots | Plot > Categorical | Plot > Categorical > Parallel Plot and Parallel Index (T49, graphing.md 14.25; `-t parallel`, `parallel-index`, `--group`) | ◐ | one vertical axis per column, per-axis or shared range, lines coloured by a numeric column (colour scale) or by group (legend), Plot Details Parallel tab; Origin's defaults and colour map unmeasured, no Parallel Sets, curvature or axis reordering; written to .opj as line plots | P2 |
+| Treemap | Plot > Categorical | Plot > Categorical > Treemap (T50, graphing.md 14.26; `-t treemap`, `--group`, `--treemap-*`) | ◐ | nested rectangles by category columns sized by a value column, six layouts (squarified, squarified+, split, three pivots), order, depth, gap, per-level layout; Origin's defaults, colours and labels unmeasured; no hover or drill-down | P2 |
+| Sunburst plot | Plot > Categorical | Plot > Categorical > Sunburst Plot (T51, graphing.md 14.27; `-t sunburst`, `--group`, `--sunburst-*`) | ◐ | hierarchy of category columns as concentric rings, angles by a value column, leaves coloured by value and categories by their leaves' mean on the shared ramp with a colour scale, unfilled missing categories, radial labels, Pie Geometry tab (start angle, hole, ring gap, labels); Origin's defaults unmeasured; no hover or Collapse/Expand drilling; written to .opj as columns | P2 |
 | Contour, heat map | Plot > Contour | Plot > Contour/Heat Map > Hexbin only (T45, graphing.md 14.24; `-t hexbin`) | ◐ | Hexbin of XY data with Origin's bin controls and a count colour scale; contour and heat map need matrices | P2 |
 | Inset, pictures in graphs | Zoom, Insert picture | none | ✗ | | P2 |
 | Other plot-type IDs when reading .opj | area, box, bar, histogram, pie | only types 200 to 203 mapped | ✗ | | P2 |

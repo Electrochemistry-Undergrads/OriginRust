@@ -903,6 +903,7 @@ struct PlotArgs {
     y: Vec<String>,
     y2: Vec<String>,
     graph: Option<String>,
+    group: Option<String>,
     panels: Option<PanelArgs>,
     overlay_files: Vec<String>,
     options: Option<Map<String, Value>>,
@@ -1004,7 +1005,7 @@ fn session_options(raw: &Value, command: &str) -> Result<Map<String, Value>, Too
         _ => return Err(ToolError::new("options must be an object")),
     };
     let common: &[&str] = if command == "plot" {
-        &["template", "book", "sheet", "y", "y2", "graph"]
+        &["template", "book", "sheet", "y", "y2", "graph", "group"]
     } else {
         &[
             "model",
@@ -1164,6 +1165,7 @@ fn plot(s: &mut Ctx, a_raw: &Value) -> Res {
         panels: a.panels.map(panels_from).transpose()?,
         overlay: !a.overlay_files.is_empty(),
         overlay_books: Vec::new(),
+        group: a.group.clone(),
         style: style_from(a.style, a.size.as_ref())?,
     };
     if let Some(mut parsed) = bridged {
@@ -1976,7 +1978,8 @@ fn simulate_curve(s: &mut Ctx, a_raw: &Value) -> Res {
         "sheet": ws.name,
         "x_column": qualified(project, x.id),
         "y_column": qualified(project, y.id),
-        "function": y.long_name,
+        // The Y column's comment is the function's name (Origin's naming, fitting.md 13.1).
+        "function": y.comments,
         "points": points,
         "graph": run.report.new_graph.and_then(|g| project.graph(g)).map(|g| g.name.clone()),
         "image": image,

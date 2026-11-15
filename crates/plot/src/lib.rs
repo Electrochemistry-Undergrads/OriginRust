@@ -24,6 +24,7 @@ mod legend;
 mod margin;
 pub mod markup;
 mod multipage;
+mod parallel;
 mod pie;
 mod plots;
 mod polar;
@@ -35,12 +36,14 @@ pub mod scene;
 mod shapes;
 mod sheet;
 mod stack;
+mod sunburst;
 mod svg;
 mod symbol_gaps;
 mod ternary;
 mod text;
 pub mod ticks;
 mod ticks_scales;
+mod treemap;
 pub(crate) mod trend;
 mod vector;
 mod violin;
@@ -72,6 +75,8 @@ mod multipage_tests;
 #[cfg(test)]
 mod offset_multiplier_tests;
 #[cfg(test)]
+mod parallel_tests;
+#[cfg(test)]
 mod ridgeline_tests;
 #[cfg(test)]
 mod rug_tests;
@@ -80,11 +85,15 @@ mod skip_tests;
 #[cfg(test)]
 mod sort_x_tests;
 #[cfg(test)]
+mod sunburst_tests;
+#[cfg(test)]
 mod symbol_gap_tests;
 #[cfg(test)]
 mod symbol_line_order_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod treemap_tests;
 #[cfg(test)]
 mod trend_tests;
 #[cfg(test)]
@@ -391,6 +400,22 @@ pub fn stack_places(
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
     let layer = g.layers.get(layer).ok_or(PlotError::NoSuchLayer(layer))?;
     Ok(stack::places(project, layer).0)
+}
+
+/// How far a plot of a waterfall layer is moved on the page from the front frame, `(dx, dy)` in
+/// page points, for the plot placed by `place` in layer `layer` with geometry `geometry`. Member `k`
+/// is drawn `k` shifts right of and above the front frame (spec 13.6); `(0, 0)` for every plot of a
+/// layer that is not drawn as a waterfall. Add it to `LayerGeometry::data_to_page`.
+pub fn waterfall_shift(
+    project: &Project,
+    graph: WindowId,
+    layer: usize,
+    place: &sheaf_core::stack::Place,
+    geometry: &LayerGeometry,
+) -> (f64, f64) {
+    let Some((sx, sy)) = project.graph(graph).and_then(|g| stack::waterfall(g, layer)) else { return (0.0, 0.0) };
+    let k = place.member.unwrap_or(0) as f64;
+    (k * sx * geometry.frame.w, -k * sy * geometry.frame.h)
 }
 
 /// Renders a graph as SVG text, measuring text with the installed fonts.

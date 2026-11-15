@@ -15,7 +15,7 @@
 //! underlined, and Alt plus the letter of a top-level menu opens that menu. Letters inside the
 //! open menus are not handled (egui has no way to pick an item by letter).
 
-use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, DataTool, GraphOp, GraphTool, ImportPick, SheetOp};
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
@@ -235,6 +235,8 @@ pub enum Cmd {
     Pointer,
     /// The Data Reader tool of the Tools toolbar.
     DataReader,
+    /// A tool of the Data menu (Mask, Move or Remove Bad Data Points).
+    DataTool(DataTool),
     /// The Text tool of the Tools toolbar.
     TextTool,
     /// A drawing tool of the Tools toolbar.
@@ -873,6 +875,15 @@ fn plot_menu() -> Vec<Entry> {
             .concat(),
         ),
         sub(
+            "Cate&gorical",
+            vec![
+                item("Parallel Plot", Cmd::Plot(Template::Parallel)),
+                item("Parallel Index", Cmd::Plot(Template::ParallelIndex)),
+                item("Treemap", Cmd::Plot(Template::Treemap)),
+                item("Sunburst Plot", Cmd::Plot(Template::Sunburst)),
+            ],
+        ),
+        sub(
             "&Area",
             vec![
                 item("&Area", Cmd::Plot(Template::Area)),
@@ -1323,9 +1334,9 @@ fn data_menu() -> Vec<Entry> {
         grey_sub("Analysis Markers", &["Hide", "Show Partial Ranges", "Show All", "Tiny", "Small", "Medium", "Large"]),
         grey_sub("Lock Position", &["Layer Icon", "First Point", "Last Point"]),
         sep(),
-        grey("Mask Data Points"),
-        grey("Move Data Points"),
-        grey("Remove Bad Data Points"),
+        item("Mask Data Points", Cmd::DataTool(DataTool::Mask)),
+        item("Move Data Points", Cmd::DataTool(DataTool::Move)),
+        item("Remove Bad Data Points", Cmd::DataTool(DataTool::RemoveBad)),
     ]
 }
 
@@ -2280,6 +2291,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::GoTo(id) => Action::Focus(*id),
         Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pointer },
         Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Reader },
+        Cmd::DataTool(tool) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Data(*tool) },
         Cmd::TextTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Text },
         Cmd::ShapeTool(kind) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Draw(*kind) },
         Cmd::EditShape { layer, shape } => {
@@ -2503,8 +2515,9 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
     }
 }
 
-/// The entries of a recent list: numbered, the name first and the folder after it in a weaker
-/// colour, the full path as the tooltip. An empty list shows a greyed "(none)".
+/// The entries of a recent list as Origin 2016 shows them: numbered 1 to 9 and A to F, the path
+/// without its extension shortened to 80 characters, the full path as the tooltip. An empty list
+/// shows a greyed "(none)".
 fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &mut Vec<Action>) {
     let list = if kind == RecentKind::Projects { c.recent_projects } else { c.recent_imports };
     if list.is_empty() {
@@ -2512,13 +2525,7 @@ fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &m
         return;
     }
     for (n, path) in list.iter().enumerate() {
-        let (name, folder) = recent::entry_parts(path, RECENT_FOLDER_CHARS);
-        let mut job = label_job(ui, &recent::numbered(n, &name), true);
-        if !folder.is_empty() {
-            let font_id = TextStyle::Button.resolve(ui.style());
-            let weak = TextFormat { font_id, color: ui.visuals().weak_text_color(), ..Default::default() };
-            job.append(&folder, 14.0, weak);
-        }
+        let job = label_job(ui, &recent::numbered(n, &recent::entry_text(path, RECENT_ENTRY_CHARS)), true);
         let full = path.display().to_string();
         let response = ui.add(egui::Button::new(job)).on_hover_text(&full);
         if response.contains_pointer() {
@@ -2535,7 +2542,8 @@ fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &m
 }
 
 /// The longest folder text an entry shows; longer folders are cut from the left (Sheaf's choice).
-const RECENT_FOLDER_CHARS: usize = 48;
+/// Origin 2016 shortens a recent entry to 80 characters (recent-files.md 2).
+const RECENT_ENTRY_CHARS: usize = 80;
 
 /// A check mark in the room left of the label.
 fn tick(ui: &egui::Ui, response: &egui::Response) {

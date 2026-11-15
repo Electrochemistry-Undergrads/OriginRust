@@ -90,6 +90,32 @@ fn style_schema() -> Value {
             ("bar_overlap", n("Overlap of bars, percent.")),
             ("hex_bins", n("Hexbin plots: number of bins along X, 2 to 1000 (default 20).")),
             (
+                "treemap_layout",
+                t(
+                    "string",
+                    "Treemaps: squarified (default), squarified-plus, split, pivot-size, pivot-middle or pivot-split-size.",
+                ),
+            ),
+            (
+                "treemap_order",
+                t(
+                    "string",
+                    "Treemaps: categorical (default), alphabetical, size or column:NAME (the squarified layouts ignore it).",
+                ),
+            ),
+            ("treemap_depth", n("Treemaps: the number of levels shown, 1 or more (default: all).")),
+            ("treemap_gap", n("Treemaps: gap between rectangles in pt, 0 to 20 (default 1.5).")),
+            (
+                "sunburst_start",
+                n(
+                    "Sunburst plots: where the first wedge starts, degrees counter-clockwise from 3 o'clock (default 90 = 12 o'clock; wedges go clockwise).",
+                ),
+            ),
+            ("sunburst_hole", n("Sunburst plots: the hole as a percentage of the radius, 0 to 90 (default 30).")),
+            ("sunburst_gap", n("Sunburst plots: gap between rings in pt, 0 to 20 (default 0).")),
+            ("sunburst_labels", t("string", "Sunburst plots: names (default), values, both or none.")),
+            ("sunburst_order", t("string", "Sunburst plots: worksheet (default) or size (largest first).")),
+            (
                 "text_labels",
                 json!({"type": "array", "description": "Text placed in the layer; x and y are fractions of the layer frame, (0,0) the top left.",
                        "items": obj(vec![("text", t("string", "The text.")), ("x", n("X fraction.")), ("y", n("Y fraction."))], &["text", "x", "y"])}),
@@ -311,7 +337,7 @@ pub fn defs() -> Vec<Def> {
                     (
                         "template",
                         s(
-                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), scatter-rug (scatter with rug marks beside the bottom and left axes), violin (also violin-box, violin-point, violin-quartile, violin-stick, half-violin), ridgeline (one density curve per y column, stacked up the page), hexbin (x against the first y column, binned into hexagons coloured by count, with a colour scale; no right axis), ... (the names of sheaf plot --template). Default: what the data suggests.",
+                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), scatter-rug (scatter with rug marks beside the bottom and left axes), violin (also violin-box, violin-point, violin-quartile, violin-stick, half-violin), ridgeline (one density curve per y column, stacked up the page), hexbin (x against the first y column, binned into hexagons coloured by count, with a colour scale; no right axis), parallel (one vertical axis per y column, one line per row coloured by the last column or by group, with a colour scale; two or more y columns, no right axis), parallel-index (like parallel, lines coloured by a text group column with a legend; three or more y columns plus group), treemap (nested rectangles, one level per category column given in group, default the text columns, with areas proportional to the last numeric y column; options treemap_layout, treemap_order, treemap_depth, treemap_gap; no right axis), sunburst (the same hierarchy as concentric rings, first category innermost, angles proportional to the last numeric y column, coloured by value with a colour scale; options sunburst_start, sunburst_hole, sunburst_gap, sunburst_labels, sunburst_order; no right axis), ... (the names of sheaf plot --template). Default: what the data suggests.",
                         ),
                     ),
                     ("book", s(BOOK)),
@@ -319,6 +345,12 @@ pub fn defs() -> Vec<Def> {
                     ("y", strs("Y columns. Default: the sheet's Y columns.")),
                     ("y2", strs("Columns on the right Y axis (double-Y).")),
                     ("graph", s("Style this existing graph instead of making one.")),
+                    (
+                        "group",
+                        s(
+                            "Parallel plots: the group column of parallel-index (default: the first text column), or the numeric colour column of parallel (default: the last y column; none = one colour); for treemap and sunburst the category columns, comma-separated, first = top level or innermost ring (default: the text columns of the sheet).",
+                        ),
+                    ),
                     ("panels", panels),
                     (
                         "overlay_files",

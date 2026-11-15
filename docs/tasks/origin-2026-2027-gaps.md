@@ -50,19 +50,19 @@ outputs or UI behavior.
 | Feature | Release | Functionality to add | Source |
 |---|---|---|---|
 | Manhattan plot | 2017 Pro App | Plot significance across grouped genomic positions, typically with chromosome groups and a significance cutoff. | [2017][o17] |
-| Violin and parallel-coordinate plots | 2019 | Show each group's distribution as a density silhouette, or draw each record across parallel variable axes. | [2019][o19] |
+| Violin and parallel-coordinate plots | 2019 | Violin done (T37); parallel plot and parallel index done (T49). Show each group's distribution as a density silhouette, or draw each record across parallel variable axes. | [2019][o19] |
 | Rug plot | 2019b | Done (T41). Add a mark along an axis for each observation to reveal its distribution. | [2019b][o19b] |
 | Sankey and alluvial diagrams | 2020 | Show quantities as flows whose widths reflect their values, including transitions between categories across stages. | [2020][o20] |
 | Browser Graph | 2020b / 2024 | Browse similarly structured datasets inside a graph and switch the displayed series, including datasets on different sheets. | [2020b][browser] · [2024][o24] |
 | Chord and lollipop plots | 2021 | Lollipop done (T33). Draw relationships as chords between categories. Draw values as stems ending in markers. | [2021][o21] |
 | Network and grouped marginal plots | 2021b | Draw connections among nodes. Pair grouped scatter data with distributions along the margins. | [2021b][o21b] |
-| Sunburst and ridgeline plots | 2022 | Ridgeline done (T44). Draw a hierarchy as concentric rings or compare distributions as vertically offset density curves. Ridgeline done (T44). | [2022][o22] |
+| Sunburst and ridgeline plots | 2022 | Sunburst done (T51), ridgeline done (T44). Draw a hierarchy as concentric rings or compare distributions as vertically offset density curves. | [2022][o22] |
 | Plot-only X sorting | 2023 | Done (T39). Sort points by X for line connections while preserving worksheet row order. | [2023][o23] |
 | Built-in equation rendering | 2023b | Render LaTeX equations in graph labels and worksheet metadata, carry metadata equations into legends and axis titles, and retain vector output on export. | [2023b][o23b] |
 | Time Series Explorer | 2024b | View the full series and a detail panel for a chosen interval. Step or play through successive intervals. | [2024b][o24b] |
 | Extract data from regions on a graph | 2024b | Draw one or more rectangular, oval or freeform regions and output the enclosed observations to a worksheet. | [2024b][o24b] |
 | Graph Slicer | 2025 / 2025b | Filter plots from a common source sheet at page, layer or plot scope and extract the selected subset. | [2025][o25] · [2025b][o25b] |
-| Treemap | 2025b | Show hierarchical magnitudes as nested rectangles sized by values. | [2025b][o25b] |
+| Treemap | 2025b | Done (T50). Show hierarchical magnitudes as nested rectangles sized by values. | [2025b][o25b] |
 | On-graph trendlines | 2025b | Done (T43). Add a fitted trend or moving average directly to a plot with its own editable label and curve settings. | [2025b][o25b] |
 | Cause-and-effect and nested frequency charts | 2026 | Draw a fishbone diagram or summarize frequency counts as columns, bars, pie or doughnut sections, including nested categories. | [2026][o26] |
 | Slope Annotation | 2026b | Mark a slope directly on a graph with a data-linked annotation. | [2026b][o26b] |

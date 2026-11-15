@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 144 | 46 | 239 |
+| All rows | 49 | 145 | 46 | 240 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 75 | 46 | 138 |
+| P1 and P2 together | 17 | 76 | 46 | 139 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
@@ -123,6 +123,7 @@ Cross-cutting findings:
 | Conditional formatting | Worksheet > Conditional Formatting | Highlight Min Max (row- or column-wise, Origin's default colours) and Highlight Top Bottom (Top/Bottom N items or N%) on the selected cells, live, per sheet, saved in `.sheaf`; Remove Conditional Format; undo (gui-look.md 3, T35) | ◐ | no Conditional Highlight, Heatmap, Pareto, Outliers or Manager; ties, masks, N% rounding and Top Bottom colours are unmeasured; `.opj` save warns | P2 |
 | Internal types | double, short, long, complex | f64 only | ✗ | | P1 |
 | Categorical columns | Set as Categorical | Set as Categorical toggle (column and Column menus); Unstack Columns offers categorical columns first; Group and Subject designations in Set As and Column Properties | ◐ | no analysis tool reads Group or Subject yet; the .opj file codes of Group and Subject are unknown (companion keeps them) | P1 |
+| Cell notes | Mini Toolbar Add Note, Notes window, hover popup on the cell tab (Origin 2022) | Cell menu Add/Edit/Delete Note (plain-text editor), a red corner tab and a hover popup, per sheet, kept through sort, row/column edits, duplicate and append, saved in `.sheaf`; undo (gui-look.md 3, T36) | ◐ | no Notes window, rich text, `@NCP` or Mini Toolbar button; indicator, delete and sort/insert rules are unmeasured; notes are not copied by transpose/stack/split; `.opj` save warns | P2 |
 | Worksheet display and view options | Format > Worksheet F4; hide, freeze, zoom | hidden columns; View > Freeze/Unfreeze Panes (Ctrl+Shift+F) keeps the first rows and columns in view while the rest scrolls, per sheet, saved in `.sheaf`, darker heads (gui-look.md 3, T34) | ◐ | no Format > Worksheet window or zoom; the freeze rules (displayed rows, n = index - 1, label rows not counted) are unmeasured; `.opj` save warns | P1 |
 | Before-formula script, multi-column set | Set Column Values | none | ✗ | one column only | P1 |
 | Fill Column With | row numbers, random, patterns | only formula `i` | ◐ | no random, series or dates | P1 |

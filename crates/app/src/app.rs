@@ -6,6 +6,7 @@ use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, L
 use crate::autosave::{Autosave, Due};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
+use crate::dialogs::cell_note::CellNoteDialog;
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::cond_format::CondFormatDialog;
 use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
@@ -141,6 +142,7 @@ pub struct SheafApp {
     row_filter: Option<RowFilterDialog>,
     mask_condition: Option<MaskConditionDialog>,
     cond_format: Option<CondFormatDialog>,
+    pub(crate) cell_note: Option<CellNoteDialog>,
     reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
@@ -227,6 +229,7 @@ impl SheafApp {
             row_filter: None,
             mask_condition: None,
             cond_format: None,
+            cell_note: None,
             reshape: None,
             export: None,
             export_sheet: None,
@@ -573,6 +576,7 @@ impl SheafApp {
         self.row_filter = None;
         self.mask_condition = None;
         self.cond_format = None;
+        self.cell_note = None;
         self.reshape = None;
         self.sort = None;
         self.sheet_name = None;
@@ -1386,6 +1390,25 @@ impl SheafApp {
                     Err(why) => self.warn(why),
                 }
             }
+            Action::NoteDialog(book) => match self.note_cell(book) {
+                Ok((column, row)) => self.cell_note = CellNoteDialog::new(&self.doc, book, column, row),
+                Err(why) => self.warn(why),
+            },
+            Action::DeleteNote(book) => match self.note_cell(book) {
+                Ok((column, row)) => {
+                    let has = self.doc.project().workbook(book).is_some_and(|b| b.sheet().note(column, row).is_some());
+                    if has {
+                        self.doc.apply("Delete note", |p| {
+                            if let Some(b) = p.workbook_mut(book) {
+                                b.sheet_mut().remove_note(column, row);
+                            }
+                        });
+                    } else {
+                        self.warn("The selected cell has no note");
+                    }
+                }
+                Err(why) => self.warn(why),
+            },
             Action::RemoveCondFormat(book) => match self.cond_range(book) {
                 Ok(range) => {
                     let has = self
@@ -1990,6 +2013,7 @@ impl SheafApp {
                         c.id = new;
                     }
                     copy.remap_cond_format_columns(&|c| renamed.get(&c).copied());
+                    copy.remap_note_columns(&|c| renamed.get(&c).copied());
                     if let Some(b) = p.workbook_mut(book) {
                         b.sheets.insert(active + 1, copy);
                         b.active_sheet = active + 1;
@@ -2264,6 +2288,12 @@ impl SheafApp {
         grid::cond_range(state, sheet)
     }
 
+    fn note_cell(&self, book: WindowId) -> Result<(ColumnId, usize), &'static str> {
+        let sheet = self.doc.project().workbook(book).map(|b| b.sheet()).ok_or("This workbook no longer exists")?;
+        let state = self.books.get(&book).ok_or("Select a cell first")?;
+        grid::note_cell(state, sheet)
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -2475,6 +2505,7 @@ impl SheafApp {
             || self.row_filter.is_some()
             || self.mask_condition.is_some()
             || self.cond_format.is_some()
+            || self.cell_note.is_some()
             || self.reshape.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
@@ -2859,6 +2890,11 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.cond_format = None;
+        }
+        if let Some(d) = &mut self.cell_note
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.cell_note = None;
         }
         if let Some(d) = &mut self.row_filter
             && !d.show(ctx, &mut self.doc)
@@ -3595,6 +3631,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
                 for s in &mut b.sheets {
                     s.columns.retain(|c| !columns.contains(&c.id));
                     s.remap_cond_format_columns(&|c| (!columns.contains(&c)).then_some(c));
+                    s.remap_note_columns(&|c| (!columns.contains(&c)).then_some(c));
                 }
             }
             Window::Graph(g) => {

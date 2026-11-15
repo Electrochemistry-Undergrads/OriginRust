@@ -124,6 +124,10 @@ pub enum Cmd {
     CondFormat(crate::dialogs::cond_format::CondKind),
     /// Worksheet > Conditional Formatting > Remove Conditional Format.
     RemoveCondFormat,
+    /// Cell menu > Add Note... / Edit Note...: the note editor for the selected cell.
+    EditNote,
+    /// Cell menu > Delete Note.
+    DeleteNote,
     /// Insert rows or columns at the selection (Edit > Insert and the cell menus).
     InsertCells,
     /// Delete the selected rows or columns (Edit > Delete and the cell menus).
@@ -1532,8 +1536,8 @@ pub fn label_cell_menu() -> Vec<Entry> {
     ]
 }
 
-/// The menu of a data cell.
-pub fn cell_menu() -> Vec<Entry> {
+/// The menu of a data cell; `noted` when the cell has a note (Edit/Delete Note instead of Add).
+pub fn cell_menu_for(noted: bool) -> Vec<Entry> {
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
     v.extend(copy_entries());
     v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
@@ -1546,12 +1550,17 @@ pub fn cell_menu() -> Vec<Entry> {
     v.extend(greys(&[
         "Insert Graph...",
         "Insert Images from Files...",
-        "Insert Notes",
         "Insert Sparklines...",
         "Insert Variables...",
         "-",
         "Format Cells...",
     ]));
+    if noted {
+        v.push(item("Edit Note...", Cmd::EditNote));
+        v.push(item("Delete Note", Cmd::DeleteNote));
+    } else {
+        v.push(item("Add Note...", Cmd::EditNote));
+    }
     v.push(mask_menu());
     v.push(cond_format_menu());
     v.push(grey_sub("Set Data Style", &["Default"]));
@@ -2106,6 +2115,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::CondFormat(kind) => {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             Action::CondFormatDialog { book: book?, kind: *kind }
+        }
+        Cmd::EditNote => {
+            c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            Action::NoteDialog(book?)
+        }
+        Cmd::DeleteNote => {
+            c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            Action::DeleteNote(book?)
         }
         Cmd::RemoveCondFormat => {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;

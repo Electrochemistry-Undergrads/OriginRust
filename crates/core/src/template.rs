@@ -1122,6 +1122,6 @@ mod tests {
         assert!(back.layers[0].x_axis.rug.is_default());
         // A partly written rug keeps the defaults for the rest.
         let r: Rug = serde_json::from_str(r#"{"show":true,"plot":2}"#).unwrap();
-        assert!(r.show && r.plot == Some(2) && r.overlap && r.size_pct == 5.0);
+        assert!(r.show && r.plot == Some(crate::ids::ColumnId(2)) && r.overlap && r.size_pct == 5.0);
     }
 }

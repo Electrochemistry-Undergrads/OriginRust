@@ -120,5 +120,9 @@ Add/Remove, qualified references, transfer to the parent before navigation, and 
 uses the chosen position in the original worksheet even for another book's column; several
 added columns go to the last column. The browser now implements these measured behaviors,
 project/book/sheet/folder scopes and metadata without data/history/activation changes. Five UI
-regressions and a folder-scope fixture cover it. Exclude, top-table multiple selection/block add,
+regressions and a folder-scope fixture cover it. A second follow-up adds top-table Ctrl/Command,
+Shift and keyboard selection plus Add as One Block, enabled only for consecutive columns in one
+sheet. Nine valid native cases establish individual versus grouped Add, disabled noncontiguous/
+mixed-book blocks, whole-block Remove and the original-sheet last-column navigation rule.
+Five more UI regressions cover those workflows and grouped reference transfer. Exclude,
 lower row-range editing and saved preferences remain (gui-look section 5).

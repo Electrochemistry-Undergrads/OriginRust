@@ -68,8 +68,8 @@ fn a_project_opened_at_start_is_first_in_recent_projects_and_in_the_file() {
     assert_eq!(listed(&h).0, [new.clone(), old.clone()], "newest first");
     assert_eq!(file_lists(&file).projects, [new, old], "the file has them too");
     open_recent_projects(&mut h);
-    let first = menu_entry(&h, "1 new.sheaf").rect().min.y;
-    let second = menu_entry(&h, "2 old.sheaf").rect().min.y;
+    let first = recent_entry(&h, "1", "new").rect().min.y;
+    let second = recent_entry(&h, "2", "old").rect().min.y;
     assert!(first < second, "numbered and newest first");
 }
 
@@ -115,7 +115,7 @@ fn clicking_a_recent_project_opens_it() {
     settle(&mut h);
     assert!(project(&h).workbooks().any(|w| w.long_name == "BetaBook"));
     open_recent_projects(&mut h);
-    menu_entry(&h, "2 a.sheaf").click();
+    recent_entry(&h, "2", "a").click();
     settle(&mut h);
     assert!(project(&h).workbooks().any(|w| w.long_name == "AlphaBook"), "a.sheaf is open again");
     assert_eq!(h.state().path.as_deref(), Some(a.as_path()));
@@ -133,7 +133,7 @@ fn clicking_a_recent_project_with_unsaved_changes_asks_first() {
     });
     settle(&mut h);
     open_recent_projects(&mut h);
-    menu_entry(&h, "1 a.sheaf").click();
+    recent_entry(&h, "1", "a").click();
     settle(&mut h);
     assert!(has_label(&h, "The project has unsaved changes."), "the question comes first");
     assert!(project(&h).workbooks().any(|w| w.long_name == "Mine"), "nothing was replaced yet");
@@ -142,7 +142,7 @@ fn clicking_a_recent_project_with_unsaved_changes_asks_first() {
     assert!(project(&h).workbooks().any(|w| w.long_name == "Mine"));
     // Click again and answer "Don't save": the project opens.
     open_recent_projects(&mut h);
-    menu_entry(&h, "1 a.sheaf").click();
+    recent_entry(&h, "1", "a").click();
     settle(&mut h);
     click(&mut h, "Don't save");
     assert!(project(&h).workbooks().any(|w| w.long_name == "AlphaBook"));
@@ -159,7 +159,7 @@ fn a_missing_recent_project_is_reported_and_removed() {
     settle(&mut h);
     std::fs::remove_file(&a).unwrap();
     open_recent_projects(&mut h);
-    menu_entry(&h, "2 a.sheaf").click();
+    recent_entry(&h, "2", "a").click();
     settle(&mut h);
     let (title, text) = h.state().message.clone().expect("the owner is told");
     assert_eq!(title, "Could not open the project");
@@ -179,7 +179,7 @@ fn a_recent_entry_that_is_a_folder_is_reported_and_never_followed() {
     h.state_mut().recent.push_project(&folder);
     settle(&mut h);
     open_recent_projects(&mut h);
-    menu_entry(&h, "1 looks-like.sheaf").click();
+    recent_entry(&h, "1", "looks-like").click();
     settle(&mut h);
     let (_, text) = h.state().message.clone().expect("the owner is told");
     assert!(text.contains("not a file"), "{text}");
@@ -200,7 +200,7 @@ fn an_imported_csv_is_first_in_recent_imports_and_clicking_it_imports_again() {
     assert_eq!(file_lists(&file).imports, [csv]);
     assert!(listed(&h).0.is_empty(), "an import is not a project");
     open_recent_imports(&mut h);
-    menu_entry(&h, "1 run1.csv").click();
+    recent_entry(&h, "1", "run1").click();
     settle(&mut h);
     assert_eq!(project(&h).workbooks().count(), 2, "imported again with the default settings");
     assert_eq!(project(&h).graphs().count(), 2, "and plotted, as a dropped file is");
@@ -238,7 +238,7 @@ fn a_missing_recent_import_is_reported_and_removed() {
     std::fs::remove_file(&a).unwrap();
     let books = project(&h).workbooks().count();
     open_recent_imports(&mut h);
-    menu_entry(&h, "2 a.csv").click();
+    recent_entry(&h, "2", "a").click();
     settle(&mut h);
     let (title, _) = h.state().message.clone().expect("the owner is told");
     assert_eq!(title, "Could not import the file");
@@ -363,18 +363,19 @@ fn without_a_recent_file_nothing_is_kept_and_the_menus_are_empty() {
 }
 
 #[test]
-fn the_tenth_entry_is_numbered_with_the_accelerator_on_the_zero_and_an_eleventh_drops_the_first() {
+fn entries_are_numbered_to_f_and_a_sixteenth_drops_the_first_as_in_origin() {
     let dir = scratch("ten");
     let mut h = start_with(vec![], Some(dir.join("recent.json")));
-    let files: Vec<PathBuf> = (1..=11).map(|n| csv_in(&dir, &format!("f{n:02}.csv"))).collect();
+    let files: Vec<PathBuf> = (1..=16).map(|n| csv_in(&dir, &format!("f{n:02}.csv"))).collect();
     for f in &files {
         h.state_mut().open_paths(vec![f.clone()], false);
     }
     settle(&mut h);
-    assert_eq!(listed(&h).1.len(), 10, "ten entries at most");
+    assert_eq!(listed(&h).1.len(), 15, "fifteen entries at most, as Origin's Recent Projects");
     assert!(!listed(&h).1.contains(&files[0]), "the oldest dropped out");
     open_recent_imports(&mut h);
-    assert!(has_label_containing(&h, "10 f02.csv"), "the tenth is numbered 10");
+    let _ = recent_entry(&h, "A", "f07");
+    let _ = recent_entry(&h, "F", "f02");
 }
 
 #[test]
@@ -414,4 +415,15 @@ fn an_import_whose_name_is_not_valid_text_is_listed_under_its_real_name() {
     h.state_mut().open_paths(vec![raw.clone()], false);
     settle(&mut h);
     assert_eq!(listed(&h).1, [raw]);
+}
+
+/// The entry numbered `n` whose text (the path without its extension, perhaps shortened in the
+/// middle) ends with `stem`.
+fn recent_entry<'a>(h: &'a Harness<'static, SheafApp>, n: &str, stem: &'a str) -> egui_kittest::Node<'a> {
+    h.query_all_by_label_contains(stem)
+        .find(|node| {
+            let label = node.accesskit_node().label().unwrap_or_default().to_string();
+            label.starts_with(&format!("{n} ")) && label.ends_with(stem)
+        })
+        .unwrap_or_else(|| panic!("no recent entry {n} ... {stem}"))
 }

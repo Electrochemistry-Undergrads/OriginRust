@@ -36,6 +36,15 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T02 Column Browser selection/block add (2026-11-15, Windows, feature `3208db0`):
+  Ctrl/Command and Shift selection, Shift+Up/Down and select-all feed individual Add or
+  one contiguous same-sheet block. Noncontiguous/mixed-book selections disable block add;
+  Remove deletes the whole lower block. Nine valid isolated Origin cases and five new UI
+  regressions cover eligibility, grouping, reference transfer and original-sheet navigation.
+  All 29 Go To tests pass; formatting, strict workspace all-target Clippy and 3,032 tests
+  pass (eight existing ignored), with Parallel Plot and Windows MCP privacy integrated.
+  Exclude, lower row-range editing and saved preferences remain (gui-look section 5).
+
 - T25 Windows endpoint acceptance (2026-11-15): inherited profile grants exposed token-file
   read access to other local accounts. The owned runtime folder/lock now have protected DACLs;
   token files are private from creation, and clients verify/refuse broad or foreign-owned
@@ -52,8 +61,8 @@ open. History of what was merged when is in `git log` (not repeated here).
   browser choice. Eight isolated Origin probes establish qualified references, original-sheet
   position mapping for other books, and the multiple-range last-column rule. Five UI regressions
   and one folder-scope fixture cover it; all 24 Go To tests pass. Formatting, strict workspace/
-  all-target Clippy and 2974 workspace tests pass (eight ignored). Exclude, block add,
-  top-table multiple selection, row-range editing and saved preferences remain (gui-look section 5).
+  all-target Clippy and 2974 workspace tests pass (eight ignored). Selection/block add is
+  covered by the later follow-up; Exclude, row-range editing and saved preferences remain.
 
 - T21 thin-width dashes (2026-11-15, Windows): the shared stroke conversion uses
   verified 0.5/1 pt visible-pattern samples, interpolating into the unchanged normal-width
@@ -182,7 +191,8 @@ open. History of what was merged when is in `git log` (not repeated here).
   choose the first column. Escape closes the flyout before the dialog. Origin 2016 UI
   probes, four new UI regressions and a parser fixture cover these rules. Formatting,
   strict all-target Clippy and 2276 workspace tests pass (three existing ignored). The
-  project-wide Column Browser was added in `c941fb0`; advanced selection controls remain (gui-look section 5).
+  project-wide Column Browser was added in `c941fb0`; Exclude, row-range editing and saved
+  preferences remain (gui-look section 5).
 - T13 Draw Line in Front/Behind (2026-11-15, Windows): the Line + Symbol choice controls
   both plotted curves and legend samples, defaulting to Behind. Gap to Symbol disables the
   radios and overrides the retained choice, as Origin 2016 controls/PNG exports confirm.
@@ -289,7 +299,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t02-browser-selection` | Codex Windows, t02-browser-selection | T02 Go To Column Browser top-table Ctrl/Shift range selection and Add as One Block: native measurements, browser state and focused UI tests/docs | claimed 2026-11-15; only go_to/browser.rs and own go_to_browser tests/docs; no Exclude, row-range editing/preferences, navigation semantics, app/MRU/grid/core/history/MCP/plot/stats/formula/label or other owner changes |
+| `codex/t02-browser-rows` | Codex Windows, t02-browser-rows | T02 Column Browser lower row-range editor: native defaults/validation/Cancel/reference transfer and focused UI tests/docs | claimed 2026-11-15; only go_to/browser and own go_to_browser tests/docs; no Exclude/preferences, original-sheet navigation changes without published refinement, app/MRU/grid/core/history/MCP/plots/stats/fit/formula/labels or other owner work |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |

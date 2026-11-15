@@ -405,6 +405,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         windows: Vec::new(),
         open: None,
         panels: [true; 4],
+        ai_link: false,
         layer: 0,
         tool: Default::default(),
         curve: None,

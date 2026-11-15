@@ -17,6 +17,7 @@ sheaf-fit = { path = "crates/fit" }
 sheaf-io = { path = "crates/io" }
 sheaf-plot = { path = "crates/plot" }
 sheaf-ops = { path = "crates/ops" }
+sheaf-mcp = { path = "crates/mcp" }
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 thiserror = "2"

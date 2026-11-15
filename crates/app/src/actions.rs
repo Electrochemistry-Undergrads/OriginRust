@@ -493,5 +493,7 @@ pub enum Action {
     Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
+    /// Tools > AI Assistants (MCP): turn the endpoint of `sheaf-mcp --attach` on or off.
+    ToggleAiLink,
     Quit,
 }

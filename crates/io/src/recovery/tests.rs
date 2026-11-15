@@ -479,3 +479,37 @@ fn start_creates_the_folder_and_ids_are_unique_within_a_process() {
     assert!(first.id().starts_with(&format!("{}-", std::process::id())));
     assert!(first.lock_path().exists());
 }
+
+#[test]
+fn the_run_folder_candidates_come_in_order_without_duplicates() {
+    let root = std::env::current_dir().unwrap();
+    let forced = root.join("forced");
+    let runtime = root.join("runtime");
+    let all = |name: &str| match name {
+        "SHEAF_MCP_RUN_DIR" => Some(forced.as_os_str().to_os_string()),
+        "XDG_RUNTIME_DIR" => Some(runtime.as_os_str().to_os_string()),
+        "HOME" => Some(OsString::from("/home/a")),
+        _ => None,
+    };
+    assert_eq!(
+        run_dir_candidates_for(Platform::Other, &all),
+        vec![forced.clone(), runtime.join("sheaf"), PathBuf::from("/home/a/.local/share/sheaf/run")]
+    );
+    // Only Linux has a runtime folder; the variable is ignored elsewhere.
+    assert_eq!(
+        run_dir_candidates_for(Platform::Mac, &all),
+        vec![forced.clone(), PathBuf::from("/home/a/Library/Application Support/Sheaf/run")]
+    );
+    let win = env(&[("LOCALAPPDATA", "C:/Users/a/AppData/Local")]);
+    assert_eq!(
+        run_dir_candidates_for(Platform::Windows, &win),
+        vec![PathBuf::from("C:/Users/a/AppData/Local").join("Sheaf").join("run")]
+    );
+    // A relative override or runtime folder is not used.
+    let relative = env(&[("SHEAF_MCP_RUN_DIR", "run"), ("XDG_RUNTIME_DIR", "rt"), ("HOME", "/home/a")]);
+    assert_eq!(
+        run_dir_candidates_for(Platform::Other, &relative),
+        vec![PathBuf::from("/home/a/.local/share/sheaf/run")]
+    );
+    assert!(run_dir_candidates_for(Platform::Other, &env(&[])).is_empty());
+}

@@ -3233,10 +3233,12 @@ dependencies = [
  "embed-resource",
  "image",
  "rfd",
+ "serde_json",
  "sheaf-calc",
  "sheaf-core",
  "sheaf-expr",
  "sheaf-io",
+ "sheaf-mcp",
  "sheaf-plot",
  "windows-sys 0.61.2",
 ]
@@ -3320,6 +3322,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "getrandom 0.3.4",
  "serde",
  "serde_json",
  "sheaf-core",

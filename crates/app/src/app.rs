@@ -5,6 +5,7 @@
 use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::column_props::ColumnPropsDialog;
+use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::export_sheet::SheetExportDialog;
 use crate::dialogs::find::{FindDialog, FindOutcome};
@@ -101,6 +102,7 @@ pub struct SheafApp {
     graph_props: Option<GraphPropsDialog>,
     layer_contents: Option<crate::dialogs::layer_contents::LayerContentsDialog>,
     plot_setup: Option<crate::dialogs::plot_setup::PlotSetupDialog>,
+    error_bars: Option<ErrorBarsDialog>,
     column_props: Option<ColumnPropsDialog>,
     text_dialog: Option<TextDialog>,
     shape_dialog: Option<ShapeDialog>,
@@ -121,6 +123,7 @@ pub struct SheafApp {
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
     copied: String,
+    worksheet_clipboard: crate::wks_clipboard::WorksheetClipboard,
     /// The pixel size of the last page put on the clipboard by Copy Page.
     copied_page: Option<[usize; 2]>,
     about: bool,
@@ -167,6 +170,7 @@ impl SheafApp {
             graph_props: None,
             layer_contents: None,
             plot_setup: None,
+            error_bars: None,
             column_props: None,
             text_dialog: None,
             shape_dialog: None,
@@ -186,6 +190,7 @@ impl SheafApp {
             sort: None,
             sheet_name: None,
             copied: String::new(),
+            worksheet_clipboard: crate::wks_clipboard::WorksheetClipboard::default(),
             copied_page: None,
             about: false,
             toolbars: Toolbars::default(),
@@ -323,6 +328,7 @@ impl SheafApp {
         self.books.clear();
         self.graphs.clear();
         self.graph_props = None;
+        self.error_bars = None;
         self.column_props = None;
         self.set_values = None;
         self.export = None;
@@ -576,7 +582,9 @@ impl SheafApp {
         let Some(geom) = sheaf_plot::layout_geometry(project, graph).ok().and_then(|v| v.into_iter().nth(layer)) else {
             return;
         };
-        let (x0, x1) = (geom.x.from_unit(0.25), geom.x.from_unit(0.75));
+        let placement =
+            sheaf_plot::stack_places(project, graph, layer).ok().and_then(|p| p.get(plot).copied()).unwrap_or_default();
+        let (x0, x1) = (placement.source_x(geom.x.from_unit(0.25)), placement.source_x(geom.x.from_unit(0.75)));
         state.gadget = Some(crate::gadget::Integrator { layer, plot, x0, x1, end_point_baseline: false });
         self.focus(graph);
     }
@@ -1270,7 +1278,7 @@ impl SheafApp {
             let original = grid::label_text_full(c, &row);
             let replacement = match op {
                 CellOp::Copy(_) | CellOp::Cut => {
-                    ctx.copy_text(original.clone());
+                    self.worksheet_clipboard.write_plain(ctx, original.clone());
                     self.copied = original;
                     if op == CellOp::Cut { Some(String::new()) } else { None }
                 }
@@ -1317,7 +1325,12 @@ impl SheafApp {
                     label_rows: kind == CopyKind::WithLabels,
                 };
                 let text = sheet.copy_text(&t.columns, t.rows.clone(), options);
-                ctx.copy_text(text.clone());
+                let external = sheet.copy_external_text(
+                    &t.columns,
+                    t.rows.clone(),
+                    CopyOptions { full_precision: kind == CopyKind::FullPrecision, label_rows: options.label_rows },
+                );
+                self.worksheet_clipboard.write(ctx, &external, &text);
                 self.copied = text;
                 let what = format!("{} row(s) of {} column(s)", t.rows.len(), t.columns.len());
                 if matches!(op, CellOp::Cut) {
@@ -1368,6 +1381,7 @@ impl SheafApp {
                 ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
             }
             CellOp::PasteText(text) => {
+                let text = self.worksheet_clipboard.for_paste(text);
                 let (col, row) = t.top_left;
                 match self.doc.edit("Paste", |p| p.paste_text(book, sheet_index, col, row, &text)) {
                     Ok(report) => {
@@ -1627,36 +1641,17 @@ impl SheafApp {
         }
     }
 
-    /// Graph > Add Error Bars: every plot of the layer without error bars takes the Y error
-    /// column that follows its Y column in the sheet.
+    /// Graph > Add Error Bars: choose a plot and an existing error column, without changing
+    /// any other plot of the layer.
     fn add_error_bars(&mut self, graph: WindowId, layer: usize) {
-        let project = self.doc.project();
-        let Some(l) = project.graph(graph).and_then(|g| g.layers.get(layer)) else { return };
-        let found: Vec<(usize, ColumnId)> = l
-            .plots
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| p.y_error.is_none())
-            .filter_map(|(k, p)| {
-                let (_, sheet, _) = project.locate(p.y)?;
-                let err = sheet.y_error_for(sheet.column_index(p.y)?)?;
-                Some((k, err.id))
-            })
-            .collect();
-        if found.is_empty() {
-            self.warn(
-                "No error bars added: the plots have none left to add, or no Y error column follows their Y column",
-            );
-            return;
-        }
-        self.doc.apply("Add error bars", |p| {
-            if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
-                for (k, err) in &found {
-                    l.plots[*k].y_error = Some(*err);
-                }
-            }
+        let selected = self.graphs.get(&graph).and_then(|state| match state.selected {
+            Some((l, sheaf_plot::scene::ObjectKind::Plot(i))) if l == layer => Some(i),
+            _ => None,
         });
-        self.say(format!("Added error bars to {} plot(s)", found.len()));
+        self.error_bars = ErrorBarsDialog::new(self.doc.project(), graph, layer, selected);
+        if self.error_bars.is_none() {
+            self.warn("No error bars added: the active layer has no plots");
+        }
     }
 
     /// Window > Refresh: recalculates the columns of the active workbook that wait for it.
@@ -1917,9 +1912,20 @@ impl SheafApp {
         // belong to the cells unless a text field has the keyboard.
         if !typing && let Some(book) = menu_ctx.book {
             let events = ctx.input(|i| i.events.clone());
+            // winit consumes Ctrl+Alt+C and Ctrl+Shift+C as Copy events too, without a C
+            // key event. Keep Origin's variants reachable through the native shortcuts.
+            let copy_kind = ctx.input(|i| {
+                if i.modifiers.alt {
+                    CopyKind::FullPrecision
+                } else if i.modifiers.shift {
+                    CopyKind::WithLabels
+                } else {
+                    CopyKind::Plain
+                }
+            });
             for event in events {
                 let op = match event {
-                    egui::Event::Copy => CellOp::Copy(CopyKind::Plain),
+                    egui::Event::Copy => CellOp::Copy(copy_kind),
                     egui::Event::Cut => CellOp::Cut,
                     egui::Event::Paste(text) => CellOp::PasteText(text),
                     _ => continue,
@@ -1957,6 +1963,7 @@ impl SheafApp {
             || self.graph_props.is_some()
             || self.layer_contents.is_some()
             || self.plot_setup.is_some()
+            || self.error_bars.is_some()
             || self.column_props.is_some()
             || self.text_dialog.is_some()
             || self.shape_dialog.is_some()
@@ -2151,6 +2158,16 @@ impl SheafApp {
             && matches!(d.show(ctx, &mut self.doc), crate::dialogs::plot_setup::Outcome::Closed)
         {
             self.plot_setup = None;
+        }
+        if let Some(d) = &mut self.error_bars {
+            match d.show(ctx, &mut self.doc) {
+                ErrorBarsOutcome::Open => {}
+                ErrorBarsOutcome::Closed => self.error_bars = None,
+                ErrorBarsOutcome::Added => {
+                    self.error_bars = None;
+                    self.say("Updated Y error bars for the selected plot");
+                }
+            }
         }
         if let Some(column) = self.graph_props.as_mut().and_then(|d| d.take_show_workbook())
             && let Some((book, _, _)) = self.doc.project().locate(column)
@@ -2694,6 +2711,12 @@ impl SheafApp {
                     if let Some(id) = first_graph {
                         self.layer_contents =
                             Some(crate::dialogs::layer_contents::LayerContentsDialog::new(id, 0, 1_000_000));
+                        self.focus(id);
+                    }
+                }
+                "error-bars" => {
+                    if let Some(id) = first_graph {
+                        self.add_error_bars(id, 0);
                         self.focus(id);
                     }
                 }

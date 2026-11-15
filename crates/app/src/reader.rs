@@ -41,13 +41,13 @@ fn place(
     if !(xv.is_finite() && yv.is_finite()) {
         return None;
     }
-    let (ox, oy) = offset(project, graph, p.layer, p.plot);
-    let at = to_screen(geometry.get(p.layer)?.data_to_page(xv + ox, yv + oy));
+    let placement = placement(project, graph, p.layer, p.plot);
+    let at = to_screen(geometry.get(p.layer)?.data_to_page(placement.x(xv), placement.y(yv)));
     (at.x.is_finite() && at.y.is_finite()).then_some((at, xv, yv))
 }
 
-fn offset(project: &Project, graph: WindowId, layer: usize, plot: usize) -> (f64, f64) {
-    sheaf_plot::stack_offsets(project, graph, layer).ok().and_then(|o| o.get(plot).copied()).unwrap_or((0.0, 0.0))
+fn placement(project: &Project, graph: WindowId, layer: usize, plot: usize) -> sheaf_core::stack::Place {
+    sheaf_plot::stack_places(project, graph, layer).ok().and_then(|o| o.get(plot).copied()).unwrap_or_default()
 }
 
 /// The data point of a shown plot nearest to `pointer`, if one is within reach.
@@ -69,12 +69,12 @@ pub fn nearest(
             let Some((x, y)) = plot_xy(project, graph, li, pi) else { continue };
             let filters = project.plot_row_filters(plot);
             let (start, end) = sheaf_core::stack::row_range(plot, x.len().min(y.len()));
-            let (ox, oy) = offset(project, graph, li, pi);
+            let placement = placement(project, graph, li, pi);
             for (row, (xv, yv)) in x.iter().zip(&y).enumerate().take(end).skip(start) {
                 if !(filters.iter().all(|f| f.passes(row)) && xv.is_finite() && yv.is_finite()) {
                     continue;
                 }
-                let at = to_screen(geom.data_to_page(xv + ox, yv + oy));
+                let at = to_screen(geom.data_to_page(placement.x(*xv), placement.y(*yv)));
                 let d = at.distance(pointer);
                 if d <= SNAP && best.is_none_or(|(b, _)| d < b) {
                     best = Some((d, Point { layer: li, plot: pi, row }));
@@ -154,6 +154,34 @@ pub fn draw(
 mod tests {
     use super::*;
     use sheaf_core::{ColumnData, Designation, template::Template};
+
+    #[test]
+    fn reader_follows_scaled_points_but_returns_original_values() {
+        let mut p = Project::new();
+        let b = p.add_workbook("Data");
+        let x = p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![2.0, 4.0, 6.0])).unwrap();
+        let g = p.add_graph(Template::Scatter);
+        p.add_plot_xy(g, 0, Some(x), y, None).unwrap();
+        let layer = &mut p.graph_mut(g).unwrap().layers[0];
+        layer.stack = sheaf_core::graph::Stack::Individual;
+        layer.x_axis.min = Some(0.0);
+        layer.x_axis.max = Some(20.0);
+        layer.y_axis.min = Some(0.0);
+        layer.y_axis.max = Some(30.0);
+        let o = layer.plot_offset_mut(y);
+        (o.x, o.y, o.x_multiplier, o.y_multiplier) = (5.0, 7.0, 2.0, 3.0);
+        let geometry = sheaf_plot::layout_geometry(&p, g).unwrap();
+        let to_screen = |(x, y)| egui::pos2(x as f32, y as f32);
+        let point = Point { layer: 0, plot: 0, row: 1 };
+        let at = to_screen(geometry[0].data_to_page(9.0, 19.0));
+        assert_eq!(nearest(&p, g, &geometry, &to_screen, at), Some(point));
+        let (marker, xv, yv) = place(&p, g, &geometry, &to_screen, point).unwrap();
+        assert_eq!((marker, xv, yv), (at, 2.0, 4.0));
+        let unscaled = to_screen(geometry[0].data_to_page(2.0, 4.0));
+        assert!(nearest(&p, g, &geometry, &to_screen, unscaled).is_none());
+        assert_eq!(step(&p, g, point, 1), Point { row: 2, ..point });
+    }
 
     #[test]
     fn filtered_rows_cannot_be_picked_drawn_or_stepped_to_by_the_data_reader() {

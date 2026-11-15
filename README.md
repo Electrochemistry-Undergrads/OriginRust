@@ -81,7 +81,8 @@ Projects save as `.sheaf` or Origin `.opj`; see the
 ## Use Sheaf from Claude or other AI tools
 
 `sheaf-mcp` is a Model Context Protocol server. An assistant can import data, read columns, plot,
-analyze, fit, export figures and save projects. It works on a project held by the server and sees
+analyze (every tool of `sheaf analyze`), fit, export figures and save projects, and offers three
+prompts (plot CV files, integrate a peak, fit a curve). It works on a project held by the server and sees
 only the folders you give with `--root`; with no `--root` every file path is refused.
 
 ```sh
@@ -118,6 +119,14 @@ The tools and their limits are listed in [docs/spec/mcp.md](docs/spec/mcp.md).
 ## Get started
 
 Requires Git and [Rust](https://www.rust-lang.org/tools/install) 1.90 or newer.
+
+### Windows executable icon
+
+Windows builds embed Sheaf's existing multi-size icon in `sheaf-app.exe`, so Explorer and
+shortcuts can display it. Install the Windows C++ build tools and Windows SDK (including `rc.exe`).
+Build with `cargo build --release -p sheaf-app`; verify the actual executable with
+`python tools/check-windows-icon.py target/release/sheaf-app.exe`. Details are in
+[Windows packaging](docs/spec/windows-packaging.md).
 
 ### First time: download, build, and run
 

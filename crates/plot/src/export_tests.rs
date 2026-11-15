@@ -42,6 +42,7 @@ fn scene_with(items: Vec<Item>) -> Scene {
             grid: vec![],
             plots: items,
             overlay: vec![],
+            underlay_len: 0,
             objects: vec![],
         }],
     }
@@ -49,6 +50,61 @@ fn scene_with(items: Vec<Item>) -> Scene {
 
 fn eps_text(scene: &Scene) -> String {
     String::from_utf8(eps::write_eps(scene, 1.0).bytes).unwrap()
+}
+
+#[test]
+fn data_on_top_keeps_axes_outside_the_data_clip_and_annotations_above_it_in_vector_exports() {
+    let mut scene = scene_with(vec![Item::Text(text("DATA", Anchor::Start))]);
+    scene.layers[0].overlay = vec![Item::Text(text("AXIS", Anchor::Start)), Item::Text(text("LEGEND", Anchor::Start))];
+    for enabled in [false, true] {
+        scene.layers[0].underlay_len = usize::from(enabled);
+        let svg = svg::write_svg(&scene);
+        let axis = svg.find(">AXIS<").unwrap();
+        let data = svg.find(">DATA<").unwrap();
+        let legend = svg.find(">LEGEND<").unwrap();
+        assert_eq!(axis < data, enabled, "{svg}");
+        assert!(legend > axis && legend > data);
+        let doc = roxmltree::Document::parse(&svg).unwrap();
+        let group = |label: &str| {
+            doc.descendants().find(|n| n.has_tag_name("text") && n.text() == Some(label)).unwrap().parent().unwrap()
+        };
+        assert!(group("AXIS").attribute("clip-path").is_none());
+        assert!(group("LEGEND").attribute("clip-path").is_none());
+        assert!(group("DATA").attribute("clip-path").is_some());
+
+        let eps = eps_text(&scene);
+        let axis = eps.find("(AXIS)").unwrap();
+        let data = eps.find("(DATA)").unwrap();
+        let legend = eps.find("(LEGEND)").unwrap();
+        let clip = eps.find("rectclip\n").unwrap();
+        assert_eq!(axis < clip, enabled);
+        assert_eq!(axis < data, enabled);
+        assert!(legend > axis && legend > data);
+
+        let bytes = emf::write_emf(&scene, 1.0, &FixedMetrics);
+        let records = emf_records(&bytes);
+        let labels: Vec<(usize, String)> = records
+            .iter()
+            .enumerate()
+            .filter_map(|(i, (kind, r))| {
+                if *kind != 84 {
+                    return None;
+                }
+                let len = i32_at(r, 44) as usize;
+                let offset = i32_at(r, 48) as usize;
+                let units: Vec<u16> =
+                    r[offset..offset + len * 2].as_chunks::<2>().0.iter().copied().map(u16::from_le_bytes).collect();
+                Some((i, String::from_utf16(&units).unwrap()))
+            })
+            .collect();
+        let at = |label: &str| labels.iter().find(|(_, s)| s == label).unwrap().0;
+        let clip = records.iter().position(|(kind, _)| *kind == 30).unwrap();
+        let restore = records.iter().position(|(kind, _)| *kind == 34).unwrap();
+        assert_eq!(at("AXIS") < clip, enabled);
+        assert_eq!(at("AXIS") < at("DATA"), enabled);
+        assert!(clip < at("DATA") && at("DATA") < restore);
+        assert!(at("LEGEND") > restore && at("LEGEND") > at("AXIS"));
+    }
 }
 
 #[test]

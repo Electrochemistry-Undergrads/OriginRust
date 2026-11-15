@@ -98,7 +98,9 @@ fn main() -> ExitCode {
         if buf.is_empty() && !too_long {
             return ExitCode::SUCCESS;
         }
-        let reply = if too_long {
+        // The extra buffer byte is only for LF. At EOF it may instead be an extra payload byte.
+        let payload_len = buf.len() - usize::from(buf.ends_with(b"\n"));
+        let reply = if too_long || payload_len > LINE_CAP {
             Some(
                 serde_json::json!({"jsonrpc": "2.0", "id": null,
                     "error": {"code": -32600, "message": "invalid request: the line is longer than 8 MB"}})

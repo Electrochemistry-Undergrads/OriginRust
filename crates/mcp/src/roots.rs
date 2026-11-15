@@ -114,7 +114,13 @@ impl Roots {
         let path = self.check(text)?;
         let target = sheaf_io::save::default_extension(&path);
         for extra in [with_suffix(&target, ".sheaf"), with_suffix(&target, ".bak")] {
-            self.check_path(&extra, &extra.display().to_string())?;
+            self.check_path(&extra, &extra.display().to_string()).map_err(|e| {
+                if extra.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink()) {
+                    format!("the path is a symbolic link; remove it first: {}", extra.display())
+                } else {
+                    e
+                }
+            })?;
         }
         Ok(path)
     }

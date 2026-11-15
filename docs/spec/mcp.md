@@ -607,6 +607,15 @@ allowed.
 
 The proxy has a reader thread on stdin and one on the link, feeding one event queue.
 
+The active link also owns a cancellation flag for its reader. Dropping the link signals the
+flag and attempts socket shutdown. The reader uses a 250 ms socket timeout as a cancellation
+poll, so it can release its socket clone even when shutdown does not wake a blocking receive.
+This is not a new call deadline: live reads keep waiting across polls and preserve partial
+frames. A cancelled read discards its partial/late frame; request ids, epoch checks, the
+50-second wait and 2-second cancellation grace are unchanged. EOF does not leave an abandoned
+reader keeping the app's connection open. A real TCP regression tests idle and partial replies
+with writer shutdown deliberately omitted.
+
 - `ping`, other notifications and `initialize` are answered at once, also while a call waits. A further
   request that needs the app waits its turn (requests are handled in order).
 - `notifications/cancelled` for a request that waits behind the call in flight, or that has not arrived

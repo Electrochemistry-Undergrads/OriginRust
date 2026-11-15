@@ -4,6 +4,16 @@ Preserved from HANDOFF.md on 2026-11-15. These are recorded results, not a new v
 Update the relevant brief/spec when resolving one; the historical snapshot is in
 [the archived handoff](../archive/HANDOFF-2026-11-15.md).
 
+## Integration after the archived snapshot
+
+- T25 proxy disconnect cleanup (2026-11-15, Windows, feature `ef98bf7`): disposing of the
+  active link signals its reader and polls cancellation every 250 ms, releasing its socket
+  clone even when shutdown does not wake the receive. Live partial frames survive polls;
+  cancelled partial replies are discarded. A real-TCP regression omits shutdown and checks
+  peer EOF for idle/partial replies. The original ten-second integration assertion is unchanged;
+  1,750 stress checks pass. Formatting, strict workspace all-target Clippy and 3,306 tests pass
+  (eight existing ignored), with formula formatting, digital filters and ROC integrated.
+
 ## Known issues
 
 - T01 sorting: Sort Range and range Custom respect selected cell/row bounds. Sort Columns

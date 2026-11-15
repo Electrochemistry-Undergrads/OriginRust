@@ -1,12 +1,6 @@
 # T26: Tests for variance and proportions
 
-**Status:** started 2026-11-14 by a session that could not build, run Origin or commit (no permission for
-cargo, PowerShell scripts or git writes). Done so far, all untracked in the main checkout: the calc module
-`crates/calc/src/vartest.rs` (not yet in `lib.rs`, never compiled), the Origin probe
-`re-workspace/scratch/vartest/probe1.lines.txt`. Taken over by session 318653a1 (branch `vartest`, worktree
-`.claude/worktrees/vartest`, local commit `91674e9` with this brief and the module); it ran probes 1-3 and one
-dialog capture and stopped for the day. The findings are under Origin facts below. Next: the report sheets
-and proportion dialogs in Origin, then steps 3-5. **Size:** M. **Branch:** `vartest`.
+**Status:** built on branch `vartest` (not merged): calc module with fixtures (`crates/calc/tests/origin_vartest.rs`), core sheets in Origin's report layout, four dialogs, menu, CLI (`analyze vartest | proptest`, `--pooled`), spec section 17, parity row (partial). Measured in Origin: the variance tests (X-functions and dialog reports), the one-sample proportion test (13 dialog runs), one run of the two-sample proportion test. Left: the two-sample proportion test beyond that run (unpooled z, other tails, negative difference, nonzero test difference, Fisher, small samples), the two-sample variance dialog with intervals, the power analysis, raw and indexed input. **Size:** M. **Branch:** `vartest`.
 **Model:** Sonnet (Haiku to run the suites).
 
 **Goal:** Origin's Statistics > Hypothesis Testing has eight entries; Sheaf has the three t-tests. Add

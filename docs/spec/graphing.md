@@ -3689,3 +3689,49 @@ Plotting into a new layer: `plotxy iy:=[Book]Sheet!(1,3) plot:=200 ogl:=[Graph1]
 
 - Undo text after adding any of these layers (button or menu): "Undo Create".
 - The graph shows layer icons "1 2 3 ..." in its top-left corner; the active layer's icon is dark, the others grey (see 21.3).
+
+### 21.3 Layer icon: right-click menu, Hide, Layer Properties
+
+**Icons.** A graph with several layers shows numbered icons in the top-left corner of the window; clicking one makes that layer active. Right-clicking an icon (the same menu for the first and for any other layer) shows:
+
+1. Hide Layer (a check mark when the layer is hidden)
+2. Hide Other Layers
+3. Show Active Layer Only
+4. Set Active Layer By Layer Icon Only
+5. Delete Layer
+6. separator; Layer Contents... (F12); Plot Setup...; Double click to open Plot Setup
+7. separator; Axis...; Layer Properties...; Layer Management...
+8. separator; one row per plot of the layer ("1  [DQ]Sheet1! A(X), B(Y) [1*:21*]", ticked)
+
+(Origin's "Set Active Layer By Layer Icon Only" is a toggle of Graph > ... that makes a click inside the graph no longer change the active layer; its effect was not measured beyond its existence in both the icon menu and the Graph menu. "Show Active Layer Only" and "Hide Other Layers" were not run.)
+
+**Hide Layer** hides everything the layer draws: its curves and its axes, ticks and labels disappear from the window (the other layers keep their positions); it is a toggle on the same menu item. It does not delete anything. It did not add an Undo entry (the Edit menu still said "Undo Create" from the layer added before; weak evidence).
+
+**Layer Properties...** opens the Plot Details dialog (title "Plot Details - Layer Properties") with the layer's node selected in the tree on the left (the tree lists the graph, then Layer1, Layer2, ... each with a check box, and each layer expands to its plots). The right side has five tabs for a layer:
+
+- **Background**: Color (None), Border Style (None), Gradient Fill: Mode (None), Color (Black), Direction (Top Bottom).
+- **Size/Speed**: Layer Area Left / Top / Width / Height with a Units combo (measured for a linked layer: 0, 0, 100, 100, "% of Linked Layer"); "Link Axis Length to Scale with X:Y Ratio" (off, value 1); "When dragged to reposition, also reposition parent layer" (on); Graphic Image Caching (None); Speed Mode, Skip Points if needed: Worksheet data, maximum points per curve (on, 3000), Matrix data (off, 32 by 32).
+- **Display**: Scale Elements: Scale With Layer Frame (selected) or Fixed Factor (0.87 greyed); Show Elements: X Axes, Y Axes, Labels, Data (all on), Frame (off), Z Axes (grey); Data Drawing Options: Clip Data to Frame (on), Data on Top of Axes (off), Grid on Top of Data (off); Clipping Margins (%) Horizontal 0, Vertical 0.
+- **Link Axes Scales**: "Link to" combo (the parent layer, "Layer1"); "Link Axes in Child Layer to Parent"; X Axis Link and Y Axis Link groups each with None / Straight (1 to 1) / Align (X = or Y =) / Custom (X1 =, X2 = or Y1 =, Y2 =). For a right-Y layer: X Straight, Y None.
+- **Stack**: Offset None / Cumulative / Incremental / Constant / Auto (Gap 8, Keep Proportion of Plot Range) / Individual, and the stacked-column options (as section 13.14).
+
+The dialog has OK, Cancel and Apply and a ">>" button; Apply is disabled until something changes. The axis dialog opened by Axis... or by double-clicking an axis ("Y Axis - Layer 3") has a left strip with Bottom, Top, Left, Right (or Horizontal, Vertical when the layer shows one side per direction) and the tabs Scale, Tick Labels, Title, Grids, Line and Ticks, Special Ticks, Breaks. **Line and Ticks** has, per side: Show Line and Ticks, "Use Same Options for Left and Right", Line: Show, Color (Auto), Thickness (0.2, 0.5, 1, 1.5, 2, 3, 4, 5; default 1.5), **Axis Position** with three items and **Percent/Value**; Major Ticks and Minor Ticks: Style (In & Out, In, Out, None; Out), Length (3, 5, 8, 10, 15; major 8), Color, Thickness.
+
+**Axis Position** items: for the left axis "Left", "% From Left", "At Position ="; for the right axis "Right", "% From Right", "At Position =". "% From Right" with 12 draws the right axis 12 % of the layer's width **outside** the frame; "% From Left" with 11 draws the left axis 11 % outside; a negative value moves the axis inside (-50 puts a left axis at 50 % of the layer's width). In LabTalk the left/bottom axis reads as `layer.y.position`, `layer.y.posType`, `layer.x.position`, `layer.x.posType` and the right/top axis as **`layer.y2.position`, `layer.y2.posType`, `layer.x2.position`, `layer.x2.posType`** (`layer.y.opposite` is something else; names such as `axisPos` or `offset` do not exist). `posType` 0 = "Left"/"Right" (at the frame), 1 = "% From ..." (the value is the offset in % of the **X axis length**, outward positive), the "At Position =" type was not read. A hidden side of an axis keeps stale values (for example `posType` 1 with 0 on the left of a right-only layer), so read only the shown side.
+
+### 21.4 Deleting a layer
+
+Right-click icon > Delete Layer deletes the layer at once (no question). LabTalk: `layer -d;` deletes the **active** layer; `layer -d N;` deletes layer N. Undo text in the Edit menu afterwards: **"Undelete frame"** (Ctrl+Z). The window layout does not shift the other layers' pictures; the icons renumber (4 layers: delete 2 left icons 1 2 3).
+
+Measured on the 3Ys templates (layers linked to each other, all `x.link` straight):
+
+| state | deleted | result |
+|---|---|---|
+| Y-YY: L2 linked to L1, L3 linked to L2 | L2 (a parent) | 2 layers; the old L3 is now L2, **unlinked** (`layer.link` 0), its frame became the parent's absolute rectangle (page % 9.593 / 19.89 / 75.73 / 66.52, same as L1), its own scales, axes and `x.link` = 1 setting stay |
+| same | L1 (the root, and the parent of L2) | 2 layers; the old L2 becomes L1 and is unlinked with the old L1's absolute frame (and keeps its right-only axis, so the graph now has no left axis); the old L3, linked to the old L2, keeps its link to it (now `layer.link` 1, frame 0 0 100 100) |
+| Y-Y-Y: L2 and L3 both linked to L1 | L1 | 2 layers, **both children unlinked** (`layer.link` 0), each with L1's absolute frame, so they sit on top of each other; no axes are added back |
+| Y-YY | L3 (last, no children) | 2 layers, nothing else changes |
+
+So Origin has no refusal and no re-parenting: deleting a parent turns every child into an independent layer that keeps the parent's rectangle, and links of other layers are renumbered. The legend text is **not** rewritten: a four-layer graph whose legend lists layer 1 to 4 plots showed "B, D, E, ???" after deleting layer 2 (the entries are references by layer index, so the one pointing at the removed layer index 4 shows "???").
+
+Not measured: deleting through the icon menu a layer that is a parent (the LabTalk `layer -d` behaviour above is taken as the same command), deleting the only layer, and the effect on `layer.y.link`.

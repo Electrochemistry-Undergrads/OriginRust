@@ -20,11 +20,11 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 159 | 39 | 247 |
+| All rows | 49 | 161 | 39 | 249 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 90 | 39 | 146 |
+| P1 and P2 together | 17 | 92 | 39 | 148 |
 
-By priority alone: 101 rows are P0, 87 are P1 and 57 are P2.
+By priority alone: 101 rows are P0, 87 are P1 and 61 are P2.
 
 Reading the counts: the P0 rows are mostly present but often only partly (69 of 101 are partial). No P0 row is missing altogether any more: the analysis dialogs now share one frame with Preview and Auto Preview, and the Analysis menu works on a graph's data plot. Since 2026-11-11 the former holes of .opj saving, the Origin look, Double-Y graphs, offset and waterfall plots and graph gadgets have become partial rows: they work for the owner's cases but lack Origin's breadth (three or more Y axes, colour-mapped waterfalls, more gadgets, saving the newer graph features into .opj without the companion file).
 
@@ -191,7 +191,9 @@ Cross-cutting findings:
 | Envelope | envelope | Envelope window, `analyze envelope`, `Tool::Envelope`: upper, lower or both, natural spline through the extremes found with `npts` points on each side, Origin's report columns (analysis-tools 13.2) | ✓ | checked against Origin | P2 |
 | Coherence | cohere | Coherence window, `analyze coherence`, `Tool::Coherence`: Welch-style segment averaging with nine windows, FFT and window length, overlap and interval; each input against a second signal (analysis-tools 13.3) | ✓ | checked against Origin; no result graph | P2 |
 | Decimation | Signal Processing > Decimation (decimate) | Decimation window, `analyze decimate`, `Tool::Decimate`: factor, none, moving average and FIR filter (analysis-tools 13.4) | ◐ | checked against Origin including its refusals; FIR is the triangle Origin computes; no missing values, no preview | P2 |
-| Wavelets, STFT, digital filters | Signal Processing | none | ✗ | | P2 |
+| IIR filter | Signal Processing > IIR Filter (dfilter, OriginPro) | IIR Filter window, `analyze iir-filter`, `Tool::IirFilter`: Butterworth, Chebyshev I and II, elliptic; low, high, band pass, band stop; fixed or minimum order; forward-backward (analysis-tools 17.1) | ◐ | documented, not measured in Origin (checked against scipy.signal); no Bessel (Origin has none); no SOS/ZPK/state-space worksheets, no preview panels | P2 |
+| FIR filter | FIR Filter app (Origin 2027) | FIR Filter window, `analyze fir-filter`, `Tool::FirFilter`: Window (17 windows, Kaiser minimum order) and Least Squares designs, Scale Passband, forward-backward (analysis-tools 17.2) | ◐ | documented, not measured in Origin (checked against scipy.signal); no custom window data, no coefficient output, no preview panels | P2 |
+| Wavelets, STFT | Signal Processing | none | ✗ | | P2 |
 
 ## 7 Peaks and baseline
 

@@ -787,11 +787,14 @@ impl SheafApp {
     /// goes to `lp`.
     fn print_graph(&mut self, window: WindowId) {
         let project = self.doc.project();
-        let setup = project.page_setup;
+        let mut setup = project.page_setup;
         // (title, page size in points, the pages as metafiles, the same as one PDF)
         let (title, page, what) = if let Some(g) = project.graph(window) {
             (g.name.clone(), (g.page.width_pt, g.page.height_pt), "graph")
         } else if let Some(b) = project.workbook(window) {
+            // A sheet's orientation follows the paper (Automatic means portrait, as in Print
+            // Preview), never the printed area, which can be wider than tall.
+            setup.orientation = setup.orientation_for(0.0, 1.0);
             let area = sheaf_plot::sheet_pages(b.sheet(), &setup).map(|p| p.area).unwrap_or((0.0, 0.0));
             (b.name.clone(), area, "sheet")
         } else {

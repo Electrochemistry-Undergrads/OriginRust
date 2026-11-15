@@ -24,11 +24,19 @@ fn cut(text: &str, max_w: f64, font: &Font, size: f64, m: &dyn TextMeasurer) -> 
     if m.width(text, font, size) <= max_w {
         return text.to_string();
     }
-    let mut s: String = text.to_string();
-    while !s.is_empty() && m.width(&s, font, size) > max_w {
-        s.pop();
+    // The width grows with the prefix, so the longest fitting prefix is found by bisection
+    // (a long cell must not cost a measurement per character).
+    let ends: Vec<usize> = text.char_indices().map(|(i, _)| i).skip(1).chain(std::iter::once(text.len())).collect();
+    let (mut lo, mut hi) = (0usize, ends.len()); // chars kept: lo fits, hi is the whole text
+    while lo < hi {
+        let mid = (lo + hi).div_ceil(2);
+        if m.width(&text[..ends[mid - 1]], font, size) <= max_w {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
     }
-    s
+    if lo == 0 { String::new() } else { text[..ends[lo - 1]].to_string() }
 }
 
 /// The scene of `ops` on a page `w` x `h` points with the content moved by `(dx, dy)`.
@@ -169,6 +177,18 @@ mod tests {
     use sheaf_core::column::{Column, ColumnData, Designation};
     use sheaf_core::ids::ColumnId;
     use sheaf_core::page_setup::{Margins, Orientation, Paper};
+
+    #[test]
+    fn cut_keeps_the_longest_prefix_that_fits() {
+        let f = Font { family: FAMILY.into(), size_pt: 10.0, bold: false, italic: false, color: Color::BLACK };
+        let m = crate::fonts::FixedMetrics; // 5.5 pt per char
+        assert_eq!(cut("abc", 100.0, &f, 10.0, &m), "abc");
+        assert_eq!(cut("abcdefghij", 16.6, &f, 10.0, &m), "abc");
+        assert_eq!(cut("abcdefghij", 5.0, &f, 10.0, &m), "");
+        assert_eq!(cut("aébcd", 16.5, &f, 10.0, &m), "aéb");
+        let long = "x".repeat(2_000_000);
+        assert_eq!(cut(&long, 55.0, &f, 10.0, &m).len(), 10);
+    }
 
     /// 130 rows, three columns, labels on two of them: 3 pages on Letter portrait.
     fn sheet() -> Worksheet {

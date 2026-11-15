@@ -142,11 +142,13 @@ pub struct PrintPreview {
     drawn_for: Option<(u64, usize)>,
     /// The sheet page shown, counting from 0 (workbooks only).
     page: usize,
+    /// The revision, printed area and page count of the sheet, so a frame does not paginate again.
+    sheet_info: Option<(u64, (f64, f64), usize)>,
 }
 
 impl PrintPreview {
     pub fn new(graph: WindowId) -> Self {
-        PrintPreview { graph, texture: None, drawn_for: None, page: 0 }
+        PrintPreview { graph, texture: None, drawn_for: None, page: 0, sheet_info: None }
     }
 
     /// The page being shown, counting from 0 (a workbook's table pages).
@@ -163,10 +165,16 @@ impl PrintPreview {
         let (page, pages) = if let Some(g) = project.graph(self.graph) {
             ((g.page.width_pt, g.page.height_pt), 1)
         } else if let Some(sheet) = project.workbook(self.graph).map(|b| b.sheet()) {
-            match sheaf_plot::sheet_pages(sheet, &setup) {
-                Ok(p) => (p.area, p.count),
-                Err(_) => (setup.paper_pt(0.0, 1.0), 1),
+            // Paginating walks every row, so it is done once per revision, not once per frame.
+            let key = doc.revision();
+            if self.sheet_info.is_none_or(|(k, _, _)| k != key) {
+                let (area, count) = match sheaf_plot::sheet_pages(sheet, &setup) {
+                    Ok(p) => (p.area, p.count),
+                    Err(_) => (setup.paper_pt(0.0, 1.0), 1),
+                };
+                self.sheet_info = Some((key, area, count));
             }
+            self.sheet_info.map_or(((0.0, 0.0), 1), |(_, a, c)| (a, c))
         } else {
             return PreviewOutcome::Closed;
         };

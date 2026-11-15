@@ -102,7 +102,7 @@ mod imp {
         SetEnhMetaFileBits, VERTRES,
     };
     use windows_sys::Win32::Graphics::Printing::{ClosePrinter, DocumentPropertiesW, OpenPrinterW, PRINTER_HANDLE};
-    use windows_sys::Win32::Storage::Xps::{DOCINFOW, EndDoc, EndPage, StartDocW, StartPage};
+    use windows_sys::Win32::Storage::Xps::{AbortDoc, DOCINFOW, EndDoc, EndPage, StartDocW, StartPage};
     use windows_sys::Win32::System::Memory::{GlobalLock, GlobalUnlock};
     use windows_sys::Win32::UI::Controls::Dialogs::{
         PD_NOPAGENUMS, PD_NOSELECTION, PD_PAGENUMS, PD_RETURNDC, PD_RETURNDEFAULT, PD_USEDEVMODECOPIESANDCOLLATE,
@@ -185,7 +185,12 @@ mod imp {
                         break;
                     }
                 }
-                EndDoc(hdc);
+                if result.is_ok() {
+                    EndDoc(hdc);
+                } else {
+                    // A failed page cancels the job instead of submitting a partial one.
+                    AbortDoc(hdc);
+                }
                 result
             }
         }

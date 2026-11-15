@@ -163,6 +163,7 @@ pub fn dialog_body(
     sources: &[Source],
     columns: &[(ColumnId, String)],
     add_from: &mut usize,
+    spans: &[(f64, f64)],
 ) {
     // The node may have gone (a plot was removed).
     *node = match *node {
@@ -284,7 +285,7 @@ pub fn dialog_body(
                         }
                         _ => page_tab(ui, graph),
                     },
-                    Node::Layer(l) => layer_tab(ui, *tab, graph, l, sources, add_from),
+                    Node::Layer(l) => layer_tab(ui, *tab, graph, l, sources, add_from, spans),
                     Node::Plot(l, p) => plot_tab(ui, *tab, graph, l, p, labels, columns, node),
                 },
             );
@@ -945,7 +946,53 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
 
 // ----- layer --------------------------------------------------------------------------------
 
-fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sources: &[Source], add_from: &mut usize) {
+/// Origin's "Link Axis Length to Scale with X:Y Ratio" (graphing 18.7a): ticking it or changing the ratio
+/// shrinks the frame to fit, as Origin did; afterwards the drawing keeps the width and lets the height follow
+/// the axis ranges. Not for a layer that follows another, a polar or ternary layer or an axis with breaks.
+fn xy_ratio_ui(ui: &mut egui::Ui, layer: &mut Layer, follows: bool, page: (f64, f64), span: Option<(f64, f64)>) {
+    let breaks = !layer.x_axis.axis_breaks.is_empty() || !layer.y_axis.axis_breaks.is_empty();
+    let cartesian = layer.coords.polar().is_none() && layer.coords.ternary().is_none();
+    let usable = !follows && cartesian && !breaks;
+    let mut on = layer.xy_ratio.is_some();
+    let mut ratio = layer.xy_ratio.unwrap_or(1.0);
+    let fit = |layer: &mut Layer, ratio: f64| match span {
+        Some((sx, sy)) => layer.fit_xy_ratio(ratio, page, sx, sy),
+        None => layer.xy_ratio = Some(ratio),
+    };
+    ui.add_enabled_ui(usable, |ui| {
+        ui.horizontal(|ui| {
+            let tick = ui.checkbox(&mut on, "Link Axis Length to Scale with X:Y Ratio");
+            if breaks {
+                tick.on_disabled_hover_text("Not available while an axis has breaks");
+            } else if tick.changed() {
+                if on {
+                    fit(layer, ratio);
+                } else {
+                    layer.xy_ratio = None;
+                }
+            }
+            let value =
+                ui.add_enabled(on, DragValue::new(&mut ratio).range(0.001..=1000.0).speed(0.01).max_decimals(4));
+            if on && value.changed() {
+                // While dragging only the ratio changes; the frame is fitted once the value is set.
+                layer.xy_ratio = Some(ratio);
+            }
+            if on && (value.drag_stopped() || (value.changed() && !value.dragged())) {
+                fit(layer, ratio);
+            }
+        });
+    });
+}
+
+fn layer_tab(
+    ui: &mut egui::Ui,
+    tab: DetailTab,
+    graph: &mut Graph,
+    l: usize,
+    sources: &[Source],
+    add_from: &mut usize,
+    spans: &[(f64, f64)],
+) {
     if tab == DetailTab::Link {
         link_tab(ui, graph, l);
         return;
@@ -1006,6 +1053,7 @@ fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sou
                 edit(ui, "Height", &mut layer.frame.height, page.1);
             });
             ui.data_mut(|d| d.insert_temp(unit_id, unit));
+            xy_ratio_ui(ui, layer, link.is_some(), page, spans.get(l).copied());
         }
         DetailTab::Stack => stack_tab(ui, layer),
         DetailTab::Display => {

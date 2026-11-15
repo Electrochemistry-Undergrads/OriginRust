@@ -111,6 +111,16 @@ impl ResolvedAxis {
         out
     }
 
+    /// The length of the axis in its own scale: `max - min` on a linear axis, the number of decades on a
+    /// log10 axis, the transformed span on the others. What Origin's X:Y ratio compares (graphing 18.7a).
+    pub fn scale_span(&self) -> f64 {
+        match self.scale {
+            ScaleKind::Linear => (self.max - self.min).abs(),
+            ScaleKind::Log10 => (self.max.log10() - self.min.log10()).abs(),
+            other => (other.forward(self.max) - other.forward(self.min)).abs(),
+        }
+    }
+
     /// Position along the axis without the break.
     fn plain_unit(&self, v: f64) -> f64 {
         match self.scale {

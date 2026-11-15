@@ -312,7 +312,27 @@ Sort Columns > Custom and the column-header context menu now open the existing n
 
 ### 13.1a Mask, measured with Origin (task T10)
 
-`wcellmask irng:=<range>` masks the cells of a range. `stats` on a column with one of five cells masked reports n = 4 (the masked value is left out). In a graph (line + symbol, five points, the third masked, exported to PNG) the masked point stays plotted: its symbol is drawn **red**, and so are the two line segments that meet at it. Sheaf: `Column::mask` (a set of rows), Column > Mask > Apply / Remove / Swap on the selected cells; analysis, statistics and fits read `Column::numeric_unmasked`; the mask moves with its rows in sorts, inserts and deletes; the plot draws masked points red (`draw_masked`). Not done: Change Color, Disable Masking, Mask Cells by Condition, masking from the graph, the `.opj` reader (it skips masks) and the writer (it names masked columns in the save warnings). The worksheet shows a masked cell with red text on a light red fill; Origin's own cell colour was not measured.
+`wcellmask irng:=<range>` masks the cells of a range. `stats` on a column with one of five cells masked reports n = 4 (the masked value is left out). In a graph (line + symbol, five points, the third masked, exported to PNG) the masked point stays plotted: its symbol is drawn **red**, and so are the two line segments that meet at it. Sheaf: `Column::mask` (a set of rows), Column > Mask > Apply / Remove / Swap on the selected cells; analysis, statistics and fits read `Column::numeric_unmasked`; the mask moves with its rows in sorts, inserts and deletes; the plot draws masked points red (`draw_masked`). Not done: masking from the graph, Hide Masked Data (Origin's toolbar switch `@MP`, which leaves masked points out of graphs), the `.opj` reader (it skips masks) and the writer (it names masked columns in the save warnings).
+
+**Change Color, Disable Masking, Mask Cells by Condition (measured 2026-11-15, Origin 2016, `re-workspace/scratch/t10m`):**
+- Column > Mask holds Apply, Remove, Swap, Change Color and Disable Masking; Mask Cells by Condition... is its own item
+  after the Mask submenu. Change Color has no dialog: each use moves the mask colour, a global setting (`@MC`, 1 at
+  first), to the next entry of the colour list and wraps after index 23 back to 1, so black (0) never comes up
+  (Origin's own menu script). Exported graphs with `@MC` = 1, 2, 3, 4, 5 drew the masked symbol and its two segments
+  red, green, blue, cyan and magenta: the indices of the colour list (graphing 1.5).
+- Disable Masking is a global switch (`@MM`); the menu then reads Enable Masking. With it on, `stats` counts the masked
+  cell (n 5 instead of 4) and the graph draws the masked point as an ordinary black point; the mask itself stays.
+- Mask Cells by Condition... is `colmask` (inputs `irng`, `cond`, `nSD`, `val`, `abs`, `keep`). Dialog: Input,
+  Condition (Outliers by Std. Deviation, >, >=, <, <=, =; the first by default), Multiple of SD (1 to 6, default 1),
+  for the other conditions Value and Use Absolute Values to Test, and Keep Existing Mask (off). 46 runs on our data:
+  the outlier test masks `|y - mean| > k s` with the sample standard deviation (divisor n - 1) of all the numbers
+  (one set separates n - 1 from n; `>=` fits as well); `cond` 1 to 5 are the five comparisons in the dialog's order;
+  with Use Absolute Values `|y|` is compared with `|value|` (`|y| > -1` leaves 0 and 1 unmasked); without Keep Existing
+  Mask the column's old mask is replaced, with it the new cells are added.
+Sheaf: `Project::mask_color` (saved with the project, Origin keeps it as a setting) and `cycle_mask_color`; Disable
+Masking sets `Column::mask_disabled` on every column of the project (`Column::active_mask` is what analysis, plots and
+the categorical tools read); `sheetops::MaskCondition` and `Worksheet::mask_by_condition`. The worksheet still shows
+masked cells in its mask colours while masking is disabled (Origin's sheet colours were not measured). The worksheet shows a masked cell with red text on a light red fill; Origin's own cell colour was not measured.
 
 ### 13.2 Worksheet operations in Sheaf (T10)
 

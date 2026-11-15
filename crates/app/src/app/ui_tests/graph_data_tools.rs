@@ -105,16 +105,18 @@ fn dragging_a_rectangle_masks_exactly_the_y_cells_of_the_points_inside_in_one_un
     let book = project(&h).workbooks().next().unwrap();
     assert!(book.sheet().column_by_name("A").unwrap().mask.is_empty(), "the X cells are not masked");
     assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5], "values stay");
-    assert_eq!(h.state().doc.undo_label(), Some("Mask 2 points of B(Y)"));
+    assert_eq!(h.state().doc.undo_label(), Some("Set Mask Data"));
     assert!(graph_ui(&h).data_tool.is_some(), "the tool stays on");
-    menu(&mut h, "Edit", "Undo Mask 2 points of B(Y)");
+    menu(&mut h, "Edit", "Undo Set Mask Data");
     assert!(mask_of(&h, 0).is_empty());
-    menu(&mut h, "Edit", "Redo Mask 2 points of B(Y)");
+    menu(&mut h, "Edit", "Redo Set Mask Data");
     assert_eq!(mask_of(&h, 0), vec![1, 2]);
 }
 
 #[test]
-fn a_rectangle_over_no_point_does_nothing_and_a_click_on_a_masked_point_unmasks_it() {
+fn a_rectangle_over_no_point_does_nothing_a_click_masks_and_u_switches_to_unmasking() {
+    // Origin 2016: a click on an unmasked point masks it, a click on a masked point leaves it
+    // masked; unmasking is a separate mode. (Before: Sheaf's click unmasked a masked point.)
     let mut h = start(vec![data_file("gdt-unmask")]);
     scatter(&mut h);
     data_menu(&mut h, "Mask Data Points");
@@ -124,15 +126,46 @@ fn a_rectangle_over_no_point_does_nothing_and_a_click_on_a_masked_point_unmasks_
     assert!(mask_of(&h, 0).is_empty());
     assert_eq!(h.state().doc.undo_label().map(str::to_string), empty, "no undo step");
     click_at(&mut h, p);
-    assert!(mask_of(&h, 0).is_empty(), "a click on a point that is not masked does nothing");
-    assert_eq!(h.state().doc.undo_label().map(str::to_string), empty);
-    drag(&mut h, p - egui::vec2(8.0, 8.0), p + egui::vec2(8.0, 8.0));
-    assert_eq!(mask_of(&h, 0), vec![1]);
+    assert_eq!(mask_of(&h, 0), vec![1], "a click on an unmasked point masks it");
+    assert!(mask_of(&h, 1).is_empty(), "the click masks one plot's point only");
+    assert_eq!(h.state().doc.undo_label(), Some("Set Mask Data"));
+    let steps = h.state().doc.undo_label().map(str::to_string);
     click_at(&mut h, p);
-    assert!(mask_of(&h, 0).is_empty(), "the masked point is unmasked");
-    assert_eq!(h.state().doc.undo_label(), Some("Unmask 1 point of B(Y)"));
-    menu(&mut h, "Edit", "Undo Unmask 1 point of B(Y)");
+    assert_eq!(mask_of(&h, 0), vec![1], "a click on a masked point leaves it masked");
+    assert_eq!(h.state().doc.undo_label().map(str::to_string), steps, "and records nothing");
+    h.key_press(egui::Key::U);
+    settle(&mut h);
+    click_at(&mut h, p);
+    assert!(mask_of(&h, 0).is_empty(), "in the unmask mode the click unmasks");
+    menu(&mut h, "Edit", "Undo Set Mask Data");
     assert_eq!(mask_of(&h, 0), vec![1], "undo masks it again");
+    // A rectangle unmasks in the same mode.
+    drag(&mut h, p - egui::vec2(8.0, 8.0), p + egui::vec2(8.0, 8.0));
+    assert!(mask_of(&h, 0).is_empty());
+    h.key_press(egui::Key::U);
+    settle(&mut h);
+    drag(&mut h, p - egui::vec2(8.0, 8.0), p + egui::vec2(8.0, 8.0));
+    assert_eq!(mask_of(&h, 0), vec![1], "U again is the mask mode");
+}
+
+#[test]
+fn tab_limits_the_mask_tool_to_the_active_plot() {
+    let mut h = start(vec![data_file("gdt-tab")]);
+    scatter(&mut h);
+    data_menu(&mut h, "Mask Data Points");
+    let pts: Vec<egui::Pos2> = [(0, 1), (0, 2), (1, 1), (1, 2)].iter().map(|&(p, r)| point_pos(&h, p, r)).collect();
+    let both = egui::Rect::from_points(&pts).expand(8.0);
+    h.key_press(egui::Key::Tab);
+    settle(&mut h);
+    // The first plot is active until a click picks another.
+    drag(&mut h, both.min, both.max);
+    assert_eq!(mask_of(&h, 0), vec![1, 2], "the active plot");
+    assert!(mask_of(&h, 1).is_empty(), "not the other plot");
+    // Tab again: all plots.
+    h.key_press(egui::Key::Tab);
+    settle(&mut h);
+    drag(&mut h, both.min, both.max);
+    assert_eq!(mask_of(&h, 1), vec![1, 2], "all plots of the layer");
 }
 
 #[test]
@@ -155,27 +188,93 @@ fn masked_points_that_are_hidden_and_other_plot_kinds_cannot_be_picked() {
 }
 
 #[test]
-fn remove_bad_data_points_makes_the_clicked_y_cell_missing_and_keeps_the_row() {
+fn remove_bad_data_points_picks_with_a_click_and_enter_makes_the_y_cell_missing() {
     let mut h = start(vec![data_file("gdt-remove")]);
     scatter(&mut h);
     data_menu(&mut h, "Remove Bad Data Points");
+    let before = h.state().doc.undo_label().map(str::to_string);
     let arg0 = point_pos(&h, 0, 2) + egui::vec2(3.0, -3.0);
     click_at(&mut h, arg0);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5], "a click only picks the point");
+    assert_eq!(h.state().doc.undo_label().map(str::to_string), before);
+    h.key_press(egui::Key::Delete);
+    h.key_press(egui::Key::Backspace);
+    settle(&mut h);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5], "Delete and Backspace do nothing");
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
     let b = column(&h, "B");
     assert_eq!(b.len(), 4, "the row stays");
     assert!(b[2].is_nan() && b[1] == 4.5 && b[3] == 8.5);
     assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0], "the X cell stays");
     assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5], "another plot's cell stays");
-    assert_eq!(h.state().doc.undo_label(), Some("Remove bad point B(Y) row 3"));
-    // The next click, on a point of the other plot, uses the same mode.
+    assert_eq!(h.state().doc.undo_label(), Some("Remove Data Point"));
+    // The mode stays on: Left/Right move the pick, Enter removes the point reached.
     let arg0 = point_pos(&h, 1, 0);
     click_at(&mut h, arg0);
-    assert!(column(&h, "C")[0].is_nan());
-    assert_eq!(h.state().doc.undo_label(), Some("Remove bad point C(Y) row 1"));
-    menu(&mut h, "Edit", "Undo Remove bad point C(Y) row 1");
-    menu(&mut h, "Edit", "Undo Remove bad point B(Y) row 3");
+    h.key_press(egui::Key::ArrowRight);
+    settle(&mut h);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert!(column(&h, "C")[1].is_nan(), "one Right key from row 1 reached row 2");
+    assert!(column(&h, "C")[0].is_finite());
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert!(column(&h, "C")[0].is_finite(), "after a removal nothing stays picked");
+    menu(&mut h, "Edit", "Undo Remove Data Point");
+    menu(&mut h, "Edit", "Undo Remove Data Point");
     assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
     assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5]);
+}
+
+#[test]
+fn enter_without_a_picked_point_removes_nothing() {
+    let mut h = start(vec![data_file("gdt-enter")]);
+    scatter(&mut h);
+    data_menu(&mut h, "Remove Bad Data Points");
+    let before = h.state().doc.undo_label().map(str::to_string);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert_eq!(h.state().doc.undo_label().map(str::to_string), before);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+}
+
+#[test]
+fn a_right_click_ends_a_data_menu_mode_and_a_double_click_does_not() {
+    let mut h = start(vec![data_file("gdt-right")]);
+    scatter(&mut h);
+    data_menu(&mut h, "Mask Data Points");
+    let p = point_pos(&h, 0, 1);
+    double_click_at(&mut h, p);
+    assert!(graph_ui(&h).data_tool.is_some(), "a double click does not end the mode");
+    let at = empty_spot(&h);
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Secondary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+    }
+    settle(&mut h);
+    assert!(graph_ui(&h).data_tool.is_none(), "a right click ends the mode");
+}
+
+#[test]
+fn the_pick_reach_is_about_nine_points_for_the_default_symbol_and_grows_with_a_big_symbol() {
+    let mut h = start(vec![data_file("gdt-reach")]);
+    scatter(&mut h);
+    data_menu(&mut h, "Mask Data Points");
+    let p = point_pos(&h, 0, 1);
+    click_at(&mut h, p + egui::vec2(0.0, 12.0));
+    assert!(mask_of(&h, 0).is_empty(), "12 points away is out of reach for the default symbol");
+    click_at(&mut h, p + egui::vec2(0.0, 6.0));
+    assert_eq!(mask_of(&h, 0), vec![1], "6 points away masks it");
+    edit_graph(&mut h, |g| g.layers[0].plots.iter_mut().for_each(|p| p.symbol.size_pt = 24.0));
+    let q = point_pos(&h, 0, 2);
+    click_at(&mut h, q + egui::vec2(0.0, 12.0));
+    assert_eq!(mask_of(&h, 0), vec![1, 2], "a size 24 symbol is picked at 12");
 }
 
 #[test]
@@ -299,6 +398,8 @@ fn a_column_that_a_formula_keeps_up_to_date_refuses_remove_and_move_but_can_be_m
     let before = h.state().doc.undo_label().map(str::to_string);
     let arg0 = point_pos(&h, 1, 2);
     click_at(&mut h, arg0);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
     assert_eq!(column(&h, "C"), [5.0, 9.0, 13.0, 17.0]);
     assert!(h.state().status.contains("calculated from a formula"), "{}", h.state().status);
     assert_eq!(h.state().doc.undo_label().map(str::to_string), before, "no undo step");
@@ -329,10 +430,12 @@ fn a_masked_point_changes_an_auto_analysis_result_and_removing_a_point_recalcula
     data_menu(&mut h, "Remove Bad Data Points");
     let arg0 = point_pos(&h, 0, 3);
     click_at(&mut h, arg0);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
     let after = project(&h).numeric(d).unwrap().to_vec();
     assert_eq!(&after[..3], [3.5, 5.5, 7.5]);
     assert!(after[3].is_nan(), "the formula column follows");
-    menu(&mut h, "Edit", "Undo Remove bad point B(Y) row 4");
+    menu(&mut h, "Edit", "Undo Remove Data Point");
     assert_eq!(project(&h).numeric(d).unwrap(), [3.5, 5.5, 7.5, 9.5], "source and result come back together");
 }
 
@@ -415,6 +518,8 @@ fn a_waterfall_curve_is_picked_where_it_is_drawn_not_where_the_front_curve_would
     data_menu(&mut h, "Remove Bad Data Points");
     let at = waterfall_pos(&h, 1, 1.0, 30.5);
     click_at(&mut h, at);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
     assert!(column(&h, "C")[0].is_nan());
     assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
     // Move: the point lands under the pointer in the waterfall's own frame.
@@ -470,6 +575,8 @@ fn points_beyond_the_axis_range_are_clipped_and_cannot_be_picked() {
     assert!(out.x > inside.x, "the point is right of the frame");
     data_menu(&mut h, "Remove Bad Data Points");
     click_at(&mut h, out);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
     assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5], "the clipped point stays");
     data_menu(&mut h, "Mask Data Points");
     drag(&mut h, out - egui::vec2(8.0, 8.0), out + egui::vec2(8.0, 8.0));
@@ -478,10 +585,14 @@ fn points_beyond_the_axis_range_are_clipped_and_cannot_be_picked() {
     data_menu(&mut h, "Remove Bad Data Points");
     let at = point_pos(&h, 0, 2);
     click_at(&mut h, at);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
     assert!(column(&h, "B")[2].is_nan());
     // With Clip Data to Frame off the point is drawn, so it is picked.
     edit_graph(&mut h, |g| g.layers[0].display.clip_data = false);
     click_at(&mut h, out);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
     assert!(column(&h, "B")[3].is_nan());
 }
 
@@ -491,8 +602,8 @@ fn a_move_drag_that_returns_to_where_it_began_writes_nothing_and_a_drag_moves_by
     scatter(&mut h);
     data_menu(&mut h, "Move Data Points");
     let before = h.state().doc.undo_label().map(str::to_string);
-    // Grab the point 20 points off its centre, still within reach, and drag away and back.
-    let press = point_pos(&h, 0, 1) + egui::vec2(20.0, 0.0);
+    // Grab the point 7 points off its centre, still within reach, and drag away and back.
+    let press = point_pos(&h, 0, 1) + egui::vec2(7.0, 0.0);
     let button = |pressed| egui::Event::PointerButton {
         pos: press,
         button: egui::PointerButton::Primary,
@@ -519,4 +630,38 @@ fn a_move_drag_that_returns_to_where_it_began_writes_nothing_and_a_drag_moves_by
     let new = point_pos(&h, 0, 1);
     assert!((new.x - old.x).abs() < 0.5 && (new.y - (old.y - 40.0)).abs() < 0.5, "moved from {old:?} to {new:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Move point B(Y) row 2"));
+}
+
+#[test]
+fn space_switches_the_mask_tool_to_a_freehand_path_that_masks_the_points_inside_it() {
+    let mut h = start(vec![data_file("gdt-freehand")]);
+    scatter(&mut h);
+    data_menu(&mut h, "Mask Data Points");
+    h.key_press(egui::Key::Space);
+    settle(&mut h);
+    // A triangle around point 1 of the first plot and no other point.
+    let p = point_pos(&h, 0, 1);
+    let path =
+        [p + egui::vec2(-8.0, 8.0), p + egui::vec2(0.0, -8.0), p + egui::vec2(8.0, 8.0), p + egui::vec2(-8.0, 8.0)];
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    h.event(egui::Event::PointerMoved(path[0]));
+    h.step();
+    h.event(button(path[0], true));
+    h.step();
+    for at in &path[1..] {
+        h.event(egui::Event::PointerMoved(*at));
+        h.step();
+    }
+    assert!(graph_ui(&h).data_dragging());
+    h.event(button(path[3], false));
+    h.step();
+    settle(&mut h);
+    assert_eq!(mask_of(&h, 0), vec![1], "only the point inside the path");
+    assert!(mask_of(&h, 1).is_empty());
+    assert_eq!(h.state().doc.undo_label(), Some("Set Mask Data"));
 }

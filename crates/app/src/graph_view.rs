@@ -104,7 +104,7 @@ pub struct GraphUi {
     /// The Data menu tool in use (Mask, Move, Remove Bad Data Points).
     pub data_tool: Option<DataTool>,
     /// What the Data menu tool is dragging.
-    data_drag: Option<data_tools::Drag>,
+    data: data_tools::State,
     /// An object being drawn.
     drawing: Option<Drawing>,
     /// A drawn object being moved.
@@ -155,7 +155,7 @@ impl GraphUi {
     /// Whether a Data menu tool has a drag in progress.
     #[cfg(test)]
     pub fn data_dragging(&self) -> bool {
-        self.data_drag.is_some()
+        self.data.drag.is_some()
     }
 
     /// The tool in use.
@@ -400,10 +400,11 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             to_screen: &to_screen,
             to_page: &to_page,
         };
-        data_tools::show(ui, &painter, &response, &view, tool, &mut state.data_drag, actions);
-        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        data_tools::show(ui, &painter, &response, &view, tool, &mut state.data, actions);
+        // Esc and a right-click (which also opens the context menu) end the mode.
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) || response.secondary_clicked() {
             state.data_tool = None;
-            state.data_drag = None;
+            state.data = data_tools::State::default();
         }
     }
 

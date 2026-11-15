@@ -3339,6 +3339,11 @@ core edits, is independent of those choices.
 
 ### 20.1 Sheaf's rules
 
+**Superseded in part by 20.4 and 20.6** (Origin measured, Sheaf changed to follow it): the click in Mask mode,
+Remove Bad (pick, then Enter), the undo labels, the reach, the plots a mask acts on (Tab) and the ending of a mode
+are as 20.6 says; the paragraphs below keep their [Sheaf choice] text where 20.6 does not replace it (Move
+entirely, hidden masked points, clipping, Skip Points, waterfall).
+
 - **Any shown plot of any layer [Sheaf choice].** A tool acts on the points of the plots the pointer picks, the
   nearest point that the graph draws within the Data Reader's reach (30 screen points), in any layer; a
   rectangle masks the drawn points of every plot inside it. Sheaf has no active plot (only an active layer), so
@@ -3556,7 +3561,7 @@ Move tool (default -1, size 6), which is the only fact found about it.
 **M5. Undo.** One step each for a mask drag/click ("Undo Set Mask Data") and for a removal ("Undo Remove Data Point",
 `@YPR` 0 or 1); the worksheet shows the change at once (read right after the action).
 
-### 20.5 Where Sheaf's current behaviour differs from Origin (to change in part 2)
+### 20.5 Where Sheaf differed from Origin (before part 2; what was done is in 20.6)
 
 1. **Active plot.** Origin has one; Sheaf has none. Origin's Mask default acts on all plots of the layer by region;
    Tab switches to the active plot, and the toolbar flyout offers active-plot and all-plots modes. Sheaf: the pointer
@@ -3576,3 +3581,33 @@ Move tool (default -1, size 6), which is the only fact found about it.
    "Remove bad point B(Y) row 12" (Sheaf's own wording may stay).
 7. **Hit radius.** Origin about 8 to 9 pixels for the default symbol (more for larger symbols); Sheaf 30 points.
 8. **Move.** Unmeasured; Sheaf's design stays [Sheaf choice].
+
+### 20.6 What Sheaf does now (part 2, following 20.4)
+
+Changed to match Origin (core unit tests in `graph_data.rs`, UI tests in `ui_tests/graph_data_tools.rs`):
+
+1. **Mask click.** A click on an unmasked point masks it (that plot's Y cell); a click on a masked point leaves it
+   masked and records no undo step. The old rule (click unmasks) was wrong and its test was replaced.
+2. **Plots.** The drag masks the Y cell of every plot of the layer in the region (X cells never). Tab toggles
+   "active plot only" (the label in the corner of the graph names the mode: "Mask rectangle on all plots"). Sheaf's
+   active plot is the first plot until a click picks a point of another plot (Origin: the same, M1). The state is
+   reset when the mode is left, so re-entering starts with all plots; Origin's re-entry is unmeasured.
+3. **Shapes and unmask.** Space switches the rectangle to a freehand closed path (even-odd rule, the points inside
+   the traced path). Origin unmasks only from its Tools toolbar flyout; Sheaf has no such button, so **U** toggles an
+   unmask mode (rectangle, path and click) [Sheaf choice].
+4. **Remove Bad.** A click (or Left/Right, `reader::step`) picks a point, drawn with a heavy ring; **Enter** makes its
+   Y cell missing and the mode stays on; Delete, Backspace and double-click do nothing; Enter with nothing picked
+   does nothing; nothing is picked after a removal. Not built: the row-delete variant of `@YPR` 0 (Sheaf has no
+   system variables) and the starting point of Left/Right without a click (Origin's was not measured; Sheaf needs a
+   pick first). A formula-kept column is still refused with the message (Origin cleared it in one unverified run).
+5. **Undo text.** "Set Mask Data" (mask and unmask; Origin's unmask text was not measured) and "Remove Data Point"
+   (Edit shows "Undo Set Mask Data", "Undo Remove Data Point"). Move keeps Sheaf's "Move point B(Y) row 12".
+6. **Reach.** The Data menu tools pick within max(9, half the symbol size + 2) screen points (default symbol about 9,
+   size 24 about 14: M7); the Data Reader keeps its 30. The hover ring was dropped (Origin showed no highlight).
+7. **Ending.** Esc or a right-click ends the mode (the right-click also reaches the context menu); a double click does
+   not end it. The Pointer and Data Reader buttons end it as before.
+
+Still different: the Data menu has no plot list with a check on the active plot; no Tools-toolbar mask flyout (U
+instead); Move is Sheaf's design, unmeasured (M4): the reach for the grab, X-and-Y, follow-by-distance, undo text
+stay [Sheaf choice]. Unmeasured and left: items 6 and 8 (other plot kinds, Hide Masked Points, filters, clipped
+points, Skip Points, Show Elements Data, waterfall), the exact hit radius, log axes, column plots.

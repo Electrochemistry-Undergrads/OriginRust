@@ -21,6 +21,18 @@ pub struct Point {
 /// How far from the pointer, in screen points, a data point is still picked.
 const SNAP: f32 = 30.0;
 
+/// How far from a point the Data menu tools still pick it, in screen points: Origin 2016 picked up
+/// to 8 to 9 pixels from the default symbol and 14 at symbol size 24 (spec 20.4, M7), about half
+/// the symbol plus a margin and not below 9.
+fn edit_reach(project: &Project, graph: WindowId, p: Point) -> f32 {
+    let size = project
+        .graph(graph)
+        .and_then(|g| g.layers.get(p.layer))
+        .and_then(|l| l.plots.get(p.plot))
+        .map_or(0.0, |plot| plot.symbol.size_pt);
+    (size as f32 / 2.0 + 2.0).max(9.0)
+}
+
 /// How far outside the frame, in page points, a point still counts as drawn (a symbol on the axis
 /// limit sits on the frame edge).
 const CLIP_TOLERANCE: f64 = 0.5;
@@ -190,7 +202,8 @@ pub fn nearest_where(
     let mut best: Option<(f32, Point)> = None;
     each_point(project, graph, geometry, to_screen, pick, |at, p| {
         let d = at.distance(pointer);
-        if d <= SNAP && best.is_none_or(|(b, _)| d < b) && keep(p) {
+        let reach = if pick == Pick::Edit { edit_reach(project, graph, p) } else { SNAP };
+        if d <= reach && best.is_none_or(|(b, _)| d < b) && keep(p) {
             best = Some((d, p));
         }
     });

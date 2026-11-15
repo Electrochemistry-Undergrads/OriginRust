@@ -5842,6 +5842,9 @@ fn add_error_bars_chooses_one_plot_and_commits_only_on_ok() {
 #[path = "ui_tests/error_bars.rs"]
 mod error_bars;
 
+#[path = "ui_tests/clipboard_origin.rs"]
+mod clipboard_origin;
+
 #[test]
 fn update_legend_keeps_custom_text_and_adds_the_plots_it_lacks() {
     let mut h = start(vec![data_file("updleg")]);

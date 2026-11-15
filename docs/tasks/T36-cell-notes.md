@@ -1,6 +1,6 @@
 # T36: Worksheet cell notes
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `cell-notes`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `cell-notes`. Plain text only; no Notes window, rich text or `@NCP`. Spec: gui-look.md "Cell notes (T36)".
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Worksheets: Cell notes, Origin 2022).
 
 ## Goal

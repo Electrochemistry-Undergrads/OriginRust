@@ -2050,7 +2050,8 @@ tab; Sheaf shows it under the check box), with the colour's alpha as transparenc
 Transparency slider sets the alpha of the line colour. Both drop lines offer style, width and an
 Auto or chosen colour, drawing from each point to the left and bottom edges of the frame.
 
-Fill Area Under Curve now offers **Normal**, **Sidelines only** and **Sidelines and Base**.
+Fill Area Under Curve offers **Normal**, **Inclusive broken by missing values**, **Sidelines only**
+and **Sidelines and Base**.
 Normal remains the old default and keeps its previous filled rendering. Sidelines only leaves
 an unfilled curve and adds vertical boundaries from its first and last finite displayed points
 to the bottom of the frame. Sidelines and Base also connects those bottom endpoints. These
@@ -2083,6 +2084,31 @@ the mode, including while disabled; the existing `.opj` save warning covers the 
 Cartesian straight-line examples were Origin-measured; other connections use Sheaf's existing
 curve geometry, and specialised coordinates, alternate baselines and unusual stroke preferences
 remain unmeasured. Normal's older hatch/gradient/border fidelity remains covered by section 18.6.
+
+**Inclusive broken by missing values** fills each finite run by directly joining its last point
+back to its first. The connecting stroke also closes that chord, with no added boundary down to
+the frame bottom. Missing rows separate the polygons. A one-point run has no filled area but
+keeps its round connecting-stroke cap. Fill colour, hatch, gradient and transparency remain active;
+the legend keeps a filled box. The same finite-run closure uses the existing connection geometry,
+clipping, row selection and symbol-gap handling. Each closed outline is one stroke, so its joins
+do not receive a second coat of translucent line colour. Normal remains the old default and its
+filled geometry is unchanged. Group editing, Apply/Cancel/history and native/companion saves
+preserve the new mode; `.opj` retains the unsupported-fill warning.
+
+Measured in Origin 2016 on 2026-11-15, `re-workspace/scratch/t13-fill-inclusive/`: the corrected
+`verified_sloping` control selects Inclusive (combo 4, item 1) and applies OK, with blue fill and
+a red 6 pt line through (1,1), (5,3), (10,2), on Y=-1..4. Only the endpoint-chord triangle is blue,
+with a red closing chord and blue filled legend. In `verified_missing`, rows 4/8/10 of a 13-row
+series are explicitly missing (`0/0`, each `ISNA` result 1): three finite runs become three closed
+filled triangles, without bridging the gaps; the isolated ninth row remains a red round cap.
+The `verified_closed` control repeats X=(2,2,6,6,2), Y=(1,3,3,1,1): the closed rectangle is
+blue with a red outline and no fill down to the frame bottom.
+The initial `sloping`/`missing`/`closed` attempts failed to open Plot Details (setup/command false)
+and are excluded as mode evidence. The verified controls, actions, raw worksheet reads and
+exports remain local. The [published Line-tab reference](https://docs.originlab.com/origin-help/pd-dialog-line-tab/)
+describes the endpoint closure and missing-run behavior. Only Cartesian straight connections
+were Origin-measured; other connections reuse Sheaf's existing geometry. Specialised-coordinate,
+self-intersection and remaining fill-mode parity are still unmeasured.
 
 Data Points Display Control on Drop Lines now offers Skip Points and a frequency. This uses the
 existing `SymbolStyle::every` (the former Symbol tab's Show every field), so old projects keep their
@@ -2437,6 +2463,39 @@ Sheaf's own choices, all unmeasured (no Origin at hand):
 - Stroke width and style are the Drop Lines defaults (0.5 pt, solid). `.opj` cannot hold either new setting; a save
   warning names them and the `.opj.sheaf` companion keeps them. Files without the new fields load as Axis / Auto and
   are written back without them.
+
+### 18.9 Plot-only X sorting (T39)
+
+Origin's documented facts (from its help, not measured; [W:originlab.com/2023]): Origin 2023's
+"Line-Symbol Plot with automatic X value sorting" sorts the data of line and line-symbol plots
+by X "without having to sort the worksheet columns". It is a per-data-plot LabTalk property,
+`layer.plot1.line.sortx=1;`, and the graph can then be saved as a template. The Plot Details Line
+tab page lists no such option [W:origin-help/pd-dialog-line-tab], and no default is documented
+(taken as off).
+
+Sheaf's choices (all unmeasured; Origin's help does not say):
+
+- Field: `LineStyle::sort_x` (serde default false, omitted from `.sheaf` when false, so old files and
+  flag-off output are unchanged). "Apply to all" copies it with the rest of the line style and
+  Dependent group edits copy it from the leader.
+- UI: a check box "Sort X for line connection" at the top of the Line tab, offered only for Line and
+  Line + Symbol plots (Sheaf's own place and label). CLI `--sort-x` and the MCP `style.sort_x` set it on
+  the plots a command makes or restyles.
+- Order: the line joins the plotted rows by increasing drawn X (after multiplier and offset), computed
+  once per plot per draw (`PlotData::line_rows`). The sort is stable, so equal X keep worksheet order.
+  A row whose X is missing or not finite is left out of the path altogether (it neither connects
+  nor breaks it). A row with a missing Y keeps its sorted place and breaks the line between its
+  sorted neighbours, as a missing Y does in worksheet order.
+- Everything that follows the line path uses that order: straight, step, spline, B-spline and Bezier
+  connections (a spline needs strictly increasing X, which sorted data without ties meets), fill under
+  the curve in every mode, Gap to Symbol clearances, No Line Break for skipped points, the outer
+  endpoints of the Sidelines modes.
+- Per-point items (symbols, data labels, error bars, drop lines, masking) stay on their points and keep
+  worksheet painting order; the Data Reader and hit testing read worksheet rows. The worksheet is never
+  sorted.
+- Area, column, bar and other kinds ignore the flag. Sheaf has no exchanged X-Y layer for line
+  plots; horizontal bars are their own kinds.
+- `.opj`: the writer has no field for it; a save warning says so and the companion `.opj.sheaf` keeps it.
 
 ## 19. Printing (File > Print, Print Preview, Page Setup; T27)
 

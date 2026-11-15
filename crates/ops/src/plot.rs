@@ -60,6 +60,9 @@ pub struct Style {
     pub height: Option<f64>,
     /// Line width in points.
     pub line_width: Option<f64>,
+    /// Connect the points of line and line+symbol plots in increasing X order (the worksheet is
+    /// not sorted).
+    pub sort_x: bool,
     pub colors: Vec<String>,
     pub labels: Vec<String>,
     pub no_legend: bool,
@@ -491,6 +494,9 @@ fn style_plots(g: &mut Graph, group: &[usize], s: &Style, colors: &[Color]) {
         for plot in &mut layer.plots {
             if let Some(w) = s.line_width {
                 plot.line = LineStyle { width_pt: w, ..plot.line.clone() };
+            }
+            if s.sort_x {
+                plot.line.sort_x = true;
             }
             if let Some(c) = colors.get(i) {
                 // A column plot's color is its fill; its outline keeps its own color.

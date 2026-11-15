@@ -564,10 +564,10 @@ fn grid_group(
     group_box(ui, title, |ui| {
         let mut on = line.is_some();
         if ui.checkbox(&mut on, "Show").changed() {
-            *line = on.then_some(LineStyle { color, width_pt: width, dash, connect: Connect::Straight });
+            *line = on.then_some(LineStyle { color, width_pt: width, dash, connect: Connect::Straight, sort_x: false });
         }
         ui.add_enabled_ui(line.is_some(), |ui| {
-            let mut fallback = LineStyle { color, width_pt: width, dash, connect: Connect::Straight };
+            let mut fallback = LineStyle { color, width_pt: width, dash, connect: Connect::Straight, sort_x: false };
             let l = line.as_mut().unwrap_or(&mut fallback);
             grid(ui, id, |ui| {
                 ui.label("Color");

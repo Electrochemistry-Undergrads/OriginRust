@@ -623,7 +623,8 @@ fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
         colors: vec![Color::rgb(0x46, 0xB1, 0xE1), Color::rgb(0x4E, 0x95, 0xD9), Color::rgb(0x10, 0x48, 0x62)],
         mode: PaletteMode::Spread,
     };
-    layer.default_line = LineStyle { color: Color::BLACK, width_pt: 1.75, dash: Dash::Solid, connect: Connect::Spline };
+    layer.default_line =
+        LineStyle { color: Color::BLACK, width_pt: 1.75, dash: Dash::Solid, connect: Connect::Spline, sort_x: false };
     layer.legend = Legend {
         visible: true,
         position: LegendPosition::BottomRight,

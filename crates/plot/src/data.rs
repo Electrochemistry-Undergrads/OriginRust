@@ -161,6 +161,21 @@ impl PlotData<'_> {
         (self.start..self.end).filter(|&r| self.row_shown(r))
     }
 
+    /// Rows in the order the line connects them: worksheet order, or with the plot's `sort_x`
+    /// flag (line and line-symbol plots only) increasing drawn X. The sort is stable, so ties keep
+    /// worksheet order; rows whose X is not a finite number are left out of the path altogether
+    /// (they neither connect nor break it). A row with a missing Y stays in its sorted place and
+    /// breaks the line there, as in worksheet order.
+    pub fn line_rows(&self) -> Box<dyn DoubleEndedIterator<Item = usize> + '_> {
+        if !(self.plot.line.sort_x && matches!(self.plot.kind, PlotKind::Line | PlotKind::LineSymbol)) {
+            return Box::new(self.rows());
+        }
+        let mut rows: Vec<(f64, usize)> =
+            self.rows().map(|r| (self.x_at(r), r)).filter(|(x, _)| x.is_finite()).collect();
+        rows.sort_by(|a, b| a.0.total_cmp(&b.0));
+        Box::new(rows.into_iter().map(|(_, r)| r))
+    }
+
     /// Display frequency for point decorations. Lines, ranges and analysis still read every row.
     pub fn point_interval(&self) -> usize {
         if self.plot.kind.supports_skip_points() { self.plot.symbol.every.max(1) as usize } else { 1 }

@@ -44,6 +44,8 @@ mod detail_tests;
 #[cfg(test)]
 mod export_tests;
 #[cfg(test)]
+mod fill_inclusive_tests;
+#[cfg(test)]
 mod fill_sideline_tests;
 #[cfg(test)]
 mod label_frame_tests;
@@ -61,6 +63,8 @@ mod multipage_tests;
 mod offset_multiplier_tests;
 #[cfg(test)]
 mod skip_tests;
+#[cfg(test)]
+mod sort_x_tests;
 #[cfg(test)]
 mod symbol_gap_tests;
 #[cfg(test)]

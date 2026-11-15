@@ -62,6 +62,13 @@ fn style_schema() -> Value {
             ("width", n("Page width in inches, 0.1 to 100.")),
             ("height", n("Page height in inches, 0.1 to 100.")),
             ("line_width", n("Line width in points.")),
+            (
+                "sort_x",
+                t(
+                    "boolean",
+                    "Connect line and line+symbol plots in increasing X order without sorting the worksheet (Origin 2023 LabTalk line.sortx).",
+                ),
+            ),
             ("colors", strs("Plot colors in legend order: names or #RRGGBB.")),
             ("labels", strs("Legend text of the plots, in legend order.")),
             ("no_legend", t("boolean", "Hide the legend.")),

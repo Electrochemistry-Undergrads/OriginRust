@@ -376,6 +376,11 @@ impl Writer {
             if p.symbol.every > 1 && p.kind.supports_skip_points() {
                 notes.push("Skip Points (symbols, drop lines, error bars and labels on every n-th point only) was not written; the companion file keeps it".into());
             }
+            if p.line.sort_x
+                && matches!(p.kind, sheaf_core::graph::PlotKind::Line | sheaf_core::graph::PlotKind::LineSymbol)
+            {
+                notes.push("Sort X for line connection (the line joins the points in increasing X order) was not written; the companion file keeps it".into());
+            }
             if !p.decor.is_default() {
                 notes.push(
                     "drop lines, symbol/line gaps and draw order, fills under curves (with their pattern, transparency and gradient) and data labels were not written (the companion file keeps them)"

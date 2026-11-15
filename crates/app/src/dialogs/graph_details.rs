@@ -380,6 +380,12 @@ fn plot_tab_body(
                     },
                 );
                 ui.end_row();
+                if matches!(plot.kind, PlotKind::Line | PlotKind::LineSymbol) {
+                    // Sheaf's own place and label; Origin 2023 has only LabTalk line.sortx.
+                    ui.label("");
+                    ui.checkbox(&mut plot.line.sort_x, "Sort X for line connection");
+                    ui.end_row();
+                }
                 ui.label("Style");
                 dash_ui(ui, "plot_dash", &mut plot.line.dash);
                 ui.end_row();
@@ -432,7 +438,7 @@ fn plot_tab_body(
                             .labelled_by(label.id);
                     });
                 });
-                if plot.decor.fill_under_mode.is_normal()
+                if !plot.decor.fill_under_mode.is_sidelines()
                     && let Some(color) = plot.decor.fill_under.as_mut()
                 {
                     ui.horizontal(|ui| {

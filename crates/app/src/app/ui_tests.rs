@@ -10,8 +10,10 @@ use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
 mod autosave;
+mod cell_notes;
 mod cond_format;
 mod excel;
+mod fill_inclusive;
 mod fill_sidelines;
 mod frozen_panes;
 mod label_frames;
@@ -20,6 +22,7 @@ mod live;
 mod lollipop;
 mod offset_multipliers;
 mod skip_points;
+mod sort_x;
 mod symbol_line_gaps;
 mod symbol_line_order;
 mod toolbar_print;

@@ -668,7 +668,10 @@ pub struct PlotArgs {
     /// Y column as a mirrored kernel density silhouette, like box (also violin-box, violin-point,
     /// violin-quartile, violin-stick and half-violin, which differ in the marks inside); ridgeline draws
     /// each Y column as a density curve on its own baseline, the columns stacked up the page; hexbin bins
-    /// the X column against the first Y column into hexagons coloured by their count (see --hex-bins).
+    /// the X column against the first Y column into hexagons coloured by their count (see --hex-bins);
+    /// parallel (two or more Y columns) draws one vertical axis per column and one line per row, coloured by a
+    /// column with a colour scale; parallel-index (three or more Y columns and a text group column, see --group)
+    /// colours the lines by group, with a legend.
     #[arg(short, long)]
     pub template: Option<String>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).
@@ -691,6 +694,12 @@ pub struct PlotArgs {
     /// with a companion .opj.sheaf if needed) or .sheaf.
     #[arg(long, value_name = "PROJECT")]
     pub save: Option<PathBuf>,
+    /// Parallel plots (-t parallel, -t parallel-index): the column that colours the lines. For a parallel index the
+    /// group column (text; default: the first text column of the sheet), one colour and legend entry per distinct
+    /// text. For a parallel plot a numeric column (default: the last Y column) shown with a colour scale; `none`
+    /// draws every line in the plot colour.
+    #[arg(long, value_name = "COLUMN", conflicts_with_all = ["graph", "panels"])]
+    pub group: Option<String>,
     /// Make a graph of several panels: stack (one column of panels that share the X axis, the
     /// first at the bottom, as Origin's Stack command), or ROWSxCOLUMNS such as 2x1 (Origin's
     /// Vertical 2 Panel), 1x2 (Horizontal 2 Panel) or 2x2 (4 Panel). Each Y column gets its own

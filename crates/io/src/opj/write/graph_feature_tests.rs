@@ -719,6 +719,21 @@ fn hexbin_plots_are_written_as_scatter_plots_with_a_save_warning() {
 }
 
 #[test]
+fn parallel_plots_are_written_as_line_plots_with_a_save_warning() {
+    for kind in [sheaf_core::graph::PlotKind::Parallel, sheaf_core::graph::PlotKind::ParallelIndex] {
+        let mut p = source();
+        line_graph(&mut p, |l| l.plots[0].kind = kind);
+        let (_, out) = round_trip(&p);
+        assert!(
+            out.warnings.iter().any(|w| w.contains("parallel plots and parallel indexes were written as line plots")),
+            "{:?}",
+            out.warnings
+        );
+        assert!(!out.warnings.iter().any(|w| w.contains("hexbin")), "{:?}", out.warnings);
+    }
+}
+
+#[test]
 fn violin_plots_are_written_as_plain_columns_with_a_save_warning() {
     for kind in [sheaf_core::graph::PlotKind::Violin, sheaf_core::graph::PlotKind::HalfViolin] {
         let mut p = source();

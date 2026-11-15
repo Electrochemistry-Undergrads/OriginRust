@@ -234,6 +234,14 @@ impl GraphPropsDialog {
             graph.layers.iter().map(|l| l.plots.iter().map(|p| doc.project().plot_data_name(p)).collect()).collect();
         let sources = sources(doc.project());
         let columns = all_columns(doc.project());
+        let numeric: Vec<ColumnId> = doc
+            .project()
+            .workbooks()
+            .flat_map(|b| b.sheets.iter())
+            .flat_map(|sh| sh.columns.iter())
+            .filter(|c| c.data.is_numeric())
+            .map(|c| c.id)
+            .collect();
         // The span of each layer's axes in their own scale, for the X:Y ratio of Size/Speed.
         let spans: Vec<(f64, f64)> = geometry
             .as_ref()
@@ -292,6 +300,7 @@ impl GraphPropsDialog {
                             &names,
                             &sources,
                             &columns,
+                            &numeric,
                             &mut this.add_from,
                             &spans,
                         );

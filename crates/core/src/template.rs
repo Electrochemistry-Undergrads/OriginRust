@@ -108,10 +108,16 @@ pub enum Template {
     /// Hexbin plot (Origin's "Hexbin", 2027): the X and Y columns binned into hexagons coloured by their
     /// count. The legend is hidden: the colour scale beside the layer names the colours.
     Hexbin,
+    /// Parallel Plot (Origin's "Parallel Plot", 2019): one vertical axis per Y column, one line per row, coloured by
+    /// a numeric column. No legend: the colour scale beside the layer names the colours.
+    Parallel,
+    /// Parallel Index (Origin's "Parallel Index"): like [`Template::Parallel`], with the lines coloured by the
+    /// group of their row and a legend of the groups.
+    ParallelIndex,
 }
 
 impl Template {
-    pub const ALL: [Template; 41] = [
+    pub const ALL: [Template; 43] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -137,6 +143,8 @@ impl Template {
         Template::HalfViolin,
         Template::Ridgeline,
         Template::Hexbin,
+        Template::Parallel,
+        Template::ParallelIndex,
         Template::Bubble,
         Template::ColorMapped,
         Template::BubbleColorMapped,
@@ -199,6 +207,8 @@ impl Template {
             Template::HalfViolin => "half-violin",
             Template::Ridgeline => "ridgeline",
             Template::Hexbin => "hexbin",
+            Template::Parallel => "parallel",
+            Template::ParallelIndex => "parallel-index",
         }
     }
 
@@ -245,7 +255,14 @@ impl Template {
             Template::HalfViolin => "Half Violin",
             Template::Ridgeline => "Ridgeline Chart",
             Template::Hexbin => "Hexbin",
+            Template::Parallel => "Parallel Plot",
+            Template::ParallelIndex => "Parallel Index",
         }
+    }
+
+    /// True for [`Template::Parallel`] and [`Template::ParallelIndex`].
+    pub fn is_parallel(&self) -> bool {
+        matches!(self, Template::Parallel | Template::ParallelIndex)
     }
 
     /// True for the six violin templates.
@@ -313,6 +330,21 @@ impl Template {
                 let mut g = from_red(general(id, name, PlotKind::Hexbin));
                 for l in &mut g.layers {
                     l.legend.visible = false;
+                }
+                g
+            }
+            Template::Parallel => {
+                let mut g = from_red(general(id, name, PlotKind::Parallel));
+                for l in &mut g.layers {
+                    l.legend.visible = false;
+                }
+                g
+            }
+            Template::ParallelIndex => {
+                // The legend of the groups goes right of the frame (`Automatic`, see graphing spec 14.25).
+                let mut g = from_red(general(id, name, PlotKind::ParallelIndex));
+                for l in &mut g.layers {
+                    l.legend.position = LegendPosition::Automatic;
                 }
                 g
             }
@@ -855,7 +887,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 41);
+        assert_eq!(Template::ALL.len(), 43);
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
         assert_eq!(Template::from_name("violin"), Some(Template::Violin));
         assert_eq!(Template::from_name("violin-box"), Some(Template::ViolinBox));
@@ -1189,6 +1221,67 @@ mod tests {
         assert!(!partial.derive_y_from_x && partial.prefer_regular);
         assert_eq!(partial.y, d.y);
         assert!(serde_json::from_str::<HexbinStyle>("{}").unwrap().is_default());
+    }
+
+    #[test]
+    fn the_parallel_templates_have_their_own_kinds_and_refuse_too_few_columns() {
+        use crate::graph::{LegendPosition, ParallelStyle};
+        use crate::{ColumnData, Designation, Project};
+        assert_eq!(Template::from_name("parallel"), Some(Template::Parallel));
+        assert_eq!(Template::from_name("parallel-index"), Some(Template::ParallelIndex));
+        assert_eq!((Template::Parallel.label(), Template::ParallelIndex.label()), ("Parallel Plot", "Parallel Index"));
+        assert!(
+            Template::Parallel.is_parallel()
+                && Template::ParallelIndex.is_parallel()
+                && !Template::Hexbin.is_parallel()
+        );
+        assert!(
+            PlotKind::Parallel.is_parallel() && PlotKind::ParallelIndex.is_parallel() && !PlotKind::Line.is_parallel()
+        );
+        assert_eq!(serde_json::to_string(&PlotKind::ParallelIndex).unwrap(), "\"parallel_index\"");
+        let plain = Template::Parallel.new_graph(WindowId(1), "G");
+        assert_eq!(plain.layers[0].default_kind, PlotKind::Parallel);
+        assert!(!plain.layers[0].legend.visible, "the colour scale names the colours");
+        let grouped = Template::ParallelIndex.new_graph(WindowId(1), "G");
+        assert!(grouped.layers[0].legend.visible && grouped.layers[0].legend.position == LegendPosition::Automatic);
+        for g in [plain, grouped] {
+            let back: Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+            assert_eq!(back, g);
+        }
+        // The defaults: rescale each axis, 0.5 pt, opaque, no colour column; a partial style fills in the rest.
+        let d = ParallelStyle::default();
+        assert_eq!((d.rescale_each_axis, d.width_pt, d.transparency_pct, d.color), (true, 0.5, 0.0, None));
+        let partial: ParallelStyle = serde_json::from_str(r#"{"rescale_each_axis":false}"#).unwrap();
+        assert!(!partial.rescale_each_axis && partial.width_pt == 0.5);
+        assert!(serde_json::from_str::<ParallelStyle>("{}").unwrap().is_default());
+
+        let mut p = Project::new();
+        let b = p.add_workbook("d");
+        let ys: Vec<_> = (0..4)
+            .map(|i| p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![i as f64, 2.0])).unwrap())
+            .collect();
+        let species = p.add_column(b, 0, Designation::Y, ColumnData::text(vec!["a".into(), "b".into()])).unwrap();
+        let err = p.plot_columns(Template::Parallel, &ys[..1]).unwrap_err();
+        assert!(err.to_string().contains("two or more numeric columns"), "{err}");
+        let err = p.plot_columns(Template::ParallelIndex, &[ys[0], ys[1], species]).unwrap_err();
+        assert!(err.to_string().contains("three or more numeric columns"), "{err}");
+        let err = p.plot_parallel(Template::ParallelIndex, &ys[..3], None).unwrap_err();
+        assert!(err.to_string().contains("group column"), "{err}");
+        assert_eq!(p.graphs().count(), 0, "a refused plot leaves no graph behind");
+        let err = p.plot_columns_double_y(Template::Parallel, &ys[..2], &ys[2..]).unwrap_err();
+        assert!(err.to_string().contains("right Y axis"), "{err}");
+        // The text column among the columns is the group; one axis per numeric column.
+        let g = p.plot_columns(Template::ParallelIndex, &[ys[0], ys[1], ys[2], species]).unwrap();
+        let l = &p.graph(g).unwrap().layers[0];
+        assert_eq!(l.plots.len(), 3);
+        assert!(l.plots.iter().all(|pl| pl.kind == PlotKind::ParallelIndex && pl.parallel.color == Some(species)));
+        // Without a named group the first text column of the sheet groups the rows.
+        assert_eq!(p.parallel_group_default(&ys), Some(species));
+        let g2 = p.plot_columns(Template::ParallelIndex, &ys[..3]).unwrap();
+        assert_eq!(p.graph(g2).unwrap().layers[0].plots[0].parallel.color, Some(species));
+        // A parallel plot colours by its last column by default.
+        let g3 = p.plot_columns(Template::Parallel, &ys).unwrap();
+        assert_eq!(p.graph(g3).unwrap().layers[0].plots[2].parallel.color, Some(ys[3]));
     }
 
     #[test]

@@ -24,6 +24,7 @@ mod legend;
 mod margin;
 pub mod markup;
 mod multipage;
+mod parallel;
 mod pie;
 mod plots;
 mod polar;
@@ -71,6 +72,8 @@ mod margin_tests;
 mod multipage_tests;
 #[cfg(test)]
 mod offset_multiplier_tests;
+#[cfg(test)]
+mod parallel_tests;
 #[cfg(test)]
 mod ridgeline_tests;
 #[cfg(test)]

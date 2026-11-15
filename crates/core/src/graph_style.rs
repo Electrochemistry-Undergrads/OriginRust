@@ -9,6 +9,7 @@
 
 use crate::color::Color;
 use crate::graph::Dash;
+use crate::ids::ColumnId;
 use serde::{Deserialize, Serialize};
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
@@ -585,5 +586,35 @@ impl HexbinStyle {
             prefer_regular: self.prefer_regular,
             frame_aspect,
         }
+    }
+}
+
+/// The settings shared by the plots (one per axis) of a Parallel Plot or Parallel Index (graphing spec
+/// 14.25). Every field is skipped when written while it has its default, so older files load unchanged.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ParallelStyle {
+    /// Origin's "Rescale Each Axis Independently": each axis has its own range (the default, Sheaf's choice);
+    /// cleared, every axis takes one range, the union of the ranges of all the columns.
+    pub rescale_each_axis: bool,
+    /// Width of the lines, in pt (Origin's Plot Details Parallel tab, Width; the default is Sheaf's choice).
+    pub width_pt: f64,
+    /// Transparency of the lines, 0 (opaque) to 100 percent (Origin's Transparency).
+    pub transparency_pct: f64,
+    /// A Parallel Plot: the numeric column that colours the lines through the colour ramp, with a colour
+    /// scale (`None` draws every line in the plot colour). A Parallel Index: the column whose text groups
+    /// the rows, one colour and one legend entry per group.
+    pub color: Option<ColumnId>,
+}
+
+impl Default for ParallelStyle {
+    fn default() -> ParallelStyle {
+        ParallelStyle { rescale_each_axis: true, width_pt: 0.5, transparency_pct: 0.0, color: None }
+    }
+}
+
+impl ParallelStyle {
+    pub fn is_default(&self) -> bool {
+        *self == ParallelStyle::default()
     }
 }

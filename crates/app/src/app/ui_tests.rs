@@ -24,6 +24,7 @@ mod legend_position;
 mod live;
 mod lollipop;
 mod offset_multipliers;
+mod parallel;
 mod recent;
 mod rug;
 mod simulate;

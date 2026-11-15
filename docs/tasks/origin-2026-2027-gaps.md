@@ -50,7 +50,7 @@ outputs or UI behavior.
 | Feature | Release | Functionality to add | Source |
 |---|---|---|---|
 | Manhattan plot | 2017 Pro App | Plot significance across grouped genomic positions, typically with chromosome groups and a significance cutoff. | [2017][o17] |
-| Violin and parallel-coordinate plots | 2019 | Show each group's distribution as a density silhouette, or draw each record across parallel variable axes. | [2019][o19] |
+| Violin and parallel-coordinate plots | 2019 | Violin done (T37); parallel plot and parallel index done (T49). Show each group's distribution as a density silhouette, or draw each record across parallel variable axes. | [2019][o19] |
 | Rug plot | 2019b | Done (T41). Add a mark along an axis for each observation to reveal its distribution. | [2019b][o19b] |
 | Sankey and alluvial diagrams | 2020 | Show quantities as flows whose widths reflect their values, including transitions between categories across stages. | [2020][o20] |
 | Browser Graph | 2020b / 2024 | Browse similarly structured datasets inside a graph and switch the displayed series, including datasets on different sheets. | [2020b][browser] · [2024][o24] |

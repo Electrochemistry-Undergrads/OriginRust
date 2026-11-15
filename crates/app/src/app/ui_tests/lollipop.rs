@@ -54,3 +54,29 @@ fn the_drop_lines_tab_has_drop_to_and_offers_plus_minus_only_for_the_next_data_p
     assert_eq!(graph(&h).layers[0].plots[0].decor.drop.vertical.color_mode, DropColorMode::PlusMinus);
     click(&mut h, "Cancel");
 }
+
+#[test]
+fn importing_one_y_column_with_the_lollipop_template_keeps_the_data_and_says_why_there_is_no_graph() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-lollipop-import-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("one.csv");
+    std::fs::write(&path, "t,a\n1,2.5\n2,4.5\n3,6.5\n").unwrap();
+    let mut h = start(vec![]);
+    let (books, graphs) = (project(&h).workbooks().count(), project(&h).graphs().count());
+    let (chi, ascii) = (sheaf_io::chi::ChiOptions::default(), sheaf_io::ascii::AsciiOptions::default());
+    let item = sheaf_io::import_file(&path, sheaf_io::ImportKind::Auto, &chi, &ascii).unwrap();
+    h.state_mut().finish_import(crate::dialogs::import::ImportRequest {
+        items: vec![item],
+        errors: vec![],
+        plot: true,
+        template: Some(sheaf_core::template::Template::Lollipop),
+        mode: ImportMode::NewBook,
+        place: Default::default(),
+    });
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().count(), books + 1, "the data is imported");
+    assert_eq!(project(&h).graphs().count(), graphs, "no graph");
+    let (_, text) = h.state().message.clone().expect("the user is told");
+    assert!(text.contains("two or more Y columns"), "{text}");
+}

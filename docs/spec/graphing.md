@@ -2269,7 +2269,7 @@ Sheaf's own choices, all unmeasured (no Origin at hand):
 - `Template::Lollipop` ("lollipop" on the command line and in MCP, menu Plot > Symbol > Lollipop
   Plot): scatter with the standard scatter symbol and size, vertical drop lines on, Drop To = Next
   Data Plot. Fewer than two Y columns are refused in `Project::plot_columns` (menu message, CLI and
-  MCP error "a lollipop plot needs two or more Y columns"). `--panels` refuses it.
+  MCP error "a lollipop plot needs two or more Y columns"). `--panels` and `--y2` refuse it (a lollipop has no right Y axis; the app and MCP refuse it too).
 - Exchange X-Y: each plot's X and Y columns and the layer's two axes trade places (as Graph > Exchange
   X-Y Axes does), so the drop lines run sideways along the value axis. Plots without an X column
   (row number) cannot be exchanged in the model; they stay upright. Each plot keeps its Y column's

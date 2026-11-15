@@ -132,6 +132,8 @@ pub enum ProjectError {
     Panels(#[from] PanelError),
     #[error("a lollipop plot needs two or more Y columns (got {0}); select at least two Y columns")]
     LollipopNeedsTwoColumns(usize),
+    #[error("a lollipop plot cannot have a right Y axis; use one Y axis or another template")]
+    LollipopNoRightAxis,
 }
 
 impl Project {
@@ -736,6 +738,9 @@ impl Project {
         left: &[ColumnId],
         right: &[ColumnId],
     ) -> Result<WindowId, ProjectError> {
+        if template == Template::Lollipop {
+            return Err(ProjectError::LollipopNoRightAxis);
+        }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
         }
@@ -948,6 +953,15 @@ mod tests {
         let mut part = plot;
         part.rows = Some((1, 3));
         assert_eq!(p.plot_data_name(&part), format!("[Book1]{sheet}! A(X), B(Y) [2:3]"));
+    }
+
+    #[test]
+    fn a_lollipop_is_refused_a_right_y_axis() {
+        let (mut p, _, _, y) = sample();
+        let graphs = p.graphs().count();
+        let r = p.plot_columns_double_y(crate::template::Template::Lollipop, &[y], &[y]);
+        assert!(matches!(r, Err(ProjectError::LollipopNoRightAxis)));
+        assert_eq!(p.graphs().count(), graphs, "no graph is left behind");
     }
 
     #[test]

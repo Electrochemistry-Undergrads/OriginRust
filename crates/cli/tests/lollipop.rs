@@ -61,3 +61,14 @@ fn the_lollipop_template_refuses_a_single_y_column() {
     assert!(!ok);
     assert!(e.contains("two or more Y columns"), "{e}");
 }
+
+#[test]
+fn a_lollipop_cannot_have_a_right_y_axis() {
+    let dir = scratch("y2");
+    let csv = dir.join("d.csv");
+    std::fs::write(&csv, "x,a,b\n1,2,3\n2,4,1\n").unwrap();
+    let svg = dir.join("o.svg");
+    let (ok, e) = sheaf(&["plot", csv.to_str().unwrap(), "-t", "lollipop", "--y2", "b", "-o", svg.to_str().unwrap()]);
+    assert!(!ok && e.contains("lollipop") && e.contains("right Y axis"), "{e}");
+    assert!(!svg.exists());
+}

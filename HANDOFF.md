@@ -27,6 +27,16 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T11 several axis breaks (2026-11-15, Windows, branch `axis-breaks`): an axis holds up to
+  seven breaks (`Axis::axis_breaks`; the former single `axis_break` still reads as one, keeping
+  its place). Measured in Origin 2016's Breaks tab and PNG exports (graphing 3.6): Auto Position
+  puts break k of n at k/(n+1); the automatic gap is about 1.75 % of the axis length; the mark is
+  two strokes rising to the right, centred on the segment ends, about 8 pt across the line; each
+  added row is the middle half of what the last break left. Decided without Origin's rule: Sheaf
+  keeps the axis tick step across breaks (Origin changed it on two of four data sets, no rule
+  found) and offers a step after each break; the Break Half Length unit is unmeasured (typing in
+  the scripted dialog did not take), so Sheaf shows one gap in percent of the axis. Formatting,
+  strict all-target Clippy and 2,420 workspace tests pass (four ignored).
 - T02 Go To picker/name lookup (2026-11-15, Windows): the flyout lists short names,
   designations and long names, fills an unambiguous short-name/quoted-long-name reference,
   and Reset clears only the column. Typed names ignore ASCII case; repeated long names
@@ -98,7 +108,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | Branch | Owner session | What | State |
 |---|---|---|---|
 | `codex/t02-find-replace` | Codex Windows, t02-find-replace | T02 existing Find in Sheets/Replace layout, defaults and options measured against Origin; find dialog and focused UI tests | claimed 2026-11-15; no Find in Project, grid/Go To, core/expr/history, plot, statistics, printing or other sessions' scopes |
-| `axis-breaks` | Claude Windows, "axis-breaks" | T11 more than one axis break (Origin's 1-7 breaks, per-break position), measured Origin break layout; core Axis break list, plot axis/tick drawing, graph_axis.rs Breaks tab, persistence and focused tests | claimed 2026-11-15; Axis fields only, no PLOT/plots.rs draw_plot, graph_details, navigation, stats or other sessions' scopes |
 | `codex/t13-fill-sidelines` | Codex Windows, t13-fill-sidelines | T13 Fill Area Sidelines only / Sidelines and Base; plot fill-mode/group copy, draw_fill_under/draw_line boundaries, draw_legend sample, graph_details selector and focused tests | claimed 2026-11-15; no Axis/layout geometry/PDF, mask policy/color, navigation, labels, stats or other sessions scopes |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `mac-print-panel` | Codex macOS, no Origin | T27 native macOS graph print panel via PDFKit; app print_graph/macprint, macOS dependencies and no-spool validation example | claimed 2026-11-14; no workbook printing, Windows CLI, Excel/imports or other sessions’ scope |

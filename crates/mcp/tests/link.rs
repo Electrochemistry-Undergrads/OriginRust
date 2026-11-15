@@ -399,8 +399,9 @@ fn the_proxy_sends_absolute_roots_only() {
     let roots = Roots::new(&[PathBuf::from("."), PathBuf::from("src")]).unwrap();
     let cfg = ProxyConfig::new(&roots);
     assert_eq!(cfg.roots.len(), 2);
+    let expected_root = sheaf_mcp::roots::plain(here.canonicalize().unwrap());
     for r in &cfg.roots {
-        assert!(Path::new(r).is_absolute() && Path::new(r).starts_with(here.canonicalize().unwrap()), "{r}");
+        assert!(Path::new(r).is_absolute() && Path::new(r).starts_with(&expected_root), "{r}");
     }
     drop(scratch);
 }
@@ -464,6 +465,24 @@ fn a_connection_that_never_says_hello_is_closed_and_the_ninth_is_refused() {
     assert_eq!(raw(&a.scratch.run(), vec![]).err().as_deref(), Some(proto::BUSY_APP));
     drop((l1, l2));
     eventually("room for another", || raw(&a.scratch.run(), vec![]).is_ok());
+    a.stop();
+}
+
+#[test]
+fn a_full_tcp_host_delivers_busy_repeatedly_and_a_silent_rejected_peer_cannot_hold_accept() {
+    let a = app_with("busy-tcp", Kind::Tcp, false, |config| config.max_connections = 1);
+    let held = raw(&a.scratch.run(), vec![]).unwrap();
+    for attempt in 0..32 {
+        assert_eq!(raw(&a.scratch.run(), vec![]).err().as_deref(), Some(proto::BUSY_APP), "attempt {attempt}");
+        assert_eq!(a.server.connections().len(), 1, "a busy reply must not admit another client");
+    }
+    let info = discovery::probe(&a.scratch.run(), Duration::from_secs(1)).unwrap();
+    let silent = Stream::connect(&info.endpoint).unwrap();
+    let start = Instant::now();
+    assert_eq!(raw(&a.scratch.run(), vec![]).err().as_deref(), Some(proto::BUSY_APP));
+    assert!(start.elapsed() < Duration::from_secs(3), "a rejected silent peer must not block later refusals");
+    drop((silent, held));
+    eventually("room after busy replies", || raw(&a.scratch.run(), vec![]).is_ok());
     a.stop();
 }
 

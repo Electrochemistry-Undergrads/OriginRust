@@ -10,8 +10,11 @@ use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
 mod autosave;
+mod cell_notes;
 mod cond_format;
 mod excel;
+mod fill_inclusive;
+mod fill_sidelines;
 mod frozen_panes;
 mod label_frames;
 mod label_whiteout;
@@ -19,10 +22,14 @@ mod live;
 mod lollipop;
 mod offset_multipliers;
 mod recent;
+mod rug;
 mod skip_points;
+mod sort_x;
+mod switcher;
 mod symbol_line_gaps;
 mod symbol_line_order;
 mod toolbar_print;
+mod violin;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {
@@ -133,7 +140,10 @@ fn menu_entry<'a>(h: &'a Harness<'static, SheafApp>, text: &'a str) -> egui_kitt
     };
     let pick =
         |nodes: Vec<egui_kittest::Node<'a>>| nodes.into_iter().max_by(|a, b| a.rect().min.x.total_cmp(&b.rect().min.x));
-    let all: Vec<egui_kittest::Node<'a>> = not_toolbar(h, text);
+    // Ordinary Undo has a dynamic history suffix; the separate batch command also starts with
+    // "Undo" and must not win that prefix lookup when the ordinary item has no exact label.
+    let all: Vec<egui_kittest::Node<'a>> =
+        not_toolbar(h, text).into_iter().filter(|n| text != "Undo" || name(n) != "Undo AI Changes").collect();
     let exact: Vec<egui_kittest::Node<'a>> = all
         .iter()
         .filter(|n| name(n) == text || n.accesskit_node().label().as_deref() == Some(text))
@@ -654,8 +664,16 @@ fn the_page_node_has_origins_tabs() {
     assert!(has_label(&h, "Dimensions") && has_label(&h, "Units") && has_label(&h, "Width"));
     click(&mut h, "Legends/Titles");
     click(&mut h, "Include data plots from all Layers when constructing legend");
+    // Origin's page Display tab: lines are cut at axis breaks unless this is ticked (off by default).
+    click(&mut h, "Display");
+    assert!(!graph(&h).page.style.connect_across_breaks);
+    click(&mut h, "Connect line across Axis Break");
+    assert!(!graph(&h).page.style.connect_across_missing);
+    click(&mut h, "Connect line across Missing Data");
     click(&mut h, "OK");
+    assert!(graph(&h).page.style.connect_across_missing);
     assert!(graph(&h).layers.iter().all(|l| l.legend.scope == sheaf_core::graph::LegendScope::Graph));
+    assert!(graph(&h).page.style.connect_across_breaks);
 }
 
 #[test]
@@ -6179,6 +6197,8 @@ mod clipboard_origin;
 #[path = "ui_tests/clipboard_formats.rs"]
 mod clipboard_formats;
 
+mod find_replace;
+mod find_selection;
 mod go_to;
 mod go_to_picker;
 mod label_panels;
@@ -6715,9 +6735,28 @@ fn the_axis_dialog_lists_the_edges_and_has_working_breaks_and_special_ticks_tabs
     }
     click(&mut h, "Breaks");
     assert!(h.query_by_label("Horizontal").is_some() && h.query_by_label("Bottom").is_none());
-    h.get_by_label("Show Break").click();
+    h.get_by_label("Enable").click();
     settle(&mut h);
-    assert!(graph(&h).layers[0].x_axis.axis_break.is_some());
+    let axis = &graph(&h).layers[0].x_axis;
+    assert_eq!(axis.axis_breaks.len(), 1);
+    // The first break is the middle half of the axis and is placed automatically, as in Origin.
+    let b = axis.axis_breaks[0];
+    assert!(b.auto_position && b.from < b.to);
+    // A second break takes the middle half of what the first left, a third likewise.
+    for k in [2, 3] {
+        h.get(By::new().role(egui::accesskit::Role::ComboBox).value((k - 1).to_string().as_str())).click();
+        settle(&mut h);
+        h.get(By::new().role(egui::accesskit::Role::Button).label(k.to_string().as_str())).click();
+        settle(&mut h);
+        let breaks = &graph(&h).layers[0].x_axis.axis_breaks;
+        assert_eq!(breaks.len(), k);
+        let (prev, new) = (breaks[k - 2], breaks[k - 1]);
+        assert!(new.from > prev.to && new.to > new.from, "{breaks:?}");
+    }
+    // Deleting a row removes that break.
+    h.get_all_by_label("Delete").next().expect("a Delete button per row").click();
+    settle(&mut h);
+    assert_eq!(graph(&h).layers[0].x_axis.axis_breaks.len(), 2);
     click(&mut h, "Special Ticks");
     click(&mut h, "Add Tick");
     assert_eq!(graph(&h).layers[0].x_axis.special_ticks.len(), 1);
@@ -7993,6 +8032,7 @@ fn find_in_sheets_moves_the_cursor_to_the_cell_with_the_text() {
     show_window(&mut h, "Book1 - sample");
     menu(&mut h, "Edit", "Find in Sheets...");
     assert!(h.state().find.is_some(), "the window opens");
+    click(&mut h, "String");
     h.state_mut().find.as_mut().unwrap().set_text("4.5");
     settle(&mut h);
     click(&mut h, "Find Next");
@@ -8012,6 +8052,7 @@ fn replace_changes_the_cell_at_the_cursor_and_replace_all_every_cell_in_one_step
     let mut h = start(vec![data_file("replacesheet")]);
     show_window(&mut h, "Book1 - sample");
     menu(&mut h, "Edit", "Replace...");
+    click(&mut h, "String");
     {
         let d = h.state_mut().find.as_mut().expect("the Replace window opens");
         d.set_text("4.5");
@@ -8434,6 +8475,29 @@ fn the_size_tab_edits_the_layer_area_and_a_linked_layer_shows_fractions_of_its_p
     assert_eq!(graph(&h).layers[0].frame, parent, "the parent did not move");
 }
 
+#[test]
+fn the_size_tab_links_the_axis_lengths_to_the_scale_and_shrinks_the_frame() {
+    let mut h = start(vec![data_file("xy-ratio")]);
+    let before = graph(&h).layers[0].frame;
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Size/Speed");
+    click(&mut h, "Link Axis Length to Scale with X:Y Ratio");
+    click(&mut h, "OK");
+    let layer = &graph(&h).layers[0];
+    assert_eq!(layer.xy_ratio, Some(1.0));
+    // One side shrank, the other and the corner stayed, as in Origin.
+    let f = layer.frame;
+    assert!((f.left, f.top) == (before.left, before.top), "{f:?}");
+    assert!(
+        (f.width < before.width && (f.height - before.height).abs() < 1e-9)
+            || (f.height < before.height && (f.width - before.width).abs() < 1e-9),
+        "{before:?} -> {f:?}"
+    );
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert_eq!(graph(&h).layers[0].xy_ratio, None);
+}
+
 fn has_label_containing(h: &Harness<'static, SheafApp>, text: &str) -> bool {
     h.query_all_by_label_contains(text).next().is_some()
 }
@@ -8474,6 +8538,47 @@ fn the_survival_menu_runs_the_kaplan_meier_estimator() {
     assert_eq!(h.state().doc.undo_label(), Some("Kaplan-Meier estimator"));
 }
 
+/// Statistics > Descriptive Statistics > Graphical Summary...: the options window offers Groups, the confidence level
+/// and the graph arrangement; OK writes the three tables and one three-layer graph; one undo removes both.
+#[test]
+fn the_descriptive_menu_runs_a_graphical_summary() {
+    let mut text = String::from("n,value\n");
+    for i in 0..20 {
+        text.push_str(&format!("{i},{}\n", 5.0 + (f64::from(i) * 1.9).sin() * 2.0 + f64::from(i) * 0.2));
+    }
+    let data = csv_file("gsum", "summary", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - summary");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Graphical Summary..."]);
+    assert!(h.state().analysis.is_some(), "the Graphical Summary window is open");
+    for label in ["Groups", "Confidence Level (%)", "Graph Arrangement"] {
+        assert!(has_label(&h, label), "{label} is missing");
+    }
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    let (sheet, _) = result_column(&h, "Value");
+    assert!(sheet.starts_with("GraphSummary"), "{sheet}");
+    let (_, tables) = {
+        let p = project(&h);
+        let ws = p.workbooks().next().unwrap().sheets.last().unwrap();
+        let col = ws.columns.iter().find(|c| c.long_name == "Table").unwrap();
+        (sheet.clone(), col.text().unwrap().to_vec())
+    };
+    for t in ["Description Statistics", "95% Confidence Intervals", "Normality Test"] {
+        assert!(tables.iter().any(|x| x == t), "{t} missing");
+    }
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    let g = project(&h).graphs().last().unwrap();
+    assert_eq!(g.layers.len(), 3);
+    assert_eq!(h.state().doc.undo_label(), Some("Graphical summary"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).graphs().count(), graphs_before);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+}
+
 /// Statistics > Multivariate Analysis > K-Means Cluster Analysis...: the cluster table and the cluster of every row
 /// in a result sheet and a scatter graph; one undo removes both.
 #[test]
@@ -8505,3 +8610,6 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
     assert_eq!(project(&h).graphs().count(), graphs_before + 1);
     assert_eq!(h.state().doc.undo_label(), Some("K-means cluster analysis"));
 }
+
+#[path = "ui_tests/trendline.rs"]
+mod trendline;

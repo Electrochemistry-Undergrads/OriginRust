@@ -118,8 +118,22 @@ Function data sets and matrix sheets have other names (matrices have no undersco
 The data block holds `rows x cell size` bytes with no framing inside. The number of rows is the
 block size divided by the cell size; trailing bytes that do not make a whole cell were never
 seen and are ignored. A data set with an empty data block exists (it belongs to an unfilled
-column). The mask block was empty in every file seen; public documentation says it is read but
-its meaning is not documented (so nothing is decoded from it) [pub][obs].
+column). The mask block is empty when no cell of the column is masked [obs]. With masked cells
+(measured 2026-11-15 on projects Origin 2016 saved after `wcellmask`: one cell, three scattered
+cells in two columns, a run of eight, and the first and last of 50 rows; `re-workspace/scratch/opjmask`)
+it holds `40 + rows + 4` bytes for a column of `rows` cells [obs]:
+
+| Offset | Bytes | Meaning |
+|---|---|---|
+| 0 | 4 | differs between saves of the same data (a stale address) [obs] |
+| 4 | 4 | u32, the block's own length [obs] |
+| 8 | 32 | zero [obs] |
+| 40 | `rows` | one byte per row, 1 = masked, 0 = not [obs] |
+| 40 + rows | 4 | zero [obs] |
+
+Sheaf reads the masked rows (`dataset::decode_mask`; a block whose length field disagrees is ignored)
+and writes the same layout with zeros in the first four bytes; Origin 2016 opened such a file with the
+written cells masked (`ismasked`, and `stats` counted the others only) [obs].
 
 Columns are stored padded: in the small private files a worksheet with six numbers still stored 32
 cells per column, the rest being "no value" cells [obs]. The reader keeps the padding (it cannot tell
@@ -454,6 +468,13 @@ double-Y study of graphing.md 12.7 showed what it is.)
   5 give the major tick direction, bits 6 and 7 the minor one: 0 none, 1 in, 2 out, 3 both (a default
   Origin graph has `0xA0`, both out; the owner's Y axis has `0x50`, both in, which matches his figure).
   The meaning of 1 and 3 was inferred from these two cases, not from a rendering of each.
+- Block 3, u16 at `0x4A`: the major tick length in tenths of a point (measured 2026-11-15 by setting
+  Line and Ticks > Major Ticks > Length in Origin 2016's axis dialog and saving: 80 for the default 8 pt,
+  150 for 15 pt, 30 for 3 pt; the same u16 stands at `0x4A` of the other five blocks but did not change).
+  Where a minor tick length other than Auto (half the major) is kept was not found: a chosen minor
+  length changed no byte in the scripted runs (the choice may not have been committed). Sheaf writes the
+  major length and names a minor length that is not half the major in the save warnings. Origin 2016 opened a
+  Sheaf file with 15 pt (X) and 3 pt (Y) and saved them back unchanged (150, 30).
 - Block 3, byte `0x26`: bit `0x40` set means the axis line and ticks are drawn on the primary side
   (bottom for X, left for Y). u16 at `0x0F`: the axis colour; `F7 FF` means "automatic" (the colour
   of the layer's plot), 0 black.
@@ -605,7 +626,7 @@ colour, heights, error bars, axis range and tick marks inside.
 
 ## 11. Unknowns
 
-- The mask block (always empty in these files).
+- The mask block (empty, or the masked rows in the layout of section 3.2).
 - Byte 1 of a text-or-number cell when not 0; flags in the data-set header at `0x3F`.
 - Whether text longer than `cell size - 2` is ever truncated or stored elsewhere.
 - The meaning of designation value 1 (read as "disregard"), and of values 8 to 17, 64, 80, 82, 128, 129 seen in

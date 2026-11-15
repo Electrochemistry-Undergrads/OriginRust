@@ -7,8 +7,8 @@ use crate::fill::{fill_polygon, fill_rect};
 use crate::fonts::TextMeasurer;
 use crate::scene::{Anchor, Cap, Item, Join, Stroke, TextItem, line_to, move_to, push_num};
 use sheaf_core::graph::{
-    Connect, DataLabels, DropColorMode, DropTarget, ErrorDirection, LabelForm, LabelFrame, LabelPosition, LineStyle,
-    PLUS_MINUS_NEGATIVE, PLUS_MINUS_POSITIVE, PlotKind, ScaleKind, SymbolShape, SymbolStyle,
+    Connect, DataLabels, DropColorMode, DropTarget, ErrorDirection, FillUnderMode, LabelForm, LabelFrame,
+    LabelPosition, LineStyle, PLUS_MINUS_NEGATIVE, PLUS_MINUS_POSITIVE, PlotKind, ScaleKind, SymbolShape, SymbolStyle,
 };
 
 /// Points closer than this (in pt) to the last kept point are dropped.
@@ -87,6 +87,10 @@ pub(crate) fn draw_plot(
     }
     if plot.kind == PlotKind::Box {
         draw_box(out, pd, geom);
+    } else if plot.kind.is_violin() {
+        crate::violin::draw_violin(out, pd, geom);
+    } else if plot.kind.is_ridgeline() {
+        crate::ridgeline::draw_ridge(out, pd, geom);
     } else if plot.kind.is_bar() {
         draw_columns(out, pd, geom);
     }
@@ -102,22 +106,40 @@ pub(crate) fn draw_plot(
     if pd.mask.is_some() && !plot.kind.is_bar() {
         draw_masked(out, pd, geom);
     }
-    if decor.labels.enable && plot.kind != PlotKind::Box {
+    if decor.labels.enable && !plot.kind.is_distribution() {
         draw_data_labels(out, pd, geom, m);
     }
 }
 
-/// Origin's "Fill Area Under Curve" in its Normal mode: the area between the curve and the bottom
-/// of the layer frame (measured: the fill reaches the bottom axis, not Y = 0). A missing point
+/// Filled modes of "Fill Area Under Curve": Normal fills to the frame bottom (not Y = 0),
+/// while Inclusive closes each finite run directly between its endpoints. A missing point
 /// breaks the area, as it breaks the line.
 fn draw_fill_under(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, color: sheaf_core::Color) {
+    if pd.plot.decor.fill_under_mode.is_sidelines() {
+        // The outline modes are part of the connecting stroke, avoiding double opacity at joins.
+        return;
+    }
     let bottom = geom.frame.y + geom.frame.h;
     let style = pd.plot.decor.fill;
+    let inclusive = pd.plot.decor.fill_under_mode == FillUnderMode::InclusiveBrokenByMissingValues;
+    let connect = match pd.plot.line.connect {
+        Connect::Spline if !spline_applies(pd) => Connect::Straight,
+        c => c,
+    };
     let mut d = String::new();
     let mut run: Vec<(f64, f64)> = Vec::new();
     let close = |run: &mut Vec<(f64, f64)>, d: &mut String, out: &mut Vec<Item>| {
         if run.len() >= 2 {
-            if style.is_plain() {
+            if inclusive {
+                if style.is_plain() {
+                    polyline_path(d, run, connect);
+                    d.push('Z');
+                } else {
+                    let mut curve = String::new();
+                    polyline_path(&mut curve, run, connect);
+                    fill_polygon(out, &crate::hit::path_points(&curve), color, &style);
+                }
+            } else if style.is_plain() {
                 move_to(d, run[0].0, bottom);
                 for &(x, y) in run.iter() {
                     line_to(d, x, y);
@@ -133,7 +155,7 @@ fn draw_fill_under(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, col
         }
         run.clear();
     };
-    for i in pd.rows() {
+    for i in pd.line_rows() {
         match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
             Some(p) => run.push(p),
             None => close(&mut run, &mut d, out),
@@ -192,7 +214,13 @@ fn draw_drop_lines(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, nex
             }
         }
         let stroke = |color: sheaf_core::Color| {
-            line_stroke(&LineStyle { color, width_pt: l.width_pt, dash: l.dash, connect: Connect::Straight })
+            line_stroke(&LineStyle {
+                color,
+                width_pt: l.width_pt,
+                dash: l.dash,
+                connect: Connect::Straight,
+                sort_x: false,
+            })
         };
         let path = |keep: &dyn Fn(f64) -> bool| {
             let mut d = String::new();
@@ -536,38 +564,94 @@ fn symbol_line_gaps(pd: &PlotData, geom: &LayerGeometry, stroke: &Stroke) -> Opt
     // Keep it beyond the symbol's half-size, including round stroke end caps.
     let cap = if stroke.cap == Cap::Round { stroke.width.max(0.0) / 2.0 } else { 0.0 };
     let radius = size * (0.5 + 0.3) + cap;
-    let rows: Box<dyn Iterator<Item = usize> + '_> =
-        if interface.no_break_skipped { Box::new(pd.point_rows()) } else { Box::new(pd.rows()) };
+    let rows: Box<dyn Iterator<Item = usize> + '_> = if !interface.no_break_skipped {
+        pd.line_rows()
+    } else if pd.plot.line.sort_x {
+        let shown: std::collections::BTreeSet<usize> = pd.point_rows().collect();
+        Box::new(pd.line_rows().filter(move |r| shown.contains(r)))
+    } else {
+        Box::new(pd.point_rows())
+    };
     crate::symbol_gaps::Gaps::new(rows.filter_map(|i| geom.checked_data_to_page(pd.x_at(i), pd.y_at(i))), radius)
 }
 
 fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let stroke = line_stroke(&pd.plot.line);
     let gaps = symbol_line_gaps(pd, geom, &stroke);
+    let inclusive = pd.plot.decor.fill_under.is_some()
+        && !pd.plot.kind.is_area()
+        && pd.plot.decor.fill_under_mode == FillUnderMode::InclusiveBrokenByMissingValues;
+    let side_mode =
+        (pd.plot.decor.fill_under.is_some() && !pd.plot.kind.is_area() && pd.plot.decor.fill_under_mode.is_sidelines())
+            .then_some(pd.plot.decor.fill_under_mode);
+    let ends = side_mode.and_then(|_| {
+        let mut points =
+            pd.line_rows().filter_map(|i| geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)).map(|p| (i, p)));
+        let first = points.next()?;
+        Some((first, points.next_back().unwrap_or(first)))
+    });
+    let bottom = geom.frame.y + geom.frame.h;
     let connect = match pd.plot.line.connect {
         Connect::Spline if !spline_applies(pd) => Connect::Straight,
         c => c,
     };
     let mut piece: Vec<(f64, f64)> = Vec::new();
     let mut pending: Option<(f64, f64)> = None;
-    let flush = |piece: &mut Vec<(f64, f64)>, pending: &mut Option<(f64, f64)>, out: &mut Vec<Item>| {
-        if let Some(p) = pending.take() {
-            piece.push(p);
-        }
-        if piece.len() >= 2 {
-            let mut d = String::with_capacity(piece.len() * 12);
-            polyline_path(&mut d, piece, connect);
-            if let Some(gaps) = &gaps {
-                let points = crate::hit::path_points(&d);
-                d.clear();
-                gaps.write_polyline(&points, &mut d);
+    let (mut first_row, mut last_row) = (None, None);
+    let mut outline = String::new();
+    let mut flush =
+        |piece: &mut Vec<(f64, f64)>, pending: &mut Option<(f64, f64)>, out: &mut Vec<Item>, first_row, last_row| {
+            if let Some(p) = pending.take() {
+                piece.push(p);
             }
-            if !d.is_empty() {
-                out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
+            let at_end = ends.is_some_and(|((a, _), (b, _))| first_row == Some(a) || last_row == Some(b));
+            if piece.len() >= 2 || ((at_end || inclusive) && !piece.is_empty()) {
+                let mut d = String::with_capacity(piece.len() * 12);
+                polyline_path(&mut d, piece, connect);
+                if inclusive {
+                    // Origin outlines each closed finite run with the connecting stroke, including
+                    // the endpoint chord. A one-point run has no area but shows the round stroke cap.
+                    // One path keeps transparency uniform at the joins.
+                    if piece.len() == 1 {
+                        line_to(&mut d, piece[0].0, piece[0].1);
+                    } else {
+                        d.push('Z');
+                    }
+                }
+                if let Some(((first, first_point), (last, _))) = ends {
+                    // Origin adds boundaries only at the plot's outer endpoints, including across
+                    // missing-data breaks. It adds none at internal breaks or isolated middle points.
+                    if first_row == Some(first) {
+                        let mut prefix = String::new();
+                        move_to(&mut prefix, piece[0].0, bottom);
+                        d.replace_range(..1, "L");
+                        prefix.push_str(&d);
+                        d = prefix;
+                    }
+                    if last_row == Some(last) {
+                        let last_x = crate::hit::path_points(&d).last().map_or(piece[piece.len() - 1].0, |p| p.0);
+                        line_to(&mut d, last_x, bottom);
+                        if side_mode == Some(FillUnderMode::SidelinesAndBase) {
+                            line_to(&mut d, first_point.0, bottom);
+                        }
+                    }
+                }
+                if let Some(gaps) = &gaps {
+                    let points = crate::hit::path_points(&d);
+                    d.clear();
+                    gaps.write_polyline(&points, &mut d);
+                }
+                let d = crate::break_cut::cut_at_breaks(d, geom);
+                if !d.is_empty() {
+                    if side_mode.is_some() {
+                        outline.push_str(&d);
+                    } else {
+                        out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
+                    }
+                }
             }
-        }
-        piece.clear();
-    };
+            piece.clear();
+        };
     // Adds a point to the piece unless it is closer than DECIMATE_PT to the last kept one.
     let keep = |piece: &mut Vec<(f64, f64)>, pending: &mut Option<(f64, f64)>, p: (f64, f64)| match piece.last() {
         None => piece.push(p),
@@ -582,9 +666,11 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         }
     };
     let mut run: Option<Run> = None;
-    for i in pd.rows() {
+    for i in pd.line_rows() {
         match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
             Some(p) => {
+                first_row.get_or_insert(i);
+                last_row = Some(i);
                 let strip = (p.0 / STRIP_PT).floor() as i64;
                 match &mut run {
                     Some(r) if r.strip == strip => r.add(p),
@@ -596,18 +682,24 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
                     }
                 }
             }
+            // With the page's "Connect line across Missing Data" a row without a value does not break the
+            // line (a value that cannot be placed still does).
+            None if geom.connect_across_missing && !(pd.x_at(i).is_finite() && pd.y_at(i).is_finite()) => {}
             None => {
                 if let Some(r) = run.take() {
                     r.emit(|q| keep(&mut piece, &mut pending, q));
                 }
-                flush(&mut piece, &mut pending, out);
+                flush(&mut piece, &mut pending, out, first_row.take(), last_row.take());
             }
         }
     }
     if let Some(r) = run.take() {
         r.emit(|q| keep(&mut piece, &mut pending, q));
     }
-    flush(&mut piece, &mut pending, out);
+    flush(&mut piece, &mut pending, out, first_row.take(), last_row.take());
+    if !outline.is_empty() {
+        out.push(Item::Path { d: outline, fill: None, stroke: Some(stroke) });
+    }
 }
 
 /// Writes one piece as path data.
@@ -666,7 +758,7 @@ fn spline_applies(pd: &PlotData) -> bool {
         return false;
     }
     let mut last = f64::NEG_INFINITY;
-    for i in pd.rows() {
+    for i in pd.line_rows() {
         let x = pd.x_at(i);
         if !x.is_finite() {
             continue;

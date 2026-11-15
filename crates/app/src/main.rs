@@ -40,6 +40,7 @@ mod menus;
 mod panels;
 mod reader;
 mod recent;
+mod switcher;
 mod theme;
 mod toolbar;
 mod winclip;

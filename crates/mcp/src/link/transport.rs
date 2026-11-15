@@ -133,6 +133,15 @@ impl Stream {
         }
     }
 
+    /// Finishes outgoing data while leaving the peer's incoming bytes readable.
+    pub(super) fn shutdown_write(&self) -> io::Result<()> {
+        match self {
+            #[cfg(unix)]
+            Stream::Unix(s) => s.shutdown(Shutdown::Write),
+            Stream::Tcp(s) => s.shutdown(Shutdown::Write),
+        }
+    }
+
     /// Ends both directions; a thread blocked on this connection wakes up with an error or end of input.
     pub fn shutdown(&self) {
         let _ = match self {
@@ -183,6 +192,8 @@ impl Listener {
     /// Binds a new endpoint of `kind`. A Unix socket is made in `dir` with mode 0600 (the folder is 0700
     /// already); TCP takes a free port on 127.0.0.1 and a new random token. Nothing else is bound.
     pub fn bind(kind: Kind, dir: &Path) -> Result<(Listener, Endpoint), String> {
+        #[cfg(not(unix))]
+        let _ = dir;
         match kind {
             #[cfg(unix)]
             Kind::Unix => {

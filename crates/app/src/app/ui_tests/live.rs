@@ -3,6 +3,9 @@
 //! to the app over a real socket. Every test listens in its own folder under the temporary folder; none
 //! touches the user's real run folders (`Startup::default()` has no folder for the link).
 
+mod app_context;
+mod undo_ai;
+
 use super::*;
 use serde_json::{Value, json};
 use sheaf_mcp::link::client::{self, ClientOptions};
@@ -522,7 +525,8 @@ fn the_tooltip_and_the_log_show_a_client_name_without_bidi_or_control_characters
     let tip = crate::live::tooltip(h.state().live.clients());
     assert!(tip.contains("evil-client"), "{tip}");
     assert!(!tip.contains('\u{202e}') && !tip.contains('\u{7}') && !tip.contains('\u{200b}'), "{tip:?}");
-    assert!(tip.contains(&dirs.root().to_string_lossy().into_owned()), "the tooltip names the folders: {tip}");
+    let displayed_root = sheaf_mcp::roots::plain(dirs.root());
+    assert!(tip.contains(displayed_root.to_string_lossy().as_ref()), "the tooltip names the folders: {tip}");
     assert!(log_has(&h, "evil-client"), "{:?}", h.state().logs.messages);
     assert!(
         !h.state().logs.messages.iter().any(|m| m.text.contains('\u{202e}')),

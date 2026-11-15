@@ -80,6 +80,12 @@ pub enum Job {
         options: analysis::IfftOptions,
         auto_interval: bool,
     },
+    /// Graphical summary; the group columns are looked up once the project is loaded.
+    GraphSummary {
+        groups: Vec<String>,
+        level: f64,
+        arrangement: analysis::GraphArrangement,
+    },
     Sort {
         by: String,
         descending: bool,
@@ -241,6 +247,10 @@ pub fn run_job_to(project: &mut Project, target: &Target, job: Job, output: &ana
                 let interval = interval.unwrap_or(1.0);
                 Tool::SignalCorrelation(analysis::SignalCorrelationSpec { other, circular, normalize, interval })
             }
+        }
+        Job::GraphSummary { groups, level, arrangement } => {
+            let groups = if groups.is_empty() { Vec::new() } else { named_columns(project, book, sheet, &groups)? };
+            Tool::GraphSummary(analysis::GraphSummarySpec { groups, level, arrangement })
         }
         Job::Sort { by, descending } => {
             let key = named_columns(project, book, sheet, std::slice::from_ref(&by))?[0];

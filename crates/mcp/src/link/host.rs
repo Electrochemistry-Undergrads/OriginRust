@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 use sheaf_core::Document;
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -269,8 +269,28 @@ impl Job {
         self.begin().then(|| self.run(doc, protected))
     }
 
+    /// Runs on the UI thread with a context reader for `sheaf://app`. The reader is called only
+    /// for that resource, after the job begins, and receives the current document without edit access.
+    pub fn execute_with_app_context(
+        &self,
+        doc: &mut Document,
+        protected: Protected,
+        app_context: &dyn Fn(&Document) -> Value,
+    ) -> Option<Done> {
+        self.begin().then(|| self.run_with_context(doc, protected, Some(app_context)))
+    }
+
     /// Runs a job that [`begin`](Job::begin) accepted and sends the reply.
     pub fn run(&self, doc: &mut Document, protected: Protected) -> Done {
+        self.run_with_context(doc, protected, None)
+    }
+
+    fn run_with_context(
+        &self,
+        doc: &mut Document,
+        protected: Protected,
+        app_context: Option<&dyn Fn(&Document) -> Value>,
+    ) -> Done {
         let done = match &self.op {
             Op::Call { name, args, structured } => {
                 let mut policy = self.conn.policy.clone();
@@ -296,13 +316,24 @@ impl Job {
                 Done { tool: name.clone(), label, failed: failed.map(|m| sanitize(&m, ERROR_CHARS)) }
             }
             Op::ResourcesList => {
-                let listed = json!({"resources": resources::list(doc.project())});
+                let mut list = resources::list(doc.project());
+                if app_context.is_some() {
+                    list.insert(1, resources::app_descriptor());
+                }
+                let listed = json!({"resources": list});
                 self.finish(proto::result_line(self.req_id, &listed));
                 Done { tool: "resources".into(), label: "AI: resources".into(), failed: None }
             }
             Op::ResourceRead { uri } => {
-                let read =
-                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| resources::read(doc.project(), uri)));
+                let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    if uri == resources::APP_URI
+                        && let Some(context) = app_context
+                    {
+                        Ok(resources::read_app(&context(doc)))
+                    } else {
+                        resources::read(doc.project(), uri)
+                    }
+                }));
                 let (line, failed) = match read {
                     Ok(Ok(v)) => (proto::result_line(self.req_id, &v), None),
                     Ok(Err(e)) => (proto::error_line(Some(self.req_id), e.code, &e.message), Some(e.message)),
@@ -571,10 +602,35 @@ fn accept_loop(shared: &Arc<Shared>, listener: &Listener) {
     }
 }
 
-/// Tells a client that will not be served why, with a short write that cannot hold the accept thread.
+/// Tells an over-limit client why, then briefly drains its hello before closing.
 fn refuse(mut stream: Stream, message: &str) {
     let _ = stream.set_write_timeout(Some(Duration::from_secs(1)));
-    let _ = frame::write_line(&mut stream, &proto::error_line(None, proto::CODE_OTHER, message));
+    if frame::write_line(&mut stream, &proto::error_line(None, proto::CODE_OTHER, message)).is_err()
+        || stream.shutdown_write().is_err()
+    {
+        stream.shutdown();
+        return;
+    }
+    // Winsock resets a connection when SD_BOTH discards unread input. The peer sends its
+    // hello before reading this reply, so leave receives open until it sees the busy reason.
+    // A silent or trickling rejected peer must not hold the accept loop indefinitely.
+    // https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-shutdown
+    let deadline = Instant::now() + Duration::from_millis(100);
+    let mut remaining = frame::HELLO_CAP + 1;
+    let mut buf = [0u8; 1024];
+    while remaining > 0 {
+        let wait = deadline.saturating_duration_since(Instant::now());
+        if wait.is_zero() || stream.set_read_timeout(Some(wait)).is_err() {
+            break;
+        }
+        let count = remaining.min(buf.len());
+        match stream.read(&mut buf[..count]) {
+            Ok(0) => break,
+            Ok(n) => remaining -= n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        }
+    }
     stream.shutdown();
 }
 

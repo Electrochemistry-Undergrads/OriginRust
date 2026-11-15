@@ -64,6 +64,11 @@ pub(crate) struct PlotData<'a> {
     pub bar: Option<BarSlot>,
     /// The statistics a box chart plot draws; `None` for other kinds.
     pub boxed: Option<BoxStats>,
+    /// The density silhouette a violin plot draws (its box statistics are in `boxed`); `None`
+    /// for other kinds.
+    pub violin: Option<crate::violin::ViolinData>,
+    /// The density curve (or bars) a ridgeline plot draws; `None` for other kinds.
+    pub ridge: Option<crate::ridgeline::RidgeData>,
     /// What a pie chart plot draws; `None` for other kinds.
     pub pie: Option<PieData>,
     /// The values that set the size of each symbol of a bubble plot.
@@ -77,6 +82,9 @@ pub(crate) struct PlotData<'a> {
     pub closing: Option<usize>,
     /// The cells of the label column of a plot whose data labels come from a column, one per row.
     pub label_texts: Option<Vec<String>>,
+    /// The observations a histogram plot bins (shown, unmasked rows of its Y column), kept for rugs
+    /// because `x`/`y` hold bin centres and counts; `None` for other kinds.
+    pub hist_raw: Option<Vec<f64>>,
 }
 
 /// The numbers of one box of a box chart (Origin's defaults: the box runs from the 25th to the
@@ -114,7 +122,7 @@ pub(crate) struct PieData {
 pub(crate) const BOX_WIDTH: f64 = 0.8;
 
 /// The statistics of one box from the finite values of a column, `None` without any.
-fn box_stats(values: &[f64], pos: f64, label: String) -> Option<BoxStats> {
+pub(crate) fn box_stats(values: &[f64], pos: f64, label: String) -> Option<BoxStats> {
     let mut v: Vec<f64> = values.iter().copied().filter(|x| x.is_finite()).collect();
     if v.is_empty() {
         return None;
@@ -134,6 +142,15 @@ fn box_stats(values: &[f64], pos: f64, label: String) -> Option<BoxStats> {
 /// The bins of a histogram plot as the points of a column plot: bin centres and counts. `None`
 /// without numbers or with a bin size that cannot be used.
 fn histogram_points(values: &[f64], style: &sheaf_core::graph::HistogramStyle) -> Option<(Vec<f64>, Vec<f64>)> {
+    let f = histogram_freq(values, style)?;
+    Some((f.rows.iter().map(|r| r.center).collect(), f.rows.iter().map(|r| r.count as f64).collect()))
+}
+
+/// The bins of a histogram plot (also those of a ridgeline's block bars).
+pub(crate) fn histogram_freq(
+    values: &[f64],
+    style: &sheaf_core::graph::HistogramStyle,
+) -> Option<sheaf_calc::freq::Freq> {
     use sheaf_calc::freq::{BinSize, FreqOptions, freq_counts};
     let opts = FreqOptions {
         min: style.begin,
@@ -142,8 +159,7 @@ fn histogram_points(values: &[f64], style: &sheaf_core::graph::HistogramStyle) -
         below: false,
         above: false,
     };
-    let f = freq_counts(values, &opts)?;
-    Some((f.rows.iter().map(|r| r.center).collect(), f.rows.iter().map(|r| r.count as f64).collect()))
+    freq_counts(values, &opts)
 }
 
 impl PlotData<'_> {
@@ -156,6 +172,21 @@ impl PlotData<'_> {
     /// A real missing value still breaks a line; a filtered row simply joins its neighbours.
     pub fn rows(&self) -> impl DoubleEndedIterator<Item = usize> + Clone + '_ {
         (self.start..self.end).filter(|&r| self.row_shown(r))
+    }
+
+    /// Rows in the order the line connects them: worksheet order, or with the plot's `sort_x`
+    /// flag (line and line-symbol plots only) increasing drawn X. The sort is stable, so ties keep
+    /// worksheet order; rows whose X is not a finite number are left out of the path altogether
+    /// (they neither connect nor break it). A row with a missing Y stays in its sorted place and
+    /// breaks the line there, as in worksheet order.
+    pub fn line_rows(&self) -> Box<dyn DoubleEndedIterator<Item = usize> + '_> {
+        if !(self.plot.line.sort_x && matches!(self.plot.kind, PlotKind::Line | PlotKind::LineSymbol)) {
+            return Box::new(self.rows());
+        }
+        let mut rows: Vec<(f64, usize)> =
+            self.rows().map(|r| (self.x_at(r), r)).filter(|(x, _)| x.is_finite()).collect();
+        rows.sort_by(|a, b| a.0.total_cmp(&b.0));
+        Box::new(rows.into_iter().map(|(_, r)| r))
     }
 
     /// Display frequency for point decorations. Lines, ranges and analysis still read every row.
@@ -278,6 +309,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
     let (places, members) = stack::places(project, layer);
     let mut plots = Vec::new();
     let mut boxes = 0usize;
+    let mut ridges = 0usize;
     for (plot, place) in layer.plots.iter().zip(places).filter(|(p, _)| p.visible) {
         let Some(y) = project.numeric(plot.y) else { continue };
         let x = plot.x.and_then(|id| project.numeric(id));
@@ -319,11 +351,14 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             member: place.member,
             bar: None,
             boxed: None,
+            violin: None,
+            ridge: None,
             pie: None,
             size_z: plot.size_from.and_then(|id| project.numeric(id)),
             color_z: plot.color_from.and_then(|id| project.numeric(id)),
             spokes: None,
             closing: None,
+            hist_raw: None,
             label_texts: match plot.decor.labels.form {
                 LabelForm::Column { column } if plot.decor.labels.enable => project.column(column).map(cell_texts),
                 _ => None,
@@ -334,6 +369,8 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 // The plot shows the counts of the bins of its Y values: one point per bin.
                 let values = pd.visible_values();
                 let Some((centres, counts)) = histogram_points(&values, &plot.hist) else { continue };
+                pd.hist_raw =
+                    Some(pd.rows().filter(|r| !pd.mask.is_some_and(|m| m.contains(r))).map(|r| pd.y[r]).collect());
                 pd.start = 0;
                 pd.end = counts.len();
                 pd.x = Some(Cow::Owned(centres));
@@ -365,13 +402,28 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.xerr = None;
                 pd.base = None;
             }
-            PlotKind::Box => {
+            PlotKind::Box
+            | PlotKind::Violin
+            | PlotKind::ViolinBox
+            | PlotKind::ViolinPoint
+            | PlotKind::ViolinQuartile
+            | PlotKind::ViolinStick
+            | PlotKind::HalfViolin => {
                 boxes += 1;
                 let label = project.plot_label(plot);
-                let values = pd.visible_values();
+                // A violin leaves out masked rows (Origin's masked data are excluded from the plot);
+                // the box chart takes every visible row as it always did.
+                let values: Cow<[f64]> = if plot.kind.is_violin() && pd.mask.is_some() {
+                    Cow::Owned(pd.rows().filter(|r| !pd.mask.is_some_and(|m| m.contains(r))).map(|r| pd.y[r]).collect())
+                } else {
+                    pd.visible_values()
+                };
                 let Some(stats) = box_stats(&values, boxes as f64, label) else {
                     continue;
                 };
+                if plot.kind.is_violin() {
+                    pd.violin = Some(crate::violin::ViolinData::new(&values));
+                }
                 // The plot is the one point at the middle of its box.
                 pd.x = Some(Cow::Owned(vec![stats.pos]));
                 pd.y = Cow::Owned(vec![stats.median]);
@@ -383,6 +435,31 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.xerr = None;
                 pd.base = None;
                 pd.boxed = Some(stats);
+            }
+            PlotKind::Ridgeline => {
+                // Masked rows are left out, as in a violin; filtered rows too.
+                let values: Vec<f64> =
+                    pd.rows().filter(|r| !pd.mask.is_some_and(|m| m.contains(r))).map(|r| pd.y[r]).collect();
+                ridges += 1;
+                let ridge = crate::ridgeline::RidgeData::new(
+                    &values,
+                    ridges as f64,
+                    project.plot_label(plot),
+                    &plot.ridge,
+                    &plot.hist,
+                    layer.x_axis.scale,
+                );
+                // The plot is the one point at the left end of its curve, on its baseline.
+                pd.x = Some(Cow::Owned(vec![ridge.x_extent().map_or(0.0, |e| e.0)]));
+                pd.y = Cow::Owned(vec![ridge.pos]);
+                pd.start = 0;
+                pd.end = 1;
+                pd.mask = None;
+                pd.filters.clear();
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
+                pd.ridge = Some(ridge);
             }
             _ => {}
         }
@@ -397,6 +474,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
     if layer.coords.polar().is_some_and(|p| p.radar) {
         radar_columns(project, &mut plots);
     }
+    crate::ridgeline::set_scales(&mut plots);
     stack_bars(&mut plots);
     place_bars(&mut plots, &layer.bars);
     LayerData { plots, members }
@@ -635,6 +713,42 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
         }
     };
     for pd in pds {
+        if let Some(rd) = &pd.ridge {
+            if dim == Dim::X {
+                if let Some((lo, hi)) = rd.x_extent() {
+                    add(pd.display_x(lo));
+                    add(pd.display_x(hi));
+                }
+                // The data themselves keep the range valid where the curve's ends cannot be placed.
+                if let (Some(&first), Some(&last)) = (rd.values.first(), rd.values.last()) {
+                    add(pd.display_x(first));
+                    add(pd.display_x(last));
+                }
+            } else {
+                add(pd.display_y(rd.pos - rd.rug_reach(&pd.plot.ridge)));
+                add(pd.display_y(rd.pos + rd.peak() * rd.scale));
+            }
+            continue;
+        }
+        if let (Some(b), Some(v)) = (&pd.boxed, &pd.violin) {
+            if dim == Dim::X {
+                add(pd.display_x(b.pos - crate::violin::VIOLIN_WIDTH / 2.0));
+                add(pd.display_x(b.pos + crate::violin::VIOLIN_WIDTH / 2.0));
+            } else if let Some((lo, hi)) = v.y_extent() {
+                add(pd.display_y(lo));
+                add(pd.display_y(hi));
+                // The curve ends reach below the smallest value and can be <= 0 where the data are not,
+                // which a log axis cannot show: the data and the box marks keep the range valid.
+                if let (Some(&first), Some(&last)) = (v.values.first(), v.values.last()) {
+                    add(pd.display_y(first));
+                    add(pd.display_y(last));
+                }
+                for y in [b.whisker_low, b.q1, b.median, b.q3, b.whisker_high] {
+                    add(pd.display_y(y));
+                }
+            }
+            continue;
+        }
         if let Some(b) = &pd.boxed {
             if dim == Dim::X {
                 add(pd.display_x(b.pos - BOX_WIDTH / 2.0));

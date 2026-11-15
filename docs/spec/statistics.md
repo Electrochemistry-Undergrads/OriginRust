@@ -1042,6 +1042,10 @@ Two-Sample Test for Variance, separator, Two-Sample t-test on Rows, Pair-Sample 
 One-Sample Proportion Test, Two-Sample Proportion Test. The dialogs are titled `<name>: OneSampleTestVar`,
 `TwoSampleTestVar`, `OneSampleProportionTest`, `TwoSampleProportionTest`.
 
+The four items with a trailing arrow in the menu open a short submenu: `1 <Last used>` and `Open Dialog...`; the
+reference scripts click `Open Dialog...` (screen position 30 pixels below the item, x 822 to 830). The older note
+that a single click on the item opens the dialog only held while Origin had no "last used" entry.
+
 Controls (read with `origin-dialog.ps1`; our dialogs copy the layout, not Origin's help text):
 
 - One-Sample Test for Variance: Results Log Output, Recalculate, Input (data range); group "Chi-Square Test for
@@ -1061,8 +1065,12 @@ Controls (read with `origin-dialog.ps1`; our dialogs copy the layout, not Origin
   Size of Sample1, the same of Sample2; "Proportion Test": Test Difference (0), Null Hypothesis, Alternative
   Hypothesis `Proportion1 - Proportion2 <> 0` / `> 0` / `< 0`, Significance Level, Confidence Intervals, Confidence
   Level(s) in %; "Test Method": Normal Approximation (on), Use pooled p for test (off), Fisher's Exact Test (off);
-  "Power Analysis" as above. Sheaf offers the Summarized form only and no power analysis (not implemented).
-- A line under the controls reads "Number of Success must not be less than 0" (a validation hint; when it shows was not measured).
+  "Power Analysis" as above: Actual Power (off), Significance Level (0.05, greyed until a power box is ticked),
+  Hypothetical Power (off), Hypothetical Sample Size(s) (`50 100 200`, greyed until Hypothetical Power is ticked).
+  Sheaf offers the Summarized form only (the Raw and Indexed forms are unmeasured and not implemented).
+- A red line under the controls reads "Number of Success must not be less than 0" while the form is invalid and OK
+  is greyed. Typing `0` into a Number of Success box leaves the box empty, so 0 successes can not be entered in the
+  dialog at all (the runs for 0 of 10 and 0 of 8 produced no report); the hint is also there with every box empty.
 
 ### 21.2 Variance tests
 
@@ -1083,9 +1091,17 @@ Controls (read with `origin-dialog.ps1`; our dialogs copy the layout, not Origin
   keeps it); upper 0.845325861079629, lower 0.15467413892037091 (A over B). Interval of the ratio
   `[r / F(1 - a/2), r / F(a/2)]`, one-sided as for `vartest1` (alpha 0.1 two-sided: 0.13764506856862324,
   1.6663801124937843). Origin's F quantiles carry errors up to 4e-6 relative (its 2.5 % point of F(7, 9) differs
-  from scipy's by 1.3e-6); the fixture tolerance for F-based numbers is 1e-5. The interval levels of the
-  two-sample dialog report were not measured (the run with the intervals ticked failed to open the dialog; the
-  rule is assumed the same as for one sample): unmeasured.
+  from scipy's by 1.3e-6); the fixture tolerance for F-based numbers is 1e-5. The two-sample dialog report with the
+  intervals ticked (runs e1 to e3, f1 to f3 of 2026-11-15) follows the one-sample rule: two-sided tests give the
+  two-sided interval of the ratio of each level in "Confidence Level(s)" (80 and 97.5 with alpha 0.1: 0.180908333322787
+  to 1.23490469912963 and 0.0864579395572253 to 2.81524108445531 for A over B); an upper-tailed test only a lower
+  limit `r / F(c)` (upper `--`); a lower-tailed test lower limit 0 and upper limit `r / F(1 - c)`. A significant case
+  (A = `10 + sin 3i`, n 8; B = `10 + 6 sin 2i`, n 10; F 0.0198795620225935, df 7 and 9): two-sided p
+  3.11295523751483E-05, lower p 1.55647761875741E-05, upper p 0.999984435223812; limits at 90 95 99: two-sided
+  0.00603738122870874 to 0.0730906825481206, 0.00473656569603998 to 0.0958834430181464, 0.00288741737587226 to
+  0.169251014777939; lower tail upper limits 0.0541653291854217, 0.0730906825481206, 0.133565841332107; upper tail
+  lower limits 0.00793499241983704, 0.00603738122870874, 0.00354178496000994. The heading of the p column is
+  `Prob > F` for every tail (the one-sample report switches to `Prob<Chi-Square` for the lower tail).
 - Significance level: every value below 1 was accepted by `vartest1` for the two-sided test (0.6 gave the 40 %
   interval 1.5218 to 2.7311); a one-sided test with alpha 0.5 or more was not measured (Sheaf: NaN limits).
 - Edge cases (`vartest1`/`vartest2`): variance 0 or negative fails (the call returns false, outputs untouched);
@@ -1113,7 +1129,7 @@ Controls (read with `origin-dialog.ps1`; our dialogs copy the layout, not Origin
 - Report: Notes; "Normal Approximation" with Test Statistics (Success, N, Sample P, Z, P, `95% LCL`, `95% UCL`;
   the percentage is `1 - alpha`: 0.1 gave `90% LCL`), the lines `Null Hypothesis: Proportion = 0.5`,
   `Alternative Hypothesis: Proportion <> 0.5`, a warning line when the approximation is poor (seen for 20 of 20;
-  the rule fewer than 10 successes or failures is a guess: unmeasured) and Confidence Intervals (Conf. Levels in
+  the two-sample runs of 21.4 show the rule: measured only for fewer than 10 failures) and Confidence Intervals (Conf. Levels in
   %, Lower Limits, Upper Limits); then "Binomial Test" with Test Statistics (Success, N, Sample P, Exact P, LCL,
   UCL), the hypothesis lines and its Confidence Intervals. Whether the LCL and UCL columns exist with the intervals
   off was not measured (every run had them ticked); Sheaf shows them only with the intervals on.
@@ -1133,38 +1149,172 @@ Controls (read with `origin-dialog.ps1`; our dialogs copy the layout, not Origin
   the fixture tolerance for the exact p is 5e-10 absolute or 1e-6 relative.
 - Exact interval: Clopper-Pearson, same one- and two-sided rules as the Wald interval (60 of 100, 95 %:
   0.49720915042233 to 0.69670523129712; 1 of 5: 0.00505076337946806 to 0.716417936118089). 20 of 20 two-sided:
-  lower 0.831566529016915, upper `--` (all successes has no upper limit). 0 successes: the run did not produce a
-  report, unmeasured (Sheaf: no lower limit).
-- Power analysis ("Actual Power"): 60 of 100 against 0.5, alpha 0.05, printed `Alpha 0.05, Sample Size 100, Power
-  0.516323421027342`, which equals the normal-approximation power
-  `Phi((d sqrt(n) - z sqrt(p0 q0)) / sqrt(p1 q1)) + Phi((-d sqrt(n) - z sqrt(p0 q0)) / sqrt(p1 q1))` with
-  `d = p1 - p0` (0.5163234210273414). Not implemented in Sheaf; the Hypothetical Power and Sample Size boxes were
-  not measured.
+  lower 0.831566529016915, upper `--` (all successes has no upper limit). 0 successes: the dialog does not accept
+  0 in the Number of Success box (21.1), so no report exists (Sheaf: no lower limit).
+- Power analysis (Actual Power, Hypothetical Power; runs o1 to o4): a section "Powers" with the table Alpha, Sample
+  Size, Power, one row for the actual size (when Actual Power is ticked), then one row per hypothetical size (the
+  size 100 appears twice when it is typed again). Two-sided, 60 of 100 against 0.5, alpha 0.05, sizes 50 100 200:
+  powers 0.516323421027342 (100), 0.28904912956061, 0.516323421027342, 0.812291820591136; 30 of 100 against 0.4:
+  0.534629686422704, 0.290523649212481, 0.534629686422704, 0.839102957979036 (that run's z is clipped to 0 and p is
+  1, but the power uses the unclipped difference). Formula, matched to 1e-12: with `d = p1 - p0` (p1 the
+  observed proportion), `se0 = sqrt(p0 q0)`, `se1 = sqrt(p1 q1)` and `z` the `1 - alpha/2` quantile,
+  `Phi((d sqrt(n) - z se0) / se1) + Phi((-d sqrt(n) - z se0) / se1)`. For a one-sided test only one term remains,
+  with the `1 - alpha` quantile, and it is the term that looks like the wrong direction: the upper tail gave
+  9.96062005464234E-05 (the term with `-d`) and the lower tail 0.641499487271636 (the term with `+d`) for 60 of
+  100 against 0.5. The power alpha is its own box (Significance Level of the group, default 0.05) and does not
+  follow the test's.
 
 ### 21.4 Two-sample proportion test
 
-Measured: one run only (30 of 50 against 20 of 50, Use pooled p ticked, levels 90 95 99). Every other planned run
-failed to open the dialog (the Origin window was in use by another session) and was not repeated.
+Measured in 2026-11-15 runs through the dialog (Open Dialog, Summarized input, levels 90 95 99; raw outputs in
+`re-workspace/scratch/vartest/w/c*`, `d*`, `w*`, local only); the first run of 2026-11-14 was the pooled 30 of 50
+against 20 of 50. Each run gave one report sheet.
 
-- Report: "Normal Approximation" with Test Summary (rows Sample1, Sample2; Success, N, Sample P), Test Statistics
-  (Difference = `Sample1 - Sample2`, Estimate for difference, Z, P, `95% LCL`, `95% UCL`), the hypothesis lines
-  (`Proportion1 - Proportion2 = 0`, `<> 0`) and Confidence Intervals (Conf. Levels in %, Lower Limits, Upper
-  Limits). No Fisher section appeared although the Fisher box was clicked in that run (not understood; the layout
-  of Fisher's result is unmeasured).
-- Values: estimate 0.2; Z 2 = `0.2 / sqrt(p (1 - p) (1/n1 + 1/n2))` with the pooled p = 0.5; p 0.045500263896185;
-  the intervals are the unpooled Wald interval of the difference `0.2 +- z sqrt(.6 .4 / 50 + .4 .6 / 50)`: 95 %
-  0.0079635329457877 to 0.39203646705421, 90 % 0.0388379164961064 to 0.361162083503894, 99 % -0.0523786983281347
-  to 0.452378698328135 (not cut at 0).
-- Unmeasured, implemented by the textbook rule: z without the pooled p (unpooled standard error), a hypothesized
-  difference other than 0, a negative z (Sheaf keeps the sign, unlike the one-sample test), one-sided p and
-  intervals, Fisher's exact p (hypergeometric, two-sided sum of tables no more likely), small samples and 0 or all
-  successes, the warning line.
+- Report layout: Notes; "Normal Approximation" with Test Summary (rows Sample1, Sample2; Success, N, Sample P), Test
+  Statistics (Difference = `Sample1 - Sample2`, Estimate for difference, Z, P, `95% LCL`, `95% UCL`; the percentage
+  is `1 - alpha`, 0.1 gave `90%`), the hypothesis lines (`Proportion1 - Proportion2 = 0`, `<> 0`) and Confidence
+  Intervals (Conf. Levels in %, Lower Limits, Upper Limits); then, when ticked and the test difference is 0, the
+  section "Fisher's Exact Test" with its own Test Summary, Test Statistics (Difference, Estimate for difference,
+  Exact P, LCL, UCL), hypothesis lines and Confidence Intervals; then, when ticked, "Powers" (Alpha, Sample Size,
+  Power). With a test difference other than 0 the Fisher section is left out without a message (0.1, Fisher
+  ticked). The earlier run without a Fisher section had the Fisher box below the visible part of the dialog (the
+  dialog has to be scrolled): the click had missed it.
+- z: unpooled standard error `sqrt(p1 q1 / n1 + p2 q2 / n2)` by default (30 of 50 against 20 of 50: z
+  2.0412414523193, two-sided p 0.041226833337006), the pooled one `sqrt(p q (1/n1 + 1/n2))` with "Use pooled p for
+  test" (z 2, p 0.045500263896185). With a nonzero test difference the pooled box has no effect (0.1: z
+  1.0206207261597 = `(0.2 - 0.1) / sqrt(.6 .4 / 50 + .4 .6 / 50)`, p 0.30743416593004, with or without the box). The
+  sign of z is kept and nothing is clipped, unlike the one-sample test (20 of 50 against 30 of 50: z
+  -2.0412414523193, two-sided p 0.041226833337006, upper p 0.9793865833315, pooled lower p 0.022750131948092 for
+  z -2). Tails: upper `1 - Phi(z)` (pooled 30 of 50 against 20 of 50: 0.022750131948092), lower `Phi(z)`
+  (0.9793865833315 unpooled). Equal proportions give z 0 and p 1 (20 of 25 against 20 of 25). Both samples all
+  successes (10 of 10 against 8 of 8) give Z and P `--` (no spread), difference 0, limits 0 and 0, Fisher's p 1.
+- Intervals: always the unpooled Wald interval of the difference, not cut at 0 (cut at -1 and 1), whichever z was
+  used: 95 % 0.0079635329457877 to 0.39203646705421 for 30 of 50 against 20 of 50; the headline `95% LCL`
+  and `UCL` equal the table row of the level `1 - alpha`. Upper-tailed test: lower limits only, upper limit printed
+  `1` (90 95 99: 0.074434103414031, 0.0388379164961065, -0.0279346102243397); lower-tailed: lower limit `-1`, upper
+  limits 0.325565896585969, 0.361162083503893, 0.42793461022434; negative difference 20 of 50 against 30 of 50
+  (95 %): -0.39203646705421 to -0.0079635329457877. Fisher's section shows the same numbers as the normal section.
+- Fisher's exact p (hypergeometric; two-sided: every table no more likely than the observed one): 30 of 50 against
+  20 of 50 0.071342403485151 (two-sided), 0.035671201744004 (upper), 0.98634419171458 (lower); 3 of 10 against 1 of
+  8 0.5882352938664 (exact 10/17); 10 of 10 against 5 of 10 0.032507739937749; 15 of 40 against 25 of 35
+  0.0051489221075077. Origin's values differ from the exact ones by up to 3e-10 (the same table in the mirrored
+  order gave 0.98634419171744): tolerance 5e-10 absolute.
+- Warning line under the normal approximation's hypotheses (Origin's text says that with fewer than 10 successes
+  and a sample size below successes + 10 the approximation might be unsatisfactory; ours is worded differently): it
+  appears when some sample has fewer than 10 failures (Sheaf also warns for fewer than 10 successes, unmeasured): 3/10 and 1/8, 10/10 and 5/10,
+  10/10 and 8/8, 20/25 and 20/25 (5 failures), 3/10 and 30/50, 30/50 and 3/10 all show it; 30/50 and 20/50, 12/30
+  and 30/50, and 15/40 and 25/35 (the second sample has exactly 10 failures) do not. Every sample that showed it has fewer than 10 failures, and
+  every one without it has 10 or more. No run had fewer than 10 successes with 10 or more failures (nor exactly 10
+  successes), so Sheaf's "fewer than 10 successes" half of the rule is an unmeasured guess; Origin's own text only
+  describes the failures side. The one-sample report's warning follows the same rule.
+- Power analysis (Actual Power, Hypothetical Power; significance level of its own, default 0.05): table Alpha, Sample
+  Size, Power. "Actual Power" gives one row per distinct sample size, each taken as the size of both samples (30
+  of 50 against 20 of 50: one row, 50; 15 of 40 against 25 of 35: rows 40 and 35), then the hypothetical sizes (50 100
+  200) as typed. The test difference and the pooled box do not change it (0.1 gave the same 0.516323421027342). With
+  `d = p1 - p2`, `pbar = (p1 + p2) / 2`, `se0 = sqrt(2 pbar (1 - pbar) / n)`, `se1 = sqrt((p1 q1 + p2 q2) / n)`:
+  two-sided `Phi((d - z se0) / se1) + Phi((-d - z se0) / se1)` with the `1 - alpha/2` quantile (matched to 1e-12:
+  0.516323421027342 for 50 and 0.278367227355963 for alpha 0.01; 15/40 against 25/35: 0.87616102837545 (40),
+  0.828106373863776 (35), 0.938038580207161 (50), 0.998814261304273 (100), 0.999999877623331 (200)); one-sided:
+  upper tail only `Phi((-d - z se0) / se1)` (30/50 against 20/50: 9.96062005463871E-05, with test alpha 0.05 or 0.1),
+  lower tail only `Phi((d - z se0) / se1)` (15/40 against 25/35: 3.01679803625835E-07 at n 40, 8.72825092768114E-07 at
+  n 35), both with the `1 - alpha` quantile, as for the one-sample test.
+- Not entered: 0 successes (see 21.1). Unmeasured: the Raw and Indexed input forms, whether the headline LCL and UCL
+  columns exist with the intervals unticked (every run had them ticked), the pooled box together with the power
+  analysis for unequal sample sizes (the power formula always used the average proportion `pbar`).
 
 ### 21.5 Sheaf
 
 `analyze` for the proportion tests reads no column (the first chosen column only names the workbook). The result
-sheet is named `VarTest1` or `PropTest1`. Tolerances of the fixtures: 1e-6 relative except the F quantiles (1e-5)
-and tiny exact p (5e-10 absolute).
+sheet is named `VarTest1` or `PropTest1`. The proportion sheet is laid out as columns: the normal section (Sample,
+Success, N, Sample P, Difference, Estimate for difference, Z, P, LCL, UCL, level table), Fisher's section when
+ticked (the same summary, Exact P, LCL, UCL, level table), and the power table (Alpha, Sample Size, Power); the
+hypotheses and warnings go to the notes. The CLI takes `--power`, `--power-sizes 50,100,200` and `--power-alpha`
+beside `--exact`, `--pooled` and `--levels`. The dialogs have the Power Analysis group. Tolerances of the fixtures:
+1e-6 relative except the F quantiles (1e-5) and the exact p (5e-10 absolute; tiny exact p of the one-sample test
+likewise).
+
+## 22 Graphical Summary (T40)
+
+Statistics > Descriptive Statistics > Graphical Summary. Numerics in `crates/calc/src/graph_summary.rs`, tool in
+`crates/core/src/analysis/summary.rs`, window in `crates/app/src/dialogs/analysis.rs`
+(`AnalysisKind::GraphSummary`), CLI `sheaf analyze graphsummary` (MCP: the bridged tool `graphsummary`).
+Documentation facts only, nothing measured: Origin 2026 is not available to the sessions that built this.
+
+### 22.1 What Origin does (documentation, not measured)
+
+- Inputs: one or more columns (or a data table), optional Group column(s), Confidence Interval (%) level, Graph
+  Arrangement: Separate Graphs, Per Variable, Per Group, All in One. [W:origin-help/graphical-summary]
+- Separate Graphs: for each variable-group pair a graph with three plots (histogram with a distribution curve,
+  confidence interval plot, probability plot) and three tables "Description Statistics", "##% Confidence Intervals"
+  and "Normality Test", titled by variable and group. [W:origin-help/graphical-summary; blog.originlab.com/graphical-summary]
+- Per Variable and Per Group draw a histogram with curve, a box chart with outliers and a CI plot with a panel per
+  group or variable and one summary table; All in One puts all subsets in one graph. [same]
+- The table shows mean and median with their confidence intervals; the summary includes the Anderson-Darling normality
+  test (2026 release). [W:blog; press release]
+- Not stated by Origin: the full statistic list, the default level, the destination of the outputs, the curve, the
+  p-value method of the test, the interval formulas.
+
+### 22.2 What Sheaf does (Sheaf's choices)
+
+- **Arrangement**: only Separate Graphs. The other three are in the enum (`GraphArrangement`) and the dialog (greyed,
+  with a hover note) and are refused by the tool and by `--arrangement` with "not available yet".
+- **Groups**: any number of group columns (numbers or text); a group is one combination of their values. Rows with an
+  empty group cell are left out. The group key is exact, not the 4-digit text of other tools: a numeric cell is kept
+  as its f64 value (so 2023.5 and 2024 are two groups, -0 equals 0) and labelled with its full round-trip number
+  (`2023.5`); a text cell is its trimmed text. Keys are ordered per column, in the order of the group columns, by a
+  total order: numeric cells first, by `f64::total_cmp`, then text cells by bytes; numeric-ness comes from the cell
+  type, never from parsing text, so "nan", "inf" or "1a" are plain text. Variable-group pairs with fewer than two numbers are left out with a note; at least one must remain.
+  A variable-group whose mean, SD or variance is not finite (values such as 1e300 and -1e300) keeps its table rows
+  but gets no graph, with a note, like the constant sample.
+- **Statistics** (the Descriptive Statistics tool's own `calc::stats`, not redefined): N, missing, mean, standard
+  deviation (n - 1), SE of the mean, variance, bias-corrected skewness and kurtosis, minimum, Q1, median, Q3, maximum
+  (Origin's quartile rule of `calc::quantile_origin`).
+- **Confidence level**: percent, default 95, between 0 and 100 (exclusive).
+- **CI of the mean**: Student t, `mean +/- t(1 - a/2, n-1) * SE` (`calc::mean_confidence_limits`).
+- **CI of the standard deviation**: chi-square, `s sqrt((n-1)/chi2(1 - a/2, n-1))` to `s sqrt((n-1)/chi2(a/2, n-1))`.
+- **CI of the median**: distribution-free, from order statistics, exact binomial and not interpolated. With the sample
+  sorted ascending, `k` is the largest rank with `P(Binomial(n, 1/2) <= k-1) <= a/2` and the interval is
+  `[x(k), x(n+1-k)]`; both ends are sample values. Its real coverage `1 - 2 P(Binomial(n,1/2) <= k-1)` is at least the
+  level (conservative, so it is often wider than asked). When even `k = 1` cannot reach the level (n too small: n = 4
+  at 95 %) the interval is `[min, max]` and a note gives its real confidence. Minitab-style interpolation between
+  neighbouring order statistics is not used.
+- **Normality Test**: Anderson-Darling A-squared and its p-value exactly as `calc::anderson_darling` gives them (the
+  Normality Test tool; needs 8 numbers with spread, otherwise the cells are empty and a note says so).
+- **Report sheet** `GraphSummary1` (Sheaf's layout): the first seven columns are long-form tables, text columns
+  Variable, Group, Table, Statistic and number columns Value, Lower, Upper. The Table column holds "Description
+  Statistics" (13 rows: N ... Maximum), "<level>% Confidence Intervals" (Mean, Median, Standard Deviation with estimate
+  in Value and the limits in Lower and Upper) and "Normality Test" (A-Squared, P-Value). `Report.table` has one row per
+  variable-group with the same numbers as columns (also the limits and A-Squared, P-Value).
+- **Graph data** is written to the same sheet behind those seven columns, per variable-group: the histogram's columns
+  (the Frequency Counts tool, automatic bins), the normal curve (101 points over the bin range,
+  `N * bin width * pdf` of the sample mean and SD, so it is on the count axis), the two interval segments and the two
+  estimates with their labels, and the Probability Plot tool's columns (normal, T14).
+- **Graph** per variable-group, long name `<variable> <group>` (the variable alone without groups), page 11 x 7 in
+  with three layers (Sheaf's layout, not Origin's): top left the histogram (bars) with the red normal curve, bottom
+  left the interval plot (the mean and the median each a horizontal bar from lower to upper limit with a square at the
+  estimate and its name; bars are line plots because the median interval is asymmetric and X error bars are
+  symmetric), right the normal probability plot with the fitted line on a probability axis. The graph title is a text
+  label above the histogram. Graphs are numbered in the order variable, then group: `new_graph` is the first, the rest
+  are `more_graphs`.
+- **Dialog**: input columns from the selection; Groups (a drop-down of check boxes over the other columns of the
+  sheet), Confidence Level (%), Graph Arrangement. No X range (the tool takes row ranges only). Auto Apply is off for
+  it (each run makes sheets and graphs); no Recalculate (the tool is not linkable).
+
+### 22.3 Checked against scipy, tolerances
+
+Sample `[2.1, 3.4, 3.9, 4.4, 4.8, 5.0, 5.3, 6.1, 6.6, 7.2, 8.0, 11.5]` (n = 12), numpy/scipy 1.18:
+mean 5.691666666666667, SD 2.4640905876697032, skewness 1.058210251752913 (`scipy.stats.skew(bias=False)`), kurtosis
+1.866917485643393 (`kurtosis(bias=False)`), mean interval 4.1260582004245965 to 7.257275132908738 (`t.ppf`), SD
+interval 1.7455498235905689 to 4.183725242485017 (`chi2.ppf`), median interval 3.9 to 7.2 with coverage 0.96142578125
+(`binom.cdf`), A-squared 0.30557037512815555 (`scipy.stats.anderson`). Tests in `calc::graph_summary` use 1e-9 relative
+(1e-12 for the plain statistics). The p-value is not compared with scipy (scipy 1.18 gives none for `anderson` without
+a method; Sheaf's comes from the existing implementation, section 4).
+
+### 22.4 Not done or not known
+
+Per Variable, Per Group and All in One arrangements; Origin's exact table layout, table row names and order, the
+panel layout and styling, and its median/SD interval formulas (none was measured: the documentation does not give
+them); the box chart of the other arrangements; Origin's default level.
 
 ## 5 Where results go (ADR 0005)
 

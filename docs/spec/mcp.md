@@ -374,6 +374,7 @@ The text names only tools and options of this server.
 | URI | Content |
 | --- | --- |
 | `sheaf://project` | `application/json`: the `list_contents` result. |
+| `sheaf://app` | `application/json`: current desktop window, selection, Data Reader pin and dialog/edit state; listed only by an attached desktop host (section 11.18). |
 | `sheaf://column/{book}/{sheet}/{column}` | `text/csv` (template): the column with its X column, at most 10 000 rows; a header line carries the long name and unit. |
 | `sheaf://graph/{name}.png` | `image/png` blob (template), 150 dpi. |
 
@@ -938,3 +939,77 @@ Four commits, each with the workspace green (`cargo fmt --all`, strict Clippy, `
    `sync_windows`; the generation check; the UI tests.
 4. **Docs.** README, ROADMAP, the T25 status and its step 8 (which still says named pipe), `ui-command-map.md`,
    the `main.rs` comment of the app, and the status of ADR 0013 and of this section.
+
+### 11.18 Current desktop context (`sheaf://app`, 2026-11-15)
+
+The attached desktop host lists `sheaf://app` as `application/json`. Read it with the existing
+`resources/read` request, for example `{"uri":"sheaf://app"}`. The MCP reply uses the usual
+`contents` envelope; its `text` is a JSON object. The headless server and hosts without a UI-context
+provider omit it from `resources/list` and return resource-not-found (`-32002`) when it is read.
+The existing version-1 link `resource_read` operation carries the request; the wire format is unchanged.
+
+```json
+{
+  "document_revision": 4,
+  "project_generation": 0,
+  "modified": true,
+  "active_window": {"id": 1, "name": "Book1", "kind": "workbook"},
+  "worksheet": {"name": "Sheet1", "index": 1, "column_count": 3, "row_count": 10},
+  "active_layer": null,
+  "selection": {
+    "kind": "cells", "columns": ["B", "C"], "column_count": 2,
+    "columns_truncated": false, "rows": {"from": 2, "to": 5},
+    "active_cell": {"column": "B", "row": 2}
+  },
+  "data_reader": null,
+  "editing": false,
+  "dialog_open": false
+}
+```
+
+`active_window` gives the short name usable in tool arguments and an informational model ID. It
+is `null` when no project window is active. `worksheet` is present for a workbook, and `active_layer`
+is present for a graph. Indices and rows count from **1**, with inclusive range endpoints. Continue
+to address tools by workbook, sheet and column **names**; this resource does not change tool defaults
+or make the selection an implicit input. Re-read it before acting when the owner may have changed focus.
+
+Worksheet selections use `kind` = `cells`, `columns`, `rows`, `all` or `label`; no selection is `null`.
+`columns` lists short names in worksheet order, including nonadjacent selected columns. At most
+1,024 names are returned, with the full `column_count` and `columns_truncated` flag. A truncated
+list is incomplete. `rows: null` for a column or whole-sheet selection denotes its full extent.
+Cell blocks and row selections carry `rows: {from,to}`; a block also gives its current `active_cell`.
+A `label` selection has no data rows: `label_row.kind` is `long_name`, `units`, `comments`, `formula`
+or `parameter`; a parameter adds its `name`. Editor text and cell/label values are absent.
+
+Graph selections give `kind` = `plot`, `label`, `shape`, `x_axis`, `y_axis`, `x_title`, `y_title` or
+`legend`, plus `layer`. Plots, labels and shapes add a one-based `index`. A stored object index that
+no longer exists yields `null`. `data_reader` gives `enabled` and the stored pin as `{layer,plot,row}`
+or `null`; the row is the source worksheet row. The point is omitted when its plot/column/row no
+longer exists. This reports UI state without changing graph selection or the reader.
+
+The resource is read on the UI thread when its queued request runs. Its reader is created for that
+frame but serializes only when this URI is requested, using the document after earlier queued jobs.
+If a preceding job switched sheets before the grid redrew, that snapshot has `selection: null` rather
+than applying the previous sheet's grid selection to the new sheet. `editing` and `dialog_open`
+explain why mutating calls may be waiting; reads remain available under either condition. A read
+leaves project data, revision, modified state, selection and undo history untouched. UI-only focus
+changes can change this resource without changing `document_revision`. There is no subscription
+or cached context; clients request it again for a fresh view.
+
+### 11.19 Owner Undo AI Changes (2026-11-15)
+
+Edit > Undo AI Changes is beside ordinary Undo/Redo. The no-window menu keeps it beside File >
+Undo/Redo instead. It is enabled only when the latest retained history entry starts with `AI: `
+and no cell/label editor or dialog is active. Dispatch checks these conditions again.
+
+One activation undoes consecutive completed AI calls from the top, stopping at the first manual
+history entry or the retained-history limit. Each step uses ordinary Undo, including its cleanup
+hooks and saved-state tracking. Ordinary Redo restores one call at a time. An older AI call below
+manual work is left in place; an evicted call cannot be restored. With no undoable AI entry the
+command is disabled. After a batch the status bar reports the number of AI changes undone.
+
+The command leaves exported files on disk and keeps assistant connections open. It does not
+cancel queued calls; use Tools > AI Assistants (MCP) to stop further calls. It adds no MCP tool,
+selective-undo mechanism or history format. Real-proxy/UI tests cover a complete import/plot/
+formula batch, exported-file preservation, clean saved-state restoration, per-call redo, manual
+boundaries, stale dispatch, cell/label editors, dialogs and history eviction.

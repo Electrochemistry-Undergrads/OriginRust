@@ -6,6 +6,7 @@ use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, L
 use crate::autosave::{Autosave, Due};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
+use crate::dialogs::cell_note::CellNoteDialog;
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::cond_format::CondFormatDialog;
 use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
@@ -32,6 +33,7 @@ use crate::dialogs::shape_object::ShapeDialog;
 use crate::dialogs::sort::{SortDialog, SortOutcome};
 use crate::dialogs::stack_panels::{Outcome as StackPanelsOutcome, StackPanelsDialog};
 use crate::dialogs::text_object::TextDialog;
+use crate::dialogs::trendline::{Outcome as TrendlineOutcome, TrendlineDialog};
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi, Sel};
 use crate::live::{self, Live, Note};
@@ -132,6 +134,7 @@ pub struct SheafApp {
     layer_contents: Option<crate::dialogs::layer_contents::LayerContentsDialog>,
     plot_setup: Option<crate::dialogs::plot_setup::PlotSetupDialog>,
     error_bars: Option<ErrorBarsDialog>,
+    trendline: Option<TrendlineDialog>,
     stack_panels: Option<StackPanelsDialog>,
     label_panels: Option<LabelPanelsDialog>,
     column_props: Option<ColumnPropsDialog>,
@@ -145,6 +148,7 @@ pub struct SheafApp {
     row_filter: Option<RowFilterDialog>,
     mask_condition: Option<MaskConditionDialog>,
     cond_format: Option<CondFormatDialog>,
+    pub(crate) cell_note: Option<CellNoteDialog>,
     reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
@@ -198,6 +202,8 @@ pub struct SheafApp {
     live: Live,
     /// The recent projects and imports (File > Recent Projects, File > Import > Recent Imports).
     recent: Recent,
+    /// The Window Switcher (Ctrl+Tab) while it is open.
+    switcher: Option<crate::switcher::Switcher>,
 }
 
 impl SheafApp {
@@ -221,6 +227,7 @@ impl SheafApp {
             layer_contents: None,
             plot_setup: None,
             error_bars: None,
+            trendline: None,
             stack_panels: None,
             label_panels: None,
             column_props: None,
@@ -234,6 +241,7 @@ impl SheafApp {
             row_filter: None,
             mask_condition: None,
             cond_format: None,
+            cell_note: None,
             reshape: None,
             export: None,
             export_sheet: None,
@@ -272,12 +280,13 @@ impl SheafApp {
             recovered_from: None,
             live: Live::new(cc.egui_ctx.clone(), startup_dirs),
             recent: Recent::new(recent_path),
+            switcher: None,
         };
         app.start_recovery();
         let paths = std::mem::take(&mut app.startup.paths);
         app.open_paths(paths, false);
         app.sync_windows();
-        app.run_startup_show();
+        app.run_startup_show(&cc.egui_ctx);
         if app.startup.mcp {
             app.set_link(true);
         }
@@ -567,6 +576,7 @@ impl SheafApp {
         self.graphs.clear();
         self.graph_props = None;
         self.error_bars = None;
+        self.trendline = None;
         self.stack_panels = None;
         self.label_panels = None;
         self.column_props = None;
@@ -582,6 +592,7 @@ impl SheafApp {
         self.row_filter = None;
         self.mask_condition = None;
         self.cond_format = None;
+        self.cell_note = None;
         self.reshape = None;
         self.sort = None;
         self.sheet_name = None;
@@ -1020,6 +1031,7 @@ impl SheafApp {
             GraphOp::HideOtherLayers { .. } => "Hide other layers",
             GraphOp::MovePlotToAxis { right: true, .. } => "Move plot to right Y axis",
             GraphOp::MovePlotToAxis { .. } => "Move plot to left Y axis",
+            GraphOp::RemoveTrendline { .. } => "Remove trendline",
             GraphOp::HidePlot { .. } => unreachable!("handled above"),
         };
         // The present axis ranges, for the zoom (an automatic axis has no stored limits).
@@ -1041,6 +1053,55 @@ impl SheafApp {
             && d.layer_shapes(&self.doc) != before.as_deref()
         {
             self.shape_dialog = None;
+        }
+    }
+
+    /// Opens the Window Switcher on the windows of the Project Explorer's selected folder, most
+    /// recently used first. With fewer than two windows nothing opens.
+    fn open_switcher(&mut self, ctx: &egui::Context, backward: bool, sticky: bool) {
+        let ids = explorer::windows_in(self.doc.project(), &self.panels.explorer.folder);
+        let ids = self.workspace.recent_order(&ids);
+        let workspace = &self.workspace;
+        self.switcher = crate::switcher::Switcher::open(
+            ctx,
+            self.doc.project(),
+            &ids,
+            |id| !workspace.is_shown(id),
+            workspace.active(),
+            backward,
+            sticky,
+        );
+    }
+
+    /// The keys of the Window Switcher: Ctrl+Tab opens it, Tab and the arrows move, releasing
+    /// Ctrl or Enter activates the selection, Esc closes it. Runs before the grid reads keys.
+    fn switcher_keys(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        use crate::switcher::Nav;
+        let open = self.switcher.is_some();
+        let keys = crate::switcher::take_keys(ctx, open, !self.dialog_open());
+        for nav in keys {
+            match &mut self.switcher {
+                None => {
+                    if matches!(nav, Nav::Next | Nav::Prev) {
+                        self.open_switcher(ctx, nav == Nav::Prev, false);
+                    }
+                }
+                Some(s) => match nav {
+                    Nav::Confirm => {
+                        actions.push(Action::Focus(s.selected()));
+                        self.switcher = None;
+                    }
+                    Nav::Cancel => self.switcher = None,
+                    other => s.go(other),
+                },
+            }
+        }
+        if let Some(s) = &self.switcher
+            && !s.sticky
+            && !crate::switcher::ctrl_down(ctx)
+        {
+            actions.push(Action::Focus(s.selected()));
+            self.switcher = None;
         }
     }
 
@@ -1095,7 +1156,10 @@ impl SheafApp {
             return;
         }
         let editing = self.books.values().any(|b| b.editing.is_some() || b.editing_label.is_some());
-        let blocked = editing || self.dialog_open();
+        let dialog_open = self.dialog_open();
+        let blocked = editing || dialog_open;
+        let context = live::Context::new(self.active, &self.doc, &self.books, &self.graphs, editing, dialog_open);
+        let app_context = |doc: &Document| context.snapshot(doc);
         let files = sheaf_mcp::files::OpenFiles {
             project: self.path.clone(),
             origin: self.foreign_source.clone(),
@@ -1103,7 +1167,7 @@ impl SheafApp {
         };
         let now = std::time::Instant::now();
         let recovery = self.startup.recovery_dir.as_deref();
-        for note in self.live.step(&mut self.doc, blocked, &files, recovery, now) {
+        for note in self.live.step(&mut self.doc, blocked, &files, recovery, now, &app_context) {
             match note {
                 Note::Info(t) => self.say(t),
                 Note::Warn(t) => self.warn(t),
@@ -1114,6 +1178,27 @@ impl SheafApp {
     fn token(&mut self) -> u64 {
         self.next_token += 1;
         self.next_token
+    }
+
+    /// Only completed AI calls at the top of history are eligible. An active owner edit or dialog
+    /// must finish first; the handler checks this again in case an enabled menu became stale.
+    fn can_undo_ai_changes(&self) -> bool {
+        self.doc.undo_label().is_some_and(|label| label.starts_with("AI: "))
+            && !self.books.values().any(|book| book.editing.is_some() || book.editing_label.is_some())
+            && !self.dialog_open()
+    }
+
+    fn undo_ai_changes(&mut self, ctx: &egui::Context) {
+        if !self.can_undo_ai_changes() {
+            return;
+        }
+        let mut count = 0;
+        while self.doc.undo_label().is_some_and(|label| label.starts_with("AI: ")) {
+            // Reuse ordinary Undo, including its existing cleanup hooks and per-step log entry.
+            self.apply(Action::Undo, ctx);
+            count += 1;
+        }
+        self.say(format!("Undone {count} AI change{}", if count == 1 { "" } else { "s" }));
     }
 
     // ----- actions -------------------------------------------------------
@@ -1147,8 +1232,8 @@ impl SheafApp {
             Action::ImportPick(pick) => self.start_import(None, pick),
             Action::GoToCell(book) => self.open_go_to(book),
             Action::Power(kind) => self.power = Some(PowerDialog::new(kind)),
-            Action::FindInSheets(book) => self.find = Some(FindDialog::new(book)),
-            Action::ReplaceInSheets(book) => self.find = Some(FindDialog::replace(book)),
+            Action::FindInSheets(book) => self.open_find(book, false),
+            Action::ReplaceInSheets(book) => self.open_find(book, true),
             Action::ImportWizard => {
                 // An open wizard keeps its settings: the command only brings it to the front.
                 if self.import_wizard.is_some() {
@@ -1171,6 +1256,7 @@ impl SheafApp {
                 }
                 self.close_shape_dialog_if_changed(shapes);
             }
+            Action::UndoAiChanges => self.undo_ai_changes(ctx),
             Action::NewWorkbook => {
                 self.doc.apply("New workbook", |p| {
                     let book = p.add_workbook("");
@@ -1397,6 +1483,9 @@ impl SheafApp {
                 }
             }
             Action::AddErrorBars { graph, layer } => self.add_error_bars(graph, layer),
+            Action::Trendline { graph, layer, plot, edit } => {
+                self.trendline = TrendlineDialog::new(&self.doc, graph, layer, plot, edit);
+            }
             Action::Refresh(active) => self.refresh(active),
             Action::RowFilterDialog { book, column } => {
                 self.row_filter = RowFilterDialog::new(&self.doc, book, column);
@@ -1436,6 +1525,25 @@ impl SheafApp {
                     Err(why) => self.warn(why),
                 }
             }
+            Action::NoteDialog(book) => match self.note_cell(book) {
+                Ok((column, row)) => self.cell_note = CellNoteDialog::new(&self.doc, book, column, row),
+                Err(why) => self.warn(why),
+            },
+            Action::DeleteNote(book) => match self.note_cell(book) {
+                Ok((column, row)) => {
+                    let has = self.doc.project().workbook(book).is_some_and(|b| b.sheet().note(column, row).is_some());
+                    if has {
+                        self.doc.apply("Delete note", |p| {
+                            if let Some(b) = p.workbook_mut(book) {
+                                b.sheet_mut().remove_note(column, row);
+                            }
+                        });
+                    } else {
+                        self.warn("The selected cell has no note");
+                    }
+                }
+                Err(why) => self.warn(why),
+            },
             Action::RemoveCondFormat(book) => match self.cond_range(book) {
                 Ok(range) => {
                     let has = self
@@ -1593,6 +1701,7 @@ impl SheafApp {
             Action::PrintPreview(graph) => self.print_preview = Some(PrintPreview::new(graph)),
             Action::PageSetup => self.page_setup = Some(PageSetupDialog::new(self.doc.project().page_setup)),
             Action::Focus(id) => self.focus(id),
+            Action::OpenSwitcher => self.open_switcher(ctx, false, true),
             Action::HideWindow(id) => self.workspace.hide(id),
             Action::AppendProject(path) => {
                 let path = path.or_else(|| {
@@ -2055,6 +2164,7 @@ impl SheafApp {
                         c.id = new;
                     }
                     copy.remap_cond_format_columns(&|c| renamed.get(&c).copied());
+                    copy.remap_note_columns(&|c| renamed.get(&c).copied());
                     if let Some(b) = p.workbook_mut(book) {
                         b.sheets.insert(active + 1, copy);
                         b.active_sheet = active + 1;
@@ -2069,6 +2179,29 @@ impl SheafApp {
                 self.sheet_name = Some(SheetNameDialog { book, sheet: active, name });
             }
         }
+    }
+
+    fn open_find(&mut self, book: WindowId, replacing: bool) {
+        let text = self
+            .books
+            .get(&book)
+            .and_then(|state| state.active_cell())
+            .and_then(|(column, row)| {
+                let workbook = self.doc.project().workbook(book)?;
+                workbook.sheets.get(workbook.active_sheet)?.columns.get(column).map(|column| column.shown_text(row))
+            })
+            .unwrap_or_default();
+        let mut dialog = if replacing { FindDialog::replace(book) } else { FindDialog::new(book) };
+        if let Some(selection) = self.books.get(&book).and_then(|state| {
+            if matches!(state.sel, Sel::Cells { anchor, end } if anchor == end) {
+                return None;
+            }
+            let workbook = self.doc.project().workbook(book)?;
+            state.target(workbook.sheets.get(workbook.active_sheet)?)
+        }) {
+            dialog = dialog.in_selection(selection.columns, selection.rows);
+        }
+        self.find = Some(dialog.initial_text(text));
     }
 
     fn open_go_to(&mut self, book: WindowId) {
@@ -2315,6 +2448,12 @@ impl SheafApp {
         grid::cond_range(state, sheet)
     }
 
+    fn note_cell(&self, book: WindowId) -> Result<(ColumnId, usize), &'static str> {
+        let sheet = self.doc.project().workbook(book).map(|b| b.sheet()).ok_or("This workbook no longer exists")?;
+        let state = self.books.get(&book).ok_or("Select a cell first")?;
+        grid::note_cell(state, sheet)
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -2362,6 +2501,7 @@ impl SheafApp {
             cells: book.and_then(|b| self.books.get(&b)).is_some_and(|s| s.sel != Sel::None),
             undo: self.doc.undo_label(),
             redo: self.doc.redo_label(),
+            undo_ai: self.can_undo_ai_changes(),
             windows: project.windows.iter().map(|w| (w.id(), w.title())).collect(),
             open: self.open_menu.as_deref(),
             recent_projects: self.recent.projects(),
@@ -2428,6 +2568,7 @@ impl SheafApp {
     fn shortcuts(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         // A widget with the keyboard is a text field, except the grid itself (it takes the
         // keyboard when a cell is clicked so that Tab and the arrows stay with it).
+        self.switcher_keys(ctx, actions);
         let grids: HashSet<egui::Id> = self.books.keys().map(|b| grid::grid_id(*b)).collect();
         let typing = ctx.memory(|m| m.focused()).is_some_and(|id| !grids.contains(&id));
         // Delete on a graph removes its selected object (a legend, a title, a text label).
@@ -2515,6 +2656,7 @@ impl SheafApp {
             || self.layer_contents.is_some()
             || self.plot_setup.is_some()
             || self.error_bars.is_some()
+            || self.trendline.is_some()
             || self.stack_panels.is_some()
             || self.label_panels.is_some()
             || self.column_props.is_some()
@@ -2528,6 +2670,7 @@ impl SheafApp {
             || self.row_filter.is_some()
             || self.mask_condition.is_some()
             || self.cond_format.is_some()
+            || self.cell_note.is_some()
             || self.reshape.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
@@ -2545,6 +2688,7 @@ impl SheafApp {
             || self.pending.is_some()
             || self.autosave_dialog.is_some()
             || self.recovery_offer.is_some()
+            || self.switcher.is_some()
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
@@ -2756,6 +2900,13 @@ impl SheafApp {
                 }
             }
         }
+        if let Some(d) = &mut self.trendline {
+            match d.show(ctx, &mut self.doc) {
+                TrendlineOutcome::Open => {}
+                TrendlineOutcome::Closed => self.trendline = None,
+                TrendlineOutcome::Done => self.trendline = None,
+            }
+        }
         if let Some(d) = &mut self.stack_panels {
             match d.show(ctx, &mut self.doc) {
                 StackPanelsOutcome::Open => {}
@@ -2912,6 +3063,11 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.cond_format = None;
+        }
+        if let Some(d) = &mut self.cell_note
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.cell_note = None;
         }
         if let Some(d) = &mut self.row_filter
             && !d.show(ctx, &mut self.doc)
@@ -3317,7 +3473,7 @@ impl SheafApp {
     // ----- checking the interface without a person ------------------------
 
     /// Opens the things named by `--show` on the command line.
-    fn run_startup_show(&mut self) {
+    fn run_startup_show(&mut self, ctx: &egui::Context) {
         let shows = self.startup.show.clone();
         for what in shows {
             let (name, arg) = what.split_once(':').unwrap_or((what.as_str(), ""));
@@ -3327,6 +3483,8 @@ impl SheafApp {
             let named = project.window_by_name(arg).map(Window::id);
             match name {
                 "menu" => self.open_menu = Some(arg.to_string()),
+                // The Window Switcher, held open (as from the menu).
+                "switcher" => self.open_switcher(ctx, false, true),
                 // panel:explorer (slid out), panel:explorer-docked, panel:explorer-hidden; the
                 // names are explorer, objects, messages and results.
                 "panel" => {
@@ -3418,6 +3576,13 @@ impl SheafApp {
                         self.layer_contents =
                             Some(crate::dialogs::layer_contents::LayerContentsDialog::new(id, 0, 1_000_000));
                         self.focus(id);
+                    }
+                }
+                "find" | "replace" => {
+                    let book = project.workbooks().next().map(|b| b.id);
+                    if let Some(book) = book {
+                        self.open_find(book, name == "replace");
+                        self.focus(book);
                     }
                 }
                 "go-to" => {
@@ -3641,6 +3806,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
                 for s in &mut b.sheets {
                     s.columns.retain(|c| !columns.contains(&c.id));
                     s.remap_cond_format_columns(&|c| (!columns.contains(&c)).then_some(c));
+                    s.remap_note_columns(&|c| (!columns.contains(&c)).then_some(c));
                 }
             }
             Window::Graph(g) => {
@@ -3788,6 +3954,16 @@ impl eframe::App for SheafApp {
             self.panels.flyouts(ctx, &data, &mut actions);
         }
         self.dialogs(ctx);
+        if let Some(s) = &mut self.switcher {
+            match s.show(ctx) {
+                Some(crate::switcher::Click::Window(id)) => {
+                    actions.push(Action::Focus(id));
+                    self.switcher = None;
+                }
+                Some(crate::switcher::Click::Dismiss) => self.switcher = None,
+                None => {}
+            }
+        }
         for action in actions {
             self.apply(action, ctx);
         }

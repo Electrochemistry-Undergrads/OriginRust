@@ -104,7 +104,7 @@ pub(crate) fn item_bounds(item: &Item, m: &dyn TextMeasurer) -> Option<Rect> {
 
 /// The vertices of each subpath of SVG path data written by this crate (`M`, `L`, `C`, `A`,
 /// `Z`; absolute coordinates). Curves contribute their end points only.
-fn subpaths(d: &str) -> Vec<Vec<(f64, f64)>> {
+pub(crate) fn subpaths(d: &str) -> Vec<Vec<(f64, f64)>> {
     let mut out: Vec<Vec<(f64, f64)>> = Vec::new();
     let mut cmd = 'M';
     let mut nums: Vec<f64> = Vec::new();

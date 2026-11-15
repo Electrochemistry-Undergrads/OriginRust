@@ -223,6 +223,17 @@ fn results_name_the_book_and_the_sheet() {
     assert_eq!((xlsx["book"].as_str(), xlsx["sheet"].as_str()), (Some("Book1"), Some("a")));
 }
 
+#[test]
+fn the_plot_tool_accepts_the_sort_x_style_flag() {
+    let d = Dirs::new("sortx");
+    write_csv(&d, "a.csv");
+    let mut s = Server::new(d.roots());
+    ok(&headless(&mut s, "import_files", json!({"files": ["a.csv"]})));
+    let plot = ok(&headless(&mut s, "plot", json!({"y": ["B"], "style": {"sort_x": true}})));
+    assert_eq!(plot["graph"], "Graph1");
+    ok(&headless(&mut s, "plot", json!({"graph": "Graph1", "style": {"sort_x": true}})));
+}
+
 // ----- with a history ----------------------------------------------------------------------
 
 #[test]
@@ -506,7 +517,8 @@ fn an_extension_less_xlsx_export_reports_the_file_that_was_written() {
         ok(&c.call("import_files", json!({"files": ["a.csv"]})));
         let out = ok(&c.call("export_data", json!({"path": name, "format": "xlsx"})));
         let reported = PathBuf::from(out["path"].as_str().unwrap());
-        assert_eq!(reported, d.root.join(format!("{name}.xlsx")), "attached: {attached}");
+        let expected = sheaf_mcp::roots::plain(d.root.join(format!("{name}.xlsx")));
+        assert_eq!(reported, expected, "attached: {attached}");
         assert!(reported.exists());
         // The name the writer would have made is checked like any other: it exists now.
         if attached {

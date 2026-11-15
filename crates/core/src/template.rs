@@ -86,10 +86,29 @@ pub enum Template {
     /// exchanged and vertical drop lines that go from each plot to the next data plot. Needs two
     /// or more Y columns ([`Project::plot_columns`] refuses fewer).
     Lollipop,
+    /// Scatter plot with a rug on the bottom and left axes (Origin's "Scatter + Rug", 2019b): one short
+    /// line per point beside each axis, all plots overlapping in one strip (graphing spec 18.10).
+    ScatterRug,
+    /// Violin plot (Origin's "Violin Plot"): every Y column a kernel density silhouette, with the
+    /// colours of the box chart template.
+    Violin,
+    /// Origin's "Violin with Box".
+    ViolinBox,
+    /// Origin's "Violin with Point".
+    ViolinPoint,
+    /// Origin's "Violin with Quartile".
+    ViolinQuartile,
+    /// Origin's "Violin with Stick".
+    ViolinStick,
+    /// Origin's "Half Violin".
+    HalfViolin,
+    /// Ridgeline chart (Origin's "Ridgeline Chart", 2022): every Y column a density curve on a
+    /// baseline at its column index, with the colours of the box chart template.
+    Ridgeline,
 }
 
 impl Template {
-    pub const ALL: [Template; 32] = [
+    pub const ALL: [Template; 40] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -107,6 +126,13 @@ impl Template {
         Template::FillArea,
         Template::Histogram,
         Template::BoxChart,
+        Template::Violin,
+        Template::ViolinBox,
+        Template::ViolinPoint,
+        Template::ViolinQuartile,
+        Template::ViolinStick,
+        Template::HalfViolin,
+        Template::Ridgeline,
         Template::Bubble,
         Template::ColorMapped,
         Template::BubbleColorMapped,
@@ -122,6 +148,7 @@ impl Template {
         Template::StackedLines,
         Template::Waterfall,
         Template::Lollipop,
+        Template::ScatterRug,
     ];
 
     /// The name used on the command line and in menus.
@@ -159,6 +186,14 @@ impl Template {
             Template::Radar => "radar",
             Template::Ternary => "ternary",
             Template::Lollipop => "lollipop",
+            Template::ScatterRug => "scatter-rug",
+            Template::Violin => "violin",
+            Template::ViolinBox => "violin-box",
+            Template::ViolinPoint => "violin-point",
+            Template::ViolinQuartile => "violin-quartile",
+            Template::ViolinStick => "violin-stick",
+            Template::HalfViolin => "half-violin",
+            Template::Ridgeline => "ridgeline",
         }
     }
 
@@ -196,7 +231,28 @@ impl Template {
             Template::Radar => "Radar",
             Template::Ternary => "Ternary",
             Template::Lollipop => "Lollipop Plot",
+            Template::ScatterRug => "Scatter + Rug",
+            Template::Violin => "Violin Plot",
+            Template::ViolinBox => "Violin with Box",
+            Template::ViolinPoint => "Violin with Point",
+            Template::ViolinQuartile => "Violin with Quartile",
+            Template::ViolinStick => "Violin with Stick",
+            Template::HalfViolin => "Half Violin",
+            Template::Ridgeline => "Ridgeline Chart",
         }
+    }
+
+    /// True for the six violin templates.
+    pub fn is_violin(&self) -> bool {
+        matches!(
+            self,
+            Template::Violin
+                | Template::ViolinBox
+                | Template::ViolinPoint
+                | Template::ViolinQuartile
+                | Template::ViolinStick
+                | Template::HalfViolin
+        )
     }
 
     pub fn from_name(name: &str) -> Option<Template> {
@@ -239,6 +295,14 @@ impl Template {
             Template::Radar => radar(id, name),
             Template::Ternary => ternary(id, name),
             Template::Lollipop => general(id, name, PlotKind::Scatter),
+            Template::ScatterRug => scatter_rug(id, name),
+            Template::Violin => from_red(general(id, name, PlotKind::Violin)),
+            Template::ViolinBox => from_red(general(id, name, PlotKind::ViolinBox)),
+            Template::ViolinPoint => from_red(general(id, name, PlotKind::ViolinPoint)),
+            Template::ViolinQuartile => from_red(general(id, name, PlotKind::ViolinQuartile)),
+            Template::ViolinStick => from_red(general(id, name, PlotKind::ViolinStick)),
+            Template::HalfViolin => from_red(general(id, name, PlotKind::HalfViolin)),
+            Template::Ridgeline => from_red(general(id, name, PlotKind::Ridgeline)),
         }
     }
 }
@@ -378,7 +442,7 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         hide_end_label: false,
         reverse: false,
         first_tick: None,
-        axis_break: None,
+        axis_breaks: Vec::new(),
         additional_line: None,
         special_ticks: Vec::new(),
         tick_label_formula: String::new(),
@@ -387,7 +451,19 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         tick_width_pt: None,
         tick_prefix: String::new(),
         tick_suffix: String::new(),
+        rug: Default::default(),
+        rug_opposite: Default::default(),
     }
+}
+
+/// The scatter template with a default rug on the bottom and left axes.
+fn scatter_rug(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::Scatter);
+    for l in &mut g.layers {
+        l.x_axis.rug = Rug::shown();
+        l.y_axis.rug = Rug::shown();
+    }
+    g
 }
 
 fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
@@ -438,6 +514,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             background_style: BackgroundStyle::default(),
             group_style: GroupStyle::default(),
             display: LayerDisplay::default(),
+            xy_ratio: None,
         }],
     }
 }
@@ -573,7 +650,8 @@ fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
         colors: vec![Color::rgb(0x46, 0xB1, 0xE1), Color::rgb(0x4E, 0x95, 0xD9), Color::rgb(0x10, 0x48, 0x62)],
         mode: PaletteMode::Spread,
     };
-    layer.default_line = LineStyle { color: Color::BLACK, width_pt: 1.75, dash: Dash::Solid, connect: Connect::Spline };
+    layer.default_line =
+        LineStyle { color: Color::BLACK, width_pt: 1.75, dash: Dash::Solid, connect: Connect::Spline, sort_x: false };
     layer.legend = Legend {
         visible: true,
         position: LegendPosition::BottomRight,
@@ -756,8 +834,11 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 32);
+        assert_eq!(Template::ALL.len(), 40);
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
+        assert_eq!(Template::from_name("violin"), Some(Template::Violin));
+        assert_eq!(Template::from_name("violin-box"), Some(Template::ViolinBox));
+        assert_eq!(Template::from_name("half-violin"), Some(Template::HalfViolin));
     }
 
     #[test]
@@ -966,5 +1047,117 @@ mod tests {
         }
         assert_eq!(p.plot_label(&l.plots[0]), p.column(y1).unwrap().display_name());
         assert_eq!(Template::Lollipop.label(), "Lollipop Plot");
+    }
+
+    #[test]
+    fn the_violin_templates_are_box_chart_templates_with_their_own_kinds() {
+        use crate::graph::ViolinInner;
+        let cases = [
+            (Template::Violin, "violin", "Violin Plot", PlotKind::Violin, ViolinInner::Median),
+            (Template::ViolinBox, "violin-box", "Violin with Box", PlotKind::ViolinBox, ViolinInner::Box),
+            (Template::ViolinPoint, "violin-point", "Violin with Point", PlotKind::ViolinPoint, ViolinInner::Point),
+            (
+                Template::ViolinQuartile,
+                "violin-quartile",
+                "Violin with Quartile",
+                PlotKind::ViolinQuartile,
+                ViolinInner::Quartile,
+            ),
+            (Template::ViolinStick, "violin-stick", "Violin with Stick", PlotKind::ViolinStick, ViolinInner::Stick),
+            (Template::HalfViolin, "half-violin", "Half Violin", PlotKind::HalfViolin, ViolinInner::Box),
+        ];
+        let boxed = Template::BoxChart.new_graph(WindowId(1), "G");
+        for (t, name, label, kind, inner) in cases {
+            assert_eq!((t.name(), t.label()), (name, label));
+            assert_eq!(Template::from_name(name), Some(t));
+            assert!(t.is_violin());
+            let g = t.new_graph(WindowId(1), "G");
+            let l = &g.layers[0];
+            assert_eq!(l.default_kind, kind);
+            assert_eq!(kind.violin_inner(), Some(inner));
+            assert!(kind.is_violin() && kind.is_distribution());
+            assert!(!kind.is_bar() && !kind.has_line() && !kind.has_symbols() && !kind.is_area());
+            // Same page, axes and colours (starting at red) as the box chart.
+            assert_eq!(l.palette, boxed.layers[0].palette);
+            assert_eq!(
+                (&l.x_axis, &l.y_axis, &g.page),
+                (&boxed.layers[0].x_axis, &boxed.layers[0].y_axis, &boxed.page)
+            );
+        }
+        assert!(!Template::BoxChart.is_violin() && PlotKind::Box.is_distribution() && !PlotKind::Box.is_violin());
+        assert!(PlotKind::HalfViolin.is_half_violin() && !PlotKind::ViolinBox.is_half_violin());
+    }
+
+    #[test]
+    fn violin_kinds_save_by_name_and_old_kinds_still_load() {
+        for (kind, name) in [
+            (PlotKind::Violin, "violin"),
+            (PlotKind::ViolinBox, "violin_box"),
+            (PlotKind::ViolinPoint, "violin_point"),
+            (PlotKind::ViolinQuartile, "violin_quartile"),
+            (PlotKind::ViolinStick, "violin_stick"),
+            (PlotKind::HalfViolin, "half_violin"),
+        ] {
+            let json = serde_json::to_string(&kind).unwrap();
+            assert_eq!(json, format!("\"{name}\""));
+            assert_eq!(serde_json::from_str::<PlotKind>(&json).unwrap(), kind);
+        }
+        // A graph saved before the violin kinds existed loads unchanged, and a box chart stays a box chart.
+        let g = Template::BoxChart.new_graph(WindowId(1), "G");
+        let json = serde_json::to_string(&g).unwrap();
+        assert!(json.contains("\"default_kind\":\"box\""));
+        let back: crate::graph::Graph = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, g);
+    }
+
+    #[test]
+    fn the_ridgeline_template_is_a_box_chart_template_with_its_own_kind() {
+        use crate::graph::{RidgeBandwidth, RidgeDisplay, RidgelineStyle};
+        assert_eq!(Template::from_name("ridgeline"), Some(Template::Ridgeline));
+        assert_eq!(Template::Ridgeline.label(), "Ridgeline Chart");
+        let g = Template::Ridgeline.new_graph(WindowId(1), "G");
+        assert_eq!(g.layers[0].default_kind, PlotKind::Ridgeline);
+        assert!(PlotKind::Ridgeline.is_ridgeline() && PlotKind::Ridgeline.is_distribution());
+        assert!(!PlotKind::Ridgeline.is_violin() && !Template::Ridgeline.is_violin());
+        assert_eq!(serde_json::to_string(&PlotKind::Ridgeline).unwrap(), "\"ridgeline\"");
+        let back: crate::graph::Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!(back, g);
+        // Defaults: Scott, curve, no quantile lines; a plot saved without settings loads with them.
+        let d = RidgelineStyle::default();
+        assert_eq!(
+            (d.display, d.bandwidth, d.quantile_lines),
+            (RidgeDisplay::DistributionCurve, RidgeBandwidth::Scott, false)
+        );
+        assert_eq!((d.height, d.fill_transparency_pct, d.quantiles.clone()), (1.5, 30.0, vec![25.0, 50.0, 75.0]));
+        let partial: RidgelineStyle =
+            serde_json::from_str(r#"{"display":"with_rug","bandwidth":{"k_sd":0.5}}"#).unwrap();
+        assert_eq!(partial.display, RidgeDisplay::WithRug);
+        assert_eq!(partial.bandwidth, RidgeBandwidth::KSd(0.5));
+        assert_eq!(partial.height, 1.5);
+        let all: RidgelineStyle = serde_json::from_str("{}").unwrap();
+        assert!(all.is_default());
+    }
+
+    #[test]
+    fn scatter_rug_template_and_rug_serde() {
+        assert_eq!(Template::from_name("scatter-rug"), Some(Template::ScatterRug));
+        assert_eq!(Template::ScatterRug.label(), "Scatter + Rug");
+        let g = Template::ScatterRug.new_graph(WindowId(1), "g");
+        let l = &g.layers[0];
+        assert!(l.x_axis.rug.show && l.y_axis.rug.show && l.x_axis.rug.overlap);
+        assert!(!l.x_axis.rug_opposite.show && !l.y_axis.rug_opposite.show);
+        assert_eq!((l.x_axis.rug.size_pct, l.x_axis.rug.thickness_pt, l.x_axis.rug.margin_pct), (5.0, 0.5, 0.0));
+        // Round trip.
+        let back: Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!(back, g);
+        // Graphs without a rug carry no rug keys; old files read as no rug.
+        let plain = Template::Scatter.new_graph(WindowId(1), "g");
+        let json = serde_json::to_string(&plain).unwrap();
+        assert!(!json.contains("rug"), "{json}");
+        let back: Graph = serde_json::from_str(&json).unwrap();
+        assert!(back.layers[0].x_axis.rug.is_default());
+        // A partly written rug keeps the defaults for the rest.
+        let r: Rug = serde_json::from_str(r#"{"show":true,"plot":2}"#).unwrap();
+        assert!(r.show && r.plot == Some(crate::ids::ColumnId(2)) && r.overlap && r.size_pct == 5.0);
     }
 }

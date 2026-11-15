@@ -30,19 +30,19 @@ fn project(template: Template, x: Vec<f64>, ys: Vec<Vec<f64>>) -> (Project, Wind
     (p, g)
 }
 
-fn svg_of(p: &Project, g: WindowId) -> String {
+pub(crate) fn svg_of(p: &Project, g: WindowId) -> String {
     render_svg_with(p, g, &FixedMetrics).unwrap()
 }
 
-fn doc(svg: &str) -> roxmltree::Document<'_> {
+pub(crate) fn doc(svg: &str) -> roxmltree::Document<'_> {
     roxmltree::Document::parse(svg).expect("well-formed XML")
 }
 
-fn with_class<'a, 'b>(d: &'b roxmltree::Document<'a>, class: &str) -> Vec<roxmltree::Node<'a, 'b>> {
+pub(crate) fn with_class<'a, 'b>(d: &'b roxmltree::Document<'a>, class: &str) -> Vec<roxmltree::Node<'a, 'b>> {
     d.descendants().filter(|n| n.attribute("class") == Some(class)).collect()
 }
 
-fn texts(d: &roxmltree::Document) -> Vec<String> {
+pub(crate) fn texts(d: &roxmltree::Document) -> Vec<String> {
     d.descendants().filter(|n| n.has_tag_name("text")).map(|n| n.text().unwrap_or("").to_string()).collect()
 }
 
@@ -722,7 +722,7 @@ fn check_golden(name: &str, template: Template) {
     compare_golden(name, &svg_of(&p, g));
 }
 
-fn compare_golden(name: &str, svg: &str) {
+pub(crate) fn compare_golden(name: &str, svg: &str) {
     let path =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("golden").join(format!("{name}.svg"));
     if std::env::var_os("SHEAF_UPDATE_GOLDEN").is_some() {
@@ -4069,4 +4069,139 @@ fn hidden_masked_points_leave_a_gap_and_nothing_red() {
     assert_eq!(segments(&p), 2);
     p.column_mut(y).unwrap().mask.clear();
     assert_eq!(segments(&p), 4);
+}
+
+/// Origin 2016 kept the width of a linked layer and let its height follow the axis ranges (graphing 18.7a):
+/// doubling the X span halved the height, doubling the Y span as well restored it, and a short X span made
+/// the layer taller than the page. Breaks switch the link off.
+#[test]
+fn a_linked_x_y_ratio_keeps_the_width_and_lets_the_height_follow_the_ranges() {
+    use sheaf_core::graph::AxisBreak;
+    let (mut p, g) = line_project_for_ratio();
+    let set = |p: &mut Project, x: (f64, f64), y: (f64, f64)| {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        (l.x_axis.min, l.x_axis.max, l.y_axis.min, l.y_axis.max) = (Some(x.0), Some(x.1), Some(y.0), Some(y.1));
+    };
+    let frame = |p: &Project| crate::layout_geometry(p, g).unwrap()[0].frame;
+    let unlinked = frame(&p);
+    p.graph_mut(g).unwrap().layers[0].xy_ratio = Some(1.0);
+    set(&mut p, (-2.5, 12.5), (-2.0, 22.0));
+    let f = frame(&p);
+    assert!((f.w - unlinked.w).abs() < 1e-9 && (f.x - unlinked.x).abs() < 1e-9 && (f.y - unlinked.y).abs() < 1e-9);
+    assert!((f.h / f.w - 24.0 / 15.0).abs() < 1e-9, "one unit of X as long as one of Y: {f:?}");
+    set(&mut p, (-2.5, 27.5), (-2.0, 22.0));
+    assert!((frame(&p).h - f.h / 2.0).abs() < 1e-9, "twice the X span, half the height");
+    set(&mut p, (-2.5, 27.5), (-2.0, 46.0));
+    assert!((frame(&p).h - f.h).abs() < 1e-9);
+    set(&mut p, (-2.5, 7.5), (-2.0, 46.0));
+    let tall = frame(&p);
+    assert!(tall.y + tall.h > p.graph(g).unwrap().page.height_pt, "past the page, as in Origin: {tall:?}");
+    // Ratio 2: one unit of X twice as long as one of Y.
+    p.graph_mut(g).unwrap().layers[0].xy_ratio = Some(2.0);
+    set(&mut p, (-2.5, 12.5), (-2.0, 22.0));
+    assert!((frame(&p).h - f.h / 2.0).abs() < 1e-9);
+    // An axis break turns the link off.
+    p.graph_mut(g).unwrap().layers[0].y_axis.axis_breaks = vec![AxisBreak::new(5.0, 10.0)];
+    let broken = frame(&p);
+    assert!((broken.h / broken.w - 24.0 / 15.0).abs() > 1e-3, "{broken:?}");
+}
+
+fn line_project_for_ratio() -> (Project, sheaf_core::WindowId) {
+    use sheaf_core::{ColumnData, Designation};
+    let mut p = Project::new();
+    let book = p.add_workbook("R");
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let y: Vec<f64> = x.iter().map(|v| 2.0 * v).collect();
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+    let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+    let g = p.plot_columns(sheaf_core::template::Template::Line, &[yc]).unwrap();
+    (p, g)
+}
+
+/// Origin 2016 draws the segment from a point below a Y break to one above it but leaves it out over the
+/// band of the break's gap (graphing spec 3.6); the page's "Connect line across Axis Break" draws it through.
+#[test]
+fn a_line_across_an_axis_break_is_cut_over_the_gap_unless_the_page_connects_it() {
+    use sheaf_core::graph::AxisBreak;
+    use sheaf_core::{ColumnData, Designation};
+    let mut p = Project::new();
+    let book = p.add_workbook("B");
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let y = vec![0.0, 0.5, 1.0, 1.5, 2.0, 18.0, 18.5, 19.0, 19.5, 20.0, 20.5];
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+    let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+    let g = p.plot_columns(Template::Line, &[yc]).unwrap();
+    {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        (l.y_axis.min, l.y_axis.max) = (Some(-2.0), Some(23.0));
+        l.y_axis.axis_breaks = vec![AxisBreak::new(4.25, 16.75)];
+    }
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let (lo, hi) = geom.y.gaps[0].span(false);
+    let band = (geom.frame.y + (1.0 - hi) * geom.frame.h, geom.frame.y + (1.0 - lo) * geom.frame.h);
+    let line_paths = |p: &Project| -> Vec<Vec<Vec<(f64, f64)>>> {
+        let scene = crate::graph_scene(p, g).unwrap();
+        scene.layers[0]
+            .plots
+            .iter()
+            .filter_map(|it| match it {
+                crate::scene::Item::Path { d, fill: None, stroke: Some(_) } if d.matches('L').count() >= 9 => {
+                    Some(crate::hit::subpaths(d))
+                }
+                _ => None,
+            })
+            .collect()
+    };
+    let cut = line_paths(&p);
+    assert_eq!(cut.len(), 1, "one line path");
+    assert_eq!(cut[0].len(), 2, "the line is in two pieces: {:?}", cut[0]);
+    let all: Vec<(f64, f64)> = cut[0].iter().flatten().copied().collect();
+    assert!(all.iter().all(|q| q.1 <= band.0 + 2e-3 || q.1 >= band.1 - 2e-3), "nothing inside the band");
+    // The pieces end exactly on the edges of the band.
+    assert!(all.iter().any(|q| (q.1 - band.0).abs() < 2e-3) && all.iter().any(|q| (q.1 - band.1).abs() < 2e-3));
+    p.graph_mut(g).unwrap().page.style.connect_across_breaks = true;
+    let whole = line_paths(&p);
+    assert_eq!(whole[0].len(), 1, "drawn through");
+}
+
+/// Origin 2016 breaks a line at rows with a missing value; the page's "Connect line across Missing Data"
+/// joins the points on either side instead (graphing spec 18.7b: rows 4, 5 and 8 of 0..10 missing gave three
+/// pieces, and one line with the switch). A value that cannot be placed (here -1 on a log axis) still breaks it.
+#[test]
+fn connect_line_across_missing_data_joins_the_points_around_missing_rows() {
+    use sheaf_core::{ColumnData, Designation};
+    let mut p = Project::new();
+    let book = p.add_workbook("M");
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let mut y: Vec<f64> = x.iter().map(|v| 2.0 * v + 1.0).collect();
+    for r in [4, 5, 8] {
+        y[r] = f64::NAN;
+    }
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+    let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+    let g = p.plot_columns(Template::Line, &[yc]).unwrap();
+    let pieces = |p: &Project| -> usize {
+        let scene = crate::graph_scene(p, g).unwrap();
+        scene.layers[0]
+            .plots
+            .iter()
+            .filter_map(|it| match it {
+                crate::scene::Item::Path { d, fill: None, stroke: Some(_) } => Some(crate::hit::subpaths(d).len()),
+                _ => None,
+            })
+            .sum()
+    };
+    assert_eq!(pieces(&p), 3, "broken at the missing rows by default");
+    p.graph_mut(g).unwrap().page.style.connect_across_missing = true;
+    assert_eq!(pieces(&p), 1, "joined across them");
+    // A value that a log axis cannot place still breaks the line.
+    {
+        let pr = &mut p;
+        let col = pr.column_mut(yc).unwrap();
+        if let ColumnData::Numeric(v) = &mut col.data {
+            std::sync::Arc::make_mut(v)[2] = -1.0;
+        }
+        pr.graph_mut(g).unwrap().layers[0].y_axis.scale = sheaf_core::graph::ScaleKind::Log10;
+    }
+    assert_eq!(pieces(&p), 2);
 }

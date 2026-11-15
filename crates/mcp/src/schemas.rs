@@ -62,6 +62,20 @@ fn style_schema() -> Value {
             ("width", n("Page width in inches, 0.1 to 100.")),
             ("height", n("Page height in inches, 0.1 to 100.")),
             ("line_width", n("Line width in points.")),
+            (
+                "sort_x",
+                t(
+                    "boolean",
+                    "Connect line and line+symbol plots in increasing X order without sorting the worksheet (Origin 2023 LabTalk line.sortx).",
+                ),
+            ),
+            (
+                "trendline",
+                strs(
+                    "Trendlines added to every curve (replacing its own), each linear, poly:N (order 2-10), power, log, exp or ma:N (moving average, window 2-10). Fitted ones write their equation and R-squared at the top left.",
+                ),
+            ),
+            ("no_trendline_label", t("boolean", "Leave the equation and R-squared label off the trendlines.")),
             ("colors", strs("Plot colors in legend order: names or #RRGGBB.")),
             ("labels", strs("Legend text of the plots, in legend order.")),
             ("no_legend", t("boolean", "Hide the legend.")),
@@ -296,7 +310,7 @@ pub fn defs() -> Vec<Def> {
                     (
                         "template",
                         s(
-                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), ... (the names of sheaf plot --template). Default: what the data suggests.",
+                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), scatter-rug (scatter with rug marks beside the bottom and left axes), violin (also violin-box, violin-point, violin-quartile, violin-stick, half-violin), ridgeline (one density curve per y column, stacked up the page), ... (the names of sheaf plot --template). Default: what the data suggests.",
                         ),
                     ),
                     ("book", s(BOOK)),

@@ -156,6 +156,10 @@ pub enum ProjectError {
     LollipopNeedsTwoColumns(usize),
     #[error("a lollipop plot cannot have a right Y axis; use one Y axis or another template")]
     LollipopNoRightAxis,
+    #[error("a violin plot cannot have a right Y axis; use one Y axis or another template")]
+    ViolinNoRightAxis,
+    #[error("a ridgeline chart cannot have a right Y axis; use one Y axis or another template")]
+    RidgelineNoRightAxis,
 }
 
 impl Project {
@@ -328,6 +332,7 @@ impl Project {
                 col.id = new;
             }
             sheet.remap_cond_format_columns(&|c| renamed.get(&c).copied());
+            sheet.remap_note_columns(&|c| renamed.get(&c).copied());
         }
         self.windows.push(Window::Workbook(book));
         id
@@ -382,6 +387,7 @@ impl Project {
                             col.analysis = None;
                         }
                         sheet.remap_cond_format_columns(&|id| Some(c(id)));
+                        sheet.remap_note_columns(&|id| Some(c(id)));
                     }
                 }
                 Window::Graph(graph) => {
@@ -595,6 +601,7 @@ impl Project {
             y_base: None,
             error: ErrorStyle::default(),
             hist: Default::default(),
+            ridge: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -810,6 +817,12 @@ impl Project {
     ) -> Result<WindowId, ProjectError> {
         if template == Template::Lollipop {
             return Err(ProjectError::LollipopNoRightAxis);
+        }
+        if template.is_violin() {
+            return Err(ProjectError::ViolinNoRightAxis);
+        }
+        if template == Template::Ridgeline {
+            return Err(ProjectError::RidgelineNoRightAxis);
         }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
@@ -1031,6 +1044,15 @@ mod tests {
         let graphs = p.graphs().count();
         let r = p.plot_columns_double_y(crate::template::Template::Lollipop, &[y], &[y]);
         assert!(matches!(r, Err(ProjectError::LollipopNoRightAxis)));
+        assert_eq!(p.graphs().count(), graphs, "no graph is left behind");
+    }
+
+    #[test]
+    fn a_violin_is_refused_a_right_y_axis() {
+        let (mut p, _, _, y) = sample();
+        let graphs = p.graphs().count();
+        let r = p.plot_columns_double_y(crate::template::Template::Violin, &[y], &[y]);
+        assert!(matches!(r, Err(ProjectError::ViolinNoRightAxis)));
         assert_eq!(p.graphs().count(), graphs, "no graph is left behind");
     }
 
@@ -1487,5 +1509,26 @@ mod tests {
         let _ = (ob, oc);
         let col = p.workbook(new[0]).unwrap().sheets[0].columns[0].id;
         assert_eq!(rule_columns(&p, new[0]), vec![col]);
+    }
+
+    #[test]
+    fn duplicate_window_and_append_remap_the_notes() {
+        let mut p = Project::new();
+        let b = p.add_workbook("");
+        let c = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        p.workbook_mut(b).unwrap().sheets[0].set_note(c, 1, "n");
+        let copy = p.duplicate_window(b).unwrap();
+        let col = p.workbook(copy).unwrap().sheets[0].columns[0].id;
+        assert_ne!(col, c);
+        assert_eq!(p.workbook(copy).unwrap().sheets[0].note(col, 1), Some("n"));
+        assert_eq!(p.workbook(b).unwrap().sheets[0].note(c, 1), Some("n"));
+
+        let mut other = Project::new();
+        let ob = other.add_workbook("");
+        let oc = other.add_column(ob, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+        other.workbook_mut(ob).unwrap().sheets[0].set_note(oc, 0, "o");
+        let (new, _) = p.append(other, "f");
+        let col = p.workbook(new[0]).unwrap().sheets[0].columns[0].id;
+        assert_eq!(p.workbook(new[0]).unwrap().sheets[0].note(col, 0), Some("o"));
     }
 }

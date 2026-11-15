@@ -334,11 +334,30 @@ pub struct PageStyle {
     /// Free notes about the graph; the Object Manager shows them as the page's hover text.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub comments: String,
+    /// Origin's page Display tab "Connect line across Axis Break" (off by default, graphing spec 3.6): off
+    /// leaves a line out where it crosses the band of an axis break, on draws it through.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub connect_across_breaks: bool,
+    /// Origin's page Display tab "Connect line across Missing Data" (off by default, graphing spec 18.7b): on
+    /// joins the points before and after rows with a missing X or Y value instead of breaking the line.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub connect_across_missing: bool,
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 impl Default for PageStyle {
     fn default() -> Self {
-        PageStyle { border: None, layer_icons: true, title_display: TitleDisplay::Both, comments: String::new() }
+        PageStyle {
+            border: None,
+            layer_icons: true,
+            title_display: TitleDisplay::Both,
+            comments: String::new(),
+            connect_across_breaks: false,
+            connect_across_missing: false,
+        }
     }
 }
 
@@ -378,6 +397,8 @@ mod tests {
             layer_icons: false,
             title_display: TitleDisplay::LongName,
             comments: "notes".into(),
+            connect_across_breaks: true,
+            connect_across_missing: true,
         };
         let json = serde_json::to_string(&page).unwrap();
         assert_eq!(serde_json::from_str::<PageStyle>(&json).unwrap(), page);
@@ -386,5 +407,107 @@ mod tests {
         let json = serde_json::to_string(&fill).unwrap();
         assert_eq!(serde_json::from_str::<FillStyle>(&json).unwrap(), fill);
         assert!(FillStyle::default().is_plain() && !fill.is_plain());
+    }
+}
+
+/// What a ridgeline plot draws for its Y column (Origin's Plot Details Display tab, Type; graphing
+/// spec 14.23).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RidgeDisplay {
+    /// The kernel density curve, filled down to its baseline.
+    #[default]
+    DistributionCurve,
+    /// The curve with the observations as points on the baseline.
+    WithDataPoints,
+    /// The curve with a rug of short ticks below the baseline.
+    WithRug,
+    /// A histogram in place of the curve ("Single Block Bar").
+    SingleBlockBar,
+}
+
+/// The kernel bandwidth rule of a ridgeline plot (Origin's Distribution tab, Kernel Smooth).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RidgeBandwidth {
+    /// `0.9 A n^(-1/5)`, `A = min(SD, IQR / 1.349)`.
+    #[default]
+    Scott,
+    /// `1.059 A n^(-1/5)`.
+    Silverman,
+    /// `k` times the sample standard deviation ("k*SD").
+    KSd(f64),
+    /// A bandwidth typed in.
+    Custom(f64),
+}
+
+impl RidgeBandwidth {
+    /// The rule of the shared kernel density code.
+    pub fn to_calc(self) -> sheaf_calc::kde::Bandwidth {
+        use sheaf_calc::kde::Bandwidth;
+        match self {
+            RidgeBandwidth::Scott => Bandwidth::Scott,
+            RidgeBandwidth::Silverman => Bandwidth::Silverman,
+            RidgeBandwidth::KSd(k) => Bandwidth::Sd(k),
+            RidgeBandwidth::Custom(h) => Bandwidth::Fixed(h),
+        }
+    }
+}
+
+/// The rug of a ridgeline plot (Origin: Color, Thickness, Size(%), Gap Between Curve). Sizes are in
+/// percent of the spacing between baselines (Sheaf's reading of the percentages).
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RidgeRug {
+    /// Tick colour; `None` is the plot's colour.
+    pub color: Option<Color>,
+    pub thickness_pt: f64,
+    /// Tick length, percent of the baseline spacing.
+    pub size_pct: f64,
+    /// Space between the baseline and the ticks, percent of the baseline spacing.
+    pub gap_pct: f64,
+}
+
+impl Default for RidgeRug {
+    fn default() -> RidgeRug {
+        RidgeRug { color: None, thickness_pt: 0.5, size_pct: 10.0, gap_pct: 3.0 }
+    }
+}
+
+/// The settings of a ridgeline plot (graphing spec 14.23). Every field is skipped when written
+/// while it has its default, so older files load unchanged.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RidgelineStyle {
+    pub display: RidgeDisplay,
+    pub bandwidth: RidgeBandwidth,
+    /// Vertical lines from the baseline to the curve at the percentiles in `quantiles`.
+    pub quantile_lines: bool,
+    /// Percentiles, 0 to 100.
+    pub quantiles: Vec<f64>,
+    pub rug: RidgeRug,
+    /// Height of the tallest ridge's peak, in baseline spacings (Sheaf's choice: 1.5, so ridges overlap).
+    pub height: f64,
+    /// Transparency of the fill, 0 to 100 percent (Sheaf's choice: 30).
+    pub fill_transparency_pct: f64,
+}
+
+impl Default for RidgelineStyle {
+    fn default() -> RidgelineStyle {
+        RidgelineStyle {
+            display: RidgeDisplay::default(),
+            bandwidth: RidgeBandwidth::default(),
+            quantile_lines: false,
+            quantiles: vec![25.0, 50.0, 75.0],
+            rug: RidgeRug::default(),
+            height: 1.5,
+            fill_transparency_pct: 30.0,
+        }
+    }
+}
+
+impl RidgelineStyle {
+    pub fn is_default(&self) -> bool {
+        *self == RidgelineStyle::default()
     }
 }

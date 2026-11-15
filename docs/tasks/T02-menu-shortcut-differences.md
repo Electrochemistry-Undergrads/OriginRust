@@ -1,6 +1,6 @@
 # T02: Menu labels, shortcuts and context menus that differ from Origin
 
-**Status:** done, merged (`bbdb60a`) (items 1-7, 9, 10 done; 8 kept; see Result); Go To layout/selection (2026-11-14) and column-picker/name lookup (2026-11-15) measured and updated, gui-look section 5. The project-wide Column Browser remains. **Size:** M. **Branch:** `menu-diffs`. **Model:** Sonnet.
+**Status:** done, merged (`bbdb60a`) (items 1-7, 9, 10 done; 8 kept; see Result); Go To and Find/Replace follow-ups measured and updated (2026-11-14/15), gui-look section 5. Wider search scopes and the project-wide Column Browser remain. **Size:** M. **Branch:** `menu-diffs`. **Model:** Sonnet.
 **Detail:** audit section A, bullet "Different" (`docs/audit/origin-differences-2026-11-12.md`).
 **Spec:** `docs/spec/gui-look.md` sections 1 and 3, `docs/spec/ui-command-map.md`.
 
@@ -56,7 +56,8 @@ Each item fixed or listed as "kept, because ..." here; a UI test per new key bin
 3. Done: Recent Graphs only in the graph File menu, Re-Import items only outside graphs, "Open Sample
    Projects".
 4. Done: Ctrl+Shift+C = Copy including label rows.
-5. Done: Find in Project (F3), Find in Sheets (Ctrl+F), Replace (Ctrl+H) greyed with key text; Go to live.
+5. Done: shortcut text added; Find in Project (F3) remains greyed, Find in Sheets (Ctrl+F), Replace
+   (Ctrl+H) and Go to (Ctrl+G) are live.
 6. Done: F2 / Delete / Ctrl+A in the Explorer while it has the keyboard (last click inside it); Ctrl+A
    highlights every window of the folder, Delete deletes the highlighted ones (one undo step each).
    Folder menu Rename and Delete Folder live (not for the root); Delete Folder removes its windows as
@@ -95,3 +96,21 @@ Columns stays disabled.
 Sheet row capacity is still Sheaf's data length plus 30 spare rows, rather than a persisted Origin
 allocation. Six new UI regressions, a new unequal-column parser fixture and the expanded existing
 parser regression cover this follow-up.
+
+Find/Replace follow-up (2026-11-15): direct Origin 2016 captures show one tabbed window, Numeric
+initial mode, selected display text in Find what, active-sheet scope and expanded Options. The
+dialog now implements Numeric conditions, relative tolerance, missing values, absolute-value and
+sign-preserving replacement, clearing nonmatches, backward search and String wildcards. The
+measured strict `!=` rule is distinct from tolerant equality. Empty Numeric replacement clears
+the cell. String mode keeps the existing case/whole-cell and substring rules. Four new UI tests,
+four matching fixtures and the updated existing substring regressions cover the change.
+All probes and the remaining wider-scope, labels, cell-link, history and query-menu
+limitations are recorded in gui-look section 5. `--show find` / `--show replace` open native previews.
+
+Selected-range follow-up (2026-11-15): eleven successful Origin GUI cases establish the checked
+range option for blocks, whole columns and rows, its retention across restricted hits and its
+removal after an unchecked search collapses the range. Sheaf snapshots the opening scope for
+both data modes, forward/backward/wildcard searches and both replacement paths, including
+clearing numeric nonmatches. Four UI regressions and one matching fixture cover this addition.
+The visual difference (Sheaf selects each hit while retaining the saved scope; Origin retains
+the rectangle) and the remaining gaps are recorded in gui-look section 5.

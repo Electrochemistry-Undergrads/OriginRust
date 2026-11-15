@@ -234,6 +234,11 @@ impl GraphPropsDialog {
             graph.layers.iter().map(|l| l.plots.iter().map(|p| doc.project().plot_data_name(p)).collect()).collect();
         let sources = sources(doc.project());
         let columns = all_columns(doc.project());
+        // The span of each layer's axes in their own scale, for the X:Y ratio of Size/Speed.
+        let spans: Vec<(f64, f64)> = geometry
+            .as_ref()
+            .map(|g| g.iter().map(|lg| (lg.x.scale_span(), lg.y.scale_span())).collect())
+            .unwrap_or_default();
 
         let (title, window_id, size) = match self.view {
             View::Axis { vertical, .. } => (
@@ -288,6 +293,7 @@ impl GraphPropsDialog {
                             &sources,
                             &columns,
                             &mut this.add_from,
+                            &spans,
                         );
                     }
                 });

@@ -10,6 +10,7 @@
 //! [`render_pdf`], [`export_file`] and, for an interactive view,
 //! [`render_raster`] together with [`layout_geometry`].
 
+mod break_cut;
 mod data;
 mod emf;
 mod eps;
@@ -26,6 +27,8 @@ mod plots;
 mod polar;
 mod psd;
 mod raster;
+mod ridgeline;
+mod rug;
 pub mod scene;
 mod shapes;
 mod sheet;
@@ -36,12 +39,18 @@ mod ternary;
 mod text;
 pub mod ticks;
 mod ticks_scales;
+pub(crate) mod trend;
 mod vector;
+mod violin;
 
 #[cfg(test)]
 mod detail_tests;
 #[cfg(test)]
 mod export_tests;
+#[cfg(test)]
+mod fill_inclusive_tests;
+#[cfg(test)]
+mod fill_sideline_tests;
 #[cfg(test)]
 mod label_frame_tests;
 #[cfg(test)]
@@ -57,13 +66,23 @@ mod multipage_tests;
 #[cfg(test)]
 mod offset_multiplier_tests;
 #[cfg(test)]
+mod ridgeline_tests;
+#[cfg(test)]
+mod rug_tests;
+#[cfg(test)]
 mod skip_tests;
+#[cfg(test)]
+mod sort_x_tests;
 #[cfg(test)]
 mod symbol_gap_tests;
 #[cfg(test)]
 mod symbol_line_order_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod trend_tests;
+#[cfg(test)]
+mod violin_tests;
 
 pub use eps::EpsOutput;
 pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextMeasurer};
@@ -253,6 +272,12 @@ pub struct LayerGeometry {
     /// The triangle of a ternary layer. Then the data are the normalised X and Y fractions of the
     /// rows (graphing spec section 14.20).
     pub ternary: Option<ternary::TernaryMap>,
+    /// The page's "Connect line across Axis Break": lines are drawn through the bands of axis breaks
+    /// instead of being cut there (graphing spec 3.6).
+    pub connect_across_breaks: bool,
+    /// The page's "Connect line across Missing Data": rows with a missing X or Y value do not break a
+    /// connecting line (graphing spec 18.7b).
+    pub connect_across_missing: bool,
 }
 
 impl LayerGeometry {

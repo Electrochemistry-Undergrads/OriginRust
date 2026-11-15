@@ -47,6 +47,7 @@ const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
 const NO_UNDO: &str = "Nothing to undo";
 const NO_REDO: &str = "Nothing to redo";
+const NO_AI_UNDO: &str = "The latest change must be an AI change, with no edit or dialog open";
 const ANALYSIS_ON_BOOK: &str = "The active layer has no data plot to analyse: plot a worksheet column first";
 
 /// Which menu bar is shown.
@@ -95,6 +96,7 @@ pub enum Cmd {
     Exit,
     Undo,
     Redo,
+    UndoAiChanges,
     DeleteColumns,
     /// Column > Move Columns.
     MoveColumns(MoveTo),
@@ -126,6 +128,10 @@ pub enum Cmd {
     CondFormat(crate::dialogs::cond_format::CondKind),
     /// Worksheet > Conditional Formatting > Remove Conditional Format.
     RemoveCondFormat,
+    /// Cell menu > Add Note... / Edit Note...: the note editor for the selected cell.
+    EditNote,
+    /// Cell menu > Delete Note.
+    DeleteNote,
     /// Insert rows or columns at the selection (Edit > Insert and the cell menus).
     InsertCells,
     /// Delete the selected rows or columns (Edit > Delete and the cell menus).
@@ -150,6 +156,12 @@ pub enum Cmd {
     },
     StackPanels,
     LabelPanels,
+    /// Add / Edit Trendline... on a plot of the active layer.
+    Trendline {
+        layer: usize,
+        plot: usize,
+        edit: bool,
+    },
     /// Graph > Add Error Bars... on the active layer.
     AddErrorBars,
     /// Window > Refresh (F5).
@@ -255,6 +267,9 @@ pub enum Cmd {
     CloseWindow,
     /// Window > Duplicate: a copy of the active workbook or graph.
     DuplicateWindow,
+    /// Window > Window Switcher (Ctrl+Tab, handled by `switcher.rs`; the menu entry opens it
+    /// and keeps it open until a card is chosen).
+    WindowSwitcher,
     /// File > Append...: bring the windows of another project into this one.
     AppendProject,
     /// Clear Recent Projects / Clear Recent Imports.
@@ -322,6 +337,8 @@ pub struct MenuContext<'a> {
     pub cells: bool,
     pub undo: Option<&'a str>,
     pub redo: Option<&'a str>,
+    /// The latest history entry is an AI call and no editor/dialog is active.
+    pub undo_ai: bool,
     /// All windows of the project, in order, with their titles.
     pub windows: Vec<(WindowId, String)>,
     /// A top-level menu to hold open (`--show menu:Plot`, for pictures of the menus); `File>Recent
@@ -494,6 +511,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(sep());
         v.push(keyed("&Undo", ctrl(Key::Z), Cmd::Undo));
         v.push(keyed("&Redo", ctrl_shift(Key::Z), Cmd::Redo));
+        v.push(item("Undo AI Changes", Cmd::UndoAiChanges));
     }
     if kind != WindowKind::None {
         v.push(sep());
@@ -586,6 +604,7 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         keyed("&Undo", ctrl(Key::Z), Cmd::Undo),
         // Origin has no Redo; Sheaf keeps its own, with its own key.
         keyed("&Redo", ctrl_shift(Key::Z), Cmd::Redo),
+        item("Und&o AI Changes", Cmd::UndoAiChanges),
         sep(),
     ];
     if kind == WindowKind::Workbook {
@@ -721,7 +740,12 @@ fn plot_menu() -> Vec<Entry> {
         sub(
             "&Symbol",
             [
-                vec![item("&Scatter", Cmd::Plot(Template::Scatter)), grey("Scatter Central"), grey("Column Scatter")],
+                vec![
+                    item("&Scatter", Cmd::Plot(Template::Scatter)),
+                    item("Scatter + Rug", Cmd::Plot(Template::ScatterRug)),
+                    grey("Scatter Central"),
+                    grey("Column Scatter"),
+                ],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
                 greys(&["Vertical Drop Line"]),
                 vec![item("Lollipop Plot", Cmd::Plot(Template::Lollipop))],
@@ -821,6 +845,15 @@ fn plot_menu() -> Vec<Entry> {
             [
                 vec![item("Box Chart", Cmd::Plot(Template::BoxChart))],
                 greys(&["Grouped Box Charts", "Interval Plot"]),
+                vec![
+                    item("Violin Plot", Cmd::Plot(Template::Violin)),
+                    item("Violin with Box", Cmd::Plot(Template::ViolinBox)),
+                    item("Violin with Point", Cmd::Plot(Template::ViolinPoint)),
+                    item("Violin with Quartile", Cmd::Plot(Template::ViolinQuartile)),
+                    item("Violin with Stick", Cmd::Plot(Template::ViolinStick)),
+                    item("Half Violin", Cmd::Plot(Template::HalfViolin)),
+                ],
+                vec![item("Ridgeline Chart", Cmd::Plot(Template::Ridgeline))],
                 vec![item("Histogram", Cmd::Plot(Template::Histogram))],
                 greys(&[
                     "Histogram + Probabilities",
@@ -1147,6 +1180,8 @@ fn statistics_menu() -> Vec<Entry> {
                 item("Statistics on &Columns...", Cmd::Analyze(AnalysisKind::Statistics)),
                 item("Statistics on &Rows...", Cmd::Analyze(AnalysisKind::RowStatistics)),
                 sep(),
+                item("Graphical Summary...", Cmd::Analyze(AnalysisKind::GraphSummary)),
+                sep(),
                 item("Cross Tabulation...", Cmd::Analyze(AnalysisKind::Crosstab)),
                 sep(),
                 item("Discrete Frequency...", Cmd::Analyze(AnalysisKind::DiscreteFreq)),
@@ -1417,6 +1452,8 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
         sep(),
         grey_sub("&Folders", &["Folders List"]),
         sep(),
+        keyed("Window S&witcher", KeyboardShortcut::new(Modifiers::CTRL, Key::Tab), Cmd::WindowSwitcher),
+        sep(),
         Entry::Windows,
     ]);
     v
@@ -1552,8 +1589,8 @@ pub fn label_cell_menu() -> Vec<Entry> {
     ]
 }
 
-/// The menu of a data cell.
-pub fn cell_menu() -> Vec<Entry> {
+/// The menu of a data cell; `noted` when the cell has a note (Edit/Delete Note instead of Add).
+pub fn cell_menu_for(noted: bool) -> Vec<Entry> {
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
     v.extend(copy_entries());
     v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
@@ -1566,12 +1603,17 @@ pub fn cell_menu() -> Vec<Entry> {
     v.extend(greys(&[
         "Insert Graph...",
         "Insert Images from Files...",
-        "Insert Notes",
         "Insert Sparklines...",
         "Insert Variables...",
         "-",
         "Format Cells...",
     ]));
+    if noted {
+        v.push(item("Edit Note...", Cmd::EditNote));
+        v.push(item("Delete Note", Cmd::DeleteNote));
+    } else {
+        v.push(item("Add Note...", Cmd::EditNote));
+    }
     v.push(mask_menu());
     v.push(cond_format_menu());
     v.push(grey_sub("Set Data Style", &["Default"]));
@@ -1619,6 +1661,7 @@ pub fn graph_plot_menu(
     kind: PlotKind,
     on_right: bool,
     book: Option<(WindowId, String)>,
+    trendlines: usize,
 ) -> Vec<Entry> {
     let change = |label: &str, to: PlotKind| {
         if to == kind {
@@ -1647,7 +1690,13 @@ pub fn graph_plot_menu(
             Cmd::GraphEdit(GraphOp::MovePlotToAxis { layer, plot, right: !on_right }),
         ),
         item("Hide Data Plot", Cmd::GraphEdit(GraphOp::HidePlot { layer, plot })),
+        sep(),
+        item("Add Trendline...", Cmd::Trendline { layer, plot, edit: false }),
     ];
+    if trendlines > 0 {
+        v.push(item("Edit Trendline...", Cmd::Trendline { layer, plot, edit: true }));
+        v.push(item("Remove Trendline", Cmd::GraphEdit(GraphOp::RemoveTrendline { layer, plot })));
+    }
     match book {
         Some((id, name)) => v.push(item(&format!("Go to {name}"), Cmd::GoTo(id))),
         None => v.push(grey("Go to Book")),
@@ -2021,6 +2070,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             c.redo.ok_or(NO_REDO)?;
             Action::Redo
         }
+        Cmd::UndoAiChanges => {
+            if !c.undo_ai {
+                return Err(NO_AI_UNDO);
+            }
+            Action::UndoAiChanges
+        }
         Cmd::DeleteColumns => {
             book?;
             Action::DeleteColumns(some()?)
@@ -2113,6 +2168,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::StackPanels => Action::StackPanels { book: book?, columns: c.selected.to_vec() },
         Cmd::LabelPanels => Action::LabelPanels { book: book?, columns: c.selected.to_vec() },
+        Cmd::Trendline { layer, plot, edit } => {
+            Action::Trendline { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, plot: *plot, edit: *edit }
+        }
         Cmd::AddErrorBars => Action::AddErrorBars { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::Refresh => Action::Refresh(c.active),
         Cmd::UpdateLegend => {
@@ -2126,6 +2184,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::CondFormat(kind) => {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             Action::CondFormatDialog { book: book?, kind: *kind }
+        }
+        Cmd::EditNote => {
+            c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            Action::NoteDialog(book?)
+        }
+        Cmd::DeleteNote => {
+            c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            Action::DeleteNote(book?)
         }
         Cmd::RemoveCondFormat => {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
@@ -2224,6 +2290,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ToggleAiLink => Action::ToggleAiLink,
         Cmd::CloseWindow => Action::HideWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::DuplicateWindow => Action::DuplicateWindow(c.active.ok_or(NEED_WINDOW)?),
+        Cmd::WindowSwitcher => Action::OpenSwitcher,
         Cmd::AppendProject => Action::AppendProject(None),
         Cmd::ClearRecent(kind) => {
             let list = if *kind == RecentKind::Projects { c.recent_projects } else { c.recent_imports };
@@ -2249,7 +2316,9 @@ pub fn shortcuts() -> Vec<(KeyboardShortcut, Cmd)> {
     for kind in [WindowKind::Workbook, WindowKind::Graph, WindowKind::None] {
         for m in bar(kind) {
             walk(&m.entries, &mut |i| {
+                // Ctrl+Tab is read by the Window Switcher itself (it needs the key release).
                 if let (Some(keys), Some(cmd)) = (i.keys, &i.cmd)
+                    && *cmd != Cmd::WindowSwitcher
                     && !out.iter().any(|(k, c)| *k == keys && c == cmd)
                 {
                     out.push((keys, cmd.clone()));
@@ -2658,6 +2727,7 @@ mod tests {
             cells: false,
             undo: None,
             redo: None,
+            undo_ai: false,
             windows: Vec::new(),
             open: None,
             recent_projects: &[],

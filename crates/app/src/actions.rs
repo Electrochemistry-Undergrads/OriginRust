@@ -83,6 +83,8 @@ pub enum GraphOp {
     MovePlotToAxis { layer: usize, plot: usize, right: bool },
     /// Hide Data Plot.
     HidePlot { layer: usize, plot: usize },
+    /// Remove Trendline: the plot's last trendline goes.
+    RemoveTrendline { layer: usize, plot: usize },
     /// Hide Axis (`y` false for the X axis).
     HideAxis { layer: usize, y: bool },
     /// Hide Grids, or show the major grid lines again.
@@ -161,6 +163,8 @@ pub enum Action {
     ReplaceInSheets(WindowId),
     Undo,
     Redo,
+    /// Owner-only: undo consecutive completed AI calls, stopping at a manual history entry.
+    UndoAiChanges,
     NewWorkbook,
     AddColumn(WindowId),
     DeleteColumns(Vec<ColumnId>),
@@ -307,6 +311,10 @@ pub enum Action {
     /// Worksheet > Conditional Formatting > Remove Conditional Format: removes the rules that
     /// touch the selection.
     RemoveCondFormat(WindowId),
+    /// Cell menu > Add Note... / Edit Note...: the note editor for the single selected cell.
+    NoteDialog(WindowId),
+    /// Cell menu > Delete Note: removes the note of the single selected cell.
+    DeleteNote(WindowId),
     /// Column > Filter > Reapply Filter.
     ReapplyRowFilter(WindowId),
     /// Open the window that keeps only the rows matching a condition.
@@ -338,6 +346,13 @@ pub enum Action {
     LabelPanels {
         book: WindowId,
         columns: Vec<ColumnId>,
+    },
+    /// A plot's menu: Add Trendline... or Edit Trendline... (the plot's last one).
+    Trendline {
+        graph: WindowId,
+        layer: usize,
+        plot: usize,
+        edit: bool,
     },
     /// Graph > Add Error Bars: choose an existing Y-error column for one plot of the layer.
     AddErrorBars {
@@ -449,6 +464,8 @@ pub enum Action {
     PageSetup,
     /// Bring a window's tab to the front, reopening it if it was closed.
     Focus(WindowId),
+    /// Window > Window Switcher: the switcher stays open until a window is chosen.
+    OpenSwitcher,
     /// Close a window: it leaves the workspace, its data stays (Hide in the project explorer).
     HideWindow(WindowId),
     /// Window > Duplicate: copy this workbook or graph into a new window.

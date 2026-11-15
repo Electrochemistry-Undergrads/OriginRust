@@ -4,6 +4,10 @@
 //! The link's threads read sockets and queue jobs; only [`Live::step`] touches the project, on the
 //! UI thread, once a frame, before the new windows are opened.
 
+mod context;
+
+pub use context::Context;
+
 use eframe::egui;
 use sheaf_core::Document;
 use sheaf_mcp::files::{OpenFiles, protected_set};
@@ -103,6 +107,7 @@ impl Live {
         files: &OpenFiles,
         recovery_dir: Option<&Path>,
         now: Instant,
+        app_context: &dyn Fn(&Document) -> serde_json::Value,
     ) -> Vec<Note> {
         let mut notes = Vec::new();
         let Some(server) = &self.server else { return notes };
@@ -135,7 +140,9 @@ impl Live {
                 continue;
             }
             let before = doc.revision();
-            let Some(done) = job.execute(doc, protected_set(files, &folders)) else { continue };
+            let Some(done) = job.execute_with_app_context(doc, protected_set(files, &folders), app_context) else {
+                continue;
+            };
             ran = true;
             let tool = sanitize(&done.tool, TOOL_CHARS);
             match done.failed {

@@ -16,6 +16,10 @@
 //!   limit of `S`, the upper limit of the quartile the upper limit of `S`. When the upper limit is never
 //!   reached Origin reports the largest event time (measured once, for a quartile whose estimate is reached; the
 //!   lower limit and a quartile whose estimate is never reached are `None`, which was not measured).
+//! - The confidence limits of the curve itself are the linear limits `S -/+ z se`, **not cut off** at 0 and 1 (Origin's
+//!   survival-function sheet holds `1.1163...` as an upper limit; measured with 90 and 95 percent, one and two
+//!   groups, `tools/origin-ref/kaplan-plots2.lines.txt`). They stand on the event rows; the start is `(0, 1, 1)`
+//!   and a curve that has reached 0 has the limits 0 and 0.
 //! - The mean is the area under the curve up to the **largest time, censored or not**; its standard error is
 //!   `sqrt(D / (D - 1) sum A_i^2 d_i / (n_i (n_i - d_i)))` with `A_i` the area after the i-th event time and `D` the
 //!   number of events; the factor `D / (D - 1)` is applied only when the curve reaches 0 (the largest time is an
@@ -170,8 +174,8 @@ pub fn kaplan_meier(time: &[f64], censored: &[bool], confidence: f64) -> Result<
                 time: t,
                 survival: s,
                 se,
-                lower: (s - z * se).max(0.0),
-                upper: (s + z * se).min(1.0),
+                lower: s - z * se,
+                upper: s + z * se,
                 at_risk,
                 events: d,
             });

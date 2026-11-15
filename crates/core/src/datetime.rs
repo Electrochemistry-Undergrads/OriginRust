@@ -472,7 +472,7 @@ pub fn format_date_time(v: f64, date: DatePattern, time: TimePattern) -> String 
 // ----- parsing -------------------------------------------------------------------------
 
 /// Which number comes first in `a/b/yyyy`.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum DateOrder {
     /// Month first (`11/12/2026` is 12 November).
     #[default]

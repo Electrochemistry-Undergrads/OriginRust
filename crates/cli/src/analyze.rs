@@ -97,7 +97,7 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
         load_project(&target.input)?
     } else {
         let mut p = Project::new();
-        p.adopt_workbook(read_data_file(&target.input, &crate::commands::read_settings(&target.read))?.workbook);
+        p.adopt_workbook(read_data_file(&target.input, &crate::commands::read_settings(&target.read)?)?.workbook);
         p
     };
     let spec = Target {
@@ -106,7 +106,7 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
         sheet: target.sheet.clone(),
         rows: target.rows.clone(),
         x_range: target.x_range.clone(),
-        read: crate::commands::read_settings(&target.read),
+        read: crate::commands::read_settings(&target.read)?,
     };
     let run = sheaf_ops::analyze::run_job(&mut project, &spec, job)?;
     for w in &run.load_warnings {

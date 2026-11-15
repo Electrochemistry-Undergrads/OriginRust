@@ -14,8 +14,11 @@ path = "src/main.rs"
 [dependencies]
 sheaf-calc.workspace = true
 sheaf-core.workspace = true
+sheaf-fit.workspace = true
 sheaf-io.workspace = true
+sheaf-mcp.workspace = true
 sheaf-plot.workspace = true
+serde_json.workspace = true
 eframe = { version = "0.33", default-features = false, features = ["glow", "default_fonts", "accesskit"] }
 egui_extras = "0.33"
 rfd = "0.15"

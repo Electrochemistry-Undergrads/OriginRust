@@ -30,8 +30,8 @@ buttons OK, Apply, Cancel; Apply always enabled; resizable.
 - Recalculate: a drop-down, default Manual. Rows: "From <auto> To <auto>".
 - Buttons OK, Cancel, Apply; Apply grey until something changes. Same order fix for the text object
   dialog (`text_object.rs`).
-- Set Multiple Columns Values (Ctrl+Shift+Q, greyed in menus.rs) uses the same dialog for several
-  columns; optional here.
+- Set Multiple Columns Values (Ctrl+Shift+Q) uses the same dialog for several columns; done by T53
+  (`docs/tasks/T53-set-multiple-columns.md`), no longer greyed in menus.rs.
 
 ## Done when
 

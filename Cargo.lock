@@ -3249,10 +3249,13 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "objc2-pdf-kit",
  "rfd",
+ "serde_json",
  "sheaf-calc",
  "sheaf-core",
  "sheaf-expr",
+ "sheaf-fit",
  "sheaf-io",
+ "sheaf-mcp",
  "sheaf-plot",
  "windows-sys 0.61.2",
 ]
@@ -3336,12 +3339,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "getrandom 0.3.4",
  "serde",
  "serde_json",
  "sheaf-core",
  "sheaf-io",
  "sheaf-ops",
  "sheaf-plot",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3353,6 +3358,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sheaf-core",
+ "sheaf-fit",
  "sheaf-io",
  "sheaf-plot",
 ]

@@ -1,13 +1,15 @@
 //! The import window: choose how files are read, see a preview of the
 //! result, then import all chosen files with the same settings.
 
+use super::import_theme::{ThemeRow, Themed};
 use eframe::egui::{self, Color32, DragValue, RichText};
 use egui_extras::{Column as TableColumn, TableBuilder};
 use sheaf_core::template::Template;
 use sheaf_io::ascii::{AsciiOptions, Delimiter, Thousands, parse_widths};
 use sheaf_io::batch::{ImportMode, PlaceOptions};
 use sheaf_io::chi::ChiOptions;
-use sheaf_io::{ImportKind, Imported};
+use sheaf_io::themes::{self, AsciiSettings, ChiSettings};
+use sheaf_io::{ImportKind, Imported, IoError};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -46,6 +48,10 @@ pub struct ImportDialog {
     detect_runs: usize,
     /// The node of the tree at the left that is shown.
     pub(super) page: ImportPage,
+    /// The Dialog Theme row (T46).
+    pub themes: ThemeRow,
+    /// A failure to record `<last used>` at OK, for the application to log.
+    theme_warning: Option<String>,
 }
 
 /// The nodes of the tree at the left: "Import Options" and its groups.
@@ -153,7 +159,82 @@ impl ImportDialog {
             detection: None,
             detect_runs: 0,
             page: ImportPage::Options,
+            themes: ThemeRow::new("import_dialog"),
+            theme_warning: None,
         }
+    }
+
+    /// The text controls and options as a theme stores them (the file list and the target are not
+    /// part of it).
+    fn ascii_settings(&self) -> AsciiSettings {
+        AsciiSettings {
+            data_type: self.kind,
+            ascii: self.ascii.clone(),
+            partial_except_first: self.partial_except_first,
+            other_delimiter: self.other_delimiter.clone(),
+            combine_delimiters: self.combine_delimiters,
+            fixed_widths: self.fixed_widths.clone(),
+            mode: self.mode,
+            plot: self.plot,
+        }
+    }
+
+    fn chi_settings(&self) -> ChiSettings {
+        ChiSettings { chi: self.chi.clone(), mode: self.mode, plot: self.plot }
+    }
+
+    /// The failure of the last OK to record `<last used>`, once.
+    pub fn take_theme_warning(&mut self) -> Option<String> {
+        self.theme_warning.take()
+    }
+
+    /// The entry shown in the Dialog Theme list (for tests).
+    #[cfg(test)]
+    pub fn theme_entry(&self) -> &str {
+        self.themes.selected()
+    }
+
+    /// The id of the Save As window (for tests).
+    #[cfg(test)]
+    pub fn theme_prompt_id(&self) -> egui::Id {
+        self.themes.prompt_id()
+    }
+
+    /// Whether the Save As window is open (for tests).
+    #[cfg(test)]
+    pub fn theme_prompt_open(&self) -> bool {
+        self.themes.prompt_open()
+    }
+
+    /// The saved names in the Dialog Theme list (for tests).
+    #[cfg(test)]
+    pub fn theme_names(&self) -> &[String] {
+        self.themes.names()
+    }
+
+    /// The message under the Dialog Theme row (for tests).
+    #[cfg(test)]
+    pub fn theme_message(&self) -> Option<&str> {
+        self.themes.message()
+    }
+
+    /// Everything a theme stores, and the files and target it must not (for tests).
+    #[cfg(test)]
+    pub fn theme_state(&self) -> (AsciiSettings, ChiSettings) {
+        (self.ascii_settings(), self.chi_settings())
+    }
+
+    /// Changes the options as the controls would (for tests).
+    #[cfg(test)]
+    pub fn edit_options(&mut self, change: impl FnOnce(&mut ImportKind, &mut AsciiOptions, &mut ChiOptions)) {
+        change(&mut self.kind, &mut self.ascii, &mut self.chi);
+        self.preview = None;
+    }
+
+    /// The files in the list (for tests).
+    #[cfg(test)]
+    pub fn file_list(&self) -> &[PathBuf] {
+        &self.files
     }
 
     /// File > Import > Comma Delimited (CSV): the delimiter starts as comma instead of detected.
@@ -183,9 +264,6 @@ impl ImportDialog {
 
     pub fn show(&mut self, ctx: &egui::Context, target: Option<&str>) -> ImportOutcome {
         self.target = target.map(str::to_string);
-        if self.target.is_none() {
-            self.mode = ImportMode::NewBook;
-        }
         if self.files.is_empty() {
             return ImportOutcome::Cancelled;
         }
@@ -213,7 +291,7 @@ impl ImportDialog {
                             outcome = ImportOutcome::Cancelled;
                         }
                         if ui.button("OK").clicked() {
-                            outcome = self.run();
+                            outcome = self.confirm();
                         }
                         if self.files.len() > 1 {
                             ui.weak(format!("{} files are imported with these options", self.files.len()));
@@ -221,6 +299,9 @@ impl ImportDialog {
                     });
                 });
                 egui::CentralPanel::default().show_inside(ui, |ui| {
+                    if let Some(command) = self.themes.ui(ui) {
+                        self.run_theme_command(command);
+                    }
                     self.files_ui(ui);
                     ui.separator();
                     // The tree of option groups at the left, the controls of the chosen group at
@@ -257,6 +338,17 @@ impl ImportDialog {
         outcome
     }
 
+    /// OK: imports the files and remembers the settings as `<last used>`.
+    pub(super) fn confirm(&mut self) -> ImportOutcome {
+        self.confirm_themes();
+        self.run()
+    }
+
+    /// Remembers the settings as `<last used>` (OK, and Finish in the wizard).
+    pub(super) fn confirm_themes(&mut self) {
+        self.theme_warning = self.record_last_used();
+    }
+
     pub(super) fn run(&self) -> ImportOutcome {
         let mut items = Vec::new();
         let mut errors = Vec::new();
@@ -275,7 +367,7 @@ impl ImportDialog {
             errors,
             plot: self.plot,
             template: self.template,
-            mode: self.mode,
+            mode: usable_mode(self.mode, self.target.is_some()),
             place: PlaceOptions {
                 // The sheet names of other formats (CH Instruments) are not the file name's business.
                 rename_sheet: self.ascii.rename_sheet || self.shown_format() != "ascii",
@@ -758,6 +850,13 @@ pub(super) fn selection_rows(
     }
 }
 
+/// The mode an import uses: with no target sheet every mode but a new book falls back to a new
+/// book. The window keeps the mode that was chosen (or that a theme brought), so that Save and OK
+/// store it and a later window with a target gets it back.
+pub(super) fn usable_mode(mode: ImportMode, has_target: bool) -> ImportMode {
+    if has_target { mode } else { ImportMode::NewBook }
+}
+
 /// What the Import Mode page changes.
 pub(super) struct ModeControls<'a> {
     pub mode: &'a mut ImportMode,
@@ -774,14 +873,16 @@ pub(super) fn mode_and_graph_controls(ui: &mut egui::Ui, c: ModeControls<'_>) {
     let ModeControls { mode, target, plot, template, suggested } = c;
     ui.horizontal(|ui| {
         ui.label("Import Mode");
-        egui::ComboBox::from_id_salt("import_mode").selected_text(mode.label()).show_ui(ui, |ui| {
-            for m in ImportMode::ALL {
-                let usable = m == ImportMode::NewBook || target.is_some();
-                ui.add_enabled_ui(usable, |ui| {
-                    ui.selectable_value(mode, m, m.label());
-                });
-            }
-        });
+        egui::ComboBox::from_id_salt("import_mode")
+            .selected_text(usable_mode(*mode, target.is_some()).label())
+            .show_ui(ui, |ui| {
+                for m in ImportMode::ALL {
+                    let usable = m == ImportMode::NewBook || target.is_some();
+                    ui.add_enabled_ui(usable, |ui| {
+                        ui.selectable_value(mode, m, m.label());
+                    });
+                }
+            });
     });
     match (target, *mode) {
         (Some(t), m) if m != ImportMode::NewBook => {
@@ -829,6 +930,55 @@ pub(super) fn optional_line(ui: &mut egui::Ui, value: &mut Option<usize>, detect
             }
         }
     });
+}
+
+impl Themed for ImportDialog {
+    fn theme_row(&mut self) -> &mut ThemeRow {
+        &mut self.themes
+    }
+
+    fn theme_row_ref(&self) -> &ThemeRow {
+        &self.themes
+    }
+
+    fn list_names(&self, dir: &Path) -> Vec<String> {
+        themes::names::<AsciiSettings>(dir)
+    }
+
+    /// The `ascii` store gives everything but the CH Instruments options; those come from the
+    /// `chi` store under the same entry (the defaults when it has none).
+    fn apply_entry(&mut self, dir: &Path, entry: &str) -> Result<(), themes::ThemeError> {
+        let s = themes::resolve::<AsciiSettings>(dir, entry)?;
+        let chi = themes::resolve::<ChiSettings>(dir, entry).unwrap_or_default();
+        self.kind = s.data_type;
+        self.ascii = s.ascii;
+        self.partial_except_first = s.partial_except_first;
+        self.other_delimiter = s.other_delimiter;
+        self.combine_delimiters = s.combine_delimiters;
+        self.fixed_widths = s.fixed_widths;
+        self.mode = s.mode;
+        self.plot = s.plot;
+        self.chi = chi.chi;
+        self.preview = None;
+        Ok(())
+    }
+
+    fn store_as(&self, dir: &Path, name: &str) -> Result<String, themes::ThemeError> {
+        let stored = themes::save_theme(dir, name, &self.ascii_settings())?;
+        themes::save_theme(dir, &stored, &self.chi_settings())?;
+        Ok(stored)
+    }
+
+    fn remove_theme(&self, dir: &Path, name: &str) -> Result<(), IoError> {
+        themes::delete_theme::<AsciiSettings>(dir, name)?;
+        themes::delete_theme::<ChiSettings>(dir, name)?;
+        Ok(())
+    }
+
+    fn record_theme(&self, dir: &Path) -> Result<(), IoError> {
+        themes::record_last_used(dir, &self.ascii_settings())?;
+        themes::record_last_used(dir, &self.chi_settings())
+    }
 }
 
 #[cfg(test)]

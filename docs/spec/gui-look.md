@@ -264,6 +264,24 @@ Pictures: `gr-plain.png` area, `wb-*.png`, `rc-*.png`, `wb-m04-column.png`; seco
   second box "Before Formula Scripts" with its own grey hint. The dialog is small (about 425 x
   335 px), has minimise, a disabled maximise and a close X (no "?"); the formula box has the
   text cursor on opening [seen 2].
+- **Sheaf Set Multiple Columns Values (T53, 2026-11-15).** Column > Set Multiple Columns Values...
+  (Ctrl+Shift+Q; the Column menu and the column right-click menu) is enabled when two or more
+  columns of the sheet are selected and greyed with the hint "Select two or more columns first"
+  otherwise; Set Column Values (Ctrl+Q) stays one-column only. It opens the same Set Values
+  window with these differences, all Sheaf choices and not measured in Origin: the title reads
+  "Set Multiple Columns Values - [Book1]Sheet1!Col(B:D)" (`B:D` for three or more side-by-side
+  columns, otherwise the short names with commas, such as `Col(B, D)`); the `Col(B:D)=` label
+  has no first/previous/next/last buttons (the window edits the selection together); the
+  Formula menu starts with "Scale by column position" (`col(A)*j`) and "Double the column to the
+  left" (`wcol(j-1)*2`); the `wcol(1)` menu starts with `wcol(j-1)` and `wcol(j+1)`; the Variables
+  menu lists `j` (the column position in the sheet, counted from 1). The row range and Recalculate
+  apply to every column and OK or Apply is one undo step, "Set multiple columns values". The
+  fields start from what the columns share (formula, rows, recalculation); columns that differ
+  start empty and Manual. An error (an unknown column, a loop) keeps the window open with the
+  message and changes nothing. `--show set-values-multiple[:B,C,D]` opens it for a screenshot.
+  Windows measurements still to make with `tools/origin-ref`: the window title, whether the
+  navigation buttons are hidden or step through the selection, and the label text beside the
+  row range (see `docs/spec/expression-language.md` section 7 for the `j` measurements).
 - **Sheaf Set Values function search (T09, 2026-11-14).** Find beside the column navigation,
   or Function > Search Functions, opens Search and Insert Functions. Keyword matches cover
   the names, categories, arguments and descriptions in the existing Function-menu catalog;
@@ -424,6 +442,52 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
 - **Left out.** Conditional Highlight, Heatmap, Pareto, Outliers and the Manager (greyed); renaming a
   rule after creation. The `.opj` writer cannot store the rules: saving to `.opj` warns and the
   companion keeps them.
+
+### Cell notes (T36)
+
+Origin facts (help pages, not measured; no Origin was available) [W:originlab.com/2022,
+W:origin-help/insnote-to-wkscell, W:x-function/ref/insertcmt]:
+
+- Origin 2022: "Add Notes to individual Worksheet Cells", similar to Excel and Google Sheets. Select the
+  cell and click the Mini Toolbar Add Note button; the note displays as a popup when hovering on the
+  tab in the upper-right corner of the cell; the system variable `@NCP = 0` stops the popups. Notes
+  are edited in a Notes window ("Open in Notes Window"); contents are Text or Origin Rich Text. The
+  X-Function `insertCmt` adds a note to a selected cell (search snippet, unconfirmed).
+- Not documented: how to delete a note, the tab's colour and size, behaviour under sort/insert/delete,
+  export.
+
+Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
+
+- **Storage.** Per sheet (`Worksheet.notes`, core `notes.rs`, saved in `.sheaf`, absent when empty): a
+  list sorted by column id and data row, so the saved form is deterministic and a lookup is a binary
+  search (no per-cell scan). Plain text only; empty text is never stored. A note may sit on an empty
+  cell (beyond the data rows) and then follows its row position like any other.
+- **Indicator.** A small filled dark-red triangle (7 px) in the upper-right corner of the cell, also in
+  frozen (overlay) cells and over conditional-format fills. Origin's colour and size are unmeasured.
+- **Popup.** Hovering anywhere on the noted cell (not only the tab) shows the text in a tooltip, wrapped
+  at 300 px. There is no `@NCP` switch. A tooltip cannot scroll, so a long note is cut at 20 lines or
+  1,500 characters and ends with "…" (the full text stays in the editor).
+- **Editing.** The cell right-click menu replaces the greyed "Insert Notes" item: "Add Note..." on a cell
+  without a note, "Edit Note..." and "Delete Note" on one with a note, for a single selected cell
+  (otherwise a status message). Inside a multi-cell selection the note entries act on the right-clicked
+  cell (choosing one reselects that cell; the other cell-menu entries still act on the selection). The
+  editor is a small window with a multi-line text box (scrolls above 300 px, so OK/Cancel stay on screen) and OK/Cancel
+  (no Notes window, no Mini Toolbar button, no rich text). Each change is one undo step ("Add note",
+  "Edit note", "Delete note"; emptying the text of an existing note deletes it). Clear (Delete key)
+  clears values and leaves the note.
+- **Sort.** Notes move with their row: Sort Worksheet, Sort Range, nested/custom sort (also of selected
+  rows) and Filter Rows (in place, dropping the notes of removed rows) permute the notes of the sorted
+  columns exactly as the values; Sort Columns (each column on its own) and Reverse Order move only that
+  column's notes.
+- **Rows and columns.** Insert rows shifts the notes of the columns inserted into at or below the row;
+  delete rows drops the notes on the deleted cells and shifts those below. Columns have stable ids, so
+  Move Columns and column insert need nothing; deleting a column drops its notes (same undo step).
+  Duplicate (window or sheet) and File > Append keep the notes, on the copy's own columns.
+- **Not carried.** Operations that build a new sheet (Transpose, Stack/Unstack, Split Columns, Reduce
+  Rows, Filter Rows to a new sheet) do not copy notes; neither do the `.opj` writer (save to `.opj`
+  warns "N cell note(s) are not written"; the `.opj.sheaf` companion keeps them), CSV and Excel export.
+- **Left out.** Notes window, rich text, `@NCP`, Mini Toolbar button, hovering only on the tab, notes
+  on labels/headers.
 
 ## 4. Graph window
 
@@ -738,6 +802,84 @@ disabled controls are grey; blue bold text marks a hint or a state message.
   The tab and the list are independent: choosing a different tab changes which targets the list
   offers (two for Scale and Breaks, four for the others).
 
+### Find and Replace (2026-11-15)
+
+Origin 2016's public `findreplace option:=0;` and `option:=1;` commands open the Find and Replace
+tabs of one window. The [command reference](https://docs.originlab.com/x-function/ref/findreplace/)
+documents this entry point. Clear pictures, control dumps and post-operation values are in
+`re-workspace/scratch/t02-find-replace/`. The initial Ctrl+F/Ctrl+H attempts found no dialog and
+are excluded as layout evidence; the direct-command captures succeeded.
+
+The initial captures show Numeric selected, condition `=`, Active Worksheet, and expanded Options.
+Find what is seeded from the selected cell's display: B2 containing 5 gives `5`, and a stored
+100.000001 displayed as 100 gives `100`. Selecting text Alpha seeds `Alpha` but leaves Numeric
+selected, with Find Next disabled until the query is valid or the user chooses String.
+Skip linked cells is checked. Absolute value, Search up, Keep sign and Set as missing are unchecked;
+tolerance is `1e-8`. Numeric conditions are `=`, `<`, `<=`, `>`, `>=`, `!=`.
+The Replace tab adds its replacement field and two numeric replacement flags. Its bottom buttons
+are Find Next, Replace, Replace All, Close; Find has Find Next and Close at the right.
+
+String mode hides the numeric condition/tolerance and shows Match case, Match whole cell contents,
+Use wildcards and Include label rows, initially unchecked, alongside Skip linked cells and Search
+up. Look in also offers workbook, folder, recursive folder, open books in folder and project scopes.
+Options can persist in Origin across temporary instances: the last probe explicitly
+restored the original numeric/string flags, condition, scope and tolerance; the restored image and
+action log are retained in `final/restore/` and `conditions/restore/`.
+
+The synthetic GUI probes establish these rules:
+
+| Probe | Observed result |
+|---|---|
+| Numeric 100, tolerance 1e-8, data 100.000001 and 100 | both found/replaced: relative tolerance, not an absolute 1e-8 difference |
+| Numeric 2, data 1.99999999, 2, 2.00000001, missing | `=`, `<=`, `>=` match the three finite cells; `<` matches the first; `>` the third; `!=` matches first, third and missing |
+| Absolute 2, replace 7, Keep sign, data -2, 2, -3, 0 | -7, 7, -3, 0 |
+| Greater than 2, replace 7, Set as missing, data -2, 2, 3, missing | missing, missing, 7, missing |
+| Find numeric `--` with one explicit missing value at A4 | A4; unused allocation beyond the data did not become the result |
+| Find 2 upward from B2, B = 2, 5, 2, 8 | B1 rather than B3 |
+| String `a*c`, wildcard on, replace Z; abXXc, xabc, abc | Z, xabc, Z: the pattern must match the entire cell |
+| Numeric 2, empty replacement | the matching cell becomes missing |
+
+Equality uses the relative difference `abs(a-b)/(abs(a)+abs(b))` with exact equality handling zero.
+The inclusive comparisons include that equality test; strict comparisons and `!=` do not use its
+tolerance. Thus `!=` is deliberately not the complement of tolerant `=`. Numeric searches use stored
+numbers, whereas String searches use displayed text and preserve ordinary substring replacement
+when wildcards are off. Wildcard replacement substitutes the entire matching cell with literal text.
+
+Sheaf follows these measured controls and rules in the existing dialog, with a shared Find/Replace
+window, preserved inputs across its tabs, selected-cell seeding and one undo step per replacement
+action. Formula columns retain their existing replacement protection. Search, invalid input, Close
+and Escape create no document edit. Case and whole-cell String behavior remains available; old
+substring UI regressions explicitly select String now that Numeric is the initial mode.
+Four new UI regressions and four parser/matching fixtures cover these behaviors. `--show find` and
+`--show replace` support native screenshots.
+
+The selected-range follow-up uses `re-workspace/scratch/t02-find-selection/verified/` and
+`bounds/`: all eleven corrected GUI cases have successful setup/command results. The initial
+six cases had no workbook and are excluded. A B2:B3 selection shows **Find/Replace in selected
+range**, initially checked, immediately below Skip linked cells. Finding 6 and then 5 stays
+inside B2:B3; replacing 5 with 9 changes B2 and leaves the equal cells in C alone. Unchecking
+the option lets Find Next reach C1. After that unrestricted hit collapses the range, Origin
+hides the option. Unchecking and rechecking before searching retains the original range.
+Unchecked Replace All covers the sheet without collapsing the selection, and the option stays
+visible. Whole-column and row-header selections offer it, including a column with one populated
+value and a single whole row; a single selected data cell does not. The final fresh-range probe
+explicitly restores the checked setting; its control dump and action log confirm it.
+
+Sheaf snapshots the opening columns and rows, offering that checked scope for blocks, columns,
+rows and Select All. Numeric and String searches (including backward search and wildcards),
+single replacement and Replace All respect it. Clearing numeric nonmatches also stays inside
+the range. Finding a cell moves Sheaf's worksheet selection to that hit; the saved search range
+survives until a successful unchecked search, which hides the option. Origin instead retains
+the visible selected rectangle while showing a restricted hit. Four additional UI regressions
+and one matching fixture cover range retention, option visibility, both replacement paths,
+unchanged search history, undo, noncontiguous columns and conditional missing values.
+
+Remaining: searches still cover active-sheet data only. The wider Look in scopes, label rows,
+individual cell links, saved dialog history/settings and the query's
+triangle menu are not implemented. Look in and Include label rows are disabled; Skip linked cells
+is fixed checked because individual links are not modeled. The worksheet's normal formula-column
+protection remains in force independently. These gaps keep the parity row partial.
+
 ### Go To (2026-11-14)
 
 Origin 2016's `dlgRowColGoto -d;` opens **Go To: dlgRowColGoto**. The clear screenshot and control
@@ -792,7 +934,65 @@ the Go To dialog open. The earlier all-black choose/reset images are excluded as
 the clear `verified-menu/` captures and post-OK coordinates supersede them.
 Select Columns opens a separate Column Browser, defaulting to Current Sheet and offering project,
 folder, recursive folder and book scopes, a column table and Add/Remove controls. That general
-browser remains unimplemented in Sheaf; its menu entry stays disabled.
+browser is now available from Sheaf's Go To flyout (follow-up below).
+
+The Column Browser follow-up (`re-workspace/scratch/t02-column-browser/verified/` and
+`followup/`) uses eight isolated Origin 2016 instances, each with explicit input-field resets.
+The initial exploratory batch targeted the hint fields rather than Column/Row; its destination
+coordinates are excluded. The browser's upper table lists sheet, book long/short names, index,
+column short/long names, comments, format, size and first value. Add puts a qualified column
+reference into the lower Range/Rows table, initially `[1:end]`; Remove deletes the selected
+lower range. OK transfers the reference to the parent field without navigating. The parent OK
+performs the navigation. Browser Cancel preserves the parent's typed column and row.
+
+| Browser probe, original columns A/B/C/D ending at rows 4/2/6/3 | Observed Go To result |
+|---|---|
+| Add D with duplicate long name, parent Row 0 | qualified D reference; D3 on parent OK |
+| Add B, parent Row 0 | B2 |
+| Add A then C, parent Row 10 | parenthesized qualified list; D10, the original sheet's last column |
+| Add A then C, remove A, parent Row 0 | qualified C reference; C6 |
+| Add another book's B (five populated rows), parent Row 0 | original book's B2, not the other book's row 5 |
+| Type B/10, add D, cancel browser, then parent OK | B10 |
+
+Thus Go To uses the chosen column's position in its original worksheet; choosing a column from
+another book does not activate that book. Several added columns behave as the last column in
+this Origin version. Sheaf copies both observed rules, including the qualified display string.
+Editing the column field, picking a normal flyout item or Reset discards the browser choice;
+Reset still preserves Row. The five scope labels are Current Project, Current Folder, Current
+Folder (recursive), Current Book and Current Sheet. Scope can persist in Origin across temporary
+instances: the final restore explicitly selects Current Sheet, with its control dump retained.
+Cancelled Go To commands return false even though the browser was successfully captured.
+
+Sheaf lists the current project's column metadata and filters these scopes without changing
+workbook data, folder contents or activation. Folder scopes use the original workbook's folder;
+unlisted windows belong to root. Added ranges survive scope changes. The browser starts at
+Current Sheet each time; preferences are not saved. The parent remains open on browser Cancel
+or Escape. Five UI regressions cover return/apply, cross-book position mapping, Cancel/Escape,
+multiple ranges/Remove and edited/reset references. A fixture covers sheet/book/folder/recursive
+scopes, including unlisted root books. Exclude and editing the lower row ranges remain
+unimplemented; Exclude stays disabled.
+
+The top-table selection follow-up (`re-workspace/scratch/t02-browser-selection/origin/` and
+`verified/`) has nine valid isolated Origin cases, including a final Current Sheet restore.
+Shift+Down extends B through D; ordinary Add appends B, C and D as three lower rows.
+Add as One Block instead appends one `[Book1]Sheet1!B"Shared current":D"Shared current"`
+range. Ctrl-selected adjacent B/C can form a block; noncontiguous A/C and a range crossing
+workbooks disable block add. Ctrl+A selects all four columns and can add one A:D block.
+Remove deletes the entire selected lower block; an empty list disables OK. A B:C block plus
+a separately added D remains two lower rows and transfers a parenthesized `(B:C,D)` reference;
+parent OK with Row 0 still selects original D3, including for B:C alone. Quoted long names
+remain on each endpoint. The initial noncontiguous case's programmatic click bypassed the
+disabled block button, so its activation/result are excluded; later probes check native
+enablement and skip disabled buttons. One composite capture failed to open the browser and
+is excluded; its fresh-instance retry supplies the valid block-plus-singleton observation.
+
+Sheaf now supports plain, Ctrl/Command and Shift row clicks, Shift+Up/Down and select-all
+while the top table has focus. Add preserves selected columns in table order; block add
+requires consecutive columns in one worksheet. Blocks remain single lower rows for Remove
+and reference transfer. Scope changes clear the top selection and preserve added ranges.
+Five additional UI regressions cover contiguous and noncontiguous selection, adjacent Ctrl
+selection, disabled block controls, select-all/group removal, mixed-workbook ranges, scope
+changes and block/list transfer. Navigation still waits for the parent, preserving data/history.
 
 Sheaf's Go To now follows the measured input order/focus, right-aligned OK/Cancel and optional-coordinate, zero/end,
 extension and clamping behavior. Its capacity remains data length plus 30 spare view rows;
@@ -807,6 +1007,46 @@ picker lists column names, designations and long names. Six navigation UI tests 
 measured axis/range cases, forward/backward/inside extension, capacity/end navigation, visibility,
 keyboard continuation, far-column jumps in both directions, invalid entries and cancel/history; parser fixtures include the 100-row,
 four-populated-row distinction and a new unequal-column end fixture. `--show go-to` supports native screenshots.
+
+### Window Switcher (T42)
+
+Origin facts (documentation, not measured here): 2025b adds Ctrl+Tab (forward) and Ctrl+Shift+Tab
+(backward) "to toggle child windows with preview" [W:originlab.com/2025b]. Pressing Ctrl and then
+Tab shows the Window Switcher; each Tab moves on until Ctrl is released; it shows thumbnails of
+all windows of the same folder, including floating and hidden windows; the selected window has a
+blue frame; arrow keys and a mouse click also select; clicking Ctrl alone closes it. LabTalk:
+`doc -nav` then Tab [W:origin-help/operate-childwindow-basic].
+
+Sheaf's choices (unmeasured, the documentation gives no order, Esc or sizes):
+
+- **Order:** most recently activated first (`Workspace::recent_order`; activation by click, menu,
+  Project Explorer, Go To, opening). So the first Ctrl+Tab selects the second card, the previous
+  window. A window that is closed or minimised drops to the end of the list (or behind the new
+  active window), so it is not "previous". Windows never activated follow in creation order.
+- **Keys:** Ctrl+Tab opens with the first card that is not the active window selected (the
+  second card when the active window is listed first, the first card when the Project Explorer's
+  folder does not hold the active window), Ctrl+Shift+Tab with the last. While
+  open: Tab / Shift+Tab and Left / Right move and wrap, Up / Down move by a row, Enter confirms,
+  Esc cancels, releasing Ctrl activates the selection (showing it if hidden), a click on a card
+  activates it, a click outside cancels. Ctrl+Tab is read before the grid, so it works while a
+  worksheet has the keyboard; plain Tab still moves the cell. Not opened while a dialog is open.
+  While it is open (also when opened from the menu) it is modal: every other key and text event
+  (Delete, letters, shortcuts, paste) is swallowed and never reaches the grid, the graph or the
+  shortcut table; only the Ctrl state is read to detect the release.
+- **macOS:** Ctrl is the physical Control key (Cmd+Tab belongs to the system); the Window menu
+  shows the shortcut as the Control symbol plus Tab. On Windows and Linux it is Ctrl+Tab.
+- **Windows listed:** all windows of the Project Explorer's selected folder (not subfolders),
+  hidden ones marked "(hidden)" and drawn paler. Sheaf has no floating windows. With 0 or 1
+  window Ctrl+Tab does nothing.
+- **Menu:** Window > Window Switcher opens it held open (no Ctrl to release): Tab / arrows move,
+  Enter or a click chooses, Esc closes.
+- **Look:** a dimmed backdrop and a centred panel of 168 x 134 pt cards (up to six per row),
+  each with a thumbnail, the window name and "Graph" or "Workbook"; the selected card has a 3 pt
+  blue frame. Graphs are rendered when the switcher opens at 148 x 98 pt (their own
+  `render_raster`, not the window cache, which is sized to the window and absent for closed
+  graphs) and the textures are dropped on close; at most 24 graphs per opening, the rest show the
+  type icon. Workbooks show a drawn miniature of the first four columns and five rows.
+  Nothing is redrawn per frame. `--show switcher` opens it for screenshots.
 
 ## 6. Mouse and keyboard summary
 

@@ -46,6 +46,12 @@ impl Place {
         let value = if self.ox == 0.0 { value } else { value - self.ox };
         if self.mx == 1.0 { value } else { value / self.mx }
     }
+
+    /// Original Y under a display coordinate. Resolved multipliers are strictly positive.
+    pub fn source_y(self, value: f64) -> f64 {
+        let value = if self.oy == 0.0 { value } else { value - self.oy };
+        if self.my == 1.0 { value } else { value / self.my }
+    }
 }
 
 /// The places of the plots of a layer, one per plot in plot order, and the number of members of
@@ -146,4 +152,18 @@ pub fn row_range(plot: &Plot, len: usize) -> (usize, usize) {
         None => (0, len),
     };
     (start, end.max(start))
+}
+
+#[cfg(test)]
+mod place_tests {
+    use super::Place;
+
+    #[test]
+    fn source_values_are_the_inverse_of_the_display_values() {
+        let p = Place { ox: 5.0, oy: 7.0, mx: 2.0, my: 3.0, member: None };
+        assert_eq!((p.x(2.0), p.y(4.0)), (9.0, 19.0));
+        assert_eq!((p.source_x(9.0), p.source_y(19.0)), (2.0, 4.0));
+        let id = Place::default();
+        assert_eq!((id.source_x(0.1), id.source_y(0.3)), (0.1, 0.3), "identity keeps every digit");
+    }
 }

@@ -200,6 +200,8 @@ fn the_gap_of_the_bars_comes_back_and_the_overlap_is_named() {
         let mut p = source();
         let c = ids(&p);
         let id = p.add_graph(Template::Column);
+        p.graph_mut(id).unwrap().layers[0].legend.position = LegendPosition::TopRight;
+        p.graph_mut(id).unwrap().layers[0].legend.background = None;
         for y in [5, 6] {
             p.add_plot_xy(id, 0, None, c[y], None).unwrap();
         }
@@ -211,6 +213,8 @@ fn the_gap_of_the_bars_comes_back_and_the_overlap_is_named() {
     let mut p = source();
     let c = ids(&p);
     let id = p.add_graph(Template::Column);
+    p.graph_mut(id).unwrap().layers[0].legend.position = LegendPosition::TopRight;
+    p.graph_mut(id).unwrap().layers[0].legend.background = None;
     p.add_plot_xy(id, 0, None, c[5], None).unwrap();
     p.graph_mut(id).unwrap().layers[0].bars = BarSpacing { gap_pct: 30.0, overlap_pct: 40.0, width_pct: None };
     let (imp, out) = round_trip(&p);
@@ -224,7 +228,12 @@ fn one_layer(f: impl FnOnce(&mut Layer)) -> Project {
     let c = ids(&p);
     let id = p.add_graph(Template::Line);
     p.add_plot_xy(id, 0, Some(c[0]), c[1], None).unwrap();
-    f(&mut p.graph_mut(id).unwrap().layers[0]);
+    // These feature fixtures use the original fixed-position legend. Automatic retention is
+    // checked separately and intentionally produces a companion warning.
+    let layer = &mut p.graph_mut(id).unwrap().layers[0];
+    layer.legend.position = LegendPosition::TopRight;
+    layer.legend.background = None;
+    f(layer);
     p
 }
 
@@ -289,6 +298,8 @@ fn tick_label_number_formats_are_written_and_read_back() {
         let mut p = source();
         let c = ids(&p);
         let id = p.add_graph(Template::Line);
+        p.graph_mut(id).unwrap().layers[0].legend.position = LegendPosition::TopRight;
+        p.graph_mut(id).unwrap().layers[0].legend.background = None;
         p.add_plot_xy(id, 0, Some(c[0]), c[1], None).unwrap();
         let l = &mut p.graph_mut(id).unwrap().layers[0];
         l.x_axis.tick_format = put;
@@ -306,6 +317,8 @@ fn a_number_format_on_a_column_plot_comes_back() {
     let mut p = source();
     let c = ids(&p);
     let id = p.add_graph(Template::Column);
+    p.graph_mut(id).unwrap().layers[0].legend.position = LegendPosition::TopRight;
+    p.graph_mut(id).unwrap().layers[0].legend.background = None;
     p.add_plot_xy(id, 0, None, c[5], None).unwrap();
     p.graph_mut(id).unwrap().layers[0].y_axis.tick_format = TickFormat::Decimal(2);
     let (imp, out) = round_trip(&p);
@@ -335,7 +348,12 @@ fn columns_graph(ys: &[usize], f: impl FnOnce(&mut Layer)) -> Project {
     for y in ys {
         p.add_plot_xy(id, 0, None, c[*y], None).unwrap();
     }
-    f(&mut p.graph_mut(id).unwrap().layers[0]);
+    // These feature fixtures use the original fixed-position legend. Automatic retention is
+    // checked separately and intentionally produces a companion warning.
+    let layer = &mut p.graph_mut(id).unwrap().layers[0];
+    layer.legend.position = LegendPosition::TopRight;
+    layer.legend.background = None;
+    f(layer);
     p
 }
 
@@ -376,7 +394,12 @@ fn lines_graph(ys: &[usize], f: impl FnOnce(&mut Layer)) -> Project {
     for y in ys {
         p.add_plot_xy(id, 0, None, c[*y], None).unwrap();
     }
-    f(&mut p.graph_mut(id).unwrap().layers[0]);
+    // These feature fixtures use the original fixed-position legend. Automatic retention is
+    // checked separately and intentionally produces a companion warning.
+    let layer = &mut p.graph_mut(id).unwrap().layers[0];
+    layer.legend.position = LegendPosition::TopRight;
+    layer.legend.background = None;
+    f(layer);
     p
 }
 
@@ -468,7 +491,14 @@ fn panels_keep_their_link_their_frames_and_their_linked_scales() {
         (ScaleLink::Straight, ScaleLink::Straight),
         (ScaleLink::None, ScaleLink::None),
     ] {
-        let p = panels(3, x, y);
+        let mut p = panels(3, x, y);
+        let graph_ids: Vec<_> = p.graphs().map(|g| g.id).collect();
+        for id in graph_ids {
+            for layer in &mut p.graph_mut(id).unwrap().layers {
+                layer.legend.position = LegendPosition::TopRight;
+                layer.legend.background = None;
+            }
+        }
         let (imp, out) = round_trip(&p);
         assert!(out.warnings.is_empty(), "{x:?} {y:?}: {:?}", out.warnings);
         let want = &p.graphs().next().unwrap().layers;
@@ -545,7 +575,10 @@ fn line_graph(p: &mut Project, f: impl FnOnce(&mut Layer)) {
     let c = ids(p);
     let id = p.add_graph(Template::Line);
     p.add_plot_xy(id, 0, Some(c[0]), c[1], None).unwrap();
-    f(&mut p.graph_mut(id).unwrap().layers[0]);
+    let layer = &mut p.graph_mut(id).unwrap().layers[0];
+    layer.legend.position = LegendPosition::TopRight;
+    layer.legend.background = None;
+    f(layer);
 }
 
 #[test]
@@ -650,6 +683,98 @@ fn lollipop_drop_settings_are_named_in_the_save_warnings() {
 }
 
 #[test]
+fn an_axis_rug_is_named_in_the_save_warnings() {
+    let mut p = source();
+    line_graph(&mut p, |l| l.y_axis.rug = sheaf_core::graph::Rug::shown());
+    let (_, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("axis rug")), "{:?}", out.warnings);
+    let (_, out) = round_trip(&source());
+    assert!(!out.warnings.iter().any(|w| w.contains("axis rug")), "{:?}", out.warnings);
+}
+
+#[test]
+fn ridgeline_charts_are_written_as_plain_columns_with_a_save_warning() {
+    let mut p = source();
+    line_graph(&mut p, |l| l.plots[0].kind = sheaf_core::graph::PlotKind::Ridgeline);
+    let (_, out) = round_trip(&p);
+    assert!(
+        out.warnings.iter().any(|w| w.contains("ridgeline charts were written as plain columns")),
+        "{:?}",
+        out.warnings
+    );
+    assert!(!out.warnings.iter().any(|w| w.contains("violin plots")), "{:?}", out.warnings);
+}
+
+#[test]
+fn hexbin_plots_are_written_as_scatter_plots_with_a_save_warning() {
+    let mut p = source();
+    line_graph(&mut p, |l| l.plots[0].kind = sheaf_core::graph::PlotKind::Hexbin);
+    let (_, out) = round_trip(&p);
+    assert!(
+        out.warnings.iter().any(|w| w.contains("hexbin plots were written as scatter plots")),
+        "{:?}",
+        out.warnings
+    );
+    assert!(!out.warnings.iter().any(|w| w.contains("ridgeline")), "{:?}", out.warnings);
+}
+
+#[test]
+fn parallel_plots_are_written_as_line_plots_with_a_save_warning() {
+    for kind in [sheaf_core::graph::PlotKind::Parallel, sheaf_core::graph::PlotKind::ParallelIndex] {
+        let mut p = source();
+        line_graph(&mut p, |l| l.plots[0].kind = kind);
+        let (_, out) = round_trip(&p);
+        assert!(
+            out.warnings.iter().any(|w| w.contains("parallel plots and parallel indexes were written as line plots")),
+            "{:?}",
+            out.warnings
+        );
+        assert!(!out.warnings.iter().any(|w| w.contains("hexbin")), "{:?}", out.warnings);
+    }
+}
+
+#[test]
+fn treemaps_are_written_as_column_plots_with_a_save_warning() {
+    let mut p = source();
+    line_graph(&mut p, |l| l.plots[0].kind = sheaf_core::graph::PlotKind::Treemap);
+    let (_, out) = round_trip(&p);
+    assert!(
+        out.warnings.iter().any(|w| w.contains("treemaps were written as column plots of their value column")),
+        "{:?}",
+        out.warnings
+    );
+    assert!(!out.warnings.iter().any(|w| w.contains("hexbin") || w.contains("parallel")), "{:?}", out.warnings);
+}
+
+#[test]
+fn sunbursts_are_written_as_column_plots_with_a_save_warning() {
+    let mut p = source();
+    line_graph(&mut p, |l| l.plots[0].kind = sheaf_core::graph::PlotKind::Sunburst);
+    let (_, out) = round_trip(&p);
+    assert!(
+        out.warnings.iter().any(|w| w.contains("sunburst plots were written as column plots of their value column")),
+        "{:?}",
+        out.warnings
+    );
+    assert!(!out.warnings.iter().any(|w| w.contains("treemap") || w.contains("parallel")), "{:?}", out.warnings);
+}
+
+#[test]
+fn violin_plots_are_written_as_plain_columns_with_a_save_warning() {
+    for kind in [sheaf_core::graph::PlotKind::Violin, sheaf_core::graph::PlotKind::HalfViolin] {
+        let mut p = source();
+        line_graph(&mut p, |l| l.plots[0].kind = kind);
+        let (_, out) = round_trip(&p);
+        assert!(
+            out.warnings.iter().any(|w| w.contains("violin plots were written as plain columns")),
+            "{:?}",
+            out.warnings
+        );
+        assert!(!out.warnings.iter().any(|w| w.contains("histogram, box and pie")), "{:?}", out.warnings);
+    }
+}
+
+#[test]
 fn the_plot_details_settings_the_file_cannot_hold_are_named_in_the_save_warnings() {
     let mut p = one_layer(|l| {
         l.bars.width_pct = Some(70.0);
@@ -685,4 +810,30 @@ fn the_plot_details_settings_the_file_cannot_hold_are_named_in_the_save_warnings
     // A graph without them warns about none of it.
     let (_, out) = round_trip(&one_layer(|_| {}));
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+}
+
+#[test]
+fn automatic_legend_opj_rectangle_keeps_the_measured_upper_left_anchor() {
+    for count in [1, 4] {
+        let p = lines_graph(&[1, 2, 3, 4][..count], |l| {
+            l.legend.position = LegendPosition::Automatic;
+            for plot in &mut l.plots {
+                plot.label = Some("B".into());
+            }
+        });
+        let (imported, out) = round_trip(&p);
+        assert!(out.warnings.iter().any(|w| w.contains("automatic legend anchor")));
+        let source = p.graphs().next().unwrap();
+        let LegendPosition::Manual { x, y } = imported.graphs[0].layers[0].legend.position else {
+            panic!("raw OPJ imports a fixed rectangle centre");
+        };
+        // The annotation is stored as a centre plus a rectangle. The writer's published
+        // character/line metrics for a one-character legend give this rectangle in points.
+        let width = (0.58 + 2.6) * 22.0;
+        let height = 1.2 * 22.0 * count as f64;
+        let fw = source.layers[0].frame.width * source.page.width_pt;
+        let fh = source.layers[0].frame.height * source.page.height_pt;
+        assert!((x - width / (2.0 * fw) - 4.933_850_365 / 6.0).abs() < 0.001);
+        assert!((y - height / (2.0 * fh) - (1.0 - (12.043_552_036 - 1.0) / 10.0)).abs() < 0.001);
+    }
 }

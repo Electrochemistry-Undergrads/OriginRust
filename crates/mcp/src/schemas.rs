@@ -7,6 +7,11 @@ pub struct Def {
     pub description: &'static str,
     /// True when the tool changes neither the project nor any file.
     pub read_only: bool,
+    /// True when the tool changes the project through `Document::edit`: one undo step in the app.
+    pub mutates: bool,
+    /// True when the tool is for the headless server only: it opens, replaces or saves the project, which
+    /// the person using the app does. Attached, it is hidden from `tools/list` and refused.
+    pub headless_only: bool,
     pub schema: Value,
     pub example: Value,
 }
@@ -57,6 +62,20 @@ fn style_schema() -> Value {
             ("width", n("Page width in inches, 0.1 to 100.")),
             ("height", n("Page height in inches, 0.1 to 100.")),
             ("line_width", n("Line width in points.")),
+            (
+                "sort_x",
+                t(
+                    "boolean",
+                    "Connect line and line+symbol plots in increasing X order without sorting the worksheet (Origin 2023 LabTalk line.sortx).",
+                ),
+            ),
+            (
+                "trendline",
+                strs(
+                    "Trendlines added to every curve (replacing its own), each linear, poly:N (order 2-10), power, log, exp or ma:N (moving average, window 2-10). Fitted ones write their equation and R-squared at the top left.",
+                ),
+            ),
+            ("no_trendline_label", t("boolean", "Leave the equation and R-squared label off the trendlines.")),
             ("colors", strs("Plot colors in legend order: names or #RRGGBB.")),
             ("labels", strs("Legend text of the plots, in legend order.")),
             ("no_legend", t("boolean", "Hide the legend.")),
@@ -69,6 +88,33 @@ fn style_schema() -> Value {
             ("x_label_angle", n("Angle of the X tick labels in degrees.")),
             ("bar_gap", n("Gap between bars, percent.")),
             ("bar_overlap", n("Overlap of bars, percent.")),
+            ("hex_bins", n("Hexbin plots: number of bins along X, 2 to 1000 (default 20).")),
+            (
+                "treemap_layout",
+                t(
+                    "string",
+                    "Treemaps: squarified (default), squarified-plus, split, pivot-size, pivot-middle or pivot-split-size.",
+                ),
+            ),
+            (
+                "treemap_order",
+                t(
+                    "string",
+                    "Treemaps: categorical (default), alphabetical, size or column:NAME (the squarified layouts ignore it).",
+                ),
+            ),
+            ("treemap_depth", n("Treemaps: the number of levels shown, 1 or more (default: all).")),
+            ("treemap_gap", n("Treemaps: gap between rectangles in pt, 0 to 20 (default 1.5).")),
+            (
+                "sunburst_start",
+                n(
+                    "Sunburst plots: where the first wedge starts, degrees counter-clockwise from 3 o'clock (default 90 = 12 o'clock; wedges go clockwise).",
+                ),
+            ),
+            ("sunburst_hole", n("Sunburst plots: the hole as a percentage of the radius, 0 to 90 (default 30).")),
+            ("sunburst_gap", n("Sunburst plots: gap between rings in pt, 0 to 20 (default 0).")),
+            ("sunburst_labels", t("string", "Sunburst plots: names (default), values, both or none.")),
+            ("sunburst_order", t("string", "Sunburst plots: worksheet (default) or size (largest first).")),
             (
                 "text_labels",
                 json!({"type": "array", "description": "Text placed in the layer; x and y are fractions of the layer frame, (0,0) the top left.",
@@ -163,6 +209,8 @@ pub fn defs() -> Vec<Def> {
             name: "new_project",
             description: "Replace the project with an empty one. Unsaved work is lost.",
             read_only: false,
+            mutates: false,
+            headless_only: true,
             schema: obj(vec![], &[]),
             example: json!({}),
         },
@@ -170,6 +218,8 @@ pub fn defs() -> Vec<Def> {
             name: "open_project",
             description: "Open a .opj, .opju or .sheaf project, replacing the current project. Origin files are read in part: save_project over one keeps a .bak copy.",
             read_only: false,
+            mutates: false,
+            headless_only: true,
             schema: obj(vec![("path", s("Project file under an allowed folder."))], &["path"]),
             example: json!({"path": "data/run1.opj"}),
         },
@@ -177,6 +227,8 @@ pub fn defs() -> Vec<Def> {
             name: "save_project",
             description: "Save the project as .opj (default; with a .opj.sheaf companion when the .opj cannot hold everything) or .sheaf.",
             read_only: false,
+            mutates: false,
+            headless_only: true,
             schema: obj(
                 vec![("path", s("File to write. Default: the file the project was opened from or last saved to."))],
                 &[],
@@ -187,6 +239,8 @@ pub fn defs() -> Vec<Def> {
             name: "import_files",
             description: "Import data files, folders or wildcards (CH Instruments text and .bin, CSV, other text, Excel .xls/.xlsx/.xlsm with one sheet per Excel sheet) into the project. A file that fails is listed in errors; the others are imported.",
             read_only: false,
+            mutates: true,
+            headless_only: false,
             schema: obj(
                 vec![
                     ("files", strs("Files, folders, wildcards (in the file name) or project files.")),
@@ -213,6 +267,8 @@ pub fn defs() -> Vec<Def> {
             name: "list_contents",
             description: "The folders, workbooks, sheets, columns (designation, units, formula) and graphs of the project.",
             read_only: true,
+            mutates: false,
+            headless_only: false,
             schema: obj(vec![("book", s(BOOK))], &[]),
             example: json!({}),
         },
@@ -220,6 +276,8 @@ pub fn defs() -> Vec<Def> {
             name: "read_columns",
             description: "Values of columns for a row range. At most 10000 cells per reply; when truncated, pass next to continue.",
             read_only: true,
+            mutates: false,
+            headless_only: false,
             schema: obj(
                 vec![
                     ("book", s(BOOK)),
@@ -237,6 +295,8 @@ pub fn defs() -> Vec<Def> {
             name: "set_column_values",
             description: "Fill a column from a formula of Sheaf's expression language, for example col(B)*1000. Nothing changes on error.",
             read_only: false,
+            mutates: true,
+            headless_only: false,
             schema: obj(
                 vec![
                     ("book", s(BOOK)),
@@ -270,12 +330,14 @@ pub fn defs() -> Vec<Def> {
             name: "plot",
             description: "Make a graph from columns, or, with graph, restyle an existing graph (template, y and y2 are then refused). Returns the graph name; use export_graph to see it.",
             read_only: false,
+            mutates: true,
+            headless_only: false,
             schema: obj(
                 vec![
                     (
                         "template",
                         s(
-                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), ... (the names of sheaf plot --template). Default: what the data suggests.",
+                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), scatter-rug (scatter with rug marks beside the bottom and left axes), violin (also violin-box, violin-point, violin-quartile, violin-stick, half-violin), ridgeline (one density curve per y column, stacked up the page), hexbin (x against the first y column, binned into hexagons coloured by count, with a colour scale; no right axis), parallel (one vertical axis per y column, one line per row coloured by the last column or by group, with a colour scale; two or more y columns, no right axis), parallel-index (like parallel, lines coloured by a text group column with a legend; three or more y columns plus group), treemap (nested rectangles, one level per category column given in group, default the text columns, with areas proportional to the last numeric y column; options treemap_layout, treemap_order, treemap_depth, treemap_gap; no right axis), sunburst (the same hierarchy as concentric rings, first category innermost, angles proportional to the last numeric y column, coloured by value with a colour scale; options sunburst_start, sunburst_hole, sunburst_gap, sunburst_labels, sunburst_order; no right axis), ... (the names of sheaf plot --template). Default: what the data suggests.",
                         ),
                     ),
                     ("book", s(BOOK)),
@@ -283,6 +345,12 @@ pub fn defs() -> Vec<Def> {
                     ("y", strs("Y columns. Default: the sheet's Y columns.")),
                     ("y2", strs("Columns on the right Y axis (double-Y).")),
                     ("graph", s("Style this existing graph instead of making one.")),
+                    (
+                        "group",
+                        s(
+                            "Parallel plots: the group column of parallel-index (default: the first text column), or the numeric colour column of parallel (default: the last y column; none = one colour); for treemap and sunburst the category columns, comma-separated, first = top level or innermost ring (default: the text columns of the sheet).",
+                        ),
+                    ),
                     ("panels", panels),
                     (
                         "overlay_files",
@@ -314,6 +382,8 @@ pub fn defs() -> Vec<Def> {
             name: "export_graph",
             description: "Render a graph to a file (png, svg, pdf, eps, tiff, emf, jpg, bmp) and/or return it as a PNG image to look at. With graphs or all_graphs, several graphs go into one multi-page PDF, one page per graph (at most 500).",
             read_only: false,
+            mutates: false,
+            headless_only: false,
             schema: obj(
                 vec![
                     ("graph", s("Graph name. Default: the only graph.")),
@@ -346,6 +416,8 @@ pub fn defs() -> Vec<Def> {
             name: "export_data",
             description: "Write a sheet as delimited text (comma for csv, tab for tsv) or as an Excel .xlsx workbook.",
             read_only: false,
+            mutates: false,
+            headless_only: false,
             schema: obj(
                 vec![
                     ("book", s(BOOK)),
@@ -368,6 +440,8 @@ pub fn defs() -> Vec<Def> {
             name: "list_analysis_tools",
             description: "Every analysis tool analyze accepts (all the tools of `sheaf analyze`), with their options, types and defaults. Tools marked bridged also carry a JSON Schema.",
             read_only: true,
+            mutates: false,
+            headless_only: false,
             schema: obj(vec![], &[]),
             example: json!({}),
         },
@@ -375,6 +449,8 @@ pub fn defs() -> Vec<Def> {
             name: "analyze",
             description: "Run an analysis tool on Y columns: any tool of `sheaf analyze` (integrate, smooth, fft_filter, ttest, anova, mannwhitney, histogram, normality, corr, ...). Results go to new columns next to the input or to a new sheet; the reply says where and carries any table. Names are snake_case; options are keys of list_analysis_tools (snake_case or kebab-case).",
             read_only: false,
+            mutates: true,
+            headless_only: false,
             schema: obj(
                 vec![
                     ("tool", s("Tool name from list_analysis_tools.")),
@@ -403,6 +479,8 @@ pub fn defs() -> Vec<Def> {
             name: "sort_sheet",
             description: "Sort the rows of a sheet by a column.",
             read_only: false,
+            mutates: true,
+            headless_only: false,
             schema: obj(
                 vec![
                     ("book", s(BOOK)),
@@ -418,6 +496,8 @@ pub fn defs() -> Vec<Def> {
             name: "filter_sheet",
             description: "Keep the rows of a sheet for which a formula is true, in a new sheet unless in_place.",
             read_only: false,
+            mutates: true,
+            headless_only: false,
             schema: obj(
                 vec![
                     ("book", s(BOOK)),
@@ -433,13 +513,17 @@ pub fn defs() -> Vec<Def> {
             name: "list_fit_models",
             description: "The built-in fit functions with their parameters, and the special model names.",
             read_only: true,
+            mutates: false,
+            headless_only: false,
             schema: obj(vec![("category", s("Only this category."))], &[]),
             example: json!({"category": "Peak"}),
         },
         Def {
             name: "fit",
-            description: "Fit a model to Y columns (one fit per column), compare two models, rank models, fit globally or regress on several columns. Results go to new sheets; the reply has parameters, errors and statistics.",
+            description: "Fit a model to Y columns (one fit per column), compare two models, rank models, fit globally or regress on several columns. Results go to new sheets; the reply has parameters, errors and statistics. A fit is all or nothing: if the plot file cannot be written, the fit is undone.",
             read_only: false,
+            mutates: true,
+            headless_only: false,
             schema: obj(
                 vec![
                     (
@@ -482,6 +566,49 @@ pub fn defs() -> Vec<Def> {
                 &[],
             ),
             example: json!({"model": "Gauss", "y": ["B"], "x_range": "0.2:0.6", "init": {"xc": 0.4}, "bounds": {"w": [0, null]}}),
+        },
+        Def {
+            name: "list_simulate_functions",
+            description: "The built-in functions that simulate_curve can draw, with each parameter's starting value (the value used when a parameter is not given).",
+            read_only: true,
+            mutates: false,
+            headless_only: false,
+            schema: obj(vec![("category", s("Only this category."))], &[]),
+            example: json!({"category": "Peak Functions"}),
+        },
+        Def {
+            name: "simulate_curve",
+            description: "Simulate Curve: the values of a built-in fit function (list_simulate_functions) for chosen parameter values, at X values from a range (from, to, points, linear or log spacing) or from a column (x_of). The X and Y columns go to a new sheet of the workbook (Simulate1, ...); plot also draws a graph, image also writes it as a picture. Parameters not given keep their starting values.",
+            read_only: false,
+            mutates: true,
+            headless_only: false,
+            schema: obj(
+                vec![
+                    ("function", s("Built-in fit function name, case does not matter. Default Gauss.")),
+                    (
+                        "params",
+                        json!({"type": "object", "additionalProperties": {"type": "number"},
+                            "description": "Parameter values by name, for example {\"xc\": 5, \"w\": 2}."}),
+                    ),
+                    ("from", t("number", "First X value (default 1). Above to gives falling X.")),
+                    ("to", t("number", "Last X value (default 10).")),
+                    ("points", t("integer", "Number of X values, 2 to 1000000 (default 100).")),
+                    ("log", b("Space the X values evenly on a logarithmic scale; from and to must be positive.")),
+                    (
+                        "x_of",
+                        s(
+                            "Use the X values of this column instead of a range. Cannot be combined with from, to, points or log; the call is refused.",
+                        ),
+                    ),
+                    ("book", s(BOOK)),
+                    ("sheet", s("Sheet that x_of is looked up in. Default: the active sheet.")),
+                    ("plot", b("Also draw the curve in a new graph.")),
+                    ("image", s("Also render the curve as an image at this path (implies plot).")),
+                    ("values", b("Put the X and Y values in the reply (default true up to 1000 points).")),
+                ],
+                &[],
+            ),
+            example: json!({"function": "Gauss", "params": {"xc": 5, "w": 2, "A": 4}, "from": 0, "to": 10, "points": 101, "plot": true}),
         },
     ]
 }

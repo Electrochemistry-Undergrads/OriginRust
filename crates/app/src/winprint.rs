@@ -53,9 +53,10 @@ pub enum Outcome {
     Cancelled,
 }
 
-/// Elsewhere than Windows: the page's PDF goes to the default printer with `lp` (paper size and
-/// orientation from the Page Setup; the margins are the printer's). A first step: no print dialog.
-#[cfg(not(any(windows, target_os = "macos")))]
+/// Elsewhere than Windows (on macOS only for a sheet; a graph uses PDFKit): the PDF goes to the
+/// default printer with `lp` (paper size and orientation from the Page Setup; the margins are the
+/// printer's). A first step: no print dialog.
+#[cfg(not(windows))]
 pub fn print_pdf(pdf: &[u8], setup: &PageSetup, page_pt: (f64, f64), title: &str) -> Result<(), String> {
     use sheaf_core::page_setup::Orientation;
     let path = std::env::temp_dir().join(format!("sheaf-print-{}.pdf", std::process::id()));
@@ -102,11 +103,11 @@ mod imp {
         SetEnhMetaFileBits, VERTRES,
     };
     use windows_sys::Win32::Graphics::Printing::{ClosePrinter, DocumentPropertiesW, OpenPrinterW, PRINTER_HANDLE};
-    use windows_sys::Win32::Storage::Xps::{DOCINFOW, EndDoc, EndPage, StartDocW, StartPage};
+    use windows_sys::Win32::Storage::Xps::{AbortDoc, DOCINFOW, EndDoc, EndPage, StartDocW, StartPage};
     use windows_sys::Win32::System::Memory::{GlobalLock, GlobalUnlock};
     use windows_sys::Win32::UI::Controls::Dialogs::{
-        PD_NOPAGENUMS, PD_NOSELECTION, PD_RETURNDC, PD_RETURNDEFAULT, PD_USEDEVMODECOPIESANDCOLLATE, PRINTDLGW,
-        PrintDlgW,
+        PD_NOPAGENUMS, PD_NOSELECTION, PD_PAGENUMS, PD_RETURNDC, PD_RETURNDEFAULT, PD_USEDEVMODECOPIESANDCOLLATE,
+        PRINTDLGW, PrintDlgW,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
@@ -132,11 +133,13 @@ mod imp {
         };
     }
 
-    /// Plays the metafile into `hdc` as one page, then ends the document. `output` redirects the
-    /// job to a file (the driver may still ask where to save it).
+    /// Plays the metafiles into `hdc`, one printed page each (`range` picks pages, 1-based and
+    /// inclusive), then ends the document. `output` redirects the job to a file (the driver may
+    /// still ask where to save it).
     fn print_on_dc(
         hdc: HDC,
-        emf: &[u8],
+        pages: &[Vec<u8>],
+        range: Option<(usize, usize)>,
         page_pt: (f64, f64),
         setup: &PageSetup,
         title: &str,
@@ -156,12 +159,12 @@ mod imp {
         };
         let [left, top, right, bottom] = device_rect(&caps, setup, page_pt.0, page_pt.1)
             .ok_or_else(|| "the margins leave no room on the paper".to_string())?;
-        let size = u32::try_from(emf.len()).map_err(|_| "the metafile is too large".to_string())?;
-        // SAFETY: `emf` is valid for `size` bytes; the call copies them into a new metafile handle.
-        let hemf = unsafe { SetEnhMetaFileBits(size, emf.as_ptr()) };
-        if hemf.is_null() {
-            return Err("the page's metafile could not be read".to_string());
+        let (first, last) = range.unwrap_or((1, pages.len()));
+        let (first, last) = (first.max(1), last.min(pages.len()));
+        if first > last {
+            return Err("the page range has no page in it".to_string());
         }
+        let rect = windows_sys::Win32::Foundation::RECT { left, top, right, bottom };
         let name = wide(title);
         let out = output.map(|p| wide(&p.to_string_lossy()));
         let doc = DOCINFOW {
@@ -172,17 +175,46 @@ mod imp {
             fwType: 0,
         };
         // SAFETY: `hdc` is a live printer device context; `doc` and its strings outlive the calls.
-        let result = unsafe {
+        unsafe {
             if StartDocW(hdc, &doc) <= 0 {
                 Err(format!("the printer did not start the job (error {})", GetLastError()))
-            } else if StartPage(hdc) <= 0 {
-                EndDoc(hdc);
+            } else {
+                let mut result = Ok(());
+                for emf in &pages[first - 1..last] {
+                    result = play_page(hdc, emf, &rect);
+                    if result.is_err() {
+                        break;
+                    }
+                }
+                if result.is_ok() {
+                    EndDoc(hdc);
+                } else {
+                    // A failed page cancels the job instead of submitting a partial one.
+                    AbortDoc(hdc);
+                }
+                result
+            }
+        }
+    }
+
+    /// One printed page: the metafile played into `rect`.
+    ///
+    /// # Safety
+    /// `hdc` must be a live printer device context with a document started on it.
+    unsafe fn play_page(hdc: HDC, emf: &[u8], rect: &windows_sys::Win32::Foundation::RECT) -> Result<(), String> {
+        let size = u32::try_from(emf.len()).map_err(|_| "the metafile is too large".to_string())?;
+        // SAFETY: `emf` is valid for `size` bytes; the call copies them into a new metafile handle.
+        let hemf = unsafe { SetEnhMetaFileBits(size, emf.as_ptr()) };
+        if hemf.is_null() {
+            return Err("the page's metafile could not be read".to_string());
+        }
+        // SAFETY: the caller guarantees the device context and the started document.
+        let result = unsafe {
+            if StartPage(hdc) <= 0 {
                 Err(format!("the printer did not start the page (error {})", GetLastError()))
             } else {
-                let rect = windows_sys::Win32::Foundation::RECT { left, top, right, bottom };
-                let played = PlayEnhMetaFile(hdc, hemf, &rect);
+                let played = PlayEnhMetaFile(hdc, hemf, rect);
                 EndPage(hdc);
-                EndDoc(hdc);
                 if played == 0 { Err("the page could not be drawn on the printer".to_string()) } else { Ok(()) }
             }
         };
@@ -192,9 +224,10 @@ mod imp {
     }
 
     /// Asks for a printer with the system's print dialog (paper and orientation start from the
-    /// Page Setup) and prints the page, the metafile `emf` of `page_pt` points, on it.
+    /// Page Setup) and prints the pages, metafiles of `page_pt` points each, on it. With more than
+    /// one page the dialog offers a page range.
     pub fn print_with_dialog(
-        emf: &[u8],
+        pages: &[Vec<u8>],
         page_pt: (f64, f64),
         setup: &PageSetup,
         title: &str,
@@ -219,7 +252,16 @@ mod imp {
                 }
             }
         }
-        pd.Flags = PD_RETURNDC | PD_NOSELECTION | PD_NOPAGENUMS | PD_USEDEVMODECOPIESANDCOLLATE;
+        pd.Flags = PD_RETURNDC | PD_NOSELECTION | PD_USEDEVMODECOPIESANDCOLLATE;
+        if pages.len() > 1 {
+            let n = u16::try_from(pages.len()).unwrap_or(u16::MAX);
+            pd.nMinPage = 1;
+            pd.nMaxPage = n;
+            pd.nFromPage = 1;
+            pd.nToPage = n;
+        } else {
+            pd.Flags |= PD_NOPAGENUMS;
+        }
         // SAFETY: no window is the owner of last resort; the foreground window is normally ours.
         pd.hwndOwner = unsafe { GetForegroundWindow() } as HWND;
         // SAFETY: `pd` holds the handles from the first call.
@@ -228,7 +270,8 @@ mod imp {
         let result = if ok == 0 || hdc.is_null() {
             Ok(Outcome::Cancelled)
         } else {
-            print_on_dc(hdc, emf, page_pt, setup, title, None).map(|()| Outcome::Printed)
+            let range = (pd.Flags & PD_PAGENUMS != 0).then(|| (usize::from(pd.nFromPage), usize::from(pd.nToPage)));
+            print_on_dc(hdc, pages, range, page_pt, setup, title, None).map(|()| Outcome::Printed)
         };
         // SAFETY: each handle is released once, after its last use.
         unsafe {
@@ -251,7 +294,7 @@ mod imp {
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn print_to_printer(
         printer: &str,
-        emf: &[u8],
+        pages: &[Vec<u8>],
         page_pt: (f64, f64),
         setup: &PageSetup,
         title: &str,
@@ -286,7 +329,7 @@ mod imp {
             if hdc.is_null() {
                 Err("the printer could not be opened for printing".to_string())
             } else {
-                let r = print_on_dc(hdc, emf, page_pt, setup, title, output);
+                let r = print_on_dc(hdc, pages, None, page_pt, setup, title, output);
                 // SAFETY: the context was created above.
                 unsafe { DeleteDC(hdc) };
                 r
@@ -376,7 +419,7 @@ mod tests {
     }
 
     /// The headless check, run by hand (never in the normal test run, it needs a printer driver):
-    /// `SHEAF_PRINT_EMF` is a page's metafile (`sheaf plot FILE -o page.emf`), `SHEAF_PRINT_OUT` the
+    /// `SHEAF_PRINT_EMF` is a page's metafile (`sheaf plot FILE -o page.emf`; several, separated by `;`, print as pages), `SHEAF_PRINT_OUT` the
     /// file the job is written to, `SHEAF_PRINTER` the printer (default "Microsoft Print to PDF"),
     /// `SHEAF_PRINT_PAGE` the page size in points as `WxH` (default 460.8x345.6, the 6.4 x 4.8 in
     /// page). The call runs on a thread so a driver that opens a window cannot hang the test.
@@ -384,7 +427,11 @@ mod tests {
     #[test]
     #[ignore = "prints through a real printer driver; run by hand"]
     fn prints_a_page_to_a_named_printer_without_a_dialog() {
-        let emf = std::fs::read(std::env::var("SHEAF_PRINT_EMF").expect("SHEAF_PRINT_EMF")).unwrap();
+        let emfs: Vec<Vec<u8>> = std::env::var("SHEAF_PRINT_EMF")
+            .expect("SHEAF_PRINT_EMF")
+            .split(';')
+            .map(|p| std::fs::read(p).unwrap())
+            .collect();
         let out = std::path::PathBuf::from(std::env::var("SHEAF_PRINT_OUT").expect("SHEAF_PRINT_OUT"));
         let printer = std::env::var("SHEAF_PRINTER").unwrap_or_else(|_| "Microsoft Print to PDF".to_string());
         let page = std::env::var("SHEAF_PRINT_PAGE").unwrap_or_else(|_| "460.8x345.6".to_string());
@@ -393,7 +440,52 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let target = out.clone();
         std::thread::spawn(move || {
-            let r = print_to_printer(&printer, &emf, page, &PageSetup::default(), "Sheaf print check", Some(&target));
+            let r = print_to_printer(&printer, &emfs, page, &PageSetup::default(), "Sheaf print check", Some(&target));
+            let _ = tx.send(r);
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(90)).expect("the printer did not finish in 90 s").unwrap();
+        assert!(out.exists(), "the job wrote no file");
+    }
+
+    /// The same check for a worksheet: a synthetic 130-row sheet prints as three pages on Letter
+    /// portrait. `SHEAF_PRINT_OUT` is the job's file; the Sheaf PDF of the same sheet is written
+    /// beside it (`.sheaf.pdf`) for comparison. Run by hand, with a timeout like the test above.
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "prints through a real printer driver; run by hand"]
+    fn prints_a_three_page_sheet_to_a_named_printer_without_a_dialog() {
+        use sheaf_core::column::{Column, ColumnData, Designation};
+        use sheaf_core::ids::ColumnId;
+        let out = std::path::PathBuf::from(std::env::var("SHEAF_PRINT_OUT").expect("SHEAF_PRINT_OUT"));
+        let printer = std::env::var("SHEAF_PRINTER").unwrap_or_else(|_| "Microsoft Print to PDF".to_string());
+        let n = 130;
+        let mut ws = sheaf_core::worksheet::Worksheet::new("Sheet1");
+        ws.columns = vec![
+            Column::new(ColumnId(1), "A", Designation::X, ColumnData::numeric((1..=n).map(f64::from).collect()))
+                .with_labels("Index", "n", ""),
+            Column::new(
+                ColumnId(2),
+                "B",
+                Designation::Y,
+                ColumnData::numeric((1..=n).map(|i| f64::from(i).sqrt()).collect()),
+            )
+            .with_labels("Root", "", "of the index"),
+            Column::new(
+                ColumnId(3),
+                "C",
+                Designation::Y,
+                ColumnData::text((1..=n).map(|i| format!("row {i}")).collect()),
+            ),
+        ];
+        let setup = PageSetup::default();
+        let pages = sheaf_plot::render_sheet_emf_pages(&ws, &setup).unwrap();
+        assert_eq!(pages.len(), 3);
+        let area = sheaf_plot::sheet_pages(&ws, &setup).unwrap().area;
+        std::fs::write(out.with_extension("sheaf.pdf"), sheaf_plot::render_sheet_pdf(&ws, &setup).unwrap()).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let target = out.clone();
+        std::thread::spawn(move || {
+            let r = print_to_printer(&printer, &pages, area, &setup, "Sheaf sheet print check", Some(&target));
             let _ = tx.send(r);
         });
         rx.recv_timeout(std::time::Duration::from_secs(90)).expect("the printer did not finish in 90 s").unwrap();

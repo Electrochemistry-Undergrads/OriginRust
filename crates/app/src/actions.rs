@@ -83,6 +83,8 @@ pub enum GraphOp {
     MovePlotToAxis { layer: usize, plot: usize, right: bool },
     /// Hide Data Plot.
     HidePlot { layer: usize, plot: usize },
+    /// Remove Trendline: the plot's last trendline goes.
+    RemoveTrendline { layer: usize, plot: usize },
     /// Hide Axis (`y` false for the X axis).
     HideAxis { layer: usize, y: bool },
     /// Hide Grids, or show the major grid lines again.
@@ -126,6 +128,31 @@ pub enum GraphTool {
     Text,
     /// A drawing tool (Line, Arrow, Rectangle, Circle): a drag on the graph draws one object.
     Draw(sheaf_core::shape::ShapeKind),
+    /// One of the Data menu's tools (Mask, Move, Remove Bad Data Points).
+    Data(DataTool),
+}
+
+/// The tools of a graph's Data menu that act on the points of a plot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataTool {
+    /// Data > Mask Data Points: a drag masks the points in a rectangle, a click on a masked point
+    /// unmasks it.
+    Mask,
+    /// Data > Move Data Points: a drag moves a point, changing its X and Y cells.
+    Move,
+    /// Data > Remove Bad Data Points: a click sets the Y cell of a point missing.
+    RemoveBad,
+}
+
+/// A change of worksheet cells made from a graph's Data menu tools (one undo step each).
+#[derive(Debug, Clone, PartialEq)]
+pub enum DataEdit {
+    /// Masks or unmasks the Y cells of points.
+    Mask { cells: Vec<sheaf_core::DataCell>, masked: bool },
+    /// Sets the Y cells of points missing.
+    RemoveBad { cells: Vec<sheaf_core::DataCell> },
+    /// Moves a point: its Y cell and, when the plot has an X column, its X cell.
+    Move { y: (sheaf_core::DataCell, f64), x: Option<(sheaf_core::DataCell, f64)> },
 }
 
 /// Which File > Import item opened the file chooser.
@@ -163,6 +190,8 @@ pub enum Action {
     ReplaceInSheets(WindowId),
     Undo,
     Redo,
+    /// Owner-only: undo consecutive completed AI calls, stopping at a manual history entry.
+    UndoAiChanges,
     NewWorkbook,
     AddColumn(WindowId),
     DeleteColumns(Vec<ColumnId>),
@@ -209,6 +238,8 @@ pub enum Action {
     },
     ColumnProperties(ColumnId),
     SetColumnValues(ColumnId),
+    /// The Set Values window for several columns of one sheet at once (Ctrl+Shift+Q).
+    SetMultipleColumnsValues(Vec<ColumnId>),
     /// Recalculate these columns now. Columns without a recalculating formula are skipped.
     Recalculate(Vec<ColumnId>),
     /// Open the window of an analysis tool for these columns of a workbook; without columns,
@@ -242,6 +273,10 @@ pub enum Action {
         book: WindowId,
         column: Option<ColumnId>,
         kind: FitMoreKind,
+    },
+    /// Analysis > Fitting > Simulate Curve: the window, with the active workbook if there is one.
+    SimulateCurve {
+        book: Option<WindowId>,
     },
     /// Sort the rows of the sheet that holds this column by the column's values.
     SortSheet {
@@ -290,6 +325,8 @@ pub enum Action {
     MaskColor,
     /// Column > Mask > Disable Masking / Enable Masking, for the whole project.
     ToggleMasking,
+    /// Column > Mask > Hide/Show Masked Points for the whole project.
+    ToggleHideMasked,
     /// Column > Mask Cells by Condition...: the window for these columns.
     MaskByConditionDialog {
         book: WindowId,
@@ -307,6 +344,10 @@ pub enum Action {
     /// Worksheet > Conditional Formatting > Remove Conditional Format: removes the rules that
     /// touch the selection.
     RemoveCondFormat(WindowId),
+    /// Cell menu > Add Note... / Edit Note...: the note editor for the single selected cell.
+    NoteDialog(WindowId),
+    /// Cell menu > Delete Note: removes the note of the single selected cell.
+    DeleteNote(WindowId),
     /// Column > Filter > Reapply Filter.
     ReapplyRowFilter(WindowId),
     /// Open the window that keeps only the rows matching a condition.
@@ -338,6 +379,13 @@ pub enum Action {
     LabelPanels {
         book: WindowId,
         columns: Vec<ColumnId>,
+    },
+    /// A plot's menu: Add Trendline... or Edit Trendline... (the plot's last one).
+    Trendline {
+        graph: WindowId,
+        layer: usize,
+        plot: usize,
+        edit: bool,
     },
     /// Graph > Add Error Bars: choose an existing Y-error column for one plot of the layer.
     AddErrorBars {
@@ -374,6 +422,8 @@ pub enum Action {
         graph: WindowId,
         tool: GraphTool,
     },
+    /// A change that a Data menu tool made to the cells of a plot's worksheet.
+    DataEdit(DataEdit),
     /// Add Text: opens the text window for a new label in a layer (the active one when `layer`
     /// is `None`) at a point given as fractions of the layer frame (the middle when `None`).
     AddText {
@@ -449,6 +499,8 @@ pub enum Action {
     PageSetup,
     /// Bring a window's tab to the front, reopening it if it was closed.
     Focus(WindowId),
+    /// Window > Window Switcher: the switcher stays open until a window is chosen.
+    OpenSwitcher,
     /// Close a window: it leaves the workspace, its data stays (Hide in the project explorer).
     HideWindow(WindowId),
     /// Window > Duplicate: copy this workbook or graph into a new window.
@@ -456,6 +508,14 @@ pub enum Action {
     /// File > Append: bring the windows of another project file into this one (the file, or `None`
     /// to ask for it).
     AppendProject(Option<std::path::PathBuf>),
+    /// The File menu was opened: read the recent files again.
+    ReloadRecent,
+    /// File > Recent Projects: open this entry the way Open does.
+    OpenRecent(std::path::PathBuf),
+    /// File > Import > Recent Imports: import this entry again with the default settings.
+    ImportRecent(std::path::PathBuf),
+    /// Clear Recent Projects / Clear Recent Imports.
+    ClearRecent(crate::recent::RecentKind),
     /// Remove a window from the project.
     DeleteWindow(WindowId),
     /// Put a window into a folder of the project explorer (the path of indices; empty is the root).
@@ -504,5 +564,7 @@ pub enum Action {
     Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
+    /// Tools > AI Assistants (MCP): turn the endpoint of `sheaf-mcp --attach` on or off.
+    ToggleAiLink,
     Quit,
 }

@@ -12,9 +12,10 @@ use super::frame::{
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
     AnovaSpec, BinSize, CorrelationSpec, CrosstabSpec, DiscSort, DiscreteFreqSpec, FreqOptions, FriedmanSpec,
-    HistogramSpec, KruskalWallisSpec, KsTwoSampleSpec, MannWhitneySpec, MeansComparison, MedianTestSpec, NormalitySpec,
-    OutlierSpec, PropTestKind, PropTestSpec, RowStatsSpec, SignTestSpec, SignedRankKind, SignedRankSpec,
-    StatisticsSpec, TTestKind, TTestSpec, Tail, TwoWayAnovaSpec, TwoWayLayout, VarTestKind, VarTestSpec,
+    GraphArrangement, GraphSummarySpec, HistogramSpec, KruskalWallisSpec, KsTwoSampleSpec, MannWhitneySpec,
+    MeansComparison, MedianTestSpec, NormalitySpec, OutlierSpec, PropPowerSpec, PropTestKind, PropTestSpec,
+    RowStatsSpec, SignTestSpec, SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind, TTestSpec, Tail,
+    TwoWayAnovaSpec, TwoWayLayout, VarTestKind, VarTestSpec,
 };
 use sheaf_core::analysis::{
     AreaType, BaselineSpec, Boundary, ColumnMathSpec, ConvolutionSpec, CrossingIndex, CurveMathSpec, CurveOp,
@@ -126,6 +127,8 @@ pub enum AnalysisKind {
     Kmeans,
     /// Statistics > Descriptive Statistics > Cross Tabulation.
     Crosstab,
+    /// Statistics > Descriptive Statistics > Graphical Summary (T40).
+    GraphSummary,
     /// Analysis > Mathematics: Average Multiple Curves, Intersect and Polygon Area.
     AverageCurves,
     Intersect,
@@ -225,6 +228,7 @@ impl AnalysisKind {
             AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
             AnalysisKind::Kmeans => "K-Means Cluster Analysis...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
+            AnalysisKind::GraphSummary => "Graphical Summary...",
             AnalysisKind::AverageCurves => "Average Multiple Curves...",
             AnalysisKind::Intersect => "Intersect...",
             AnalysisKind::PolygonArea => "Polygon Area...",
@@ -299,6 +303,7 @@ impl AnalysisKind {
             "kaplanmeier" => AnalysisKind::KaplanMeier,
             "kmeans" => AnalysisKind::Kmeans,
             "crosstab" => AnalysisKind::Crosstab,
+            "graphsummary" => AnalysisKind::GraphSummary,
             "average-curves" => AnalysisKind::AverageCurves,
             "intersect" => AnalysisKind::Intersect,
             "polygon-area" => AnalysisKind::PolygonArea,
@@ -425,6 +430,14 @@ fn parse_levels(text: &str) -> Result<Vec<f64>, String> {
         .collect()
 }
 
+/// The Hypothetical Sample Size(s) box: whole numbers separated by spaces or commas.
+fn parse_sizes(text: &str) -> Result<Vec<u64>, String> {
+    text.split(|c: char| c.is_whitespace() || c == ',')
+        .filter(|w| !w.is_empty())
+        .map(|w| w.parse::<u64>().map_err(|_| format!("\"{w}\" is not a sample size")))
+        .collect()
+}
+
 /// The Alternate Hypothesis radios of the variance and proportion tests: `Variance <> 1`, `> 1`, `< 1`.
 fn alternative_radios(ui: &mut egui::Ui, tail: &mut Tail, what: &str, value: &str) {
     ui.horizontal(|ui| {
@@ -469,6 +482,12 @@ struct StatsOptions {
     binomial_method: bool,
     /// Two-sample proportion test: "Use pooled p for test" (Origin: off).
     pooled_p: bool,
+    /// Proportion tests, Power Analysis: Actual Power, Hypothetical Power, their significance level and the
+    /// hypothetical sample sizes as typed (Origin's defaults: off, 0.05, "50 100 200").
+    power_actual: bool,
+    power_hypothetical: bool,
+    power_alpha: f64,
+    power_sizes_text: String,
     /// Confidence intervals of the variance and proportion tests, and their levels in percent as typed.
     intervals: bool,
     levels_text: String,
@@ -480,6 +499,9 @@ struct StatsOptions {
     /// Cross tabulation: indexes into the sheet's columns, row variable and column variable.
     pair_columns: [usize; 2],
     cross: CrosstabSpec,
+    /// Graphical Summary: level and arrangement, and the group columns (indexes into the sheet's columns).
+    summary: GraphSummarySpec,
+    summary_groups: Vec<usize>,
     /// 0 automatic, 1 bin size, 2 number of bins.
     bins: usize,
     bin_size: f64,
@@ -528,6 +550,10 @@ impl Default for StatsOptions {
             normal_method: true,
             binomial_method: false,
             pooled_p: false,
+            power_actual: false,
+            power_hypothetical: false,
+            power_alpha: 0.05,
+            power_sizes_text: "50 100 200".to_string(),
             intervals: false,
             levels_text: "90 95 99".to_string(),
             tail: Tail::Two,
@@ -536,6 +562,8 @@ impl Default for StatsOptions {
             control: 0,
             pair_columns: [0, 1],
             cross: CrosstabSpec::default(),
+            summary: GraphSummarySpec::default(),
+            summary_groups: Vec::new(),
             bins: 0,
             bin_size: 1.0,
             bin_count: 10,
@@ -1676,6 +1704,12 @@ impl AnalysisDialog {
                     normal: st.normal_method,
                     exact: st.binomial_method,
                     pooled: st.pooled_p,
+                    power: PropPowerSpec {
+                        actual: st.power_actual,
+                        hypothetical: st.power_hypothetical,
+                        alpha: st.power_alpha,
+                        sizes: if st.power_hypothetical { parse_sizes(&st.power_sizes_text)? } else { Vec::new() },
+                    },
                 })
             }
             AnalysisKind::Anova => Tool::Anova(AnovaSpec {
@@ -1684,6 +1718,16 @@ impl AnalysisDialog {
                 control: self.stats.control,
             }),
             AnalysisKind::Crosstab => Tool::Crosstab(CrosstabSpec { alpha: self.stats.alpha, ..self.stats.cross }),
+            AnalysisKind::GraphSummary => {
+                let groups = self
+                    .stats
+                    .summary_groups
+                    .iter()
+                    .filter_map(|&i| self.sheet_columns.get(i).map(|(id, _)| *id))
+                    .filter(|id| !self.columns.contains(id))
+                    .collect();
+                Tool::GraphSummary(GraphSummarySpec { groups, ..self.stats.summary })
+            }
             AnalysisKind::Histogram => Tool::Histogram(HistogramSpec {
                 freq: FreqOptions {
                     min: self.stats.own_range.then_some(self.stats.bin_min),
@@ -2331,6 +2375,21 @@ impl AnalysisDialog {
                     ui.checkbox(&mut st.pooled_p, "Use pooled p for test");
                 }
                 ui.checkbox(&mut st.binomial_method, if one { "Binomial Test" } else { "Fisher's Exact Test" });
+                ui.label("Power Analysis");
+                ui.checkbox(&mut st.power_actual, "Actual Power");
+                ui.add_enabled_ui(st.power_actual || st.power_hypothetical, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Significance Level");
+                        ui.add(DragValue::new(&mut st.power_alpha).speed(0.001).range(0.0001..=0.4999));
+                    });
+                });
+                ui.checkbox(&mut st.power_hypothetical, "Hypothetical Power");
+                ui.add_enabled_ui(st.power_hypothetical, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Hypothetical Sample Size(s)");
+                        ui.add(egui::TextEdit::singleline(&mut st.power_sizes_text).desired_width(120.0));
+                    });
+                });
             }
             AnalysisKind::Anova => {
                 let st = &mut self.stats;
@@ -2414,6 +2473,66 @@ impl AnalysisDialog {
                     ui.label("Significance level");
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
+            }
+            AnalysisKind::GraphSummary => {
+                let st = &mut self.stats;
+                ui.label(
+                    "Every chosen column is a variable; each group of the group columns is summarized on its own.",
+                );
+                ui.horizontal(|ui| {
+                    ui.label("Groups");
+                    let chosen: Vec<&str> = st
+                        .summary_groups
+                        .iter()
+                        .filter_map(|&i| self.sheet_columns.get(i))
+                        .map(|(_, n)| n.split("  ").next().unwrap_or(""))
+                        .collect();
+                    let text = if chosen.is_empty() { "(none)".to_string() } else { chosen.join(", ") };
+                    egui::ComboBox::from_id_salt("summary_groups").selected_text(text).width(220.0).show_ui(ui, |ui| {
+                        for (j, (id, name)) in self.sheet_columns.iter().enumerate() {
+                            if self.columns.contains(id) {
+                                continue;
+                            }
+                            let mut on = st.summary_groups.contains(&j);
+                            if ui.checkbox(&mut on, name).changed() {
+                                if on {
+                                    st.summary_groups.push(j);
+                                } else {
+                                    st.summary_groups.retain(|k| *k != j);
+                                }
+                            }
+                        }
+                    });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Confidence Level (%)");
+                    ui.add(DragValue::new(&mut st.summary.level).speed(0.1).range(0.01..=99.99));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Graph Arrangement");
+                    egui::ComboBox::from_id_salt("summary_arrangement")
+                        .selected_text(st.summary.arrangement.label())
+                        .show_ui(ui, |ui| {
+                            for a in GraphArrangement::ALL {
+                                let enabled = a.implemented();
+                                let r = ui.add_enabled(
+                                    enabled,
+                                    egui::Button::selectable(st.summary.arrangement == a, a.label()),
+                                );
+                                if enabled && r.clicked() {
+                                    st.summary.arrangement = a;
+                                }
+                                if !enabled {
+                                    r.on_disabled_hover_text("Not available yet; Sheaf makes Separate Graphs only.");
+                                }
+                            }
+                        });
+                });
+                ui.weak(
+                    "For each variable and group: Description Statistics, confidence intervals of the mean, median and \
+                     standard deviation, and the Anderson-Darling normality test, with a graph of a histogram and \
+                     normal curve, an interval plot and a normal probability plot.",
+                );
             }
             AnalysisKind::Crosstab => {
                 let st = &mut self.stats;
@@ -2721,6 +2840,7 @@ impl AnalysisDialog {
             AnalysisKind::ReduceDup => "reducedup",
             // Origin's X-Function names for these were not looked up; the title shows the tool alone.
             AnalysisKind::Crosstab
+            | AnalysisKind::GraphSummary
             | AnalysisKind::Pca
             | AnalysisKind::Roc
             | AnalysisKind::SubtractLine
@@ -2806,6 +2926,9 @@ impl AnalysisDialog {
             AnalysisKind::Pca => "Describe the variation of several columns by uncorrelated components",
             AnalysisKind::Crosstab => {
                 "Count the cases of every combination of two categorical variables and test their independence"
+            }
+            AnalysisKind::GraphSummary => {
+                "Descriptive statistics, confidence intervals and a normality test with a histogram, an interval plot and a probability plot"
             }
             AnalysisKind::AverageCurves => "Average several curves on a common set of X values",
             AnalysisKind::Intersect => "Find the points where two curves meet",
@@ -2903,6 +3026,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::Crosstab => {
                 "Counts, percentages, expected counts and the chi-square and Fisher tests in a new sheet"
+            }
+            AnalysisKind::GraphSummary => {
+                "Description Statistics, Confidence Intervals and Normality Test tables in a new sheet, and a graph for each variable and group"
             }
             AnalysisKind::AverageCurves => "X, the mean, its standard deviation and the count in a new sheet",
             AnalysisKind::Intersect => "X and Y of each intersection in a new sheet",
@@ -3086,7 +3212,10 @@ impl AnalysisDialog {
         let output = self.output_target()?;
         let mode = if Project::can_link(&request.tool) { self.recalc } else { RecalcMode::None };
         // A histogram makes a graph that plots the new columns, which must stay.
-        let previous = if matches!(self.kind, AnalysisKind::Histogram | AnalysisKind::ProbPlot | AnalysisKind::QQPlot) {
+        let previous = if matches!(
+            self.kind,
+            AnalysisKind::Histogram | AnalysisKind::ProbPlot | AnalysisKind::QQPlot | AnalysisKind::GraphSummary
+        ) {
             None
         } else {
             self.applied.clone()
@@ -3191,7 +3320,7 @@ impl AnalysisDialog {
             });
         });
         // The tools that take their variables from factor boxes have no X column to limit.
-        if matches!(self.kind, AnalysisKind::Crosstab | AnalysisKind::Anova2) {
+        if matches!(self.kind, AnalysisKind::Crosstab | AnalysisKind::Anova2 | AnalysisKind::GraphSummary) {
             return;
         }
         ui.horizontal(|ui| {
@@ -3334,7 +3463,10 @@ impl AnalysisDialog {
                     ui.add_enabled(self.has_preview(), egui::Checkbox::new(&mut self.auto_preview, "Auto Preview"));
                     // The probability and Q-Q plots make a new sheet and a new graph on every run, so running them
                     // at each option change would pile those up; they run on OK and Apply only.
-                    let allowed = !matches!(self.kind, AnalysisKind::ProbPlot | AnalysisKind::QQPlot);
+                    let allowed = !matches!(
+                        self.kind,
+                        AnalysisKind::ProbPlot | AnalysisKind::QQPlot | AnalysisKind::GraphSummary
+                    );
                     if !allowed {
                         self.auto_apply = false;
                     }

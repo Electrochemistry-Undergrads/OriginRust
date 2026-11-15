@@ -15,12 +15,19 @@ fn column_with(id: u64, short: &str, designation: Designation, data: ColumnData,
 }
 
 fn sheet_of(name: &str, columns: Vec<Column>) -> Worksheet {
-    Worksheet { name: name.into(), columns, filter: None, frozen: Default::default(), cond_formats: Vec::new() }
+    Worksheet {
+        name: name.into(),
+        columns,
+        filter: None,
+        frozen: Default::default(),
+        cond_formats: Vec::new(),
+        notes: Vec::new(),
+    }
 }
 
 /// A workbook of three sheets written by the exporter: two with data and header rows, one holding
 /// text only.
-fn excel_file(tag: &str) -> PathBuf {
+pub(super) fn excel_file(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("sheaf-app-excel-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();

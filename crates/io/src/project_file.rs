@@ -494,6 +494,30 @@ mod tests {
     }
 
     #[test]
+    fn a_formula_with_j_set_on_several_columns_survives_saving_and_still_recalculates_by_column() {
+        use sheaf_core::{Document, RecalcMode};
+        let dir = TempDir::new("multicol");
+        let path = dir.file("multi.sheaf");
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let a = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        let ids: Vec<_> =
+            (0..3).map(|_| p.add_column(book, 0, Designation::Y, ColumnData::numeric(Vec::new())).unwrap()).collect();
+        let mut doc = Document::new(p);
+        doc.set_columns_values(&ids, "col(A)*j", None, RecalcMode::Auto).unwrap();
+        save(doc.project(), &path).unwrap();
+        let back = load(&path).unwrap();
+        same_data(doc.project(), &back);
+        assert!(ids.iter().all(|c| back.column(*c).unwrap().formula.as_deref() == Some("col(A)*j")));
+        let mut doc = Document::new(back);
+        doc.apply("edit", |p| {
+            p.column_mut(a).unwrap().set_cell_text(0, "10");
+        });
+        let first: Vec<f64> = ids.iter().map(|c| doc.project().numeric(*c).unwrap()[0]).collect();
+        assert_eq!(first, [20.0, 30.0, 40.0]);
+    }
+
+    #[test]
     fn an_analysis_that_recalculates_survives_saving_and_loading() {
         use sheaf_core::analysis::{OutputTarget, Request, RowRange, Tool};
         use sheaf_core::column::RecalcMode;

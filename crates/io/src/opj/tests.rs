@@ -424,6 +424,11 @@ fn into_project_renumbers_the_stack_offsets_with_the_columns() {
             y_base: None,
             error: sheaf_core::graph::ErrorStyle::default(),
             hist: Default::default(),
+            ridge: Default::default(),
+            hexbin: Default::default(),
+            parallel: Default::default(),
+            treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -474,4 +479,36 @@ fn local_xrd_project_keeps_the_offsets_of_its_stacked_graphs() {
     let plain = project.graphs().find(|g| g.name == "LMOafter100cycle").expect("the graph is read");
     assert_eq!(plain.layers[0].stack, sheaf_core::graph::Stack::None);
     assert!(plain.layers[0].plot_offsets.is_empty());
+}
+
+#[test]
+fn masked_cells_are_read_from_the_mask_block() {
+    let mut b = FileBuilder::default();
+    let values: Vec<u8> = (0..6).flat_map(|i| number_cell(f64::from(i))).collect();
+    b.dataset_masked("Book1_A", 0x6121, 10, &values, &[1, 4]);
+    b.dataset("Book1_B", 0x6121, 10, &values);
+    b.window("Book1", "", &[("S", &[(1, 0, "A", b""), (2, 0, "B", b"")])]);
+    let imp = read(b.build()).unwrap();
+    let cols = &imp.workbooks[0].sheets[0].columns;
+    assert_eq!(cols[0].mask.iter().copied().collect::<Vec<_>>(), vec![1, 4]);
+    assert!(cols[1].mask.is_empty(), "an empty mask block masks nothing");
+}
+
+/// Projects saved by Origin 2016 with `wcellmask` (re-workspace/scratch/opjmask, local only):
+/// `SHEAF_OPJ_MASK_DIR=<that folder> cargo test -p sheaf-io -- --ignored origin_written_masks`.
+#[test]
+#[ignore]
+fn origin_written_masks() {
+    let Ok(dir) = std::env::var("SHEAF_OPJ_MASK_DIR") else { return };
+    let rows = |file: &str, book: &str, col: &str| -> Vec<usize> {
+        let imp = read_opj(&std::path::Path::new(&dir).join(file)).unwrap();
+        let b = imp.workbooks.iter().find(|b| b.name == book).unwrap();
+        b.sheets[0].columns.iter().find(|c| c.short_name == col).unwrap().mask.iter().copied().collect()
+    };
+    assert!(rows("m0.opj", "GSrc", "B").is_empty());
+    assert_eq!(rows("m1.opj", "GSrc", "B"), vec![2]);
+    assert_eq!(rows("m2.opj", "GSrc", "B"), vec![0, 1, 4]);
+    assert_eq!(rows("m2.opj", "GSrc", "C"), vec![20]);
+    assert_eq!(rows("m3.opj", "GSrc", "B"), (2..10).collect::<Vec<_>>());
+    assert_eq!(rows("m4.opj", "Book1", "A"), vec![0, 49]);
 }

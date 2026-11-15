@@ -54,6 +54,8 @@ const AXIS_DATE_LABELS: u8 = 3;
 const AXIS_FIXED_DECIMALS_BIT: u8 = 0x80;
 const AXIS_LINE_WIDTH_AT: usize = 0x15;
 const AXIS_TICKS_AT: usize = 0x25;
+/// u16 in the axis line block: the major tick length in tenths of a point (opj-format.md 10.3).
+const AXIS_MAJOR_LEN_AT: usize = 0x4A;
 // Curve record.
 const CURVE_Y_AT: usize = 0x04;
 /// Plot group bits of curve byte `0x06`: set on the first plot of a group and on the others.
@@ -475,6 +477,13 @@ fn apply_axis_blocks(axis: &mut Axis, blocks: &[Vec<u8>], side: AxisSide) {
         let code = u8_at(b, AXIS_TICKS_AT);
         axis.major_tick = tick_direction((code >> 4) & 3);
         axis.minor_tick = tick_direction((code >> 6) & 3);
+        // The major tick length; the minor one is Origin's Auto, half the major (where Origin keeps
+        // a chosen minor length was not found).
+        let len = f64::from(u16_at(b, AXIS_MAJOR_LEN_AT)) / 10.0;
+        if len > 0.0 && len <= 100.0 {
+            axis.major_tick_len_pt = len;
+            axis.minor_tick_len_pt = len / 2.0;
+        }
     }
     // A line on the other edge too closes the box; on an axis drawn on the opposite side that edge
     // is not drawn (the model has one line per axis there).
@@ -842,6 +851,7 @@ fn read_curve(
             width_pt: width,
             dash,
             connect: if kind == PlotKind::Column { Connect::Straight } else { connect_kind(connect, notes) },
+            sort_x: false,
         },
         symbol: SymbolStyle {
             shape,
@@ -859,6 +869,11 @@ fn read_curve(
         y_base: None,
         error: ErrorStyle::default(),
         hist: Default::default(),
+        ridge: Default::default(),
+        hexbin: Default::default(),
+        parallel: Default::default(),
+        treemap: Default::default(),
+        sunburst: Default::default(),
         size_from: None,
         color_from: None,
         decor: Default::default(),

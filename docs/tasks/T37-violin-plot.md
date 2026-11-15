@@ -1,6 +1,6 @@
 # T37: Violin plot
 
-**Status:** claimed 2026-11-15 (session "violin", Claude macOS, no Origin), branch `violin-plot`.
+**Status:** done 2026-11-15 (session "violin", Claude macOS, no Origin), branch `violin-plot`; spec in graphing.md 14.22. Left: the "Violin with Box" toolbar button (Origin has one on the 2D Graphs toolbar; Sheaf has none yet), Split Violin, grouped violins from indexed data, violin settings in Plot Details (bandwidth rule, extend, scale mode, scale to maximum, curve next to box, binned data), and measuring Origin's defaults (nothing here is measured).
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Graphing: Violin and parallel-coordinate
 plots, Origin 2019; the violin half only; parallel coordinates are left).
 
@@ -12,8 +12,16 @@ in plot order, like the box chart, with the box/quartiles/points inside as Origi
 
 ## Origin facts (docs, not measured)
 
-To be filled from Origin's help pages (violin plot, Plot Details Box/Violin tab) before building;
-everything Sheaf has to choose without Origin goes in graphing.md 14.22, labelled as such.
+From Origin's help pages (violin plot, create violin plot, Plot Details Distribution/Box/Data/Spacing tabs, LabTalk
+`ksdensity` and `kernelwidth`), summarised; details and URLs in graphing.md 14.22:
+
+- Origin 2019; a "fancy variation of box chart" with a kernel density curve. Seven variants: Violin Plot, Violin with
+  Box, Violin with Point, Violin with Quartile, Violin with Stick, Split Violin, Half Violin. The help never describes
+  what each draws.
+- Each Y column is a violin; column names or labels are the tick labels. Split Violin: last column has two categories.
+- Gaussian kernel; bandwidth Scott `0.9 A n^-1/5` or Silverman `1.059 A n^-1/5`, `A = min(SD, IQR/1.349)`, or k x SD
+  or a number. The curve extends past min and max by Extend/100 bandwidths. Scale by Count, Width or Area.
+- Not documented: grid size, default scale, default extend, maximum width, default colours/fill/outline, inner marks.
 
 ## Where
 

@@ -39,10 +39,16 @@ fn import_without_extension_writes_an_opj_that_holds_the_graph() {
     assert!(stdout.contains("lab.opj"), "{stdout}");
     assert!(dir.join("lab.opj").exists());
     assert!(!dir.join("lab").exists());
-    assert!(!dir.join("lab.opj.sheaf").exists(), "graphs are written into the .opj; no companion");
+    assert!(dir.join("lab.opj.sheaf").exists(), "the companion keeps the automatic legend anchor");
     let opened = sheaf_io::open_project(&dir.join("lab.opj")).unwrap();
-    assert!(!opened.companion_used);
-    assert_eq!(opened.project.graphs().count(), 1, "the graph is read back from the .opj");
+    assert!(opened.companion_used);
+    assert_eq!(
+        opened.project.graphs().next().unwrap().layers[0].legend.position,
+        sheaf_core::graph::LegendPosition::Automatic
+    );
+    let bytes = std::fs::read(dir.join("lab.opj")).unwrap();
+    let raw = sheaf_io::opj::read_opj_from(std::io::Cursor::new(bytes), &dir.join("lab.opj")).unwrap();
+    assert_eq!(raw.graphs.len(), 1, "the graph is also written into the .opj itself");
 }
 
 /// A .sheaf project of the data file whose second column has a long name with a character outside

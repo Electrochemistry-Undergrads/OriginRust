@@ -18,11 +18,12 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Info(a) => info(a),
         Command::Import(a) => import(a),
         Command::Plot(a) => plot(*a),
-        Command::Export(a) => export(a),
+        Command::Export(a) => export(*a),
         Command::Print(a) => print(a),
         Command::ExportData(a) => export_data(a),
         Command::Analyze(a) => crate::analyze::analyze(a),
-        Command::Fit(a) => crate::fit::fit(a),
+        Command::Fit(a) => crate::fit::fit(*a),
+        Command::Simulate(a) => crate::simulate::simulate(a),
     }
 }
 
@@ -49,8 +50,36 @@ pub(crate) fn load_project(path: &Path) -> Result<Project> {
     Ok(opened.project)
 }
 
-/// The import options of the command line as the library takes them.
-pub(crate) fn read_settings(r: &ReadOptions) -> ReadSettings {
+/// The ids of the options given on the command line (not filled from a default), set once by `main`.
+static EXPLICIT: std::sync::OnceLock<std::collections::HashSet<String>> = std::sync::OnceLock::new();
+
+pub(crate) fn set_explicit(ids: std::collections::HashSet<String>) {
+    let _ = EXPLICIT.set(ids);
+}
+
+fn is_explicit(id: &str) -> bool {
+    EXPLICIT.get().is_some_and(|ids| ids.contains(id))
+}
+
+/// The import options of the command line as the library takes them. With `--theme` or
+/// `--last-used` the saved settings come first and the options given on the command line win.
+pub(crate) fn read_settings(r: &ReadOptions) -> Result<ReadSettings> {
+    themed_read_settings(r).map(|(settings, _)| settings)
+}
+
+/// [`read_settings`] and whether the theme ticks "partial import except the first file".
+pub(crate) fn themed_read_settings(r: &ReadOptions) -> Result<(ReadSettings, bool)> {
+    let flags = flag_settings(r);
+    let Some(entry) = sheaf_ops::themes::entry(r.theme.as_deref(), r.last_used) else {
+        return Ok((flags, false));
+    };
+    let dir = sheaf_ops::themes::themes_dir(r.themes_dir.as_deref())?;
+    let themed = sheaf_ops::themes::load(&dir, &entry)?;
+    Ok((sheaf_ops::themes::merge(&themed.read, &flags, &is_explicit), themed.partial_except_first))
+}
+
+/// The options as the flags alone give them.
+fn flag_settings(r: &ReadOptions) -> ReadSettings {
     ReadSettings {
         format: match r.format {
             Format::Auto => DataFormat::Auto,
@@ -99,6 +128,7 @@ pub(crate) fn read_settings(r: &ReadOptions) -> ReadSettings {
         sheets: r.sheets.clone(),
         hidden_sheets: r.hidden_sheets,
         skip_hidden_sheets: r.skip_hidden_sheets,
+        ..ReadSettings::default()
     }
 }
 
@@ -138,7 +168,7 @@ fn info(a: InfoArgs) -> Result<()> {
         describe(&load_project(&a.path)?);
         return Ok(());
     }
-    let imported = read_data_file(&a.path, &read_settings(&a.read))?;
+    let imported = read_data_file(&a.path, &read_settings(&a.read)?)?;
     println!("format: {}", imported.format);
     println!("suggested template: {}", imported.suggested_template.name());
     for (k, v) in &imported.meta {
@@ -156,6 +186,7 @@ fn import(mut a: ImportArgs) -> Result<()> {
         bail!("the output '{}' is also one of the inputs", a.output.display());
     }
     let mut project = if a.append && a.output.exists() { load_project(&a.output)? } else { Project::new() };
+    let (read, theme_partial) = themed_read_settings(&a.read)?;
     let request = ImportRequest {
         files: a.files.clone(),
         layout: match a.mode {
@@ -164,10 +195,10 @@ fn import(mut a: ImportArgs) -> Result<()> {
             ImportLayout::Columns => OpsLayout::Columns,
             ImportLayout::Rows => OpsLayout::Rows,
         },
-        read: read_settings(&a.read),
+        read,
         book_name: a.book_name.clone(),
         file_name_comments: a.file_name_comments,
-        partial_except_first: a.partial_except_first,
+        partial_except_first: a.partial_except_first || theme_partial,
         plot: a.plot,
     };
     let result = sheaf_ops::import::import_files(&mut project, &request)?;
@@ -253,7 +284,7 @@ fn plot(a: PlotArgs) -> Result<()> {
     }
     let spec = plot_spec(&a);
     spec.validate()?;
-    let read = read_settings(&a.read);
+    let read = read_settings(&a.read)?;
     let (mut project, suggested) = if is_project(first) {
         (load_project(first)?, Template::Line)
     } else {
@@ -296,7 +327,7 @@ fn export_opj(a: &ExportArgs) -> Result<()> {
         load_project(&a.project)?
     } else {
         let mut p = Project::new();
-        p.adopt_workbook(read_data_file(&a.project, &read_settings(&a.read))?.workbook);
+        p.adopt_workbook(read_data_file(&a.project, &read_settings(&a.read)?)?.workbook);
         p
     };
     save_project(&project, &a.output)
@@ -342,7 +373,7 @@ fn export_xlsx(a: &ExportArgs) -> Result<()> {
         load_project(&a.project)?
     } else {
         let mut p = Project::new();
-        p.adopt_workbook(read_data_file(&a.project, &read_settings(&a.read))?.workbook);
+        p.adopt_workbook(read_data_file(&a.project, &read_settings(&a.read)?)?.workbook);
         p
     };
     write_xlsx(&project, a.book.as_deref(), a.sheet.as_deref(), &a.xlsx, &a.output)

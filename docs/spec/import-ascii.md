@@ -262,7 +262,25 @@ Name derivation from file name (group `Names`):
 | FNameToUDL | write file name to a user parameter row named `SourceFile` | 0 | [W] |
 | FPathToComm | include path and extension in appended names | 0 | [W] |
 
-Sheaf's naming options (`rename_sheet`, `rename_book` in `AsciiOptions`, both default on like Origin's "Rename Sheet with (Partial) Filename" and "Rename Book with (Partial) Filename"; CLI `--no-rename-sheet`, `--no-rename-book`): off gives the sheet the name `Sheet1` (`Sheet<n>` for a new sheet or a later block; a replaced sheet keeps its own name) and the book an empty long name. File name trimming (`Trim Filename From/To`), "Rename Long Name for Book only", "Include File Path when Renaming Book", "Auto Rename Using Filename" and the three "Append Filename to ... Comment" options are not offered.
+Sheaf's naming options (`rename_sheet`, `rename_book` in `AsciiOptions`, both default on like Origin's "Rename Sheet with (Partial) Filename" and "Rename Book with (Partial) Filename"; CLI `--no-rename-sheet`, `--no-rename-book`): off gives the sheet the name `Sheet1` (`Sheet<n>` for a new sheet or a later block; a replaced sheet keeps its own name) and the book an empty long name. **File name trimming, measured 2026-11-15** (Origin 2016, `impasc` on `abcdefgh.csv` with `AutoNames:=0`,
+`FNameToSht:=1`, `FNameToBk:=1` and the same From/To for both; `re-workspace/scratch/fntrim`):
+
+- The sheet name is cut from the file name **without** its extension (`abcdefgh`, 8 characters); the book long name
+  from the file name **with** it (`abcdefgh.csv`, 12 characters). With From 1, To 0 the long name is `abcdefgh.csv`
+  (Sheaf's long name has no extension today: a difference, left for a decision because it changes every imported
+  book's title).
+- From and To are 1-based character positions, both included: (2, 5) gives `bcde` for both names; (3, 3) gives `c`.
+- A negative number counts from the end, `len + n`: To -4 gives the sheet `abcd` (8 - 4) and the long name
+  `abcdefgh` (12 - 4, which drops `.csv`); From -6 gives the sheet `bcdefgh` (from 8 - 6 = 2) and the long name
+  `fgh.csv` (from 6); (-6, -4) gives `bcd` and `fgh`.
+- From 0, or a From before the first character (-20), means the first character; To 0, a To past the end (20), or a
+  To before From (5, 2) means the last character.
+- A range that leaves nothing (From 9 on the 8-character sheet name) keeps the default sheet name (`Sheet2` in that
+  run) and the default book short name (`Book1`); the long name still takes its own range (`.csv`).
+- The book short name follows the sheet's text (the range applied to the name without extension), numbered when the
+  name is taken (`abcdefgh1`, `abcdefgh2`).
+
+File name trimming (`Trim Filename From/To`; not offered yet, rules above), "Rename Long Name for Book only", "Include File Path when Renaming Book", "Auto Rename Using Filename" and the three "Append Filename to ... Comment" options are not offered.
 
 ### The impASC window, measured in Origin (2026-11-13)
 
@@ -489,3 +507,162 @@ it and reads `""` as one quote, but not `'`. Run from a script with no options, 
 as data (Text & Numeric columns, no long names), while `impASC` makes the header into long names and units.
 Sheaf splits fields like `impCSV` (double quotes are a qualifier) and finds header lines like `impASC`; no change
 was made.
+
+## 17. Dialog themes (saved import settings, T46)
+
+The mechanism is in `crates/io/src/themes.rs`; the theme row and the command-line flags are built by the app
+and CLI parts. Labels: **[F]** measured in Origin, **[S]** Sheaf's own choice, not measured (no Origin was
+available when this was written), **[M]** to measure.
+
+### 17.1 What is known
+
+- **[F]** The impASC window has a Dialog Theme row at the top, above the description (section 10).
+- **[F]** The other X-Function windows (NLFit, Peak Analyzer, Export Graphs) show the row as a label, a wide box
+  for a theme name and a small arrow button that opens a menu of theme actions (`gui-look.md`). The items of
+  the menu were not seen.
+- **[F]** The Import Wizard has a separate "Import Filter" list (`gui-look.md`; section 16). Origin keeps
+  those filters in `.oif` files. Sheaf does not read or write `.oif` files (clean-room; the Import Filters
+  Manager is left out).
+
+### 17.2 What Sheaf does
+
+All of this is **[S]** unless it says otherwise.
+
+- **The row.** Each import window (text, CH Instruments options, Excel) gets a Dialog Theme row at the top: a
+  combo box and a small menu with Save, Save As... and Delete. The combo lists `<default>`, `<last used>` and the
+  saved names, in that order; the saved names keep the order in which they were first saved.
+- **`<default>`.** The built-in defaults of the window (`AsciiSettings::default()` and so on).
+- **`<last used>`.** The settings of the last OK in that kind of window. Cancel records nothing. The list shows
+  `<last used>` before the first OK, and choosing it then gives the defaults.
+- **A fresh window.** Opens with `<last used>` when it exists, otherwise `<default>`. A file dropped on the
+  window or passed on the command line without `--theme` is not changed by this.
+- **What a theme stores.** Every option of the window except the file list and the target sheet or book: the
+  text options (`AsciiOptions`), the data type choice, the CHI options (`ChiOptions`), the Excel options
+  (`ExcelOptions`, without the list of ticked sheets, which belong to the files), the import mode, the
+  partial-import tick, the graph tick, and the text of the boxes (other delimiter, fixed widths). The graph
+  template is not stored. The import mode is stored, but a window with no target sheet still falls back to
+  new books: the window keeps the mode that was chosen (shown as New Book while there is no target) and only the
+  import itself uses a new book, so Save and OK store the theme's mode and not the fallback.
+- **Save, Save As, Delete.** Save writes the current settings over the selected saved theme (it asks for a
+  name when `<default>` or `<last used>` is selected). Save As asks for a name. Delete removes the selected saved
+  theme; the two built-in entries cannot be deleted. After Save or Save As the combo shows the saved theme;
+  changing a control afterwards leaves the name shown but does not change the stored theme.
+- **Names.** Leading and trailing white space is cut, runs of white space become one space, control characters
+  are dropped, and a name is at most 60 characters (longer names are cut). A name must not be empty and must not
+  be in angle brackets (`<...>` is for the built-in entries). Two names that differ only in letter case are the
+  same theme: saving under a taken name replaces that theme in its place and takes the new spelling.
+- **One store per importer kind.** `ascii`, `chi` and `excel`, each with its own `<last used>` and its own
+  saved themes. A theme saved in the Excel window is not offered in the text window. The CH Instruments options
+  are in the `chi` store; the text window with the data type set to CH Instruments (or detected as such)
+  applies the `chi` store to the CHI options and the `ascii` store to the rest.
+- **Where.** One file per kind in the folder `import-themes` inside the settings folder (the folder of
+  `autosave.json`, `recovery::default_settings_path`): `ascii.json`, `chi.json`, `excel.json`. The file is JSON:
+  `{"version": 1, "last_used": {...}, "themes": [{"name": "...", "settings": {...}}]}`. It is per user, not
+  per project, so a theme is available in every project.
+- **Compatibility.** Every option struct is read with defaults for fields that are missing (a file from an
+  older Sheaf keeps loading and the new options get their defaults) and ignores fields it does not know (a file
+  from a newer Sheaf loads). Field names of the option structs are therefore part of the file format and are
+  not renamed. A theme whose values this version cannot read at all (a new variant of an enum) is listed but
+  cannot be chosen, and is kept when the file is written again. A file whose `version` is above 1 is also
+  kept as `<name>.json.bad` before this version writes it again (what this version can read is carried over;
+  the fields it does not know are lost from the new file, which is why the backup is made).
+- **A damaged file.** A file that is missing, unreadable or not a JSON object (or whose `themes` is not a list)
+  gives empty lists. The next change keeps a damaged file as `<name>.json.bad` before writing a new one. A file
+  that exists but cannot be read (no permission, a sharing violation) is not replaced: the change fails with
+  the error, which the window shows under the row. Only a missing file starts an empty store. A damaged entry (no name, no settings,
+  a bad or repeated name) is skipped and the others are kept.
+- **Two instances.** Changes take a lock file, read the file again, apply the change and write it atomically
+  (as the recent files, `recent-files.md`), so themes saved by another running instance are not lost.
+  The `<last used>` of the instance that confirms last wins.
+- **Command line** (`crates/ops/src/themes.rs`, flags in `ReadOptions`, so every command that reads a data file
+  has them: `import`, `info`, `plot`, `export`, `fit` and `analyze ...`; the MCP server does not
+  offer them). `--theme NAME` and `--last-used` (same as `--theme "<last used>"`; the two cannot be combined)
+  start from the stored settings, and options typed on the command line win. Details:
+  - *Which store.* The entry is looked up in the text, CH Instruments and Excel stores, in that order, and every
+    store that has it sets its part: the text store the text options, the data type (`--format`) and the options
+    the readers share; the CH Instruments store the `--no-split-scans`-style CHI options; the Excel store the
+    hidden-sheet choice and the options the readers share, for Excel files. So a name (or `<last used>`) that
+    both the text and the Excel window saved reads a text file with the text window's settings and a workbook
+    with the Excel window's, as each window's own `<last used>` does (`ReadSettings::excel_shared`). When only
+    the Excel store has the name, text files take its shared options too (Sheaf's choice; there is nothing
+    else to read them with). Two things stay one value per run: the partial-import tick (the text store's when
+    it has the name, else the Excel store's) and the data type. `<default>` is the built-in settings (the
+    same as giving no flag).
+  - *Typed options win.* An option counts as typed only when it appears on the command line; a value that equals
+    its default (`--first-row 1`) still wins. The four delimiter options (`--delimiter`, `--delimiter-chars`,
+    `--combine-delimiters`, `--fixed-width`) act as one, so any of them replaces the theme's delimiter whole. A typed option also
+    replaces the Excel store's value of that option for Excel files. A delimiter that a theme holds as a
+    character or a whole string is used as it is, not read as a keyword: a stored `tab` (three characters)
+    stays the string `tab`, where `--delimiter tab` typed on the command line means a tab.
+    A switch such as `--decimal-comma` can only turn an option on: to run without an option that a theme turns
+    on, save a theme without it.
+  - *What is not applied.* The import mode and the graph tick belong to the window (a target sheet, a template)
+    and are not applied: use `--mode` and `--plot`. The partial-import tick is applied (the theme turns on
+    `--partial-except-first`; the flag cannot turn it off). The few options with no flag (first column is X,
+    parameter names from the first cell, the legacy skip and maximum rows) come from the theme, so the window and
+    the command line read a file the same way.
+  - *Read only.* The command line never writes the stores: it does not record `<last used>` (that is the
+    window's OK) and does not save themes. Without `--theme` or `--last-used` the folder is not read.
+  - *Where.* `--themes-dir DIR`, else the environment variable `SHEAF_THEMES_DIR`, else the folder of
+    section 17.2 "Where". Tests give a folder of their own.
+  - *Errors.* An unknown name stops before anything is written: `no import theme named 'X'; saved themes: A, B`
+    (the themes of the three stores, each name once, text first). `<last used>` before any OK says so. A theme
+    that this version cannot read (section "Compatibility") is an error that names it, not "unknown".
+- **Tests never touch the real folder.** The app takes the folder from `Startup.themes_dir`; tests pass `None`
+  or a temporary folder.
+
+### 17.2a The row in the app
+
+Built in `crates/app/src/dialogs/import_theme.rs` and used by the text window, the Excel window and the
+Import Wizard. All of this is **[S]** (Origin's layout of the row was not measured beyond "above the
+description", section 10).
+
+- **Place.** The first row inside the window, above the file list: the label `Dialog Theme`, a combo box
+  (240 px) and a small button `Manage` (the default font has no arrow glyph that draws) that opens the menu
+  `Save`, `Save As...`, `Delete`. In the wizard the row is the top of the Source page. When the application has
+  no theme folder (`Startup.themes_dir` is `None`; `--no-themes`) the row is not shown and nothing is read or
+  written. `--themes-dir DIR` picks another folder (screenshots and checks without the user's folder).
+- **Reading.** The stores are read when a window opens (the list of names and `<last used>`) and again after
+  each Save, Save As, Delete or choice (another instance may have changed them), never while drawing a frame.
+- **Choosing an entry** fills every option the theme holds and leaves the file list, the file shown in the
+  preview, the target sheet and the graph template as they are. The Excel window also leaves the ticked
+  sheets. Choosing `<last used>` before any OK gives the defaults.
+- **Fresh window.** Opens with `<last used>` when the store has one (the combo says so), else `<default>`.
+  File > Import > Comma Delimited (CSV) still starts with the comma delimiter: the preset is applied after the
+  theme.
+- **OK** records `<last used>` before the files are read, whatever the result of the import; a failure to
+  write is logged as a warning and does not stop the import. **Cancel** and closing the window record nothing.
+  The Import Wizard records on Finish.
+- **Text window, two stores.** A name saved in the text window is written to the `ascii` store (everything but
+  the CHI options) and to the `chi` store (the CHI options, with the same name); choosing it reads both (the
+  default CHI options when the `chi` store has no such name). `<last used>` and Delete work on both. The list
+  shows the names of the `ascii` store.
+- **Save** on a saved theme writes over it without asking; on `<default>` or `<last used>` it opens the name
+  prompt, like Save As. The prompt is a small window `Save Dialog Theme As` with a name box, `Save` and
+  `Cancel`; `Save` is off for an empty name and for a name in angle brackets (the reason is shown), and a note
+  says when a theme of that name will be replaced. Enter confirms. Each import window (text, Excel,
+  wizard) has a Save As window with an id of its own, so that two of them can be open at once. The wizard draws
+  it on the Source page only and closes it when the page changes.
+- **Delete** is off for the two built-in entries. After it the combo shows `<default>` and the window is
+  filled with the defaults, so that the list and the controls agree.
+- **Errors.** A write that fails, a theme that cannot be read (an enum value of a newer version) or one that
+  another instance deleted is reported in red under the row; the controls do not change.
+- **Not done.** Rename, and an Import Filters Manager (Origin's `.oif`, section 17.1). Moving a theme between
+  the text and the Excel stores is not offered.
+
+Tests: `crates/app/src/app/ui_tests/import_themes.rs`.
+
+### 17.3 To measure in Origin [M]
+
+Measure on Windows with `tools/origin-ref` (screenshots of the theme drop-down and its menu into
+`re-workspace/scratch/t46/`):
+
+1. The entries of the theme drop-down in impASC: whether `<default>` and `<last used>` exist or some other
+   built-in names, and the menu items (Save, Save As, Delete, Rename, Reset?).
+2. Which theme a fresh window opens with.
+3. Whether a theme stores the file name and the output (target book and sheet), or only the options.
+4. Where Origin keeps the themes (per user, per project, a file in the user files folder) and how many a
+   window can hold.
+5. How the Import Wizard's Import Filter list relates to the Dialog Theme of impASC (the same files or not).
+6. Whether OK records `<last used>` only when the import succeeds.
+7. Whether the theme name box accepts a typed new name directly (Save As without a prompt).

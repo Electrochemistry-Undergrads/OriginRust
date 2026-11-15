@@ -12,12 +12,16 @@
 //! next start offers it back after a crash (`docs/spec/autosave.md`). `--recovery-dir DIR` uses another
 //! folder and `--no-recovery` turns recovery off for the run (no folder is read or written).
 //!
+//! `--mcp` turns on the AI link at start, as Tools > AI Assistants (MCP) does: an assistant started
+//! with `sheaf-mcp --attach` can then work on the open project (`docs/spec/mcp.md` section 11). The
+//! switch is never saved, so a run without the flag starts with the link off.
+//!
 //! Two more options exist so the interface can be checked without a person
 //! at the screen: `--screenshot FILE.png` saves a picture of the window after
 //! a moment and quits, and `--show ITEM` opens a dialog first (`graph-settings:x`,
 //! `graph-settings:plots`, `panel:explorer` (also `-docked`, `-hidden`; `objects`, `messages`,
-//! `results`), `hide-plot:2`, `text:1` (the Text window of the first label), `shape:1` (the window of the first drawn object), `column`, `export`, `import:FILE`, `import-excel:FILE` (with `import-excel-page:mode|header|columns|partial|misc`), `export-excel` (the first workbook), `import-wizard:FILE` (with `import-wizard-page:header|names|file|data|save`), `analysis:smooth`, `analysis-preview:smooth`, `focus:Book1`, `menu:Plot` to
-//! hold a top-level menu open, `select-column:B` and `column-menu:B` for the first workbook, `autosave` for Tools > Autosave).
+//! `results`), `hide-plot:2`, `text:1` (the Text window of the first label), `shape:1` (the window of the first drawn object), `column`, `set-values-multiple` (or `set-values-multiple:B,C,D`; the columns of the first workbook, default all but the first), `export`, `import:FILE`, `import-excel:FILE` (with `import-excel-page:mode|header|columns|partial|misc`), `export-excel` (the first workbook), `import-wizard:FILE` (with `import-wizard-page:header|names|file|data|save`), `analysis:smooth`, `analysis-preview:smooth`, `focus:Book1`, `menu:Plot` to
+//! hold a top-level menu open (`menu:File>Recent Projects` also opens a submenu), `select-column:B` and `column-menu:B` for the first workbook, `autosave` for Tools > Autosave, `simulate` or `simulate:FUNCTION` for Analysis > Fitting > Simulate Curve).
 
 // In release builds on Windows, do not open a console window next to the app.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
@@ -25,15 +29,19 @@
 mod actions;
 mod app;
 mod autosave;
+mod data_tools;
 mod dialogs;
 mod gadget;
 mod graph_view;
 mod grid;
+mod live;
 #[cfg(target_os = "macos")]
 mod macprint;
 mod menus;
 mod panels;
 mod reader;
+mod recent;
+mod switcher;
 mod theme;
 mod toolbar;
 mod winclip;
@@ -55,6 +63,9 @@ fn main() -> eframe::Result {
     let mut startup = app::Startup {
         recovery_dir: sheaf_io::recovery::default_dir(),
         settings_path: sheaf_io::recovery::default_settings_path(),
+        recent_path: sheaf_io::recent::default_path(),
+        themes_dir: sheaf_io::themes::default_dir(),
+        mcp_dirs: Some(sheaf_io::recovery::run_dir_candidates()),
         ..Default::default()
     };
     let mut args = std::env::args().skip(1);
@@ -64,6 +75,9 @@ fn main() -> eframe::Result {
             "--no-recovery" => startup.recovery_dir = None,
             "--screenshot" => startup.screenshot = args.next().map(PathBuf::from),
             "--show" => startup.show.extend(args.next()),
+            "--themes-dir" => startup.themes_dir = args.next().map(PathBuf::from),
+            "--no-themes" => startup.themes_dir = None,
+            "--mcp" => startup.mcp = true,
             _ => startup.paths.push(PathBuf::from(arg)),
         }
     }

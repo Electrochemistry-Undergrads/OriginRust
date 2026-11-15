@@ -188,6 +188,7 @@ impl Project {
             new_columns: Vec::new(),
             new_sheet: Some(0),
             new_graph: None,
+            more_graphs: Vec::new(),
             table: None,
             message: format!(
                 "{}: {} rows in workbook {}",

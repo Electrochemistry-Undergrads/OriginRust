@@ -236,6 +236,9 @@ fn std_normal() -> Normal {
 }
 
 fn z_p(z: f64, tail: Tail) -> f64 {
+    if z.is_nan() {
+        return f64::NAN;
+    }
     let n = std_normal();
     p_of(n.cdf(z), n.sf(z), tail)
 }
@@ -369,7 +372,8 @@ pub struct TwoProportions {
     pub hypothesized: f64,
     /// Normal approximation `(p1 - p2 - d0) / se`; `se` is the pooled one (`sqrt(p (1 - p) (1/n1 + 1/n2))`,
     /// `p = (x1 + x2) / (n1 + n2)`) when `pooled` and the hypothesized difference is 0, else the unpooled
-    /// `sqrt(p1 (1 - p1) / n1 + p2 (1 - p2) / n2)`. 0 when that is 0 (equal all-or-nothing samples).
+    /// `sqrt(p1 (1 - p1) / n1 + p2 (1 - p2) / n2)`. The sign is kept (unlike the one-sample test). NaN, with a
+    /// NaN p-value, when that standard error is 0 (both samples all successes: Origin printed `--`).
     pub z: f64,
     pub p_normal: f64,
     /// Fisher's exact p-value (hypergeometric); two-sided: every table no more likely than the observed one.
@@ -403,7 +407,7 @@ pub fn proportion_two(
         (p1 * (1.0 - p1) / g1 + p2 * (1.0 - p2) / g2).sqrt()
     };
     let diff = p1 - p2;
-    let z = if se > 0.0 { (diff - difference) / se } else { 0.0 };
+    let z = if se > 0.0 { (diff - difference) / se } else { f64::NAN };
     Some(TwoProportions {
         first,
         second,

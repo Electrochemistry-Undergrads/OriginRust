@@ -288,3 +288,165 @@ fn two_proportions_match_the_dialog() {
         assert!((hi - wu).abs() <= TOL * wu.abs(), "{level}: {hi} vs {wu}");
     }
 }
+
+/// Every run of the Two-Sample Proportion Test dialog of section 21.4 (summarized input, levels 90 95 99):
+/// the unpooled and pooled z, the three tails, a negative difference (z keeps its sign here, unlike the
+/// one-sample test), a test difference of 0.1, small samples and Fisher's exact p.
+#[test]
+fn two_proportions_cover_every_dialog_run() {
+    use Tail::{Lower, Two, Upper};
+    // (first, second, difference, pooled, tail, z, p of the normal approximation, Fisher's p)
+    #[rustfmt::skip]
+    let cases: Vec<((u64, u64), (u64, u64), f64, bool, Tail, f64, f64, f64)> = vec![
+        ((30, 50), (20, 50), 0.0, false, Two,   2.0412414523193,  0.041226833337006,  0.071342403485151),
+        ((30, 50), (20, 50), 0.0, true,  Upper, 2.0,              0.022750131948092,  0.035671201744004),
+        ((30, 50), (20, 50), 0.0, false, Lower, 2.0412414523193,  0.9793865833315,    0.98634419171458),
+        ((20, 50), (30, 50), 0.0, false, Two,  -2.0412414523193,  0.041226833337006,  0.071342403485151),
+        ((20, 50), (30, 50), 0.0, false, Upper,-2.0412414523193,  0.9793865833315,    0.98634419171744),
+        ((20, 50), (30, 50), 0.0, true,  Lower,-2.0,              0.022750131948092,  0.035671201741147),
+        ((30, 50), (20, 50), 0.1, false, Two,   1.0206207261597,  0.30743416593004,   f64::NAN),
+        ((3, 10),  (1, 8),   0.0, false, Two,   0.93983017460485, 0.34730467831052,   0.5882352938664),
+        ((10, 10), (5, 10),  0.0, false, Two,   3.1622776601684,  0.0015654022579966, 0.032507739937749),
+        ((15, 40), (25, 35), 0.0, false, Two,  -3.1380014488579,  0.0017010403614346, 0.0051489221075077),
+    ];
+    for (i, (first, second, d0, pooled, tail, z, p, fisher)) in cases.iter().enumerate() {
+        let r = proportion_two(*first, *second, *d0, *pooled, *tail).expect("case runs");
+        eq(&format!("case {i} z"), r.z, *z);
+        eq(&format!("case {i} p"), r.p_normal, *p);
+        match r.p_fisher {
+            Some(got) if !fisher.is_nan() => {
+                // Origin's exact p is good to about 5e-10 (its sums run in single steps of a few 1e-12).
+                assert!((got - fisher).abs() <= 5e-10, "case {i} Fisher: got {got:e}, Origin {fisher:e}");
+            }
+            None => assert!(fisher.is_nan(), "case {i}: no Fisher p, Origin has {fisher}"),
+            Some(got) => panic!("case {i}: Fisher p {got} for a test difference other than 0"),
+        }
+    }
+}
+
+/// One-sided and signed intervals of the difference (Origin's Confidence Intervals tables).
+#[test]
+fn two_proportion_intervals_follow_the_tail() {
+    use Tail::{Lower, Two, Upper};
+    let near = |what: &str, got: f64, want: f64| {
+        assert!((got - want).abs() <= TOL * want.abs().max(1e-300), "{what}: got {got:e}, Origin {want:e}");
+    };
+    // 30 of 50 against 20 of 50, upper tail: lower limits only (the upper limit prints as 1).
+    for (level, want) in [(0.9, 0.074434103414031), (0.95, 0.0388379164961065), (0.99, -0.0279346102243397)] {
+        let (lo, hi) = wald_difference_interval((30, 50), (20, 50), Upper, level);
+        near("upper-tailed lower limit", lo, want);
+        assert_eq!(hi, 1.0);
+    }
+    // Lower tail: [-1, upper].
+    for (level, want) in [(0.9, 0.325565896585969), (0.95, 0.361162083503893), (0.99, 0.42793461022434)] {
+        let (lo, hi) = wald_difference_interval((30, 50), (20, 50), Lower, level);
+        assert_eq!(lo, -1.0);
+        near("lower-tailed upper limit", hi, want);
+    }
+    // The negative difference of 20 of 50 against 30 of 50.
+    let (lo, hi) = wald_difference_interval((20, 50), (30, 50), Two, 0.95);
+    near("negative lower", lo, -0.39203646705421);
+    near("negative upper", hi, -0.0079635329457877);
+    let (lo, hi) = wald_difference_interval((20, 50), (30, 50), Two, 0.99);
+    near("negative 99 lower", lo, -0.452378698328135);
+    near("negative 99 upper", hi, 0.0523786983281348);
+    // Small samples: 3 of 10 against 1 of 8 (not cut: the limits stay inside [-1, 1]).
+    let (lo, hi) = wald_difference_interval((3, 10), (1, 8), Two, 0.95);
+    near("small lower", lo, -0.18995284633601);
+    near("small upper", hi, 0.53995284633601);
+    // 15 of 40 against 25 of 35.
+    let (lo, hi) = wald_difference_interval((15, 40), (25, 35), Two, 0.95);
+    near("unequal lower", lo, -0.55120014176661);
+    near("unequal upper", hi, -0.12737128680482);
+    // Both samples all successes: no spread, no z and no p, interval 0 to 0, Fisher's p 1.
+    let r = proportion_two((10, 10), (8, 8), 0.0, false, Two).unwrap();
+    assert!(r.z.is_nan() && r.p_normal.is_nan());
+    assert_eq!(r.p_fisher, Some(1.0));
+    assert_eq!(wald_difference_interval((10, 10), (8, 8), Two, 0.95), (0.0, 0.0));
+}
+
+fn a3() -> Vec<f64> {
+    (1..=8).map(|i| 10.0 + (3.0 * i as f64).sin()).collect()
+}
+fn b3() -> Vec<f64> {
+    (1..=10).map(|i| 10.0 + 6.0 * (2.0 * i as f64).sin()).collect()
+}
+
+/// Two-Sample Test for Variance dialog, a significant case (A: 10 + sin 3i, n 8; B: 10 + 6 sin 2i, n 10) with
+/// the three tails and the intervals ticked (levels 90 95 99).
+#[test]
+fn two_sample_variance_dialog_reports_each_tail() {
+    use Tail::{Lower, Two, Upper};
+    let (a, b) = (a3(), b3());
+    // Origin's F distribution is only good to about 4e-6 relative in the tails: 1e-5.
+    let near = |what: &str, got: f64, want: f64| {
+        assert!((got - want).abs() <= 1e-5 * want.abs().max(1e-300), "{what}: got {got:e}, Origin {want:e}");
+    };
+    let r = vartest_two(&a, &b, 1.0, Two, 0.05).unwrap();
+    eq("F", r.statistic, 0.0198795620225935);
+    near("two-sided p", r.p, 3.11295523751483e-5);
+    assert!(r.rejected());
+    let lo = [0.00603738122870874, 0.00473656569603998, 0.00288741737587226];
+    let hi = [0.0730906825481206, 0.0958834430181464, 0.169251014777939];
+    for (i, level) in [0.9, 0.95, 0.99].into_iter().enumerate() {
+        let (l, u) = ratio_interval(a.len(), b.len(), r.estimate, Two, level);
+        near("two-sided lower", l, lo[i]);
+        near("two-sided upper", u, hi[i]);
+    }
+    let r = vartest_two(&a, &b, 1.0, Lower, 0.05).unwrap();
+    near("lower p", r.p, 1.55647761875741e-5);
+    assert!(r.rejected());
+    let hi = [0.0541653291854217, 0.0730906825481206, 0.133565841332107];
+    for (i, level) in [0.9, 0.95, 0.99].into_iter().enumerate() {
+        let (l, u) = ratio_interval(a.len(), b.len(), r.estimate, Lower, level);
+        assert_eq!(l, 0.0);
+        near("lower-tailed upper", u, hi[i]);
+    }
+    let r = vartest_two(&a, &b, 1.0, Upper, 0.05).unwrap();
+    near("upper p", r.p, 0.999984435223812);
+    assert!(!r.rejected());
+    let lo = [0.00793499241983704, 0.00603738122870874, 0.00354178496000994];
+    for (i, level) in [0.9, 0.95, 0.99].into_iter().enumerate() {
+        let (l, u) = ratio_interval(a.len(), b.len(), r.estimate, Upper, level);
+        near("upper-tailed lower", l, lo[i]);
+        assert!(u.is_nan());
+    }
+    // Original columns, alpha 0.1, levels 80 and 97.5 (two-sided) and the one-sided p-values.
+    let (a, b) = (self::a(), self::b());
+    let r = vartest_two(&a, &b, 1.0, Two, 0.1).unwrap();
+    for (level, want_lo, want_hi) in
+        [(0.8, 0.180908333322787, 1.23490469912963), (0.975, 0.0864579395572253, 2.81524108445531)]
+    {
+        let (l, u) = ratio_interval(a.len(), b.len(), r.estimate, Two, level);
+        near("80/97.5 lower", l, want_lo);
+        near("80/97.5 upper", u, want_hi);
+    }
+    near("upper p", vartest_two(&a, &b, 1.0, Upper, 0.05).unwrap().p, 0.845325861079629);
+    near("lower p", vartest_two(&a, &b, 1.0, Lower, 0.05).unwrap().p, 0.154674138920371);
+}
+
+/// One-Sample Test for Variance dialog, significant cases (column A, n 8, variance 1.8225...).
+#[test]
+fn one_sample_variance_dialog_significant_cases() {
+    use Tail::{Lower, Two, Upper};
+    let a = a();
+    let r = vartest_one(&a, 0.3, Two, 0.05).unwrap();
+    eq("chi-square", r.statistic, 42.5255879934331);
+    eq("two-sided p", r.p, 8.23668836691382e-7);
+    assert!(r.rejected());
+    let r = vartest_one(&a, 0.3, Upper, 0.05).unwrap();
+    eq("upper p", r.p, 4.11834418345691e-7);
+    assert!(r.rejected());
+    let r = vartest_one(&a, 20.0, Lower, 0.05).unwrap();
+    eq("chi-square", r.statistic, 0.637883819901497);
+    eq("lower p", r.p, 0.00123117416379124);
+    assert!(r.rejected());
+    // Two-sided intervals at 90 95 99.
+    let want =
+        [(0.906913265616178, 5.88630183733099), (0.796719176361771, 7.54950463751445), (0.629146861198078, 12.8962370807767)];
+    for (level, (wl, wu)) in [0.9, 0.95, 0.99].into_iter().zip(want) {
+        let (l, u) = variance_interval(a.len(), r.estimate, Two, level);
+        eq("lower", l, wl);
+        eq("upper", u, wu);
+    }
+}

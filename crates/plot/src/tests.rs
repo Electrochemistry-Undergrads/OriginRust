@@ -4070,3 +4070,50 @@ fn hidden_masked_points_leave_a_gap_and_nothing_red() {
     p.column_mut(y).unwrap().mask.clear();
     assert_eq!(segments(&p), 4);
 }
+
+/// Origin 2016 kept the width of a linked layer and let its height follow the axis ranges (graphing 18.7a):
+/// doubling the X span halved the height, doubling the Y span as well restored it, and a short X span made
+/// the layer taller than the page. Breaks switch the link off.
+#[test]
+fn a_linked_x_y_ratio_keeps_the_width_and_lets_the_height_follow_the_ranges() {
+    use sheaf_core::graph::AxisBreak;
+    let (mut p, g) = line_project_for_ratio();
+    let set = |p: &mut Project, x: (f64, f64), y: (f64, f64)| {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        (l.x_axis.min, l.x_axis.max, l.y_axis.min, l.y_axis.max) = (Some(x.0), Some(x.1), Some(y.0), Some(y.1));
+    };
+    let frame = |p: &Project| crate::layout_geometry(p, g).unwrap()[0].frame;
+    let unlinked = frame(&p);
+    p.graph_mut(g).unwrap().layers[0].xy_ratio = Some(1.0);
+    set(&mut p, (-2.5, 12.5), (-2.0, 22.0));
+    let f = frame(&p);
+    assert!((f.w - unlinked.w).abs() < 1e-9 && (f.x - unlinked.x).abs() < 1e-9 && (f.y - unlinked.y).abs() < 1e-9);
+    assert!((f.h / f.w - 24.0 / 15.0).abs() < 1e-9, "one unit of X as long as one of Y: {f:?}");
+    set(&mut p, (-2.5, 27.5), (-2.0, 22.0));
+    assert!((frame(&p).h - f.h / 2.0).abs() < 1e-9, "twice the X span, half the height");
+    set(&mut p, (-2.5, 27.5), (-2.0, 46.0));
+    assert!((frame(&p).h - f.h).abs() < 1e-9);
+    set(&mut p, (-2.5, 7.5), (-2.0, 46.0));
+    let tall = frame(&p);
+    assert!(tall.y + tall.h > p.graph(g).unwrap().page.height_pt, "past the page, as in Origin: {tall:?}");
+    // Ratio 2: one unit of X twice as long as one of Y.
+    p.graph_mut(g).unwrap().layers[0].xy_ratio = Some(2.0);
+    set(&mut p, (-2.5, 12.5), (-2.0, 22.0));
+    assert!((frame(&p).h - f.h / 2.0).abs() < 1e-9);
+    // An axis break turns the link off.
+    p.graph_mut(g).unwrap().layers[0].y_axis.axis_breaks = vec![AxisBreak::new(5.0, 10.0)];
+    let broken = frame(&p);
+    assert!((broken.h / broken.w - 24.0 / 15.0).abs() > 1e-3, "{broken:?}");
+}
+
+fn line_project_for_ratio() -> (Project, sheaf_core::WindowId) {
+    use sheaf_core::{ColumnData, Designation};
+    let mut p = Project::new();
+    let book = p.add_workbook("R");
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let y: Vec<f64> = x.iter().map(|v| 2.0 * v).collect();
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+    let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+    let g = p.plot_columns(sheaf_core::template::Template::Line, &[yc]).unwrap();
+    (p, g)
+}

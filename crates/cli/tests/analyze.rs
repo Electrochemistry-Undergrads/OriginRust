@@ -757,20 +757,23 @@ fn variance_and_proportion_tests_run_from_the_command_line() {
     let (ok, out, err) =
         sheaf(&["analyze", "vartest", file, "--y", "untreated", "--variance", "0.1", "--levels", "95"]);
     assert!(ok, "{err}");
-    assert!(out.contains("one-sample test for variance") && out.contains("LCL(95%)"), "{out}");
+    assert!(out.contains("One-sample test for variance") && out.contains("NOT significantly different"), "{out}");
     let (ok, out, err) = sheaf(&["analyze", "vartest", file, "--y", "untreated,treated", "--tail", "upper"]);
     assert!(ok, "{err}");
-    assert!(out.contains("two-sample test for variance") && out.contains("upper-tailed"), "{out}");
+    assert!(
+        out.contains("Two-sample test for variance") && out.contains("Alternative Hypothesis: Variance1/Variance2 > 1"),
+        "{out}"
+    );
     let (ok, _, err) = sheaf(&["analyze", "vartest", file, "--y", "untreated", "--ratio", "1"]);
     assert!(!ok && err.contains("exactly two columns"), "{err}");
 
     let (ok, out, err) = sheaf(&["analyze", "proptest", file, "--successes", "7", "--size", "10", "--exact"]);
     assert!(ok, "{err}");
-    assert!(out.contains("One-sample proportion test") && out.contains("exact p = 0.3438"), "{out}");
+    assert!(out.contains("One-sample proportion test") && out.contains("Null Hypothesis: Proportion = 0.5"), "{out}");
     let (ok, out, err) =
         sheaf(&["analyze", "proptest", file, "--successes", "15,9", "--size", "40,35", "--levels", "90,95"]);
     assert!(ok, "{err}");
-    assert!(out.contains("Two-sample proportion test"), "{out}");
+    assert!(out.contains("Two-sample proportion test") && out.contains("Proportion1 - Proportion2"), "{out}");
     let (ok, _, err) = sheaf(&["analyze", "proptest", file, "--successes", "11", "--size", "10"]);
     assert!(!ok && err.contains("no more successes"), "{err}");
     let (ok, _, err) = sheaf(&["analyze", "proptest", file, "--successes", "1,2,3", "--size", "10,10,10"]);

@@ -178,7 +178,7 @@ pub fn vartest_two(a: &[f64], b: &[f64], ratio0: f64, tail: Tail, alpha: f64) ->
 /// `vartest1` instead gives the two-sided interval of level `1 - 2 alpha` for a one-sided test; that is
 /// [`VarTest::lcl`].) NaN where the sample has no spread.
 pub fn variance_interval(n: usize, var: f64, tail: Tail, level: f64) -> (f64, f64) {
-    if n < 2 || !(var > 0.0) || !(level > 0.0 && level < 1.0) {
+    if n < 2 || var.is_nan() || var <= 0.0 || !(level > 0.0 && level < 1.0) {
         return (f64::NAN, f64::NAN);
     }
     let df = n as f64 - 1.0;
@@ -382,7 +382,7 @@ pub fn proportion_two(
     tail: Tail,
 ) -> Option<TwoProportions> {
     let ((x1, n1), (x2, n2)) = (first, second);
-    if n1 == 0 || n2 == 0 || x1 > n1 || x2 > n2 || !(difference.abs() < 1.0) {
+    if n1 == 0 || n2 == 0 || x1 > n1 || x2 > n2 || difference.abs() >= 1.0 || difference.is_nan() {
         return None;
     }
     let (f1, f2, g1, g2) = (x1 as f64, x2 as f64, n1 as f64, n2 as f64);

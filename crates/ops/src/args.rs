@@ -1681,6 +1681,10 @@ pub enum AnalyzeTool {
         /// Only the exact test, not the normal approximation.
         #[arg(long, requires = "exact")]
         exact_only: bool,
+        /// Two-sample test: take the standard error of z from the pooled proportion (Origin's "Use pooled p for
+        /// test", off by default).
+        #[arg(long)]
+        pooled: bool,
         /// Confidence levels in percent, for example 90,95,99; none means no intervals.
         #[arg(long, value_delimiter = ',')]
         levels: Vec<f64>,

@@ -452,6 +452,8 @@ struct StatsOptions {
     /// Proportion tests: normal approximation and exact (binomial) test.
     normal_method: bool,
     binomial_method: bool,
+    /// Two-sample proportion test: "Use pooled p for test" (Origin: off).
+    pooled_p: bool,
     /// Confidence intervals of the variance and proportion tests, and their levels in percent as typed.
     intervals: bool,
     levels_text: String,
@@ -510,6 +512,7 @@ impl Default for StatsOptions {
             prop_diff: 0.0,
             normal_method: true,
             binomial_method: false,
+            pooled_p: false,
             intervals: false,
             levels_text: "90 95 99".to_string(),
             tail: Tail::Two,
@@ -1588,7 +1591,7 @@ impl AnalysisDialog {
                     kind: if self.kind == AnalysisKind::VarTestOne {
                         VarTestKind::OneSample { variance: st.var_hyp }
                     } else {
-                        VarTestKind::TwoSample { ratio: st.var_hyp }
+                        VarTestKind::TwoSample { ratio: 1.0 }
                     },
                     tail: st.tail,
                     alpha: st.alpha,
@@ -1618,7 +1621,7 @@ impl AnalysisDialog {
                     levels: parse_levels(&st.levels_text)?,
                     normal: st.normal_method,
                     exact: st.binomial_method,
-                    pooled: true,
+                    pooled: st.pooled_p,
                 })
             }
             AnalysisKind::Anova => Tool::Anova(AnovaSpec {
@@ -2212,19 +2215,22 @@ impl AnalysisDialog {
             AnalysisKind::VarTestOne | AnalysisKind::VarTestTwo => {
                 let one = self.kind == AnalysisKind::VarTestOne;
                 let st = &mut self.stats;
-                ui.horizontal(|ui| {
-                    ui.label(if one { "Test Variance" } else { "Test Ratio of Variances" });
-                    ui.add(DragValue::new(&mut st.var_hyp).speed(0.01).range(1e-12..=f64::MAX));
-                });
-                let what = if one { "Variance" } else { "Ratio" };
-                let shown = format!("{}", st.var_hyp);
+                // Origin's two-sample dialog has no box for the ratio: its null hypothesis is fixed at 1.
+                if one {
+                    ui.horizontal(|ui| {
+                        ui.label("Test Variance");
+                        ui.add(DragValue::new(&mut st.var_hyp).speed(0.01).range(1e-12..=f64::MAX));
+                    });
+                }
+                let (what, shown) =
+                    if one { ("Variance", format!("{}", st.var_hyp)) } else { ("Variance 1/Variance 2", "1".into()) };
                 ui.horizontal(|ui| {
                     ui.label("Null Hypothesis");
                     read_only_box(ui, &format!("{what} = {shown}"), 140.0);
                 });
                 alternative_radios(ui, &mut st.tail, what, &shown);
                 if !one {
-                    ui.label("Needs exactly two columns; the first over the second.");
+                    ui.weak("Needs exactly two columns; the first over the second.");
                 }
                 significance_and_intervals(ui, st);
             }
@@ -2232,8 +2238,9 @@ impl AnalysisDialog {
                 let one = self.kind == AnalysisKind::PropTestOne;
                 let st = &mut self.stats;
                 let samples = if one { 1 } else { 2 };
+                ui.label("Input Data: Summarized");
                 for i in 0..samples {
-                    let tag = if one { String::new() } else { format!(" (sample {})", i + 1) };
+                    let tag = if one { String::new() } else { format!(" of Sample{}", i + 1) };
                     ui.horizontal(|ui| {
                         ui.label(format!("Number of Success{tag}"));
                         ui.add(DragValue::new(&mut st.successes[i]).range(0..=u64::from(u32::MAX)));
@@ -2243,6 +2250,7 @@ impl AnalysisDialog {
                         ui.add(DragValue::new(&mut st.sample_size[i]).range(1..=u64::from(u32::MAX)));
                     });
                 }
+                ui.label("Proportion Test");
                 let (what, value) = if one {
                     ui.horizontal(|ui| {
                         ui.label("Test Proportion");
@@ -2251,19 +2259,24 @@ impl AnalysisDialog {
                     ("Proportion", st.prop_hyp)
                 } else {
                     ui.horizontal(|ui| {
-                        ui.label("Test Difference (first minus second)");
+                        ui.label("Test Difference");
                         ui.add(DragValue::new(&mut st.prop_diff).speed(0.01).range(-0.9999..=0.9999));
                     });
-                    ("Difference", st.prop_diff)
+                    ("Proportion1 - Proportion2", st.prop_diff)
                 };
                 let shown = format!("{value}");
+                ui.horizontal(|ui| {
+                    ui.label("Null Hypothesis");
+                    read_only_box(ui, &format!("{what} = {shown}"), 180.0);
+                });
                 alternative_radios(ui, &mut st.tail, what, &shown);
                 significance_and_intervals(ui, st);
-                ui.horizontal(|ui| {
-                    ui.label("Test Method");
-                    ui.checkbox(&mut st.normal_method, "Normal Approximation");
-                    ui.checkbox(&mut st.binomial_method, if one { "Binomial Test" } else { "Exact Test (Fisher)" });
-                });
+                ui.label("Test Method");
+                ui.checkbox(&mut st.normal_method, "Normal Approximation");
+                if !one {
+                    ui.checkbox(&mut st.pooled_p, "Use pooled p for test");
+                }
+                ui.checkbox(&mut st.binomial_method, if one { "Binomial Test" } else { "Fisher's Exact Test" });
             }
             AnalysisKind::Anova => {
                 let st = &mut self.stats;

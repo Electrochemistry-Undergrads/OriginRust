@@ -444,7 +444,11 @@ fn var_test(spec: &VarTestSpec, inputs: &[Input<'_>]) -> Result<Output, Analysis
             notes.push(format!(
                 "At the {} level, the {} {}significantly {rel}.",
                 num(spec.alpha),
-                if spec.tail == Tail::Two { "two population variances are" } else { "ratio of the population variances is" },
+                if spec.tail == Tail::Two {
+                    "two population variances are"
+                } else {
+                    "ratio of the population variances is"
+                },
                 if r.rejected() { "" } else { "NOT " },
             ));
         }

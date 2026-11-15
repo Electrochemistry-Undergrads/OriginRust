@@ -547,6 +547,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             alpha,
             exact,
             exact_only,
+            pooled,
             levels,
         } => {
             if successes.len() != size.len() || !(1..=2).contains(&successes.len()) {
@@ -571,7 +572,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 levels,
                 normal: !exact_only,
                 exact,
-                pooled: true,
+                pooled,
             };
             (target, Job::Tool(Tool::PropTest(spec)))
         }

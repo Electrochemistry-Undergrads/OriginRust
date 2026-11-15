@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::data::Dim;
-use crate::tests::{compare_golden, doc, svg_of, texts, with_class};
+use crate::tests::{compare_golden, doc, svg_of, texts};
 use sheaf_core::graph::PlotKind;
 use sheaf_core::graph::ScaleKind;
 use sheaf_core::template::Template;
@@ -40,7 +40,7 @@ fn skewed() -> Vec<f64> {
 
 fn numbers(d: &str) -> Vec<(f64, f64)> {
     let n: Vec<f64> = d.split(['M', 'L', 'Z', ' ']).filter(|t| !t.is_empty()).filter_map(|t| t.parse().ok()).collect();
-    n.chunks_exact(2).map(|c| (c[0], c[1])).collect()
+    n.as_chunks::<2>().0.iter().map(|c| (c[0], c[1])).collect()
 }
 
 /// The page points of the silhouettes drawn (the filled paths without an outline), one list per plot.
@@ -83,7 +83,7 @@ fn the_silhouette_is_symmetric_and_widest_at_the_mode() {
 #[test]
 fn the_curve_reaches_two_bandwidths_past_the_data_and_the_ranges_cover_it() {
     let data = skewed();
-    let (p, g, _) = violins(Template::Violin, &[data.clone()]);
+    let (p, g, _) = violins(Template::Violin, std::slice::from_ref(&data));
     let l = layer_data(&p, g);
     let v = l.plots[0].violin.as_ref().unwrap();
     let w = v.bandwidth.unwrap();

@@ -786,6 +786,14 @@ fn plot_menu() -> Vec<Entry> {
             [
                 vec![item("Box Chart", Cmd::Plot(Template::BoxChart))],
                 greys(&["Grouped Box Charts", "Interval Plot"]),
+                vec![
+                    item("Violin Plot", Cmd::Plot(Template::Violin)),
+                    item("Violin with Box", Cmd::Plot(Template::ViolinBox)),
+                    item("Violin with Point", Cmd::Plot(Template::ViolinPoint)),
+                    item("Violin with Quartile", Cmd::Plot(Template::ViolinQuartile)),
+                    item("Violin with Stick", Cmd::Plot(Template::ViolinStick)),
+                    item("Half Violin", Cmd::Plot(Template::HalfViolin)),
+                ],
                 vec![item("Histogram", Cmd::Plot(Template::Histogram))],
                 greys(&[
                     "Histogram + Probabilities",

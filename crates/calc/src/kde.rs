@@ -63,7 +63,7 @@ pub fn bandwidth(data: &[f64], rule: Bandwidth) -> Option<f64> {
     let nf = n as f64;
     let mean = v.iter().sum::<f64>() / nf;
     let sd = (v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (nf - 1.0)).sqrt();
-    if !(sd > 0.0) {
+    if sd.is_nan() || sd <= 0.0 {
         return None;
     }
     let w = match rule {

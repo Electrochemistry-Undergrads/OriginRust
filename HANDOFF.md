@@ -252,6 +252,10 @@ open. History of what was merged when is in `git log` (not repeated here).
   long-name-and-unit title, per-axis or shared range, one line per row breaking at missing cells, coloured by a numeric
   column (hexbin's colour scale, now shared) or by group (legend), Plot Details Parallel tab (graphing.md 14.25). Parallel
   Sets, curvature and axis reordering not done.
+- T52 slope annotation (2026-11-15, macOS, no Origin): Tools toolbar "Slope" picks two points of one plot
+  (Data Reader snapping); a segment, dashed rise/run legs and "slope = ..." linked to those rows and the plot's
+  X/Y columns; per decade on log axes (Tafel), units from the drawn axes' columns; follows moved plots;
+  Delete/undo, properties dialog, `sheaf plot --slope A,B`, MCP `style.slope` (graphing.md 17.6, unmeasured).
 - T51 Sunburst plot (2026-11-15, macOS, no Origin): Plot > Categorical > Sunburst Plot (`-t sunburst`, `--group`, `--sunburst-start/-hole/-gap/-labels/-order`, MCP),
   the treemap hierarchy as concentric rings (`sheaf_calc::sunburst`), leaves coloured by value and categories by their leaves' mean on the shared
   ramp with a colour scale, unfilled missing categories, radial labels hidden when they do not fit, Plot Details Pie Geometry tab (graphing.md 14.27).

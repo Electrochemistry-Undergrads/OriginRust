@@ -166,8 +166,31 @@ fn quantise(rgb: &[u8]) -> Indexed {
     quantise_to(rgb, 256)
 }
 
-/// An optimised palette of at most `colours` colours (NeuQuant) and the nearest entry per pixel.
+/// An optimised palette of at most `colours` colours and the nearest entry per pixel. A picture
+/// with no more distinct colours than that keeps them exactly (Origin's 256-colour export held just
+/// the picture's own colours, graphing.md 9.4); otherwise NeuQuant chooses the palette.
 fn quantise_to(rgb: &[u8], colours: usize) -> Indexed {
+    let mut exact: Vec<[u8; 3]> = Vec::new();
+    let mut lookup = std::collections::HashMap::new();
+    let mut indices = Vec::with_capacity(rgb.len() / 3);
+    for p in rgb.as_chunks::<3>().0 {
+        let i = match lookup.get(p) {
+            Some(&i) => i,
+            None => {
+                if exact.len() == colours {
+                    exact.clear();
+                    break;
+                }
+                exact.push(*p);
+                lookup.insert(*p, (exact.len() - 1) as u8);
+                (exact.len() - 1) as u8
+            }
+        };
+        indices.push(i);
+    }
+    if !exact.is_empty() {
+        return Indexed { palette: exact, indices };
+    }
     let rgba: Vec<u8> = rgb.as_chunks::<3>().0.iter().flat_map(|p| [p[0], p[1], p[2], 255]).collect();
     let nq = color_quant::NeuQuant::new(10, colours, &rgba);
     let palette = nq.color_map_rgb().as_chunks::<3>().0.to_vec();

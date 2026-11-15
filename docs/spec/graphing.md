@@ -471,8 +471,10 @@ Image Type, Image Settings expanded; `re-workspace/scratch/t05/d2`). Labels and 
   on the page background (0xFFFF) and not inside the layer (0x7FFF). The picture has the same 64 colours as the
   256-colour export, so Origin draws in 15-bit colour first. Sheaf writes the same layout with the top bit always clear
   and each channel reduced by dropping its low three bits (other formats given 16-bit write 24-bit).
-- 256 Colors (same probe) also has palette values on that 5-bit grid (levels 0, 57, 99, 140, 181, 214, 255); Sheaf's
-  NeuQuant palette differs in the exact entries.
+- 256 Colors (same probe) also has palette values on that 5-bit grid (levels 0, 57, 99, 140, 181, 214, 255): the
+  palette holds exactly the picture's own 64 colours. Sheaf likewise keeps the exact colours when a picture has at
+  most 256 (or at most 16 for 16 Colors) and uses NeuQuant only above that; it does not reduce colours to 15 bits
+  first, so its entries are the 24-bit colours.
 
 Trap: PNG and TIF default to 256 colours; use 24-bit for colour figures.
 

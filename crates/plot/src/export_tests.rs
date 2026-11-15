@@ -510,7 +510,9 @@ fn indexed_tiff_preserves_palette_indices_resolution_and_each_compression() {
         assert_eq!(palette.len(), 768);
         for channel in 0..3 {
             for index in 0..256 {
-                assert_eq!(palette[channel * 256 + index], u16::from(expected_palette[index * 3 + channel]) * 257);
+                // a picture with few colours has a short PNG palette; TIFF pads its table with zeros
+                let want = expected_palette.get(index * 3 + channel).map_or(0, |&c| u16::from(c) * 257);
+                assert_eq!(palette[channel * 256 + index], want);
             }
         }
         // This tiff crate can decompress 8-bit samples but cannot expand a palette. In a
@@ -690,4 +692,17 @@ fn sixteen_bit_bmp_and_tga_store_five_bits_per_channel_like_origin() {
     assert_eq!(&tga[18..18 + 2 * tw], &bmp[54..54 + 2 * w]);
     // Formats without a 16-bit form write 24-bit colour.
     assert_eq!(raster_bytes("png", &o), raster_bytes("png", &RasterOptions::default()));
+}
+
+#[test]
+fn few_colours_keep_their_exact_values_in_a_palette() {
+    // red, white and black only: the 256-colour and 16-colour palettes hold exactly these
+    let rgb = [255, 0, 0, 255, 255, 255, 0, 0, 0, 255, 0, 0];
+    let r = Raster { width: 2, height: 2, rgba: rgb.chunks(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect() };
+    for depth in [ColorDepth::Colors256, ColorDepth::Colors16] {
+        let png = raster::encode_raster(&r, "png", 72.0, &RasterOptions { depth, ..RasterOptions::default() }).unwrap();
+        let (_, palette, idx, _, _) = png_indices(&png);
+        assert_eq!(palette, vec![255, 0, 0, 255, 255, 255, 0, 0, 0], "{depth:?}");
+        assert_eq!(idx, vec![0, 1, 2, 0], "{depth:?}");
+    }
 }

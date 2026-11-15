@@ -41,4 +41,4 @@ pub use graph::{Axis, Graph, Layer, Plot};
 pub use history::Document;
 pub use ids::{ColumnId, WindowId};
 pub use project::{Project, Window};
-pub use worksheet::{Workbook, Worksheet};
+pub use worksheet::{Frozen, MAX_FROZEN, Workbook, Worksheet};

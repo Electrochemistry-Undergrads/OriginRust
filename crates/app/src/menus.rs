@@ -1131,6 +1131,8 @@ fn statistics_menu() -> Vec<Entry> {
                 item("Statistics on &Columns...", Cmd::Analyze(AnalysisKind::Statistics)),
                 item("Statistics on &Rows...", Cmd::Analyze(AnalysisKind::RowStatistics)),
                 sep(),
+                item("Graphical Summary...", Cmd::Analyze(AnalysisKind::GraphSummary)),
+                sep(),
                 item("Cross Tabulation...", Cmd::Analyze(AnalysisKind::Crosstab)),
                 sep(),
                 item("Discrete Frequency...", Cmd::Analyze(AnalysisKind::DiscreteFreq)),

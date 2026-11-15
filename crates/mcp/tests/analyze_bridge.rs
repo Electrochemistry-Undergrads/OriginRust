@@ -221,6 +221,7 @@ fn bridged_tools_give_the_numbers_of_the_command_line() {
         &["histogram", "--y", "C", "--bins", "8", "--no-graph"],
     );
     parity(&dir, "normality", &["B", "C"], json!({}), &["normality", "--y", "B,C"]);
+    parity(&dir, "graphsummary", &["B", "C"], json!({"level": 90.0}), &["graphsummary", "--y", "B,C", "--level", "90"]);
     parity(&dir, "corr", &["A", "B", "C"], json!({"spearman": true}), &["corr", "--y", "A,B,C", "--spearman"]);
     parity(&dir, "mannwhitney", &["C", "D"], json!({}), &["mannwhitney", "--y", "C,D"]);
     parity(

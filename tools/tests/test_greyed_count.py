@@ -1,6 +1,7 @@
 """Regressions for inventory counting and stale-document detection."""
 import importlib.util
 from pathlib import Path
+import re
 import unittest
 
 SPEC = importlib.util.spec_from_file_location("greyed_count", Path(__file__).resolve().parents[1] / "greyed-count.py")
@@ -43,7 +44,7 @@ class InventoryTests(unittest.TestCase):
     def test_refresh_detects_stale_counts_and_is_idempotent(self):
         paths = ("docs/tasks/greyed-items.md", "docs/tasks/PLAN.md", "HANDOFF.md")
         source = {p: (COUNT.ROOT / p).read_text(encoding="utf-8") for p in paths}
-        source[paths[0]] = source[paths[0]].replace("463 greyed items", "1 greyed items", 1)
+        source[paths[0]] = re.sub(r"\d+ greyed items", "1 greyed items", source[paths[0]], count=1)
         updated, _, _ = COUNT.refreshed(source)
         self.assertNotEqual(source[paths[0]], updated[paths[0]])
         self.assertEqual(updated, COUNT.refreshed(updated)[0])

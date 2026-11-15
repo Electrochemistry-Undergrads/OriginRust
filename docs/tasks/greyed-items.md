@@ -6,8 +6,10 @@ Every Origin menu item Sheaf lacks is drawn greyed with the tooltip "Not availab
 them, by menu, and tags each line with the package that will enable it. The packages and their order
 are in [PLAN.md](PLAN.md).
 
-Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session; recounted against its package tags during recovery.
-The item groups were checked against the relevant source helpers; this is not a new runtime audit. **463 greyed items: 319 in the menu bar, 47 on the toolbars, 97 in context menus.**
+Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
+recounted against its package tags during recovery.
+Formatting and layer gaps were checked in source during recovery; other labels retain the
+original inventory baseline. This is not a new runtime audit. **463 greyed items: 319 in the menu bar, 47 on the toolbars, 97 in context menus.**
 
 ## How to read and keep this file
 

@@ -78,7 +78,6 @@ The result and recorded checks are preserved in [known issues/recent results](do
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/sheaf-priority-plan` | Codex macOS, cloud-session recovery | Finish paused Claude prioritization docs: archive handoff, PLAN, greyed inventory/counts, T58–T63 briefs, task index, roadmap/parity priorities; no feature implementation | claimed 2026-11-15; worktree `work/OriginRust` in Codex chat; preserves all other claims |
 | `codex/formula-worksheet-substitution` | Codex Windows, formula-worksheet-substitution | T08 static worksheet-cell %([Book]Sheet,column,row[,format]) substitution; expr lowering/evaluation, isolated core/IO formula regressions | claimed 2026-11-15; no graph/legend/session/generated-expression substitution, global Options/model fields, UI, MCP, imports, statistics or other owner scopes |
 | `t19-fntrim` | Claude Windows, session fe4b37eb | T19 file-name trimming on ASCII import (Origin's FNameToSht/Bk From/To rules) and the book long name keeping the file extension (owner's decision 2026-11-15); crates/io ascii naming, app import window, cli flags, import-ascii.md, title tests | claimed 2026-11-15 |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |

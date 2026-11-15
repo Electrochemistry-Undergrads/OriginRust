@@ -19,7 +19,8 @@ a brief names the exact spec section and audit letter to open only when you need
    in `re-workspace/scratch/peer-notes.md` (local only), before implementation docs/specs or code.
 2. **Branch and worktree.** `git worktree add .claude/worktrees/<branch> -b <branch> main`. Build
    with your own folder: `CARGO_TARGET_DIR=target/wt-<branch> CARGO_PROFILE_DEV_DEBUG=0`. Check
-   `df -h .` (macOS/Linux) or `df -h /c` (Windows Git Bash) first (the disk has filled twice; LESSONS "Parallel build folders fill the disk").
+   `df -h .` (macOS/Linux) or `df -h /c` (Windows Git Bash) first (LESSONS "Parallel build
+   folders fill the disk").
 3. **Find code by name, not line number.** Line numbers in the briefs and the audit drift. Use
    Grep for the function, enum or menu label given.
 4. **Origin is the reference.** When unsure how something looks or behaves, measure Origin

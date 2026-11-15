@@ -45,10 +45,8 @@ open. History of what was merged when is in `git log` (not repeated here).
   keeps the axis tick step across breaks (Origin changed it on two of four data sets, no rule
   found) and offers a step after each break; the Break Half Length unit is unmeasured (typing in
   the scripted dialog did not take), so Sheaf shows one gap in percent of the axis. Formatting
-  and strict all-target Clippy pass; on the final merge (main d45f267) 2,656 tests pass (seven
-  ignored). Pushed although the MCP link admission tests in crates/mcp/tests/link.rs fail
-  intermittently on this Windows machine (a different one per run, the file passed alone once):
-  pre-existing on main, not touched here, repair 50b5ecb on codex/t02-find-replace.
+  and strict all-target Clippy pass and 2,666 workspace tests pass (seven ignored) on the pushed
+  main 61d568b, which also holds the MCP link admission repair 50b5ecb.
 - T25 busy greeting repair (2026-11-15, Windows): an over-limit TCP connection receives its
   busy reason before closing, using a send-half-close and a bounded receive drain. This
   avoids Winsock reset errors caused by unread hello data, while retaining connection limits

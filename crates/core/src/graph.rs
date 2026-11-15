@@ -958,6 +958,12 @@ pub struct Axis {
     /// One break in the axis: a region of values that is left out, with a gap in the axis line.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub axis_break: Option<AxisBreak>,
+    /// Origin's Grids tab "Additional Lines": a line across the layer at this value of the OTHER axis,
+    /// in this axis' line style (for the X axis a horizontal line at Y = value, labelled "Y =" in
+    /// Origin's dialog; for the Y axis a vertical line at X = value). `None` means off; Origin's
+    /// default value is 0 (graphing.md 3.7).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub additional_line: Option<f64>,
     /// Extra ticks at chosen values, each with its own label (the Special Ticks tab of Origin).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub special_ticks: Vec<SpecialTick>,

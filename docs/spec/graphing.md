@@ -206,6 +206,18 @@ half-length in points), ticks inside the break go, the ticks after it can use th
 ### 3.7 Special ticks and reference lines (P1/P2)
 Custom tick positions and labels per tick. Reference lines are not documented for 2016; emulate with `addline` objects.
 
+**Additional Lines (Grids tab, measured 2026-11-14 in Origin 2016's axis dialog, `re-workspace/scratch/addlines`):**
+the Grids tab's last group, "Additional Lines", has `Opposite` (a check box) and a check box with a value box,
+labelled `Y =` on the page of the vertical grid lines (the X axis) and `X =` on the page of the horizontal ones
+(the Y axis); the value starts at 0 and the box is grey until ticked. Exported pictures: `Opposite` on the X axis
+page draws the X axis line along the top edge (as the Line and Ticks tab's top line); `Y =` draws a straight line
+across the whole layer at Y = 0, `X =` one at X = 0, both solid and in the axis line's colour and weight. Not
+measured: a value other than 0 (typing into the box did not take in the scripted dialog), whether the line hides
+with a hidden axis, and its order against the data.
+Sheaf: `Axis::additional_line` (`Some(value)` on the axis whose page has the box); the line is drawn with the axis
+lines in that axis' width and colour, and only when the value lies inside the other axis' range; `Opposite` on the
+Grids tab is the same setting as the opposite line of Line and Ticks. `.opj` saves warn that the line was not written.
+
 ---
 
 ### 3.8 Scale types other than linear and log10 (measured)

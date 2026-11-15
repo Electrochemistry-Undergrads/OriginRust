@@ -674,6 +674,7 @@ fn layer_scene(
     let y_line = Rect { x: if ya.side == AxisSide::Opposite { f.x + f.w } else { f.x }, w: 0.0, ..f };
     let gaps = (geom.x.gap.map(|g| g.span(geom.x.reversed)), geom.y.gap.map(|g| g.span(geom.y.reversed)));
     draw_axis_lines(out, xa, ya, f, xp.line, yp.line, gaps);
+    draw_additional_lines(out, xa, ya, geom, xp.line, yp.line);
     let start = out.len();
     draw_ticks(out, xa, &geom.x, f, true, xp.line);
     if xa.side != AxisSide::Hidden {
@@ -907,6 +908,40 @@ fn draw_axis_lines(
     }
     if shown(ya) && ya.show_opposite {
         line(out, (y_other, t), (y_other, b), ya, yc, gap_y);
+    }
+}
+
+/// Origin's "Additional Lines" (Grids tab): the X axis' line repeated across the layer at a Y value
+/// and the Y axis' line at an X value, in that axis' width and colour. A value outside the axis
+/// range draws nothing.
+fn draw_additional_lines(out: &mut Vec<Item>, xa: &Axis, ya: &Axis, geom: &LayerGeometry, xc: Color, yc: Color) {
+    let f = geom.frame;
+    let stroke = |a: &Axis, color: Color| Stroke {
+        color,
+        width: a.line_width_pt,
+        dash: Vec::new(),
+        cap: Cap::Butt,
+        join: Join::Miter,
+    };
+    if let Some(v) = xa.additional_line {
+        let u = geom.y.to_unit(v);
+        if u.is_finite() && (0.0..=1.0).contains(&u) {
+            let y = f.y + (1.0 - u) * f.h;
+            let mut d = String::new();
+            move_to(&mut d, f.x, y);
+            line_to(&mut d, f.x + f.w, y);
+            out.push(Item::Path { d, fill: None, stroke: Some(stroke(xa, xc)) });
+        }
+    }
+    if let Some(v) = ya.additional_line {
+        let u = geom.x.to_unit(v);
+        if u.is_finite() && (0.0..=1.0).contains(&u) {
+            let x = f.x + u * f.w;
+            let mut d = String::new();
+            move_to(&mut d, x, f.y);
+            line_to(&mut d, x, f.y + f.h);
+            out.push(Item::Path { d, fill: None, stroke: Some(stroke(ya, yc)) });
+        }
     }
 }
 

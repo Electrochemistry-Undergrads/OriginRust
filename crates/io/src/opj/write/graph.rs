@@ -1081,6 +1081,9 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         if axis.axis_break.is_some() {
             notes.push("an axis break was not written".into());
         }
+        if axis.additional_line.is_some() {
+            notes.push("an additional line at a value of the other axis (Grids tab) was not written".into());
+        }
         if !axis.special_ticks.is_empty() || !axis.tick_label_formula.is_empty() || axis.minor_tick_labels {
             notes.push("special ticks, tick label formulas and minor tick labels were not written".into());
         }

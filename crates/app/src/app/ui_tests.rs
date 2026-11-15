@@ -459,6 +459,27 @@ fn the_axis_dialog_switches_between_the_horizontal_and_the_vertical_axis() {
 }
 
 #[test]
+fn the_grids_tab_turns_on_the_opposite_line_and_a_line_at_zero_of_the_other_axis() {
+    let mut h = start(vec![data_file("axis-additional")]);
+    open_props(&mut h, 0, PropsTab::XAxis, None);
+    click(&mut h, "Grids");
+    // Origin labels the X axis page's line "Y =" (a horizontal line at that Y) and starts it at 0.
+    click(&mut h, "Y =");
+    click(&mut h, "Opposite");
+    assert_eq!(graph(&h).layers[0].x_axis.additional_line, Some(0.0));
+    assert!(graph(&h).layers[0].x_axis.show_opposite);
+    click(&mut h, "OK");
+    open_props(&mut h, 0, PropsTab::YAxis, None);
+    click(&mut h, "Grids");
+    click(&mut h, "X =");
+    assert_eq!(graph(&h).layers[0].y_axis.additional_line, Some(0.0));
+    click(&mut h, "OK");
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert_eq!(graph(&h).layers[0].y_axis.additional_line, None, "undo the Y axis change");
+    assert_eq!(graph(&h).layers[0].x_axis.additional_line, Some(0.0), "the X axis change was its own step");
+}
+
+#[test]
 fn a_change_on_the_scale_tab_fixes_the_limit() {
     let mut h = start(vec![data_file("axis-scale")]);
     open_props(&mut h, 0, PropsTab::YAxis, None);

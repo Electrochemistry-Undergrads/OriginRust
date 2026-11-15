@@ -791,6 +791,7 @@ mod tests {
             reverse: false,
             first_tick: None,
             axis_break: None,
+            additional_line: None,
             special_ticks: Vec::new(),
             tick_label_formula: String::new(),
             minor_tick_labels: false,

@@ -5,6 +5,7 @@ use eframe::egui;
 use egui_extras::{Column as TableColumn, TableBuilder};
 use sheaf_core::format::NumberFormat;
 use sheaf_core::{Column, ColumnId, Project, WindowId, Workbook, Worksheet};
+use std::collections::HashSet;
 
 mod rows;
 
@@ -64,7 +65,7 @@ impl Scope {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct Choice {
     book: WindowId,
     sheet: usize,
@@ -120,6 +121,7 @@ pub(super) struct ColumnBrowser {
     sheet: usize,
     scope: Scope,
     selected: Vec<Choice>,
+    excluded: HashSet<Choice>,
     anchor: Option<Choice>,
     cursor: Option<Choice>,
     table_focus: Option<egui::Id>,
@@ -137,6 +139,7 @@ impl ColumnBrowser {
             sheet,
             scope: Scope::Sheet,
             selected: Vec::new(),
+            excluded: HashSet::new(),
             anchor: None,
             cursor: None,
             table_focus: None,
@@ -172,7 +175,29 @@ impl ColumnBrowser {
                     index,
                 })
             })
+            .filter(|entry| !self.excluded.contains(&entry.choice))
             .collect()
+    }
+
+    fn exclude(&mut self, project: &Project) -> Option<Choice> {
+        if self.selected.is_empty() {
+            return None;
+        }
+        let entries = self.entries(project);
+        let first = entries.iter().position(|entry| self.selected.contains(&entry.choice)).unwrap_or(0);
+        self.excluded.extend(self.selected.drain(..));
+        let remaining = |entry: &&Entry<'_>| !self.excluded.contains(&entry.choice);
+        let next = entries
+            .iter()
+            .filter(remaining)
+            .nth(first)
+            .or_else(|| entries.iter().rev().find(remaining))
+            .map(|entry| entry.choice);
+        self.selected = next.into_iter().collect();
+        self.anchor = next;
+        self.cursor = next;
+        self.table_focus = None;
+        next
     }
 
     fn select(&mut self, entries: &[Entry<'_>], index: usize, modifiers: egui::Modifiers) {
@@ -246,6 +271,7 @@ impl ColumnBrowser {
         let popup_was_open = egui::Popup::is_any_open(ctx);
         let window = egui::Window::new("Column Browser").enabled(!editing_rows);
         window.open(&mut open).collapsible(false).default_width(700.0).show(ctx, |ui| {
+            let mut focus_after_exclude = None;
             ui.horizontal(|ui| {
                 let label = ui.label("List Columns");
                 let previous = self.scope;
@@ -264,15 +290,19 @@ impl ColumnBrowser {
                     self.first_frame = false;
                 }
                 if previous != self.scope {
+                    self.excluded.clear();
                     self.selected.clear();
                     self.anchor = None;
                     self.cursor = None;
                     self.table_focus = None;
                 }
-                ui.add_enabled(false, egui::Button::new("Exclude"));
+                if ui.add_enabled(!self.selected.is_empty(), egui::Button::new("Exclude")).clicked() {
+                    focus_after_exclude = self.exclude(project);
+                }
             });
             let entries = self.entries(project);
-            let mut reveal = None;
+            let mut reveal =
+                focus_after_exclude.and_then(|choice| entries.iter().position(|entry| entry.choice == choice));
             if !editing_rows
                 && !popup_was_open
                 && !egui::Popup::is_any_open(ctx)

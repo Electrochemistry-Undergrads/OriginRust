@@ -8015,3 +8015,35 @@ fn the_survival_menu_runs_the_kaplan_meier_estimator() {
     assert_eq!(project(&h).graphs().count(), graphs_before + 1);
     assert_eq!(h.state().doc.undo_label(), Some("Kaplan-Meier estimator"));
 }
+
+/// Statistics > Multivariate Analysis > K-Means Cluster Analysis...: the cluster table and the cluster of every row
+/// in a result sheet and a scatter graph; one undo removes both.
+#[test]
+fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
+    // Two clear groups of three rows.
+    let data = csv_file(
+        "kmeans",
+        "clusters",
+        "id,a,b
+1,1,1
+2,1.5,2
+3,2,1.5
+4,9,9
+5,9.5,8.5
+6,10,9.5
+",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - clusters");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Multivariate Analysis", "K-Means Cluster Analysis..."]);
+    assert!(h.state().analysis.is_some(), "the k-means window is open");
+    assert!(has_label(&h, "Number of clusters"), "the cluster count box is missing");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "the window closed after OK");
+    let (sheet, n) = result_column(&h, "Cluster N");
+    assert!(sheet.starts_with("KMeans"), "{sheet}");
+    assert_eq!(n.iter().sum::<f64>() as usize, 6, "{n:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("K-means cluster analysis"));
+}

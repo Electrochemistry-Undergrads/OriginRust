@@ -2043,6 +2043,27 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// K-means cluster analysis of the --y columns (the variables): cluster centres, sizes and distances, analysis
+    /// of variance by variable and the cluster of every row; makes a scatter graph of the first two variables.
+    Kmeans {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Number of clusters.
+        #[arg(long, default_value_t = 3)]
+        clusters: usize,
+        /// Upper limit of the passes of single-case moves.
+        #[arg(long, default_value_t = 100)]
+        max_passes: usize,
+        /// Leave out the analysis of variance.
+        #[arg(long)]
+        no_anova: bool,
+        /// Do not write the cluster of every row.
+        #[arg(long)]
+        no_membership: bool,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Kaplan-Meier estimator: the --y columns are time, censor and, optionally, group. Survival table, quartile
     /// and mean survival times, tests of groups; makes a graph of the curves.
     KaplanMeier {

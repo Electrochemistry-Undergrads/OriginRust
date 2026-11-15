@@ -1104,7 +1104,7 @@ fn statistics_menu() -> Vec<Entry> {
             "&Multivariate Analysis",
             vec![
                 item("Principal Component Analysis...", Cmd::Analyze(AnalysisKind::Pca)),
-                grey("K-Means Cluster Analysis..."),
+                item("K-Means Cluster Analysis...", Cmd::Analyze(AnalysisKind::Kmeans)),
             ],
         ),
         sub(

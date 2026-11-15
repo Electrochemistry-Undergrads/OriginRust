@@ -3,7 +3,7 @@
 
 use super::analysis::AnalysisKind;
 use eframe::egui;
-use sheaf_core::analysis::{KaplanMeierSpec, PcaSpec, RocSpec, Tool};
+use sheaf_core::analysis::{KaplanMeierSpec, KmeansSpec, PcaSpec, RocSpec, Tool};
 
 /// What the windows keep between frames.
 #[derive(Default)]
@@ -11,6 +11,7 @@ pub struct MultiOptions {
     pca: PcaSpec,
     roc: RocSpec,
     km: KaplanMeierSpec,
+    kmeans: KmeansSpec,
 }
 
 impl MultiOptions {
@@ -28,6 +29,12 @@ impl MultiOptions {
                     return Err("give the value of the state column that is the positive state".to_string());
                 }
                 Ok(Tool::Roc(self.roc.clone()))
+            }
+            AnalysisKind::Kmeans => {
+                if self.kmeans.clusters < 2 {
+                    return Err("the number of clusters must be at least 2".to_string());
+                }
+                Ok(Tool::Kmeans(self.kmeans))
             }
             AnalysisKind::KaplanMeier => {
                 if self.km.censor.trim().is_empty() {
@@ -85,6 +92,26 @@ impl MultiOptions {
                 ui.checkbox(&mut s.curve, "ROC curve (new graph, with the diagonal)");
                 ui.weak(
                     "The area under the curve with its standard error (DeLong's method) and confidence interval, the                      curve points with their cut-offs, and the cut-off with the largest sensitivity + specificity - 1.",
+                );
+            }
+            AnalysisKind::Kmeans => {
+                let s = &mut self.kmeans;
+                ui.label("Every chosen column is a variable, every row a case.");
+                ui.horizontal(|ui| {
+                    ui.label("Number of clusters");
+                    ui.add(egui::DragValue::new(&mut s.clusters).range(2..=1000));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Maximum passes");
+                    ui.add(egui::DragValue::new(&mut s.max_passes).range(1..=10000));
+                });
+                ui.checkbox(&mut s.anova, "Analysis of variance of the variables by cluster");
+                ui.checkbox(&mut s.membership, "Write the cluster of every row");
+                ui.add_enabled(s.membership, egui::Checkbox::new(&mut s.member_distance, "... and its distance to the centre"));
+                ui.checkbox(&mut s.graph, "Scatter graph of the first two variables, one plot per cluster");
+                ui.weak(
+                    "The initial centres are picked from the rows by replacement in sheet order, as Origin does, so the \
+                     cluster numbers depend on the order of the rows. Distances are Euclidean on the values as they are.",
                 );
             }
             AnalysisKind::KaplanMeier => {

@@ -1292,3 +1292,26 @@ fn kaplan_meier_runs_from_the_command_line() {
     let (ok, _, err) = sheaf(&["analyze", "kaplan-meier", file, "--y", "time"]);
     assert!(!ok && err.contains("two or three columns"), "{err}");
 }
+
+/// K-means cluster analysis (spec `statistics.md` section 18): Origin's measured 12-case example in two variables.
+#[test]
+fn kmeans_runs_from_the_command_line() {
+    let dir = scratch("kmeans");
+    let path = dir.join("points.csv");
+    std::fs::write(
+        &path,
+        "a,b\n1,1\n1.5,2\n3,4\n5,7\n3.5,5\n4.5,5\n3.5,4.5\n6,8\n7.5,7\n8,9\n7,6.5\n9,8.5\n",
+    )
+    .unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "kmeans", file, "--y", "a,b", "--clusters", "2"]);
+    assert!(ok, "{err}");
+    // Origin: two clusters of six, sums of squares 23.0417 and 15.0417.
+    assert!(out.contains("KMeans1") && out.contains("23.04") && out.contains("15.04"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "kmeans", file, "--y", "a,b", "--clusters", "3", "--no-graph", "--no-anova"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Cluster 3: 4 cases"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "kmeans", file, "--y", "a,b", "--clusters", "20"]);
+    assert!(!ok && err.contains("cannot be made"), "{err}");
+}

@@ -753,6 +753,17 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
+        AnalyzeTool::Kmeans { target, clusters, max_passes, no_anova, no_membership, no_graph } => (
+            target,
+            Job::Tool(Tool::Kmeans(analysis::KmeansSpec {
+                clusters,
+                max_passes,
+                anova: !no_anova,
+                membership: !no_membership,
+                member_distance: !no_membership,
+                graph: !no_graph,
+            })),
+        ),
         AnalyzeTool::KaplanMeier {
             target,
             censor,

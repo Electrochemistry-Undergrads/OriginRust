@@ -44,7 +44,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/formula-cross-sheet` | Codex Windows, formula-cross-sheet | T08 explicit cross-sheet/book formula references, formula dependencies and persistence tests; expr + core formula paths only | claimed 2026-11-14; no percent substitution, app dialogs, graph/plot, statistics, MCP or other sessions' scope |
+| `mcp-plot-fit` | Codex macOS, no Origin | T25 CLI-option bridge for MCP `plot` and `fit`; crates/mcp, shared ops conversions if needed, focused tests/docs | claimed 2026-11-14; no desktop attach, autosave, statistics or other sessions’ scope |
 | `codex/t13-label-frame-margin` | Codex Windows, t13-label-frame-margin | T13 Label Frame (None/Box/Shadow, border/fill colors) and Margin only; core DataLabels, plot label backgrounds, graph_details and focused tests | claimed 2026-11-14; no T01 stack panels, app state/menu, leader lines or other sessions' work |
 | `vartest` | Claude Windows, "continue all tasks" (owner's decision) | T26 variance and proportion tests: calc vartest.rs, core Tool::VarTest/PropTest, Hypothesis Testing dialogs, ops analyze vartest/proptest | claimed 2026-11-14, continues 7ec9e48/5a08edf |
 | `stats-multi` | Claude Windows, "continue all tasks" | T29 PCA, ROC, Kaplan-Meier, k-means: calc pca/roc/survival/kmeans.rs, core statistics tools, Statistics menu items, ops analyze | claimed 2026-11-14 |

@@ -3540,8 +3540,9 @@ and the last session was stopped by its time limit, so these were not reached.
 - The mode stays on after a removal (a second click and Enter removed a second point; one of the other plot works).
 - One Undo (Ctrl+Z) restores all of it; Edit shows **"Undo Remove Data Point"** (for `@YPR` 1 and 0 and for a
   formula column).
-- A column set by a Set Column Values formula with Auto recalculation (Yc = 20 - X): Enter on its point set the cell
-  missing as for any column (no refusal), and Undo restored it. [To re-verify that the column was in Auto mode, M3b.]
+- A column set by a Set Column Values formula with Auto recalculation (Yc = 20 - X): Enter on its point: **inconclusive**.
+  The worksheet dump after the run showed no missing cell in the formula column (only the earlier Yb cell), so it is
+  not known whether Origin clears or refuses a formula column; unmeasured.
 
 **M7. Hit radius.** Clicking at a measured pixel distance from a plot's point (below, above, right or left)
 masked it at 2, 4, 6 and 8 pixels and not at 9 and more pixels for the default symbol size; for symbol size 24
@@ -3571,8 +3572,8 @@ Move tool (default -1, size 6), which is the only fact found about it.
    unmasked point does nothing. Sheaf has no Unmask modes, no Tab (active plot) toggle, no Space (freehand shape).
 3. **Remove Bad.** Origin: pick with the Data Reader (click or Left/Right) and confirm with Enter; Y cell missing
    (rows kept) with `@YPR` 1, whole row deleted with 0; undo text "Undo Remove Data Point". Sheaf: a click removes at
-   once, always only the Y cell; no row-delete variant; no formula-column refusal difference was measured (Origin
-   cleared a cell of a formula column in one run; Sheaf refuses).
+   once, always only the Y cell; no row-delete variant; no formula-column difference was measured (the one Origin run
+   was inconclusive; Sheaf refuses).
 4. **Ending.** Origin: right-click ends and opens the context menu, double-click does not end. Sheaf: Esc or Pointer
    ends (Esc matches; right-click and double-click not defined).
 5. **Menu.** Origin lists the plots under the tools with the active plot checked; Sheaf has no such list. No check
@@ -3599,15 +3600,16 @@ Changed to match Origin (core unit tests in `graph_data.rs`, UI tests in `ui_tes
    Y cell missing and the mode stays on; Delete, Backspace and double-click do nothing; Enter with nothing picked
    does nothing; nothing is picked after a removal. Not built: the row-delete variant of `@YPR` 0 (Sheaf has no
    system variables) and the starting point of Left/Right without a click (Origin's was not measured; Sheaf needs a
-   pick first). A formula-kept column is still refused with the message (Origin cleared it in one unverified run).
+   pick first). A formula-kept column is still refused with the message (Origin's behaviour was not obtained: one inconclusive run).
 5. **Undo text.** "Set Mask Data" (mask and unmask; Origin's unmask text was not measured) and "Remove Data Point"
    (Edit shows "Undo Set Mask Data", "Undo Remove Data Point"). Move keeps Sheaf's "Move point B(Y) row 12".
-6. **Reach.** The Data menu tools pick within max(9, half the symbol size + 2) screen points (default symbol about 9,
-   size 24 about 14: M7); the Data Reader keeps its 30. The hover ring was dropped (Origin showed no highlight).
+6. **Reach.** The Mask click picks within max(9, half the symbol size + 2) screen points (default symbol about 9,
+   size 24 about 14: M7, measured for the Mask click only); Remove Bad's click and Move's grab keep 30, like the Data
+   Reader, since no reach was measured for them [Sheaf choice]. The hover ring was dropped (Origin showed no highlight).
 7. **Ending.** Esc or a right-click ends the mode (the right-click also reaches the context menu); a double click does
    not end it. The Pointer and Data Reader buttons end it as before.
 
 Still different: the Data menu has no plot list with a check on the active plot; no Tools-toolbar mask flyout (U
-instead); Move is Sheaf's design, unmeasured (M4): the reach for the grab, X-and-Y, follow-by-distance, undo text
+instead); Move is Sheaf's design, unmeasured (M4): the reach for the grab (30), X-and-Y, follow-by-distance, undo text
 stay [Sheaf choice]. Unmeasured and left: items 6 and 8 (other plot kinds, Hide Masked Points, filters, clipped
 points, Skip Points, Show Elements Data, waterfall), the exact hit radius, log axes, column plots.

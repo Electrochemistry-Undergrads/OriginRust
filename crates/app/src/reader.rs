@@ -186,10 +186,12 @@ pub fn nearest_of(
     pick: Pick,
     pointer: Pos2,
 ) -> Option<Point> {
-    nearest_where(project, graph, geometry, to_screen, pick, pointer, |_| true)
+    nearest_where(project, graph, geometry, to_screen, pick, pointer, false, |_| true)
 }
 
-/// The nearest point within reach among those that `pick` allows and `keep` accepts.
+/// The nearest point within reach among those that `pick` allows and `keep` accepts. With
+/// `measured_reach` the reach is the one measured for Origin's Mask click ([`edit_reach`]); the
+/// other callers keep [`SNAP`] (Move's grab and Remove Bad's click were not measured).
 pub fn nearest_where(
     project: &Project,
     graph: WindowId,
@@ -197,12 +199,13 @@ pub fn nearest_where(
     to_screen: &dyn Fn((f64, f64)) -> Pos2,
     pick: Pick,
     pointer: Pos2,
+    measured_reach: bool,
     keep: impl Fn(Point) -> bool,
 ) -> Option<Point> {
     let mut best: Option<(f32, Point)> = None;
     each_point(project, graph, geometry, to_screen, pick, |at, p| {
         let d = at.distance(pointer);
-        let reach = if pick == Pick::Edit { edit_reach(project, graph, p) } else { SNAP };
+        let reach = if measured_reach { edit_reach(project, graph, p) } else { SNAP };
         if d <= reach && best.is_none_or(|(b, _)| d < b) && keep(p) {
             best = Some((d, p));
         }

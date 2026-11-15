@@ -192,7 +192,7 @@ pub fn show(
     let unmask = state.unmask;
     let near = |at: Pos2| match tool {
         // Mask masks an unmasked point (a masked one stays); Unmask unmasks a masked one.
-        DataTool::Mask => reader::nearest_where(project, graph, geometry, to_screen, Pick::Edit, at, |p| {
+        DataTool::Mask => reader::nearest_where(project, graph, geometry, to_screen, Pick::Edit, at, true, |p| {
             allowed(p) && is_masked(project, graph, p) == unmask
         }),
         _ => reader::nearest_of(project, graph, geometry, to_screen, Pick::Edit, at),

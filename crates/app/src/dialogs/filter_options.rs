@@ -33,6 +33,12 @@ const RESPONSES: [(&str, FilterResponse); 4] = [
     ("Band Stop", FilterResponse::BandStop),
 ];
 
+/// The Nyquist frequency in the unit of the dialog, the base of the start values of the frequencies: from the
+/// Fs given, else the one Auto gives for the input, else 1000 Hz.
+fn nyquist_start(unit: FreqUnit, fs: Option<f64>, auto_fs: Option<f64>) -> f64 {
+    if unit == FreqUnit::Hz { fs.or(auto_fs).unwrap_or(1000.0) / 2.0 } else { 1.0 }
+}
+
 /// A frequency that is Sheaf's default until "Auto" is unticked.
 fn auto_value(ui: &mut egui::Ui, label: &str, value: &mut Option<f64>, start: f64) {
     ui.horizontal(|ui| {
@@ -76,10 +82,14 @@ fn order_row(ui: &mut egui::Ui, order: &mut Option<usize>, minimum_allowed: bool
 
 /// Frequency Specification: Unit, Sample Frequency and the pass, stop and cutoff frequencies.
 /// `use_edges`: pass and stop frequencies (minimum order, least squares) instead of cutoffs.
+/// `auto_fs` is the sample frequency Auto gives (1 / the X step of the input), so that the start values of the
+/// frequencies stay below the Nyquist frequency of the data; `cutoff_note` says what the cutoff is.
 #[allow(clippy::too_many_arguments)]
 fn frequency_section(
     ui: &mut egui::Ui,
     response: FilterResponse,
+    auto_fs: Option<f64>,
+    cutoff_note: Option<&str>,
     unit: &mut FreqUnit,
     fs: &mut Option<f64>,
     cutoffs: [&mut Option<f64>; 2],
@@ -109,10 +119,10 @@ fn frequency_section(
         }
     }
     if *unit == FreqUnit::Hz {
-        auto_value(ui, "Sample Frequency (Fs)", fs, 1000.0);
+        auto_value(ui, "Sample Frequency (Fs)", fs, auto_fs.unwrap_or(1000.0));
     }
     let band = response.is_band();
-    let start = if *unit == FreqUnit::Hz { fs.unwrap_or(1000.0) / 2.0 } else { 1.0 };
+    let start = nyquist_start(*unit, *fs, auto_fs);
     if use_edges {
         auto_value(ui, if band { "Pass Frequency 1" } else { "Pass Frequency" }, p1, start * 0.4);
         if band {
@@ -129,10 +139,24 @@ fn frequency_section(
         }
     }
     ui.weak("Auto: the sample frequency is 1 / the X step; cutoffs at a quarter (and three quarters) of the Nyquist frequency.");
+    if let Some(note) = cutoff_note.filter(|_| !use_edges) {
+        ui.weak(note);
+    }
+}
+
+/// What the cutoff frequency means for each IIR method (scipy's convention; unmeasured in Origin).
+fn iir_cutoff_note(method: IirMethod) -> &'static str {
+    match method {
+        IirMethod::Butterworth => "Fc is the frequency where the gain is down by 3 dB.",
+        IirMethod::Chebyshev1 | IirMethod::Elliptic => {
+            "Fc is the passband edge: the gain there is down by the passband ripple."
+        }
+        IirMethod::Chebyshev2 => "Fc is the stopband edge: the gain there is down by the stopband attenuation.",
+    }
 }
 
 /// The options of Signal Processing > IIR Filter.
-pub fn iir_options(ui: &mut egui::Ui, spec: &mut IirSpec) {
+pub fn iir_options(ui: &mut egui::Ui, spec: &mut IirSpec, auto_fs: Option<f64>) {
     response_combo(ui, "iir_response", &mut spec.response);
     const METHODS: [(&str, IirMethod); 4] = [
         ("Butterworth", IirMethod::Butterworth),
@@ -152,8 +176,20 @@ pub fn iir_options(ui: &mut egui::Ui, spec: &mut IirSpec) {
     });
     order_row(ui, &mut spec.order, true, sheaf_core::analysis::IIR_MAX_ORDER);
     let minimum = spec.order.is_none();
+    let note = iir_cutoff_note(spec.method);
     let IirSpec { response, unit, sample_frequency, cutoff, cutoff2, pass, pass2, stop, stop2, .. } = spec;
-    frequency_section(ui, *response, unit, sample_frequency, [cutoff, cutoff2], [pass, pass2], [stop, stop2], minimum);
+    frequency_section(
+        ui,
+        *response,
+        auto_fs,
+        Some(note),
+        unit,
+        sample_frequency,
+        [cutoff, cutoff2],
+        [pass, pass2],
+        [stop, stop2],
+        minimum,
+    );
     ui.separator();
     ui.label("Magnitude Specification (dB)");
     let ripple = minimum || matches!(spec.method, IirMethod::Chebyshev1 | IirMethod::Elliptic);
@@ -174,7 +210,7 @@ pub fn iir_options(ui: &mut egui::Ui, spec: &mut IirSpec) {
 }
 
 /// The options of Signal Processing > FIR Filter.
-pub fn fir_options(ui: &mut egui::Ui, spec: &mut FirSpec) {
+pub fn fir_options(ui: &mut egui::Ui, spec: &mut FirSpec, auto_fs: Option<f64>) {
     response_combo(ui, "fir_response", &mut spec.response);
     ui.horizontal(|ui| {
         ui.label("Method");
@@ -215,7 +251,18 @@ pub fn fir_options(ui: &mut egui::Ui, spec: &mut FirSpec) {
     ui.checkbox(&mut spec.scale_passband, "Scale Passband");
     let edges = spec.method == FirMethod::LeastSquares || spec.order.is_none();
     let FirSpec { response, unit, sample_frequency, cutoff, cutoff2, pass, pass2, stop, stop2, .. } = spec;
-    frequency_section(ui, *response, unit, sample_frequency, [cutoff, cutoff2], [pass, pass2], [stop, stop2], edges);
+    frequency_section(
+        ui,
+        *response,
+        auto_fs,
+        None,
+        unit,
+        sample_frequency,
+        [cutoff, cutoff2],
+        [pass, pass2],
+        [stop, stop2],
+        edges,
+    );
     ui.separator();
     ui.label("Magnitude Specification");
     if spec.method == FirMethod::LeastSquares {
@@ -271,4 +318,20 @@ pub fn fir_options(ui: &mut egui::Ui, spec: &mut FirSpec) {
     }
     ui.separator();
     ui.checkbox(&mut spec.forward_backward, "Forward-Backward Filtering");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_start_values_stay_below_the_nyquist_frequency_of_the_input() {
+        // X steps by 0.01 s: Fs 100 Hz, Nyquist 50 Hz (the start was 500 Hz whatever the data)
+        assert_eq!(nyquist_start(FreqUnit::Hz, None, Some(100.0)), 50.0);
+        assert!(nyquist_start(FreqUnit::Hz, None, Some(100.0)) * 0.75 < 50.0);
+        // a given Fs wins over the Auto one; without either the old 1000 Hz stays
+        assert_eq!(nyquist_start(FreqUnit::Hz, Some(200.0), Some(100.0)), 100.0);
+        assert_eq!(nyquist_start(FreqUnit::Hz, None, None), 500.0);
+        assert_eq!(nyquist_start(FreqUnit::Normalized, None, Some(100.0)), 1.0);
+    }
 }

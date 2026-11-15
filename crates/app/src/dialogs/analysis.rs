@@ -1881,7 +1881,7 @@ impl AnalysisDialog {
         );
     }
 
-    fn options(&mut self, ui: &mut egui::Ui) {
+    fn options(&mut self, ui: &mut egui::Ui, filter_fs: Option<f64>) {
         match self.kind {
             AnalysisKind::IntegrateRanges => {
                 let mut remove = None;
@@ -1920,8 +1920,8 @@ impl AnalysisDialog {
             }
             AnalysisKind::Fft => fft_options(ui, &mut self.fft),
             AnalysisKind::FftFilter => fft_filter_options(ui, &mut self.fft_filter),
-            AnalysisKind::IirFilter => super::filter_options::iir_options(ui, &mut self.filters.iir),
-            AnalysisKind::FirFilter => super::filter_options::fir_options(ui, &mut self.filters.fir),
+            AnalysisKind::IirFilter => super::filter_options::iir_options(ui, &mut self.filters.iir, filter_fs),
+            AnalysisKind::FirFilter => super::filter_options::fir_options(ui, &mut self.filters.fir, filter_fs),
             AnalysisKind::Envelope => envelope_options(ui, &mut self.envelope),
             AnalysisKind::Coherence => {
                 self.reference_options(ui);
@@ -3265,6 +3265,22 @@ impl AnalysisDialog {
         }
     }
 
+    /// The sample frequency Auto gives the IIR and FIR filters for the first input: 1 / the mean X step (the
+    /// row number is the X without an X column), as the tools take it when they run.
+    fn auto_sample_frequency(&self, project: &Project) -> Option<f64> {
+        if !matches!(self.kind, AnalysisKind::IirFilter | AnalysisKind::FirFilter) {
+            return None;
+        }
+        let (_, sheet, first) = self.columns.first().and_then(|c| project.locate(*c))?;
+        let Some(x) = sheet.column_index(first.id).and_then(|i| sheet.x_for(i)).and_then(|x| x.numeric()) else {
+            return Some(1.0);
+        };
+        let a = x.iter().position(|v| v.is_finite())?;
+        let b = x.iter().rposition(|v| v.is_finite())?;
+        let step = (x[b] - x[a]) / (b.checked_sub(a).filter(|n| *n > 0)? as f64);
+        (step.is_finite() && step > 0.0).then(|| 1.0 / step).or(Some(1.0))
+    }
+
     /// The range of the input in Origin's text form: `[Book1]Sheet1!(A"t",B"up")`.
     fn range_text(&self, project: &Project) -> String {
         let Some((book, sheet, first)) = self.columns.first().and_then(|c| project.locate(*c)) else {
@@ -3418,6 +3434,7 @@ impl AnalysisDialog {
         let width = if with_pane { 800.0 } else { 520.0 };
         let pos = (avail.center() - egui::vec2(width, 520.0) / 2.0).max(avail.min);
         let title = self.window_title();
+        let filter_fs = self.auto_sample_frequency(doc.project());
         egui::Window::new(title)
             .id(egui::Id::new("analysis"))
             .open(&mut open)
@@ -3463,7 +3480,7 @@ impl AnalysisDialog {
                                     tree_node(ui, "analysis_input", "Input", |ui| self.input_node(ui, doc.project()));
                                 }
                                 let title = self.kind.title();
-                                tree_node(ui, "analysis_options", title, |ui| self.options(ui));
+                                tree_node(ui, "analysis_options", title, |ui| self.options(ui, filter_fs));
                                 tree_node(ui, "analysis_output", "Output", |ui| self.output_node(ui));
                             });
                     });
@@ -3745,5 +3762,24 @@ impl FilterDialog {
             }
         }
         if open && !cancel { FilterOutcome::Open } else { FilterOutcome::Closed }
+    }
+}
+
+#[cfg(test)]
+mod filter_fs_tests {
+    use super::*;
+    use sheaf_core::{ColumnData, Designation};
+
+    #[test]
+    fn auto_sample_frequency_is_one_over_the_x_step() {
+        let mut p = Project::new();
+        let book = p.add_workbook("Book1");
+        let x: Vec<f64> = (0..50).map(|i| f64::from(i) * 0.01).collect();
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 50])).unwrap();
+        let d = AnalysisDialog::new(&p, AnalysisKind::IirFilter, vec![y]).unwrap();
+        assert!((d.auto_sample_frequency(&p).unwrap() - 100.0).abs() < 1e-9);
+        let other = AnalysisDialog::new(&p, AnalysisKind::Smooth, vec![y]).unwrap();
+        assert_eq!(other.auto_sample_frequency(&p), None);
     }
 }

@@ -279,6 +279,9 @@ pub struct FitOutcome {
     pub derived: Vec<(String, f64)>,
     /// One sentence for a status line.
     pub message: String,
+    /// A surface fit: `curve_x` and `curve_y` are then the X and Z columns of the grid sheet
+    /// `curve_sheet` (its Y column is between them), and there is no graph of the fit.
+    pub surface: bool,
 }
 
 /// What [`Project::fit_multi`] did.
@@ -811,6 +814,7 @@ impl Project {
             graphs,
             derived: fitted.derived,
             message,
+            surface: false,
         })
     }
 

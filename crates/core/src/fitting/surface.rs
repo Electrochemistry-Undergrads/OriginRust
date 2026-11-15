@@ -367,6 +367,7 @@ impl Project {
             graphs: Vec::new(),
             derived,
             message,
+            surface: true,
         })
     }
 }

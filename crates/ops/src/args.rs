@@ -177,6 +177,15 @@ pub struct FitArgs {
     /// negative limits as --x-range=-0.5:0.1).
     #[arg(long, value_name = "FROM:TO", allow_hyphen_values = true)]
     pub x_range: Option<String>,
+    /// Fit a surface z = f(x, y) to this Z column (short or long name); --model is then a surface
+    /// function such as Gauss2D or Plane (see --list), or --formula in x and y. The Y column is
+    /// the one given with --y and the X column the one given with --x; left out, they are the X
+    /// column to the left of the Z column and the nearest Y column before it.
+    #[arg(long, value_name = "COLUMN", conflicts_with_all = ["global", "regress", "compare", "rank", "xerr", "plot"])]
+    pub z: Option<String>,
+    /// The X column of a surface fit (--z).
+    #[arg(long, value_name = "COLUMN", requires = "z")]
+    pub x: Option<String>,
     /// Draw the data with the fitted curve and write the figure (.png, .tif, .jpg, .bmp, .gif, .tga,
     /// .pcx, .psd, .svg, .pdf, .eps or .emf). With
     /// several columns, only the first one is drawn.

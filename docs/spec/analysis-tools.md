@@ -495,10 +495,11 @@ Steps, in order:
    not sorted" and changes nothing. The area of a positive peak is positive whichever way X runs
    (Origin's `integ1` gives a negative area for falling X, section 1; the table here follows the
    fit columns instead, so the two sets of columns have one sign).
-5. Multi-peak fit (own model, Origin's functions): a sum of Gauss or Lorentz peaks plus a constant or
-   sloped baseline, parameters `y0`, `m`, then `xc`, `w`, `A` per peak, in Origin's parameterisation
-   (Gauss `A/(w sqrt(pi/2)) exp(-2((x-xc)/w)^2)`, FWHM `w sqrt(ln 4)`; Lorentz
-   `2A/pi * w/(4(x-xc)^2+w^2)`, FWHM `w`). Starting values come from the found peaks (centre, FWHM,
+5. Multi-peak fit (own model, Origin's functions): a sum of Gauss, Lorentz or Voigt peaks plus a
+   constant or sloped baseline, parameters `y0`, `m`, then `xc`, `w`, `A` per peak (Voigt: `xc`, `A`,
+   `wG`, `wL`, Origin's order), in Origin's parameterisation (Gauss `A/(w sqrt(pi/2))
+   exp(-2((x-xc)/w)^2)`, FWHM `w sqrt(ln 4)`; Lorentz `2A/pi * w/(4(x-xc)^2+w^2)`, FWHM `w`; Voigt
+   section 11.2). Starting values come from the found peaks (centre, FWHM,
    height above the baseline), with widths bounded to stay positive. The fit uses the nonlinear engine
    of `crates/fit`. The report has centre, height, FWHM, area and area percent per peak, plus a line of
    R squared, reduced chi-square and iterations. The fit uses the data, not the corrected curve, so
@@ -528,7 +529,8 @@ other than the request's range.
 
 Command line: `sheaf analyze peaks FILE [--method local-max|window|first-derivative|second-derivative]
 [--smooth N] [--min-width W] [--baseline none|end-points|minima|anchors] [--baseline-points N]
-[--anchors X1:Y1,X2:Y2] [--limits baseline|half-height] [--integrate] [--fit gauss|lorentz]
+[--anchors X1:Y1,X2:Y2] [--limits baseline|half-height] [--integrate] [--fit gauss|lorentz|voigt]
+[--fit-shapes F1,F2,...]
 [--fit-baseline constant|linear]`, together with the existing `--points`, `--min-height`, `--count`,
 `--direction`. Without any chain option the plain peak finder of section 7 runs. Window: Analysis >
 Analyze Peaks... (command line `--show analysis:peak-chain`).
@@ -593,6 +595,43 @@ measured from, never subtracted from the data), Find Peaks, Integrate Peaks and 
 Center, Row, Height and FWHM match Origin to 1e-9 on the data above, Area % follows Origin's definition,
 and the limit between two peaks (the valley, 6.8) matches; the outer limits do not (Sheaf integrates to
 where the corrected curve meets the baseline or the end of the data: 0 and 20 here, Origin 0.3 and 14.15).
+
+### 11.2 Voigt peaks (measured 2026-11-15)
+
+The Fit Peaks page (`sheaf analyze peaks --fit voigt`) offers Origin's `Voigt` besides Gauss and
+Lorentz: a Gauss of FWHM `wG` convolved with a Lorentz of FWHM `wL`, area `A`. Sheaf evaluates it
+exactly through the Faddeeva function (`sheaf_fit::library::voigt`; scipy's `wofz` gives the same
+digits). Origin's function record (`VOIGT5.FDF`, `docs/spec/data/fit-functions.json`) gives the
+parameter order `y0 xc A wG wL` and the derived FWHM `0.5346 wL + sqrt(0.2166 wL^2 + wG^2)`, which
+Sheaf reports as the peak's FWHM; the height is the value at the centre. A peak starts at the found
+centre with `wG = wL` (as Origin's initialisation, which gave `wG = wL = 1.421` on the probe below)
+chosen so that the start has the found FWHM and height; `wL` is bounded below by 0 (a Gauss) and `wG`
+by 1e-4 of its start.
+
+Measured in Origin 2016 (`re-workspace/scratch/t04v/v1` and `v2`, `tools/origin-ref/run-labtalk-lines.ps1`):
+
+- `nlf_Voigt` is a numerical approximation: at six points (0.2 + Voigt(xc 5, A 4, wG 1.2, wL 0.8) at x
+  = 0, 2, 4.5, 5; a nearly Lorentzian and a nearly Gaussian peak) it differs from the exact value by at
+  most 1.7e-6 of the peak height (2.042942100 against 2.042945314 at the centre).
+- `nlbegin func:=Voigt; nlfit` on 201 points made by `nlf_Voigt` plus a fixed ripple (x = 0 to 10,
+  kept as `crates/fit/tests/data/origin_voigt_probe.tsv`) gave y0 0.199772863732606, xc
+  4.99999967995525, A 4.00225088185448, wG 1.19892425718239, wL 0.801615491802901, reduced
+  chi-square 7.8673486183435684e-05 in 8 iterations. Sheaf's multi-peak fit of the same points with
+  one Voigt peak agrees to 6e-6 relative (xc to 2.3e-9) and the reduced chi-square to 2e-7, the size of
+  the difference between Origin's approximate and Sheaf's exact function. The standard errors of xc
+  and A are 3.4e-4 and 5.3e-3 relative apart (Origin's derivatives of its approximate function would
+  explain it; not measured further). Test: `crates/fit/tests/multipeak_voigt.rs`.
+
+**A function per peak** (Sheaf's own layout; Origin's Fit Control window, where the Pro version sets a
+function per peak, was not opened): the Fit Peaks page's "Function per peak" list (Add Peak Function,
+one entry per peak in the order found, "Same as above" or Gauss, Lorentz, Voigt) and
+`sheaf analyze peaks --fit F --fit-shapes F1,F2,...` give peak *k* its own function; peaks beyond the
+list take the Function (`--fit`). Each peak keeps its own parameters (`xc1 w1 A1 xc2 A2 wG2 wL2` for a
+Gauss and a Voigt), the note names them in order ("Gauss+Voigt fit of 2 peaks") and the fitted
+column's comment says the same. `--fit-shapes` needs `--fit`.
+
+Not done: constraints between peaks, and Origin's own Peak Analyzer Fit Peaks (Pro) page, which was
+not opened (11.1).
 
 ## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1)
 

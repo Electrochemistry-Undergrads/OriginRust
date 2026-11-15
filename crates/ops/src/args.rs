@@ -1128,6 +1128,8 @@ pub enum PeakLimitKind {
 pub enum PeakFitKind {
     Gauss,
     Lorentz,
+    /// Origin's Voigt: a Gauss of FWHM wG convolved with a Lorentz of FWHM wL.
+    Voigt,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -1672,6 +1674,10 @@ pub enum AnalyzeTool {
         /// Baseline of the multi-peak fit.
         #[arg(long, value_enum, default_value_t = PeakFitBaselineKind::Linear)]
         fit_baseline: PeakFitBaselineKind,
+        /// A function per peak, in the order found, comma-separated (for example gauss,voigt);
+        /// peaks beyond the list take the --fit function.
+        #[arg(long, value_enum, value_delimiter = ',', requires = "fit")]
+        fit_shapes: Vec<PeakFitKind>,
     },
     /// Descriptive statistics of each column. By default N, missing, mean, SD, SEM, sum, minimum, quartiles
     /// and maximum; --all adds IQR, variance, skewness, kurtosis, CV and the confidence limits of the mean.
@@ -1710,6 +1716,64 @@ pub enum AnalyzeTool {
         /// Significance level.
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
+    },
+    /// Test of variance: each column against a hypothesized variance (chi-square, --variance) or two columns
+    /// as a ratio of variances (F test, --ratio, first over second). Two --y columns, or --ratio, make the
+    /// two-sample test. --levels (percent, comma-separated) adds the confidence intervals.
+    Vartest {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// One-sample test: the hypothesized variance (default 1).
+        #[arg(long, conflicts_with = "ratio")]
+        variance: Option<f64>,
+        /// Two-sample test: the hypothesized ratio of the variances (default 1).
+        #[arg(long)]
+        ratio: Option<f64>,
+        #[arg(long, value_enum, default_value_t = TailArg::Two)]
+        tail: TailArg,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+        /// Confidence levels in percent, for example 90,95,99; none means no intervals.
+        #[arg(long, value_delimiter = ',')]
+        levels: Vec<f64>,
+    },
+    /// Test of a proportion from counts (Origin's Summarized input): --successes and --size once for the
+    /// one-sample test against --proportion, twice (or comma-separated) for the two-sample test of the
+    /// difference against --difference. The data file only names the workbook that receives the result sheet.
+    Proptest {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Number of successes of each sample.
+        #[arg(long, value_delimiter = ',', required = true)]
+        successes: Vec<u64>,
+        /// Sample size of each sample.
+        #[arg(long, value_delimiter = ',', required = true)]
+        size: Vec<u64>,
+        /// One-sample test: the test proportion.
+        #[arg(long, default_value_t = 0.5)]
+        proportion: f64,
+        /// Two-sample test: the hypothesized difference of the proportions (first minus second).
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        difference: f64,
+        #[arg(long, value_enum, default_value_t = TailArg::Two)]
+        tail: TailArg,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+        /// Also the exact test (binomial; Fisher's for two samples).
+        #[arg(long)]
+        exact: bool,
+        /// Only the exact test, not the normal approximation.
+        #[arg(long, requires = "exact")]
+        exact_only: bool,
+        /// Two-sample test: take the standard error of z from the pooled proportion (Origin's "Use pooled p for
+        /// test", off by default).
+        #[arg(long)]
+        pooled: bool,
+        /// Confidence levels in percent, for example 90,95,99; none means no intervals.
+        #[arg(long, value_delimiter = ',')]
+        levels: Vec<f64>,
     },
     /// One-way ANOVA: every chosen column is a group. The result (group statistics, ANOVA table,
     /// means comparison of all pairs) goes to a new sheet.
@@ -2078,6 +2142,102 @@ pub enum AnalyzeTool {
         #[arg(long, value_enum, default_value_t = FamilyArg::Normal)]
         family: FamilyArg,
         /// Do not make a graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// Principal component analysis of the --y columns (the variables): eigenvalues, percent of variance,
+    /// loadings and scores; makes a scree plot as a graph.
+    Pca {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Analyze the covariance matrix instead of the correlation matrix.
+        #[arg(long)]
+        covariance: bool,
+        /// Leave missing values out pairwise instead of dropping the whole row.
+        #[arg(long)]
+        pairwise: bool,
+        /// Number of components whose loadings and scores are written.
+        #[arg(long, default_value_t = 2)]
+        components: usize,
+        /// Divide each column of scores by the square root of its eigenvalue.
+        #[arg(long)]
+        standardize_scores: bool,
+        /// Do not write the scores.
+        #[arg(long)]
+        no_scores: bool,
+        /// Do not make the scree plot.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// ROC curve: the --y columns are the test variables followed, last, by the state column. Area under the
+    /// curve with standard error (DeLong) and confidence interval, the curve and the best cut-off; makes a graph.
+    Roc {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The value of the state column that is the positive state (a number or a text).
+        #[arg(long, default_value = "1")]
+        positive: String,
+        /// Lower test values point to the positive state (default: higher values do).
+        #[arg(long)]
+        lower_is_positive: bool,
+        /// Confidence level of the interval of the area, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// K-means cluster analysis of the --y columns (the variables): cluster centres, sizes and distances, analysis
+    /// of variance by variable and the cluster of every row; makes a scatter graph of the first two variables.
+    Kmeans {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Number of clusters.
+        #[arg(long, default_value_t = 3)]
+        clusters: usize,
+        /// Upper limit of the passes of single-case moves.
+        #[arg(long, default_value_t = 100)]
+        max_passes: usize,
+        /// Leave out the analysis of variance.
+        #[arg(long)]
+        no_anova: bool,
+        /// Do not write the cluster of every row.
+        #[arg(long)]
+        no_membership: bool,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// Kaplan-Meier estimator: the --y columns are time, censor and, optionally, group. Survival table, quartile
+    /// and mean survival times, tests of groups; makes a graph of the curves.
+    KaplanMeier {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The value of the censor column that marks a censored case (a number or a text).
+        #[arg(long, default_value = "1")]
+        censor: String,
+        /// Confidence level of the quartile and mean limits, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
+        /// Leave out the quartile estimates.
+        #[arg(long)]
+        no_quartiles: bool,
+        /// Leave out the mean estimate.
+        #[arg(long)]
+        no_mean: bool,
+        /// Log-rank test of the groups.
+        #[arg(long)]
+        log_rank: bool,
+        /// Breslow test of the groups.
+        #[arg(long)]
+        breslow: bool,
+        /// Tarone-Ware test of the groups.
+        #[arg(long)]
+        tarone_ware: bool,
+        /// Add the confidence limits of the curves to the graph.
+        #[arg(long)]
+        band: bool,
+        /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,
     },

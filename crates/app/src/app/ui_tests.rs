@@ -1977,6 +1977,57 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 2));
 }
 
+/// The Fit Peaks goal of the Peak Analyzer offers Origin's Voigt and a function per peak; OK fits
+/// the found peaks with them.
+#[test]
+fn peak_analyzer_fits_the_found_peaks_with_voigt() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-peakvoigt-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("peaks.csv");
+    let mut text = String::from(
+        "t,i
+",
+    );
+    for k in 0..400 {
+        let x = k as f64 * 0.05;
+        let g = |c: f64, s: f64, a: f64| a * (-(x - c) * (x - c) / (2.0 * s * s)).exp();
+        text.push_str(&format!(
+            "{x},{}
+",
+            0.1 + 0.01 * x + g(6.0, 0.4, 1.0) + g(13.0, 0.5, 0.6)
+        ));
+    }
+    std::fs::write(&path, text).unwrap();
+    let mut h = start(vec![path]);
+    show_window(&mut h, "Book1 - peaks");
+    menu_path(&mut h, &["Analysis", "Peaks and Baseline", "Peak Analyzer..."]);
+    h.get_by_label("Fit Peaks").scroll_to_me();
+    settle(&mut h);
+    click(&mut h, "Fit Peaks");
+    assert!(label_containing(&h, "Goal - Fit Peaks"));
+    for _ in 0..4 {
+        click(&mut h, "Next");
+    }
+    assert!(has_label(&h, "Voigt"), "the Fit Peaks page offers Voigt");
+    click(&mut h, "Voigt");
+    // The first peak gets its own function, Gauss; the second keeps Voigt.
+    click(&mut h, "Add Peak Function");
+    h.query_all_by_role(egui::accesskit::Role::ComboBox).last().expect("the per-peak function list").click();
+    settle(&mut h);
+    h.get_all_by_label("Gauss").last().unwrap().click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = &b.sheets[1];
+    let center = sheet.column_by_name("Fit center").map(|c| c.numeric().unwrap().to_vec());
+    let names: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
+    let center = center.unwrap_or_else(|| panic!("no Fit center column in {names:?}"));
+    assert!((center[0] - 6.0).abs() < 1e-4 && (center[1] - 13.0).abs() < 1e-4, "{center:?}");
+    let logged = h.state().logs.results.iter().flat_map(|r| &r.lines).any(|l| l.contains("Gauss+Voigt fit of 2 peaks"));
+    assert!(logged, "the fit note in the Results Log names each peak's function");
+}
+
 /// A folder for the project files of one save test.
 fn save_dir(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-save-{tag}-{}", std::process::id()));
@@ -4063,6 +4114,34 @@ fn the_statistics_menu_runs_a_t_test_and_undoes_in_one_step() {
     assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
 }
 
+/// The four variance and proportion tests of Statistics > Hypothesis Testing open from the menu, run on OK and
+/// add a result sheet; the proportion windows ask for counts and have no Input node.
+#[test]
+fn the_hypothesis_testing_menu_runs_the_variance_and_proportion_tests() {
+    let cases = [
+        ("One-Sample Test for Variance...", "VarTest", "Chi-Square", true),
+        ("Two-Sample Test for Variance...", "VarTest", "F", true),
+        ("One-Sample Proportion Test...", "PropTest", "Z", false),
+        ("Two-Sample Proportion Test...", "PropTest", "Z", false),
+    ];
+    for (item, sheet, column, has_input) in cases {
+        let mut h = start(vec![data_file("vartest-menu")]);
+        show_window(&mut h, "Book1 - sample");
+        menu_path(&mut h, &["Statistics", "Hypothesis Testing", item]);
+        assert!(h.state().analysis.is_some(), "{item} opens its window");
+        assert_eq!(has_label(&h, "Input"), has_input, "{item}");
+        assert!(has_label(&h, "Alternate Hypothesis"), "{item}");
+        click(&mut h, "OK");
+        assert!(h.state().analysis.is_none(), "OK closes the window of {item}");
+        let b = project(&h).workbooks().next().unwrap();
+        assert_eq!(b.sheets.len(), 2, "{item}");
+        let ws = &b.sheets[1];
+        assert!(ws.name.starts_with(sheet), "{}", ws.name);
+        let col = ws.columns.iter().find(|c| c.long_name == column).unwrap_or_else(|| panic!("{item}: no {column}"));
+        assert!(col.numeric().unwrap().iter().all(|v| v.is_finite()), "{item}");
+    }
+}
+
 /// Statistics > Histogram... adds the counts sheet and a graph with a column plot.
 #[test]
 fn the_statistics_menu_makes_a_histogram_graph() {
@@ -4750,6 +4829,63 @@ fn the_descriptive_menu_fits_distributions() {
     assert_eq!(aic.len(), 10, "five families for each of the two columns (t is not chosen)");
     assert!(aic.iter().all(|v| v.is_finite()), "{aic:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Distribution fit"));
+}
+
+/// Statistics > Multivariate Analysis > Principal Component Analysis...: eigenvalues and loadings in a result
+/// sheet, a scree plot as a graph; one undo removes both.
+#[test]
+fn the_multivariate_menu_runs_a_principal_component_analysis() {
+    let mut h = start(vec![data_file("pca")]);
+    show_window(&mut h, "Book1 - sample");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Multivariate Analysis", "Principal Component Analysis..."]);
+    assert!(h.state().analysis.is_some(), "the PCA window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, eigen) = result_column(&h, "Eigenvalue");
+    assert!(sheet.starts_with("PCA"), "{sheet}");
+    // Two columns that are perfectly anti-correlated: eigenvalues 2 and 0, loadings of equal size.
+    assert_eq!(eigen.len(), 2);
+    assert!((eigen[0] - 2.0).abs() < 1e-9 && eigen[1].abs() < 1e-9, "{eigen:?}");
+    let (_, l1) = result_column(&h, "Loading PC1");
+    assert!((l1[0].abs() - 0.5f64.sqrt()).abs() < 1e-9 && (l1[0].abs() - l1[1].abs()).abs() < 1e-9, "{l1:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Principal component analysis"));
+}
+
+/// Statistics > ROC Curve...: the test variable and the state column (last) give the area, the curve and a graph;
+/// one undo removes both.
+#[test]
+fn the_statistics_menu_draws_a_roc_curve() {
+    // Positives 3, 4, 5 against negatives 1, 2, 4: the area is 5/6.
+    let data = csv_file(
+        "roc",
+        "marker",
+        "id,score,state
+1,3,1
+2,4,1
+3,5,1
+4,1,0
+5,2,0
+6,4,0
+",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - marker");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "ROC Curve..."]);
+    assert!(h.state().analysis.is_some(), "the ROC window is open");
+    assert!(has_label(&h, "Positive state value"), "the positive state box is missing");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, area) = result_column(&h, "Area");
+    assert!(sheet.starts_with("ROC"), "{sheet}");
+    assert!((area[0] - 5.0 / 6.0).abs() < 1e-9, "{area:?}");
+    let (_, sens) = result_column(&h, "Sensitivity");
+    assert_eq!(sens.first().copied(), Some(0.0));
+    assert!(sens.contains(&1.0), "the curve ends at (1, 1)");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("ROC curve"));
 }
 
 /// Statistics > Descriptive Statistics > Probability Plot... and Q-Q Plot...: a result sheet and a graph with
@@ -8101,4 +8237,72 @@ fn the_size_tab_edits_the_layer_area_and_a_linked_layer_shows_fractions_of_its_p
 
 fn has_label_containing(h: &Harness<'static, SheafApp>, text: &str) -> bool {
     h.query_all_by_label_contains(text).next().is_some()
+}
+
+/// Statistics > Survival Analysis > Kaplan-Meier Estimator...: time, censor and group columns give the survival
+/// table and a graph with the curves; one undo removes both.
+#[test]
+fn the_survival_menu_runs_the_kaplan_meier_estimator() {
+    // Two, 3+, 4, 4, 6+ in group 1: S(4) = 4/15 (hand worked in `calc::survival`).
+    let data = csv_file(
+        "km",
+        "survival",
+        "id,time,censor,group
+1,2,0,1
+2,3,1,1
+3,4,0,1
+4,4,0,1
+5,6,1,1
+6,1,0,2
+7,5,0,2
+8,7,1,2
+9,8,0,2
+10,9,0,2
+",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - survival");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Survival Analysis", "Kaplan-Meier Estimator..."]);
+    assert!(h.state().analysis.is_some(), "the Kaplan-Meier window is open");
+    assert!(has_label(&h, "Censoring value"), "the censoring value box is missing");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, events) = result_column(&h, "Events");
+    assert!(sheet.starts_with("KaplanMeier"), "{sheet}");
+    assert_eq!(events.first().copied(), Some(3.0), "{events:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Kaplan-Meier estimator"));
+}
+
+/// Statistics > Multivariate Analysis > K-Means Cluster Analysis...: the cluster table and the cluster of every row
+/// in a result sheet and a scatter graph; one undo removes both.
+#[test]
+fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
+    // Two clear groups of three rows.
+    let data = csv_file(
+        "kmeans",
+        "clusters",
+        "id,a,b
+1,1,1
+2,1.5,2
+3,2,1.5
+4,9,9
+5,9.5,8.5
+6,10,9.5
+",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - clusters");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Multivariate Analysis", "K-Means Cluster Analysis..."]);
+    assert!(h.state().analysis.is_some(), "the k-means window is open");
+    assert!(has_label(&h, "Number of clusters"), "the cluster count box is missing");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "the window closed after OK");
+    let (sheet, n) = result_column(&h, "Cluster N");
+    assert!(sheet.starts_with("KMeans"), "{sheet}");
+    assert_eq!(n.iter().sum::<f64>() as usize, 6, "{n:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("K-means cluster analysis"));
 }

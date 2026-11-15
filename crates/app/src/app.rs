@@ -2043,7 +2043,14 @@ impl SheafApp {
     /// plot of the active sheet would show; columns that hold text are left out.
     fn open_analysis(&mut self, book: WindowId, columns: Vec<ColumnId>, kind: AnalysisKind) {
         let project = self.doc.project();
-        let columns: Vec<ColumnId> = if columns.is_empty() {
+        // The proportion tests read no data: one column of the sheet only says where the results go.
+        let host_only = matches!(kind, AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo);
+        let columns: Vec<ColumnId> = if host_only {
+            let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
+            let all = project.workbook(book).and_then(|b| b.sheets.get(sheet)).map(|s| &s.columns);
+            let first = columns.first().copied().or_else(|| all.and_then(|c| c.first()).map(|c| c.id));
+            first.into_iter().collect()
+        } else if columns.is_empty() {
             let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
             if kind == AnalysisKind::Crosstab {
                 // Categorical columns are not Y columns: start with the first two of the sheet.

@@ -143,6 +143,12 @@ The owner sometimes starts a second Claude session on the same repository. The s
 message which crates and files each one owns. Only the lead merges to `main` and edits HANDOFF.md,
 ROADMAP.md and LESSONS.md. The other session works on named branches and reports them to the lead.
 
+Sessions on different machines cannot see each other's `re-workspace/scratch/peer-notes.md` (it is
+local). On 2026-11-14 a macOS and a Windows session both built T25 (the MCP server) in parallel, each
+having claimed it only where the other could not read it; one design had to be ported into the other.
+Before starting a brief: `git fetch`, read HANDOFF.md on `origin/main`, and claim the brief there in a
+small pushed commit (branch name and session), not only in the peer notes.
+
 ## One build folder shared by several worktrees can run tests with a dead source path
 
 Cargo's fingerprints use paths relative to the workspace, so a test binary built in worktree A is

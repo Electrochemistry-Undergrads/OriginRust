@@ -13,6 +13,7 @@ mod autosave;
 mod cell_notes;
 mod cond_format;
 mod excel;
+mod export_themes;
 mod fill_inclusive;
 mod fill_sidelines;
 mod frozen_panes;

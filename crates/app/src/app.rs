@@ -84,8 +84,8 @@ pub struct Startup {
     /// The file of the recent projects and imports (`recent.json`); `None` keeps no lists and writes
     /// nothing (the tests pass a temporary file).
     pub recent_path: Option<PathBuf>,
-    /// The folder of the saved import settings (`import-themes`: the Dialog Theme row of the import
-    /// windows); `None` hides the row and writes nothing (the tests pass a temporary folder).
+    /// The folder of saved dialog settings (`import-themes`: importer files and separate graph-export
+    /// files); `None` hides the theme rows and writes nothing (tests pass a temporary folder).
     pub themes_dir: Option<PathBuf>,
     /// Turn the AI link on at start (`--mcp`). It is never saved: a run starts with it off.
     pub mcp: bool,
@@ -1971,7 +1971,8 @@ impl SheafApp {
             Action::StartIntegrate { graph } => self.start_integrate(graph),
             Action::Gadget { graph, op } => self.gadget(graph, op),
             Action::ExportGraph(graph) => {
-                self.export = Some(ExportDialog::new(graph, self.folder()));
+                self.export =
+                    Some(ExportDialog::new(graph, self.folder()).with_themes(self.startup.themes_dir.clone()));
             }
             Action::ExportData(book) => self.export_data(book),
             Action::ExportExcel(book) => {
@@ -4113,7 +4114,7 @@ impl SheafApp {
                 }
                 "export" => {
                     if let Some(id) = first_graph {
-                        self.export = Some(ExportDialog::new(id, None));
+                        self.export = Some(ExportDialog::new(id, None).with_themes(self.startup.themes_dir.clone()));
                     }
                 }
                 "import-wizard" => {

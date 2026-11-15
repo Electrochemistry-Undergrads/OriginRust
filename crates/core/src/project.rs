@@ -302,9 +302,13 @@ impl Project {
         book.id = id;
         book.name = self.unique_name("Book");
         for sheet in &mut book.sheets {
+            let mut renamed = std::collections::HashMap::new();
             for col in &mut sheet.columns {
-                col.id = ColumnId(self.fresh_id());
+                let new = ColumnId(self.fresh_id());
+                renamed.insert(col.id, new);
+                col.id = new;
             }
+            sheet.remap_cond_format_columns(&|c| renamed.get(&c).copied());
         }
         self.windows.push(Window::Workbook(book));
         id
@@ -353,9 +357,12 @@ impl Project {
             match window {
                 Window::Workbook(book) => {
                     book.id = w(book.id);
-                    for col in book.sheets.iter_mut().flat_map(|s| s.columns.iter_mut()) {
-                        col.id = c(col.id);
-                        col.analysis = None;
+                    for sheet in &mut book.sheets {
+                        for col in &mut sheet.columns {
+                            col.id = c(col.id);
+                            col.analysis = None;
+                        }
+                        sheet.remap_cond_format_columns(&|id| Some(c(id)));
                     }
                 }
                 Window::Graph(graph) => {
@@ -1428,5 +1435,38 @@ mod tests {
         assert_eq!(here.root.folders.last().unwrap().name, "XRD project");
         let fresh = here.new_column_id();
         assert!(fresh.0 > y.0, "new ids come after the appended ones");
+    }
+
+    fn book_with_rule(p: &mut Project) -> (WindowId, ColumnId) {
+        let b = p.add_workbook("");
+        let c = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        let sheet = &mut p.workbook_mut(b).unwrap().sheets[0];
+        let rule = crate::condformat::CondFormat::new(
+            sheet,
+            crate::condformat::CondRange::whole_columns(vec![c]),
+            crate::condformat::Rule::min_max(),
+        );
+        sheet.cond_formats.push(rule);
+        (b, c)
+    }
+
+    fn rule_columns(p: &Project, b: WindowId) -> Vec<ColumnId> {
+        p.workbook(b).unwrap().sheets[0].cond_formats[0].range.columns.clone()
+    }
+
+    #[test]
+    fn duplicate_window_and_append_remap_the_rules() {
+        let mut p = Project::new();
+        let (b, _) = book_with_rule(&mut p);
+        let copy = p.duplicate_window(b).unwrap();
+        let col = p.workbook(copy).unwrap().sheets[0].columns[0].id;
+        assert_eq!(rule_columns(&p, copy), vec![col]);
+
+        let mut other = Project::new();
+        let (ob, oc) = book_with_rule(&mut other);
+        let (new, _) = p.append(other, "f");
+        let _ = (ob, oc);
+        let col = p.workbook(new[0]).unwrap().sheets[0].columns[0].id;
+        assert_eq!(rule_columns(&p, new[0]), vec![col]);
     }
 }

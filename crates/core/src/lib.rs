@@ -13,6 +13,7 @@ pub mod autorange;
 pub mod clipboard;
 pub mod color;
 pub mod column;
+pub mod condformat;
 pub mod datetime;
 pub mod fitting;
 pub mod format;

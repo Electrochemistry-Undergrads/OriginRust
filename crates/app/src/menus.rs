@@ -117,6 +117,10 @@ pub enum Cmd {
     ReapplyRowFilter,
     /// View > Freeze/Unfreeze Panes.
     FreezePanes,
+    /// Worksheet > Conditional Formatting > Highlight Min Max / Highlight Top Bottom.
+    CondFormat(crate::dialogs::cond_format::CondKind),
+    /// Worksheet > Conditional Formatting > Remove Conditional Format.
+    RemoveCondFormat,
     /// Insert rows or columns at the selection (Edit > Insert and the cell menus).
     InsertCells,
     /// Delete the selected rows or columns (Edit > Delete and the cell menus).
@@ -904,6 +908,26 @@ fn mask_menu() -> Entry {
     sub("Mask", entries)
 }
 
+/// Worksheet > Conditional Formatting (also in the right-click menu of selected cells). The other
+/// items of Origin's submenu are greyed.
+fn cond_format_menu() -> Entry {
+    use crate::dialogs::cond_format::CondKind;
+    let mut entries = vec![
+        item("Highlight Min Max...", Cmd::CondFormat(CondKind::MinMax)),
+        item("Highlight Top Bottom...", Cmd::CondFormat(CondKind::TopBottom)),
+    ];
+    entries.extend(greys(&[
+        "Conditional Highlight...",
+        "Conditional Heatmap...",
+        "Conditional Pareto...",
+        "Conditional Outliers...",
+        "-",
+    ]));
+    entries.push(item("Remove Conditional Format", Cmd::RemoveCondFormat));
+    entries.push(grey("Conditional Format Manager..."));
+    sub("Conditional Formatting", entries)
+}
+
 fn filter_menu() -> Entry {
     sub(
         "Filter",
@@ -949,6 +973,7 @@ fn worksheet_menu() -> Vec<Entry> {
         ),
         item("Sort Columns by Label...", Cmd::SortByLabel),
         sep(),
+        cond_format_menu(),
         item("Clear Worksheet...", Cmd::ClearWorksheet),
         item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
         grey("Pivot Table..."),
@@ -1510,6 +1535,7 @@ pub fn cell_menu() -> Vec<Entry> {
         "Format Cells...",
     ]));
     v.push(mask_menu());
+    v.push(cond_format_menu());
     v.push(grey_sub("Set Data Style", &["Default"]));
     v
 }
@@ -2049,6 +2075,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ToggleRowFilter => Action::ToggleRowFilter(book?),
         Cmd::ReapplyRowFilter => Action::ReapplyRowFilter(book?),
         Cmd::FreezePanes => Action::FreezePanes(book?),
+        Cmd::CondFormat(kind) => {
+            c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            Action::CondFormatDialog { book: book?, kind: *kind }
+        }
+        Cmd::RemoveCondFormat => {
+            c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            Action::RemoveCondFormat(book?)
+        }
         // On a graph the tools take the active data plot, as Origin's Analysis menu does; the
         // results go to its workbook (ADR 0005), and a fit draws its curve on the graph (ADR 0006).
         Cmd::Analyze(kind) => match (c.book, c.curve) {

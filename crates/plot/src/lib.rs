@@ -38,6 +38,7 @@ pub mod scene;
 mod shapes;
 mod sheet;
 mod slope;
+mod layer_scale;
 mod straight_line;
 pub use slope::{NOT_USABLE as SLOPE_NOT_USABLE, check_point as slope_check_point};
 mod stack;
@@ -99,6 +100,8 @@ mod skip_tests;
 mod slope_tests;
 #[cfg(test)]
 mod sort_x_tests;
+#[cfg(test)]
+mod layer_scale_tests;
 #[cfg(test)]
 mod straight_line_tests;
 #[cfg(test)]
@@ -503,6 +506,7 @@ pub fn fit_content_bounds(project: &Project, graph: WindowId) -> Result<Option<(
                     | ObjectKind::Shape(_)
                     | ObjectKind::Slope(_)
                     | ObjectKind::StraightLine(_)
+                    | ObjectKind::Scale(_)
             ) && o.bounds.w.is_finite()
                 && o.bounds.h.is_finite()
             {

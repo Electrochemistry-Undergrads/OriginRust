@@ -250,7 +250,7 @@ pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
         ObjectKind::Label(_) | ObjectKind::Shape(_) | ObjectKind::Slope(_) => 0,
         // A straight line runs across the whole frame: axes and plots under it are tried first.
         ObjectKind::StraightLine(_) => 5,
-        ObjectKind::Legend => 1,
+        ObjectKind::Legend | ObjectKind::Scale(_) => 1,
         ObjectKind::XTitle | ObjectKind::YTitle => {
             if layer.underlay_len > 0 {
                 3

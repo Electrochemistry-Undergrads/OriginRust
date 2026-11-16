@@ -548,6 +548,13 @@ fn label_edges(
     if layer.display.show_data && layer.plots.iter().any(|p| p.visible && p.kind == PlotKind::Sunburst) {
         e.right = e.right.max(f.x + f.w + crate::hexbin::scale_reserve(ya.tick_font.size_pt));
     }
+    // The colour scales and bubble scales of the layer, side by side beside the frame.
+    if layer.display.show_data && layer.coords.polar().is_none() && layer.coords.ternary().is_none() {
+        let room = crate::layer_scale::reserve(layer);
+        if room > 0.0 {
+            e.right = e.right.max(f.x + f.w + room);
+        }
+    }
     let y_size = ya.title_font.size_pt;
     match ya.side {
         AxisSide::Normal => {
@@ -939,6 +946,9 @@ fn layer_scene(
     if waterfall.is_none() && layer.display.show_data {
         crate::slope::draw(out, objects, project, layer, index, pds, geom, m);
         crate::brackets::draw(out, layer, pds, geom, (bracket_step, band_base(layer, &geom.x, geom.frame, m)), m);
+    }
+    if layer.display.show_data {
+        crate::layer_scale::draw(out, objects, project, layer, index, pds, geom, m);
     }
     if waterfall.is_none() {
         crate::straight_line::draw(out, objects, project, layer, index, geom, m);

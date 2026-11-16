@@ -187,7 +187,7 @@ fn linking_layer_2_to_layer_1_keeps_its_place_and_shows_in_the_grid() {
 fn the_tabs_that_are_not_built_are_disabled() {
     let mut h = with_layers("lm-tabs", 2);
     open(&mut h);
-    for tab in ["Add", "Axes", "Display"] {
+    for tab in ["Add", "Axes"] {
         click(&mut h, tab);
         assert!(
             h.query_by_label("Not available in Sheaf yet").is_some()
@@ -195,4 +195,172 @@ fn the_tabs_that_are_not_built_are_disabled() {
             "{tab}"
         );
     }
+}
+
+fn background_choice(h: &mut Harness<'static, SheafApp>, name: &str) {
+    click(h, "Background Color");
+    h.get_all_by_label(name).into_iter().find(|node| !node.accesskit_node().is_disabled()).unwrap().click();
+    settle(h);
+}
+
+#[test]
+fn display_background_apply_is_scoped_and_ok_is_one_undo_step() {
+    let mut h = with_layers("lm-background-scope", 3);
+    let before = graph(&h).layers.clone();
+    let revision = h.state().doc.revision();
+    open(&mut h);
+    click(&mut h, "Layer2");
+    click(&mut h, "Display");
+    background_choice(&mut h, "Red");
+    click(&mut h, "Apply");
+    assert_eq!(graph(&h).layers, before, "Apply only changes the preview");
+    assert_eq!(h.state().doc.revision(), revision);
+    click(&mut h, "OK");
+    let mut expected = before.clone();
+    expected[1].background = Some(sheaf_core::Color::RED);
+    assert_eq!(graph(&h).layers, expected);
+    assert_eq!(h.state().doc.undo_label(), Some("Layer Management"));
+    menu(&mut h, "Edit", "Undo Layer Management");
+    assert_eq!(graph(&h).layers, before);
+    menu(&mut h, "Edit", "Redo Layer Management");
+    assert_eq!(graph(&h).layers, expected);
+}
+
+#[test]
+fn display_background_mixed_layers_wait_for_a_choice_and_none_clears_only_the_selection() {
+    let mut h = with_layers("lm-background-mixed", 3);
+    let id = project(&h).graphs().next().unwrap().id;
+    h.state_mut().doc.apply("Existing backgrounds", |p| {
+        let layers = &mut p.graph_mut(id).unwrap().layers;
+        for (layer, c) in
+            layers.iter_mut().zip([sheaf_core::Color::RED, sheaf_core::Color::BLUE, sheaf_core::Color::WHITE])
+        {
+            layer.background = Some(c);
+        }
+    });
+    settle(&mut h);
+    let before = graph(&h).layers.clone();
+    open(&mut h);
+    click(&mut h, "Layer1");
+    click(&mut h, "Layer2");
+    click(&mut h, "Display");
+    let _ = h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Mixed"));
+    assert!(h.get_by_label("Apply").accesskit_node().is_disabled());
+    click(&mut h, "OK");
+    assert_eq!(graph(&h).layers, before);
+    open(&mut h);
+    click(&mut h, "Layer1");
+    click(&mut h, "Layer2");
+    click(&mut h, "Display");
+    background_choice(&mut h, "None");
+    click(&mut h, "Apply");
+    click(&mut h, "OK");
+    let mut expected = before;
+    expected[0].background = None;
+    expected[1].background = None;
+    assert_eq!(graph(&h).layers, expected);
+}
+
+#[test]
+fn display_background_cancel_escape_and_preview_undo_preserve_the_source() {
+    let mut h = with_layers("lm-background-cancel", 2);
+    let before = graph(&h).layers.clone();
+    let revision = h.state().doc.revision();
+    for end in ["Cancel", "Escape", "Undo"] {
+        open(&mut h);
+        click(&mut h, "Layer1");
+        click(&mut h, "Display");
+        background_choice(&mut h, "Blue");
+        click(&mut h, "Apply");
+        match end {
+            "Escape" => {
+                h.key_press(egui::Key::Escape);
+                settle(&mut h);
+            }
+            "Undo" => {
+                click(&mut h, "Undo");
+                click(&mut h, "OK");
+            }
+            _ => click(&mut h, "Cancel"),
+        }
+        assert!(h.state().layer_management.is_none());
+        assert_eq!(graph(&h).layers, before);
+        assert_eq!(h.state().doc.revision(), revision);
+    }
+}
+
+#[test]
+fn display_background_rgb_renders_and_survives_native_and_companion_saves() {
+    let mut h = with_layers("lm-background-rgb", 1);
+    open(&mut h);
+    click(&mut h, "Layer1");
+    click(&mut h, "Display");
+    background_choice(&mut h, "White");
+    for (label, value) in [("Background Red", "17"), ("Background Green", "131"), ("Background Blue", "213")] {
+        number(&mut h, label, value);
+    }
+    click(&mut h, "Apply");
+    click(&mut h, "OK");
+    let c = sheaf_core::Color::rgb(17, 131, 213);
+    assert_eq!(graph(&h).layers[0].background, Some(c));
+    let id = project(&h).graphs().next().unwrap().id;
+    let scene = sheaf_plot::graph_scene(project(&h), id).unwrap();
+    assert!(
+        scene.layers[0]
+            .grid
+            .iter()
+            .any(|item| matches!(item, sheaf_plot::scene::Item::Rect { fill: Some(fill), .. } if *fill == c))
+    );
+    assert!(sheaf_plot::render_svg(project(&h), id).unwrap().contains("#1183D5"));
+    let folder = save_dir("lm-background-rgb");
+    for ext in ["sheaf", "opj"] {
+        let saved = sheaf_io::save::save_project(project(&h), &folder.join(format!("background.{ext}"))).unwrap();
+        if ext == "opj" {
+            assert!(saved.warnings.iter().any(|w| w.contains("layer background colour")));
+        }
+        let reopened = sheaf_io::open_project(&saved.path).unwrap();
+        assert_eq!(reopened.project.graphs().next().unwrap().layers[0].background, Some(c));
+    }
+}
+
+#[test]
+fn display_background_does_not_overwrite_layers_edited_while_the_dialog_is_open() {
+    let mut h = with_layers("lm-background-stale", 2);
+    let id = project(&h).graphs().next().unwrap().id;
+    open(&mut h);
+    click(&mut h, "Layer1");
+    click(&mut h, "Display");
+    background_choice(&mut h, "Red");
+    click(&mut h, "Apply");
+    h.state_mut().doc.apply("Independent layer edit", |p| {
+        p.graph_mut(id).unwrap().layers[1].x_axis.title = Some("Keep this title".into());
+    });
+    settle(&mut h);
+    let current = graph(&h).layers.clone();
+    click(&mut h, "OK");
+    assert!(h.state().layer_management.is_some());
+    assert!(h.query_by_label_contains("graph layers changed").is_some());
+    assert_eq!(graph(&h).layers, current);
+    assert_eq!(h.state().doc.undo_label(), Some("Independent layer edit"));
+    click(&mut h, "Cancel");
+}
+
+#[test]
+fn display_background_requires_selection_and_unchanged_or_reverted_colors_do_not_add_history() {
+    let mut h = with_layers("lm-background-noop", 2);
+    let revision = h.state().doc.revision();
+    open(&mut h);
+    click(&mut h, "Display");
+    assert!(h.get_by_label("Background Color").accesskit_node().is_disabled());
+    assert!(h.get_by_label("Apply").accesskit_node().is_disabled());
+    click(&mut h, "Layer1");
+    background_choice(&mut h, "None");
+    assert!(h.get_by_label("Apply").accesskit_node().is_disabled());
+    background_choice(&mut h, "Red");
+    click(&mut h, "Apply");
+    background_choice(&mut h, "None");
+    click(&mut h, "Apply");
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.revision(), revision);
+    assert_ne!(h.state().doc.undo_label(), Some("Layer Management"));
 }

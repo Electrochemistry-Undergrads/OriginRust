@@ -3129,7 +3129,8 @@ the OK button to apply the changes in preview graph to source graph."; Undo, OK 
 page right-click and layer icon menu, the icon's layer selected): the layer list allows several
 layers; Arrange, Size/Position and Link are built and work on a copy shown as numbered frames on a
 page-shaped preview; Undo takes back the last Apply; OK writes the copy in one undo step; Cancel and
-Escape discard it. Add (T61), Axes and Display are shown disabled, as are Add Extra Layer(s) for Grid
+Escape discard it. Display > Color > Background Color is implemented as described below. Add (T61)
+and Axes are shown disabled, as are Add Extra Layer(s) for Grid
 (Sheaf leaves surplus cells empty), the Common Scale ticks, the Align/Custom links, the Units combo of
 Link and the reposition-parent tick. Arrange with no selection takes every layer; "Treat Linked
 Layers as a group" places a layer with the layers linked to it as one unit; Link Layers links the
@@ -3138,6 +3139,34 @@ Layer" counts from the reference layer's top left corner, a pixel is 1/96 in, th
 starts at layer 1, and a reference layer that follows a selected layer is refused (it would move
 with it). The Link tab shows the first selected layer's link; Swap with Reorder refuses an order that
 puts a parent after its child.
+
+**Display > Color > Background Color** (T60 follow-up, measured in Origin 2016 on
+2026-11-16): the stock layer starts at None (`layer.color=0`). The palette has None,
+Classic colours and custom colours. Two independent layers initially green (3) and blue (4)
+were used to check scope. Selecting layer 1, choosing Red and Apply, then Cancel left the
+source at (3, 4); repeating with OK gave (2, 4), changing only layer 1. Selecting both layers
+showed a mixed-value marker. Explicitly choosing None, Apply and OK gave (0, 0).
+The preview is separate from the source until OK. Seven isolated native runs completed;
+accepted settled captures, control lists and readbacks are hashed in ignored scratch
+`t60-layer-display/native-proof.json`. Earlier delayed-paint captures and a misdirected
+palette click are excluded as colour-change evidence.
+
+Sheaf now exposes this background control for one or more selected layers, using the existing
+`Layer.background`, export and persistence paths. None clears that field. The eight shared
+basic presets and editable opaque RGB bytes are the current Sheaf palette; the full native
+palette layout is not copied. Mixed layers keep their individual colours until an explicit
+choice; switching the selection reloads its draft. Apply changes only the working preview,
+Undo restores the previous preview, OK makes one document history entry, and Cancel/Escape
+leave the source alone. No selection, an unchanged colour and a final preview equal to the
+source add no history. OK refuses to overwrite layer edits made behind the window. Frames,
+links, axes, plots, legends, gradient settings and border settings are preserved. The small
+numbered-frame preview shows base colours; it does not render gradients or full plots.
+Native `.sheaf` saves and `.opj` companions retain the colour; bare `.opj` still omits it with
+the existing loss warning. Drawing Order, Border Fill Color, Border Color, Border Dimensions
+and Scale Elements remain disabled in this dialog. Native mixed-value interaction and the
+existing Sheaf layer drawing order are not changed by this slice. Supporting current docs:
+[Display tab](https://docs.originlab.com/origin-help/laymanage-displaytab/) and
+[Layer properties](https://docs.originlab.com/labtalk/ref/layer-obj/).
 
 **Fit Page to Layers** (`pfit2l`; Margin Control Border (default) or Tight, Border Width 5, Adjust
 Direction Height and Width (default), Height Only, Width Only), measured on the stock page: the

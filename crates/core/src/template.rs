@@ -25,6 +25,10 @@ pub enum Template {
     /// Plot > Specialized > Vector XYAM and Vector XYXY (T107).
     VectorXyam,
     VectorXyxy,
+    /// Plot > Stock > High-Low-Close, Japanese Candlestick and OHLC Bar Chart (T108).
+    HighLowClose,
+    Candlestick,
+    OhlcBar,
     /// Line plot with a symbol on every point.
     LineSymbol,
     /// Cyclic voltammetry overlay: smooth lines without markers, no grid,
@@ -172,7 +176,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 64] = [
+    pub const ALL: [Template; 67] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -237,6 +241,9 @@ impl Template {
         Template::ColumnScatter,
         Template::VectorXyam,
         Template::VectorXyxy,
+        Template::HighLowClose,
+        Template::Candlestick,
+        Template::OhlcBar,
     ];
 
     /// The name used on the command line and in menus.
@@ -248,6 +255,9 @@ impl Template {
             Template::ColumnScatter => "column-scatter",
             Template::VectorXyam => "vector-xyam",
             Template::VectorXyxy => "vector-xyxy",
+            Template::HighLowClose => "high-low-close",
+            Template::Candlestick => "candlestick",
+            Template::OhlcBar => "ohlc-bar",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
@@ -317,6 +327,9 @@ impl Template {
             Template::ColumnScatter => "Column Scatter",
             Template::VectorXyam => "Vector XYAM",
             Template::VectorXyxy => "Vector XYXY",
+            Template::HighLowClose => "High-Low-Close",
+            Template::Candlestick => "Japanese Candlestick",
+            Template::OhlcBar => "OHLC Bar Chart",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
@@ -429,6 +442,9 @@ impl Template {
             Template::LineSymbol => general(id, name, PlotKind::LineSymbol),
             Template::VectorXyam => general(id, name, PlotKind::VectorXyam),
             Template::VectorXyxy => general(id, name, PlotKind::VectorXyxy),
+            Template::HighLowClose => general(id, name, PlotKind::HighLowClose),
+            Template::Candlestick => general(id, name, PlotKind::Candlestick),
+            Template::OhlcBar => general(id, name, PlotKind::OhlcBar),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
             Template::Multi3YYy | Template::Multi3YYY | Template::Multi4YYyy | Template::Multi4YyYy => {
@@ -1133,7 +1149,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 64);
+        assert_eq!(Template::ALL.len(), 67);
+        assert_eq!(Template::from_name("candlestick"), Some(Template::Candlestick));
         assert_eq!(Template::from_name("vector-xyam"), Some(Template::VectorXyam));
         assert_eq!(Template::from_name("vector-xyxy"), Some(Template::VectorXyxy));
         assert_eq!(Template::from_name("column-scatter"), Some(Template::ColumnScatter));

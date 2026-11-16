@@ -1197,8 +1197,8 @@ fn plot_menu() -> Vec<Entry> {
                 vec![item("Ternary", Cmd::Plot(Template::Ternary))],
                 greys(&["Piper", "Smith Chart"]),
                 vec![item("Radar", Cmd::Plot(Template::Radar))],
-                greys(&["High-Low-Close"]),
                 vec![
+                    item("High-Low-Close", Cmd::Plot(Template::HighLowClose)),
                     item("Vector XYAM", Cmd::Plot(Template::VectorXyam)),
                     item("Vector XYXY", Cmd::Plot(Template::VectorXyxy)),
                 ],
@@ -1206,7 +1206,18 @@ fn plot_menu() -> Vec<Entry> {
             ]
             .concat(),
         ),
-        grey_sub("Stoc&k", &["High-Low-Close", "Japanese Candlestick", "OHLC Bar Chart", "OHLC-Volume", "Line"]),
+        sub(
+            "Stoc&k",
+            [
+                vec![
+                    item("High-Low-Close", Cmd::Plot(Template::HighLowClose)),
+                    item("Japanese Candlestick", Cmd::Plot(Template::Candlestick)),
+                    item("OHLC Bar Chart", Cmd::Plot(Template::OhlcBar)),
+                ],
+                greys(&["OHLC-Volume", "Line"]),
+            ]
+            .concat(),
+        ),
         sep(),
         item("System Templates...", Cmd::SystemTemplates),
         // Sheaf's own graph style is the one template that has no Origin counterpart.

@@ -383,7 +383,7 @@ fn build(bar: Bar) -> Vec<Item> {
             b(PlotPie, "Pie (3D Color)", Cmd::Plot(Template::Pie3D), "3D Color Pie"),
             b(PlotArea, "Area", Cmd::Plot(Template::Area), "Area"),
             g(PlotStackedArea, "Stacked Area"),
-            g(PlotHlc, "High-Low-Close"),
+            b(PlotHlc, "High-Low-Close", Cmd::Plot(Template::HighLowClose), "High-Low-Close"),
             g(PlotBox, "Box Chart"),
             g(PlotHistogram, "Histogram"),
             g(PlotBubble, "Bubble"),

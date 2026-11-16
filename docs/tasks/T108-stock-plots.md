@@ -1,6 +1,6 @@
 # T108: High-Low-Close, Japanese Candlestick, OHLC Bar Chart
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `stock-plots`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 31): measured (XYYY / XYYYY column rules, red falling days, body 0.4 and ticks 0.3 of the X spacing, axes over highs and lows) and built as new plot kinds. Left: Plot Details Advancing/Declining Price tabs, a date axis for X, OHLC-Volume, Stock > Line.
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Stock > High-Low-Close, Japanese
 Candlestick, OHLC Bar Chart; Plot > Specialized > High-Low-Close; the 2D Graphs toolbar's
 High-Low-Close). OHLC-Volume and Stock > Line stay in B4.

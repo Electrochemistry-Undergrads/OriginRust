@@ -55,6 +55,7 @@ pub mod sheet_tab;
 pub mod sheet_view;
 pub mod sheetops;
 pub mod stack;
+pub mod stock;
 pub mod straight_line;
 pub mod template;
 pub mod user_template;

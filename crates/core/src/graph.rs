@@ -1545,6 +1545,13 @@ pub enum PlotKind {
     VectorXyam,
     /// Origin's Vector XYXY (T107): an arrow from (X, Y) to the X and Y end columns of [`PlotDecor::vector`].
     VectorXyxy,
+    /// Origin's Plot > Stock > High-Low-Close (T108): a high-low line and a close tick per row, from the
+    /// columns of [`PlotDecor::stock`].
+    HighLowClose,
+    /// Origin's Japanese Candlestick (T108): an open-close body with high and low wicks per row.
+    Candlestick,
+    /// Origin's OHLC Bar Chart (T108): a high-low line with open (left) and close (right) ticks per row.
+    OhlcBar,
     /// Origin's Parallel Plot (2019, Parallel.otpu): the plot's Y column is one vertical axis; every row is a
     /// line through the axes of all the layer's parallel plots, coloured by a numeric column (graphing spec 14.25).
     Parallel,
@@ -1594,6 +1601,10 @@ impl PlotKind {
     }
 
     /// True for [`PlotKind::Parallel`] and [`PlotKind::ParallelIndex`].
+    pub fn is_stock(&self) -> bool {
+        matches!(self, PlotKind::HighLowClose | PlotKind::Candlestick | PlotKind::OhlcBar)
+    }
+
     pub fn is_vector(&self) -> bool {
         matches!(self, PlotKind::VectorXyam | PlotKind::VectorXyxy)
     }
@@ -1824,6 +1835,9 @@ pub struct PlotDecor {
     /// The extra columns and arrow settings of a vector plot (T107).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vector: Option<crate::vector::VectorSpec>,
+    /// The price columns and colours of a stock plot (T108).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stock: Option<crate::stock::StockSpec>,
 }
 
 pub use sheaf_calc::trend::TrendKind;

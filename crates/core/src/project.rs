@@ -304,6 +304,8 @@ pub enum ProjectError {
     MultiYNoRightAxis(&'static str),
     #[error("{0}")]
     VectorColumns(&'static str),
+    #[error("{0}")]
+    StockColumns(&'static str),
     #[error("a lollipop plot needs two or more Y columns (got {0}); select at least two Y columns")]
     LollipopNeedsTwoColumns(usize),
     #[error("a lollipop plot cannot have a right Y axis; use one Y axis or another template")]
@@ -985,6 +987,9 @@ impl Project {
         }
         if matches!(template, Template::VectorXyam | Template::VectorXyxy) {
             return self.plot_vectors(template, ys);
+        }
+        if matches!(template, Template::HighLowClose | Template::Candlestick | Template::OhlcBar) {
+            return self.plot_stock(template, ys);
         }
         if template == Template::Lollipop && ys.len() < 2 {
             return Err(ProjectError::LollipopNeedsTwoColumns(ys.len()));

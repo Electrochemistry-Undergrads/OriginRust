@@ -5192,3 +5192,28 @@ draw a black 0.5 pt shaft and a closed 30-degree head, 4.5 pt (XYAM) or 6.5 pt (
 `.opj` writer saves them as scatter plots of their start points and says so. Not done: the Vector tab in
 Plot Details, Head and Midpoint positions, degree and meteorological angles from the user interface, legend
 arrows.
+
+## 31. Stock plots: Plot > Stock > High-Low-Close, Japanese Candlestick, OHLC Bar Chart (T108, measured 2026-11-16, Origin 2016)
+
+Probed with X = 1..5 (and 1..8) and Open, High, Low, Close columns.
+
+- **High-Low-Close** (Plot > Stock, Plot > Specialized and the 2D Graphs toolbar) takes X and exactly three Y
+  columns, read as High, Low, Close. Any other selection is refused: "To make this plot, you need to select
+  columns designated as 'XYYY' with exact number of columns". Each row draws a vertical line from high to
+  low and a tick to the right at the close. Y title "B - C - D", X title "A".
+- **Japanese Candlestick** and **OHLC Bar Chart** take X and exactly four Y columns: Open, High, Low, Close.
+  - A candle is a body from open to close, about 0.4 of the X spacing wide, with wicks from the body to the
+    high and the low.
+  - An OHLC bar is a vertical high-low line with a tick to the left at the open and one to the right at the
+    close, each about 0.3 of the X spacing long.
+- Colours (Plot Details' "Advancing Price" and "Declining Price" tabs): a day whose close is below its open
+  is drawn entirely red (the candle's body filled red, its wicks and the OHLC bar red too). Every other day
+  is black, the candle's body hollow (Fill None). Lines are 0.5 pt. One five-day probe left a falling OHLC
+  day black; the eight-day probe coloured every falling day red, which Sheaf follows.
+- Axes: X ran exactly from the first to the last X (1 to 5, 1 to 8), so the end candles are cut in half;
+  Y took in every high and low (8.5 to 15.5 for prices 9 to 15). Origin's X axis was a date axis showing
+  "--" for plain numbers; Sheaf keeps a numeric X axis.
+- Sheaf: plot kinds `high_low_close`, `candlestick`, `ohlc_bar` with the price columns in
+  `PlotDecor::stock` (`sheaf_core::stock::StockSpec`: open, high, low, close, the falling colour, the
+  width fraction); templates `high-low-close`, `candlestick`, `ohlc-bar`. The .opj writer saves the first
+  price column as a scatter plot and warns.

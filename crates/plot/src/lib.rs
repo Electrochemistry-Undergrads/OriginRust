@@ -45,6 +45,7 @@ mod slope;
 mod straight_line;
 pub use slope::{NOT_USABLE as SLOPE_NOT_USABLE, check_point as slope_check_point};
 mod stack;
+mod stock_plot;
 mod sunburst;
 mod svg;
 mod symbol_gaps;
@@ -114,6 +115,8 @@ mod skip_tests;
 mod slope_tests;
 #[cfg(test)]
 mod sort_x_tests;
+#[cfg(test)]
+mod stock_plot_tests;
 #[cfg(test)]
 mod straight_line_tests;
 #[cfg(test)]

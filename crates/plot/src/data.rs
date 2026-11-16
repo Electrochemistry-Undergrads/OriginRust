@@ -99,6 +99,8 @@ pub(crate) struct PlotData<'a> {
     pub hex: Option<crate::hexbin::HexData>,
     /// The arrows of a vector plot (T107); `None` for other kinds.
     pub vector: Option<crate::vector_plot::VectorData>,
+    /// The prices of a stock plot (T108); `None` for other kinds.
+    pub stock: Option<crate::stock_plot::StockData>,
     /// The lines and axes of a layer's parallel plots, held by the first of them; `None` for other plots.
     pub parallel: Option<Box<crate::parallel::ParallelData>>,
     /// What a treemap plot draws; `None` for other kinds.
@@ -674,6 +676,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             hist_raw: None,
             hex: None,
             vector: None,
+            stock: None,
             parallel: None,
             treemap: None,
             sunburst: None,
@@ -819,6 +822,10 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.xerr = None;
                 pd.base = None;
                 pd.ridge = Some(ridge);
+            }
+            PlotKind::HighLowClose | PlotKind::Candlestick | PlotKind::OhlcBar => {
+                let stock = plot.decor.stock.map(|s| crate::stock_plot::StockData::new(project, &pd, s, pd.y.len()));
+                pd.stock = stock;
             }
             PlotKind::VectorXyam | PlotKind::VectorXyxy => {
                 pd.vector = plot.decor.vector.map(|s| {
@@ -1085,6 +1092,12 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
         }
     };
     for pd in pds {
+        // Stock plots: every row's high and low (and open and close) count for the Y axis.
+        if let Some(s) = &pd.stock
+            && dim == Dim::Y
+        {
+            s.values(pd.start, pd.end).for_each(&mut add);
+        }
         // Vector XYXY: the arrows' end points count for the axes too.
         if let Some(v) = &pd.vector {
             for &(ex, ey) in &v.ends()[pd.start.min(v.ends().len())..pd.end.min(v.ends().len())] {

@@ -8998,6 +8998,7 @@ mod sampling;
 mod sheet_navigate;
 mod sheet_tab;
 mod stats3;
+mod stock_plots;
 mod swap_transpose;
 mod system_templates;
 #[path = "ui_tests/trendline.rs"]

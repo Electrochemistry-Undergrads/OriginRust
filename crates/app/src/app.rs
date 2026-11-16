@@ -4028,6 +4028,23 @@ impl SheafApp {
                             .apply("Hide plot", |p| objects::set_plot_visible(p, graph, 0, n.saturating_sub(1), false));
                     }
                 }
+                "merge-graphs" if self.doc.project().graphs().count() >= 2 => {
+                    self.merge_graphs = Some(MergeGraphsDialog::new(self.doc.project()));
+                }
+                "layer-management" => {
+                    if let Some(graph) = first_graph {
+                        self.layer_management = crate::dialogs::layer_management::LayerManagementDialog::new(
+                            self.doc.project(),
+                            graph,
+                            None,
+                        );
+                    }
+                }
+                "fit-page" => {
+                    if let Some(graph) = first_graph {
+                        self.fit_page = Some(crate::dialogs::fit_page::FitPageDialog::new(graph));
+                    }
+                }
                 "autosave" => {
                     self.autosave_dialog =
                         Some(AutosaveDialog::new(self.autosave.settings, self.autosave.has_session()));

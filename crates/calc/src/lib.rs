@@ -68,7 +68,8 @@ pub use anova::{
 };
 pub use anova2::{TwoWayAnova, TwoWayError, TwoWayRow, anova_two_way};
 pub use anova3::{
-    Effect as ThreeWayEffect, EffectPower, Levene, ThreeWayAnova, ThreeWayError, ThreeWayTerms, anova_three_way,
+    Effect as ThreeWayEffect, EffectPower, Levene, MAX_THREE_WAY_LEVELS, ThreeWayAnova, ThreeWayError, ThreeWayTerms,
+    anova_three_way,
 };
 pub use baseline::{BaselineMethod, subtract_baseline, subtract_constant, subtract_line};
 pub use bin2d::{AxisBins, AxisLayout, Bin, Bin2d, Bin2dOptions, Bin2dStat, axis_layout, bin2d};

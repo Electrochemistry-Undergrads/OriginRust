@@ -3197,8 +3197,11 @@ impl SheafApp {
                 project.default_plot_columns(book, sheet, Template::Line)
             }
         } else {
-            // The cross tabulation reads categorical columns, which may hold text.
-            let any_type = kind == AnalysisKind::Crosstab;
+            // These tools read categorical columns (factors, subjects), which may hold text.
+            let any_type = matches!(
+                kind,
+                AnalysisKind::Crosstab | AnalysisKind::Anova3 | AnalysisKind::RmAnova1 | AnalysisKind::RmAnova2
+            );
             columns
                 .into_iter()
                 .filter(|id| project.column(*id).is_some_and(|c| any_type || c.data.is_numeric()))

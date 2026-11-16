@@ -7,6 +7,12 @@ use super::*;
 use calc::RmTerm;
 
 /// The number of `name` in `names`, which grows by the names in the order they first appear.
+/// The most levels of one factor, cells of the design and numbers (subjects times cells) the repeated measures
+/// ANOVA accepts, so that an ID-like column used as a factor is refused instead of exhausting memory.
+const MAX_RM_LEVELS: usize = 30;
+const MAX_RM_CELLS: usize = 400;
+const MAX_RM_GRID: usize = 2_000_000;
+
 fn index_of(names: &mut Vec<String>, name: &str) -> usize {
     names.iter().position(|l| l == name).unwrap_or_else(|| {
         names.push(name.to_string());
@@ -77,6 +83,11 @@ pub(super) fn rm_anova(
             left_out += usize::from(!(value.is_nan() && texts.iter().all(Option::is_none)));
             continue;
         }
+        if levels.iter().any(|l| l.len() > MAX_RM_LEVELS) {
+            return Err(AnalysisError::BadOption(format!(
+                "a factor has more than {MAX_RM_LEVELS} levels; is a column of IDs or continuous numbers used as a factor?"
+            )));
+        }
         let idx: Vec<usize> =
             (0..factors).map(|k| index_of(&mut levels[k], texts[k].as_deref().unwrap_or_default())).collect();
         let subject = index_of(&mut subjects, texts[factors].as_deref().unwrap_or_default());
@@ -87,6 +98,12 @@ pub(super) fn rm_anova(
         return Err(AnalysisError::BadOption("every factor needs at least two levels".into()));
     }
     let cells: usize = level_counts.iter().product();
+    if cells > MAX_RM_CELLS || subjects.len().saturating_mul(cells) > MAX_RM_GRID {
+        return Err(AnalysisError::BadOption(format!(
+            "the design is too large ({} subjects by {cells} cells); at most {MAX_RM_CELLS} cells and {MAX_RM_GRID} numbers are accepted",
+            subjects.len()
+        )));
+    }
     let cell_of = |a: usize, b: usize| if spec.two_way { a * level_counts[1] + b } else { a };
     let mut grid: Vec<Vec<Option<f64>>> = vec![vec![None; cells]; subjects.len()];
     for &(s, a, b, v) in &entries {
@@ -469,6 +486,16 @@ mod tests {
             tool: Tool::RmAnova(RmAnovaSpec::new(false)),
         };
         assert!(p.analyze(&rows).is_err());
+        // A unique-per-row "level" column is refused, not allocated.
+        let n = 500;
+        let book = p.add_workbook("ids");
+        let lv =
+            p.add_column(book, 0, Designation::Y, ColumnData::text((0..n).map(|i| format!("l{i}")).collect())).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric((0..n).map(|i| i as f64).collect())).unwrap();
+        let s =
+            p.add_column(book, 0, Designation::Y, ColumnData::text((0..n).map(|i| format!("s{i}")).collect())).unwrap();
+        let e = run(&mut p, &[lv, y, s], RmAnovaSpec::new(false)).unwrap_err();
+        assert!(e.to_string().contains("more than"), "{e}");
     }
 
     #[test]

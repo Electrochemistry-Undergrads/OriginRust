@@ -900,9 +900,8 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             spec.interaction = interaction;
             if no_descriptive {
                 spec.descriptive = Vec::new();
-            } else if interaction {
-                spec.descriptive.push(analysis::RmTerm::Ab);
             }
+            // As in the window, the A*B cells are not listed unless asked for: the CLI has no flag for them yet.
             spec.comparison_alpha = comparison_alpha;
             spec.alpha = alpha;
             (target, Job::Tool(Tool::RmAnova(spec)))

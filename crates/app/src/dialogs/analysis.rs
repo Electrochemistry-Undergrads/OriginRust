@@ -3449,6 +3449,7 @@ impl AnalysisDialog {
                 | AnalysisKind::Anova3
                 | AnalysisKind::RmAnova1
                 | AnalysisKind::RmAnova2
+                | AnalysisKind::PartialCorr
                 | AnalysisKind::GraphSummary
         ) {
             return;

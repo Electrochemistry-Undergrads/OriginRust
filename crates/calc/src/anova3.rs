@@ -87,7 +87,15 @@ pub enum ThreeWayError {
     EmptyLevel,
     /// Some combination of levels the model needs has no data (the model cannot be fitted).
     RankDeficient,
+    /// A factor has more levels, or the model more parameters, than the solver accepts.
+    TooLarge,
 }
+
+/// The most levels one factor of the three-way ANOVA may have (a text or ID column picked as a factor would
+/// otherwise build millions of design columns).
+pub const MAX_THREE_WAY_LEVELS: usize = 30;
+/// The most model parameters (columns of the design matrix) the three-way ANOVA fits.
+pub const MAX_THREE_WAY_PARAMETERS: usize = 600;
 
 impl std::fmt::Display for ThreeWayError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -98,6 +106,10 @@ impl std::fmt::Display for ThreeWayError {
             ThreeWayError::TooFewLevels => write!(f, "each factor needs at least two levels"),
             ThreeWayError::LengthMismatch => write!(f, "the factor columns and the data column differ in length"),
             ThreeWayError::EmptyLevel => write!(f, "a factor level has no data"),
+            ThreeWayError::TooLarge => write!(
+                f,
+                "the design is too large: at most {MAX_THREE_WAY_LEVELS} levels per factor and {MAX_THREE_WAY_PARAMETERS} model parameters are accepted (is a column of IDs or continuous numbers used as a factor?)"
+            ),
             ThreeWayError::RankDeficient => write!(
                 f,
                 "some combinations of the factors have no data, so the model cannot be fitted (Origin does not support \
@@ -172,6 +184,33 @@ pub fn anova_three_way(
         return Err(ThreeWayError::TooFewLevels);
     }
     let [la, lb, lc] = levels;
+    if levels.iter().any(|&l| l > MAX_THREE_WAY_LEVELS) {
+        return Err(ThreeWayError::TooLarge);
+    }
+    // The parameters of the model, known from the level counts before any design column is built.
+    let width = |e: Effect| match e {
+        Effect::A => la - 1,
+        Effect::B => lb - 1,
+        Effect::C => lc - 1,
+        Effect::Ab => (la - 1) * (lb - 1),
+        Effect::Ac => (la - 1) * (lc - 1),
+        Effect::Bc => (lb - 1) * (lc - 1),
+        Effect::Abc => (la - 1) * (lb - 1) * (lc - 1),
+    };
+    let included = |e: Effect| match e {
+        Effect::Ab => terms.ab,
+        Effect::Ac => terms.ac,
+        Effect::Bc => terms.bc,
+        Effect::Abc => terms.abc,
+        _ => true,
+    };
+    let nominal_rank: usize = 1 + Effect::ALL.iter().filter(|&&e| included(e)).map(|&e| width(e)).sum::<usize>();
+    if nominal_rank > MAX_THREE_WAY_PARAMETERS {
+        return Err(ThreeWayError::TooLarge);
+    }
+    if n <= nominal_rank {
+        return Err(ThreeWayError::TooFewData(n));
+    }
     let group = |sel: &dyn Fn(usize) -> usize, groups: usize| -> Vec<SampleStats> {
         (0..groups)
             .map(|g| SampleStats::of(&(0..n).filter(|&i| sel(i) == g).map(|i| y[i]).collect::<Vec<f64>>()))
@@ -193,13 +232,6 @@ pub fn anova_three_way(
     if stats[..3].iter().any(|(_, s)| s.iter().any(|g| g.n == 0)) {
         return Err(ThreeWayError::EmptyLevel);
     }
-    let included = |e: Effect| match e {
-        Effect::Ab => terms.ab,
-        Effect::Ac => terms.ac,
-        Effect::Bc => terms.bc,
-        Effect::Abc => terms.abc,
-        _ => true,
-    };
     let (ea, eb, ec) = (effect_columns(&a, la), effect_columns(&b, lb), effect_columns(&c, lc));
     let eab = products(&ea, &eb);
     let eac = products(&ea, &ec);
@@ -225,11 +257,6 @@ pub fn anova_three_way(
         }
         cols
     };
-    let nominal_rank: usize =
-        1 + Effect::ALL.iter().filter(|&&e| included(e)).map(|&e| columns_of(e).len()).sum::<usize>();
-    if n <= nominal_rank {
-        return Err(ThreeWayError::TooFewData(n));
-    }
     let (sse_full, rank) = fit(&model_without(None), &y);
     if rank < nominal_rank {
         return Err(ThreeWayError::RankDeficient);
@@ -378,6 +405,19 @@ mod tests {
             }
         }
         (a, b, c, y)
+    }
+
+    #[test]
+    fn id_like_factors_are_refused_before_any_design_column_is_built() {
+        let n = 2000;
+        let id: Vec<usize> = (0..n).map(|i| i % 100).collect();
+        let y: Vec<f64> = (0..n).map(|i| i as f64).collect();
+        let r = anova_three_way(&id, &id, &id, &y, ThreeWayTerms::default());
+        assert_eq!(r.err(), Some(ThreeWayError::TooLarge));
+        // Within the level cap but with more parameters than the solver takes.
+        let lv: Vec<usize> = (0..n).map(|i| i % 12).collect();
+        let r = anova_three_way(&lv, &lv, &lv, &y, ThreeWayTerms::default());
+        assert_eq!(r.err(), Some(ThreeWayError::TooLarge));
     }
 
     #[test]

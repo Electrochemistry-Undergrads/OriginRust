@@ -226,5 +226,10 @@ A2,B2,3.8,S4
     assert!(sheet.starts_with("ANOVATwoWayRM"), "{sheet}");
     // Interactions on: A, B and A*B, each with its error term, in the first block of the sheet.
     assert!(df.len() >= 6, "{df:?}");
+    let ws = project(&h).workbooks().next().unwrap().sheets.last().unwrap();
+    let labels: Vec<&str> = ws.columns.iter().filter_map(|c| c.text()).flatten().map(String::as_str).collect();
+    assert!(labels.contains(&"a*b (Sphericity Assumed)"), "the A*B rows are missing: {labels:?}");
+    // The A*B cells are listed only when the Descriptive Statistics tab asks for them.
+    assert!(!labels.iter().any(|l| l.starts_with("a*b:")), "{labels:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Two-way repeated measures ANOVA"));
 }

@@ -16,6 +16,13 @@ fn level_index(levels: &mut Vec<String>, name: &str) -> usize {
 }
 
 /// The sign Origin gives a comparison: the difference is `mean(i) - mean(j)` and the statistic carries its sign.
+fn too_many_levels() -> String {
+    format!(
+        "a factor has more than {} levels; is a column of IDs or continuous numbers used as a factor?",
+        calc::MAX_THREE_WAY_LEVELS
+    )
+}
+
 fn origin_sign(diff: f64) -> f64 {
     if diff < 0.0 { -1.0 } else { 1.0 }
 }
@@ -71,6 +78,9 @@ pub(super) fn three_way_anova(
             continue;
         }
         let [la, lb, lc] = &mut levels;
+        if [&*la, &*lb, &*lc].iter().any(|l| l.len() > calc::MAX_THREE_WAY_LEVELS) {
+            return Err(AnalysisError::BadOption(too_many_levels()));
+        }
         a.push(level_index(la, texts[0].as_deref().unwrap_or_default()));
         b.push(level_index(lb, texts[1].as_deref().unwrap_or_default()));
         c.push(level_index(lc, texts[2].as_deref().unwrap_or_default()));

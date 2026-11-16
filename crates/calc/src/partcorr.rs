@@ -28,8 +28,13 @@ pub enum PartialCorrError {
     VariableIsControl(usize, usize),
     /// The two variables of the pair (indices into the variables) are perfectly correlated.
     PerfectPair(usize, usize),
-    /// Fewer rows than the controls and the pair need (`n - 2 - k < 0`), or a correlation matrix that cannot be inverted.
+    /// Fewer rows than the controls and the pair need (`n - 2 - k < 0`).
     TooFewRows { pair: (usize, usize), n: usize },
+    /// A variable or control has no spread (or fewer than two numbers) among the rows the pair has in common
+    /// (Origin's behaviour was not measured).
+    NoSpread(usize, usize),
+    /// The correlation matrix of the pair and the controls cannot be inverted (Origin's behaviour was not measured).
+    Singular(usize, usize),
 }
 
 impl std::fmt::Display for PartialCorrError {
@@ -54,6 +59,18 @@ impl std::fmt::Display for PartialCorrError {
                     j + 1
                 )
             }
+            PartialCorrError::NoSpread(i, j) => write!(
+                f,
+                "for variables {} and {}, a variable or controlling variable is constant (or has fewer than two numbers) among the rows they have in common",
+                i + 1,
+                j + 1
+            ),
+            PartialCorrError::Singular(i, j) => write!(
+                f,
+                "for variables {} and {}, the correlations among the variables and controlling variables cannot be inverted",
+                i + 1,
+                j + 1
+            ),
             PartialCorrError::TooFewRows { pair: (i, j), n } => write!(
                 f,
                 "variables {} and {} have {n} rows in common, too few for this number of controlling variables",
@@ -194,18 +211,18 @@ pub fn partial_correlation(
                     r[(b, a)] = v;
                 }
             }
-            if r[(0, 1)].is_nan() {
-                return Err(too_few);
+            if r.iter().any(|v| v.is_nan()) {
+                return Err(if n < 2 { too_few } else { PartialCorrError::NoSpread(i, j) });
             }
             if r[(0, 1)].abs() > 1.0 - 1e-12 {
                 return Err(PartialCorrError::PerfectPair(i, j));
             }
             // Origin refuses n = 3 with one control (df 0); with two controls and df 0 it prints -1 or 1.
-            if df < 0.0 || (df == 0.0 && k == 1) || r.iter().any(|v| v.is_nan()) {
+            if df < 0.0 || (df == 0.0 && k == 1) {
                 return Err(too_few);
             }
             let Some(inv) = r.try_inverse() else {
-                return Err(too_few);
+                return Err(PartialCorrError::Singular(i, j));
             };
             let mut partial = (-inv[(0, 1)] / (inv[(0, 0)] * inv[(1, 1)]).sqrt()).clamp(-1.0, 1.0);
             if df == 0.0 && !partial.is_nan() {
@@ -213,7 +230,7 @@ pub fn partial_correlation(
                 partial = partial.signum();
             }
             if partial.is_nan() {
-                return Err(too_few);
+                return Err(PartialCorrError::Singular(i, j));
             }
             let p = if df >= 1.0 && partial.abs() < 1.0 {
                 let t = partial * (df / (1.0 - partial * partial)).sqrt();
@@ -301,6 +318,8 @@ mod tests {
         assert_eq!(partial_correlation(&[&X, &Y], &[&X], false, false), Err(PartialCorrError::VariableIsControl(0, 0)));
         let y2: Vec<f64> = X.iter().map(|v| 2.0 * v + 1.0).collect();
         assert_eq!(partial_correlation(&[&X, &y2], &[&Z], false, false), Err(PartialCorrError::PerfectPair(0, 1)));
+        // A constant variable is named as such, not blamed on a row shortage.
+        assert_eq!(partial_correlation(&[&X, &[5.0; 6]], &[&Z], false, false), Err(PartialCorrError::NoSpread(0, 1)));
         // Three rows and one control leave a singular matrix.
         assert!(partial_correlation(&[&X[..3], &Y[..3]], &[&Z[..3]], false, false).is_err());
     }

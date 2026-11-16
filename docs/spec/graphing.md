@@ -583,9 +583,44 @@ width-only implementation through default metric methods. Every backend draws th
 decoration paths: screen/PNG/PDF through SVG, and direct EPS/EMF. Tests cover nesting limits,
 anchors, rotation, script scaling, font style/colour, title/legend/label/tick placement and
 export. The SVG golden includes text; the PNG golden isolates stroke geometry so font
-installation differences do not change it. This slice adds no model fields. Per-run colour
-and font switching, combined scripts, editor/toolbar formatting and whole-object underline
+installation differences do not change it. This slice adds no model fields. Per-run font
+switching, tagged RGB codes, combined scripts, editor/toolbar formatting and whole-object underline
 remain open in the graph-text brief.
+
+### 7.2 Indexed text colours (T58 graph text)
+
+`codex/text-run-colors` (2026-11-15) adds `\cN(text)` for the original indexed colour list.
+For example, `\c2(red \c4(blue) red)` restores red after the nested blue span. A closing
+parenthesis restores the surrounding span or label font colour. Explicit indexed colours
+are opaque; uncoloured text retains the label's colour/opacity. Bold, italic, Greek, size and
+script styles compose with colour; underlines and strikeout strokes take their run's colour.
+Single-run glyph anchors and rotations are retained.
+
+The [original Origin list](https://docs.originlab.com/labtalk/ref/list-of-colors/) has 24 entries,
+starting black, red, bright green, blue, cyan and magenta. Index 9 is navy (0,0,128), 14 is royal
+(0,0,160), 18 is white and 24 is dark gray (64,64,64). This is independent of a graph's plot
+colour cycle. OriginPro 2016 measurements in `scratch/text-run-colors/` use 33 palette controls
+and 12 separate boundary controls (`palette-vector.lines.txt`, `boundaries.lines.txt`). Exact
+EMF text-colour records confirm every RGB triplet, including white. Native label reference
+points establish their order; the exporter draws labels in reverse creation order. The PNG
+capture is useful for appearance, but its current quantization changes channel values and is
+excluded from exact RGB fixtures.
+
+For positive untagged numeric indices, Origin uses the low byte as a one-based palette
+position; byte values outside 1-24 give black. Independent vector controls confirm 258 red,
+280 dark gray, 9999 orange, and black for 25, 99, 255, 256, 257, 281, 512, 1000 and 65535.
+Leading zeros work (`\c0002` is red). Sheaf accepts at most ten decimal digits, checks u32
+overflow and handles values below 0x01000000 as palette indices. Tagged RGB/special-colour
+encodings and signed codes remain literal text pending separate support.
+
+Zero retains Sheaf's previous neutral style and preserves its enclosed text. Origin's `\c0`
+and `\c00` controls instead displayed only a literal `\c` fragment; that invalid-index
+behaviour is excluded from the supported subset. Literal `\v(...)`, malformed escapes and
+nesting limits retain their existing rules. No global palette/settings or persistent model
+fields are added. The `text_color_tests` cover the native palette and boundary fixtures,
+restoration, inherited opacity, style/script combinations, anchors, rotation, decoration
+colours, overflow/literal cases, SVG/PNG goldens and EPS/EMF/PDF output. The PNG golden isolates
+decoration strokes from installed glyph fonts and checks every RGB value directly.
 
 ---
 

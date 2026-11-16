@@ -1,8 +1,10 @@
 //! Text markup of labels (spec section 5): `\b(..)` bold, `\i(..)` italic,
 //! `\+(..)` superscript, `\-(..)` subscript, `\g(..)` Greek, `\pN(..)` size in percent,
 //! `\f:Name(..)` font switch, `\x(hhhh)` a character by its code, `\v(..)` literal text; the
-//! `\u(..)` underline and `\s(..)` strikethrough. The text of `\cN(..)` is kept without color.
+//! `\u(..)` underline, `\s(..)` strikethrough and `\cN(..)` indexed text color.
 //! Escapes nest. A backslash that does not start one of these escapes is literal.
+
+use sheaf_core::Color;
 
 /// Scale of superscript and subscript text relative to its surroundings.
 pub const SCRIPT_SCALE: f64 = 0.65;
@@ -24,6 +26,8 @@ pub struct Run {
     pub underline: bool,
     /// Draw a line through this run.
     pub strikeout: bool,
+    /// An explicit classic palette colour, or the label's own colour when absent.
+    pub color: Option<Color>,
     /// Size relative to the label's font size (1 for normal text).
     pub scale: f64,
     /// Baseline shift in units of the label's font size; positive is up.
@@ -36,6 +40,7 @@ struct Style {
     italic: bool,
     underline: bool,
     strikeout: bool,
+    color: Option<Color>,
     greek: bool,
     scale: f64,
     rise: f64,
@@ -50,8 +55,16 @@ pub fn parse(text: &str) -> Vec<Run> {
     let chars: Vec<char> = text.chars().collect();
     let mut pos = 0;
     let mut out = Vec::new();
-    let base =
-        Style { bold: false, italic: false, underline: false, strikeout: false, greek: false, scale: 1.0, rise: 0.0 };
+    let base = Style {
+        bold: false,
+        italic: false,
+        underline: false,
+        strikeout: false,
+        color: None,
+        greek: false,
+        scale: 1.0,
+        rise: 0.0,
+    };
     parse_seq(&chars, &mut pos, base, false, 0, &mut out);
     out
 }
@@ -68,6 +81,7 @@ fn push(out: &mut Vec<Run>, c: char, st: Style) {
         && last.italic == st.italic
         && last.underline == st.underline
         && last.strikeout == st.strikeout
+        && last.color == st.color
         && last.scale == st.scale
         && last.rise == st.rise
     {
@@ -80,6 +94,7 @@ fn push(out: &mut Vec<Run>, c: char, st: Style) {
         italic: st.italic,
         underline: st.underline,
         strikeout: st.strikeout,
+        color: st.color,
         scale: st.scale,
         rise: st.rise,
     });
@@ -159,11 +174,12 @@ fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
             inner.greek = name.trim().eq_ignore_ascii_case("symbol");
             Some((Escape::Styled(inner), open + 1))
         }
-        // `\pN(..)` size in percent of the surrounding text; `\cN(..)` color, which is not drawn.
+        // Size percentages retain their four-digit limit; colour codes use a bounded u32.
         'p' | 'c' => {
             let digits = chars[pos + 2..].iter().take_while(|c| c.is_ascii_digit()).count();
             let open = pos + 2 + digits;
-            if digits == 0 || digits > 4 || chars.get(open) != Some(&'(') {
+            let limit = if code == 'p' { 4 } else { 10 };
+            if digits == 0 || digits > limit || chars.get(open) != Some(&'(') {
                 return None;
             }
             if code == 'p' {
@@ -171,11 +187,56 @@ fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
                 if percent > 0.0 {
                     inner.scale = st.scale * percent / 100.0;
                 }
+            } else {
+                let index = chars[pos + 2..open].iter().collect::<String>().parse::<u32>().ok()?;
+                // Tagged RGB/special-colour values use a different encoding. This slice
+                // handles untagged palette indices; retain other escapes literally.
+                if index >= 0x0100_0000 {
+                    return None;
+                }
+                // Preserve the existing text and inherited style for zero codes. Origin's
+                // invalid zero escape discards its contents; supported indices are positive.
+                if index > 0 {
+                    inner.color = Some(text_palette_color(index));
+                }
             }
             Some((Escape::Styled(inner), open + 1))
         }
         _ => None,
     }
+}
+
+/// Origin's original text palette. The low byte selects a one-based colour; unsupported
+/// byte values give black (Origin 2016 EMF fixtures in scratch/text-run-colors).
+fn text_palette_color(index: u32) -> Color {
+    const CLASSIC: [Color; 24] = [
+        Color::BLACK,
+        Color::RED,
+        Color::rgb(0, 255, 0),
+        Color::BLUE,
+        Color::rgb(0, 255, 255),
+        Color::rgb(255, 0, 255),
+        Color::rgb(255, 255, 0),
+        Color::rgb(128, 128, 0),
+        Color::rgb(0, 0, 128),
+        Color::rgb(128, 0, 128),
+        Color::rgb(128, 0, 0),
+        Color::rgb(0, 128, 0),
+        Color::rgb(0, 128, 128),
+        Color::rgb(0, 0, 160),
+        Color::rgb(255, 128, 0),
+        Color::rgb(128, 0, 255),
+        Color::rgb(255, 0, 128),
+        Color::WHITE,
+        Color::rgb(192, 192, 192),
+        Color::rgb(128, 128, 128),
+        Color::rgb(255, 255, 128),
+        Color::rgb(128, 255, 255),
+        Color::rgb(255, 128, 255),
+        Color::rgb(64, 64, 64),
+    ];
+    let index = (index & 255) as usize;
+    index.checked_sub(1).and_then(|i| CLASSIC.get(i)).copied().unwrap_or(Color::BLACK)
 }
 
 /// Copies text up to the `)` that matches an already opened `(`, balancing inner parentheses,

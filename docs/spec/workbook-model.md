@@ -570,6 +570,10 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   a Sheaf policy; drafts do not mutate the project. Existing range/request fields preserve
   independent labels/data, compact whole columns, other styles and `.sheaf`/companion saves.
   Stale selection/generation/revision and effective no-ops create no history entry.
+- **Classic presets.** The worksheet Font Color and Fill Color menus include all 24 native
+  Classic RGB colours (GUI 3, measurements 2026-11-16). The additional 16 names are grouped in a
+  submenu, a Sheaf UI choice. They reuse the same captured range changes and persistence as
+  basic/custom colours, including stale-target rejection and independent data/label styles.
 - **Dialog scope.** Set Data Style > More... reuses the selected-range Format Cells window.
   Origin 2016 has no Default data-style command; Rich Text/Wrap Text/Float remain separate,
   unsupported text controls (B5). Its Worksheet Properties Format tab instead has category

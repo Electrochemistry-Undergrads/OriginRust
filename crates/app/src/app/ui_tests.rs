@@ -66,6 +66,7 @@ mod toolbar_print;
 mod treemap;
 mod view_modes;
 mod violin;
+mod worksheet_classic_colors;
 mod worksheet_controls;
 mod worksheet_custom_colors;
 mod worksheet_format_toolbar;

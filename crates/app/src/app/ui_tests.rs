@@ -49,6 +49,7 @@ mod symbol_line_gaps;
 mod symbol_line_order;
 mod toolbar_print;
 mod treemap;
+mod view_modes;
 mod violin;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.

@@ -4190,6 +4190,13 @@ In order, with separators after the third, fifth and ninth item: Layer Icons, Ac
 
 Ctrl+Shift+J (View > Full Screen; the page right-click item "View Full Screen" has the same key): the graph page covers the whole screen, with no menu bar, toolbars, status bar or window frame, and fits its aspect to the screen height (white page, no grey). A "Reminder Message" dialog appears in the middle when it starts (text: "Hit ESC to exit", "Arrow Keys to shift to different graphs.", "Home and End key to first and last graph.", a "Do not show this message in the future" tick and OK; Enter confirms it). **Esc ends it** and the normal window comes back as it was. With a single graph a Right arrow did not leave a visible change before Esc (the window was already back in the next picture: unclear whether Right ended it; **unmeasured**). Switching between several graphs with the arrow keys, Home and End: **unmeasured**.
 
-### 22.5 What Sheaf takes from this (T66)
+### 22.5 What Sheaf does (T66, built)
+
+- The mode is per graph window and kept in `Project::view_modes` (Page View, the default, is not stored); it is saved in the `.sheaf` file, is not an undo step, and is not written to `.opj` (the `page.viewmode` block of the OPJ format was not located: unmeasured).
+- Print View and Page View draw the same picture (as measured). Window View and Draft View give the page the window's aspect with its own width (layers grow with the window, text keeps its size, no grey border; the zoom layout works over the window grown by its 12 px margin). Draft View rasterises without anti-aliasing of the text (the lines and symbols stay as they were), as measured. `page.width`/`layer.width` per mode is unmeasured, so Sheaf does not change the stored page size.
+- Show > Layer Icons toggles the existing page setting (`Plot Details > Miscellaneous > Show the layer icons`; one undo step). The other Show items and Show Data Info are grey.
+- Full Screen: Sheaf's window goes to the whole screen and shows the page only (white ground, page fitted into the screen, no menu, toolbars, panels or status bar), the Reminder Message first (Enter or OK ends it; the tick is kept for the run only, Sheaf has no settings file yet), Esc ends it; Left/Right/Home/End switch between the graphs in window order as the reminder says (not measured beyond the reminder text; Right on the last graph does nothing).
+
+### 22.6 What Sheaf took from this (T66, plan)
 
 Page View as Sheaf's current picture and the default; Window View (page stretched to the window, aspect not kept) and Draft View (the same with plain text) as in 22.2; modes saved in the `.sheaf` file; the Layer Icons tick; Full Screen with Esc and the reminder; leave the unmeasured Show items and Show Data Info grey until they are measured.

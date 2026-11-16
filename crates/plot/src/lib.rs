@@ -504,6 +504,13 @@ pub fn render_scene_raster(scene: &scene::Scene, pixels_per_point: f64) -> Resul
     raster::rasterise(&svg::write_svg(scene), pixels_per_point, SystemFonts::shared())
 }
 
+/// [`render_scene_raster`] for Draft View: the same drawing with unsmoothed (crisp, not
+/// anti-aliased) edges and text, as Origin's Draft View shows plain text (graphing spec 22.2).
+pub fn render_scene_raster_draft(scene: &scene::Scene, pixels_per_point: f64) -> Result<Raster, PlotError> {
+    let svg = svg::write_svg(scene).replacen("<svg ", "<svg text-rendering=\"optimizeSpeed\" ", 1);
+    raster::rasterise(&svg, pixels_per_point, SystemFonts::shared())
+}
+
 /// Renders a graph to pixels at `pixels_per_point` (1 = 72 dpi), for showing on screen.
 pub fn render_raster(project: &Project, graph: WindowId, pixels_per_point: f64) -> Result<Raster, PlotError> {
     let svg = render_svg(project, graph)?;

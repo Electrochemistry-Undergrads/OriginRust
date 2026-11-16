@@ -1,6 +1,6 @@
 # T66: Graph view modes, Show toggles, Show Data Info, Full Screen (B1, slice 2)
 
-**Status:** open (brief written 2026-11-15, branch `graph-view-modes`, Claude Windows). Step 1 (Origin 2016 measurement) is done and in [graphing](../spec/graphing.md) section 22; no Rust yet. Zoom In/Out, Whole Page and Pan are T65 (done); Zoom All stays `B1`.
+**Status:** partly done (2026-11-15, branch `graph-view-modes`, Claude Windows). Done: the four view modes (menu, Ctrl+2/1/0, ticks, saved in the `.sheaf` file), Show > Layer Icons, Full Screen with the reminder, Esc and the arrow keys (menu, Ctrl+Shift+J, page context item). Still grey, 10 items: Active Layer Indicator, Axis Layer Icons, Object Grid, Layer Grid, Frame, Labels, Data, Active Layer Only, Master Items on Screen and Show Data Info, because Origin's effect for them is unmeasured (graphing 22.3). Step 1 (Origin 2016 measurement) is in [graphing](../spec/graphing.md) section 22. Zoom In/Out, Whole Page and Pan are T65 (done); Zoom All stays `B1`.
 **Size:** M. **Inventory:** 17 locations: View > Print View, Page View, Window View, Draft View; View > Show (ten items); View > Show Data Info; View > Full Screen; graph page context item "View Full Screen".
 
 ## Goal

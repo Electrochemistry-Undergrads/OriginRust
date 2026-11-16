@@ -45,6 +45,7 @@ mod recent;
 mod switcher;
 mod theme;
 mod toolbar;
+mod view_modes;
 mod winclip;
 mod winprint;
 mod wks_clipboard;

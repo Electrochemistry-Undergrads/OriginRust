@@ -275,6 +275,12 @@ pub enum Cmd {
     ZoomOut,
     /// View > Whole Page (Ctrl+W).
     WholePage,
+    /// View > Print View, Page View, Window View, Draft View.
+    SetViewMode(sheaf_core::project::ViewMode),
+    /// View > Show > Layer Icons.
+    ToggleLayerIcons,
+    /// View > Full Screen (Ctrl+Shift+J) and the page's "View Full Screen".
+    FullScreen,
     /// The Pan tool of the Tools toolbar.
     PanTool,
     /// Object Edit toolbar Bring to Front / Send to Back: reorders the selected drawn shape.
@@ -425,6 +431,10 @@ pub struct MenuContext<'a> {
     pub can_cumulate: bool,
     /// The selected drawn shape of the active graph as (layer, shape index, shapes in that layer).
     pub selected_shape: Option<(usize, usize, usize)>,
+    /// The view mode of the active graph (the tick of View > Print View, Page View, Window View, Draft View).
+    pub view_mode: sheaf_core::project::ViewMode,
+    /// The active graph shows its layer icons (the tick of View > Show > Layer Icons).
+    pub layer_icons: bool,
 }
 
 impl<'a> MenuContext<'a> {
@@ -762,33 +772,35 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
         }
         WindowKind::Graph => {
             v.push(sep());
-            v.push(grey_keyed("Print View", ctrl(Key::Num2)));
-            v.push(grey_keyed("Page View", ctrl(Key::Num1)));
-            v.push(grey("Window View"));
-            v.push(grey_keyed("Draft View", ctrl(Key::Num0)));
+            use sheaf_core::project::ViewMode as VM;
+            v.push(keyed("Print View", ctrl(Key::Num2), Cmd::SetViewMode(VM::Print)));
+            v.push(keyed("Page View", ctrl(Key::Num1), Cmd::SetViewMode(VM::Page)));
+            v.push(item("Window View", Cmd::SetViewMode(VM::Window)));
+            v.push(keyed("Draft View", ctrl(Key::Num0), Cmd::SetViewMode(VM::Draft)));
             v.push(sep());
             v.push(keyed("Zoom In", ctrl(Key::I), Cmd::ZoomIn));
             v.push(keyed("Zoom Out", ctrl(Key::M), Cmd::ZoomOut));
             v.push(keyed("Whole Page", ctrl(Key::W), Cmd::WholePage));
             v.push(grey("Zoom All"));
             v.push(sep());
-            v.push(grey_sub(
-                "Show",
-                &[
-                    "Layer Icons",
-                    "Active Layer Indicator",
-                    "Axis Layer Icons",
-                    "Object Grid",
-                    "Layer Grid",
-                    "Frame",
-                    "Labels",
-                    "Data",
-                    "Active Layer Only",
-                    "Master Items on Screen",
-                ],
-            ));
+            let mut show = vec![item("Layer Icons", Cmd::ToggleLayerIcons)];
+            show.extend(greys(&[
+                "Active Layer Indicator",
+                "Axis Layer Icons",
+                "-",
+                "Object Grid",
+                "Layer Grid",
+                "-",
+                "Frame",
+                "Labels",
+                "Data",
+                "Active Layer Only",
+                "-",
+                "Master Items on Screen",
+            ]));
+            v.push(sub("Show", show));
             v.push(grey("Show Data Info"));
-            v.push(grey_keyed("Full Screen", ctrl_shift(Key::J)));
+            v.push(keyed("Full Screen", ctrl_shift(Key::J), Cmd::FullScreen));
         }
         WindowKind::None => {}
     }
@@ -1956,7 +1968,7 @@ pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
         grey("Add Shortcut to Favorites"),
         keyed("Copy Page", ctrl(Key::J), Cmd::CopyPage),
         item("Export Graphs...", Cmd::ExportGraph),
-        grey_keyed("View Full Screen", ctrl_shift(Key::J)),
+        keyed("View Full Screen", ctrl_shift(Key::J), Cmd::FullScreen),
         sep(),
         keyed("Rescale To Show All", ctrl(Key::R), Cmd::GraphEdit(GraphOp::Rescale { layer })),
         item("Page Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Page, plot: None }),
@@ -2467,6 +2479,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::PanTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pan },
         Cmd::ZoomOut => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::ZoomOut },
         Cmd::WholePage => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::WholePage },
+        Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
+        Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
+        Cmd::FullScreen => Action::FullScreen(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::EditSlope { layer, slope } => {
             Action::EditSlope { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, slope: *slope }
         }
@@ -2666,6 +2681,14 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleAiLink)) && c.ai_link {
+                    tick(ui, &response);
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleLayerIcons)) && c.layer_icons {
+                    tick(ui, &response);
+                }
+                if let Some(Cmd::SetViewMode(mode)) = &it.cmd
+                    && *mode == c.view_mode
+                {
                     tick(ui, &response);
                 }
                 if let (Some(Cmd::SetStack(mode)), Some(current)) = (&it.cmd, c.stack)
@@ -2942,6 +2965,8 @@ mod tests {
             stack: None,
             can_cumulate: false,
             selected_shape: None,
+            view_mode: Default::default(),
+            layer_icons: true,
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);

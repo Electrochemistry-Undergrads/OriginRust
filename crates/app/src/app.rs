@@ -195,6 +195,10 @@ pub struct SheafApp {
     toolbars: Toolbars,
     /// View > Status Bar turned the status bar off.
     status_bar_hidden: bool,
+    /// View > Full Screen is on (T66): one graph's page over the whole screen until Esc.
+    full_screen: Option<crate::view_modes::FullScreen>,
+    /// The Full Screen reminder was switched off with its tick (kept for this run only).
+    full_screen_reminder_off: bool,
     /// The side panels: Project Explorer, Object Manager and the logs.
     panels: Panels,
     /// What the status bar and the message boxes said, and the reports of the tools.
@@ -296,6 +300,8 @@ impl SheafApp {
             about: false,
             toolbars: Toolbars::default(),
             status_bar_hidden: false,
+            full_screen: None,
+            full_screen_reminder_off: false,
             panels: Panels::default(),
             logs: Logs::default(),
             logged_message: None,
@@ -2079,6 +2085,22 @@ impl SheafApp {
                 let percent = (state.zoom.factor * 100.0).round();
                 self.say(format!("Zoom {percent}%"));
             }
+            Action::SetViewMode { graph, mode } => {
+                if self.doc.project().graph(graph).is_some() && self.doc.project().view_mode(graph) != mode {
+                    self.doc.adjust_view(|p| p.set_view_mode(graph, mode));
+                }
+            }
+            Action::SetLayerIcons { graph, on } => {
+                self.doc.apply("Show Layer Icons", |p| {
+                    if let Some(g) = p.graph_mut(graph) {
+                        g.page.style.layer_icons = on;
+                    }
+                });
+            }
+            Action::FullScreen(graph) => {
+                self.full_screen = Some(crate::view_modes::FullScreen::new(graph, !self.full_screen_reminder_off));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+            }
             Action::DataEdit(edit) => self.data_edit(edit),
             Action::AddText { graph, layer, at } => {
                 let state = self.graphs.entry(graph).or_default();
@@ -3015,6 +3037,8 @@ impl SheafApp {
                 };
                 Some((layer, shape, project.graph(g)?.layers.get(layer)?.shapes.len()))
             }),
+            view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
+            layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
             can_cumulate: graph.is_some_and(|g| {
                 let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
                 project.graph(g).and_then(|gr| gr.layers.get(layer)).is_some_and(sheaf_core::stack::layer_cumulates)
@@ -4592,9 +4616,12 @@ impl eframe::App for SheafApp {
         }
         self.active = self.workspace.active();
         self.shortcuts(ctx, &mut actions);
+        let full = self.full_screen.is_some();
 
-        egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| self.menu_bar(ui, &mut actions));
-        {
+        if !full {
+            egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| self.menu_bar(ui, &mut actions));
+        }
+        if !full {
             let c = self.menu_context();
             let tb = &self.toolbars;
             let bar_frame = || egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(3, 1));
@@ -4618,11 +4645,11 @@ impl eframe::App for SheafApp {
                     .show(ctx, |ui| toolbar::show_row(ui, &[Bar::Graphs2D], tb, &c, &mut actions));
             }
         }
-        {
+        if !full {
             let data = panel_data(&self.doc, &self.logs, self.active, &self.path, &self.graph_props);
             self.panels.strips_and_docks(ctx, &data, &mut actions);
         }
-        {
+        if !full {
             let c = self.menu_context();
             let tb = &self.toolbars;
             let side_frame = || egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(1, 3));
@@ -4646,33 +4673,41 @@ impl eframe::App for SheafApp {
                     });
             }
         }
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::WORKSPACE_GREY)).show(ctx, |ui| {
-            if self.doc.project().windows.is_empty() {
-                self.welcome(ui, &mut actions);
-            } else {
-                let doc = &self.doc;
-                let books = &mut self.books;
-                let graphs = &mut self.graphs;
-                let actions = &mut actions;
-                let info = |id: WindowId| {
-                    doc.project()
-                        .window(id)
-                        .map(|w| WindowInfo { title: w.title(), graph: matches!(w, Window::Graph(_)) })
-                };
-                let mut content = |id: WindowId, ui: &mut egui::Ui| match doc.project().window(id) {
-                    Some(Window::Workbook(_)) => {
-                        grid::show(ui, doc, id, books.entry(id).or_default(), actions);
-                    }
-                    Some(Window::Graph(_)) => {
-                        graph_view::show(ui, doc, id, graphs.entry(id).or_default(), actions);
-                    }
-                    None => {}
-                };
-                self.workspace.show(ui, doc.dirty, &info, &mut content);
+        if let Some(fs) = &mut self.full_screen {
+            if fs.show(ctx, self.doc.project(), self.doc.revision()) == crate::view_modes::Event::End {
+                self.full_screen_reminder_off |= fs.never_remind;
+                self.full_screen = None;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
             }
-        });
+        } else {
+            egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::WORKSPACE_GREY)).show(ctx, |ui| {
+                if self.doc.project().windows.is_empty() {
+                    self.welcome(ui, &mut actions);
+                } else {
+                    let doc = &self.doc;
+                    let books = &mut self.books;
+                    let graphs = &mut self.graphs;
+                    let actions = &mut actions;
+                    let info = |id: WindowId| {
+                        doc.project()
+                            .window(id)
+                            .map(|w| WindowInfo { title: w.title(), graph: matches!(w, Window::Graph(_)) })
+                    };
+                    let mut content = |id: WindowId, ui: &mut egui::Ui| match doc.project().window(id) {
+                        Some(Window::Workbook(_)) => {
+                            grid::show(ui, doc, id, books.entry(id).or_default(), actions);
+                        }
+                        Some(Window::Graph(_)) => {
+                            graph_view::show(ui, doc, id, graphs.entry(id).or_default(), actions);
+                        }
+                        None => {}
+                    };
+                    self.workspace.show(ui, doc.dirty, &info, &mut content);
+                }
+            });
+        }
 
-        {
+        if !full {
             let data = panel_data(&self.doc, &self.logs, self.active, &self.path, &self.graph_props);
             self.panels.flyouts(ctx, &data, &mut actions);
         }

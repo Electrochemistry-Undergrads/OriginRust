@@ -5461,3 +5461,37 @@ Probed with X = 1..50 and Y = 10 sin(X/5), B selected.
   - **Differences from Origin:** shapes are drawn over the data, so the region hides the curve under it
     (Origin draws the curve on top). The axes keep Sheaf's automatic ranges.
 
+## 35. Wind rose: Plot > Specialized > Wind Rose - Binned Data, Wind Rose - Raw Data (T113, 2026-11-16, **not measured**)
+
+Origin 2016 lists both items under Plot > Specialized (seen in the menu on 2026-11-16). The probes could
+not run: Origin's COM class was unregistered on the test machine (REGDB_E_CLASSNOTREG). This section
+therefore describes Sheaf's version, built from Origin's documented behaviour. Measure it when
+automation works again.
+
+- **Layer:** a wind rose is a polar layer on the polar page (graphing 14.18). North (0 degrees) points up,
+  the angles run clockwise in degrees, and the radius is the frequency.
+- **Plots:** one plot per speed band, so the legend lists the bands with filled swatches. In each direction
+  sector a band is a wedge, piled on the bands plotted before it in the same layer.
+- **Colours:** bands are blue, cyan, green, yellow, orange and red, with black 0.5 pt edges.
+- **Binned Data:**
+  - The X column holds the sector directions in degrees. A text X column, such as N, NNE, ..., spreads
+    its rows evenly round the circle.
+  - Each selected Y column is one band's frequencies, piled in selection order.
+  - Sectors are 360 / rows wide.
+- **Raw Data:**
+  - The X column holds directions in degrees; the one selected Y column holds the speeds.
+  - There are 16 sectors of 22.5 degrees, centred on 0, 22.5, ... (a direction goes to the nearest
+    centre).
+  - The bands are 0 to s, s to 2s, ..., up to 6 of them. s is the smallest 1-2-5 step of which 6 cover the
+    top speed, and only as many bands as the top speed needs are made. The top band includes its upper
+    edge.
+  - A wedge is the percentage of all rows (with a direction and a speed) that fall in its sector and band.
+- **Sheaf internals:** plot kind `wind_rose` with `PlotDecor::wind_rose` (sectors, the band's speed range);
+  templates `wind-rose-binned` and `wind-rose-raw`. The .opj writer saves the columns as scatter plots,
+  with a warning.
+- **To measure:**
+  - Origin's dialogs, if any.
+  - Its default sector count and speed bins.
+  - Its colours, and whether it shows percent or counts.
+  - Its angle labels: degrees or compass names.
+

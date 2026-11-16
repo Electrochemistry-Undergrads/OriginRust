@@ -103,6 +103,8 @@ pub(crate) struct PlotData<'a> {
     pub stock: Option<crate::stock_plot::StockData>,
     /// The bins or box of a marginal plot (T110); `None` for other kinds.
     pub marginal: Option<crate::marginal_plot::MarginalData>,
+    /// The sectors of a wind rose band (T113); `None` for other kinds.
+    pub wind_rose: Option<crate::wind_rose::WindRoseData>,
     /// The lines and axes of a layer's parallel plots, held by the first of them; `None` for other plots.
     pub parallel: Option<Box<crate::parallel::ParallelData>>,
     /// What a treemap plot draws; `None` for other kinds.
@@ -680,6 +682,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             vector: None,
             stock: None,
             marginal: None,
+            wind_rose: None,
             parallel: None,
             treemap: None,
             sunburst: None,
@@ -826,6 +829,15 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.base = None;
                 pd.ridge = Some(ridge);
             }
+            PlotKind::WindRose => {
+                pd.wind_rose = plot.decor.wind_rose.map(|s| crate::wind_rose::WindRoseData::new(project, &pd, s));
+                // The wedges are not points; their extent counts through `wind_rose`.
+                pd.end = pd.start;
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
+            }
             PlotKind::MarginalHistogram | PlotKind::MarginalBox => {
                 let values = pd.visible_values().into_owned();
                 let side = plot.decor.marginal.unwrap_or(sheaf_core::marginal::MarginalSide::Top);
@@ -867,6 +879,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
     }
     crate::parallel::attach(project, layer, &mut plots);
     crate::ridgeline::set_scales(&mut plots);
+    crate::wind_rose::pile(&mut plots);
     stack_bars(&mut plots);
     place_bars(&mut plots, &layer.bars);
     attach_waterfall_colors(project, layer, &mut plots);
@@ -1107,6 +1120,12 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
         }
     };
     for pd in pds {
+        if let Some(w) = &pd.wind_rose {
+            let (a, b) = w.extent(dim == Dim::X);
+            add(a);
+            add(b);
+            continue;
+        }
         if let Some(m) = &pd.marginal {
             let (a, b) = m.extent(dim == Dim::X);
             add(a);

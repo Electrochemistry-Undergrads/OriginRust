@@ -40,6 +40,9 @@ pub enum Template {
     QcXbarR,
     /// Plot > Specialized > Zoom (T112): the whole curve with a region rectangle, and the region enlarged below.
     Zoom,
+    /// Plot > Specialized > Wind Rose - Binned Data and Wind Rose - Raw Data (T113).
+    WindRoseBinned,
+    WindRoseRaw,
     /// Line plot with a symbol on every point.
     LineSymbol,
     /// Cyclic voltammetry overlay: smooth lines without markers, no grid,
@@ -187,7 +190,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 73] = [
+    pub const ALL: [Template; 75] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -261,6 +264,8 @@ impl Template {
         Template::MarginalBoxCharts,
         Template::QcXbarR,
         Template::Zoom,
+        Template::WindRoseBinned,
+        Template::WindRoseRaw,
     ];
 
     /// The name used on the command line and in menus.
@@ -281,6 +286,8 @@ impl Template {
             Template::MarginalBoxCharts => "marginal-box-charts",
             Template::QcXbarR => "qc-xbar-r",
             Template::Zoom => "zoom",
+            Template::WindRoseBinned => "wind-rose-binned",
+            Template::WindRoseRaw => "wind-rose-raw",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
@@ -359,6 +366,8 @@ impl Template {
             Template::MarginalBoxCharts => "Marginal Box Charts",
             Template::QcXbarR => "QC (X bar R) Chart",
             Template::Zoom => "Zoom",
+            Template::WindRoseBinned => "Wind Rose - Binned Data",
+            Template::WindRoseRaw => "Wind Rose - Raw Data",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
@@ -480,6 +489,7 @@ impl Template {
             Template::MarginalBoxCharts => marginal(id, name, PlotKind::MarginalBox),
             Template::QcXbarR => qc_xbar_r(id, name),
             Template::Zoom => zoom(id, name),
+            Template::WindRoseBinned | Template::WindRoseRaw => wind_rose(id, name),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
             Template::Multi3YYy | Template::Multi3YYY | Template::Multi4YYyy | Template::Multi4YyYy => {
@@ -1121,6 +1131,18 @@ fn zoom(id: WindowId, name: &str) -> Graph {
     g
 }
 
+/// A wind rose (T113, from Origin's documentation, not measured): the polar page with north up and the
+/// angles running clockwise in degrees, ticks every 45 degrees, the legend listing the speed bands.
+fn wind_rose(id: WindowId, name: &str) -> Graph {
+    let mut g = polar_of(id, name, RadiusColumn::Y, PlotKind::WindRose);
+    let l = &mut g.layers[0];
+    l.coords = Coords::Polar(PolarCoords { zero_deg: 90.0, clockwise: true, ..PolarCoords::default() });
+    l.x_axis.min = Some(0.0);
+    l.x_axis.max = Some(360.0);
+    l.x_axis.major_step = Some(45.0);
+    g
+}
+
 fn double_y(id: WindowId, name: &str) -> Graph {
     let mut g = general(id, name, PlotKind::Line);
     let layer = &mut g.layers[0];
@@ -1326,7 +1348,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 73);
+        assert_eq!(Template::ALL.len(), 75);
+        assert_eq!(Template::from_name("wind-rose-raw"), Some(Template::WindRoseRaw));
         assert_eq!(Template::from_name("zoom"), Some(Template::Zoom));
         assert_eq!(Template::from_name("qc-xbar-r"), Some(Template::QcXbarR));
         assert_eq!(Template::from_name("marginal-histograms"), Some(Template::MarginalHistograms));

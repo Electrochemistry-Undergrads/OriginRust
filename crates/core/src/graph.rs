@@ -1567,6 +1567,9 @@ pub enum PlotKind {
     QcMeans,
     /// The subgroup ranges of an X bar R chart (T111): bars from the centre line [`PlotDecor::qc_center`].
     QcRanges,
+    /// One speed band of a wind rose (T113): wedges per direction sector, piled on the bands before it in the
+    /// layer ([`PlotDecor::wind_rose`]).
+    WindRose,
     /// Origin's Parallel Plot (2019, Parallel.otpu): the plot's Y column is one vertical axis; every row is a
     /// line through the axes of all the layer's parallel plots, coloured by a numeric column (graphing spec 14.25).
     Parallel,
@@ -1867,6 +1870,9 @@ pub struct PlotDecor {
     /// The centre line of an X bar R chart's means or ranges (T111).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub qc_center: Option<f64>,
+    /// The speed band of a wind rose plot (T113).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wind_rose: Option<crate::windrose::WindRoseSpec>,
 }
 
 pub use sheaf_calc::trend::TrendKind;

@@ -705,15 +705,31 @@ Sheaf choices: the size box accepts finite 1 to 1000 pt values and commits on En
 leaving the box cancels the draft. Font Color offers eight named basic RGB colours (black, red,
 green, blue, cyan, magenta, yellow, white). Origin's Auto, full system/custom palettes and palette
 management remain open. Family selection is restricted to installed families; fallback rendering
-retains its existing behaviour. Underline, scripts, Greek and Fill/Line Color remain disabled
-in this toolbar until their own whole-object semantics/model support are implemented. Text-window
-selection controls and the T59 worksheet adapter are separate slices.
+retains its existing behaviour. Text-window selection controls and the T59 worksheet adapter
+are separate slices.
 
 `text_format::{Snapshot, Target, Change, Request}` separates widget changes from target application.
 T59 can add its cell target behind the same toolbar. Requests capture graph/layer/object plus
 document generation and revision. Dispatch rechecks active selection and dialog/cell editing state;
 invalid, unchanged or stale requests add no history. Open family/colour lists retain their original
 target rather than following a later selection. No model or file-format fields were added.
+
+Underline, Superscript, Subscript, Greek, Fill Color and Line Color (`object_format`, same
+request/staleness rules, own `Action::FormatObject`). Origin's online
+[Format toolbar help](https://docs.originlab.com/origin-help/format-toolbar/) [W] describes the first
+four as acting on selected characters and does not document whole-object behaviour. Fill and
+line/border colour are described on Origin's
+[Style toolbar](https://docs.originlab.com/origin-help/style-toolbar) as setting the fill or line
+colour of the selected object; Sheaf shows them in the Format row (gui-look.md, Format and Style toolbar description). Sheaf choices,
+all **unmeasured** (Origin 2016 measurement remains open): the four text buttons wrap the whole
+text in one `\u(`, `\+(`, `\-(` or `\g(` group, or remove that group when the text is exactly one
+such group (nesting counted as the parser does; `\u(a)b` is wrapped, not unwrapped; a group may
+span lines, so multi-line text is one group) and show pressed when wrapped; they apply to free
+labels and to X/Y titles with their own non-empty text, not to the legend or automatic titles.
+Fill Color (palette: None plus the eight basic colours) sets a rectangle's or circle's fill and a
+visible legend's background; Line Color sets a drawn object's or straight line's colour. Both are
+disabled with a hover reason elsewhere (the legend frame has no colour field). The selection
+survives; undo labels are "Format graph text" and "Format graph object". No model fields added.
 
 
 ---
@@ -927,7 +943,7 @@ missing fields use the system settings, and invalid known fields reject the load
 control changes. Name whitespace normalization, case-insensitive replacement and the 60-character
 limit are Sheaf's choices, shared with import themes.
 
-Compare, Generate Script, Recent Exports, graph-specific theme attachment and Origin `.ois`
+Compare, Generate Script, graph-specific theme attachment and Origin `.ois`
 interchange remain open. Graph Theme application and the preview's Graph tab are still separate
 T05 leftovers; no exporter or renderer behavior changes here.
 
@@ -2446,6 +2462,58 @@ Origin's documented facts (Origin 2022 help, not measured; no Origin was at hand
   the Radius/Center settings, tangential labels for thin rings, a colour-by-category-palette option, a label font setting, reading
   Origin's sunburst from .opj.
 
+### 14.28 Grouped Columns (indexed data) and Grouped Box Charts (T76)
+
+Origin's documented facts (documentation only, **not measured**; no Origin was at hand; paraphrased;
+[W:docs.originlab.com/x-function/ref/plot_gindexed], [W:docs.originlab.com/origin-help/grouped-column-index-data],
+[W:docs.originlab.com/x-function/ref/plot_gboxindexed], [W:docs.originlab.com/origin-help/groupedboxcharts-indexeddata],
+[W:docs.originlab.com/tutorials/grouped-box-plot]):
+
+- The two items run the X-Functions `plot_gindexed` and `plot_gboxindexed`, available since Origin 9.1 SR0 (so in 2016). Both
+  open a dialog: the data form (summarized or raw), the bar and error-bar statistics, stacking, themes, panels or pages
+  split by a group column. Plot > Column/Bar/Pie > Grouped Columns (indexed data) is the greyed name in Sheaf's menu; in
+  newer help the same function sits under Plot > Categorical.
+- Indexed data: one or more group columns label the rows of the data column. The order of the group columns is the
+  hierarchy: the first is the main group on the axis, the next one nested inside. Groups sort alphabetically by default.
+- The result is one grouped plot (not one plot per group). With two or more group columns the X tick labels are a table
+  of rows, one per level. The fill colour is indexed by the subgroup by default.
+- Not documented on the pages read: the default bar statistic and error bar, the spacing and gap numbers, the legend,
+  the maximum number of group levels.
+
+**What Sheaf does** (everything below that is not in the list above is Sheaf's choice, **unmeasured**):
+
+- Items: Plot > Column/Bar/Pie > Grouped Columns (indexed data) (`Template::GroupedColumns`, CLI `grouped-columns`) and
+  Plot > Statistics > Grouped Box Charts (`Template::GroupedBox`, `grouped-box`). They plot straight from the selection
+  with no dialog (Origin's dialog is a leftover).
+- Selection: the data is the one selected numeric column designated Y; every other selected column is a group column, in
+  selection order, one or two (a numeric group column such as a scan number must be designated X or Group first). Anything else
+  is a status-bar warning, "Select one or two group columns and one data column (a numeric group column must be designated X or Group)", and no graph. More than two group
+  columns and a right Y axis are refused with a message. CLI: `sheaf plot -t grouped-columns|grouped-box -y DATA --group
+  G1[,G2]` (`--group` required; the data is the last numeric `--y` column, designation is not checked) and `--group-error none|sd|se` for the columns; panels, overlay, graph styling and
+  `--y2` are refused. MCP's `plot` takes the same names and `group_error`.
+- Model: the plots stay `PlotKind::Column` and `PlotKind::Box`; the new per-plot field `Plot.indexed` holds the group column,
+  for two group columns the second column and this plot's level, and the error bar. One group column gives one plot; two
+  give one plot per level of the second column, labelled with the level, so the legend names the subgroups and the colours
+  follow the layer's palette. The X axis shows the levels of the main group only (single-row labels) and takes the group
+  column's title. `.sheaf` round-trips the field; `.opj` export writes plain plots of the data column with a save warning;
+  user templates refuse these graphs.
+- Levels: the sorted distinct values of a group column (numbers numerically when every level is a number, otherwise plain
+  case-sensitive text order). Rows with a missing data value or an empty group cell are dropped. The main-group levels are
+  those of all rows with data, so every subgroup plot shares the positions 1..K.
+- Columns: the bar is the mean of the rows of the category (and subgroup); a category with no rows in a subgroup has no
+  bar. The error bar is None by default, or the SD (n-1) or the SE of those rows (a single row has none); Plot Details >
+  Error Bar sets it for every plot of the layer, one undo step. Bars side by side come from the layer's gap and overlap.
+- Boxes: the existing box statistics (Hazen quartiles, 1.5 IQR whiskers, outliers, mean) of the rows of the category and
+  subgroup. S subgroups share the 0.8 box band, each box 0.8/S wide; one subgroup keeps the plain box width. The Y range
+  covers whiskers, outliers and error bar ends. No significance brackets on grouped boxes.
+- Tests: `crates/core/src/template.rs`, `crates/core/src/indexed.rs`, `crates/plot/src/grouped_tests.rs` (goldens
+  `grouped-box.svg`, `grouped-columns.svg`), `crates/app/src/app/ui_tests/grouped_indexed.rs`,
+  `crates/cli/tests/grouped_indexed.rs`, `crates/io/src/opj/write/graph_feature_tests.rs`.
+
+**Leftovers:** Origin's dialog and data forms, raw-data bar statistics and the other error-bar statistics (CI, percentile
+ranges, MAD), stacking, two-row table tick labels, more than two group levels, Grouped Scatter, panels or pages split by a
+group, themes (half box, violin, ...), colour indexed by the main group, and a measurement of all of it in Origin 2016.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.
@@ -2825,6 +2893,14 @@ default printer's printable area for the Page Setup paper in the page's orientat
 8.205 in page became 10.667 x 8.0 in on landscape Letter: 1/6 in less on the left and right, 1/4 in on
 top and bottom); the layers keep their frames in percent of the page. Sheaf asks the default printer
 (Windows) and otherwise uses the paper less those measured edges (12 pt, 18 pt). One undo step.
+
+**Change X, Change Y, Ungroup** (plot right-click menu, T73, measured 2026-11-15): Change X and Change Y
+list the plot's sheet's columns (`[Book1]Sheet1!A(X)`, ...) in column order, the current one ticked and
+the one the plot uses on the other axis greyed; choosing one replaces that column, the legend and axis
+title follow, and the axis keeps the range it was drawn with (Sheaf fixes an automatic range at its
+drawn values). On a plot of a group Change X/Y are greyed and Ungroup ends the group with every plot
+keeping its drawn colour (Sheaf makes those colours explicit); on a plot in no group Ungroup is greyed.
+One undo step each.
 
 **Axis Center** (axis right-click menu, after Axis Zoom In/Out; T70, measured): the axis keeps its span
 and its range moves so that the value under the right-click becomes the middle (X 0..11 at 5.42 gave
@@ -3886,6 +3962,17 @@ grouped. Sheaf: `Template::VerticalDropLine` (scatter, `decor.drop.vertical` on,
 data labels of grouped columns and bars are now centred on their own bar. CLI `-t vertical-drop-line`, `-t
 column-label`.
 
+### 18.13 Scatter Central (T75, measured 2026-11-15)
+
+Origin 2016's Plot > Symbol > Scatter Central is the scatter graph with both axes crossing in the middle
+of a boxed frame: `layer.x.position` and `layer.y.position` -50 with `posType` 1 (percent), against 0
+for Scatter. The Y title stands horizontally above the frame at the Y axis' x, the X title rotated left
+of the frame at the X axis' height. Sheaf: template `scatter-central` (menu, `sheaf plot -t
+scatter-central`) with `Axis::offset_pct` -50 on both axes (the X offset is new here: percent of the
+frame height, "% From Bottom/Top" in the axis window), the frame drawn as a box, and the titles of any
+axis moved into the frame placed at its end as above; offsets 0 and outward (T61) are unchanged. New
+layers start at offset 0. `.opj` notes a lost X offset as it does a Y one.
+
 ### 20.1 Sheaf's rules
 
 **Superseded in part by 20.4 and 20.6** (Origin measured, Sheaf changed to follow it): the click in Mask mode,
@@ -4484,3 +4571,12 @@ datasets are styled, the default folder and name).
 - Tests: `crates/core/src/user_template/tests.rs`, `crates/io/src/user_templates/tests.rs`,
   `crates/plot/src/user_template_tests.rs`, `crates/app/src/app/ui_tests/user_templates.rs`,
   `crates/cli/tests/user_templates.rs`.
+
+## 25. File > New > Graph and the Standard toolbar's New Graph (T77)
+
+Origin's documentation (not measured, Origin 2016 is on Windows only) says both open an empty graph
+built from the default graph template, named Graph1, Graph2, ..., with no shortcut. [W]
+(https://www.originlab.com/doc/origin-help/standard-toolbar, https://www.originlab.com/doc/origin-help/create-childwindow)
+Sheaf: `Project::add_graph(Template::default())` (the Line template, which carries the owner defaults), no plots;
+axes with nothing to plot run 0 to 1. The graph is one undo step ("New graph") and is shown in front.
+UNMEASURED Sheaf choices: the axis ranges and the look of an empty layer.

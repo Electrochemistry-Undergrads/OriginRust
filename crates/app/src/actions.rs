@@ -85,6 +85,11 @@ pub enum GraphOp {
     MovePlotToLayer { layer: usize, plot: usize, to: usize },
     /// Hide Data Plot.
     HidePlot { layer: usize, plot: usize },
+    /// Change X / Change Y: the plot reads another column of its sheet (`y` false for X). The axis
+    /// limits are not touched.
+    SetPlotColumn { layer: usize, plot: usize, y: bool, column: sheaf_core::ColumnId },
+    /// Ungroup: the plots of the plot's group become single plots, keeping their look.
+    Ungroup { layer: usize, plot: usize },
     /// Remove Trendline: the plot's last trendline goes.
     RemoveTrendline { layer: usize, plot: usize },
     /// Hide Axis (`y` false for the X axis).
@@ -208,6 +213,12 @@ pub enum ImportPick {
 #[derive(Debug, Clone)]
 pub enum Action {
     NewProject,
+    /// File > New > Graph and the Standard toolbar button: an empty graph.
+    NewGraph,
+    /// File > Save Project without Data...: a copy without values to a file of its own.
+    SaveProjectWithoutData,
+    /// File > Duplicate Project without Data: an unsaved copy without values replaces the project.
+    DuplicateProjectWithoutData,
     OpenProject,
     SaveProject,
     SaveProjectAs,
@@ -249,6 +260,7 @@ pub enum Action {
     UndoAiChanges,
     /// A change captured by the shared Format toolbar.
     FormatText(crate::text_format::Request),
+    FormatObject(crate::object_format::Request),
     NewWorkbook,
     AddColumn(WindowId),
     DeleteColumns(Vec<ColumnId>),
@@ -661,6 +673,16 @@ pub enum Action {
     ImportRecent(std::path::PathBuf),
     /// Clear Recent Projects / Imports / Books / Graphs.
     ClearRecent(crate::recent::RecentKind),
+    /// A command ran from the Plot, Worksheet, Analysis or Statistics menu (or its Most Recently
+    /// Used list): it goes to the top of that menu's list.
+    UsedCommand {
+        menu: crate::mru::MruMenu,
+        cmd: crate::menus::Cmd,
+    },
+    /// File > Export > Recent Exports: open the export of that file again on its window.
+    OpenRecentExport(sheaf_io::recent::ExportEntry),
+    /// Clear Recent Exports.
+    ClearRecentExports,
     /// Remove a window from the project.
     DeleteWindow(WindowId),
     /// Put a window into a folder of the project explorer (the path of indices; empty is the root).

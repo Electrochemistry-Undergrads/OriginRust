@@ -79,8 +79,8 @@ fn three_graphs_become_a_vertical_shared_x_figure() {
     assert!(graphs.iter().all(|g| p.graph(*g).is_some()), "the sources are kept");
     let m = p.graphs().find(|g| g.name == "Graph4").unwrap();
     assert_eq!(m.layers.len(), 3);
-    for i in 1..3 {
-        let link = m.layers[i].link.unwrap();
+    for layer in &m.layers[1..3] {
+        let link = layer.link.unwrap();
         assert_eq!((link.parent, link.x), (0, ScaleLink::Straight));
     }
     assert!(!m.layers[0].x_axis.show_tick_labels && !m.layers[1].x_axis.show_tick_labels);

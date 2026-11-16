@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **390 greyed items: 278 in the menu bar, 26 on the toolbars, 86 in context menus.**
+original inventory baseline. This is not a new runtime audit. **368 greyed items: 266 in the menu bar, 19 on the toolbars, 83 in context menus.**
 
 ## How to read and keep this file
 
@@ -35,7 +35,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 |---|---|
 | `T56` | 1 |
 | `T57` | 2 |
-| `T58` | 8 |
+| `T58` | 2 |
 | `T59` | 2 |
 | `T60` | 0 |
 | `T61` | 5 |
@@ -47,17 +47,20 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T69` | 0 |
 | `T70` | 0 |
 | `T71` | 0 |
+| `T73` | 0 |
+| `T75` | 0 |
+| `T76` | 0 |
+| `T78` | 0 |
 | `B2` | 51 |
-| `B3` | 25 |
-| `B4` | 26 |
+| `B3` | 22 |
+| `B4` | 23 |
 | `B5` | 33 |
 | `B6` | 31 |
 | `B7` | 8 |
 | `B8` | 16 |
 | `B9` | 13 |
-| `B10` | 6 |
 | `B11` | 10 |
-| `B12` | 16 |
+| `B12` | 12 |
 | `B13` | 7 |
 | `B14` | 44 |
 | `B15` | 21 |
@@ -65,7 +68,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 48 items, backlog packages (`B`) 322, not planned (`N`) 20.
+Briefs (`T`) hold 42 items, backlog packages (`B`) 306, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -75,7 +78,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### File
 - `B14` New: Matrix... · Image · Excel · Layout · Notes · Function Plot
-- `B12` New: Graph
 - `B11` New: From Template
 - `T63` Open Excel...
 - `B12` Open Sample Projects
@@ -83,14 +85,10 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B11` Save Workbook As Analysis Template... [Workbook]
 - `N` Add Word Bookmarks to Analysis Template... [Workbook]
 - `B11` Batch Processing... [Workbook, Graph]
-- `B12` Save Project without Data...
-- `B12` Duplicate Project without Data
 - `B14` Import: Image... · Binary 2D Array... [no window, Workbook]
 - `B12` Import: Re-Import Directly · Re-Import... [no window, Workbook]
 - `T63` Export: Graph as Image... · Multi-Page PDF... [no window, Workbook]
 - `B12` Export: Worksheet as Image... [no window, Workbook]
-- `B10` Export: Recent Exports [no window, Workbook]
-- `B10` Recent Exports [Graph]
 
 ### Edit
 - `B5` Copy: Copy formula · Copy label rows · Copy formula and label rows · Copy All [Workbook]
@@ -116,21 +114,19 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Plot
 - `T63` Line: Horizontal Step · Vertical Step · Spline Connected
-- `B4` Symbol: Scatter Central · Column Scatter
+- `B4` Symbol: Column Scatter
 - `B4` Line + Symbol: Line Series
-- `B4` Column/Bar/Pie: Grouped Columns (indexed data)
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
 - `B15` 3D Symbol/Bar/Vector: 3D Bars · 3D Scatter · 3D Trajectory · 3D Scatter + Error Bar · 3D Vector XYZ XYZ · 3D Vector XYZ dXdYdZ
 - `B8` Statistics: Probability Plot · Q-Q Plot
-- `B4` Statistics: Grouped Box Charts · Interval Plot · Histogram + Probabilities · Marginal Histograms · Marginal Box Charts · 2D Kernel Density · QC (X bar R) Chart · Pareto · Scatter Matrix
+- `B4` Statistics: Interval Plot · Histogram + Probabilities · Marginal Histograms · Marginal Box Charts · 2D Kernel Density · QC (X bar R) Chart · Pareto · Scatter Matrix
 - `B14` Contour/Heat Map: Color Fill · B/W Lines + Labels · Gray Scale Map · Heat Map · Polar Contour theta(X) r(Y) · Polar Contour r(X) theta(Y) · Ternary Contour
 - `B14` Profile: Contour Profiles · Image Profiles
 - `B4` Specialized: Wind Rose · Piper · Smith Chart · High-Low-Close · Vector XYAM · Vector XYXY · Zoom
 - `B4` Stock: High-Low-Close · Japanese Candlestick · OHLC Bar Chart · OHLC-Volume · Line
 - `B11` System Templates...
-- `B10` Most Recently Used
 
 ### Column
 - `T63` Fill Column With: Row Numbers · Uniform Random Numbers · Normal Random Numbers
@@ -142,7 +138,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B7` Pivot Table...
 - `B14` Convert to Matrix: Direct · XYZ Gridding · Extract
 - `B16` Worksheet Script...
-- `B10` Most Recently Used Items
 
 ### Analysis
 - `B8` Mathematics: XYZ Surface Area...
@@ -152,12 +147,10 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T57` Signal Processing: Deconvolution... · STFT...
 - `B8` Signal Processing > Wavelet: Decompose... · Reconstruction... · Denoise... · Smooth... · Continuous Wavelet...
 - `B8` Peaks and Baseline: Multiple Peak Fit · Batch Peak Analysis Using Theme...
-- `B10` Most Recently Used Items
 
 ### Statistics
 - `B8` Descriptive Statistics: Partial Correlation Coefficient...
 - `B8` ANOVA: Three-Way ANOVA... · Repeated Measures ANOVA...
-- `B10` Most Recently Used Items
 
 ### Image
 - `B14` Adjustments: Brightness... · Contrast... · Gamma... · Levels...
@@ -219,9 +212,7 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ## Toolbars
 
-- `B12` Standard: New Graph
 - `B14` Standard: New Matrix · New Layout · New Notes
-- `T58` Format: Underline · Superscript · Subscript · Greek · Fill Color · Line Color
 - `T63` 2D Graphs: Bar · Stacked Area · Box Chart · Histogram · Bubble
 - `B4` 2D Graphs: High-Low-Close
 - `B2` Object Edit: Align Left · Align Right · Align Top · Align Bottom · Align Horizontal Center · Align Vertical Center · Make Same Width · Make Same Height · Group · Ungroup
@@ -242,7 +233,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B6` Worksheet sheet tab > Sheet Name to Show: Short Name · Long Name · Both
 - `B6` Worksheet corner: Column Header · Row Header · Column Grid · Row Grid · Page Break Preview Lines
 - `B6` Worksheet corner > Row Labels for Column Label Rows: Long Name · Units · Comments · F(x)= · Sparklines · Parameters
-- `B3` Graph plot: Change X · Change Y · Ungroup
 - `B11` Graph axis: Save Format as Theme...
 - `B2` Graph axis > Copy Format: All · All Style Formats · Axis
 - `B2` Graph axis title: Cut · Copy · Bring to the front · Push to the back

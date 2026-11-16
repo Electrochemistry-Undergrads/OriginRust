@@ -28,6 +28,7 @@ pub mod graph_data;
 pub mod graph_style;
 pub mod history;
 pub mod ids;
+pub mod indexed;
 pub mod layer_manage;
 pub mod layers;
 pub mod localtime;
@@ -47,6 +48,7 @@ pub mod stack;
 pub mod straight_line;
 pub mod template;
 pub mod user_template;
+pub mod without_data;
 pub mod worksheet;
 
 pub use clipboard::{CopyOptions, PasteReport};

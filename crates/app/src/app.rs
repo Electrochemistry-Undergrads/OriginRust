@@ -67,10 +67,13 @@ use sheaf_core::template::Template;
 use sheaf_core::{ColumnData, ColumnId, Designation, Document, Project, WindowId};
 use sheaf_io::batch::{ImportMode, PlaceOptions, Target, place_workbook_with};
 use sheaf_io::project_file;
+use sheaf_io::recent::{ExportEntry, ExportKind};
 use sheaf_io::recovery::{self, AutosaveSettings, Session};
 use sheaf_io::window_file::{self, WindowFileKind};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+
+mod no_data;
 
 pub const APP_NAME: &str = "Sheaf";
 
@@ -113,6 +116,8 @@ enum Pending {
     OpenFile,
     /// Open the newest recovery of an earlier run (the Recover button).
     Recover,
+    /// Duplicate Project without Data (it replaces the open project).
+    DuplicateNoData,
     Quit,
 }
 
@@ -1104,10 +1109,10 @@ impl SheafApp {
         let setup = self.doc.project().page_setup;
         let Some(page) = self.doc.project().graph(graph).map(|g| (g.page.width_pt, g.page.height_pt)) else { return };
         #[cfg(windows)]
-        let asked = if cfg!(test) { None } else { crate::winprint::printable_size_pt(&setup, page) };
+        let (w, h) = if cfg!(test) { None } else { crate::winprint::printable_size_pt(&setup, page) }
+            .unwrap_or_else(|| setup.fallback_printable_pt(page.0, page.1));
         #[cfg(not(windows))]
-        let asked: Option<(f64, f64)> = None;
-        let (w, h) = asked.unwrap_or_else(|| setup.fallback_printable_pt(page.0, page.1));
+        let (w, h) = setup.fallback_printable_pt(page.0, page.1);
         self.doc.apply("Fit Page to Printer", |p| {
             if let Some(g) = p.graph_mut(graph) {
                 g.resize_page(w, h, false);
@@ -1352,6 +1357,9 @@ impl SheafApp {
             GraphOp::MovePlotToAxis { .. } => "Move plot to left Y axis",
             GraphOp::MovePlotToLayer { .. } => "Move plot to layer",
             GraphOp::RemoveTrendline { .. } => "Remove trendline",
+            GraphOp::SetPlotColumn { y: false, .. } => "Change X",
+            GraphOp::SetPlotColumn { .. } => "Change Y",
+            GraphOp::Ungroup { .. } => "Ungroup",
             GraphOp::HidePlot { .. } | GraphOp::SetStack { .. } => unreachable!("handled above"),
         };
         if let GraphOp::AddLayer { layer, kind } = op {
@@ -1603,6 +1611,17 @@ impl SheafApp {
         crate::text_format::Snapshot::graph(&self.doc, graph, layer, object)
     }
 
+    /// The selected object's non-font Format-bar controls (markup, Fill and Line Color), gated
+    /// like `text_format`.
+    fn object_format(&self) -> Option<crate::object_format::Snapshot> {
+        if self.dialog_open() || self.books.values().any(|b| b.editing.is_some() || b.editing_label.is_some()) {
+            return None;
+        }
+        let graph = self.active?;
+        let (layer, object) = self.graphs.get(&graph)?.selected?;
+        crate::object_format::Snapshot::graph(&self.doc, graph, layer, object)
+    }
+
     // ----- actions -------------------------------------------------------
 
     fn apply(&mut self, action: Action, ctx: &egui::Context) {
@@ -1612,6 +1631,15 @@ impl SheafApp {
                     self.pending = Some(Pending::New);
                 } else {
                     self.do_pending(Pending::New, ctx);
+                }
+            }
+            Action::NewGraph => self.new_graph(),
+            Action::SaveProjectWithoutData => self.save_project_without_data(),
+            Action::DuplicateProjectWithoutData => {
+                if self.doc.dirty {
+                    self.pending = Some(Pending::DuplicateNoData);
+                } else {
+                    self.do_pending(Pending::DuplicateNoData, ctx);
                 }
             }
             Action::OpenProject => {
@@ -1665,6 +1693,11 @@ impl SheafApp {
             Action::FormatText(request) => {
                 if self.text_format().is_some_and(|state| state.target == request.target) {
                     crate::text_format::apply(&mut self.doc, request);
+                }
+            }
+            Action::FormatObject(request) => {
+                if self.object_format().is_some_and(|state| state.target == request.target) {
+                    crate::object_format::apply(&mut self.doc, request);
                 }
             }
             Action::NewWorkbook => {
@@ -2306,6 +2339,20 @@ impl SheafApp {
                     self.logs.warn(why);
                 }
             }
+            Action::UsedCommand { menu, cmd } => {
+                let kind = self.menu_context().kind;
+                if let Some(key) = crate::mru::key_of(crate::menus::bar(kind), menu, &cmd)
+                    && let Some(why) = self.recent.push_command(&menu.list_name(), &key)
+                {
+                    self.logs.warn(why);
+                }
+            }
+            Action::OpenRecentExport(entry) => self.open_recent_export(&entry),
+            Action::ClearRecentExports => {
+                if let Some(why) = self.recent.clear_exports() {
+                    self.logs.warn(why);
+                }
+            }
             Action::DuplicateWindow(id) => {
                 let mut new = None;
                 self.doc.apply("Duplicate window", |p| new = p.duplicate_window(id));
@@ -2457,6 +2504,7 @@ impl SheafApp {
                     }
                 }
             }
+            Pending::DuplicateNoData => self.duplicate_project_without_data(),
             Pending::Recover => self.recover_newest(),
             Pending::Quit => {
                 self.quit_confirmed = true;
@@ -2820,6 +2868,25 @@ impl SheafApp {
         } else {
             Vec::new()
         };
+        // Grouped columns / grouped box charts of indexed data: the one numeric Y column is the data, the other
+        // selected columns (one or two) are the groups, in selection order.
+        if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
+            let project = self.doc.project();
+            let is_data = |id: &ColumnId| {
+                project.column(*id).is_some_and(|c| c.data.is_numeric() && c.designation == Designation::Y)
+            };
+            let data = columns.iter().filter(|id| is_data(id)).count();
+            let groups = columns.len() - data;
+            if data != 1 || groups == 0 {
+                self.warn("Select one or two group columns and one data column (a numeric group column must be designated X or Group)".to_string());
+                return;
+            }
+            match self.doc.edit("Plot columns", |p| p.plot_columns(template, &columns)) {
+                Ok(_) => self.say(format!("Plotted {} by {} group column(s)", data, groups)),
+                Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+            }
+            return;
+        }
         let ys = self.plot_y_columns(book, columns, template);
         if ys.is_empty() {
             let what = if matches!(template, Template::Treemap | Template::Sunburst) {
@@ -3184,6 +3251,52 @@ impl SheafApp {
         self.focus(book);
     }
 
+    /// Puts the files an export wrote into Recent Exports, each with the short name of its window (unique, and unchanged by a
+    /// rename of the long name or title display).
+    fn record_exports(&mut self, kind: ExportKind, files: Vec<(WindowId, PathBuf)>) {
+        for (id, path) in files.into_iter().rev() {
+            let Some(window) = self.doc.project().windows.iter().find(|w| w.id() == id).map(|w| w.name().to_string())
+            else {
+                continue;
+            };
+            if let Some(why) = self.recent.push_export(&ExportEntry { path, kind, window }) {
+                self.logs.warn(why);
+            }
+        }
+    }
+
+    /// File > Export > Recent Exports: opens the export that wrote the file again, on the window it
+    /// was made from and in the file's folder. A window that is not in the project any more is
+    /// reported and nothing opens (Sheaf's choice, docs/spec/recent-lists.md 3).
+    fn open_recent_export(&mut self, entry: &ExportEntry) {
+        let title = "Recent Exports".to_string();
+        let project = self.doc.project();
+        let Some(id) = project.windows.iter().find(|w| w.name() == entry.window).map(|w| w.id()) else {
+            let text = format!("The window '{}' is not in this project, so its export cannot be opened.", entry.window);
+            self.message = Some((title, text));
+            return;
+        };
+        let folder = entry.path.parent().map(Path::to_path_buf).or_else(|| self.folder());
+        match entry.kind {
+            ExportKind::Graph if project.graph(id).is_some() => {
+                self.export = Some(ExportDialog::new(id, folder).with_themes(self.startup.themes_dir.clone()));
+            }
+            ExportKind::Sheet if project.workbook(id).is_some() => {
+                self.export_sheet = Some(SheetExportDialog::new(id, folder));
+            }
+            ExportKind::Excel if project.workbook(id).is_some() => {
+                let sheets = project.workbook(id).map_or(0, |b| b.sheets.len());
+                self.export_excel = Some(ExcelExportDialog::new(id, sheets, folder));
+            }
+            _ => {
+                let text = format!("'{}' is not the kind of window that wrote {}.", entry.window, entry.path.display());
+                self.message = Some((title, text));
+                return;
+            }
+        }
+        self.focus(id);
+    }
+
     fn export_data(&mut self, book: WindowId) {
         if self.doc.project().workbook(book).is_some() {
             self.export_sheet = Some(SheetExportDialog::new(book, self.folder()));
@@ -3226,6 +3339,8 @@ impl SheafApp {
             recent_imports: self.recent.imports(),
             recent_books: self.recent.books(),
             recent_graphs: self.recent.graphs(),
+            recent_commands: self.recent.commands(),
+            recent_exports: self.recent.exports(),
             user_templates: &self.user_templates,
             templates: self.startup.templates_dir.is_some(),
             panels: self.panels.shown_flags(),
@@ -3954,7 +4069,10 @@ impl SheafApp {
             }
         }
         if let Some(d) = &mut self.export {
-            match d.show(ctx, &self.doc) {
+            let outcome = d.show(ctx, &self.doc);
+            let written = d.take_written();
+            self.record_exports(ExportKind::Graph, written);
+            match outcome {
                 ExportOutcome::Open => {}
                 ExportOutcome::Closed => self.export = None,
                 ExportOutcome::Saved(path) => {
@@ -3994,14 +4112,17 @@ impl SheafApp {
             }
         }
         if let Some(d) = &mut self.export_sheet {
+            let book = d.book;
             match d.show(ctx, &self.doc) {
                 ExportOutcome::Open => {}
                 ExportOutcome::Closed => self.export_sheet = None,
                 ExportOutcome::Saved(path) => {
+                    self.record_exports(ExportKind::Sheet, vec![(book, path.clone())]);
                     self.say(format!("Wrote {}", path.display()));
                     self.export_sheet = None;
                 }
                 ExportOutcome::SavedWithNotes(path, _) => {
+                    self.record_exports(ExportKind::Sheet, vec![(book, path.clone())]);
                     self.say(format!("Wrote {}", path.display()));
                     self.export_sheet = None;
                 }
@@ -4010,14 +4131,17 @@ impl SheafApp {
             }
         }
         if let Some(d) = &mut self.export_excel {
+            let book = d.book;
             match d.show(ctx, &self.doc) {
                 ExportOutcome::Open | ExportOutcome::Applied(_) => {}
                 ExportOutcome::Closed => self.export_excel = None,
                 ExportOutcome::Saved(path) => {
+                    self.record_exports(ExportKind::Excel, vec![(book, path.clone())]);
                     self.say(format!("Wrote {}", path.display()));
                     self.export_excel = None;
                 }
                 ExportOutcome::SavedWithNotes(path, notes) => {
+                    self.record_exports(ExportKind::Excel, vec![(book, path.clone())]);
                     self.say(format!("Wrote {}", path.display()));
                     self.export_excel = None;
                     for note in &notes {
@@ -4845,6 +4969,7 @@ impl eframe::App for SheafApp {
         if !full {
             let c = self.menu_context();
             let format = self.text_format();
+            let object = self.object_format();
             let tb = &self.toolbars;
             let bar_frame = || egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(3, 1));
             if tb.shown(Bar::Standard) {
@@ -4854,9 +4979,9 @@ impl eframe::App for SheafApp {
             }
             let second = [Bar::Edit, Bar::Format, Bar::Graph];
             if tb.any(&second) {
-                egui::TopBottomPanel::top("toolbar_second")
-                    .frame(bar_frame())
-                    .show(ctx, |ui| toolbar::show_row_with_format(ui, &second, tb, &c, format.as_ref(), &mut actions));
+                egui::TopBottomPanel::top("toolbar_second").frame(bar_frame()).show(ctx, |ui| {
+                    toolbar::show_row_with_format(ui, &second, tb, &c, format.as_ref(), object.as_ref(), &mut actions)
+                });
             }
             if !self.status_bar_hidden {
                 egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| self.status_bar(ui));

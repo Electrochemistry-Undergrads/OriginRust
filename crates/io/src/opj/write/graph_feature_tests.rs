@@ -776,6 +776,22 @@ fn sunbursts_are_written_as_column_plots_with_a_save_warning() {
 }
 
 #[test]
+fn grouped_indexed_plots_are_written_as_plain_plots_with_a_save_warning() {
+    let mut p = source();
+    line_graph(&mut p, |l| {
+        l.plots[0].kind = sheaf_core::graph::PlotKind::Column;
+        l.plots[0].indexed =
+            Some(sheaf_core::graph::Indexed { group: l.plots[0].y, subset: None, error: Default::default() });
+    });
+    let (_, out) = round_trip(&p);
+    assert!(
+        out.warnings.iter().any(|w| w.contains("grouped columns and grouped box charts of indexed data were written")),
+        "{:?}",
+        out.warnings
+    );
+}
+
+#[test]
 fn violin_plots_are_written_as_plain_columns_with_a_save_warning() {
     for kind in [sheaf_core::graph::PlotKind::Violin, sheaf_core::graph::PlotKind::HalfViolin] {
         let mut p = source();
@@ -867,4 +883,16 @@ fn multi_y_layers_are_written_as_ordinary_layers_and_the_axis_offsets_are_named(
     p.graph_mut(id).unwrap().layers.iter_mut().for_each(|l| l.y_axis.offset_pct = 0.0);
     let (_, out) = round_trip(&p);
     assert!(!out.warnings.iter().any(|w| w.contains("away from the frame")), "{:?}", out.warnings);
+}
+
+#[test]
+fn an_x_axis_offset_is_named_in_the_notes() {
+    let mut p = source();
+    let c = ids(&p);
+    let id = p.plot_columns(Template::ScatterCentral, &[c[1]]).unwrap();
+    let (_, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("position of an X axis away from the frame")), "{:?}", out.warnings);
+    p.graph_mut(id).unwrap().layers.iter_mut().for_each(|l| l.x_axis.offset_pct = 0.0);
+    let (_, out) = round_trip(&p);
+    assert!(!out.warnings.iter().any(|w| w.contains("position of an X axis")), "{:?}", out.warnings);
 }

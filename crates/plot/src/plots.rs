@@ -1151,11 +1151,16 @@ fn draw_pie(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
 /// whiskers with caps and a cross at their ends, the mean as a small open square and the outliers
 /// as crosses, all in the plot's colour (measured in Origin).
 fn draw_box(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
-    let Some(b) = &pd.boxed else { return };
+    for b in pd.boxed.iter().chain(&pd.gboxes) {
+        draw_one_box(out, pd, geom, b);
+    }
+}
+
+fn draw_one_box(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, b: &crate::data::BoxStats) {
     let color = pd.plot.symbol.color;
     let width = pd.plot.line.width_pt.max(0.5);
     let at = |x: f64, y: f64| geom.checked_data_to_page(pd.display_x(x), pd.display_y(y));
-    let (l, r) = (b.pos - crate::data::BOX_WIDTH / 2.0, b.pos + crate::data::BOX_WIDTH / 2.0);
+    let (l, r) = (b.pos - b.width / 2.0, b.pos + b.width / 2.0);
     if let (Some(a), Some(c)) = (at(l, b.q1), at(r, b.q3)) {
         out.push(Item::Rect {
             rect: Rect { x: a.0.min(c.0), y: a.1.min(c.1), w: (c.0 - a.0).abs(), h: (c.1 - a.1).abs() },

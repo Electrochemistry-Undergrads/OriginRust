@@ -92,6 +92,8 @@ pub struct Style {
     pub treemap_depth: Option<usize>,
     /// Treemaps: the gap between rectangles in pt (default 1.5).
     pub treemap_gap: Option<f64>,
+    /// Grouped columns: the error bars, none (default), sd or se.
+    pub group_error: Option<String>,
     /// Sunburst plots: the start angle in degrees counter-clockwise from 3 o'clock (default 90).
     pub sunburst_start: Option<f64>,
     /// Sunburst plots: the hole as a percentage of the radius, 0 to 90 (default 30).
@@ -239,6 +241,30 @@ impl PlotSpec {
         } else if treemap_option {
             bail!("--treemap-layout, --treemap-order, --treemap-depth and --treemap-gap need -t treemap");
         }
+        let is_grouped = matches!(
+            self.template.as_deref().and_then(Template::from_name),
+            Some(Template::GroupedColumns | Template::GroupedBox)
+        );
+        if is_grouped {
+            if !self.y2.is_empty() {
+                bail!(
+                    "a grouped plot of indexed data cannot have a right Y axis; leave out --y2 or choose another template"
+                );
+            }
+            if self.panels.is_some() || self.graph.is_some() || self.overlay {
+                bail!(
+                    "a grouped plot of indexed data cannot be made in panels, as an overlay or by styling a graph; leave those options out"
+                );
+            }
+            if self.group.is_none() {
+                bail!("-t grouped-columns and -t grouped-box need --group with one or two group columns");
+            }
+        }
+        if st.group_error.is_some()
+            && self.template.as_deref().and_then(Template::from_name) != Some(Template::GroupedColumns)
+        {
+            bail!("--group-error needs -t grouped-columns");
+        }
         let sunburst_option = st.sunburst_start.is_some()
             || st.sunburst_hole.is_some()
             || st.sunburst_gap.is_some()
@@ -316,8 +342,12 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
             treemap_graph(project, book, sheet, &ys, a.group.as_deref(), &a.style)?
         } else if template == Template::Sunburst {
             sunburst_graph(project, book, sheet, &ys, a.group.as_deref(), &a.style)?
+        } else if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
+            grouped_graph(project, book, sheet, template, &ys, a.group.as_deref(), &a.style)?
         } else if a.group.is_some() {
-            bail!("--group needs -t parallel, -t parallel-index, -t treemap or -t sunburst");
+            bail!(
+                "--group needs -t parallel, -t parallel-index, -t treemap, -t sunburst, -t grouped-columns or -t grouped-box"
+            );
         } else if a.y2.is_empty() && template != Template::DoubleY {
             project.plot_columns(template, &ys)?
         } else {
@@ -425,6 +455,48 @@ fn treemap_graph(
         t.order_column = order_column.or(t.order_column);
         t.depth = style.treemap_depth.map(|d| d as u32).or(t.depth);
         t.gap_pt = style.treemap_gap.unwrap_or(t.gap_pt);
+    }
+    Ok(graph)
+}
+
+/// Grouped columns or grouped box charts of indexed data: the last numeric column among `ys` is the data, the one or
+/// two columns named by `group` (comma-separated, the first on the X axis) split its rows.
+fn grouped_graph(
+    project: &mut Project,
+    book: WindowId,
+    sheet: usize,
+    template: Template,
+    ys: &[ColumnId],
+    group: Option<&str>,
+    style: &Style,
+) -> Result<WindowId> {
+    use sheaf_core::graph::IndexedError;
+    let value = ys.iter().rev().copied().find(|y| project.numeric(*y).is_some()).ok_or_else(|| {
+        anyhow!("a grouped plot needs a numeric data column (the last numeric --y column; default: the last Y column)")
+    })?;
+    let names: Vec<String> =
+        group.unwrap_or("").split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect();
+    if names.is_empty() {
+        bail!("--group needs one or two group columns for a grouped plot");
+    }
+    let groups = named_columns(project, book, sheet, &names)?;
+    if groups.contains(&value) {
+        bail!("the data column of a grouped plot cannot also be a group column");
+    }
+    let error = match style.group_error.as_deref().map(str::trim) {
+        None => IndexedError::None,
+        Some(e) if e.eq_ignore_ascii_case("none") => IndexedError::None,
+        Some(e) if e.eq_ignore_ascii_case("sd") => IndexedError::Sd,
+        Some(e) if e.eq_ignore_ascii_case("se") => IndexedError::Se,
+        Some(e) => bail!("--group-error {e}: choose none, sd or se"),
+    };
+    let graph = project.plot_indexed(template, &groups, value)?;
+    if let Some(l) = project.graph_mut(graph).and_then(|g| g.layers.first_mut()) {
+        for p in &mut l.plots {
+            if let Some(i) = p.indexed.as_mut() {
+                i.error = error;
+            }
+        }
     }
     Ok(graph)
 }

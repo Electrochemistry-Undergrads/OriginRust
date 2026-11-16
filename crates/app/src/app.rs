@@ -163,6 +163,7 @@ pub struct SheafApp {
     text_dialog: Option<TextDialog>,
     shape_dialog: Option<ShapeDialog>,
     slope_dialog: Option<SlopeDialog>,
+    apply_formats: Option<crate::format_clip_ui::ApplyFormats>,
     straight_line_dialog: Option<StraightLineDialog>,
     comparison_plot: Option<ComparisonPlotDialog>,
     multi_y: Option<MultiYDialog>,
@@ -273,6 +274,7 @@ impl SheafApp {
             text_dialog: None,
             shape_dialog: None,
             slope_dialog: None,
+            apply_formats: None,
             straight_line_dialog: None,
             comparison_plot: None,
             multi_y: None,
@@ -2218,6 +2220,26 @@ impl SheafApp {
                 });
             }
             Action::CopyPage(graph) => self.copy_page(graph, ctx),
+            Action::CopyGraphFormat { graph, part } => {
+                if crate::format_clip_ui::copy_graph(&self.doc, graph, part) {
+                    self.say("Format copied");
+                }
+            }
+            Action::CopyAxisFormat { graph, layer, y, part } => {
+                if crate::format_clip_ui::copy_axis(&self.doc, graph, layer, y, part) {
+                    self.say("Format copied");
+                }
+            }
+            Action::PasteGraphFormat { graph } => {
+                use sheaf_core::format_clip::GraphPart;
+                crate::format_clip_ui::paste_graph(&mut self.doc, graph, GraphPart::All.groups());
+            }
+            Action::PasteAxisFormat { graph, layer, y, part } => {
+                crate::format_clip_ui::paste_axis(&mut self.doc, graph, layer, y, part);
+            }
+            Action::PasteFormatDialog { graph, layer } => {
+                self.apply_formats = Some(crate::format_clip_ui::ApplyFormats::new(graph, layer));
+            }
             Action::StartIntegrate { graph } => self.start_integrate(graph),
             Action::Gadget { graph, op } => self.gadget(graph, op),
             Action::ExportGraph(graph) => {
@@ -3256,6 +3278,7 @@ impl SheafApp {
             || self.text_dialog.is_some()
             || self.shape_dialog.is_some()
             || self.slope_dialog.is_some()
+            || self.apply_formats.is_some()
             || self.straight_line_dialog.is_some()
             || self.comparison_plot.is_some()
             || self.multi_y.is_some()
@@ -3649,6 +3672,11 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.slope_dialog = None;
+        }
+        if let Some(d) = &mut self.apply_formats
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.apply_formats = None;
         }
         if let Some(d) = &mut self.straight_line_dialog
             && !d.show(ctx, &mut self.doc)

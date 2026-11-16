@@ -1,6 +1,6 @@
 # T72: Copy Format and Paste Format on graphs (B2, slice 1)
 
-**Status:** open (step 1 done 2026-11-16: Origin 2016 measured, spec graphing 24; step 2, the Rust, not started).
+**Status:** partly done (step 1 2026-11-16: Origin measured, spec graphing 24; step 2: core `format_clip.rs`, `format_clip_ui.rs`, menus and Apply Formats window built with the measured items enabled, see graphing 24.8). Open: the unmeasured choices (still greyed, listed in greyed-items.md as T72), the legend, graph/axis crossing, persistence of the clipboard.
 **Size:** M. **Priority:** wave 4 (B2). **Spec:** graphing 24. **Inventory:** the Edit menu's Copy
 Format (nine choices) and Paste Format... [Graph]; Graph axis, legend and page > Copy Format.
 Not in this slice (stay `B2`): object cut/copy/paste, align, same size, group, order across kinds,

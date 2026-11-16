@@ -31,6 +31,7 @@ mod app;
 mod autosave;
 mod data_tools;
 mod dialogs;
+mod format_clip_ui;
 mod gadget;
 mod graph_scale;
 mod graph_view;

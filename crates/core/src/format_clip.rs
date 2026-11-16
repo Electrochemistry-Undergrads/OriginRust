@@ -84,7 +84,7 @@ pub enum AxisPart {
 pub struct AxisFormat {
     pub styles: bool,
     pub scales: bool,
-    axis: Axis,
+    axis: Box<Axis>,
 }
 
 /// The values of one layer of a graph format.
@@ -150,7 +150,7 @@ pub fn copy_axis(graph: &Graph, layer: usize, y: bool, part: AxisPart) -> Option
     Some(FormatClip::Axis(AxisFormat {
         styles: matches!(part, AxisPart::All | AxisPart::Styles),
         scales: matches!(part, AxisPart::All | AxisPart::Scales),
-        axis: if y { l.y_axis.clone() } else { l.x_axis.clone() },
+        axis: Box::new(if y { l.y_axis.clone() } else { l.x_axis.clone() }),
     }))
 }
 

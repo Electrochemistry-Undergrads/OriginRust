@@ -1803,6 +1803,7 @@ impl SheafApp {
                 }
             }
             Action::ExportWorksheetImage(book) => self.export_worksheet_image(book),
+            Action::Reimport { book, choose } => self.reimport(book, choose),
             Action::FindInProject => {
                 self.find_project = Some(crate::dialogs::find_project::FindProjectDialog::new(self.find_spec.clone()));
             }
@@ -3652,6 +3653,41 @@ impl SheafApp {
         self.focus(id);
     }
 
+    /// File > Import > Re-Import Directly and Re-Import... (T98): reads the book's source file (or, for
+    /// Re-Import..., a file picked starting from it) again and replaces the data, one undo step.
+    fn reimport(&mut self, book: WindowId, choose: bool) {
+        let Some(b) = self.doc.project().workbook(book) else { return };
+        let Some((source, kind)) = b.source.clone().zip(reimport_kind(b)) else {
+            self.warn("This workbook was not imported from a file");
+            return;
+        };
+        let mut path = PathBuf::from(&source.path);
+        if choose {
+            let mut chooser = rfd::FileDialog::new().set_title("Re-Import");
+            if let Some(dir) = path.parent().filter(|d| d.is_dir()) {
+                chooser = chooser.set_directory(dir);
+            }
+            if let Some(name) = path.file_name() {
+                chooser = chooser.set_file_name(name.to_string_lossy());
+            }
+            let Some(picked) = chooser.pick_file() else { return };
+            path = picked;
+        }
+        match reimport_book(&mut self.doc, book, &path, kind) {
+            Ok(r) => {
+                let mut s = format!("Re-imported {}: {} column(s), {} row(s)", path.display(), r.columns, r.rows);
+                if r.ignored > 0 {
+                    s.push_str(&format!("; {} more column(s) in the file were not added", r.ignored));
+                }
+                if r.emptied > 0 {
+                    s.push_str(&format!("; {} column(s) the file no longer has are empty", r.emptied));
+                }
+                self.say(s);
+            }
+            Err(e) => self.message = Some(("Could not re-import".to_string(), e)),
+        }
+    }
+
     /// File > Export > Worksheet as Image (T97): the active sheet as PNG (300 dpi), PDF or SVG.
     fn export_worksheet_image(&mut self, book: WindowId) {
         let Some(b) = self.doc.project().workbook(book) else { return };
@@ -3709,6 +3745,7 @@ impl SheafApp {
             whole_columns: book
                 .and_then(|b| self.books.get(&b))
                 .is_some_and(|s| matches!(s.sel, Sel::Columns | Sel::All)),
+            imported: book.and_then(|b| project.workbook(b)).is_some_and(|b| reimport_kind(b).is_some()),
             undo: self.doc.undo_label(),
             redo: self.doc.redo_label(),
             undo_ai: self.can_undo_ai_changes(),
@@ -5641,6 +5678,37 @@ fn panel_data<'a>(
         .unwrap_or_else(|| "UNTITLED".to_string());
     let props_plot = props.as_ref().filter(|d| Some(d.graph) == active).map(GraphPropsDialog::selected_plot);
     PanelData { project: doc.project(), active, project_name, props_plot, logs }
+}
+
+/// The importer a book's source file is read again with (Re-Import, T98); `None` for a book not
+/// imported from a data file (made in Sheaf, or opened from a project).
+pub(crate) fn reimport_kind(book: &sheaf_core::Workbook) -> Option<sheaf_io::ImportKind> {
+    match book.source.as_ref()?.importer.as_str() {
+        "ascii" => Some(sheaf_io::ImportKind::Ascii),
+        "chi" => Some(sheaf_io::ImportKind::Chi),
+        "excel" => Some(sheaf_io::ImportKind::Auto),
+        _ => None,
+    }
+}
+
+/// Reads `path` again with `kind` (default options) and replaces the data of `book` with it, one undo
+/// step; the book's source becomes `path`.
+pub(crate) fn reimport_book(
+    doc: &mut sheaf_core::Document,
+    book: WindowId,
+    path: &Path,
+    kind: sheaf_io::ImportKind,
+) -> Result<sheaf_core::reimport::ReimportReport, String> {
+    let fresh =
+        sheaf_io::import_file(path, kind, &Default::default(), &Default::default()).map_err(|e| e.to_string())?;
+    doc.edit("Re-import", |p| {
+        let r = p.replace_book_data(book, &fresh.workbook)?;
+        if let Some(b) = p.workbook_mut(book) {
+            b.source = fresh.workbook.source.clone();
+        }
+        Ok::<_, sheaf_core::project::ProjectError>(r)
+    })
+    .map_err(|e| e.to_string())
 }
 
 /// Writes the worksheet picture of File > Export > Worksheet as Image to `path`, the kind chosen by

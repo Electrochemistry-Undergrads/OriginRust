@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **327 greyed items: 228 in the menu bar, 19 on the toolbars, 80 in context menus.**
+original inventory baseline. This is not a new runtime audit. **325 greyed items: 226 in the menu bar, 19 on the toolbars, 80 in context menus.**
 
 ## How to read and keep this file
 
@@ -67,7 +67,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B8` | 9 |
 | `B9` | 13 |
 | `B11` | 10 |
-| `B12` | 11 |
+| `B12` | 9 |
 | `B13` | 7 |
 | `B14` | 44 |
 | `B15` | 21 |
@@ -75,7 +75,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 64 items, backlog packages (`B`) 243, not planned (`N`) 20.
+Briefs (`T`) hold 64 items, backlog packages (`B`) 241, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -93,7 +93,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Add Word Bookmarks to Analysis Template... [Workbook]
 - `B11` Batch Processing... [Workbook, Graph]
 - `B14` Import: Image... · Binary 2D Array... [no window, Workbook]
-- `B12` Import: Re-Import Directly · Re-Import... [no window, Workbook]
 - `T63` Export: Graph as Image... · Multi-Page PDF... [no window, Workbook]
 
 ### Edit

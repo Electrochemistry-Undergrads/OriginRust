@@ -818,6 +818,25 @@ The save window offers PNG (300 dpi), PDF and SVG; the name defaults to `<book l
 in the project's folder (Sheaf's choice). Not done: the other image types, several sheets at once, the size
 and overwrite options.
 
+## 13l. Re-Import (T98, measured 2026-11-16, Origin 2016)
+
+File > Import > Re-Import Directly (Ctrl+4) and Re-Import... (workbook File menu; a graph's has none) are
+Origin's `reimport` (`dialog` Re-Import Directly / Re-Import by Changing Options; ReImport Selected Range
+Only). Measured from LabTalk (`re-workspace/scratch/t98`, local only; `impasc` of x,y,z with three rows,
+a comment and units typed on B and B plotted, then the file replaced by x,y,z,w with four rows):
+
+- The values were replaced (four rows) and the graph followed (axes rescaled).
+- The book kept its three columns: the file's fourth column was **not** added.
+- B kept the comment and units the user typed (the file has none) and its long name from the header.
+
+Sheaf (`Project::replace_book_data`, app `reimport_book`): the book's source file (`Workbook::source`,
+importer ascii, chi or excel) is read again with that importer's default options (Origin reuses the
+import settings; Sheaf does not store them yet) and each column takes the new values and the labels the
+file gives, keeping its id, so graphs keep plotting it; extra columns of the file are reported and not
+added; a column the file no longer has is emptied (not measured). One undo step ("Re-import"). Re-Import...
+picks a file (starting at the source) and reads it the same way. A book made in Sheaf or opened from a
+project has no source and the items are refused. Not done: the stored import options, Selected Range Only.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

@@ -1,6 +1,6 @@
 # T98: Re-Import Directly and Re-Import...
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `reimport`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13l): `reimport` measured (values replaced, columns kept, user labels kept, graphs follow); both items read the source again keeping column ids. Left: stored import options, Selected Range Only.
 **Size:** S. **Source:** greyed inventory package B12 (File > Import > Re-Import Directly (Ctrl+4) and
 Re-Import... with a workbook active).
 **Spec:** `docs/spec/workbook-model.md` (a new section).

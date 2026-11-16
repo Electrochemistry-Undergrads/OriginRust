@@ -420,6 +420,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         sorting_columns: if matches!(state.sel, Sel::Label { .. }) { Vec::new() } else { state.selected.clone() },
         cells: state.sel != Sel::None,
         whole_columns: matches!(state.sel, Sel::Columns | Sel::All),
+        imported: false,
         undo: None,
         redo: None,
         undo_ai: false,

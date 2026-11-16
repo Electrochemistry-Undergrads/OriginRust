@@ -54,6 +54,7 @@ const NEED_CELLS: &str = "Select cells, columns or rows first";
 const NEED_TWO_COLUMNS: &str = "Select two or more columns first";
 const NEED_EXACTLY_TWO_COLUMNS: &str = "Select exactly two columns to swap";
 const NEED_WHOLE_COLUMNS: &str = "Select whole columns first (click their headers)";
+const NOT_IMPORTED: &str = "This workbook was not imported from a file";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
 const NO_TEMPLATE_FOLDER: &str = "There is no folder for user templates (the settings folder is missing)";
@@ -111,6 +112,8 @@ pub enum Cmd {
     FindInProject,
     /// File > Export > Worksheet as Image... (T97).
     ExportWorksheetImage,
+    /// File > Import > Re-Import Directly (false) and Re-Import... (true, choose the file) (T98).
+    Reimport(bool),
     /// Edit > Replace... (Ctrl+H) in a workbook.
     ReplaceInSheets,
     ExportGraph,
@@ -483,6 +486,8 @@ pub struct MenuContext<'a> {
     pub sorting_columns: Vec<ColumnId>,
     /// True when whole columns (or the whole sheet) of the active workbook are selected.
     pub whole_columns: bool,
+    /// True when the active workbook was imported from a data file (Re-Import, T98).
+    pub imported: bool,
     /// True when the active workbook has selected cells, columns or rows (Copy, Cut, Paste and
     /// Clear act on them).
     pub cells: bool,
@@ -761,7 +766,11 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                 if kind == WindowKind::Graph {
                     Vec::new()
                 } else {
-                    vec![sep(), grey_keyed("Re-Import Directly", ctrl(Key::Num4)), grey("Re-Import...")]
+                    vec![
+                        sep(),
+                        keyed("Re-Import Directly", ctrl(Key::Num4), Cmd::Reimport(false)),
+                        item("Re-Import...", Cmd::Reimport(true)),
+                    ]
                 },
                 vec![sub(
                     "Recent Imports",
@@ -2574,6 +2583,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::ExportExcel => Action::ExportExcel(book?),
         Cmd::ExportWorksheetImage => Action::ExportWorksheetImage(book?),
+        Cmd::Reimport(choose) => {
+            let book = book?;
+            c.imported.then_some(()).ok_or(NOT_IMPORTED)?;
+            Action::Reimport { book, choose: *choose }
+        }
         Cmd::Print => Action::Print(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
         Cmd::PrintPreview => Action::PrintPreview(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
         Cmd::PageSetup => Action::PageSetup,
@@ -3466,6 +3480,7 @@ mod tests {
             sorting_columns: Vec::new(),
             cells: false,
             whole_columns: false,
+            imported: false,
             undo: None,
             redo: None,
             undo_ai: false,

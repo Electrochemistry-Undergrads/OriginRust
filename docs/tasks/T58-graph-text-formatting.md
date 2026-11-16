@@ -45,17 +45,40 @@ still open; the renderer and text-editor results above are preserved.
 Formatting, strict workspace all-target Clippy and the combined 3,713-test suite pass
 (8 existing ignored), with all seven toolbar UI regressions, source-hash checks,
 the 397-item inventory and eight Python tooling tests; a desktop capture was inspected.
+Title/legend editor reuse (`codex/t58-title-editors`): the existing X/Y axis title entries and
+title/legend Edit Text routes use the shared selection editor and actual-object preview.
+Automatic text, raw metadata/legend notation, base fonts, visibility, draft cancellation and
+history are preserved; read-only title/region facades reuse existing rendering rules (7.7).
+The two title-menu entries are enabled. Inline family/colour pickers, combined-script insertion
+and remaining renderer gaps still need their separate slices. Final combined validation passed formatting, strict workspace all-target Clippy and
+3,957 tests (eight existing ignored), including all 21 related editor tests. Inventory
+and eight Python tooling tests pass; X-title, Y-title and legend desktop captures were
+inspected, and their four editor/test source files remain unchanged on the combined tree.
+Selected-text colour slice (`codex/t58-inline-colors`): the shared text editor offers eight
+named Classic colours through Text color, with selection/caret insertion, idempotent recolouring
+and style/literal/reference preservation (graphing 7.8). The renderer and base font are unchanged.
+Automatic text stays automatic when the menu is dismissed; changed colour remains a draft until
+Apply/OK. Existing history and native/Origin-companion persistence are used. Broader/custom
+colour controls, inline family selection and combined-script insertion remain separate work.
+Formatting, strict workspace all-target Clippy and 3,981 combined tests pass
+(eight existing ignored), including all 29 related editor UI/helper/preview tests.
+Inventory validation, eight Python tooling tests and three inspected desktop captures pass;
+the editor/test source hashes remain unchanged through validation and capture.
+
 Fourth renderer slice (`codex/text-run-fonts`): full-name inline font-family switches now
 reach run measurement, glyphs and decoration metrics, including nested restoration,
 styles/scripts/Greek and rotation. Graphing 7.6 records nineteen native family/name controls
 and their limits; eight regressions plus SVG/stroke PNG goldens cover the shared export
 path. Combined scripts and special colour/name aliases remain open. Editor and shared
 Format toolbar work stay with their owners.
+Formatting, strict workspace all-target Clippy and 4,037 combined tests pass (eight existing ignored).
+The 340-item inventory and eight Python tooling tests pass; all workspace tests ran
+with four test threads, retaining every test and assertion.
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;
 [command map](../spec/ui-command-map.md) toolbar and shortcut tables.
-**Inventory:** 8 locations tagged `T58` in [greyed-items](greyed-items.md).
+**Inventory:** 0 locations tagged `T58` in [greyed-items](greyed-items.md).
 **Ownership:** graph text model/rendering/editor; Format toolbar dispatch. T59 owns its worksheet
 adapter. Coordinate shared `graph.rs`, `toolbar.rs`, actions and menus with other claims.
 

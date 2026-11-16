@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 369 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 340 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -65,7 +65,7 @@ their files do not overlap; the "Main files" column shows where each one works.
 
 | ✓ | Package | What | Size | Origin needed | Greyed items | Main files |
 |---|---|---|---|---|---|---|
-| [ ] | [T58](T58-graph-text-formatting.md) | Format toolbar on graph text; underline, strikethrough and colour and font escapes; formatting buttons and preview in the text window; Axis Titles menu items | L | for the toolbar's exact behaviour; build first without | 2 | `plot/markup.rs`, `plot/text.rs`, backends, `app/toolbar.rs`, `dialogs/text_object.rs` |
+| [ ] | [T58](T58-graph-text-formatting.md) | Format toolbar on graph text; underline, strikethrough and colour and font escapes; formatting buttons and preview in the text window; Axis Titles menu items | L | for the toolbar's exact behaviour; build first without | 0 | `plot/markup.rs`, `plot/text.rs`, backends, `app/toolbar.rs`, `dialogs/text_object.rs` |
 | [ ] | [T59](T59-worksheet-cell-formatting.md) | Format Cells: font style, colours and alignment of worksheet cells; Format toolbar on a cell selection | L | for the Format Cells window | 2 | `core/worksheet.rs` (new `cellformat.rs`), `app/grid.rs`, new dialog |
 
 T58 goes first (it builds the toolbar's dispatch); T59 can start on its model and dialog at once.
@@ -108,8 +108,9 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T75](T75-scatter-central.md) | Scatter Central (B4 slice 3) | S | 0 |
 | [x] | [T79](T79-column-scatter.md) | Column Scatter (B4 slice) | S | 0 |
 | [x] | [T76](T76-grouped-indexed-plots.md) | Grouped Columns (indexed data), Grouped Box Charts (B4 slice) | M | 0 |
+| [x] | [T82](T82-line-series.md) | Line Series (B4 slice) | S | 0 |
 | [x] | [T83](T83-interval-and-pareto.md) | Interval Plot, Pareto (B4 slice) | M | 0 |
-| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label; Grouped Columns (indexed data) and Grouped Box Charts done as [T76](T76-grouped-indexed-plots.md); Interval Plot and Pareto done as [T83](T83-interval-and-pareto.md)): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 20 |
+| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label; Grouped Columns (indexed data) and Grouped Box Charts done as [T76](T76-grouped-indexed-plots.md); Interval Plot and Pareto done as [T83](T83-interval-and-pareto.md)): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 19 |
 
 - **B1.** The graph view draws the page to fit the window. Add a view transform (zoom factor and
   scroll offset) in `crates/app/src/graph_view.rs` so hit-testing (`sheaf_plot::hit`) still works,
@@ -135,7 +136,7 @@ Backlog packages: write the brief first (step 3 above).
 
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
-| [ ] | B5 | Worksheet editing: copy variants, Paste Transpose/Link/Special, cell links, Set As Begin/End, fill with a set of numbers/dates/text, sampling interval, Copy Columns to, Swap Columns | L | 33 |
+| [ ] | B5 | Worksheet editing: copy variants, Paste Transpose/Link/Special, cell links, Set As Begin/End, fill with a set of numbers/dates/text, sampling interval, Copy Columns to, Swap Columns | L | 10 |
 | [ ] | B6 | Worksheet view and sheets: header and grid toggles, row label rows, sheet-tab items, Split, objects in cells (graphs, images, sparklines, variables), Merge cells | L | 31 |
 | [ ] | B7 | Worksheet tools: rest of Conditional Formatting (T35 leftovers), Pivot Table, Find in Project | M | 8 |
 
@@ -153,7 +154,8 @@ Backlog packages: write the brief first (step 3 above).
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
 | [ ] | [T57](T57-deconvolution-stft.md) | Deconvolution and STFT (claimed 2026-11-15) | M | 2 |
-| [ ] | B8 | Analysis and statistics: wavelets, Multiple Peak Fit, batch peak analysis, implicit fit, Simulate Surface, Compare Datasets, XYZ Surface Area, partial correlation, three-way and repeated-measures ANOVA | L | 16 |
+| [ ] | B8 | Analysis and statistics: wavelets, Multiple Peak Fit, batch peak analysis, implicit fit, Simulate Surface, Compare Datasets, XYZ Surface Area (partial correlation, three-way and repeated-measures ANOVA moved to T81) | L | 13 |
+| [x] | [T81](T81-partial-correlation-anova3-rmanova.md) | Partial Correlation Coefficient, Three-Way ANOVA, One-Way and Two-Way Repeated Measures ANOVA (B8 slice; claimed 2026-11-16) | L | 0 |
 | [ ] | B9 | Gadgets on the graph (Statistics, Quick Fit, Quick Peaks, Differentiate, Interpolate, Intersect, FFT, Rise Time, Cluster, Vertical Cursor, ...) | L | 13 |
 | [x] | [T78](T78-recent-lists.md) | Most Recently Used lists in the Plot, Worksheet, Analysis and Statistics menus; Recent Exports (B10) | S | 0 |
 

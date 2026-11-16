@@ -732,6 +732,40 @@ disabled with a hover reason elsewhere (the legend frame has no colour field). T
 survives; undo labels are "Format graph text" and "Format graph object". No model fields added.
 
 
+---
+
+### 7.5 Text label selection editor (T58)
+
+Origin's [Text Object Properties, Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/)
+documents selection/caret formatting buttons above a raw text box and a formatted preview below.
+The buttons insert commands around selected text or insert an empty command group at the caret.
+This is a documentation reference, not a fresh measurement of Origin's dialog geometry.
+
+Sheaf's free-label Text window now offers Normal, bold, italic, underline, strikethrough,
+superscript, subscript and Greek. A button keeps the raw characters outside the selected range
+and returns focus to the selected body. With no selection, typing enters the empty group.
+Selecting `-2` in `cm-2` and choosing superscript produces `cm\+(-2)`; Unicode cursor offsets
+are characters, not UTF-8 bytes. Applying the same format to its complete selected body removes
+that wrapper. Normal removes complete inline formatting wrappers from the selection and its
+immediate surrounding wrappers, preserving literal `\v(...)`, substitution and Unicode escapes.
+These toggle/Normal details are Sheaf choices, not measured Origin rules. The existing whole-label
+Bold/Italic checkboxes still change the base font; Normal affects inline markup only.
+
+The preview uses the public graph export renderer with an isolated one-label graph. It therefore
+shares the published parser, glyphs, script layout, colours, decorations and rotation with exports.
+Its cache changes with text, font, rotation or display scale. It fits large text into a bounded
+preview and reports text over 8,192 characters or excessive dimensions without truncating the
+stored text. Size and base styles also update the preview. Buttons and preview do not mutate the
+project: OK/Apply performs the existing single history operation; Cancel discards the draft.
+A new draft containing only empty formatting groups adds no invisible label.
+
+The button labels, compact layout and Ctrl+B/I/U/G and Ctrl+= / Ctrl+Shift+= bindings are
+Sheaf choices based on the published command forms and existing shortcut map; their behaviour
+inside Origin's properties dialog has not been measured. Font/colour selection for an inline
+range, combined-script insertion and reuse for titles/legend remain open. The shared Format
+bar remains a separate target-dispatch implementation. No renderer/model/persistence changes
+are introduced by this editor slice.
+
 ### 7.6 Inline font families (T58 graph text)
 
 `codex/text-run-fonts` (2026-11-15) carries a requested family through each markup run.
@@ -780,39 +814,60 @@ name bounds, an empty font database and EPS/EMF/PDF/SVG output. New SVG and stro
 goldens use deliberately different deterministic test-family metrics; those synthetic
 metrics are not Origin measurements or installed-font rasterization fixtures.
 
----
+### 7.7 Axis-title and legend text editors (T58)
 
-### 7.5 Text label selection editor (T58)
+The existing X/Y axis titles and legend content now use the selection editor from 7.5.
+Format > Axis Titles opens the active layer's X or Y title; each title's context menu has
+Edit Text. A legend's context menu has Edit Text, and Graph > Legend > Edit Legend Text
+also reaches a hidden or off-page legend. A multi-layer graph names the layer in the window.
+These entry points and compact window layout are Sheaf choices, not newly measured Origin UI.
 
-Origin's [Text Object Properties, Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/)
-documents selection/caret formatting buttons above a raw text box and a formatted preview below.
-The buttons insert commands around selected text or insert an empty command group at the caret.
-This is a documentation reference, not a fresh measurement of Origin's dialog geometry.
+Origin documents axis titles and legends as text objects and shares its Text tab between
+common text and legends: [graph annotations](https://docs.originlab.com/user-guide/customizing-graphs/),
+[Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/) and
+[manual legend control](https://docs.originlab.com/origin-help/legend-manualcontrol/).
+The editor preserves raw column-metadata escapes, legend sample codes and name references.
+Automatic text is retained on unchanged OK, Cancel and base-font-only edits; editing raw text
+chooses custom text. Automatic text restores the existing generated title or legend, and
+Show on graph controls the existing visibility flag. Base font sizes through 1,000 points
+are preserved, matching the published Format toolbar's supported range. Titles/legend have
+no invented label-rotation property. OK or Apply writes one history step when values change;
+Cancel discards only the unapplied draft. A replaced project closes a stale editor.
 
-Sheaf's free-label Text window now offers Normal, bold, italic, underline, strikethrough,
-superscript, subscript and Greek. A button keeps the raw characters outside the selected range
-and returns focus to the selected body. With no selection, typing enters the empty group.
-Selecting `-2` in `cm-2` and choosing superscript produces `cm\+(-2)`; Unicode cursor offsets
-are characters, not UTF-8 bytes. Applying the same format to its complete selected body removes
-that wrapper. Normal removes complete inline formatting wrappers from the selection and its
-immediate surrounding wrappers, preserving literal `\v(...)`, substitution and Unicode escapes.
-These toggle/Normal details are Sheaf choices, not measured Origin rules. The existing whole-label
-Bold/Italic checkboxes still change the base font; Normal affects inline markup only.
+Generated titles come from a read-only facade over the renderer's existing resolver, including
+histogram, category and transposed-plot rules. Preview uses the actual selected scene object's
+glyphs, decorations and legend samples, with the project's data-name substitutions. A read-only
+cropped-scene facade reuses the existing SVG/raster path and supports negative off-page bounds;
+no glyph, layout or export rules change. Only the selected object is shown on the preview canvas.
 
-The preview uses the public graph export renderer with an isolated one-label graph. It therefore
-shares the published parser, glyphs, script layout, colours, decorations and rotation with exports.
-Its cache changes with text, font, rotation or display scale. It fits large text into a bounded
-preview and reports text over 8,192 characters or excessive dimensions without truncating the
-stored text. Size and base styles also update the preview. Buttons and preview do not mutate the
-project: OK/Apply performs the existing single history operation; Cancel discards the draft.
-A new draft containing only empty formatting groups adds no invisible label.
+A selected literal parenthesis is safely encoded when necessary to preserve the text.
+Whole-legend formatting keeps symbol codes and row boundaries outside text-format groups;
+name substitutions remain raw, so formatting does not freeze their data links. This is a Sheaf
+editing choice using the published renderer, not a measured Origin command-rewrite algorithm.
+The existing screenshot hooks accept `--show text:x`, `text:y` and `text:legend` for the first
+layer of the first graph, alongside the existing `text:N` label hook.
 
-The button labels, compact layout and Ctrl+B/I/U/G and Ctrl+= / Ctrl+Shift+= bindings are
-Sheaf choices based on the published command forms and existing shortcut map; their behaviour
-inside Origin's properties dialog has not been measured. Font/colour selection for an inline
-range, combined-script insertion and reuse for titles/legend remain open. The shared Format
-bar remains a separate target-dispatch implementation. No renderer/model/persistence changes
-are introduced by this editor slice.
+### 7.8 Selected-text colour palette (T58)
+
+The shared label, axis-title and legend editor has a Text color menu beside its formatting
+buttons. Black, Red, Green, Blue, Cyan, Magenta, Yellow and White use the existing Classic
+text colours from 7.2: entries 1–7 and 18. Classic Green is bright green and White is entry 18,
+not entry 8 (olive). No parser, glyph, export or base-font rules change.
+
+Origin's [Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/) documents
+font-colour selection alongside its raw text editor, selection formatting and preview.
+This compact eight-name menu and the following rewrite policy are Sheaf choices, not a newly
+measured Origin palette or command algorithm. A choice colours the selected characters, or
+inserts a colour group at the caret for typing. Existing colour groups within that selection
+are replaced while scripts, font/style groups, literal blocks and raw substitutions remain.
+Choosing the same colour again is idempotent. Normal removes inline colour with other inline
+formatting. Legend samples and row boundaries stay outside text-format groups as in 7.7.
+
+Opening and dismissing the palette does not choose custom automatic text. A changed colour
+is a draft until Apply/OK, shares the existing Undo step and preview, and preserves the base
+font. Native and Origin-companion saves retain the raw colour markup. The menu offers this
+bounded subset; broader/custom colour controls, inline family selection and combined-script
+insertion remain separate work.
 
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
 
@@ -4086,6 +4141,20 @@ grouped. Sheaf: `Template::VerticalDropLine` (scatter, `decor.drop.vertical` on,
 `Template::ColumnLabel` (column, data labels on, position Above, a quarter of the font size, 5.5 pt, above);
 data labels of grouped columns and bars are now centred on their own bar. CLI `-t vertical-drop-line`, `-t
 column-label`.
+
+### 18.15 Line Series (T82, measured 2026-11-16)
+
+Origin 2016's Plot > Line + Symbol > Line Series makes the graph at once: every worksheet row of the
+selected Y columns is one line through its values at X = 1, 2, ..., k (k columns, column order); rows are
+not joined. It is one plot with the k-point segment connection (`get %C -l` 2 for two columns, 3 for
+three), filled black squares of size 8, the X axis labelled with the column names and titled "Series",
+the Y axis "Values" (X 0.75..2.25 for two columns, 0.5..3.5 for three); Origin keeps the rearranged
+data out of sight (lock icon). Sheaf: `Project::plot_line_series` adds a `LineSeries<n>` sheet to the
+workbook (positions and values row by row, and the column names), one Line + Symbol plot with
+`Connect::Segment2`/`Segment3`/`Segments(k)` (k >= 4, saved as `{"segments":k}`; `.opj` writes it
+straight with a note), all rows black, the names as X tick labels with a tick at every position, titles
+Series and Values; one undo step. Segment connections group the plot's rows by their index (rows
+1..n, n+1..2n, ...): a missing value breaks its group's line and never shifts later groups.
 
 ### 18.14 Column Scatter (T79, measured 2026-11-16)
 

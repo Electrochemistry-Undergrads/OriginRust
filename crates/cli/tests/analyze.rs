@@ -1536,3 +1536,221 @@ fn ttest_comparison_plot_and_the_refusals() {
     ]);
     assert!(!ok && stderr.contains("means comparison"), "{stderr}");
 }
+
+#[test]
+fn partial_corr_reproduces_an_origin_run_and_explains_its_refusals() {
+    let dir = scratch("partial-corr");
+    let file = dir.join("pc.csv");
+    // The 20 rows of the Origin run with two controlling variables: r = 0.3195, p = 0.19622, df = 16.
+    std::fs::write(
+        &file,
+        "a,b,c,d
+0.632,4.903,-1.224,0.095
+2.929,7.068,0.378,0.145
+2.723,8.643,0.995,-0.345
+1.709,5.173,-0.513,-0.062
+0.907,4.698,-1.329,0.273
+1.646,5.831,-0.066,0.692
+3.531,6.826,0.478,1.097
+2.656,7.268,1.098,0.21
+1.02,5.578,-1.216,-1.79
+0.775,3.524,-1.293,0.702
+2.334,6.63,0.706,-1.42
+2.373,6.334,0.474,-0.171
+3.316,9.095,1.534,-1.474
+2.562,8.275,0.982,0.002
+2.13,7.155,-0.102,-0.779
+1.767,6.4,-0.274,0.214
+7.435,9.746,2.571,3.3
+2.119,6.412,-0.289,-0.049
+1.819,5.007,-0.785,0.842
+-0.479,5.129,-1.138,-1.323
+",
+    )
+    .unwrap();
+    let file = file.to_str().unwrap();
+    let (ok, out, err) =
+        sheaf(&["analyze", "partial-corr", file, "--y", "a,b", "--control", "c,d", "--show-significance"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("0.319499") && out.contains("0.196219") && out.contains("Controlling variables: c, d"),
+        "{out}"
+    );
+    assert!(out.contains("Two-tailed test of significance is used.") && out.contains("PartialCorr1"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "partial-corr", file, "--y", "a,b", "--control", "c", "--one-tailed", "--flag-significant"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("One-tailed test of significance is used."), "{out}");
+
+    // A control is required, a variable cannot control itself, an X range has nothing to limit.
+    let (ok, _, err) = sheaf(&["analyze", "partial-corr", file, "--y", "a,b"]);
+    assert!(!ok && err.contains("--control"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "partial-corr", file, "--y", "a,b", "--control", "b"]);
+    assert!(!ok && err.contains("both a variable and a controlling variable"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "partial-corr", file, "--y", "a,b", "--control", "c", "--x-range", "1:3"]);
+    assert!(!ok, "{err}");
+}
+
+#[test]
+fn anova3_reports_origins_type_three_table_and_options() {
+    let dir = scratch("anova3");
+    let file = dir.join("a3.csv");
+    // The balanced 2 x 3 x 2 design of the Origin run (24 numbers): A has F = 43.28302, p = 2.61651E-5.
+    std::fs::write(
+        &file,
+        "a,b,c,y
+lo,b1,c1,15.814
+lo,b2,c2,15.4569
+hi,b1,c2,17.6589
+hi,b3,c1,16.2762
+lo,b2,c1,14.8436
+lo,b3,c2,15.9664
+hi,b2,c2,20.2379
+lo,b1,c1,16.4812
+lo,b3,c1,14.5347
+hi,b1,c2,17.82
+hi,b3,c2,15.9952
+lo,b2,c1,13.867
+hi,b1,c1,17.812
+hi,b2,c2,20.4605
+lo,b1,c2,17.4733
+lo,b3,c1,15.7478
+hi,b2,c1,16.2572
+hi,b3,c2,15.4057
+lo,b2,c2,14.5925
+hi,b1,c1,16.4532
+hi,b3,c1,17.6181
+lo,b1,c2,16.3418
+lo,b3,c2,16.499
+hi,b2,c1,17.66
+",
+    )
+    .unwrap();
+    let file = file.to_str().unwrap();
+    let export = dir.join("a3-out.csv");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "anova3",
+        file,
+        "--y",
+        "a,b,c,y",
+        "--levene",
+        "--power",
+        "--power-sizes",
+        "50,100",
+        "--comparison",
+        "tukey,bonferroni",
+        "--export",
+        export.to_str().unwrap(),
+    ]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("20.234") && out.contains("43.283") && out.contains("a*b*c") && out.contains("Model"),
+        "{out}"
+    );
+    assert!(out.contains("type III") && out.contains("ANOVA3Way1"), "{out}");
+    assert!(out.contains("Tukey means comparison") && out.contains("Bonferroni means comparison"), "{out}");
+    assert!(out.contains("Levene's test"), "{out}");
+    let exported = std::fs::read_to_string(&export).unwrap();
+    assert!(exported.contains("Sum of Squares") && exported.contains("a: lo"), "{exported}");
+
+    // Interactions can be left out; the F tests then use the pooled error.
+    let (ok, out, err) =
+        sheaf(&["analyze", "anova3", file, "--y", "a,b,c,y", "--no-abc", "--no-ac", "--comparison", "none"]);
+    assert!(ok, "{err}");
+    assert!(!out.contains("a*b*c") && !out.contains("a*c") && out.contains("a*b"), "{out}");
+
+    // Three columns are too few, Dunnett is not offered, an X range has nothing to limit.
+    let (ok, _, err) = sheaf(&["analyze", "anova3", file, "--y", "a,b,y"]);
+    assert!(!ok && err.contains("FACTOR_A,FACTOR_B,FACTOR_C,DATA"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "anova3", file, "--y", "a,b,c,y", "--comparison", "dunnett"]);
+    assert!(!ok && err.contains("Dunnett"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "anova3", file, "--y", "a,b,c,y", "--x-range", "1:3"]);
+    assert!(!ok, "{err}");
+}
+
+/// The one-way repeated measures run of Origin (8 subjects, 4 levels) as indexed rows `level,y,subject`.
+fn rm_one_way_csv() -> String {
+    let table = [
+        [22.5244, 23.5244, 24.5244, 25.5244],
+        [18.138, 19.677, 22.5219, 24.6265],
+        [17.0564, 21.0059, 19.8137, 22.3672],
+        [23.5919, 22.9043, 26.4075, 24.4996],
+        [19.4001, 19.1614, 18.8032, 21.3784],
+        [20.3396, 22.2064, 23.9391, 25.4933],
+        [21.2722, 21.8676, 23.4055, 25.5475],
+        [15.6833, 19.3813, 19.8708, 19.163],
+    ];
+    let mut text = String::from("level,y,subject\n");
+    for (s, row) in table.iter().enumerate() {
+        for (l, v) in row.iter().enumerate() {
+            text.push_str(&format!("L{},{v},S{}\n", l + 1, s + 1));
+        }
+    }
+    text
+}
+
+#[test]
+fn rmanova_reports_origins_one_way_tables_and_refuses_what_it_cannot_do() {
+    let dir = scratch("rmanova1");
+    let file = dir.join("rm1.csv");
+    std::fs::write(&file, rm_one_way_csv()).unwrap();
+    let file = file.to_str().unwrap();
+    let export = dir.join("rm1-out.csv");
+    let (ok, out, err) =
+        sheaf(&["analyze", "rmanova", file, "--y", "level,y,subject", "--export", export.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(out.contains("One-way repeated measures ANOVA") && out.contains("ANOVAOneWayRM1"), "{out}");
+    assert!(out.contains("15.672") && out.contains("Intercept") && out.contains("804.75"), "{out}");
+    assert!(out.contains("Tukey means comparison"), "{out}");
+    let exported = std::fs::read_to_string(&export).unwrap();
+    for text in ["Greenhouse-Geisser", "Huynh-Feldt", "Lower-bound", "0.94848", "0.963657", "9.86391", "3.54149"] {
+        assert!(exported.contains(text), "{text} is missing from {exported}");
+    }
+    let (ok, out, err) = sheaf(&["analyze", "rmanova", file, "--y", "level,y,subject", "--comparison", "none"]);
+    assert!(ok && !out.contains("means comparison"), "{out}{err}");
+
+    // Two columns are too few, Dunnett and the interaction of a one-way design are refused.
+    let (ok, _, err) = sheaf(&["analyze", "rmanova", file, "--y", "level,y"]);
+    assert!(!ok && err.contains("FACTOR,DATA,SUBJECT"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "rmanova", file, "--y", "level,y,subject", "--comparison", "dunnett"]);
+    assert!(!ok && err.contains("Dunnett"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "rmanova", file, "--y", "level,y,subject", "--interaction"]);
+    assert!(!ok && err.contains("two-way"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "rmanova", file, "--y", "level,y,subject", "--x-range", "1:3"]);
+    assert!(!ok, "{err}");
+}
+
+#[test]
+fn rmanova_two_way_has_an_error_term_per_effect() {
+    let dir = scratch("rmanova2");
+    let file = dir.join("rm2.csv");
+    // The 6 subjects of the Origin run, A (2 levels) by B (3 levels), one number per cell.
+    let cells = [
+        [32.6833, 33.3234, 31.7134, 35.1833, 34.4234, 33.5134],
+        [34.0195, 34.1319, 33.1258, 34.1635, 36.0622, 36.4435],
+        [30.368, 30.1007, 29.7489, 32.7849, 30.9238, 31.9115],
+        [30.0507, 29.5896, 29.8773, 30.6486, 32.8153, 31.4332],
+        [33.6047, 33.1549, 34.0038, 35.4702, 34.2338, 36.4597],
+        [32.5875, 32.353, 33.6288, 34.7314, 35.5193, 33.6986],
+    ];
+    let mut text = String::from("a,b,y,s\n");
+    for (s, row) in cells.iter().enumerate() {
+        for (c, v) in row.iter().enumerate() {
+            text.push_str(&format!("A{},B{},{v},S{}\n", c / 3 + 1, c % 3 + 1, s + 1));
+        }
+    }
+    std::fs::write(&file, text).unwrap();
+    let file = file.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "rmanova", file, "--y", "a,b,y,s", "--two-way", "--interaction"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Two-way repeated measures ANOVA") && out.contains("ANOVATwoWayRM1"), "{out}");
+    assert!(out.contains("Error(a*b)") && out.contains("2181.6") && out.contains("0.9115"), "{out}");
+    // Without the interaction (Origin's default) there is no A*B row.
+    let (ok, out, err) = sheaf(&["analyze", "rmanova", file, "--y", "a,b,y,s", "--two-way"]);
+    assert!(ok && !out.contains("Error(a*b)"), "{out}{err}");
+    let (ok, _, err) = sheaf(&["analyze", "rmanova", file, "--y", "a,b,y,s", "--two-way", "--comparison", "tukey"]);
+    assert!(!ok && err.contains("no means comparisons"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "rmanova", file, "--y", "a,y,s", "--two-way"]);
+    assert!(!ok && err.contains("FACTOR_A,FACTOR_B,DATA,SUBJECT"), "{err}");
+}

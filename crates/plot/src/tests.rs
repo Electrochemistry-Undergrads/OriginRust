@@ -4675,6 +4675,10 @@ fn segment_connections_join_points_in_pairs_and_threes() {
     set(&mut p, Connect::Segment3);
     let three = path_of(&p);
     assert_eq!((three.matches('M').count(), three.matches('L').count()), (3, 6), "{three}");
+    set(&mut p, Connect::Segments(4));
+    let four = path_of(&p);
+    // 9 points: groups of 4, 4 and 1: 3 moves, 3 + 3 lines
+    assert_eq!((four.matches('M').count(), four.matches('L').count()), (3, 6), "{four}");
     let g2 = p.plot_columns(Template::Segment2, &[p.graph(g).unwrap().layers[0].plots[0].y]).unwrap();
     assert_eq!(p.graph(g2).unwrap().layers[0].plots[0].line.connect, Connect::Segment2);
     assert_eq!(Template::from_name("segment3"), Some(Template::Segment3));
@@ -4688,4 +4692,21 @@ fn a_new_graph_without_any_plot_lays_out_and_renders() {
     layout::build_scene(&p, g, &FixedMetrics).unwrap();
     svg_of(&p, g);
     assert!(!crate::render_png(&p, g, 96.0).unwrap().is_empty());
+}
+
+/// A missing value inside a group of a segment connection breaks only that group: the next group
+/// still starts at its own first row (a Line Series row never joins the next row).
+#[test]
+fn a_missing_value_does_not_shift_the_segment_groups() {
+    // rows: (1,1) (2,NaN) (3,100) | (1,2) (2,200) (3,300)
+    let (mut p, g) = project(
+        Template::Line,
+        vec![1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
+        vec![vec![1.0, f64::NAN, 100.0, 2.0, 200.0, 300.0]],
+    );
+    p.graph_mut(g).unwrap().layers[0].plots[0].line.connect = Connect::Segment3;
+    let d = svg_of(&p, g);
+    let path = paths_in(with_class(&doc(&d), "plots")[0])[0].attribute("d").unwrap().to_string();
+    // group 1: lone (1,1), then (3,100) alone after the gap: two moves, no line; group 2: one move, two lines
+    assert_eq!((path.matches('M').count(), path.matches('L').count()), (3, 2), "{path}");
 }

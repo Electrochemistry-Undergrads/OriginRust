@@ -1,6 +1,6 @@
 # T74: Fill Column With patterns (A set of Numbers, Date/Time values, Text & Numeric)
 
-**Status:** claimed 2026-11-15 (Claude Windows "t30-origin", branch `b5-fill`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", branch `b5-fill`; workbook-model.md 13c): the three items in the Column menu and the column-header menu, measured against Origin 2016's patternN/D/T and copied (month 31 days, year 365 days, random with replacement, rows below kept). Left: Origin's window layout and its text quoting.
 **Size:** M. **Source:** greyed inventory package B5 (Column > Fill Column With and the column-header
 context menu: A set of Numbers..., A set of Date/Time values..., Arbitrary set of Text&Numeric values...).
 Row Numbers and the random fills are T63's, not this brief's.

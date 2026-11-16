@@ -1,4 +1,5 @@
 //! Edit markup at character cursors, keeping the raw text outside the selection intact.
+use super::palette::TextColor;
 use eframe::egui::text::{CCursor, CCursorRange};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -11,6 +12,7 @@ pub(super) enum Format {
     Superscript,
     Subscript,
     Greek,
+    Color(TextColor),
 }
 
 impl Format {
@@ -35,6 +37,7 @@ impl Format {
             Self::Superscript => "Superscript",
             Self::Subscript => "Subscript",
             Self::Greek => "Greek",
+            Self::Color(_) => "Text color",
         }
     }
 
@@ -48,6 +51,7 @@ impl Format {
             Self::Superscript => "x²",
             Self::Subscript => "x₂",
             Self::Greek => "α",
+            Self::Color(_) => "Color",
         }
     }
 
@@ -61,6 +65,7 @@ impl Format {
             Self::Superscript => "Superscript (Ctrl+Shift+=)",
             Self::Subscript => "Subscript (Ctrl+=)",
             Self::Greek => "Greek letters (Ctrl+G)",
+            Self::Color(_) => "Color selected text, or insert colored text at the caret",
         }
     }
 
@@ -74,6 +79,7 @@ impl Format {
             Self::Superscript => r"\+(",
             Self::Subscript => r"\-(",
             Self::Greek => r"\g(",
+            Self::Color(color) => color.prefix(),
         }
     }
 }
@@ -115,7 +121,7 @@ fn prefix_end(chars: &[char], start: usize) -> Option<usize> {
     (chars.get(open) == Some(&'(')).then_some(open + 1)
 }
 
-fn clear(chars: &[char], depth: usize) -> String {
+fn clear(chars: &[char], depth: usize, only_colors: bool) -> String {
     if depth == 24 {
         return chars.iter().collect();
     }
@@ -125,7 +131,14 @@ fn clear(chars: &[char], depth: usize) -> String {
         if let Some(body) = prefix_end(chars, index)
             && let Some(end) = closing(chars, body)
         {
-            out.push_str(&clear(&chars[body..end], depth + 1));
+            let retain = only_colors && chars.get(index + 1) != Some(&'c');
+            if retain {
+                out.extend(chars[index..body].iter());
+            }
+            out.push_str(&clear(&chars[body..end], depth + 1, only_colors));
+            if retain {
+                out.push(')');
+            }
             index = end + 1;
         } else if chars.get(index) == Some(&'\\')
             && chars.get(index + 1) == Some(&'v')
@@ -143,8 +156,39 @@ fn clear(chars: &[char], depth: usize) -> String {
     out
 }
 
+/// Escape unmatched parentheses in a selected raw-text fragment. Unclosed markup stays untouched.
+fn safe_body(chars: &[char]) -> Option<String> {
+    let mut opens = Vec::new();
+    let mut escape = vec![false; chars.len()];
+    for (index, ch) in chars.iter().enumerate() {
+        match ch {
+            '(' => opens.push(index),
+            ')' if opens.pop().is_none() => escape[index] = true,
+            _ => {}
+        }
+    }
+    for index in opens {
+        if (0..index).any(|i| prefix_end(chars, i) == Some(index + 1))
+            || (index >= 2 && chars[index - 2] == '\\' && matches!(chars[index - 1], 'v' | 'x'))
+        {
+            return None;
+        }
+        escape[index] = true;
+    }
+    let mut out = String::new();
+    for (index, ch) in chars.iter().enumerate() {
+        match (*ch, escape[index]) {
+            ('(', true) => out.push_str(r"\x(0028)"),
+            (')', true) => out.push_str(r"\x(0029)"),
+            _ => out.push(*ch),
+        }
+    }
+    Some(out)
+}
+
 /// Apply or remove one complete wrapper. Returned cursors select the body, not its markup.
 pub(super) fn apply(text: &mut String, cursor: CCursorRange, format: Format) -> CCursorRange {
+    let original = text.clone();
     let mut chars: Vec<char> = text.chars().collect();
     let backwards = cursor.primary.index < cursor.secondary.index;
     let range = cursor.as_sorted_char_range();
@@ -161,9 +205,34 @@ pub(super) fn apply(text: &mut String, cursor: CCursorRange, format: Format) -> 
             start = outer;
             end += 1;
         }
-        replacement = clear(&chars[start..end], 0);
+        replacement = clear(&chars[start..end], 0, false);
         body_len = replacement.chars().count();
         body_start = start;
+    } else if matches!(format, Format::Color(_)) {
+        let adjacent = (0..start).rev().find(|&i| {
+            chars.get(i + 1) == Some(&'c')
+                && prefix_end(&chars, i) == Some(start)
+                && closing(&chars, start) == Some(end)
+        });
+        let whole = (chars.get(start + 1) == Some(&'c'))
+            .then(|| prefix_end(&chars, start))
+            .flatten()
+            .filter(|&body| closing(&chars, body) == end.checked_sub(1));
+        let body = if let Some(outer) = adjacent {
+            let body: Vec<char> = chars[start..end].to_vec();
+            start = outer;
+            end += 1;
+            body
+        } else if let Some(body) = whole {
+            chars[body..end - 1].to_vec()
+        } else {
+            let Some(body) = safe_body(&chars[start..end]) else { return cursor };
+            body.chars().collect()
+        };
+        let body = clear(&body, 0, true);
+        replacement = format!("{}{body})", format.prefix());
+        body_len = body.chars().count();
+        body_start = start + format.prefix().chars().count();
     } else {
         let prefix: Vec<char> = format.prefix().chars().collect();
         let adjacent = start >= prefix.len()
@@ -182,21 +251,134 @@ pub(super) fn apply(text: &mut String, cursor: CCursorRange, format: Format) -> 
             body_len = replacement.chars().count();
             body_start = start;
         } else {
-            body_len = end - start;
-            replacement = format!("{}{})", format.prefix(), chars[start..end].iter().collect::<String>());
+            let Some(body) = safe_body(&chars[start..end]) else { return cursor };
+            body_len = body.chars().count();
+            replacement = format!("{}{body})", format.prefix());
             body_start = start + prefix.len();
         }
     }
     chars.splice(start..end, replacement.chars());
-    *text = chars.into_iter().collect();
+    let candidate: String = chars.into_iter().collect();
+    if !matches!(format, Format::Normal | Format::Greek)
+        && sheaf_plot::markup::plain(&candidate) != sheaf_plot::markup::plain(&original)
+    {
+        return cursor;
+    }
+    *text = candidate;
     let (anchor, caret) =
         if backwards { (body_start + body_len, body_start) } else { (body_start, body_start + body_len) };
+    CCursorRange { primary: CCursor::new(caret), secondary: CCursor::new(anchor), h_pos: None }
+}
+
+/// Legend symbols and row boundaries are outside text-format groups. Name substitutions stay raw.
+pub(super) fn apply_legend(text: &mut String, cursor: CCursorRange, format: Format) -> CCursorRange {
+    let chars: Vec<char> = text.chars().collect();
+    let selected = cursor.as_sorted_char_range();
+    let (start, end) = (selected.start.min(chars.len()), selected.end.min(chars.len()));
+    if start == end {
+        return apply(text, cursor, format);
+    }
+    let mut protected = vec![false; chars.len()];
+    let mut i = 0;
+    while i < chars.len() {
+        if matches!(chars[i], '\n' | '\r') {
+            protected[i] = true;
+        }
+        if chars[i] == '\\'
+            && chars.get(i + 1).is_some_and(|c| matches!(c, 'l' | 'L'))
+            && chars.get(i + 2) == Some(&'(')
+            && let Some(offset) = chars[i + 3..].iter().position(|c| *c == ')')
+        {
+            let close = i + 3 + offset;
+            let raw: String = chars[i + 3..close].iter().collect();
+            let id = raw.split(',').next().unwrap_or_default().trim();
+            if !id.is_empty() && id.chars().all(|c| c.is_ascii_digit() || c == '.') {
+                let mut after = close + 1;
+                while after < chars.len() && matches!(chars[after], ' ' | '\t') {
+                    after += 1;
+                }
+                protected[i..after].fill(true);
+                i = after;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    if !protected[start..end].iter().any(|p| *p) {
+        return apply(text, cursor, format);
+    }
+    let mut ranges = Vec::new();
+    let mut i = start;
+    while i < end {
+        if protected[i] {
+            i += 1;
+            continue;
+        }
+        let begin = i;
+        while i < end && !protected[i] {
+            i += 1;
+        }
+        ranges.push(begin..i);
+    }
+    for range in ranges.into_iter().rev() {
+        apply(text, CCursorRange::two(CCursor::new(range.start), CCursor::new(range.end)), format);
+    }
+    let new_len = text.chars().count();
+    let end = new_len.saturating_sub(chars.len() - end);
+    let start = start.min(new_len);
+    let backwards = cursor.primary.index < cursor.secondary.index;
+    let (caret, anchor) = if backwards { (start, end) } else { (end, start) };
     CCursorRange { primary: CCursor::new(caret), secondary: CCursor::new(anchor), h_pos: None }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recoloring_preserves_nested_styles_and_literal_blocks() {
+        let mut text = r"\b(\c4(j)) / \g(m) cm\+(\c16908545(-2)) \v(\c4(raw))".to_string();
+        let plain = sheaf_plot::markup::plain(&text);
+        let cursor = CCursorRange::two(CCursor::new(0), CCursor::new(text.chars().count()));
+        apply(&mut text, cursor, Format::Color(TextColor::Red));
+        assert_eq!(sheaf_plot::markup::plain(&text), plain);
+        assert!(text.contains(r"\v(\c4(raw))"), "literal syntax stays literal: {text}");
+        let runs = sheaf_plot::markup::parse(&text);
+        assert!(runs.iter().all(|run| run.color == Some(sheaf_core::Color::RED)), "{runs:?}");
+        assert!(runs.iter().any(|run| run.text == "j" && run.bold));
+        assert!(runs.iter().any(|run| run.text == "-2" && run.scale < 1.0));
+    }
+
+    #[test]
+    fn recoloring_a_backwards_unicode_selection_is_idempotent_and_preserves_its_body() {
+        let mut text = "μA cm-2".to_string();
+        let cursor = CCursorRange::two(CCursor::new(7), CCursor::new(5));
+        let cursor = apply(&mut text, cursor, Format::Color(TextColor::Blue));
+        let blue = text.clone();
+        let cursor = apply(&mut text, cursor, Format::Color(TextColor::Blue));
+        assert_eq!(text, blue);
+        let cursor = apply(&mut text, cursor, Format::Color(TextColor::Red));
+        assert_eq!(text, r"μA cm\c2(-2)");
+        assert_eq!(text.chars().skip(cursor.as_sorted_char_range().start).take(2).collect::<String>(), "-2");
+    }
+
+    #[test]
+    fn white_uses_the_published_classic_white_entry_instead_of_olive() {
+        let mut text = "White".to_string();
+        apply(&mut text, CCursorRange::two(CCursor::new(0), CCursor::new(5)), Format::Color(TextColor::White));
+        let runs = sheaf_plot::markup::parse(&text);
+        assert_eq!(runs[0].color, Some(sheaf_core::Color::WHITE));
+        assert_eq!(sheaf_plot::markup::plain(&text), "White");
+    }
+
+    #[test]
+    fn selected_parenthesis_formatting_preserves_the_rendered_text() {
+        for range in [3..4, 5..6] {
+            let mut text = "cm (V)".to_string();
+            apply(&mut text, CCursorRange::two(CCursor::new(range.start), CCursor::new(range.end)), Format::Bold);
+            assert_eq!(sheaf_plot::markup::plain(&text), "cm (V)", "{text}");
+        }
+    }
 
     #[test]
     fn scripts_use_character_indices_and_retain_a_backwards_selection() {

@@ -605,12 +605,21 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         // A Pareto chart counts the cells of any column, text included.
         let counted = matches!(plot.stat, Some(StatPlot::Pareto | StatPlot::ParetoCumulative));
         let Some(y) = project.numeric(plot.y).or_else(|| counted.then_some(&[][..])) else { continue };
-        let x = plot.x.and_then(|id| project.numeric(id));
+        // Without an X column, a Y column with a sampling interval stands at its own X (T84).
+        let x: Option<Cow<'_, [f64]>> = match plot.x {
+            Some(id) => project.numeric(id).map(Cow::Borrowed),
+            None => project.column(plot.y).and_then(|c| c.sampling.as_ref()).map(|s| Cow::Owned(s.values(y.len()))),
+        };
         let x_format = plot.x.and_then(|id| project.column(id)).map(|c| c.format);
         let err = plot.y_error.and_then(|id| project.numeric(id));
         let xerr = plot.x_error.and_then(|id| project.numeric(id));
         let base = plot.y_base.and_then(|id| project.numeric(id));
         let (start, end) = row_range(plot, y.len());
+        // Set As Begin / Set As End: the rows outside the column's data range are left out (T87).
+        let (start, end) = match project.column(plot.y).and_then(|c| c.data_range) {
+            Some(r) => r.clip(start, end),
+            None => (start, end),
+        };
         let active_mask = project.column(plot.y).and_then(|c| c.active_mask());
         // Hide Masked Points: masked rows become gaps, like missing values, and nothing is drawn red.
         let (y_plot, mask): (Cow<'_, [f64]>, _) = match active_mask {
@@ -630,7 +639,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         };
         let mut pd = PlotData {
             plot,
-            x: x.map(Cow::Borrowed),
+            x,
             x_format,
             y: y_plot,
             mask,

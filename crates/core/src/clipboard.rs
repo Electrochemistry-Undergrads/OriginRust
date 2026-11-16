@@ -27,6 +27,26 @@ pub struct CopyOptions {
     pub full_precision: bool,
     /// Add the label rows (Long Name, Units, Comments, F(x)=, user parameters) above the values.
     pub label_rows: bool,
+    /// Which rows are written: the values (with the label rows when `label_rows`), or one of the
+    /// Edit > Copy variants of whole columns (T88).
+    pub part: CopyPart,
+}
+
+/// What Edit > Copy writes of the selected columns, as Origin 2016 puts it on the clipboard
+/// (measured 2026-11-16; workbook-model.md 13.4c).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub enum CopyPart {
+    /// The values (Copy, Copy full precision, Copy including label rows).
+    #[default]
+    Values,
+    /// Copy (formula): the F(x)= row alone.
+    Formula,
+    /// Copy (label rows): Long Name, Units, Comments, F(x)= and the user parameter rows.
+    LabelRows,
+    /// Copy (formula and label rows): F(x)= first, then Long Name, Units, Comments and parameters.
+    FormulaAndLabels,
+    /// Copy All: F(x)=, the label rows and the values.
+    All,
 }
 
 /// What a paste did, for the status line.
@@ -118,20 +138,51 @@ impl Worksheet {
                 out.push('\n');
             }
         };
-        if options.label_rows {
+        let formula = || cols.iter().map(|c| c.formula.clone().unwrap_or_default()).collect::<Vec<_>>();
+        let names = self.parameter_names();
+        let params = |line: &mut dyn FnMut(Vec<String>, bool)| {
+            for name in &names {
+                if cols.iter().any(|c| c.params.contains_key(name)) {
+                    line(cols.iter().map(|c| c.params.get(name).cloned().unwrap_or_default()).collect(), false);
+                }
+            }
+        };
+        let lnc = |line: &mut dyn FnMut(Vec<String>, bool)| {
             line(cols.iter().map(|c| c.long_name.clone()).collect(), false);
             line(cols.iter().map(|c| c.units.clone()).collect(), false);
             line(cols.iter().map(|c| c.comments.clone()).collect(), false);
-            // Origin 2016 keeps the F(x) row even when every formula is empty.
-            line(cols.iter().map(|c| c.formula.clone().unwrap_or_default()).collect(), false);
-            for name in self.parameter_names() {
-                if cols.iter().any(|c| c.params.contains_key(&name)) {
-                    line(cols.iter().map(|c| c.params.get(&name).cloned().unwrap_or_default()).collect(), false);
+        };
+        // Origin 2016 keeps the F(x) row even when every formula is empty.
+        let values = match options.part {
+            CopyPart::Values => {
+                if options.label_rows {
+                    lnc(&mut line);
+                    line(formula(), false);
+                    params(&mut line);
                 }
+                true
             }
-        }
-        for row in rows {
-            line(cols.iter().map(|c| copy_cell(c, row, options.full_precision, external)).collect(), true);
+            CopyPart::Formula => {
+                line(formula(), false);
+                false
+            }
+            CopyPart::LabelRows => {
+                lnc(&mut line);
+                line(formula(), false);
+                params(&mut line);
+                false
+            }
+            CopyPart::FormulaAndLabels | CopyPart::All => {
+                line(formula(), false);
+                lnc(&mut line);
+                params(&mut line);
+                options.part == CopyPart::All
+            }
+        };
+        if values {
+            for row in rows {
+                line(cols.iter().map(|c| copy_cell(c, row, options.full_precision, external)).collect(), true);
+            }
         }
         out
     }
@@ -221,6 +272,12 @@ fn parse_number(text: &str) -> Option<f64> {
 fn is_missing(text: &str) -> bool {
     let t = text.trim();
     t.is_empty() || t == "--"
+}
+
+/// Rows become columns and columns rows; short rows give empty cells.
+pub fn transpose_table(table: Vec<Vec<String>>) -> Vec<Vec<String>> {
+    let width = table.iter().map(Vec::len).max().unwrap_or(0);
+    (0..width).map(|j| table.iter().map(|r| r.get(j).cloned().unwrap_or_default()).collect()).collect()
 }
 
 /// Splits pasted text into rows and fields. Tabs outside quoted fields take precedence over
@@ -344,7 +401,30 @@ impl Project {
         row: usize,
         text: &str,
     ) -> Result<PasteReport, ProjectError> {
-        let table = parse_table(text);
+        self.paste_table(book, sheet, col, row, parse_table(text))
+    }
+
+    /// Edit > Paste Transpose (T86): pastes as [`Project::paste_text`] does, with the rows of the
+    /// text as columns and its columns as rows. Short rows of the text give empty cells.
+    pub fn paste_text_transposed(
+        &mut self,
+        book: WindowId,
+        sheet: usize,
+        col: usize,
+        row: usize,
+        text: &str,
+    ) -> Result<PasteReport, ProjectError> {
+        self.paste_table(book, sheet, col, row, transpose_table(parse_table(text)))
+    }
+
+    fn paste_table(
+        &mut self,
+        book: WindowId,
+        sheet: usize,
+        col: usize,
+        row: usize,
+        table: Vec<Vec<String>>,
+    ) -> Result<PasteReport, ProjectError> {
         let mut report =
             PasteReport { rows: table.len(), columns: table.first().map_or(0, Vec::len), ..Default::default() };
         if table.is_empty() {
@@ -456,6 +536,31 @@ mod tests {
         assert_eq!(shown, "0.30\ta b\n--\t\"x\ty\"\n2.00\t\n");
         let full = ws.copy_text(&[0], 0..3, CopyOptions { full_precision: true, ..Default::default() });
         assert_eq!(full, "0.30000000000000004\n--\n2\n", "a whole number has no useless .0");
+    }
+
+    #[test]
+    fn the_copy_variants_write_what_origin_puts_on_the_clipboard() {
+        // Origin 2016, columns B (Bee, mA, note; 10 20 30) and C (Double, F(x) col(B)*2; 20 40 60)
+        // selected (re-workspace/scratch/t88, local only).
+        let (mut p, b) =
+            book_with(vec![ColumnData::numeric(vec![10.0, 20.0, 30.0]), ColumnData::numeric(vec![20.0, 40.0, 60.0])]);
+        {
+            let ws = &mut p.workbook_mut(b).unwrap().sheets[0];
+            ws.columns[0].long_name = "Bee".into();
+            ws.columns[0].units = "mA".into();
+            ws.columns[0].comments = "note".into();
+            ws.columns[1].long_name = "Double".into();
+            ws.columns[1].formula = Some("col(B)*2".into());
+        }
+        let ws = &p.workbook(b).unwrap().sheets[0];
+        let copy = |part| ws.copy_external_text(&[0, 1], 0..3, CopyOptions { part, ..Default::default() });
+        assert_eq!(copy(CopyPart::Formula), "\tcol(B)*2");
+        assert_eq!(copy(CopyPart::LabelRows), "Bee\tDouble\r\nmA\t\r\nnote\t\r\n\tcol(B)*2");
+        assert_eq!(copy(CopyPart::FormulaAndLabels), "\tcol(B)*2\r\nBee\tDouble\r\nmA\t\r\nnote\t");
+        assert_eq!(copy(CopyPart::All), "\tcol(B)*2\r\nBee\tDouble\r\nmA\t\r\nnote\t\r\n10\t20\r\n20\t40\r\n30\t60");
+        // Copy including label rows (Ctrl+Shift+C), unchanged: the label rows, F(x)= and the values.
+        let with = ws.copy_external_text(&[0, 1], 0..3, CopyOptions { label_rows: true, ..Default::default() });
+        assert_eq!(with, "Bee\tDouble\r\nmA\t\r\nnote\t\r\n\tcol(B)*2\r\n10\t20\r\n20\t40\r\n30\t60");
     }
 
     #[test]

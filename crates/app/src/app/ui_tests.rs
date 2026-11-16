@@ -57,11 +57,15 @@ mod switcher;
 mod symbol_line_gaps;
 mod symbol_line_order;
 mod text_editor;
+mod text_editor_colors;
 mod text_format_toolbar;
+mod title_editors;
 mod toolbar_print;
 mod treemap;
 mod view_modes;
 mod violin;
+mod worksheet_controls;
+mod worksheet_format_toolbar;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {
@@ -3453,9 +3457,7 @@ fn the_column_header_menu_has_origins_items_in_origins_order_and_runs_them() {
     ] {
         assert!(entry_enabled(&h, have), "{have} should be enabled");
     }
-    for lack in ["Copy Columns to...", "Frequency Count..."] {
-        assert!(!entry_enabled(&h, lack), "{lack} should be greyed");
-    }
+    assert!(!entry_enabled(&h, "Frequency Count..."), "Frequency Count... should be greyed");
     // Clear empties the column and one undo brings it back.
     click_containing(&mut h, "Clear");
     assert!(column(&h, "C").is_empty());
@@ -3496,7 +3498,8 @@ fn the_cell_and_row_menus_copy_and_clear_and_grey_what_sheaf_lacks() {
         &["Cut", "Copy", "Paste", "Paste Transpose", "Insert", "Clear", "Insert Graph...", "Format Cells..."],
     );
     assert!(entry_enabled(&h, "Copy"));
-    assert!(!entry_enabled(&h, "Paste Transpose"));
+    assert!(entry_enabled(&h, "Paste Transpose"), "T86");
+    assert!(!entry_enabled(&h, "Paste Link"));
     assert!(!entry_enabled(&h, "Insert Graph..."));
     click_containing(&mut h, "Clear");
     assert!(column(&h, "B")[2].is_nan());
@@ -8874,6 +8877,13 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
     assert_eq!(h.state().doc.undo_label(), Some("K-means cluster analysis"));
 }
 
+mod copy_columns;
+mod copy_variants;
+mod data_range;
+mod fill_pattern;
+mod sampling;
+mod stats3;
+mod swap_transpose;
 #[path = "ui_tests/trendline.rs"]
 mod trendline;
 mod user_templates;

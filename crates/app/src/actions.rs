@@ -24,6 +24,9 @@ pub enum CopyKind {
     FullPrecision,
     /// The label rows above the values, which are written as shown.
     WithLabels,
+    /// Copy (formula), Copy (label rows), Copy (formula and label rows), Copy All (T88): whole
+    /// columns only, as Origin's.
+    Part(sheaf_core::clipboard::CopyPart),
 }
 
 /// What to do with the selected cells of a worksheet.
@@ -33,7 +36,12 @@ pub enum CellOp {
     Cut,
     /// Paste what is on the clipboard: asks the system for the text, which comes back as `PasteText`.
     Paste,
+    /// Edit > Paste Transpose: as `Paste`, and the text that comes back is pasted transposed.
+    PasteTranspose,
     PasteText(String),
+    /// Edit > Set As Begin / Set As End: the top (or bottom) selected row becomes the first (or
+    /// last) row of each selected column's data range.
+    SetRangeEnd(sheaf_core::data_range::RangeEnd),
     /// Empty the cells (the Delete key).
     Clear,
     /// Store the same text in every selected cell (Ctrl+Enter in the cell editor).
@@ -233,6 +241,19 @@ pub enum Action {
     SaveTemplateAs(WindowId),
     /// Plot > User Templates > Manage...: rename and delete the saved templates.
     ManageTemplates,
+    /// Column > Fill Column With > a pattern: open its window for these columns.
+    FillPattern {
+        kind: crate::dialogs::fill_pattern::FillKind,
+        columns: Vec<ColumnId>,
+    },
+    /// Column > Set Sampling Interval...: open its window for these columns.
+    SetSamplingInterval {
+        columns: Vec<ColumnId>,
+    },
+    /// Column > Show X Column...: open its window for these columns.
+    ShowXColumn {
+        columns: Vec<ColumnId>,
+    },
     /// Plot > User Templates > a saved one: plot the columns in its look.
     PlotUserTemplate {
         book: WindowId,
@@ -268,6 +289,12 @@ pub enum Action {
         columns: Vec<ColumnId>,
         to: sheaf_core::sheetops::MoveTo,
     },
+    /// The column header's Swap Columns...: the two columns exchange places.
+    SwapColumns(ColumnId, ColumnId),
+    /// The column header's Copy Columns to...: open its window for these columns.
+    CopyColumnsTo(Vec<ColumnId>),
+    /// Edit > Reset to Full Range: every column of the workbook's active sheet uses all its rows.
+    ResetFullRange(WindowId),
     /// Column > Hide/Unhide Columns > Hide Selected.
     HideColumns(Vec<ColumnId>),
     /// Column > Hide/Unhide Columns > Unhide All, on the active sheet of the workbook.
@@ -428,6 +455,11 @@ pub enum Action {
         columns: Vec<ColumnId>,
         template: Template,
     },
+    /// Plot > Line + Symbol > Line Series: one plot of the rows of the selected Y columns, k-point segments.
+    PlotLineSeries {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     /// Plot > Symbol > Y Error: a scatter plot of the Y columns that shows the error bars of
     /// their Y error columns; with `x` (XY Error) also those of their X error columns.
     PlotYError {
@@ -567,6 +599,17 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
         label: usize,
+    },
+    /// Edits the existing axis title with text-selection formatting.
+    EditTitle {
+        graph: WindowId,
+        layer: usize,
+        vertical: bool,
+    },
+    /// Edits the existing legend content, retaining plot substitutions.
+    EditLegendText {
+        graph: WindowId,
+        layer: usize,
     },
     /// Moves a label to a new anchor (fractions of the layer frame): one undo step.
     MoveLabel {

@@ -1452,6 +1452,196 @@ log axis inside the extended range, fixed maximum band and title, 15 pairs with 
 unchanged drawing), `crates/cli/tests/analyze.rs` (SVG,
 refusals), `crates/mcp` (bridge), the `.opj` warning, and the app test `comparison_plot`.
 
+## 24 Partial correlation coefficient (T81, measured against Origin 2016)
+
+Origin: Statistics > Descriptive Statistics > Partial Correlation Coefficient (`pcorrcoef`). Runs: `tools/origin-ref/stats6/gp.py`
+and `gp2.py` (line scripts, run through `run-labtalk-safe.ps1`); their data and Origin's numbers are in
+`tools/origin-ref/stats6/t81-origin.compact.json` (`pcorrcoef`), the raw output only in the git-ignored scratch folder. The numbers were
+re-computed with numpy and scipy and agree with Origin to every printed digit (r to 5 decimals, p to 6 digits).
+
+**Inputs.** `irng` the variables (at least two columns), `control` the controlling variables (at least one: a run with none is
+refused), `missing` Pairwise (default) or Listwise, `tail` One-tailed or Two-tailed (default two), `sig` "Show Significance in
+Result Table" (default off), `flag` "Flag Significant Correlations" (default off), `rt` the report and `corr` a plain sheet.
+Only Pearson exists (no Spearman or Kendall).
+
+**Numbers (confirmed on 9 runs: 2 and 3 variables, 1 and 2 controls, n = 20, 8 and 4, pairwise and listwise with missing
+cells).** For variables x, y and controls z1..zk take the correlation matrix R of (x, y, z1..zk); the partial correlation is
+`r = -P[x,y] / sqrt(P[x,x] P[y,y])` with P the inverse of R. The p-value is the t test with `t = r sqrt(df / (1 - r^2))` and
+`df = n - 2 - k`, halved for the one-tailed test (p = 7.0044E-8 against two-tailed 1.4009E-7 on the 3-variable run).
+Pairwise: every entry of R is the correlation of its own pair on the rows where both columns have a number, and n of a pair is
+the number of rows where both variables x and y have a number (the gaps of the controlling variables do not enter n: 17 rows,
+df 14 for a pair that lost three rows while a control lost another row). Listwise: only rows complete in all variables
+and controls (15 rows, df 12 everywhere). The diagonal shows r = 1, no p ("--") and df 0.
+With df 0 (n = 4, two controls) Origin still prints r = -1 or 1 and "--" for p.
+
+**Refused (no report, the command returns false):** one variable only; a control column that is constant; two identical
+control columns; a variable that is also a control; a perfect correlation between the two variables (y = 2x + 1);
+n = 3 with one control. Origin gives no message to the script; Sheaf says why in a message.
+
+**Report sheet** (a report tree, in the same book as the data): title "Partial Correlation Coefficients" with the time,
+then four sections: **Notes** (X-Function name, user name, time, "Data Filter" No), **Input Data** (a table `Data | Range` for
+the variables and one for the Controlling Variables, rows lettered A, B, C, D...), **Descriptive Statistics** (N, Mean, SD, Sum,
+Min, Max for each variable and then each control, same letters) and **Partial Correlations**: a matrix with one block of three
+rows per variable (`Partial Corr.`, `p-value`, `df`) and one column per variable. With "Show Significance" off the block has
+only the Partial Corr. row; with "Flag Significant" on, a coefficient whose p is below 0.05 carries `*`. Footer lines:
+"Controlling variables: D" (names of the controls), "Two-tailed test of significance is used." (or one-tailed) and, with
+flags, "*: The partial correlation is significantly different from zero at the 0.05 level." The plain sheet (`corr`) holds the
+matrix of r only, with the variable names in column 1 (the first column of the cells).
+
+Unmeasured: the exact message texts of the refusals, whether the flag threshold follows another alpha (there is no alpha field),
+how the report looks with listwise deletion (the Notes lines were not compared), and the sheet names of a default run.
+
+**What Sheaf does (T81; `crates/calc/src/partcorr.rs`, `crates/core/src/analysis/partcorr.rs`, `dialogs/stats3_options.rs`,
+`sheaf analyze partial-corr`).** The six measured runs with data (a, b, c, d, e, g; 2 and 3 variables, 1 and 2 controls,
+pairwise and listwise with gaps, one- and two-tailed) are reproduced to the printed digits (`crates/calc/tests/origin_t81.rs`).
+The refusals are the six measured ones, each with a message that says why. With df 0 and two or more controls the coefficient is
+printed as -1 or 1 and has no p (Origin printed the same); with df 0 and one control it is refused. The window and the command
+have Origin's inputs (variables, controlling variables, Pairwise/Listwise, One-/Two-tailed, Show Significance, Flag Significant;
+defaults as measured). The report is a Sheaf sheet, not a copy of Origin's report tree: a descriptive table (variables, then
+controls), the matrix of coefficients (text with a `*` when "Flag Significant" is on) with the p-value and df matrices when "Show
+Significance" is on, a pair table in the result and the footer lines as notes. **Sheaf's own, unmeasured:** the sheet name
+`PartialCorr1`, the refusal wording, the descriptive N under listwise deletion (the complete rows), the flag level fixed at 0.05.
+
+## 25 Three-way ANOVA (T81, measured against Origin 2016 through its dialog)
+
+Origin: Statistics > ANOVA > Three-Way ANOVA (a submenu with "1 <Last used>" and "Open Dialog..." once it has been run).
+The X-Function `ANOVAThreeWay` has no script arguments; it only runs from its dialog, so the runs automated the dialog
+(`tools/origin-ref/origin-dialog.ps1` with `-MenuClicks` and `-StepsFile`; the data generator is `stats6/g3.py`). The result
+is a new sheet `ANOVA3Way1` **in the input book** (353 columns, one block of columns per table), plus a plot-data sheet
+`ANOVAThreeWayPlots1` when graphs are asked for.
+
+**Dialog.** Tabs: Input, Model, Descriptive Statistics, Means Comparison, Power Analysis, Mean Plot, Output. Input: Indexed
+(Factor A, Factor B, Factor C and Data columns, each a range box) or Raw; "Homogeneity Tests (Levene's Test)" checkbox;
+Significance Level 0.05. Model: the model line `Data = A + B + C + A*B + A*C + B*C + A*B*C` with a checkbox per interaction
+(all four on). Descriptive Statistics: Factor A, B, C, A*B, A*C, B*C, A*B*C, Overall. Means Comparison: significance level and
+Tukey, Bonferroni, Dunn-Sidak, Fisher LSD, Scheffe, Holm-Bonferroni, Holm-Sidak (no Dunnett). Power Analysis: Actual Power,
+Hypothetical Power with significance level and "Hypothetical Sample Size(s)" (default `50 100 200`). Mean Plot: the same seven
+effects. Output: Dataset Identifier, Report Tables, Plot Data (book, sheet name `ANOVAThreeWayPlots1`), Optional Report Tables
+(Notes and Input Data on; Masked Data and Missing Data off). Levels are numbered in order of appearance.
+
+**Table (confirmed on a balanced 2 x 3 x 2 design with 2 numbers per cell and on an unbalanced one with 26 numbers).** Rows A, B,
+C, A*B, A*C, B*C, A*B*C, Model, Error, Total with DF, Sum of Squares, Mean Square, F Value, Prob>F. For both designs the sum of
+squares of a term is its **type III** value (the rise of the residual sum of squares when the term is removed from the full
+model with sum-to-zero coding). Unbalanced run: A 27.1973, B 4.87701, C 5.5441, A*B 11.77721, A*C 0.16264, B*C 8.69694, A*B*C
+1.42342, Model 66.66406 on 11 DF, Error 10.90593 on 14 DF, Total 77.56999 on 25 DF (type I gives 25.64596 for A and type II
+26.87056; both differ from Origin). The balanced run is the textbook table (A 20.23401, B 3.98318, C 4.63154, A*B 13.65266,
+A*C 0.00881, B*C 4.55638, A*B*C 6.43884, Model 53.50542 on 11 DF; F of A 43.28302, p 2.61651E-5). The Error row has no F; the
+Total row has no MS. Checked again with numpy to 6 digits. Model terms switched off in the Model tab were not run.
+
+**Descriptive statistics blocks** (when ticked): per level of a factor or per cell seven values: N, Mean, SD, SEM, Variance, then
+two more that were not identified (0 and N). The Overall block has the same seven values over all data.
+**Means comparison** (when ticked): per effect, for every pair of levels (cells for the interactions), blocks of ten values per
+method as in the one-way and two-way ANOVA (sections 2 and 7): the two level indices, mean difference, standard error
+(`sqrt(MSE (1/ni + 1/nj))`, divided by sqrt 2 for Tukey), t (Tukey: q), Prob, alpha, Sig (0/1), LCL, UCL; the Holm methods list
+the pairs by increasing p with the step alpha. Balanced run, factor A: difference 1.83639, SE 0.19737, Tukey q 13.15797, t
+9.30409, Bonferroni p 7.76269E-7.
+**Levene's test** (when ticked): a table of DF, SS, MS, F, p for the absolute deviations from the cell means. **Power**: per
+effect alpha, N and power for the actual sample size and each hypothetical size (A at N = 24: 0.99997; B: 0.62766).
+
+Unmeasured: the report as drawn (only cell values were read, no picture), the exact rule of the power column (noncentral F is the
+likely one), the Raw layout, empty cells, rows with missing values, the mean plot graphs, which interaction effects the means
+comparison lists, the Levene numbers on a design with spread (the run used 2 numbers per cell, which makes it degenerate) and the
+two unidentified descriptive values.
+
+**What Sheaf does (T81; `crates/calc/src/anova3.rs`, `crates/core/src/analysis/anova3.rs`, `dialogs/stats3_options.rs`,
+`sheaf analyze anova3`).** Reproduced to the printed digits from the report sheet (`crates/calc/tests/origin_t81.rs`): both type III
+tables (balanced and unbalanced, Error and Total rows included), the descriptive statistics of A, A*B, A*B*C and all data, the
+means comparisons (Tukey, Bonferroni, LSD, Scheffe of A and B; the first eight Tukey pairs of A*B), Levene's DF, SS and MS, and the
+power of all seven effects at the actual and the three hypothetical sizes. Findings from reading the sheet cell by cell, all
+implemented:
+- The standard error of every means comparison is `sqrt(MSE / 2 (1/ni + 1/nj))`, not the textbook `sqrt(MSE (1/ni + 1/nj))` (A: 0.19737,
+  A*B: 0.34186; t, q, p and the limits all follow from it). Tukey's q is `sqrt 2` times that t, with p from the studentized range for
+  the number of levels or cells. The difference is `mean(i) - mean(j)` (the first level minus the later one), the statistics carry its
+  sign, and Scheffe prints the signed t (its p comes from F = t^2 / (k - 1)).
+- Pairs run `(1,2), (1,3), ..., (1,k), (2,3), ...` (the first level changes slowest) for the cells of A*B; the means comparison lists
+  A, B, C and A*B only (the dump holds no block for A*C, B*C or A*B*C).
+- Power: the noncentrality is `df1 * F * N / n` (n = the number of data), the denominator degrees of freedom `N - rank` (rank = the
+  model's parameters, 12 here), and the "actual" size of an effect is `n` times the number of factors in it (24, 48 and 72); this
+  fits all 28 printed values, but it is one design, so it is Sheaf's reading of the rule.
+- Levene: a one-way ANOVA of the absolute deviations from the finest cell means over the cells (the run's DF 11 and 12 and SS 1.04913).
+**Not reproduced, labelled:** Origin's Dunn-Sidak block of the three-way ANOVA prints a "Prob" column above 1 and swapped limits
+(it looks broken), and its Holm blocks pair each p with a threshold in a rotated order; Sheaf prints the correct Dunn-Sidak p and
+lists the Holm methods by increasing p as in the one-way ANOVA. Not built: the Mean Plot tab and graphs, the Raw layout, the Output
+tab (Plot Data, optional tables). **Sheaf's own, unmeasured:** the sheet layout (one block per table, the long-format comparison
+blocks), the defaults of the dialog (all descriptive statistics, Tukey, Levene and power off), models with an interaction switched
+off (computed by the same type III rule), empty cells (refused), and Levene on a design with spread (the formula is the standard one,
+checked only by hand).
+
+## 26 Repeated measures ANOVA, one-way and two-way (T81, measured against Origin 2016 through its dialogs)
+
+Origin 2016's Statistics > ANOVA menu has **One-Way Repeated Measures ANOVA** (submenu "1 <Last used>", "Open Dialog..."),
+**Two-Way Repeated Measures ANOVA** and no single "Repeated Measures ANOVA..." item (that is the name in newer versions; Sheaf's
+greyed item is replaced by the two Origin 2016 items). The X-Functions `ANOVAOneWayRM` and `ANOVATwoWayRM` have no script
+arguments: measured by automating the dialogs as in section 25. The result is a new sheet `ANOVAOneWayRM1` or `ANOVATwoWayRM1` in
+the input book. Data, numbers and the decoded columns: `tools/origin-ref/stats6/t81-origin.compact.json` (`rmanova1`, `rmanova2`).
+
+**One-way dialog.** Tabs Input, Means Comparison, Output, Plots. Input: Indexed (Factor, Data, Subject columns) or Raw;
+Descriptive Statistics (on); Significance Level 0.05. Means Comparison: Tukey, Bonferroni, Dunn-Sidak, Fisher LSD, Scheffe,
+Dunnett (expandable: control group), Holm-Bonferroni, Holm-Sidak. **Two-way dialog.** Tabs Input, Descriptive Statistics, Means
+Comparison, Output. Input: Indexed with Factor A, Factor B, Data, Subject; an "Interactions" checkbox (off by default); a
+significance level. Descriptive Statistics: FactorA, FactorB, Interaction.
+
+**One-way numbers (8 subjects x 4 levels, indexed: A level, B data, C subject; confirmed with numpy to 6 digits).**
+- The within table has four rows per way of treating sphericity: *Sphericity Assumed*, *Greenhouse-Geisser*, *Huynh-Feldt*,
+  *Lower-bound*: SS of the factor 64.39032, DF 3 / 2.89097 / 3 / 1, MS 21.46344 / 22.27288 / 21.46344 / 64.39032, F 15.67215 (the
+  same in each row), Prob>F 1.40272E-5 / 1.93022E-5 / 1.40272E-5 / 0.00547. The error rows have SS 28.76007 and DF 21 / 20.23682 /
+  21 / 7 (the plain DFs times epsilon, MS = SS / DF).
+- Sphericity: **Mauchly's test** W 0.94848, chi-square 0.30267, DF 5 (k (k - 1) / 2 - 1), p 0.99759, chi-square =
+  `-(n - 1 - (2 (k-1)^2 + (k-1) + 2) / (6 (k-1))) ln W` with W of the covariance matrix of orthonormal contrasts. Epsilons:
+  Greenhouse-Geisser 0.96366 (`tr(C)^2 / ((k-1) tr(C C))`), Huynh-Feldt 1 (the formula gives 1.714, capped at 1), Lower-bound
+  0.33333 (1/(k-1)).
+- Multivariate tests of the factor: four rows (0.85546 and 0.14454 for the first two, 5.91835 for the last two), one F 9.86391
+  with DF 3 and 5 and p 0.01532 (Pillai's trace, Wilks' lambda, Hotelling's trace and Roy's largest root; identified by the
+  numbers, not by labels).
+- Between subjects: Intercept SS 15121.48321, DF 1, MS the same, F 804.75036, p 1.73883E-8; Subjects SS 131.53195, DF 7, MS
+  18.79028.
+- Descriptive statistics per level: Mean, SE, 95 % confidence limits (SE 0.96025 for the first level; worked out later from the
+  numbers: the standard deviation of the subjects' values over the square root of their number, limits with t of n - 1 degrees of
+  freedom). Means comparisons in blocks of ten columns (as sections 2 and 25) with SE `sqrt(2 MSE / n)` = 0.58513 and DF the
+  error DF 21: all six pairs for Tukey (q 3.54149, p 0.08833 for levels 1 and 2), Bonferroni (p 0.12354), Dunn-Sidak, Fisher LSD
+  (p 0.02059), Scheffe; Holm-Bonferroni and Holm-Sidak list the pairs by p with step alpha 0.05/6 = 0.00833 and 0.00851.
+
+**Two-way numbers (6 subjects x 2 x 3, one number per subject and cell, both factors repeated; confirmed with numpy).**
+Each effect has its own error term: A (SS 29.07798, DF 1) against A x Subject (SS 9.07567E-5, DF 5), B (SS 0.05025, DF 2)
+against B x Subject (SS 7.64333, DF 10), A*B (SS 0.15591, DF 2) against A x B x Subject (SS 8.33368, DF 10); F = MS effect / MS
+of its own error (A: 1.60197E6, p 5.84335E-15; B 0.03287, p 0.96777; A*B 0.09354, p 0.91149). Every effect with more than 1
+DF has the four sphericity rows of the one-way table (B: Mauchly W 0.96832, chi-square 0.12878, DF 2, p 0.93764, epsilon
+Greenhouse-Geisser 0.96929, Huynh-Feldt 1, Lower-bound 0.5; corrected DFs of B 1.93858 and 9.6929). Intercept SS 39236.00333,
+DF 1, F 2181.60088, p 8.4964E-8; Subjects SS 89.9248, DF 5, MS 17.98496. Descriptive statistics per level of A, B and per
+cell (Mean, SE, 95 % limits).
+
+Two-way descriptive statistics follow the same rule on the subjects' values averaged over the other factor (levels of A, of B) or
+taken as they are (cells): A level 1 mean 32.11473, SE 0.7067, limits 30.2981 / 33.93137 (t of 5 degrees of freedom); cell 1 SE
+0.67432.
+
+**What Sheaf does (T81, `sheaf_calc::rm_anova`, core `analysis/rmanova.rs`, `sheaf analyze rmanova`).** Menu items
+Statistics > ANOVA > One-Way Repeated Measures ANOVA... and Two-Way Repeated Measures ANOVA... (the single greyed "Repeated
+Measures ANOVA..." is gone). Indexed data only: columns factor, data, subject (one-way) or factor A, factor B, data, subject
+(two-way); levels and subjects may be text, levels are numbered in order of appearance. Each effect is tested on the subjects'
+scores of its orthonormal (Helmert) contrasts: SS = n times the squared length of the mean score vector, error SS = (n - 1) tr(S)
+with DF (n - 1) d, S the covariance matrix of the scores; Mauchly's W = det(S) / (tr(S) / d)^d, the chi-square and epsilons as above
+(epsilon of an effect with one DF is 1 and has no Mauchly row), the multivariate tests from the one non-zero eigenvalue
+`T^2 / (n - 1)` (Pillai lambda/(1+lambda), Wilks 1/(1+lambda), Hotelling and Roy lambda, F = (n - d) lambda / d). Intercept SS =
+n K grand-mean^2 against the Subjects mean square. The one-way means comparisons use `sqrt(2 MSE / n)` with the table's error DF,
+pairs row by row (1,2), (1,3), ..., difference mean(i) - mean(j), the statistic unsigned (q for Tukey, |t| for the others including
+Scheffe), Holm and Holm-Sidak listed by increasing p with the significance flag 1, then 0 for the first failure and -1 after it and
+the alpha column 0 after the first failure. The result sheet `ANOVAOneWayRM1` / `ANOVATwoWayRM1` has the blocks Multivariate Tests
+(one-way), Mauchly's Test of Sphericity with the epsilons, Within Subjects (effect and error rows under each of the four ways),
+Between Subjects, Descriptive Statistics, and the comparison blocks, in the order of the measured sheet; each block is a column
+group with its own label column, as for the three-way ANOVA. Every number of both measured runs, all five single-step comparison
+blocks (to the printed digits; Tukey limits to 3e-4 relative) and the Holm orders and thresholds are reproduced by
+`crates/calc/tests/origin_t81.rs`.
+
+Sheaf's own, unmeasured: Interactions off in the two-way design simply leaves the A*B rows out (the error terms of A and B stay
+those of the full design); a subject without a number in every cell is left out with a note, a repeated number in one subject
+and cell is refused; the two-way multivariate tests and the two-way means comparisons are not offered (the Means Comparison tab of
+the two-way window only says so); Dunnett is not offered (it belongs to the Dunnett work); the confidence limits use the Input
+tab's significance level.
+
+Unmeasured: the reports as drawn (no picture of either), the Raw layout, missing values or unequal numbers of observations per
+subject, the Dunnett and Holm blocks in the two-way run, the Plots and Output tabs' graphs, the rule of the means' standard
+errors, designs with a between-subjects factor (the dialog offers only the all-within design), and Interactions off.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",
@@ -1491,8 +1681,8 @@ Not verified or not done:
   distribution curve on the histogram, normal probability plot) are not copied.
 - No test of equal variance (Levene, F test) next to the two-sample t-test, no t-test from summary data, no row-wise t-tests.
 - Power and sample size: only the t tests and the one-way ANOVA (section 12); no tests of proportions or variances, no power curve.
-- Three-way and repeated measures ANOVA and means plots of the
-  ANOVA, partial correlation, scatter matrices and confidence ellipses, outlier tests other than Grubbs and
+- Means plots of the
+  ANOVA (three-way and repeated measures ANOVA and partial correlation are sections 24 to 26), scatter matrices and confidence ellipses, outlier tests other than Grubbs and
   Dixon, Chen-Shapiro and Cramer-von Mises are not built (the Friedman, median, sign and two-sample
   Kolmogorov-Smirnov tests and the Grubbs and Dixon tests are in section 10).
 - Mann-Whitney and Kruskal-Wallis take one column per sample; Origin's indexed form (a group column and a

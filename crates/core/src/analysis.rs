@@ -47,6 +47,7 @@ pub use sheaf_calc::{
     FilterError, FilterResponse, FirMethod, FirSpec, FirWindow, FreqUnit, IIR_MAX_ORDER, IirMethod, IirSpec,
     MAX_FIR_ORDER as FIR_MAX_ORDER, MagnitudeUnit,
 };
+pub use sheaf_calc::{RmTerm, ThreeWayEffect, ThreeWayTerms};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
@@ -584,6 +585,98 @@ impl Default for TwoWayAnovaSpec {
     }
 }
 
+/// What [`Tool::PartialCorrelation`] does (Origin's Partial Correlation Coefficient, `pcorrcoef`): the chosen
+/// columns are the variables; `controls` are the controlling variables, read from the same sheet. Pearson only.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PartialCorrSpec {
+    pub controls: Vec<ColumnId>,
+    /// Leave out every row where any variable or control has no number (default: pair by pair).
+    pub listwise: bool,
+    /// One-tailed instead of the default two-tailed test.
+    pub one_tailed: bool,
+    /// "Show Significance in Result Table": the p-value and df blocks (default off).
+    pub show_significance: bool,
+    /// "Flag Significant Correlations": a `*` after the coefficients whose p-value is below 0.05 (default off).
+    pub flag_significant: bool,
+}
+
+/// What [`Tool::ThreeWayAnova`] does (Origin's Three-Way ANOVA, `ANOVAThreeWay`) on indexed data: four chosen
+/// columns, the level of factor A, of factor B, of factor C and the data of each row. The Raw layout and the mean
+/// plot of Origin's dialog are not built.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ThreeWayAnovaSpec {
+    /// The interactions in the model (Origin's Model tab; all on by default).
+    pub terms: calc::ThreeWayTerms,
+    /// Levene's test of equal variances ("Homogeneity Tests").
+    pub levene: bool,
+    /// Descriptive statistics of the effects ticked here (`calc::ThreeWayEffect`), and of all data.
+    pub descriptive: Vec<calc::ThreeWayEffect>,
+    pub descriptive_overall: bool,
+    /// Means comparison methods (Origin lists the seven without Dunnett; several can be ticked).
+    pub comparisons: Vec<MeansComparison>,
+    pub comparison_alpha: f64,
+    /// Power of the F tests for the actual sample size.
+    pub power_actual: bool,
+    /// Power for these hypothetical sample sizes (Origin's default `50 100 200`; empty: not asked).
+    pub power_sizes: Vec<f64>,
+    pub power_alpha: f64,
+    /// Significance level of the F tests (Input tab).
+    pub alpha: f64,
+}
+
+impl Default for ThreeWayAnovaSpec {
+    /// Sheaf's own defaults (Origin's were not read from its dialog): all descriptive statistics, Tukey, no
+    /// Levene and no power.
+    fn default() -> Self {
+        ThreeWayAnovaSpec {
+            terms: calc::ThreeWayTerms::default(),
+            levene: false,
+            descriptive: calc::ThreeWayEffect::ALL.to_vec(),
+            descriptive_overall: true,
+            comparisons: vec![MeansComparison::Tukey],
+            comparison_alpha: 0.05,
+            power_actual: false,
+            power_sizes: Vec::new(),
+            power_alpha: 0.05,
+            alpha: 0.05,
+        }
+    }
+}
+
+/// What [`Tool::RmAnova`] does (Origin's One-Way and Two-Way Repeated Measures ANOVA) on indexed data: the chosen
+/// columns are the level column(s) (one for the one-way design, factor A and factor B for the two-way design), the
+/// data and the subject of each row, in this order. Every subject needs one number in every cell. The Raw layout,
+/// the plots and the Output tab of Origin's dialogs are not built.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RmAnovaSpec {
+    /// Two repeated factors (columns A, B, data, subject) instead of one (factor, data, subject).
+    pub two_way: bool,
+    /// The A*B interaction of the two-way design (Origin's "Interactions" box, off by default).
+    pub interaction: bool,
+    /// Descriptive statistics of the levels of A, of B (two-way) and of the A*B cells (two-way, with the interaction).
+    pub descriptive: Vec<RmTerm>,
+    /// Means comparison methods of the one-way design (the seven of Origin's dialog without Dunnett).
+    pub comparisons: Vec<MeansComparison>,
+    pub comparison_alpha: f64,
+    /// Significance level (Input tab): the confidence limits of the descriptive statistics and the verdicts.
+    pub alpha: f64,
+}
+
+impl RmAnovaSpec {
+    /// Origin's defaults as far as measured: the one-way run lists the descriptive statistics and Origin's
+    /// two-way dialog starts with Interactions off; the comparison methods start with Tukey (Sheaf's own).
+    pub fn new(two_way: bool) -> Self {
+        RmAnovaSpec {
+            two_way,
+            interaction: false,
+            descriptive: if two_way { vec![RmTerm::A, RmTerm::B] } else { vec![RmTerm::A] },
+            comparisons: if two_way { Vec::new() } else { vec![MeansComparison::Tukey] },
+            comparison_alpha: 0.05,
+            alpha: 0.05,
+        }
+    }
+}
+
 /// What [`Tool::MannWhitney`] does: two chosen columns, two independent samples.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MannWhitneySpec {
@@ -865,6 +958,12 @@ pub enum Tool {
     Normality(NormalitySpec),
     Crosstab(CrosstabSpec),
     TwoWayAnova(TwoWayAnovaSpec),
+    /// Statistics > ANOVA > Three-Way ANOVA.
+    ThreeWayAnova(ThreeWayAnovaSpec),
+    /// Statistics > ANOVA > One-Way and Two-Way Repeated Measures ANOVA.
+    RmAnova(RmAnovaSpec),
+    /// Statistics > Descriptive Statistics > Partial Correlation Coefficient.
+    PartialCorrelation(PartialCorrSpec),
     MannWhitney(MannWhitneySpec),
     SignedRank(SignedRankSpec),
     KruskalWallis(KruskalWallisSpec),
@@ -951,6 +1050,10 @@ impl Tool {
             Tool::Normality(_) => "Normality test",
             Tool::Crosstab(_) => "Cross tabulation",
             Tool::TwoWayAnova(_) => "Two-way ANOVA",
+            Tool::ThreeWayAnova(_) => "Three-way ANOVA",
+            Tool::RmAnova(spec) if spec.two_way => "Two-way repeated measures ANOVA",
+            Tool::RmAnova(_) => "One-way repeated measures ANOVA",
+            Tool::PartialCorrelation(_) => "Partial correlation",
             Tool::MannWhitney(_) => "Mann-Whitney test",
             Tool::SignedRank(spec) => match spec.kind {
                 SignedRankKind::OneSample { .. } => "One-sample Wilcoxon signed rank test",
@@ -1024,6 +1127,10 @@ impl Tool {
             Tool::Normality(_) => "Normality",
             Tool::Crosstab(_) => "Crosstab",
             Tool::TwoWayAnova(_) => "ANOVA2Way",
+            Tool::ThreeWayAnova(_) => "ANOVA3Way",
+            Tool::RmAnova(spec) if spec.two_way => "ANOVATwoWayRM",
+            Tool::RmAnova(_) => "ANOVAOneWayRM",
+            Tool::PartialCorrelation(_) => "PartialCorr",
             Tool::MannWhitney(_) => "MannWhitney",
             Tool::SignedRank(_) => "SignedRank",
             Tool::KruskalWallis(_) => "KruskalWallis",
@@ -1710,13 +1817,16 @@ fn run_peak_chain(
     Ok(t)
 }
 
+mod anova3;
 mod categorical;
 mod curves;
 mod dist;
 mod filters;
 mod manip;
 mod multivariate;
+mod partcorr;
 mod power;
+mod rmanova;
 mod roc;
 mod simulate;
 mod statistics;
@@ -1878,6 +1988,9 @@ impl Project {
         let own_columns = matches!(
             request.tool,
             Tool::TwoWayAnova(_)
+                | Tool::ThreeWayAnova(_)
+                | Tool::RmAnova(_)
+                | Tool::PartialCorrelation(_)
                 | Tool::Crosstab(_)
                 | Tool::DiscreteFrequency(_)
                 | Tool::PropTest(_)
@@ -1938,6 +2051,24 @@ impl Project {
         match &request.tool {
             Tool::TwoWayAnova(spec) => {
                 let out = statistics::two_way_anova(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::ThreeWayAnova(spec) => {
+                let out = anova3::three_way_anova(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::RmAnova(spec) => {
+                let out = rmanova::rm_anova(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::PartialCorrelation(spec) => {
+                let out = partcorr::partial_correlation(spec, sheet, &request.columns, request.rows)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

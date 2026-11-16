@@ -28,6 +28,14 @@ struct FormatCache {
     index: std::sync::Arc<sheaf_core::cellformat::FormatIndex>,
 }
 
+struct LayoutCache {
+    revision: u64,
+    generation: u64,
+    sheet: usize,
+    fonts: usize,
+    value: std::sync::Arc<crate::worksheet_layout::Layout>,
+}
+
 /// What is selected in a worksheet.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum Sel {
@@ -148,6 +156,7 @@ pub struct BookUi {
     cond_cache: Option<CondCache>,
     /// Which cell-format ranges reach each column, built once per document revision and sheet.
     fmt_cache: Option<FormatCache>,
+    layout_cache: Option<LayoutCache>,
     /// Horizontal scroll position and the sizes it ranges over, from the last frame; the bar
     /// next to the sheet tabs draws and changes them.
     h_offset: f32,
@@ -410,6 +419,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         selected: &state.selected,
         sorting_columns: if matches!(state.sel, Sel::Label { .. }) { Vec::new() } else { state.selected.clone() },
         cells: state.sel != Sel::None,
+        whole_columns: matches!(state.sel, Sel::Columns | Sel::All),
         undo: None,
         redo: None,
         undo_ai: false,
@@ -733,16 +743,47 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     let shown: Option<Vec<usize>> = sheet.shown_rows(rows);
     let rows_drawn = shown.as_ref().map_or(rows, Vec::len);
     let label_rows = label_rows(sheet);
-    let header_height = ROW_HEIGHT * (1 + label_rows.len()) as f32;
+    let font_count = ui.ctx().fonts(|f| f.definitions().font_data.len());
+    if !state.layout_cache.as_ref().is_some_and(|c| {
+        c.revision == doc.revision()
+            && c.generation == doc.generation()
+            && c.sheet == sheet_index
+            && c.fonts == font_count
+    }) {
+        let index = state
+            .fmt_cache
+            .as_ref()
+            .map(|c| c.index.clone())
+            .unwrap_or_else(|| std::sync::Arc::new(sheet.format_index()));
+        state.layout_cache = Some(LayoutCache {
+            revision: doc.revision(),
+            generation: doc.generation(),
+            sheet: sheet_index,
+            fonts: font_count,
+            value: std::sync::Arc::new(crate::worksheet_layout::Layout::new(
+                ui.ctx(),
+                sheet,
+                &index,
+                &label_rows,
+                shown.as_deref(),
+            )),
+        });
+    }
+    let layout = state.layout_cache.as_ref().expect("worksheet layout").value.clone();
+    let row_heights = &layout.rows;
+    let header_height = layout.head_height();
 
     // Frozen panes: the first displayed rows go under the head, the first visible columns sit in
     // an overlay over the table, whose own cells for them stay empty placeholders of the same width.
     let data_shown = shown.as_ref().map_or(sheet.row_count(), |s| s.iter().filter(|r| **r < sheet.row_count()).count());
-    let (nf_rows, frozen_positions) =
+    let (mut nf_rows, frozen_positions) =
         frozen_split(sheet, data_shown, body.size(), header_height, &|c| column_px(state, c));
+    while nf_rows > 0 && header_height + row_heights.offset(nf_rows + 3) as f32 > body.height() {
+        nf_rows -= 1;
+    }
     let frozen_px: Vec<f32> = frozen_positions.iter().map(|p| column_px(state, &sheet.columns[*p])).collect();
     let frozen_w = if frozen_positions.is_empty() { 0.0 } else { ROW_HEADER_WIDTH + frozen_px.iter().sum::<f32>() };
-    let header_total = header_height + nf_rows as f32 * ROW_HEIGHT;
+    let header_total = header_height + row_heights.offset(nf_rows) as f32;
     let frozen_rows: Vec<usize> = (0..nf_rows).map(|i| shown.as_ref().map_or(i, |s| s[i])).collect();
     state.frozen_cols = frozen_positions.iter().map(|p| sheet.columns[*p].id).collect();
     state.frozen_rows = frozen_rows.clone();
@@ -763,7 +804,9 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     let drag_on = state.dragging || state.head_drag.is_some() || state.row_drag;
     state.drag_pointer =
         if drag_on { ui.input(|i| i.pointer.latest_pos()).map(|p| clamp_to(p, cells_area)) } else { None };
-    state.page_rows = (((body.height() - header_total) / ROW_HEIGHT).floor() as usize).max(1);
+    let page_top = row_heights.offset(nf_rows) + f64::from(state.v_offset);
+    let page_bottom = page_top + f64::from((body.height() - header_total).max(0.0));
+    state.page_rows = row_heights.row_at(page_bottom).saturating_sub(row_heights.row_at(page_top)).max(1);
     // The keyboard belongs to the grid once something in it was clicked: Tab and the arrow keys
     // stay with it instead of moving the focus to other widgets.
     let grid = grid_id(book_id);
@@ -787,7 +830,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     }
 
     // Where the table drew the rows of the body this frame (row number, top y), for the overlay.
-    let mut drawn_rows: Vec<(usize, f32)> = Vec::new();
+    let mut drawn_rows: Vec<(usize, f32, f32)> = Vec::new();
     let output = ui
         .scope_builder(UiBuilder::new().max_rect(body), |ui| {
             egui::ScrollArea::horizontal()
@@ -823,7 +866,17 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                         if let Some(at) = at
                             && at >= nf_rows
                         {
-                            table = table.scroll_to_row(at - nf_rows, None);
+                            let top = (row_heights.offset(at) - row_heights.offset(nf_rows)) as f32;
+                            let bottom = top + row_heights.height(at) as f32;
+                            let view = (body.height() - header_total).max(1.0);
+                            let offset = if top < state.v_offset {
+                                top
+                            } else if bottom > state.v_offset + view {
+                                bottom - view
+                            } else {
+                                state.v_offset
+                            };
+                            table = table.vertical_scroll_offset(offset.max(0.0));
                         }
                     }
                     if let Some(y) = state.v_set.take() {
@@ -842,8 +895,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                                 let band_top = rect.top() + header_height;
                                 for (i, r) in frozen_rows.iter().enumerate() {
                                     let cell = Rect::from_min_size(
-                                        Pos2::new(rect.left(), band_top + ROW_HEIGHT * i as f32),
-                                        vec2(rect.width(), ROW_HEIGHT),
+                                        Pos2::new(rect.left(), band_top + row_heights.offset(i) as f32),
+                                        vec2(rect.width(), row_heights.height(i) as f32),
                                     );
                                     cell_scope(ui, cell, ("frozen_rowhead", *r), |ui| {
                                         row_header_cell(ui, *r, false, book_id, state, actions)
@@ -870,8 +923,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                                     let band_top = rect.top() + header_height;
                                     for (i, r) in frozen_rows.iter().enumerate() {
                                         let cell = Rect::from_min_size(
-                                            Pos2::new(rect.left(), band_top + ROW_HEIGHT * i as f32),
-                                            vec2(rect.width(), ROW_HEIGHT),
+                                            Pos2::new(rect.left(), band_top + row_heights.offset(i) as f32),
+                                            vec2(rect.width(), row_heights.height(i) as f32),
                                         );
                                         cell_scope(ui, cell, ("frozen_row", column.id.0, *r), |ui| {
                                             body_cell(ui, sheet, position, column, *r, false, book_id, state, actions)
@@ -899,14 +952,13 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                             });
                         })
                         .body(|body| {
-                            body.rows(ROW_HEIGHT, rows_drawn - nf_rows, |mut row| {
-                                let i = nf_rows + row.index();
+                            worksheet_rows(body, row_heights, nf_rows, rows_drawn, |i, mut row| {
                                 let r = shown.as_ref().map_or(i, |s| s[i]);
                                 if frozen_w > 0.0 {
                                     // The cell's own rect (an empty cell's used rect sits at its middle).
                                     let mut top = 0.0;
                                     row.col(|ui| top = ui.max_rect().top());
-                                    drawn_rows.push((r, top));
+                                    drawn_rows.push((r, top, row_heights.height(i) as f32));
                                 } else {
                                     row.col(|ui| row_header_cell(ui, r, false, book_id, state, actions));
                                 }
@@ -930,6 +982,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
             positions: &frozen_positions,
             widths: &frozen_px,
             rows: &frozen_rows,
+            heights: row_heights,
             header_height,
             header_total,
             width: frozen_w,
@@ -956,7 +1009,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     if drag_on && let Some(p) = ui.input(|i| i.pointer.latest_pos()) {
         let dt = ui.input(|i| i.stable_dt).min(0.1);
         let scroll_area = Rect::from_min_max(
-            Pos2::new(cells_area.left() + frozen_w, cells_area.top() + nf_rows as f32 * ROW_HEIGHT),
+            Pos2::new(cells_area.left() + frozen_w, cells_area.top() + row_heights.offset(nf_rows) as f32),
             cells_area.max,
         );
         let (mut dx, mut dy) = edge_scroll(p, scroll_area, dt);
@@ -1011,6 +1064,45 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     state.h_view = output.inner_rect.width();
 }
 
+/// TableBody's heterogeneous iterator walks every data row each frame. Compact geometry lets
+/// us skip directly to the visible interval and use only two empty buffer rows.
+fn worksheet_rows<'a>(
+    mut body: egui_extras::TableBody<'a>,
+    heights: &sheaf_core::sheet_print::RowHeights,
+    first: usize,
+    end: usize,
+    mut draw: impl FnMut(usize, egui_extras::TableRow<'_, '_>),
+) {
+    if let Some(height) = heights.uniform_height() {
+        body.rows(height as f32, end - first, |row| draw(first + row.index(), row));
+        return;
+    }
+    let view = body.max_rect();
+    let mut origin = view.top();
+    body.row(0.0, |mut row| {
+        row.col(|ui| origin = ui.max_rect().top());
+    });
+    let base = heights.offset(first);
+    let offset = f64::from(view.top() - origin).max(0.0);
+    let start = heights.row_at(base + offset).clamp(first, end);
+    let stop = heights.row_at(base + offset + f64::from(view.height())).saturating_add(2).min(end);
+    let before = heights.offset(start) - base;
+    if before > 0.0 {
+        body.row(before as f32, |mut row| {
+            row.col(|_| {});
+        });
+    }
+    for i in start..stop {
+        body.row(heights.height(i) as f32, |row| draw(i, row));
+    }
+    let after = heights.offset(end) - heights.offset(stop);
+    if after > 0.0 {
+        body.row(after as f32, |mut row| {
+            row.col(|_| {});
+        });
+    }
+}
+
 /// What a drag in progress started on: the column and the row of its anchor, where it has one.
 fn drag_anchor(state: &BookUi, sheet: &Worksheet) -> (Option<ColumnId>, Option<usize>) {
     if let Some(d) = &state.head_drag {
@@ -1029,6 +1121,7 @@ struct FrozenView<'a> {
     positions: &'a [usize],
     widths: &'a [f32],
     rows: &'a [usize],
+    heights: &'a sheaf_core::sheet_print::RowHeights,
     header_height: f32,
     header_total: f32,
     /// Width of the row header and the frozen columns together.
@@ -1044,7 +1137,7 @@ fn frozen_overlay(
     ui: &mut egui::Ui,
     inner: Rect,
     fv: &FrozenView,
-    body_rows: &[(usize, f32)],
+    body_rows: &[(usize, f32, f32)],
     sheet: &Worksheet,
     label_rows: &[LabelRow],
     book_id: WindowId,
@@ -1063,8 +1156,8 @@ fn frozen_overlay(
         cell_scope(ui, corner, "frozen_corner", |ui| corner_and_titles(ui, sheet, label_rows, book_id, state, actions));
         for (i, r) in fv.rows.iter().enumerate() {
             let cell = Rect::from_min_size(
-                Pos2::new(left, band_top + ROW_HEIGHT * i as f32),
-                vec2(ROW_HEADER_WIDTH, ROW_HEIGHT),
+                Pos2::new(left, band_top + fv.heights.offset(i) as f32),
+                vec2(ROW_HEADER_WIDTH, fv.heights.height(i) as f32),
             );
             cell_scope(ui, cell, ("frozen_rowhead", *r), |ui| row_header_cell(ui, *r, true, book_id, state, actions));
         }
@@ -1077,7 +1170,10 @@ fn frozen_overlay(
                 column_head(ui, sheet, position, column, label_rows, true, book_id, state, actions)
             });
             for (i, r) in fv.rows.iter().enumerate() {
-                let cell = Rect::from_min_size(Pos2::new(x, band_top + ROW_HEIGHT * i as f32), vec2(w, ROW_HEIGHT));
+                let cell = Rect::from_min_size(
+                    Pos2::new(x, band_top + fv.heights.offset(i) as f32),
+                    vec2(w, fv.heights.height(i) as f32),
+                );
                 cell_scope(ui, cell, ("frozen_cell", column.id.0, *r), |ui| {
                     body_cell(ui, sheet, position, column, *r, true, book_id, state, actions)
                 });
@@ -1088,16 +1184,16 @@ fn frozen_overlay(
         let below = Rect::from_min_max(Pos2::new(left, top + fv.header_total), inner.right_bottom());
         ui.scope_builder(UiBuilder::new().id_salt("frozen_body"), |ui| {
             ui.set_clip_rect(ui.clip_rect().intersect(below));
-            for &(r, y) in body_rows {
-                if y + ROW_HEIGHT < below.top() || y > below.bottom() {
+            for &(r, y, height) in body_rows {
+                if y + height < below.top() || y > below.bottom() {
                     continue;
                 }
-                let cell = Rect::from_min_size(Pos2::new(left, y), vec2(ROW_HEADER_WIDTH, ROW_HEIGHT));
+                let cell = Rect::from_min_size(Pos2::new(left, y), vec2(ROW_HEADER_WIDTH, height));
                 cell_scope(ui, cell, ("frozen_rowhead", r), |ui| row_header_cell(ui, r, true, book_id, state, actions));
                 let mut x = left + ROW_HEADER_WIDTH;
                 for (&position, &w) in fv.positions.iter().zip(fv.widths) {
                     let column = &sheet.columns[position];
-                    let cell = Rect::from_min_size(Pos2::new(x, y), vec2(w, ROW_HEIGHT));
+                    let cell = Rect::from_min_size(Pos2::new(x, y), vec2(w, height));
                     cell_scope(ui, cell, ("frozen_cell", column.id.0, r), |ui| {
                         body_cell(ui, sheet, position, column, r, true, book_id, state, actions)
                     });
@@ -1338,13 +1434,16 @@ fn corner_and_titles(
     response.context_menu(|ui| menus::show_context(ui, &menus::corner_menu(), &book_ctx(book_id, state), actions));
     for (i, row) in label_rows.iter().enumerate() {
         let cell = Rect::from_min_size(
-            Pos2::new(rect.left(), rect.top() + ROW_HEIGHT * (i + 1) as f32),
-            vec2(rect.width(), ROW_HEIGHT),
+            Pos2::new(
+                rect.left(),
+                rect.top() + state.layout_cache.as_ref().expect("worksheet layout").value.label_top(i),
+            ),
+            vec2(rect.width(), state.layout_cache.as_ref().expect("worksheet layout").value.labels[i]),
         );
         title_text(ui, cell, &row_title(row));
     }
     for i in 0..=label_rows.len() {
-        let y = rect.top() + ROW_HEIGHT * (i + 1) as f32 - 0.5;
+        let y = rect.top() + state.layout_cache.as_ref().expect("worksheet layout").value.label_top(i) - 0.5;
         ui.painter().hline(rect.x_range(), y, line);
     }
     ui.painter().vline(rect.right() - 0.5, rect.y_range(), line);
@@ -1429,13 +1528,16 @@ fn column_head(
     // The label rows.
     for (i, row) in label_rows.iter().enumerate() {
         let cell = Rect::from_min_size(
-            Pos2::new(rect.left(), rect.top() + ROW_HEIGHT * (i + 1) as f32),
-            vec2(rect.width(), ROW_HEIGHT),
+            Pos2::new(
+                rect.left(),
+                rect.top() + state.layout_cache.as_ref().expect("worksheet layout").value.label_top(i),
+            ),
+            vec2(rect.width(), state.layout_cache.as_ref().expect("worksheet layout").value.labels[i]),
         );
         label_cell(ui, cell, sheet, column, row, selected, book_id, state, actions);
     }
     for i in 0..=label_rows.len() {
-        let y = rect.top() + ROW_HEIGHT * (i + 1) as f32 - 0.5;
+        let y = rect.top() + state.layout_cache.as_ref().expect("worksheet layout").value.label_top(i) - 0.5;
         ui.painter().hline(rect.x_range(), y, line);
     }
     ui.painter().vline(rect.right() - 0.5, rect.y_range(), line);
@@ -1918,7 +2020,9 @@ fn body_cell(
         edit_cell(ui, state, sheet, book_id, actions);
         return;
     }
-    let text = if r < column.len() { column.shown_text(r) } else { String::new() };
+    // A cell outside the column's data range (Set As Begin / Set As End) shows blank, as in Origin.
+    let in_range = column.data_range.is_none_or(|d| d.contains(r));
+    let text = if r < column.len() && in_range { column.shown_text(r) } else { String::new() };
     let numeric = column.data.is_numeric();
     // A missing number shows as an empty cell, as in Origin.
     let is_text_cell = column.data.text_cell(r).is_some();
@@ -2002,36 +2106,22 @@ fn aligned_layout(h_align: Option<HAlign>, numeric: bool) -> Layout {
     }
 }
 
-// Font sizes in the grid are the formatted points as they are (the default body text is 12).
-
-/// egui can draw only its built-in families, so a manual font maps to the monospace family when
-/// its name says so and to the proportional one otherwise (installed fonts are a leftover).
-fn grid_family(name: &str) -> egui::FontFamily {
-    let n = name.to_ascii_lowercase();
-    if ["courier", "consolas", "mono", "menlo", "lucida console"].iter().any(|k| n.contains(k)) {
-        egui::FontFamily::Monospace
-    } else {
-        egui::FontFamily::Proportional
-    }
-}
-
 /// Draws `text` in the current layout with the manual format of its cell. egui has no bold
-/// face, so bold text is drawn twice, a fraction of a pixel apart.
+/// face when a system font is unavailable, so that fallback is drawn twice.
 fn formatted_text(ui: &mut egui::Ui, text: &str, color: Color32, f: &ResolvedStyle<'_>) {
-    let mut rich = RichText::new(text).color(color);
+    let face = crate::worksheet_fonts::cell_font(ui.ctx(), f);
+    let mut rich = RichText::new(text).color(color).family(face.family);
     if let Some(pt) = f.size_pt {
-        rich = rich.size(sheaf_core::cellformat::clamp_cell_pt(pt));
+        // Cell formats store physical points; egui uses logical 96-dpi pixels.
+        rich = rich.size(sheaf_core::cellformat::clamp_cell_pt(pt) * 4.0 / 3.0);
     }
-    if let Some(name) = f.font {
-        rich = rich.family(grid_family(name));
-    }
-    if f.italic {
+    if face.synthetic_italic {
         rich = rich.italics();
     }
     if f.underline {
         rich = rich.underline();
     }
-    if !f.bold {
+    if !face.synthetic_bold {
         ui.label(rich);
         return;
     }

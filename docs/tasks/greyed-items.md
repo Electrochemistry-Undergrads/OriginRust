@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **369 greyed items: 254 in the menu bar, 19 on the toolbars, 96 in context menus.**
+original inventory baseline. This is not a new runtime audit. **340 greyed items: 235 in the menu bar, 19 on the toolbars, 86 in context menus.**
 
 ## How to read and keep this file
 
@@ -35,7 +35,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 |---|---|
 | `T56` | 1 |
 | `T57` | 2 |
-| `T58` | 2 |
+| `T58` | 0 |
 | `T59` | 2 |
 | `T60` | 0 |
 | `T61` | 5 |
@@ -54,14 +54,16 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T78` | 0 |
 | `T79` | 0 |
 | `T80` | 0 |
+| `T81` | 0 |
+| `T82` | 0 |
 | `T83` | 0 |
 | `B2` | 33 |
 | `B3` | 19 |
-| `B4` | 20 |
-| `B5` | 33 |
+| `B4` | 19 |
+| `B5` | 10 |
 | `B6` | 31 |
 | `B7` | 8 |
-| `B8` | 16 |
+| `B8` | 13 |
 | `B9` | 13 |
 | `B11` | 10 |
 | `B12` | 12 |
@@ -72,7 +74,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 67 items, backlog packages (`B`) 282, not planned (`N`) 20.
+Briefs (`T`) hold 65 items, backlog packages (`B`) 255, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -95,10 +97,9 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B12` Export: Worksheet as Image... [no window, Workbook]
 
 ### Edit
-- `B5` Copy: Copy formula · Copy label rows · Copy formula and label rows · Copy All [Workbook]
 - `B5` Paste Link · Paste Special [Workbook, Graph]
-- `B5` Paste Transpose · Paste Link Transpose · Select... [Workbook]
-- `B5` Remove Links · Set As Begin · Set As End · Reset to Full Range [Workbook]
+- `B5` Paste Link Transpose · Select... [Workbook]
+- `B5` Remove Links [Workbook]
 - `B7` Find in Project... [Workbook]
 - `B16` Button Edit Mode [Workbook, Graph]
 - `B2` Cut · Copy · Paste · Clear [Graph]
@@ -117,7 +118,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Plot
 - `T63` Line: Horizontal Step · Vertical Step · Spline Connected
-- `B4` Line + Symbol: Line Series
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
@@ -132,8 +132,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Column
 - `T63` Fill Column With: Row Numbers · Uniform Random Numbers · Normal Random Numbers
-- `B5` Fill Column With: A set of Numbers... · A set of Date/Time values... · Arbitrary set of Text&Numeric values...
-- `B5` Set Sampling Interval... · Show X Column...
 
 ### Worksheet
 - `B7` Conditional Formatting: Conditional Highlight... · Conditional Heatmap... · Conditional Pareto... · Conditional Outliers... · Conditional Format Manager...
@@ -149,10 +147,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T57` Signal Processing: Deconvolution... · STFT...
 - `B8` Signal Processing > Wavelet: Decompose... · Reconstruction... · Denoise... · Smooth... · Continuous Wavelet...
 - `B8` Peaks and Baseline: Multiple Peak Fit · Batch Peak Analysis Using Theme...
-
-### Statistics
-- `B8` Descriptive Statistics: Partial Correlation Coefficient...
-- `B8` ANOVA: Three-Way ANOVA... · Repeated Measures ANOVA...
 
 ### Image
 - `B14` Adjustments: Brightness... · Contrast... · Gamma... · Levels...
@@ -194,7 +188,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B2` Snap Layers to Grid · Snap Objects to Grid [Graph]
 - `B15` Axes: Z Axis... [Graph]
 - `T63` Axis Tick Labels: X Axis Tick Labels... · Y Axis Tick Labels... [Graph]
-- `T58` Axis Titles: X Axis Title... · Y Axis Title... [Graph]
 - `T59` Worksheet... [Workbook]
 - `B6` Snap to Grid · Merge cells [Workbook]
 
@@ -221,12 +214,11 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ## Context menus
 
-- `B5` Worksheet column header: Copy Columns to... · Remove Links · Swap Columns... · Slide Show of Dependent Graphs · Set Sampling Interval... · Show X Column...
+- `B5` Worksheet column header: Remove Links · Slide Show of Dependent Graphs
 - `T63` Worksheet column header: Frequency Count...
 - `B6` Worksheet column header: Add or Update Sparklines...
 - `T63` Worksheet column header > Fill Column with: Row Numbers · Uniform Random Numbers · Normal Random Numbers
-- `B5` Worksheet column header > Fill Column with: A set of Numbers... · A set of Date/Time values... · Arbitrary set of Text&Numeric values...
-- `B5` Worksheet data cell: Paste Transpose · Paste Link · Paste Link Transpose · Remove Links · Set as Begin · Set as End
+- `B5` Worksheet data cell: Paste Link · Paste Link Transpose · Remove Links
 - `B6` Worksheet data cell: Insert Graph... · Insert Images from Files... · Insert Sparklines... · Insert Variables...
 - `B6` Worksheet data cell > Insert Arrow: Arrow · Double Arrow
 - `T59` Worksheet data cell > Set Data Style: Default

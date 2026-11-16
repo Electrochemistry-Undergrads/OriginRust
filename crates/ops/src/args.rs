@@ -2349,6 +2349,98 @@ pub enum AnalyzeTool {
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
     },
+    /// Three-way ANOVA of indexed data: --y FACTOR_A,FACTOR_B,FACTOR_C,DATA names four columns, the first
+    /// three holding the levels (text or numbers) of each row. Type III sums of squares as Origin's. The
+    /// tables (descriptive statistics, ANOVA, means comparisons of A, B, C and A*B, optional Levene and power)
+    /// go to a new sheet.
+    Anova3 {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Leave the interaction A*B out of the model.
+        #[arg(long)]
+        no_ab: bool,
+        /// Leave the interaction A*C out of the model.
+        #[arg(long)]
+        no_ac: bool,
+        /// Leave the interaction B*C out of the model.
+        #[arg(long)]
+        no_bc: bool,
+        /// Leave the interaction A*B*C out of the model.
+        #[arg(long)]
+        no_abc: bool,
+        /// Means comparison methods (comma-separated; `none` for no comparison). Dunnett is not offered.
+        #[arg(long, value_enum, value_delimiter = ',', default_values_t = [ComparisonArg::Tukey])]
+        comparison: Vec<ComparisonArg>,
+        /// Significance level of the means comparisons.
+        #[arg(long, default_value_t = 0.05)]
+        comparison_alpha: f64,
+        /// Levene's test of equal variances.
+        #[arg(long)]
+        levene: bool,
+        /// Power of the F tests for the actual sample size.
+        #[arg(long)]
+        power: bool,
+        /// Power for these hypothetical sample sizes (comma-separated, for example 50,100,200).
+        #[arg(long, value_delimiter = ',')]
+        power_sizes: Vec<f64>,
+        /// Significance level of the power analysis.
+        #[arg(long, default_value_t = 0.05)]
+        power_alpha: f64,
+        /// Leave the descriptive statistics out.
+        #[arg(long)]
+        no_descriptive: bool,
+        /// Significance level of the F tests.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Repeated measures ANOVA of indexed data. One-way: --y FACTOR,DATA,SUBJECT. With --two-way:
+    /// --y FACTOR_A,FACTOR_B,DATA,SUBJECT. Every subject needs one number in every cell. Within-subjects table
+    /// with the Greenhouse-Geisser, Huynh-Feldt and lower-bound corrections, Mauchly's test, the one-way
+    /// multivariate tests, the between-subjects rows and descriptive statistics go to a new sheet.
+    Rmanova {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Two repeated factors (Origin's Two-Way Repeated Measures ANOVA).
+        #[arg(long)]
+        two_way: bool,
+        /// The A*B interaction of the two-way design (off by default, as in Origin).
+        #[arg(long)]
+        interaction: bool,
+        /// One-way means comparison methods (comma-separated; `none` for no comparison; Tukey when not given).
+        /// Not offered for the two-way design. Dunnett is not offered.
+        #[arg(long, value_enum, value_delimiter = ',')]
+        comparison: Vec<ComparisonArg>,
+        /// Significance level of the means comparisons.
+        #[arg(long, default_value_t = 0.05)]
+        comparison_alpha: f64,
+        /// Leave the descriptive statistics out.
+        #[arg(long)]
+        no_descriptive: bool,
+        /// Significance level (confidence limits of the descriptive statistics and the verdicts).
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Partial correlation coefficients (Pearson) of the --y columns, controlling for the --control columns.
+    /// A table of pairs and the matrices go to a new sheet.
+    PartialCorr {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The controlling variables (columns of the same sheet, comma-separated; at least one).
+        #[arg(long, value_delimiter = ',', required = true)]
+        control: Vec<String>,
+        /// Leave out every row where any column has no number (default: pair by pair).
+        #[arg(long)]
+        listwise: bool,
+        /// One-tailed instead of two-tailed test.
+        #[arg(long)]
+        one_tailed: bool,
+        /// Add the p-value and df blocks ("Show Significance in Result Table").
+        #[arg(long)]
+        show_significance: bool,
+        /// Flag the coefficients that are significant at 0.05 with a `*`.
+        #[arg(long)]
+        flag_significant: bool,
+    },
     /// Mann-Whitney test of two columns (two independent samples). The alternative is about the first
     /// column.
     Mannwhitney {

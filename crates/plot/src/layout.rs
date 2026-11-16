@@ -1425,7 +1425,7 @@ fn draw_y_labels(
 /// The title of an axis without a title of its own, from the layer's first plot: its Y column for
 /// a Y axis; for an X axis its X column (numbers or text), else the column that labels the ticks,
 /// else `Row`.
-fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
+pub(crate) fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
     let Some(pd) = pds.first() else { return String::new() };
     if pd.plot.kind == PlotKind::Histogram {
         // The counts up the page, the binned column along it.
@@ -1461,6 +1461,12 @@ fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -
         return project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default();
     }
     let x = pd.plot.x.and_then(|id| project.column(id));
+    if x.is_none()
+        && let Some(s) = project.column(pd.plot.y).and_then(|c| c.sampling.as_ref())
+    {
+        // A sampling interval names the X axis by its long name and units (T84).
+        return s.title();
+    }
     match x.or_else(|| data::label_column(project, axis, Dim::X, Some(pd))) {
         Some(c) => c.axis_title(),
         None => "Row".to_string(),

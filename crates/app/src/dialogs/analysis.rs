@@ -100,6 +100,14 @@ pub enum AnalysisKind {
     Normality,
     /// Statistics > ANOVA > Two-Way ANOVA.
     Anova2,
+    /// Statistics > ANOVA > Three-Way ANOVA (options in `stats3_options.rs`).
+    Anova3,
+    /// Statistics > ANOVA > One-Way Repeated Measures ANOVA (options in `rm_options.rs`).
+    RmAnova1,
+    /// Statistics > ANOVA > Two-Way Repeated Measures ANOVA.
+    RmAnova2,
+    /// Statistics > Descriptive Statistics > Partial Correlation Coefficient (options in `stats3_options.rs`).
+    PartialCorr,
     /// Statistics > Nonparametric Tests and Descriptive Statistics > Correlation Coefficient.
     MannWhitney,
     SignedRank,
@@ -216,6 +224,10 @@ impl AnalysisKind {
             AnalysisKind::DiscreteFreq => "Discrete Frequency...",
             AnalysisKind::Normality => "Normality Test...",
             AnalysisKind::Anova2 => "Two-Way ANOVA...",
+            AnalysisKind::Anova3 => "Three-Way ANOVA...",
+            AnalysisKind::RmAnova1 => "One-Way Repeated Measures ANOVA...",
+            AnalysisKind::RmAnova2 => "Two-Way Repeated Measures ANOVA...",
+            AnalysisKind::PartialCorr => "Partial Correlation Coefficient...",
             AnalysisKind::MannWhitney => "Mann-Whitney Test...",
             AnalysisKind::SignedRank => "One-Sample Wilcoxon Signed Rank Test...",
             AnalysisKind::SignedRankPaired => "Paired Sample Wilcoxon Signed Rank Test...",
@@ -293,6 +305,10 @@ impl AnalysisKind {
             "discfreq" => AnalysisKind::DiscreteFreq,
             "normality" => AnalysisKind::Normality,
             "anova2" => AnalysisKind::Anova2,
+            "anova3" => AnalysisKind::Anova3,
+            "rmanova1" => AnalysisKind::RmAnova1,
+            "rmanova2" => AnalysisKind::RmAnova2,
+            "partial-corr" => AnalysisKind::PartialCorr,
             "mannwhitney" => AnalysisKind::MannWhitney,
             "signrank" => AnalysisKind::SignedRank,
             "signrank-paired" => AnalysisKind::SignedRankPaired,
@@ -748,6 +764,10 @@ pub struct AnalysisDialog {
     multi: super::multivariate_options::MultiOptions,
     curves: super::math_curves::CurveOptions,
     bin2d: super::bin2d_options::Bin2dState,
+    /// Partial correlation and three-way ANOVA windows.
+    partcorr: super::stats3_options::PartCorrState,
+    anova3: super::stats3_options::Anova3State,
+    rm: super::rm_options::RmState,
     discfreq: DiscreteFreqSpec,
     /// Options of the Data Manipulation windows and the median filter.
     manip: super::manip_options::ManipOptions,
@@ -1175,6 +1195,18 @@ impl AnalysisDialog {
             };
             stats.two_way_levels = vec![(String::new(), String::new()); columns.len()];
         }
+        let anova3 = if kind == AnalysisKind::Anova3 {
+            let chosen: Vec<usize> =
+                columns.iter().filter_map(|id| sheet_columns.iter().position(|(c, _)| c == id)).collect();
+            super::stats3_options::Anova3State::with_columns(&chosen, sheet_columns.len())
+        } else {
+            Default::default()
+        };
+        let rm = {
+            let chosen: Vec<usize> =
+                columns.iter().filter_map(|id| sheet_columns.iter().position(|(c, _)| c == id)).collect();
+            super::rm_options::RmState::new(kind == AnalysisKind::RmAnova2, &chosen, sheet_columns.len())
+        };
         Some(AnalysisDialog {
             kind,
             column_names: names.join(", "),
@@ -1247,6 +1279,9 @@ impl AnalysisDialog {
             multi: Default::default(),
             curves: Default::default(),
             bin2d: Default::default(),
+            partcorr: Default::default(),
+            anova3,
+            rm,
             discfreq: Default::default(),
             manip: super::manip_options::ManipOptions::new(x_lo, x_hi),
             sheet_columns,
@@ -1779,6 +1814,9 @@ impl AnalysisDialog {
                     alpha: self.stats.alpha,
                 })
             }
+            AnalysisKind::Anova3 => Tool::ThreeWayAnova(self.anova3.spec()?),
+            AnalysisKind::RmAnova1 | AnalysisKind::RmAnova2 => Tool::RmAnova(self.rm.spec()?),
+            AnalysisKind::PartialCorr => Tool::PartialCorrelation(self.partcorr.spec(&self.sheet_columns)?),
             AnalysisKind::MannWhitney => Tool::MannWhitney(MannWhitneySpec {
                 tail: self.stats.tail,
                 exact: self.stats.exact,
@@ -1828,6 +1866,10 @@ impl AnalysisDialog {
                 (Some(a), Some(b), Some(y)) => vec![a, b, y],
                 _ => return Err("the sheet needs three columns: factor A, factor B and the data".to_string()),
             }
+        } else if self.kind == AnalysisKind::Anova3 {
+            self.anova3.picked(&self.sheet_columns)?
+        } else if matches!(self.kind, AnalysisKind::RmAnova1 | AnalysisKind::RmAnova2) {
+            self.rm.picked(&self.sheet_columns)?
         } else if self.kind == AnalysisKind::Crosstab {
             let pick = |i: usize| self.sheet_columns.get(i).map(|(id, _)| *id);
             match (pick(self.stats.pair_columns[0]), pick(self.stats.pair_columns[1])) {
@@ -2491,6 +2533,9 @@ impl AnalysisDialog {
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
             }
+            AnalysisKind::Anova3 => self.anova3.ui(ui, &self.sheet_columns),
+            AnalysisKind::RmAnova1 | AnalysisKind::RmAnova2 => self.rm.ui(ui, &self.sheet_columns),
+            AnalysisKind::PartialCorr => self.partcorr.ui(ui, &self.sheet_columns, &self.columns),
             AnalysisKind::GraphSummary => {
                 let st = &mut self.stats;
                 ui.label(
@@ -2840,6 +2885,10 @@ impl AnalysisDialog {
             AnalysisKind::DiscreteFreq => "discfreqs",
             AnalysisKind::Normality => "normtest",
             AnalysisKind::Anova2 => "anova2",
+            AnalysisKind::Anova3 => "ANOVAThreeWay",
+            AnalysisKind::RmAnova1 => "ANOVAOneWayRM",
+            AnalysisKind::RmAnova2 => "ANOVATwoWayRM",
+            AnalysisKind::PartialCorr => "pcorrcoef",
             AnalysisKind::MannWhitney => "mannwhitney",
             AnalysisKind::SignedRank | AnalysisKind::SignedRankPaired => "signrank",
             AnalysisKind::KruskalWallis => "kwanova",
@@ -2925,6 +2974,14 @@ impl AnalysisDialog {
             AnalysisKind::DiscreteFreq => "Count how often each distinct value, text or number, occurs",
             AnalysisKind::Normality => "Test whether the input columns come from a normal distribution",
             AnalysisKind::Anova2 => "Two-way analysis of variance",
+            AnalysisKind::Anova3 => "Three-way analysis of variance with type III sums of squares",
+            AnalysisKind::RmAnova1 => "One-way analysis of variance of repeated measurements of the same subjects",
+            AnalysisKind::RmAnova2 => {
+                "Two-way analysis of variance of repeated measurements, both factors within subjects"
+            }
+            AnalysisKind::PartialCorr => {
+                "Partial correlation coefficients of the input columns, controlling for other columns"
+            }
             AnalysisKind::MannWhitney => "Compare two independent samples by their ranks",
             AnalysisKind::SignedRank => "Test the median of one sample by signed ranks",
             AnalysisKind::SignedRankPaired => "Test the difference of two paired samples by signed ranks",
@@ -3015,6 +3072,13 @@ impl AnalysisDialog {
                 "The tables (statistics, ANOVA, comparisons) in a new sheet; sums of squares are adjusted for the \
                  other terms, as in Origin"
             }
+            AnalysisKind::RmAnova1 | AnalysisKind::RmAnova2 => {
+                "The tables (within and between subjects, sphericity, descriptive statistics) in a new sheet"
+            }
+            AnalysisKind::Anova3 => {
+                "The tables (statistics, ANOVA, comparisons, Levene, power) in a new sheet; sums of squares are adjusted for the other terms, as in Origin"
+            }
+            AnalysisKind::PartialCorr => "The partial correlations, p-values and degrees of freedom in a new sheet",
             AnalysisKind::MannWhitney => "Ranks, U, Z and the p-values in a new sheet",
             AnalysisKind::SignedRank | AnalysisKind::SignedRankPaired => "Both p-values in a new sheet",
             AnalysisKind::KruskalWallis => "Mean ranks, the chi-square statistic and its p-value in a new sheet",
@@ -3108,8 +3172,18 @@ impl AnalysisDialog {
         if self.kind == AnalysisKind::Anova2 {
             self.stats.two_way_levels.resize(columns.len(), (String::new(), String::new()));
         }
+        if self.kind == AnalysisKind::PartialCorr {
+            self.partcorr.drop_variables(&self.sheet_columns, &columns);
+        }
         // These tools run on the columns of their own boxes, not on the Input range: the picker sets the boxes.
-        if matches!(self.kind, AnalysisKind::Crosstab | AnalysisKind::Anova2) {
+        if matches!(
+            self.kind,
+            AnalysisKind::Crosstab
+                | AnalysisKind::Anova2
+                | AnalysisKind::Anova3
+                | AnalysisKind::RmAnova1
+                | AnalysisKind::RmAnova2
+        ) {
             let chosen: Vec<usize> =
                 columns.iter().filter_map(|id| self.sheet_columns.iter().position(|(c, _)| c == id)).collect();
             if self.kind == AnalysisKind::Crosstab && chosen.len() >= 2 {
@@ -3117,6 +3191,13 @@ impl AnalysisDialog {
             }
             if self.kind == AnalysisKind::Anova2 && chosen.len() >= 3 {
                 self.stats.two_way_columns = [chosen[0], chosen[1], chosen[2]];
+            }
+            if self.kind == AnalysisKind::Anova3 && chosen.len() >= 4 {
+                self.anova3.columns = [chosen[0], chosen[1], chosen[2], chosen[3]];
+            }
+            let need = if self.kind == AnalysisKind::RmAnova2 { 4 } else { 3 };
+            if matches!(self.kind, AnalysisKind::RmAnova1 | AnalysisKind::RmAnova2) && chosen.len() >= need {
+                self.rm.columns[..need].copy_from_slice(&chosen[..need]);
             }
         }
         self.columns = columns;
@@ -3361,7 +3442,16 @@ impl AnalysisDialog {
             });
         });
         // The tools that take their variables from factor boxes have no X column to limit.
-        if matches!(self.kind, AnalysisKind::Crosstab | AnalysisKind::Anova2 | AnalysisKind::GraphSummary) {
+        if matches!(
+            self.kind,
+            AnalysisKind::Crosstab
+                | AnalysisKind::Anova2
+                | AnalysisKind::Anova3
+                | AnalysisKind::RmAnova1
+                | AnalysisKind::RmAnova2
+                | AnalysisKind::PartialCorr
+                | AnalysisKind::GraphSummary
+        ) {
             return;
         }
         ui.horizontal(|ui| {

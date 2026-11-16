@@ -497,7 +497,10 @@ pub(super) fn dash_ui(ui: &mut egui::Ui, id: &str, dash: &mut Dash) {
     });
 }
 
-pub(super) fn connect_name(c: Connect) -> &'static str {
+pub(super) fn connect_name(c: Connect) -> String {
+    if let Connect::Segments(k) = c {
+        return format!("{k} Point Segment");
+    }
     match c {
         Connect::Straight => "Straight",
         Connect::Spline => "Spline",
@@ -507,7 +510,9 @@ pub(super) fn connect_name(c: Connect) -> &'static str {
         Connect::StepVertical => "Step, vertical first",
         Connect::Segment2 => "2 Point Segment",
         Connect::Segment3 => "3 Point Segment",
+        Connect::Segments(_) => unreachable!("handled above"),
     }
+    .to_string()
 }
 
 pub(super) fn symbol_name(s: SymbolShape) -> &'static str {

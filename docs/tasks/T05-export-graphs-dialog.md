@@ -49,7 +49,7 @@ five native sessions, the PNG -> TIFF -> PNG control checks, cleanup and explici
 Four storage/export regressions and three UI workflows cover reopening, exact supported
 settings, default precedence/reset, another instance's named themes, malformed/older settings,
 Cancel/Escape, deletion, real Apply output, failed/pending exports and IO warnings.
-Graph Theme, Compare/Generate Script, graph-specific settings, Recent Exports and `.ois`
+Graph Theme, Compare/Generate Script, graph-specific settings and `.ois`
 interchange remain open; PNG/24-bit remains Sheaf's deliberate system default.
 
 Final validation with comparison plots, worksheet formatting, T48 measurements and browser Exclude

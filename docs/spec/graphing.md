@@ -943,7 +943,7 @@ missing fields use the system settings, and invalid known fields reject the load
 control changes. Name whitespace normalization, case-insensitive replacement and the 60-character
 limit are Sheaf's choices, shared with import themes.
 
-Compare, Generate Script, Recent Exports, graph-specific theme attachment and Origin `.ois`
+Compare, Generate Script, graph-specific theme attachment and Origin `.ois`
 interchange remain open. Graph Theme application and the preview's Graph tab are still separate
 T05 leftovers; no exporter or renderer behavior changes here.
 

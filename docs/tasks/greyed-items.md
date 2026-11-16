@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **381 greyed items: 278 in the menu bar, 20 on the toolbars, 83 in context menus.**
+original inventory baseline. This is not a new runtime audit. **375 greyed items: 272 in the menu bar, 20 on the toolbars, 83 in context menus.**
 
 ## How to read and keep this file
 
@@ -48,6 +48,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T70` | 0 |
 | `T71` | 0 |
 | `T73` | 0 |
+| `T78` | 0 |
 | `B2` | 51 |
 | `B3` | 22 |
 | `B4` | 26 |
@@ -56,7 +57,6 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B7` | 8 |
 | `B8` | 16 |
 | `B9` | 13 |
-| `B10` | 6 |
 | `B11` | 10 |
 | `B12` | 16 |
 | `B13` | 7 |
@@ -66,7 +66,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 42 items, backlog packages (`B`) 319, not planned (`N`) 20.
+Briefs (`T`) hold 42 items, backlog packages (`B`) 313, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -90,8 +90,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B12` Import: Re-Import Directly · Re-Import... [no window, Workbook]
 - `T63` Export: Graph as Image... · Multi-Page PDF... [no window, Workbook]
 - `B12` Export: Worksheet as Image... [no window, Workbook]
-- `B10` Export: Recent Exports [no window, Workbook]
-- `B10` Recent Exports [Graph]
 
 ### Edit
 - `B5` Copy: Copy formula · Copy label rows · Copy formula and label rows · Copy All [Workbook]
@@ -131,7 +129,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B4` Specialized: Wind Rose · Piper · Smith Chart · High-Low-Close · Vector XYAM · Vector XYXY · Zoom
 - `B4` Stock: High-Low-Close · Japanese Candlestick · OHLC Bar Chart · OHLC-Volume · Line
 - `B11` System Templates...
-- `B10` Most Recently Used
 
 ### Column
 - `T63` Fill Column With: Row Numbers · Uniform Random Numbers · Normal Random Numbers
@@ -143,7 +140,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B7` Pivot Table...
 - `B14` Convert to Matrix: Direct · XYZ Gridding · Extract
 - `B16` Worksheet Script...
-- `B10` Most Recently Used Items
 
 ### Analysis
 - `B8` Mathematics: XYZ Surface Area...
@@ -153,12 +149,10 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T57` Signal Processing: Deconvolution... · STFT...
 - `B8` Signal Processing > Wavelet: Decompose... · Reconstruction... · Denoise... · Smooth... · Continuous Wavelet...
 - `B8` Peaks and Baseline: Multiple Peak Fit · Batch Peak Analysis Using Theme...
-- `B10` Most Recently Used Items
 
 ### Statistics
 - `B8` Descriptive Statistics: Partial Correlation Coefficient...
 - `B8` ANOVA: Three-Way ANOVA... · Repeated Measures ANOVA...
-- `B10` Most Recently Used Items
 
 ### Image
 - `B14` Adjustments: Brightness... · Contrast... · Gamma... · Levels...

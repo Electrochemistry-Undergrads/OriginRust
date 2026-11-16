@@ -21,12 +21,14 @@ struct Available {
     short_name: String,
 }
 
-/// The kinds the plot type button offers (Origin's list starts with these).
-const KINDS: [(PlotKind, &str); 4] = [
+/// The kinds the plot type button offers (Origin's list starts with these; Graph > Add Plot to Layer
+/// opens the window with one of them chosen).
+const KINDS: [(PlotKind, &str); 5] = [
     (PlotKind::Line, "Line"),
     (PlotKind::Scatter, "Scatter"),
     (PlotKind::LineSymbol, "Line + Symbol"),
     (PlotKind::Column, "Column"),
+    (PlotKind::Area, "Area"),
 ];
 
 fn kind_name(k: PlotKind) -> String {
@@ -68,6 +70,20 @@ impl LayerContentsDialog {
             kind: PlotKind::Line,
             rescale: false,
         }
+    }
+
+    /// The window with `kind` chosen on the plot type button: Graph > Add Plot to Layer > Line...,
+    /// Scatter..., Line + Symbol..., Column... and Area... open Layer Contents this way (Origin 2016,
+    /// measured 2026-11-15).
+    pub fn with_kind(mut self, kind: PlotKind) -> Self {
+        self.kind = kind;
+        self
+    }
+
+    /// The kind chosen on the plot type button.
+    #[cfg(test)]
+    pub fn kind(&self) -> PlotKind {
+        self.kind
     }
 
     fn available(project: &Project) -> Vec<Available> {

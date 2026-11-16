@@ -1982,6 +1982,13 @@ impl SheafApp {
                     Some(crate::dialogs::plot_setup::PlotSetupDialog::new(graph, layer, token, self.doc.project()));
                 self.focus(graph);
             }
+            Action::AddPlotToLayer { graph, layer, kind } => {
+                let token = self.token();
+                self.layer_contents =
+                    Some(crate::dialogs::layer_contents::LayerContentsDialog::new(graph, layer, token).with_kind(kind));
+                self.focus(graph);
+                self.graphs.entry(graph).or_default().active_layer = layer;
+            }
             Action::LayerContents { graph, layer } => {
                 let token = self.token();
                 self.layer_contents =

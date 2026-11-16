@@ -220,6 +220,8 @@ pub enum Cmd {
     /// Graph > Layer Contents... (F12): Origin's own window for the plots of a layer; `None` is the
     /// active layer.
     LayerContents(Option<usize>),
+    /// Graph > Add Plot to Layer > Line... and the others: Layer Contents with this plot type chosen.
+    AddPlotToLayer(PlotKind),
     /// Graph > Layer Management... (T60); the layer to select, if any.
     LayerManagement(Option<usize>),
     /// Graph > Fit Page to Layers... (the window) and Format > Fit Page To Layers (Origin's defaults at once) (T60).
@@ -1355,7 +1357,17 @@ fn graph_menu() -> Vec<Entry> {
         // Layer Contents is Origin's own window; Plot Setup opens Sheaf's Plots tab (add and remove plots).
         keyed("Layer Contents...", plain_key(Key::F12), Cmd::LayerContents(None)),
         item("Plot Setup...", Cmd::PlotSetup(None)),
-        grey_sub("Add Plot to Layer", &["Line...", "Scatter...", "Line + Symbol...", "Column...", "Area..."]),
+        // Origin opens Layer Contents with the plot type chosen (T63 group J).
+        sub(
+            "Add Plot to Layer",
+            vec![
+                item("Line...", Cmd::AddPlotToLayer(PlotKind::Line)),
+                item("Scatter...", Cmd::AddPlotToLayer(PlotKind::Scatter)),
+                item("Line + Symbol...", Cmd::AddPlotToLayer(PlotKind::LineSymbol)),
+                item("Column...", Cmd::AddPlotToLayer(PlotKind::Column)),
+                item("Area...", Cmd::AddPlotToLayer(PlotKind::Area)),
+            ],
+        ),
         sep(),
         item("Layer Management...", Cmd::LayerManagement(None)),
         item("Add Error Bars...", Cmd::AddErrorBars),
@@ -2390,6 +2402,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::PlotSetup(layer) => {
             Action::PlotSetup { graph: c.graph.ok_or(NEED_GRAPH)?, layer: layer.unwrap_or(c.layer) }
+        }
+        Cmd::AddPlotToLayer(kind) => {
+            Action::AddPlotToLayer { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer, kind: *kind }
         }
         Cmd::LayerContents(layer) => {
             Action::LayerContents { graph: c.graph.ok_or(NEED_GRAPH)?, layer: layer.unwrap_or(c.layer) }

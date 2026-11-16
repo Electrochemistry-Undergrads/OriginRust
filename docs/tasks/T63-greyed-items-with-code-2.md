@@ -1,6 +1,6 @@
 # T63: Existing-feature menu and toolbar wire-ups, round two
 
-**Status:** open; F wired (2026-11-15), C reviewed and deferred to B8/T14; claim remaining groups separately. Group G wired 2026-11-15 (Object Edit Bring to Front/Send to Back reorder the selected drawn shape; branch `t63-g`). Groups A, B, D, E, H, I, K claimed 2026-11-15 (session "mac-multipdf", macOS, branch `greyed-2-abdehik`). Recovered and refined 2026-11-15.
+**Status:** open; F wired (2026-11-15), J wired (2026-11-15, Claude Windows, branch `t63-add-plot`), C reviewed and deferred to B8/T14; claim remaining groups separately. Group G wired 2026-11-15 (Object Edit Bring to Front/Send to Back reorder the selected drawn shape; branch `t63-g`; Origin's button state unmeasured). Groups A, B, D, E, H, I, K claimed 2026-11-15 (session "mac-multipdf", macOS, branch `greyed-2-abdehik`). Recovered and refined 2026-11-15.
 **Size:** M overall; each group S. **Branch:** `greyed-2-<group>`.
 **Priority:** wave 3, parallel lane when files do not overlap wave 1/2 claims.
 **Spec:** [command map](../spec/ui-command-map.md), [GUI](../spec/gui-look.md); T01's method.
@@ -33,7 +33,7 @@ before calling them Origin-compatible; otherwise preserve disabled state or docu
 | G | Object Edit Bring to Front/Send to Back (2) | T24 shape ordering; only shape selection supported today, broader object order is B2 |
 | H | Row Numbers/Uniform/Normal in menu and column context (6) | `sheaf-expr` row index, `rnd`, `grnd`; verify values versus stored formulas and one undo step |
 | I | X/Y Axis Tick Labels (2) | `dialogs/graph_axis.rs`, Tick Labels tab for correct axis |
-| J | Add Plot to Layer: Line, Scatter, Line + Symbol, Column, Area (5) | Existing Layer Contents/Plot Setup; confirm selection-driven versus chooser semantics |
+| J | Add Plot to Layer: Line, Scatter, Line + Symbol, Column, Area (5) | Done: measured in Origin 2016 (each item opens Layer Contents for the active layer with that type on the plot type button); Sheaf opens its Layer Contents the same way, Area added to the button's list; UI tests `ui_tests/add_plot_to_layer.rs` |
 | K | Column-header Frequency Count (1) | Existing histogram versus discrete frequency analysis; confirm correct operation |
 
 ## Steps

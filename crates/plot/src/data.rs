@@ -4,7 +4,7 @@ use crate::{Rect, stack};
 use sheaf_core::datetime::DatePattern;
 use sheaf_core::format::NumberFormat;
 use sheaf_core::graph::{
-    Axis, BarSpacing, ErrorDirection, Frame, LabelForm, Layer, Page, Plot, PlotKind, ScaleKind, TickFormat,
+    Axis, BarSpacing, ErrorDirection, Frame, LabelForm, Layer, Page, Plot, PlotKind, ScaleKind, StatPlot, TickFormat,
     TickLabelSource,
 };
 use sheaf_core::{Column, Project};
@@ -72,6 +72,8 @@ pub(crate) struct PlotData<'a> {
     pub gboxes: Vec<BoxStats>,
     /// The names of the categories at 1, 2, ... of a plot of indexed data (the levels of its main group).
     pub categories: Option<Vec<String>>,
+    /// The name of the one position of an interval plot point (T83): its column's name.
+    pub slot_label: Option<String>,
     /// The density silhouette a violin plot draws (its box statistics are in `boxed`); `None`
     /// for other kinds.
     pub violin: Option<crate::violin::ViolinData>,
@@ -265,6 +267,66 @@ fn indexed_data(project: &Project, pd: &mut PlotData, slot: usize, slots: usize)
     true
 }
 
+/// The points of an interval plot or Pareto chart (T83). An interval plot point is the mean of the plot's visible
+/// numbers at position `slot` (1, 2, ... in plot order) with the half width of its error bar as `err` (NaN for
+/// fewer than two numbers). A Pareto plot is read from the cells of its column: its categories are the distinct
+/// values, most frequent first, at 1, 2, ...; the bars are the counts, the curve the running percent.
+fn stat_data(project: &Project, pd: &mut PlotData, slot: usize) -> bool {
+    use sheaf_core::graph::{IntervalError, StatPlot};
+    let Some(stat) = pd.plot.stat.clone() else { return false };
+    match stat {
+        StatPlot::Interval { error, level } => {
+            let values: Vec<f64> = pd.visible_values().iter().copied().filter(|v| v.is_finite()).collect();
+            if values.is_empty() {
+                return false;
+            }
+            let st = sheaf_calc::stats::stats(&values);
+            let half = match error {
+                IntervalError::Sd => st.sd,
+                IntervalError::Se => st.sem,
+                IntervalError::Ci => sheaf_calc::stats::mean_confidence_limits(&st, level / 100.0).1 - st.mean,
+            };
+            pd.x = Some(Cow::Owned(vec![slot as f64]));
+            pd.y = Cow::Owned(vec![st.mean]);
+            pd.err = Some(Cow::Owned(vec![half]));
+            pd.slot_label = Some(project.plot_label(pd.plot));
+            pd.end = 1;
+        }
+        StatPlot::Pareto | StatPlot::ParetoCumulative => {
+            let Some(col) = project.column(pd.plot.y) else { return false };
+            let counts = sheaf_core::indexed::counts_descending(col);
+            let total: usize = counts.iter().map(|(_, n)| *n).sum();
+            if total == 0 {
+                return false;
+            }
+            let values: Vec<f64> = if stat == StatPlot::Pareto {
+                counts.iter().map(|(_, n)| *n as f64).collect()
+            } else {
+                let mut sum = 0usize;
+                counts
+                    .iter()
+                    .map(|(_, n)| {
+                        sum += n;
+                        100.0 * sum as f64 / total as f64
+                    })
+                    .collect()
+            };
+            pd.x = Some(Cow::Owned((1..=values.len()).map(|k| k as f64).collect()));
+            pd.end = values.len();
+            pd.y = Cow::Owned(values);
+            pd.err = None;
+            pd.categories = Some(counts.into_iter().map(|(l, _)| l).collect());
+        }
+    }
+    pd.mask = None;
+    pd.filters.clear();
+    pd.xerr = None;
+    pd.base = None;
+    pd.start = 0;
+    pd.x_format = None;
+    true
+}
+
 fn ix_error(plot: &Plot) -> sheaf_core::graph::IndexedError {
     plot.indexed.as_ref().map_or(sheaf_core::graph::IndexedError::None, |i| i.error)
 }
@@ -452,7 +514,34 @@ pub(crate) fn collect_graph<'a>(project: &'a Project, g: &'a sheaf_core::graph::
             }
         }
     }
+    place_pareto_cumulative(&mut all);
     all
+}
+
+/// Origin's Plot_ParetoRaw option symr (default 1): the symbols of the cumulative percent sit at the right edge of
+/// each bar and the line starts at (0, 0), the left edge of the first bar. The edges are those of the drawn bars of
+/// the layer that counts the same column (its bar width follows the gap), so they follow a change of the gap.
+fn place_pareto_cumulative(all: &mut [LayerData]) {
+    let bars: Vec<(sheaf_core::ColumnId, f64, f64)> = all
+        .iter()
+        .flat_map(|d| d.plots.iter())
+        .filter(|pd| pd.plot.stat == Some(StatPlot::Pareto))
+        .filter_map(|pd| pd.bar.as_ref().map(|b| (pd.plot.y, b.left, b.width)))
+        .collect();
+    for pd in all.iter_mut().flat_map(|d| d.plots.iter_mut()) {
+        if pd.plot.stat != Some(StatPlot::ParetoCumulative) {
+            continue;
+        }
+        let Some(&(_, left, width)) = bars.iter().find(|b| b.0 == pd.plot.y) else { continue };
+        let (Some(x), y) = (pd.x.as_deref(), &pd.y) else { continue };
+        let mut xs = vec![1.0 + left];
+        xs.extend(x.iter().map(|k| k + left + width));
+        let mut ys = vec![0.0];
+        ys.extend(y.iter().copied());
+        pd.end = xs.len();
+        pd.x = Some(Cow::Owned(xs));
+        pd.y = Cow::Owned(ys);
+    }
 }
 
 /// Gives the curves of a colour mapped waterfall layer (graphing spec 13.17) the ends of the colour scale and their
@@ -503,6 +592,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
     let mut boxes = 0usize;
     let mut scatter_columns = 0usize;
     let mut ridges = 0usize;
+    let mut intervals = 0usize;
     // The visible grouped box plots of indexed data share the width of a box; each has its slot.
     let indexed_boxes: Vec<usize> = layer
         .plots
@@ -512,7 +602,9 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         .map(|(i, _)| i)
         .collect();
     for (index, (plot, place)) in layer.plots.iter().zip(places).enumerate().filter(|(_, (p, _))| p.visible) {
-        let Some(y) = project.numeric(plot.y) else { continue };
+        // A Pareto chart counts the cells of any column, text included.
+        let counted = matches!(plot.stat, Some(StatPlot::Pareto | StatPlot::ParetoCumulative));
+        let Some(y) = project.numeric(plot.y).or_else(|| counted.then_some(&[][..])) else { continue };
         let x = plot.x.and_then(|id| project.numeric(id));
         let x_format = plot.x.and_then(|id| project.column(id)).map(|c| c.format);
         let err = plot.y_error.and_then(|id| project.numeric(id));
@@ -560,6 +652,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             column_at: None,
             gboxes: Vec::new(),
             categories: None,
+            slot_label: None,
             violin: None,
             ridge: None,
             pie: None,
@@ -579,6 +672,14 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             },
         };
         match plot.kind {
+            _ if plot.stat.is_some() => {
+                if !stat_data(project, &mut pd, intervals + 1) {
+                    continue;
+                }
+                if matches!(plot.stat, Some(StatPlot::Interval { .. })) {
+                    intervals += 1;
+                }
+            }
             PlotKind::Column | PlotKind::Box if plot.indexed.is_some() => {
                 let slot = indexed_boxes.iter().position(|&i| i == index).unwrap_or(0);
                 if !indexed_data(project, &mut pd, slot, indexed_boxes.len().max(1)) {

@@ -845,6 +845,37 @@ fn plot_tab_body(
             }
             ui.weak("Computed from the rows of each group: the bar is their mean.");
         }
+        DetailTab::ErrorBar
+            if matches!(graph.layers[l].plots[p].stat, Some(sheaf_core::graph::StatPlot::Interval { .. })) =>
+        {
+            // Interval plot (T83): the error bar of the mean, the same for every interval point of the layer.
+            use sheaf_core::graph::{IntervalError, StatPlot};
+            let (mut error, mut level) = match graph.layers[l].plots[p].stat {
+                Some(StatPlot::Interval { error, level }) => (error, level),
+                _ => (IntervalError::Ci, 95.0),
+            };
+            let before = (error, level);
+            grid(ui, "plot_interval_error", |ui| {
+                ui.label("Error Bar");
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut error, IntervalError::Ci, "Confidence Interval");
+                    ui.selectable_value(&mut error, IntervalError::Sd, "Standard Deviation");
+                    ui.selectable_value(&mut error, IntervalError::Se, "Standard Error");
+                });
+                ui.end_row();
+                ui.label("Confidence level (%)");
+                ui.add_enabled(error == IntervalError::Ci, DragValue::new(&mut level).range(0.1..=99.9).speed(0.1));
+                ui.end_row();
+            });
+            if (error, level) != before {
+                for plot in &mut graph.layers[l].plots {
+                    if matches!(plot.stat, Some(StatPlot::Interval { .. })) {
+                        plot.stat = Some(StatPlot::Interval { error, level });
+                    }
+                }
+            }
+            ui.weak("Computed from the numbers of each column: the symbol is their mean.");
+        }
         DetailTab::ErrorBar => {
             let plot = &mut graph.layers[l].plots[p];
             let name = plot
@@ -1293,6 +1324,7 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 parallel: layer.inherited_parallel(),
                 treemap: layer.inherited_treemap(),
                 indexed: None,
+                stat: None,
                 sunburst: layer.inherited_sunburst(),
                 size_from: None,
                 color_from: None,

@@ -753,6 +753,12 @@ impl Writer {
                     .into(),
             );
         }
+        if plots.iter().any(|r| r.plot.stat.is_some()) {
+            notes.push(
+                "interval plots and Pareto charts were written as plain plots of their data column; the means, error bars, counts and cumulative percent were not written"
+                    .into(),
+            );
+        }
         if has(&|k| k.is_ridgeline()) {
             notes.push("ridgeline charts were written as plain columns of their data".into());
         }

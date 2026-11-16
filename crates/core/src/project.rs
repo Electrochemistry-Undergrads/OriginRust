@@ -2,7 +2,7 @@
 //! organizes them.
 
 use crate::column::{Column, ColumnData, Designation};
-use crate::graph::{ErrorStyle, Graph, Indexed, IndexedError, LegendScope, Plot};
+use crate::graph::{ErrorStyle, Graph, Indexed, IndexedError, IntervalError, LegendScope, Plot, StatPlot};
 use crate::ids::{ColumnId, WindowId};
 use crate::multi_y::{MultiYError, MultiYKind, MultiYOptions, MultiYPlan};
 use crate::panels::{PanelError, PanelLayout, PanelPage, panel_layers};
@@ -312,6 +312,14 @@ pub enum ProjectError {
     IndexedTooManyGroups(usize),
     #[error("a grouped plot of indexed data cannot have a right Y axis; use one Y axis or another template")]
     IndexedNoRightAxis,
+    #[error("an interval plot needs at least one numeric data column; select one")]
+    IntervalNeedsData,
+    #[error("an interval plot cannot have a right Y axis; use one Y axis or another template")]
+    IntervalNoRightAxis,
+    #[error("a Pareto chart needs exactly one column with cells to count; select one")]
+    ParetoNeedsColumn,
+    #[error("a Pareto chart has its own right Y axis (the cumulative percent); use one column and no right axis")]
+    ParetoNoRightAxis,
     #[error("a stacked histograms graph cannot have a right Y axis; use one Y axis or another template")]
     StackedHistogramsNoRightAxis,
 }
@@ -811,6 +819,7 @@ impl Project {
             parallel: Default::default(),
             treemap: Default::default(),
             indexed: None,
+            stat: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,
@@ -962,6 +971,13 @@ impl Project {
             }
             return self.plot_treemap(&categories, value);
         }
+        if template == Template::IntervalPlot {
+            return self.plot_interval(ys);
+        }
+        if template == Template::Pareto {
+            let [y] = ys else { return Err(ProjectError::ParetoNeedsColumn) };
+            return self.plot_pareto(*y);
+        }
         if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
             // The data is the one numeric column designated Y; every other given column is a group column.
             let is_data = |p: &Self, c: ColumnId| {
@@ -1106,6 +1122,84 @@ impl Project {
                 for p in &mut l.plots {
                     p.treemap.categories = cats.clone();
                 }
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
+    /// Creates an interval plot ([`Template::IntervalPlot`], T83): one plot per numeric column in `ys`, each the
+    /// mean of its column at the next position 1, 2, ... with a 95 % confidence interval as error bar.
+    pub fn plot_interval(&mut self, ys: &[ColumnId]) -> Result<WindowId, ProjectError> {
+        for y in ys {
+            self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
+        }
+        if ys.is_empty() || ys.iter().any(|y| self.numeric(*y).is_none()) {
+            return Err(ProjectError::IntervalNeedsData);
+        }
+        let long_name = self.locate(ys[0]).map(|(b, _, _)| b.title_for_graph());
+        let graph = self.add_graph(Template::IntervalPlot);
+        for y in ys {
+            if let Err(e) = self.add_plot(graph, 0, *y) {
+                let _ = self.remove_window(graph);
+                return Err(e);
+            }
+            if let Some(p) = self.graph_mut(graph).and_then(|g| g.layers[0].plots.last_mut()) {
+                p.x = None;
+                p.y_error = None;
+                p.x_error = None;
+                p.stat = Some(StatPlot::Interval { error: IntervalError::Ci, level: 95.0 });
+            }
+        }
+        if let Some(g) = self.graph_mut(graph) {
+            g.layers[0].apply_palette();
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
+    /// Creates a Pareto chart ([`Template::Pareto`], T83) of the cells of column `y` (text or numbers): columns of
+    /// the count of each distinct value, most frequent first, in the left layer, and the cumulative percent as a
+    /// line with symbols in a right-axis layer fixed to 0 - 100.
+    pub fn plot_pareto(&mut self, y: ColumnId) -> Result<WindowId, ProjectError> {
+        let column = self.column(y).ok_or(ProjectError::NoSuchColumn(y))?;
+        if crate::indexed::levels(column).is_empty() {
+            return Err(ProjectError::ParetoNeedsColumn);
+        }
+        let long_name = self.locate(y).map(|(b, _, _)| b.title_for_graph());
+        let graph = self.add_graph(Template::Pareto);
+        let right = self.add_right_y_layer(graph, 0)?;
+        for layer in [0, right] {
+            if let Err(e) = self.add_plot(graph, layer, y) {
+                let _ = self.remove_window(graph);
+                return Err(e);
+            }
+            if let Some(g) = self.graph_mut(graph) {
+                let l = &mut g.layers[layer];
+                if let Some(p) = l.plots.last_mut() {
+                    p.x = None;
+                    p.y_error = None;
+                    p.x_error = None;
+                    p.stat = Some(if layer == 0 { StatPlot::Pareto } else { StatPlot::ParetoCumulative });
+                    p.label = Some(if layer == 0 { "Count" } else { "Cumulative %" }.to_string());
+                    if layer != 0 {
+                        p.kind = crate::graph::PlotKind::LineSymbol;
+                    }
+                }
+                l.y_axis.title = Some(if layer == 0 { "Count" } else { "Cumulative %" }.to_string());
+                if layer != 0 {
+                    l.y_axis.min = Some(0.0);
+                    l.y_axis.max = Some(100.0);
+                }
+            }
+        }
+        if let Some(g) = self.graph_mut(graph) {
+            for layer in [0, right] {
+                g.layers[layer].apply_palette();
             }
             if let Some(name) = long_name {
                 g.long_name = name;
@@ -1327,6 +1421,12 @@ impl Project {
         }
         if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
             return Err(ProjectError::IndexedNoRightAxis);
+        }
+        if template == Template::IntervalPlot {
+            return Err(ProjectError::IntervalNoRightAxis);
+        }
+        if template == Template::Pareto {
+            return Err(ProjectError::ParetoNoRightAxis);
         }
         if template == Template::StackedHistograms {
             return Err(ProjectError::StackedHistogramsNoRightAxis);

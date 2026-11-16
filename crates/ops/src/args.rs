@@ -704,6 +704,13 @@ pub struct StyleArgs {
     /// (default), sd (standard deviation, n-1) or se (standard error).
     #[arg(long, value_name = "ERROR")]
     pub group_error: Option<String>,
+    /// Interval plots (-t interval-plot): the error bar on each column's mean: ci (default, Student-t confidence
+    /// interval), sd (standard deviation, n-1) or se (standard error).
+    #[arg(long, value_name = "ERROR")]
+    pub interval_error: Option<String>,
+    /// Interval plots: the confidence level in percent of --interval-error ci, above 0 and below 100 (default 95).
+    #[arg(long, value_name = "PERCENT")]
+    pub interval_level: Option<f64>,
     /// Sunburst plots (-t sunburst): where the first wedge starts, in degrees counter-clockwise from 3 o'clock
     /// (default 90: 12 o'clock; the wedges go clockwise).
     #[arg(long, value_name = "DEGREES", allow_hyphen_values = true)]
@@ -804,7 +811,10 @@ pub struct PlotArgs {
     /// draws the same hierarchy as concentric rings, the first category innermost, angles proportional to the last
     /// numeric Y column, coloured by value (see the --sunburst-* options); grouped-columns and grouped-box split the one
     /// numeric Y column by one or two group columns (--group; the first on the X axis, the second one plot per level,
-    /// shown in the legend): the mean of each group as columns (see --group-error) or a box per group.
+    /// shown in the legend): the mean of each group as columns (see --group-error) or a box per group;
+    /// interval-plot draws the mean of each Y column with an error bar (see --interval-error); pareto counts the
+    /// distinct values of the one Y column (text or numbers) as columns, most frequent first, with the cumulative
+    /// percent on a right axis of 0 to 100.
     /// A name that is none of these plots with the user template of that name (File > Save Template As in
     /// the desktop app; see --templates-dir).
     #[arg(short, long)]

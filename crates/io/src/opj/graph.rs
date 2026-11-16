@@ -877,6 +877,7 @@ fn read_curve(
         parallel: Default::default(),
         treemap: Default::default(),
         indexed: None,
+        stat: None,
         sunburst: Default::default(),
         size_from: None,
         color_from: None,

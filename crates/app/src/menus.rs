@@ -1707,6 +1707,7 @@ pub fn graph_plot_menu(
     on_right: bool,
     book: Option<(WindowId, String)>,
     trendlines: usize,
+    layers: usize,
 ) -> Vec<Entry> {
     let change = |label: &str, to: PlotKind| {
         if to == kind {
@@ -1738,6 +1739,14 @@ pub fn graph_plot_menu(
         sep(),
         item("Add Trendline...", Cmd::Trendline { layer, plot, edit: false }),
     ];
+    if layers > 1 {
+        // The plot takes the axes of the layer it goes to (the extra Y axes of a multi-Y graph, T61).
+        let to_layer = (0..layers)
+            .filter(|&to| to != layer)
+            .map(|to| item(&format!("Layer {}", to + 1), Cmd::GraphEdit(GraphOp::MovePlotToLayer { layer, plot, to })))
+            .collect();
+        v.insert(5, sub("Move to Layer", to_layer));
+    }
     if trendlines > 0 {
         v.push(item("Edit Trendline...", Cmd::Trendline { layer, plot, edit: true }));
         v.push(item("Remove Trendline", Cmd::GraphEdit(GraphOp::RemoveTrendline { layer, plot })));

@@ -120,3 +120,31 @@ fn format_layer_properties_opens_plot_details_on_the_active_layer() {
     let d = h.state().graph_props.as_ref().expect("Plot Details is open");
     assert_eq!((d.layer, d.tab()), (1, PropsTab::Layer));
 }
+
+#[test]
+fn a_plot_moves_to_another_layer_in_one_undo_step() {
+    let (mut h, id) = setup("move-plot");
+    edit(&mut h, id, GraphOp::AddLayer { layer: 0, kind: NewLayerKind::RightY });
+    let count = |h: &Harness<'static, SheafApp>| {
+        let g = project(h).graphs().next().unwrap();
+        (g.layers[0].plots.len(), g.layers[1].plots.len())
+    };
+    let (a, b) = count(&h);
+    assert!(a >= 1);
+    edit(&mut h, id, GraphOp::MovePlotToLayer { layer: 0, plot: 0, to: 1 });
+    assert_eq!(count(&h), (a - 1, b + 1));
+    assert_eq!(h.state().doc.undo_label(), Some("Move plot to layer"));
+    menu(&mut h, "Edit", "Undo Move plot to layer");
+    assert_eq!(count(&h), (a, b));
+}
+
+#[test]
+fn an_axis_offset_survives_save_and_reload_of_the_graph() {
+    let (mut h, id) = setup("offset");
+    edit(&mut h, id, GraphOp::AddLayer { layer: 0, kind: NewLayerKind::RightY });
+    let mut g = project(&h).graph(id).unwrap().clone();
+    g.layers[1].y_axis.offset_pct = 12.0;
+    let back: sheaf_core::graph::Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+    assert_eq!(back.layers[1].y_axis.offset_pct, 12.0);
+    assert_eq!(back.layers[0].y_axis.offset_pct, 0.0);
+}

@@ -3828,3 +3828,16 @@ Implemented in `crates/core/src/layers.rs` (`Graph::add_layer`, `Graph::delete_l
 - Add makes the new layer active and clears the selection; one undo step each ("Create", "Undelete frame").
 - Layer Properties... (Format menu and layer icon) opens Plot Details on the layer's node with the Background tab. Sheaf's layer node keeps its Layer Contents and Legend tabs as well.
 - Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer still hides only the plots, not the axes (Origin hides both; a later slice).
+
+### 21.10 How Sheaf draws a displaced Y axis (slice 2)
+
+`Axis::offset_pct` (Y axis, default 0, kept in `.sheaf` files only when not 0) is Origin's axis position "% From Left" / "% From Right" (21.3): the distance in percent of the frame's **width** (the X axis length), outward positive, negative inward (-50 puts a left axis in the middle). Implemented in `crates/plot/src/axis_offset.rs` and used by the layout.
+
+- The axis line, its ticks, its tick labels and its title move together; the frame, the grid, the data and the line on the opposite edge stay. The left axis of a layer moves left, a right axis moves right.
+- Automatic margins: the labels of the displaced axis count in the label edges of the group, so the frame narrows exactly as it does for a right axis at the frame (the existing "Keeping labels on the page" rule). The offset is a share of the frame as finally fitted.
+- Clipping: data stay clipped to the frame; the axis is drawn outside the clip, in the overlay.
+- Hit testing: the displaced line, ticks and labels are the Y axis object of the layer that owns them; the line at the edge stays the object of the layer whose axis is there.
+- Linked ranges: unchanged (`ScaleLink::Straight` shares the parent's limits, offset or not).
+- Layer Properties/Axis dialog: Line and Ticks tab, Axis Position, a "% From Left" / "% From Right" field (vertical axes). Plot context menu: "Move to Layer > Layer N" moves a plot to another layer with that layer's axes (the existing Move to Right Y Axis stays).
+- The offset is not written to .opj yet (slice 3). A displaced Y title is placed beyond the displaced labels and can collide with the titles of the axes between; the multi-Y templates show no Y titles (21.5) and Origin raises the automatic gap when titles are on (21.6, 14 %); that rule is **unmeasured** in Sheaf.
+- Origin's offset of the X axis (bottom/top) is **unmeasured** and not implemented.

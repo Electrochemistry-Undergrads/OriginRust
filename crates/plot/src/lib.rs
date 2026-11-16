@@ -10,6 +10,7 @@
 //! [`render_pdf`], [`export_file`] and, for an interactive view,
 //! [`render_raster`] together with [`layout_geometry`].
 
+mod axis_offset;
 mod brackets;
 mod break_cut;
 mod dash;
@@ -77,6 +78,8 @@ mod lollipop_tests;
 mod margin_tests;
 #[cfg(test)]
 mod multipage_tests;
+#[cfg(test)]
+mod offset_axis_tests;
 #[cfg(test)]
 mod offset_multiplier_tests;
 #[cfg(test)]

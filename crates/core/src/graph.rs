@@ -1047,6 +1047,13 @@ pub struct Axis {
     /// `opposite_ticks` refer to the bottom (X) or left (Y) edge.
     #[serde(default, skip_serializing_if = "AxisSide::is_normal")]
     pub side: AxisSide,
+    /// How far the axis line stands outward from its edge of the frame, in percent of the frame's
+    /// width (Origin's axis position "% From Left" / "% From Right", measured in percent of the X axis
+    /// length, graphing spec 21.3). Negative values move it inward: -50 puts a Y axis in the middle.
+    /// Used by the Y axis, whose line, ticks, tick labels and title move together; the frame, grid and
+    /// the line on the opposite edge stay. 0 (the default) is the edge itself.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub offset_pct: f64,
     /// Draw the axis line, its ticks and its tick labels in the color of the layer's first
     /// visible plot instead of `color` and the tick font's color.
     #[serde(default, skip_serializing_if = "is_false")]

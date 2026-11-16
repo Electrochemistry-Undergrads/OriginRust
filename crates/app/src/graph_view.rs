@@ -864,7 +864,15 @@ fn menu_for(
                 };
                 let book = project.locate(plot.y).map(|(b, _, _)| (b.id, b.name.clone()));
                 let on_right = graph.right_y_member(layer) == Some(layer);
-                menus::graph_plot_menu(layer, p, plot.kind, on_right, book, plot.decor.trendlines.len())
+                menus::graph_plot_menu(
+                    layer,
+                    p,
+                    plot.kind,
+                    on_right,
+                    book,
+                    plot.decor.trendlines.len(),
+                    graph.layers.len(),
+                )
             }
             ObjectKind::XAxis | ObjectKind::YAxis => {
                 let y = kind == ObjectKind::YAxis;
@@ -966,6 +974,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::HidePlot { layer, .. }
         | GraphOp::RemoveTrendline { layer, .. }
         | GraphOp::MovePlotToAxis { layer, .. }
+        | GraphOp::MovePlotToLayer { layer, .. }
         | GraphOp::HideAxis { layer, .. }
         | GraphOp::ToggleGrids { layer, .. }
         | GraphOp::Rescale { layer }
@@ -990,6 +999,10 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
     if let GraphOp::MovePlotToAxis { layer, plot, right } = op {
         // An empty layer left behind is kept; a request that cannot be met changes nothing.
         let _ = g.set_plot_y_axis(layer, plot, right);
+        return;
+    }
+    if let GraphOp::MovePlotToLayer { layer, plot, to } = op {
+        let _ = g.move_plot_to_layer(layer, plot, to);
         return;
     }
     if let GraphOp::AddLayer { layer, kind } = op {
@@ -1105,6 +1118,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::AddLayer { .. }
         | GraphOp::DeleteLayer { .. }
         | GraphOp::MovePlotToAxis { .. }
+        | GraphOp::MovePlotToLayer { .. }
         | GraphOp::UpdateLegend { .. } => {
             unreachable!("handled above")
         }

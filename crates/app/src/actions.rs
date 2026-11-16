@@ -81,6 +81,8 @@ pub enum GraphOp {
     /// Move to Right Y Axis / Move to Left Y Axis: the plot goes to the right Y layer of its
     /// panel (made when there is none) or back to the panel's own layer.
     MovePlotToAxis { layer: usize, plot: usize, right: bool },
+    /// Move to Layer N: the plot goes to another layer of the graph, with that layer's axes (T61).
+    MovePlotToLayer { layer: usize, plot: usize, to: usize },
     /// Hide Data Plot.
     HidePlot { layer: usize, plot: usize },
     /// Remove Trendline: the plot's last trendline goes.

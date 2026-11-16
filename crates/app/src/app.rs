@@ -1271,6 +1271,7 @@ impl SheafApp {
             GraphOp::DeleteLayer { .. } => sheaf_core::layers::DELETE_LAYER_UNDO,
             GraphOp::MovePlotToAxis { right: true, .. } => "Move plot to right Y axis",
             GraphOp::MovePlotToAxis { .. } => "Move plot to left Y axis",
+            GraphOp::MovePlotToLayer { .. } => "Move plot to layer",
             GraphOp::RemoveTrendline { .. } => "Remove trendline",
             GraphOp::HidePlot { .. } => unreachable!("handled above"),
         };

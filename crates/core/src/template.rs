@@ -520,6 +520,7 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         major_grid: None,
         minor_grid: None,
         side: AxisSide::Normal,
+        offset_pct: 0.0,
         color_follows_plot: false,
         title_color_follows_plot: false,
         tick_label_source: TickLabelSource::Auto,

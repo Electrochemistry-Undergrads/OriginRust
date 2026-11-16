@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 372 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 370 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -107,7 +107,8 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T71](T71-point-segments.md) | 2 and 3 Point Segment plots (B4 slice 2) | S | 0 |
 | [x] | [T75](T75-scatter-central.md) | Scatter Central (B4 slice 3) | S | 0 |
 | [x] | [T76](T76-grouped-indexed-plots.md) | Grouped Columns (indexed data), Grouped Box Charts (B4 slice) | M | 0 |
-| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label; Grouped Columns (indexed data) and Grouped Box Charts done as [T76](T76-grouped-indexed-plots.md)): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 23 |
+| [x] | [T82](T82-interval-and-pareto.md) | Interval Plot, Pareto (B4 slice) | M | 0 |
+| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label; Grouped Columns (indexed data) and Grouped Box Charts done as [T76](T76-grouped-indexed-plots.md); Interval Plot and Pareto done as [T82](T82-interval-and-pareto.md)): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 21 |
 
 - **B1.** The graph view draws the page to fit the window. Add a view transform (zoom factor and
   scroll offset) in `crates/app/src/graph_view.rs` so hit-testing (`sheaf_plot::hit`) still works,
@@ -124,8 +125,8 @@ Backlog packages: write the brief first (step 3 above).
   are T48's leftovers (graphing 20.4). New Color Scale and Add Bubble Scale reuse the colour scale
   that hexbin and parallel plots draw: done (T80).
 - **B4.** One commit per type as in T12. Order by use in the owner's field: Vertical Drop Line,
-  Column + Label, Grouped Columns (indexed data), Grouped Box Charts, Interval Plot, Histogram +
-  Probabilities, Marginal Histograms and Box Charts (two extra layers: do after T61), Pareto, QC
+  Column + Label, Grouped Columns (indexed data), Grouped Box Charts, Interval Plot (done as T82), Histogram +
+  Probabilities, Marginal Histograms and Box Charts (two extra layers: do after T61), Pareto (done as T82), QC
   chart, Scatter Matrix, 2D Kernel Density, vectors, stock charts, wind rose, Piper, Smith, Zoom.
   Line Series and 2/3 Point Segment are line-connection variants: check `Connect` first.
 

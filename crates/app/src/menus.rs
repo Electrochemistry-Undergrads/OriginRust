@@ -1208,14 +1208,13 @@ fn plot_menu() -> Vec<Entry> {
         ),
         sub(
             "Stoc&k",
-            [
-                vec![
-                    item("High-Low-Close", Cmd::Plot(Template::HighLowClose)),
-                    item("Japanese Candlestick", Cmd::Plot(Template::Candlestick)),
-                    item("OHLC Bar Chart", Cmd::Plot(Template::OhlcBar)),
-                ],
-                greys(&["OHLC-Volume", "Line"]),
-            ]
+            [vec![
+                item("High-Low-Close", Cmd::Plot(Template::HighLowClose)),
+                item("Japanese Candlestick", Cmd::Plot(Template::Candlestick)),
+                item("OHLC Bar Chart", Cmd::Plot(Template::OhlcBar)),
+                item("OHLC-Volume", Cmd::Plot(Template::OhlcVolume)),
+                item("Line", Cmd::Plot(Template::StockLine)),
+            ]]
             .concat(),
         ),
         sep(),

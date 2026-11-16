@@ -1,6 +1,6 @@
 # T109: OHLC-Volume and Stock > Line
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `stock-volume`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 31): OHLC-Volume measured (XYYYYY rule, the two layers' frames, grey half-width volume columns, half-width candles) and built as a two-layer template on the T108 stock kinds; Stock > Line is the line template with the theme colours. Left: Origin's exact X range (no end margins), the volume axis's one-decimal labels, date X axes.
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Stock > OHLC-Volume and Line), the
 items T108 left.
 **Spec:** `docs/spec/graphing.md` (section 31, Stock plots).

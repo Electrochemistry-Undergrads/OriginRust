@@ -87,3 +87,30 @@ fn hlc_draws_a_high_low_line_and_a_close_tick_to_the_right() {
     let close = geom.data_to_page(1.0, 12.0).1;
     assert!((lines[1][0] - x).abs() < 0.01 && lines[1][2] > x && (lines[1][1] - close).abs() < 0.01, "{:?}", lines[1]);
 }
+
+#[test]
+fn ohlc_volume_draws_candles_over_grey_volume_columns_on_the_same_x() {
+    let (mut p, mut ys) = project();
+    let b = p.workbooks().next().unwrap().id;
+    ys.push(p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![100.0, 250.0, 180.0, 300.0, 120.0])).unwrap());
+    let g = p.plot_columns(Template::OhlcVolume, &ys).unwrap();
+    let graph = p.graph(g).unwrap();
+    let pds: Vec<data::LayerData> = graph.layers.iter().map(|l| data::collect(&p, l)).collect();
+    let geoms = layout::graph_geometry(&p, graph, &pds, &FixedMetrics);
+    assert_eq!(geoms.len(), 2);
+    // The volume layer sits right under the price layer and shares its X scale.
+    let (price, volume) = (&geoms[0], &geoms[1]);
+    assert!((volume.frame.y - (price.frame.y + price.frame.h)).abs() < 0.01, "{:?} {:?}", price.frame, volume.frame);
+    assert_eq!((price.x.min, price.x.max), (volume.x.min, volume.x.max));
+    assert!(volume.y.min <= 0.0 && volume.y.max >= 300.0);
+    let s = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let grey = s.layers[1]
+        .plots
+        .iter()
+        .filter(|it| {
+            matches!(it, scene::Item::Path { fill: Some(c), .. } if *c == Color::rgb(128, 128, 128))
+                || matches!(it, scene::Item::Rect { fill: Some(c), .. } if *c == Color::rgb(128, 128, 128))
+        })
+        .count();
+    assert_eq!(grey, 5, "{:?}", s.layers[1].plots);
+}

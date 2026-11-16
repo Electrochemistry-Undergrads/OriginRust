@@ -29,6 +29,10 @@ pub enum Template {
     HighLowClose,
     Candlestick,
     OhlcBar,
+    /// Plot > Stock > OHLC-Volume (T109): candlesticks over a linked layer of volume columns.
+    OhlcVolume,
+    /// Plot > Stock > Line (T109): the line template with the theme colour list.
+    StockLine,
     /// Line plot with a symbol on every point.
     LineSymbol,
     /// Cyclic voltammetry overlay: smooth lines without markers, no grid,
@@ -176,7 +180,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 67] = [
+    pub const ALL: [Template; 69] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -244,6 +248,8 @@ impl Template {
         Template::HighLowClose,
         Template::Candlestick,
         Template::OhlcBar,
+        Template::OhlcVolume,
+        Template::StockLine,
     ];
 
     /// The name used on the command line and in menus.
@@ -258,6 +264,8 @@ impl Template {
             Template::HighLowClose => "high-low-close",
             Template::Candlestick => "candlestick",
             Template::OhlcBar => "ohlc-bar",
+            Template::OhlcVolume => "ohlc-volume",
+            Template::StockLine => "stock-line",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
@@ -330,6 +338,8 @@ impl Template {
             Template::HighLowClose => "High-Low-Close",
             Template::Candlestick => "Japanese Candlestick",
             Template::OhlcBar => "OHLC Bar Chart",
+            Template::OhlcVolume => "OHLC-Volume",
+            Template::StockLine => "Stock Line",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
@@ -445,6 +455,8 @@ impl Template {
             Template::HighLowClose => general(id, name, PlotKind::HighLowClose),
             Template::Candlestick => general(id, name, PlotKind::Candlestick),
             Template::OhlcBar => general(id, name, PlotKind::OhlcBar),
+            Template::OhlcVolume => ohlc_volume(id, name),
+            Template::StockLine => themed(general(id, name, PlotKind::Line)),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
             Template::Multi3YYy | Template::Multi3YYY | Template::Multi4YYyy | Template::Multi4YyYy => {
@@ -944,6 +956,26 @@ fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
     g
 }
 
+/// Origin's OHLC-Volume (T109, measured): a price layer at 8.66 %, 4.69 %, 88.23 % x 65.92 % of the page
+/// with its X tick labels on top, and below it a layer linked to it (left 0, top 100 %, width 100 %,
+/// height 34.98 % of the price layer) for the volume columns. No legends.
+fn ohlc_volume(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::Candlestick);
+    let price = &mut g.layers[0];
+    price.frame = Frame { left: 0.0866, top: 0.04692, width: 0.8823, height: 0.6592 };
+    price.legend.visible = false;
+    price.x_axis.side = AxisSide::Opposite;
+    price.x_axis.show_opposite = true;
+    price.x_axis.opposite_ticks = true;
+    let mut volume = right_y_layer(price, 0);
+    volume.frame = Frame { left: 0.0, top: 1.0, width: 1.0, height: 0.3498 };
+    volume.x_axis.side = AxisSide::Normal;
+    volume.y_axis.side = AxisSide::Normal;
+    volume.default_kind = PlotKind::Column;
+    g.layers.push(volume);
+    g
+}
+
 fn double_y(id: WindowId, name: &str) -> Graph {
     let mut g = general(id, name, PlotKind::Line);
     let layer = &mut g.layers[0];
@@ -1149,7 +1181,9 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 67);
+        assert_eq!(Template::ALL.len(), 69);
+        assert_eq!(Template::from_name("ohlc-volume"), Some(Template::OhlcVolume));
+        assert_eq!(Template::from_name("stock-line"), Some(Template::StockLine));
         assert_eq!(Template::from_name("candlestick"), Some(Template::Candlestick));
         assert_eq!(Template::from_name("vector-xyam"), Some(Template::VectorXyam));
         assert_eq!(Template::from_name("vector-xyxy"), Some(Template::VectorXyxy));

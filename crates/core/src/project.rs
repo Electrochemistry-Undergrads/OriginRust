@@ -988,7 +988,8 @@ impl Project {
         if matches!(template, Template::VectorXyam | Template::VectorXyxy) {
             return self.plot_vectors(template, ys);
         }
-        if matches!(template, Template::HighLowClose | Template::Candlestick | Template::OhlcBar) {
+        if matches!(template, Template::HighLowClose | Template::Candlestick | Template::OhlcBar | Template::OhlcVolume)
+        {
             return self.plot_stock(template, ys);
         }
         if template == Template::Lollipop && ys.len() < 2 {

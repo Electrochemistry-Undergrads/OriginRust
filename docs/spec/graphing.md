@@ -5239,7 +5239,22 @@ Probed with X = 1..5 (and 1..8) and Open, High, Low, Close columns.
 - Axes: X ran exactly from the first to the last X (1 to 5, 1 to 8), so the end candles are cut in half;
   Y took in every high and low (8.5 to 15.5 for prices 9 to 15). Origin's X axis was a date axis showing
   "--" for plain numbers; Sheaf keeps a numeric X axis.
+- **OHLC-Volume** (T109) takes X and exactly five Y columns, read as Open, High, Low, Close, Volume;
+  otherwise "To make this plot, you need to select columns designated as 'XYYYYY' with exact number of
+  columns". It makes a two-layer graph:
+  - Layer 1 (price) sits at left 8.66 %, top 4.69 %, width 88.23 %, height 65.92 % of the page. It shows
+    candlesticks as above but with bodies half the X spacing wide, and its X axis has tick labels on top
+    and ticks only at the bottom (showAxes 3).
+  - Layer 2 (volume) is linked to layer 1 at left 0, top 100 %, width 100 %, height 34.98 % in units of
+    layer 1. Its X axis is shared and drawn at the bottom; its Y axis ran 0 to 325 (step 50, labels "50.0").
+    The volume columns are grey (128, 128, 128) with a black border and take half the X spacing.
+  - Neither layer has a legend.
+- **Stock > Line** (T109) is a line plot of every selected Y column in one layer. Its colours come from the
+  theme list (black, red, blue, magenta, green) and it has a legend; Y title "B", X title "A", Y axis
+  0 to 325 for volumes up to 300.
 - Sheaf: plot kinds `high_low_close`, `candlestick`, `ohlc_bar` with the price columns in
   `PlotDecor::stock` (`sheaf_core::stock::StockSpec`: open, high, low, close, the falling colour, the
-  width fraction); templates `high-low-close`, `candlestick`, `ohlc-bar`. The .opj writer saves the first
+  width fraction); templates `high-low-close`, `candlestick`, `ohlc-bar`, `ohlc-volume` (the volume layer's 50 % gap is set on
+  the plot, not in the template) and `stock-line`. Sheaf's price layer leaves the usual margin at the X
+  ends where Origin ran exactly from the first to the last X. The .opj writer saves the first
   price column as a scatter plot and warns.

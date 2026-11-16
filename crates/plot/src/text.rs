@@ -2,7 +2,7 @@
 //! item per run.
 
 use crate::fonts::TextMeasurer;
-use crate::markup::{self, Run};
+use crate::markup::{self, Run, Segment};
 use crate::scene::{Anchor, Item, Stroke, TextItem, push_num};
 use sheaf_core::graph::Font;
 
@@ -22,13 +22,45 @@ fn run_font(font: &Font, run: &Run) -> Font {
     f
 }
 
-fn runs_width(m: &dyn TextMeasurer, runs: &[Run], font: &Font, size: f64) -> f64 {
-    runs.iter().map(|r| m.width(&r.text, &run_font(font, r), size * r.scale)).sum()
+fn segments_width(m: &dyn TextMeasurer, segments: &[Segment], font: &Font, size: f64) -> f64 {
+    segments
+        .iter()
+        .map(|segment| match segment {
+            Segment::Text(r) => m.width(&r.text, &run_font(font, r), size * r.scale),
+            Segment::Pair { sub, sup } => segments_width(m, sub, font, size).max(segments_width(m, sup, font, size)),
+        })
+        .sum()
+}
+
+/// Visits glyph runs at local horizontal offsets. Both script branches begin at the same column;
+/// painting the upper branch first matches Origin's vector output.
+fn visit_runs(
+    segments: &[Segment],
+    m: &dyn TextMeasurer,
+    font: &Font,
+    size: f64,
+    start: f64,
+    visit: &mut impl FnMut(&Run, f64),
+) {
+    let mut cursor = start;
+    for segment in segments {
+        match segment {
+            Segment::Text(run) => {
+                visit(run, cursor);
+                cursor += m.width(&run.text, &run_font(font, run), size * run.scale);
+            }
+            Segment::Pair { sub, sup } => {
+                visit_runs(sup, m, font, size, cursor, visit);
+                visit_runs(sub, m, font, size, cursor, visit);
+                cursor += segments_width(m, sub, font, size).max(segments_width(m, sup, font, size));
+            }
+        }
+    }
 }
 
 /// Width in points of marked-up `text` at `size` (the font's own size is not used).
 pub fn width(m: &dyn TextMeasurer, text: &str, font: &Font, size: f64) -> f64 {
-    runs_width(m, &markup::parse(text), font, size)
+    segments_width(m, &markup::segments(text), font, size)
 }
 
 /// Adds the runs of `text` to `items`. `(x, y)` is the anchor: the baseline
@@ -44,7 +76,7 @@ pub fn place(
     anchor: Anchor,
     rotate_ccw: f64,
 ) {
-    let runs = markup::parse(text);
+    let runs = markup::segments(text);
     if runs.is_empty() {
         return;
     }
@@ -62,22 +94,26 @@ pub fn place(
             rotate_ccw,
         })
     };
-    let single = runs.len() == 1 && runs[0].rise == 0.0;
-    if single {
+    let single_run = match runs.as_slice() {
+        [Segment::Text(run)] if run.rise == 0.0 => Some(run),
+        _ => None,
+    };
+    let single = single_run.is_some();
+    if let Some(run) = single_run {
         // One plain run: let the renderer align it with its own font metrics.
-        items.push(item(&runs[0], x, y, anchor));
-        if !runs[0].underline && !runs[0].strikeout {
+        items.push(item(run, x, y, anchor));
+        if !run.underline && !run.strikeout {
             return;
         }
     }
-    let total = runs_width(m, &runs, font, size);
-    let mut cursor = match anchor {
+    let total = segments_width(m, &runs, font, size);
+    let cursor = match anchor {
         Anchor::Start => 0.0,
         Anchor::Middle => -total / 2.0,
         Anchor::End => -total,
     };
     let (sin, cos) = rotate_ccw.to_radians().sin_cos();
-    for run in &runs {
+    visit_runs(&runs, m, font, size, cursor, &mut |run, cursor| {
         let dy = -run.rise * size;
         // Local frame: x along the text, y down. Rotate counter-clockwise on a y-down page.
         let px = x + cursor * cos + dy * sin;
@@ -108,6 +144,5 @@ pub fn place(
                 stroke: Some(Stroke::solid(font.color, metrics.thickness * run_size)),
             });
         }
-        cursor += width;
-    }
+    });
 }

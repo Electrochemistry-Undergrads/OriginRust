@@ -869,6 +869,49 @@ font. Native and Origin-companion saves retain the raw colour markup. The menu o
 bounded subset; broader/custom colour controls, inline family selection and combined-script
 insertion remain separate work.
 
+### 7.10 Paired subscript and superscript columns (T58 renderer)
+
+Origin's [escape-sequence reference](https://docs.originlab.com/origin-help/escape-sequences/)
+defines `\=(sub,sup)` and a literal comma via `\v(,)`. On 2026-11-16, Origin 2016 was
+measured with twenty quoted synthetic Arial labels at 24 pt, exported to EMF. Raw commands,
+records and extracted runs are in local `scratch/text-script-pairs/pairs-quoted.*`;
+four additional 12/24/48/72 pt controls are in `pair-sizes.*`. Unquoted commands containing
+`=` were rejected by LabTalk and provide **no paired-script evidence**. The private runner
+held the global reference mutex, refused any existing COM Origin, and closed only its own
+instance; every native run completed before renderer validation.
+
+Measured relative to the baseline and height of the surrounding run:
+
+- Both branches begin immediately after the preceding glyph at the same left edge.
+  The next ordinary glyph advances by the **maximum** of the two branch widths, with no
+  extra gap. For `P\=(1234,5)Q` and `P\=(1,2345)Q`, P advances 67 EMF units, the wider
+  branch 132, and Q begins 199 units after P in both cases. Equal branches advance once.
+- Branches use 60% of the surrounding size. Superscript is raised by 49% and subscript
+  lowered by 35%. At base heights 50, 100, 200 and 300 the upper shifts are -25, -49,
+  -98 and -147; lower shifts +18, +35, +70 and +105 (integer rounding). The renderer
+  retains fractional coordinates. These measurements apply to paired scripts; the
+  existing standalone `\+` / `\-` placement constants are unchanged.
+- The first comma outside balanced parentheses separates branches. `\v(1,2)` stays
+  intact in the lower branch; `\=(1,2,3)` renders lower `1` and upper `2,3`.
+  With no comma, all content is lower text. Either branch may be empty; both empty
+  produce no glyph and consume no width.
+- Each branch inherits its surrounding style and restores it afterwards. Native controls
+  cover bold/italic, red/blue, Symbol Greek, Courier New/Times New Roman and underline/
+  strikeout. The family test has lower width 72 and upper width 60, so Q follows 72.
+- Nested pairs scale again: `P\=(\=(1,2),3)Q` has 36%-size inner scripts, at baseline
+  offsets +56 and +6 against P; the other branch is at -49. Native EMF paints upper
+  before lower; the shared layout does likewise.
+
+The private parsed layout tree retains each paired column for width and placement;
+public `markup::parse` still returns styled runs in logical lower/upper order and
+`plain` returns their text without delimiters. Existing single-run native anchors,
+font fallback, colour and decoration paths remain in use. Nesting is bounded by the
+existing 24-level escape limit; deeper content and malformed unclosed groups keep
+Sheaf's existing tolerant parser convention, which was not measured in Origin.
+SVG glyph/stroke and font-independent stroke PNG goldens, exact scene geometry,
+rotation/anchors, effective-font width, EMF positions, EPS and PDF exercise this path.
+No editor insertion control, new project field, font backend or UI command is added.
+
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
 
 | Group | Plots | Priority |

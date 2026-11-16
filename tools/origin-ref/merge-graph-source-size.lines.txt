@@ -1,0 +1,155 @@
+newbook;
+string bk$ = %H;
+col(1) = data(1,10);
+col(2) = col(1)^2;
+wks.addcol(); col(3) = col(1)*3;
+wks.addcol(); col(4) = 100-col(1)^2;
+?wks.ncols
+?col(2)[3]
+plotxy iy:=[Book1]1!(1,2) plot:=200 ogl:=[<new name:=GA>];
+$page.name$
+?layer.nplots
+win -a Book1;
+plotxy iy:=[Book1]1!(1,3) plot:=200 ogl:=[<new name:=GB>];
+$page.name$
+win -a Book1;
+plotxy iy:=[Book1]1!(1,4) plot:=200 ogl:=[<new name:=GC>];
+$page.name$
+win -a GA;
+layer -s 1;
+layer.width=50;
+layer.height=50;
+win -a GB;
+layer -s 1;
+layer.width=50;
+layer.height=50;
+win -a GC;
+layer -s 1;
+layer.width=50;
+layer.height=50;
+?layer.width
+?layer.height
+type -a "CASE src50x50 2x2";
+merge_graph option:=project row:=2 col:=2;
+$page.name$
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE src50x50 3x3";
+merge_graph option:=project row:=3 col:=3;
+$page.name$
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE src50x50 3x1";
+merge_graph option:=project row:=3 col:=1;
+$page.name$
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE src50x50 1x3";
+merge_graph option:=project row:=1 col:=3;
+$page.name$
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+win -a GA;
+layer -s 1;
+layer.width=30;
+layer.height=30;
+win -a GB;
+layer -s 1;
+layer.width=30;
+layer.height=30;
+win -a GC;
+layer -s 1;
+layer.width=30;
+layer.height=30;
+?layer.width
+?layer.height
+type -a "CASE src30x30 2x2";
+merge_graph option:=project row:=2 col:=2;
+$page.name$
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE src30x30 3x3";
+merge_graph option:=project row:=3 col:=3;
+$page.name$
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE src30x30 3x1";
+merge_graph option:=project row:=3 col:=1;
+$page.name$
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE src30x30 1x3";
+merge_graph option:=project row:=1 col:=3;
+$page.name$
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+win -a GA;
+layer -s 1;
+layer.width=80;
+layer.height=40;
+win -a GB;
+layer -s 1;
+layer.width=80;
+layer.height=40;
+win -a GC;
+layer -s 1;
+layer.width=80;
+layer.height=40;
+?layer.width
+?layer.height
+type -a "CASE src80x40 2x2";
+merge_graph option:=project row:=2 col:=2;
+$page.name$
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE src80x40 3x3";
+merge_graph option:=project row:=3 col:=3;
+$page.name$
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE src80x40 3x1";
+merge_graph option:=project row:=3 col:=1;
+$page.name$
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;
+type -a "CASE src80x40 1x3";
+merge_graph option:=project row:=1 col:=3;
+$page.name$
+layer -s 1;
+?layer.width
+?layer.height
+?layer.factor
+win -cd %H;

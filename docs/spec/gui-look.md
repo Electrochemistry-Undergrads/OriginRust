@@ -109,6 +109,22 @@ bold [seen]. The horizontal divider can be dragged. Context menus [spec F].
   size of 22 for the default text [seen 2, `ax-title.png`, `opts-numfmt.png`]; the older note of 18
   pt in graphing.md is not what this installation shows. Tick label size was not read.
 
+### Existing command entry points (T63)
+
+Sheaf's Standard Duplicate button uses the active workbook or graph, even when a different
+Explorer row is selected, and is state-disabled without an active window. Explorer's window
+context Duplicate uses that clicked window, including a hidden one. Both call the existing
+Window > Duplicate operation, show and activate the copy, and create one undo step. Four UI
+regressions cover target identity, copies of empty/populated books and graphs, hidden windows,
+context cancellation and Undo/Redo; the existing Explorer and Window-menu tests also pass.
+
+The Plot > Statistics Probability Plot and Q-Q Plot entries remain unavailable, assigned to
+B8/T14 after the T63 C review. The published [plot_prob defaults](https://docs.originlab.com/x-function/ref/plot_prob/)
+include Blom scores and a 95% confidence band; Sheaf's existing descriptive-statistics tools
+use Filliben positions and lack that band control. Their dispatch cannot establish equivalent
+Plot-menu behavior. The existing tools remain documented in statistics section 16; no new
+Origin 2016 numeric measurement was made by this entry-point review.
+
 ## 2. Child windows
 
 Pictures: `gr-plain.png`, `grc-page.png`, `rc-titlebar.png`; second study `graph2-plain.png`,
@@ -488,6 +504,28 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
   warns "N cell note(s) are not written"; the `.opj.sheaf` companion keeps them), CSV and Excel export.
 - **Left out.** Notes window, rich text, `@NCP`, Mini Toolbar button, hovering only on the tab, notes
   on labels/headers.
+
+### Cell formatting (T59)
+
+Origin facts known: Format Cells is on the cell, column-header and row-number context menus,
+Format > Cell... and Format > Worksheet... (F4) exist, Set Data Style > Default is on the cell
+menu, Ctrl+U underlines a selected column, the X-Function is `wcellformat`. Not measured: the
+Format Cells controls and defaults, Apply-to choices, Format > Worksheet's scope, Set Data Style,
+manual versus conditional precedence, sort behaviour and `.opj` storage.
+
+Sheaf (all unmeasured choices): the **Format Cells** window (cell/column/row menus, Format > Cell...)
+shows Font (Default or an installed family), Size (0 = Default), Bold/Italic/Underline, Use color
+with a Text Color button, Use fill with a Fill Color button, Horizontal Default/Left/Center/Right,
+Clear Formats, OK, Cancel, Apply (Apply enabled once something changed). It starts from the first
+selected cell and applies only what the user changed; OK and Apply are one undo step each ("Format
+cells"), Cancel and the close box are inert, Clear Formats is one step ("Clear formats"). With a
+label cell selected it formats that label row of the column. Format > Worksheet... and Set Data
+Style > Default stay grey: the worksheet-wide scope and the style are not measured. The row height
+stays 16 px whatever the size; the grid draws bold by painting the text twice (egui has no bold
+face) and maps fonts to egui's monospace family when the name says so, else proportional (installed
+fonts in the grid are a leftover). Print, worksheet images and PDF use the real family, size
+scaled by printed font / 12, italic, underline (a line under the text), colours, fills and
+alignment; they also show conditional colours. Model and rules: workbook-model.md 13b.
 
 ## 4. Graph window
 
@@ -969,7 +1007,7 @@ unlisted windows belong to root. Added ranges survive scope changes. The browser
 Current Sheet each time; preferences are not saved. The parent remains open on browser Cancel
 or Escape. Five UI regressions cover return/apply, cross-book position mapping, Cancel/Escape,
 multiple ranges/Remove and edited/reset references. A fixture covers sheet/book/folder/recursive
-scopes, including unlisted root books. Exclude remains unimplemented and disabled.
+scopes, including unlisted root books. Exclude is covered by the later follow-up below.
 
 The top-table selection follow-up (`re-workspace/scratch/t02-browser-selection/origin/` and
 `verified/`) has nine valid isolated Origin cases, including a final Current Sheet restore.
@@ -1029,8 +1067,31 @@ stays attached to its added range when another lower row is removed. Enter accep
 without toggling Entire Column(s), and respects a focused Cancel button. Ten additional UI
 regressions cover row transfer/end mapping, sheet bounds, reversed and numeric inputs, refusal,
 Cancel/Escape/reopening, whole-column reset, empty columns, keyboard focus and block association.
-The browser's Exclude control and saved preferences remain open; these row choices stay local
+Saved preferences remain open; these row choices stay local
 to the open dialog and create no document edit or undo entry.
+
+The Exclude follow-up (`re-workspace/scratch/t02-browser-exclude/`, `verified/`) records ten
+valid isolated Origin 2016 cases on the same four-column fixture. Exclude starts disabled with
+no upper selection. It removes only selected entries from the upper list: excluding B retains
+the distinct D with the same long name and selects C, whose displayed index remains 3. Excluding
+the final D also selects C. For Ctrl-selected A and C, both click orders remove A/C and select B.
+Selection therefore follows the first removed list position, clamped to the final remaining row.
+Excluding every column leaves the table empty and Add/Exclude disabled. Changing scope restores
+all columns and clears the selection; cancelling and reopening the browser also restores them.
+
+An already-added B remains in the lower table after excluding upper B; browser OK transfers B,
+and parent Row 0 still reaches original B2. With B excluded, selecting visible A/C/D keeps Add as
+One Block disabled because the original worksheet columns are not consecutive. Ordinary Add
+still adds those three columns individually. All valid cases retain four worksheet columns and
+the original B/C values; Cancel preserves C7, while choosing the nearest C with parent Row 0
+reaches C6. The failed first follow-up batch left the browser open after an Escape sequence and
+ended at its own instance watchdog; it is excluded. The seven repeated cases use fresh instances
+and explicit Cancel buttons, and the final capture restores Current Sheet.
+
+Sheaf now implements these temporary exclusions, nearest-row selection, original column ordinals,
+scope/reopen reset and independent lower ranges. Seven UI regressions cover both single-row
+positions, duplicate names, both multi-selection orders, all-column removal, scope/reopen reset,
+already-added ranges and gapped block refusal, with unchanged project data and history.
 
 Sheaf's Go To now follows the measured input order/focus, right-aligned OK/Cancel and optional-coordinate, zero/end,
 extension and clamping behavior. Its capacity remains data length plus 30 spare view rows;

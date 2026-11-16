@@ -10,10 +10,13 @@ use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
 mod autosave;
+mod cell_format;
 mod cell_notes;
 mod comparison_plot;
 mod cond_format;
+mod duplicate_entries;
 mod excel;
+mod export_themes;
 mod fill_inclusive;
 mod fill_sidelines;
 mod frozen_panes;
@@ -22,9 +25,11 @@ mod hexbin;
 mod import_themes;
 mod label_frames;
 mod label_whiteout;
+mod layers;
 mod legend_position;
 mod live;
 mod lollipop;
+mod multi_y;
 mod offset_multipliers;
 mod parallel;
 mod recent;
@@ -204,11 +209,11 @@ fn a_data_file_given_at_start_is_imported_and_plotted() {
     assert_eq!(graph.layers[0].plots.len(), 2, "both Y columns are plotted");
     assert!(h.state().doc.dirty);
     // Both windows are listed in the project explorer ...
-    assert_eq!(h.query_all_by_label("Book1 - sample").count(), 1);
+    assert_eq!(h.query_all_by_label("Book1 - sample.csv").count(), 1);
     assert_eq!(h.query_all_by_label("Graph1 - sample").count(), 1);
     // ... and are open as child windows of the workspace, each with its own title bar.
     assert_eq!(h.state().workspace.shown().len(), 2);
-    assert!(h.query_by_label("Title Book1 - sample").is_some());
+    assert!(h.query_by_label("Title Book1 - sample.csv").is_some());
     assert!(h.query_by_label("Title Graph1 - sample").is_some());
 }
 
@@ -255,7 +260,7 @@ fn undo_and_redo_are_reachable_with_the_mouse_when_no_window_is_open() {
 #[test]
 fn selecting_a_column_header_and_plotting_it_makes_a_graph_of_that_column() {
     let mut h = start(vec![data_file("plot")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "C(Y1)");
     let book = project(&h).workbooks().next().unwrap().id;
     let c = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().id;
@@ -271,7 +276,7 @@ fn selecting_a_column_header_and_plotting_it_makes_a_graph_of_that_column() {
 #[test]
 fn double_click_edits_a_cell_and_enter_stores_the_value() {
     let mut h = start(vec![data_file("edit")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let cell = grid_text(&h, "4.5");
     cell.click();
     cell.click();
@@ -289,7 +294,7 @@ fn double_click_edits_a_cell_and_enter_stores_the_value() {
 #[test]
 fn enter_then_clicking_elsewhere_leaves_the_next_cell_alone() {
     let mut h = start(vec![data_file("enter")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let cell = grid_text(&h, "4.5");
     cell.click();
     cell.click();
@@ -300,7 +305,7 @@ fn enter_then_clicking_elsewhere_leaves_the_next_cell_alone() {
     assert!(book_ui(&h).editing.is_none());
     assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 2), end: (1, 2) });
     // Click somewhere else to leave the editor.
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     h.key_press(egui::Key::Tab);
     settle(&mut h);
     assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
@@ -322,7 +327,7 @@ fn editing_a_cell_starts_from_the_full_precision_value_and_unchanged_text_stores
     )
     .unwrap();
     let mut h = start(vec![path]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let shown = project(&h).workbooks().next().unwrap().sheet().column_by_name("B").unwrap().shown_text(0);
     assert_ne!(shown, "0.1234567891234", "the grid shows a rounded value");
     let cell = grid_text(&h, &shown);
@@ -346,7 +351,7 @@ fn editing_a_cell_starts_from_the_full_precision_value_and_unchanged_text_stores
 #[test]
 fn the_column_menu_changes_the_designation() {
     let mut h = start(vec![data_file("designation")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     right_click_text(&mut h, "C(Y1)");
     menu_path(&mut h, &["Set As", "Y Error"]);
     let book = project(&h).workbooks().next().unwrap();
@@ -364,7 +369,7 @@ fn choose_recalc(h: &mut Harness<'static, SheafApp>, from: &str, to: &str) {
 #[test]
 fn set_column_values_fills_the_column_from_a_formula() {
     let mut h = start(vec![data_file("formula")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     right_click_text(&mut h, "C(Y1)");
     click_containing(&mut h, "Set Column Values...");
     h.event(egui::Event::Text("col(B)*2 + i".to_string()));
@@ -389,7 +394,7 @@ fn set_column_values_fills_the_column_from_a_formula() {
 #[test]
 fn an_auto_column_follows_an_edited_source_cell_and_a_manual_one_waits_to_be_recalculated() {
     let mut h = start(vec![data_file("recalc")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     // C = col(B)*2, set to recalculate automatically.
     right_click_text(&mut h, "C(Y1)");
     click_containing(&mut h, "Set Column Values...");
@@ -648,7 +653,7 @@ fn the_stack_tab_has_origins_offset_choices_and_auto_gap() {
     {
         assert!(has_label(&h, label), "{label}");
     }
-    assert!(is_disabled(&h, "Cumulative") && is_disabled(&h, "Show Connect Line on Stacked Column/Bar"));
+    assert!(!is_disabled(&h, "Cumulative") && is_disabled(&h, "Show Connect Line on Stacked Column/Bar"));
     h.get(By::new().role(egui::accesskit::Role::RadioButton).label("Auto")).click();
     settle(&mut h);
     click(&mut h, "OK");
@@ -756,7 +761,7 @@ fn a_dropped_data_file_goes_through_the_import_window() {
 fn deleting_a_workbook_removes_its_plots_and_can_be_undone() {
     let mut h = start(vec![data_file("delete")]);
     // The context menu of the workbook in the project explorer.
-    right_click(&mut h, "Book1 - sample");
+    right_click(&mut h, "Book1 - sample.csv");
     click(&mut h, "Delete");
     assert_eq!(project(&h).workbooks().count(), 0);
     assert_eq!(project(&h).graphs().next().unwrap().layers[0].plots.len(), 0);
@@ -1371,7 +1376,7 @@ fn print_preview_of_a_workbook_pages_through_the_sheet() {
     }
     std::fs::write(&path, text).unwrap();
     let mut h = start(vec![path]);
-    show_window(&mut h, "Book1 - long");
+    show_window(&mut h, "Book1 - long.csv");
     menu_path(&mut h, &["File", "Print Preview"]);
     assert!(h.state().print_preview.is_some(), "Print Preview is open for the workbook");
     // Letter portrait, 1 inch margins: 49 body rows per page, so 120 rows are 3 pages.
@@ -1618,7 +1623,7 @@ fn export_graphs_tiff_palette_and_compression_choices_write_indexed_files() {
 #[test]
 fn integrate_ranges_runs_from_the_analysis_menu_with_two_ranges() {
     let mut h = start(vec![data_file("ranges")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Mathematics", "Integrate Ranges..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "Add range");
@@ -1638,7 +1643,7 @@ fn integrate_ranges_runs_from_the_analysis_menu_with_two_ranges() {
 fn subtract_reference_data_runs_from_the_analysis_menu_in_one_undo_step() {
     let mut h = start(vec![data_file("subref-a"), data_file("subref-b")]);
     assert_eq!(project(&h).workbooks().count(), 2);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Data Manipulation", "Subtract Reference Data..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -1662,7 +1667,7 @@ fn subtract_reference_data_runs_from_the_analysis_menu_in_one_undo_step() {
 #[test]
 fn simple_math_with_a_constant_adds_a_column_for_each_y_column() {
     let mut h = start(vec![data_file("math")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Mathematics", "Simple Curve Math..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     // With no other column to use as reference the operand is the constant, 1 for a start.
@@ -1677,7 +1682,7 @@ fn simple_math_with_a_constant_adds_a_column_for_each_y_column() {
 #[test]
 fn simple_column_math_adds_ten_into_the_input_columns_as_origin() {
     let mut h = start(vec![data_file("colmath")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let before: Vec<Vec<f64>> =
         project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.numeric().unwrap().to_vec()).collect();
     menu_path(&mut h, &["Analysis", "Mathematics", "Simple Column Math..."]);
@@ -1700,7 +1705,7 @@ fn simple_column_math_adds_ten_into_the_input_columns_as_origin() {
 fn convolution_and_correlation_open_from_signal_processing_and_write_a_new_sheet() {
     for (item, prefix, rows) in [("Convolution...", "Convolution", 7), ("Correlation...", "Correlation", 7)] {
         let mut h = start(vec![data_file("signal")]);
-        show_window(&mut h, "Book1 - sample");
+        show_window(&mut h, "Book1 - sample.csv");
         menu_path(&mut h, &["Analysis", "Signal Processing", item]);
         assert!(h.state().analysis.is_some(), "the {item} window is open");
         // The first Y column is the second signal (an input may be used: autocorrelation).
@@ -1715,7 +1720,7 @@ fn convolution_and_correlation_open_from_signal_processing_and_write_a_new_sheet
 #[test]
 fn fft_opens_from_signal_processing_and_writes_a_spectrum_sheet() {
     let mut h = start(vec![data_file("fft")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Signal Processing", "FFT", "FFT..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -1729,7 +1734,7 @@ fn fft_opens_from_signal_processing_and_writes_a_spectrum_sheet() {
 #[test]
 fn ifft_opens_from_signal_processing_and_takes_the_next_column_as_the_imaginary_part() {
     let mut h = start(vec![data_file("ifft")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Signal Processing", "FFT", "IFFT..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -1743,7 +1748,7 @@ fn ifft_opens_from_signal_processing_and_takes_the_next_column_as_the_imaginary_
 #[test]
 fn decimation_opens_from_signal_processing_and_writes_the_kept_points_to_a_new_sheet() {
     let mut h = start(vec![data_file("decimate")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Signal Processing", "Decimation..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -1758,7 +1763,7 @@ fn decimation_opens_from_signal_processing_and_writes_the_kept_points_to_a_new_s
 #[test]
 fn fft_filters_open_from_signal_processing_and_add_a_column_per_input() {
     let mut h = start(vec![data_file("fftfilter")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Signal Processing", "FFT Filters..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -1786,7 +1791,7 @@ fn long_data_file(tag: &str) -> PathBuf {
 #[test]
 fn iir_filter_opens_from_signal_processing_and_adds_a_column_per_input() {
     let mut h = start(vec![data_file("iirfilter")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Signal Processing", "IIR Filter..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -1800,7 +1805,7 @@ fn iir_filter_opens_from_signal_processing_and_adds_a_column_per_input() {
 #[test]
 fn fir_filter_opens_from_signal_processing_and_adds_a_column_per_input() {
     let mut h = start(vec![long_data_file("firfilter")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Signal Processing", "FIR Filter..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -1833,7 +1838,7 @@ fn envelope_opens_from_signal_processing_and_puts_its_curves_in_a_new_sheet() {
     }
     std::fs::write(&path, text).unwrap();
     let mut h = start(vec![path]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Signal Processing", "Envelope..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -1847,7 +1852,7 @@ fn envelope_opens_from_signal_processing_and_puts_its_curves_in_a_new_sheet() {
 #[test]
 fn coherence_opens_from_signal_processing_and_writes_a_new_sheet() {
     let mut h = start(vec![data_file("coherence")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Signal Processing", "Coherence..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -1862,7 +1867,7 @@ fn coherence_opens_from_signal_processing_and_writes_a_new_sheet() {
 #[test]
 fn trace_interpolation_opens_from_mathematics_and_writes_a_sheet_with_its_own_x() {
     let mut h = start(vec![data_file("traceinterp")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Mathematics", "Trace Interpolation..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -1877,7 +1882,7 @@ fn trace_interpolation_opens_from_mathematics_and_writes_a_sheet_with_its_own_x(
 #[test]
 fn hilbert_transform_opens_from_signal_processing_and_adds_a_column_per_input() {
     let mut h = start(vec![data_file("hilbert")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Signal Processing", "Hilbert Transform..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -1890,7 +1895,7 @@ fn hilbert_transform_opens_from_signal_processing_and_adds_a_column_per_input() 
 #[test]
 fn level_crossing_opens_from_mathematics_and_lists_the_crossings() {
     let mut h = start(vec![data_file("levelx")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Mathematics", "Level Crossing..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -1907,7 +1912,7 @@ fn level_crossing_opens_from_mathematics_and_lists_the_crossings() {
 fn level_crossing_matches_origins_numbers_and_optional_outputs() {
     let data = csv_file("levelcross", "wave", "x,y\n0,0\n1,2\n2,4\n3,1\n4,-1\n5,-2\n6,1\n7,1\n8,3\n9,0.5\n10,2\n");
     let mut h = start(vec![data]);
-    show_window(&mut h, "Book1 - wave");
+    show_window(&mut h, "Book1 - wave.csv");
     menu_path(&mut h, &["Analysis", "Mathematics", "Level Crossing..."]);
     h.state_mut().analysis.as_mut().unwrap().set_crossing_level(1.5);
     click(&mut h, "Also output directions, X indices and Y crossing values");
@@ -1966,7 +1971,7 @@ fn column_properties_switch_a_date_time_column_to_a_date_only_format() {
     h.input_mut().dropped_files.push(egui::DroppedFile { path: Some(date_file("dates-props")), ..Default::default() });
     settle(&mut h);
     click(&mut h, "OK");
-    show_window(&mut h, "Book1 - icp");
+    show_window(&mut h, "Book1 - icp.csv");
     // The long menu of a column head needs a tall window to show all its items.
     h.set_size(egui::vec2(1280.0, 1400.0));
     settle(&mut h);
@@ -1987,7 +1992,7 @@ fn column_properties_switch_a_date_time_column_to_a_date_only_format() {
 #[test]
 fn the_import_window_appends_columns_to_the_active_sheet_and_reads_thousands_separators() {
     let mut h = start(vec![data_file("modes")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     // A second file, tab separated, with thousands separators in the first column.
     let more = data_file("modes").with_file_name("more.txt");
     std::fs::write(&more, "w\tz\n1,000.5\t1\n2,000.5\t2\n3,000.5\t3\n4,000.5\t4\n").unwrap();
@@ -2068,7 +2073,7 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     }
     std::fs::write(&path, text).unwrap();
     let mut h = start(vec![path]);
-    show_window(&mut h, "Book1 - peaks");
+    show_window(&mut h, "Book1 - peaks.csv");
     menu_path(&mut h, &["Analysis", "Peaks and Baseline", "Peak Analyzer..."]);
     assert!(h.state().analysis.is_some(), "the Peak Analyzer window is open");
     // Origin's wizard: the pages of the goal Integrate Peaks, Prev and Next.
@@ -2121,7 +2126,7 @@ fn peak_analyzer_fits_the_found_peaks_with_voigt() {
     }
     std::fs::write(&path, text).unwrap();
     let mut h = start(vec![path]);
-    show_window(&mut h, "Book1 - peaks");
+    show_window(&mut h, "Book1 - peaks.csv");
     menu_path(&mut h, &["Analysis", "Peaks and Baseline", "Peak Analyzer..."]);
     h.get_by_label("Fit Peaks").scroll_to_me();
     settle(&mut h);
@@ -2334,7 +2339,7 @@ fn clicking_a_window_makes_it_the_active_one_and_brings_it_to_the_front() {
     let mut h = start(vec![data_file("activate")]);
     let (book, graph) = window_ids(&h);
     assert_eq!(h.state().active, Some(graph), "the newest window is active");
-    click(&mut h, "Title Book1 - sample");
+    click(&mut h, "Title Book1 - sample.csv");
     assert_eq!(h.state().active, Some(book));
     assert_eq!(h.state().workspace.shown().last(), Some(&book), "and on top of the stack");
     assert_eq!(bar_names(&h).get(4).map(String::as_str), Some("Column"), "the workbook's menu bar");
@@ -2414,8 +2419,8 @@ fn a_million_row_workbook_scrolls_quickly_inside_a_window() {
     let mut h = start(vec![path]);
     assert_eq!(project(&h).workbooks().next().unwrap().sheet().row_count(), 1_000_000);
     // Scroll with the mouse wheel over the cells of the workbook, frame after frame.
-    click(&mut h, "Title Book1 - big");
-    let at = h.get_by_label("Title Book1 - big").rect().center() + egui::vec2(0.0, 120.0);
+    click(&mut h, "Title Book1 - big.csv");
+    let at = h.get_by_label("Title Book1 - big.csv").rect().center() + egui::vec2(0.0, 120.0);
     h.event(egui::Event::PointerMoved(at));
     let frames = 30;
     let started = std::time::Instant::now();
@@ -2489,17 +2494,17 @@ fn activating_a_workbook_and_then_a_graph_swaps_the_menu_bar() {
     let mut h = start(vec![data_file("bars")]);
     // The graph was made last and is active.
     assert_eq!(bar_names(&h), GRAPH_BAR);
-    click(&mut h, "Title Book1 - sample");
+    click(&mut h, "Title Book1 - sample.csv");
     assert_eq!(bar_names(&h), WORKBOOK_BAR);
     // The graph's title bar is partly under the workbook: use the Window menu.
     menu_path(&mut h, &["Window", "2 Graph1 - sample"]);
     assert_eq!(bar_names(&h), GRAPH_BAR);
     // Closing every window leaves the short bar.
     click(&mut h, "Close Graph1 - sample");
-    click(&mut h, "Close Book1 - sample");
+    click(&mut h, "Close Book1 - sample.csv");
     assert_eq!(bar_names(&h), NO_WINDOW_BAR);
     // An open window brings its own bar back.
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     assert_eq!(bar_names(&h), WORKBOOK_BAR);
 }
 
@@ -2518,7 +2523,7 @@ fn assert_reachable(h: &mut Harness<'static, SheafApp>, path: &[&str]) {
 #[test]
 fn every_command_of_a_workbook_is_reachable_from_its_origin_menu() {
     let mut h = start(vec![data_file("reach-book")]);
-    click(&mut h, "Title Book1 - sample");
+    click(&mut h, "Title Book1 - sample.csv");
     click_text(&mut h, "C(Y1)");
     let paths: &[&[&str]] = &[
         &["File", "New", "Project"],
@@ -2610,7 +2615,7 @@ fn every_command_of_a_graph_is_reachable_from_its_origin_menu() {
 #[test]
 fn menu_items_sheaf_lacks_are_greyed_with_origins_name_and_a_tooltip() {
     let mut h = start(vec![data_file("grey")]);
-    click(&mut h, "Title Book1 - sample");
+    click(&mut h, "Title Book1 - sample.csv");
     menu_path(&mut h, &["Plot", "Column/Bar/Pie"]);
     assert!(entry_enabled(&h, "Stacked Column"), "stacked columns exist now");
     for live in ["Stacked Bar", "100% Stacked Bar", "Floating Bar"] {
@@ -2635,7 +2640,7 @@ fn menu_items_sheaf_lacks_are_greyed_with_origins_name_and_a_tooltip() {
 #[test]
 fn a_command_that_needs_a_selection_is_greyed_until_a_column_is_selected() {
     let mut h = start(vec![data_file("needs")]);
-    click(&mut h, "Title Book1 - sample");
+    click(&mut h, "Title Book1 - sample.csv");
     click(&mut h, "Column");
     assert!(!entry_enabled(&h, "Set Column Values... Ctrl+Q"), "no column is selected");
     close_menus(&mut h);
@@ -2651,10 +2656,10 @@ fn window_menu_lists_the_windows_in_order_and_choosing_one_activates_it() {
     assert_eq!(h.state().active, Some(graph));
     click(&mut h, "Window");
     // Numbered in project order; the active window (the graph) is the one the tick is drawn at.
-    assert!(h.query_by_label("1 Book1 - sample").is_some());
+    assert!(h.query_by_label("1 Book1 - sample.csv").is_some());
     assert!(h.query_by_label("2 Graph1 - sample").is_some());
     assert_eq!(h.state().menu_context().active, Some(graph));
-    h.get_by_label("1 Book1 - sample").click();
+    h.get_by_label("1 Book1 - sample.csv").click();
     settle(&mut h);
     assert_eq!(h.state().active, Some(book), "choosing a window in the list activates it");
     assert_eq!(bar_names(&h), WORKBOOK_BAR);
@@ -2665,22 +2670,22 @@ fn cascade_and_tile_arrange_the_windows() {
     let mut h = start(vec![data_file("tile")]);
     let rect = |h: &Harness<'static, SheafApp>, title: &str| h.get_by_label(&format!("Title {title}")).rect();
     menu_path(&mut h, &["Window", "Tile Vertically"]);
-    let (a, b) = (rect(&h, "Book1 - sample"), rect(&h, "Graph1 - sample"));
+    let (a, b) = (rect(&h, "Book1 - sample.csv"), rect(&h, "Graph1 - sample"));
     assert!((a.min.y - b.min.y).abs() < 1.0, "side by side: same top");
     assert!(a.max.x <= b.min.x + 8.0 || b.max.x <= a.min.x + 8.0, "and not on each other: {a:?} {b:?}");
     menu_path(&mut h, &["Window", "Tile Horizontally"]);
-    let (a, b) = (rect(&h, "Book1 - sample"), rect(&h, "Graph1 - sample"));
+    let (a, b) = (rect(&h, "Book1 - sample.csv"), rect(&h, "Graph1 - sample"));
     assert!((a.min.x - b.min.x).abs() < 1.0, "one above the other: same left edge");
     assert!((a.min.y - b.min.y).abs() > 100.0);
     menu_path(&mut h, &["Window", "Cascade"]);
-    let (a, b) = (rect(&h, "Book1 - sample"), rect(&h, "Graph1 - sample"));
+    let (a, b) = (rect(&h, "Book1 - sample.csv"), rect(&h, "Graph1 - sample"));
     assert!(((b.min - a.min).x - 26.0).abs() < 1.0 && ((b.min - a.min).y - 26.0).abs() < 1.0, "{a:?} {b:?}");
 }
 
 #[test]
 fn origins_keys_run_the_commands_they_belong_to() {
     let mut h = start(vec![data_file("keys2")]);
-    click(&mut h, "Title Book1 - sample");
+    click(&mut h, "Title Book1 - sample.csv");
     click_text(&mut h, "C(Y1)");
     // Ctrl+Q is Set Column Values ...
     h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Q);
@@ -2708,7 +2713,7 @@ fn origins_keys_run_the_commands_they_belong_to() {
 #[test]
 fn alt_and_the_underlined_letter_opens_a_top_level_menu() {
     let mut h = start(vec![data_file("alt")]);
-    click(&mut h, "Title Book1 - sample");
+    click(&mut h, "Title Book1 - sample.csv");
     h.key_press_modifiers(egui::Modifiers::ALT, egui::Key::F);
     settle(&mut h);
     assert!(h.query_by_label("Save Project Ctrl+S").is_some(), "Alt+F opens File");
@@ -2800,7 +2805,7 @@ fn sheet<'a>(h: &'a Harness<'static, SheafApp>) -> &'a sheaf_core::Worksheet {
 fn cell_regression_table(imported: bool, tag: &str) -> Harness<'static, SheafApp> {
     if imported {
         let mut h = start(vec![data_file(tag)]);
-        show_window(&mut h, "Book1 - sample");
+        show_window(&mut h, "Book1 - sample.csv");
         h
     } else {
         let mut h = start(Vec::new());
@@ -3050,7 +3055,7 @@ fn ctrl(h: &mut Harness<'static, SheafApp>, key: egui::Key) {
 #[test]
 fn clicking_headers_selects_columns_rows_and_everything_and_dragging_selects_a_block() {
     let mut h = start(vec![data_file("select")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let (a, b, c) = (column_id(&h, "A"), column_id(&h, "B"), column_id(&h, "C"));
 
     // A click on a column name selects the column; Ctrl extends by one, Shift by a range.
@@ -3106,7 +3111,7 @@ fn clicking_headers_selects_columns_rows_and_everything_and_dragging_selects_a_b
 #[test]
 fn copy_gives_tab_separated_text_and_paste_puts_it_back_in_one_undo_step() {
     let mut h = start(vec![data_file("copypaste")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     select_block(&mut h, "2.5", "20.5");
     ctrl(&mut h, egui::Key::C);
     assert_eq!(h.state().copied, "2.5\t30.5\n4.5\t20.5\n");
@@ -3180,7 +3185,7 @@ fn plain_copy_and_copy_full_precision_both_write_every_digit() {
     let path = dir.join("sample.csv");
     std::fs::write(&path, "t,v\n1,0.1234567891234\n2,5\n").unwrap();
     let mut h = start(vec![path]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "B(Y1)");
     ctrl(&mut h, egui::Key::C);
     assert_eq!(
@@ -3197,7 +3202,7 @@ fn plain_copy_and_copy_full_precision_both_write_every_digit() {
 #[test]
 fn paste_that_is_larger_than_the_sheet_adds_rows_and_columns_with_numbers_and_text() {
     let mut h = start(vec![data_file("grow")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     // The last cell of column B: a 2 x 3 block runs past the last row and the last column.
     click_text(&mut h, "8.5");
     paste(&mut h, "5\t6\t7\n8\t9\t10\n");
@@ -3237,7 +3242,7 @@ fn paste_that_is_larger_than_the_sheet_adds_rows_and_columns_with_numbers_and_te
 #[test]
 fn delete_clears_the_selected_cells_and_cut_also_copies_each_in_one_undo_step() {
     let mut h = start(vec![data_file("clear")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     select_block(&mut h, "2.5", "20.5");
     h.key_press(egui::Key::Delete);
     settle(&mut h);
@@ -3271,7 +3276,7 @@ fn delete_clears_the_selected_cells_and_cut_also_copies_each_in_one_undo_step() 
 #[test]
 fn a_calculated_column_is_left_alone_by_clear_and_paste() {
     let mut h = start(vec![data_file("locked")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     right_click_text(&mut h, "C(Y1)");
     click_containing(&mut h, "Set Column Values...");
     h.event(egui::Event::Text("col(B)*2".to_string()));
@@ -3287,7 +3292,7 @@ fn a_calculated_column_is_left_alone_by_clear_and_paste() {
 #[test]
 fn double_clicking_a_label_cell_edits_it_in_place_as_one_undo_step() {
     let mut h = start(vec![data_file("labels")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     // The cell under the column name in the Long Name row, then Units and Comments.
     let x = text_pos(&h, "B(Y1)").x;
     for (title, text) in [("Long Name", "Signal"), ("Units", "mA"), ("Comments", "Scan 1")] {
@@ -3325,7 +3330,7 @@ fn double_clicking_a_label_cell_edits_it_in_place_as_one_undo_step() {
 #[test]
 fn a_user_parameter_gets_a_label_row_with_its_name_and_the_head_shows_designation_and_group() {
     let mut h = start(vec![data_file("params")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     // Heads: "A(X1)" is the X column, the Y columns after it belong to the same data set.
     for head in ["A(X1)", "B(Y1)", "C(Y1)"] {
         grid_text(&h, head);
@@ -3350,7 +3355,7 @@ fn a_user_parameter_gets_a_label_row_with_its_name_and_the_head_shows_designatio
 #[test]
 fn the_lock_mark_shows_the_recalculate_mode_and_the_state_of_a_formula_column() {
     let mut h = start(vec![data_file("lock")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     assert!(h.query_by_label_contains("Lock of column").is_none(), "no lock without a formula");
     right_click_text(&mut h, "C(Y1)");
     click_containing(&mut h, "Set Column Values...");
@@ -3373,7 +3378,7 @@ fn assert_in_order(h: &Harness<'static, SheafApp>, names: &[&str]) {
 fn the_column_header_menu_has_origins_items_in_origins_order_and_runs_them() {
     let mut h = start(vec![data_file("headmenu")]);
     h.set_size(egui::vec2(1280.0, 1400.0));
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     right_click_text(&mut h, "C(Y1)");
     assert_eq!(book_ui(&h).selected, vec![column_id(&h, "C")], "right-clicking selects the column first");
     assert_in_order(
@@ -3466,7 +3471,7 @@ fn the_column_header_menu_has_origins_items_in_origins_order_and_runs_them() {
 fn the_cell_and_row_menus_copy_and_clear_and_grey_what_sheaf_lacks() {
     let mut h = start(vec![data_file("cellmenu")]);
     h.set_size(egui::vec2(1280.0, 1400.0));
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     right_click_text(&mut h, "6.5");
     assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 2), end: (1, 2) }, "right-clicking selects the cell");
     assert_in_order(
@@ -3514,7 +3519,7 @@ fn right_click_tab(h: &mut Harness<'static, SheafApp>, name: &str) {
 #[test]
 fn the_sheet_tab_menu_adds_duplicates_renames_and_deletes_sheets() {
     let mut h = start(vec![data_file("tabs")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let first = sheet(&h).name.clone();
     right_click_tab(&mut h, &first);
     assert_in_order(
@@ -3584,7 +3589,7 @@ fn the_sheet_tab_menu_adds_duplicates_renames_and_deletes_sheets() {
 #[test]
 fn the_corner_menu_lists_the_grid_switches_greyed() {
     let mut h = start(vec![data_file("corner")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let title_x = text_pos(&h, "Long Name").x;
     let at = egui::pos2(title_x, text_pos(&h, "A(X1)").y);
     h.event(egui::Event::PointerMoved(at));
@@ -3620,7 +3625,7 @@ fn the_grid_shows_five_decimals_and_blank_for_missing_values() {
     let path = dir.join("sample.csv");
     std::fs::write(&path, "t,v\n1,0.841470984807897\n2,\n3,-0.7568\n").unwrap();
     let mut h = start(vec![path]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     grid_text(&h, "0.84147");
     grid_text(&h, "-0.7568");
     assert!(h.query_all(By::new().role(egui::accesskit::Role::Label).value("--")).next().is_none());
@@ -3641,7 +3646,7 @@ fn bar_button_shown(h: &Harness<'static, SheafApp>, bar: &str, tip: &str) -> boo
 #[test]
 fn clicking_line_in_the_2d_graphs_bar_with_a_column_selected_makes_a_line_graph() {
     let mut h = start(vec![data_file("tb-line")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "C(Y1)");
     let c = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().id;
     let before = project(&h).graphs().count();
@@ -3680,7 +3685,7 @@ fn ctrl_t_opens_the_toolbars_window() {
 #[test]
 fn greyed_toolbar_buttons_do_nothing_and_enabled_ones_follow_the_selection() {
     let mut h = start(vec![data_file("tb-grey")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let windows = project(&h).windows.len();
     // Stacked Area is a 2D type Sheaf lacks: greyed, a click changes nothing.
     assert!(bar_button!(h, "2D Graphs", "Stacked Area").accesskit_node().is_disabled());
@@ -3735,20 +3740,20 @@ fn the_explorer_slides_out_when_the_mouse_is_on_its_tab_and_goes_when_the_mouse_
     let mut h = start_auto_hide(vec![data_file("hover")]);
     // At rest only the vertical tab names are on screen, not the rows.
     assert!(h.query_by_label("Project Explorer tab").is_some());
-    assert!(h.query_by_label("Book1 - sample").is_none());
+    assert!(h.query_by_label("Book1 - sample.csv").is_none());
     assert_eq!(h.state().panels.flyout(), None);
     h.get_by_label("Project Explorer tab").hover();
     settle(&mut h);
     assert_eq!(h.state().panels.flyout(), Some(PanelId::Explorer));
-    assert!(h.query_by_label("Book1 - sample").is_some(), "the window list is shown");
+    assert!(h.query_by_label("Book1 - sample.csv").is_some(), "the window list is shown");
     assert!(h.query_by_label("Graph1 - sample").is_some());
     // Moving into the panel keeps it open; moving to the workspace closes it.
-    let row = h.get_by_label("Book1 - sample").rect().center();
+    let row = h.get_by_label("Book1 - sample.csv").rect().center();
     move_pointer(&mut h, row);
     assert_eq!(h.state().panels.flyout(), Some(PanelId::Explorer));
     move_pointer(&mut h, empty_workspace_point());
     assert_eq!(h.state().panels.flyout(), None);
-    assert!(h.query_by_label("Book1 - sample").is_none());
+    assert!(h.query_by_label("Book1 - sample.csv").is_none());
 }
 
 #[test]
@@ -3771,12 +3776,12 @@ fn the_pin_docks_the_explorer_and_the_same_button_lets_it_go_back_to_the_strip()
     assert_eq!(h.state().panels.flyout(), None);
     assert!(h.query_by_label("Project Explorer tab").is_none(), "a docked panel has no tab");
     move_pointer(&mut h, empty_workspace_point());
-    assert!(h.query_by_label("Book1 - sample").is_some(), "still on screen with the mouse elsewhere");
+    assert!(h.query_by_label("Book1 - sample.csv").is_some(), "still on screen with the mouse elsewhere");
     click(&mut h, "Auto Hide Project Explorer");
     assert!(!h.state().panels.is_pinned(PanelId::Explorer));
     assert!(h.query_by_label("Project Explorer tab").is_some());
     click_at(&mut h, empty_workspace_point());
-    assert!(h.query_by_label("Book1 - sample").is_none());
+    assert!(h.query_by_label("Book1 - sample.csv").is_none());
 }
 
 #[test]
@@ -3790,7 +3795,7 @@ fn alt_1_and_the_view_menu_hide_and_show_the_project_explorer() {
     h.key_press_modifiers(egui::Modifiers::ALT, egui::Key::Num1);
     settle(&mut h);
     assert!(h.state().panels.is_shown(PanelId::Explorer));
-    assert!(h.query_by_label("Book1 - sample").is_some(), "shown again, slid out");
+    assert!(h.query_by_label("Book1 - sample.csv").is_some(), "shown again, slid out");
     // The same through the menu.
     menu(&mut h, "View", "Project Explorer");
     assert!(!h.state().panels.is_shown(PanelId::Explorer));
@@ -3825,7 +3830,7 @@ fn the_explorer_lists_name_long_name_short_name_and_type_with_the_active_window_
         assert!(h.query_by_label(&format!("Sort by {head}")).is_some(), "{head}");
     }
     assert_eq!(h.state().panels.explorer.bold, vec![graph], "the graph was made last and is active");
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     assert_eq!(h.state().panels.explorer.bold, vec![book]);
     // The folder tree shows the root, named after the project (this one has no file yet).
     assert!(h.query_by_label("UNTITLED").is_some());
@@ -3835,7 +3840,7 @@ fn the_explorer_lists_name_long_name_short_name_and_type_with_the_active_window_
 fn the_short_name_of_a_window_follows_origins_rule_and_a_taken_one_is_refused() {
     let mut h = start(vec![data_file("shortname")]);
     let (book, graph) = window_ids(&h);
-    right_click(&mut h, "Book1 - sample");
+    right_click(&mut h, "Book1 - sample.csv");
     click(&mut h, "Properties...");
     // spaces and symbols dropped, a leading digit gets an A, 13 characters at most (Origin 2016)
     h.state_mut().rename.as_mut().unwrap().short_name = "2026 raw data, run #3".to_string();
@@ -3858,11 +3863,11 @@ fn the_short_name_of_a_window_follows_origins_rule_and_a_taken_one_is_refused() 
 fn the_window_menu_of_the_explorer_has_origins_commands_and_the_live_ones_work() {
     let mut h = start(vec![data_file("ctx")]);
     let (book, graph) = window_ids(&h);
-    right_click(&mut h, "Book1 - sample");
+    right_click(&mut h, "Book1 - sample.csv");
     for name in ["Show", "Hide", "Rename...", "Delete", "Duplicate", "Properties..."] {
         assert!(h.query_by_label(name).is_some(), "{name}");
     }
-    assert!(h.get_by_label("Duplicate").accesskit_node().is_disabled(), "Sheaf cannot duplicate a window yet");
+    assert!(!h.get_by_label("Duplicate").accesskit_node().is_disabled(), "the window can be duplicated");
     click(&mut h, "Hide");
     assert!(!h.state().workspace.is_shown(book));
     assert_eq!(project(&h).workbooks().count(), 1, "hiding keeps the data");
@@ -3870,7 +3875,7 @@ fn the_window_menu_of_the_explorer_has_origins_commands_and_the_live_ones_work()
     click(&mut h, "Properties...");
     assert!(h.state().rename.as_ref().is_some_and(|r| r.window == graph));
     click(&mut h, "Cancel");
-    right_click(&mut h, "Book1 - sample");
+    right_click(&mut h, "Book1 - sample.csv");
     click(&mut h, "Show");
     assert!(h.state().workspace.is_shown(book));
     assert_eq!(h.state().active, Some(book));
@@ -3890,10 +3895,10 @@ fn windows_move_into_folders_and_the_list_shows_the_selected_folder() {
     settle(&mut h);
     assert_eq!(project(&h).root.folders[0].windows, [book]);
     // Folder1 is selected: its list holds the book only.
-    assert!(h.query_by_label("Book1 - sample").is_some());
+    assert!(h.query_by_label("Book1 - sample.csv").is_some());
     assert!(h.query_by_label("Graph1 - sample").is_none());
     click(&mut h, "UNTITLED");
-    assert!(h.query_by_label("Book1 - sample").is_none(), "the root lists what no folder holds");
+    assert!(h.query_by_label("Book1 - sample.csv").is_none(), "the root lists what no folder holds");
     assert!(h.query_by_label("Graph1 - sample").is_some());
     assert_eq!(h.state().panels.explorer.folder, Vec::<usize>::new());
     // One undo step moves it back, another removes the folder.
@@ -3912,7 +3917,7 @@ fn dragging_a_row_onto_a_folder_moves_the_window_into_it() {
     h.state_mut().apply(Action::NewFolder(Vec::new()), &ctx);
     click(&mut h, "UNTITLED");
     pause(&mut h);
-    let from = h.get_by_label("Book1 - sample").rect().center();
+    let from = h.get_by_label("Book1 - sample.csv").rect().center();
     let to = h.get_by_label("Folder1").rect().center();
     let button = |pos, pressed| egui::Event::PointerButton {
         pos,
@@ -4169,7 +4174,7 @@ fn plot_setup_opens_from_the_graph_menu_and_from_layer_contents() {
 #[test]
 fn the_status_bar_shows_average_sum_and_count_of_the_selected_cells_and_the_fixed_boxes() {
     let mut h = start(vec![data_file("stats")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     assert!(label_text(&h, "AU : ON") && label_text(&h, "Radian"), "Origin always shows these two");
     let sheet_name = project(&h).workbooks().next().unwrap().sheet().name.clone();
     assert!(label_text(&h, &format!("1: [Book1]{sheet_name}!")), "the active sheet");
@@ -4252,7 +4257,7 @@ fn a_message_box_is_logged_once_and_a_tool_report_goes_to_the_results_log() {
 #[test]
 fn the_statistics_menu_runs_a_t_test_and_undoes_in_one_step() {
     let mut h = start(vec![data_file("ttest")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Statistics", "Hypothesis Testing", "Two-Sample t-Test..."]);
     assert!(h.state().analysis.is_some(), "the t-test window is open");
     click(&mut h, "OK");
@@ -4284,7 +4289,7 @@ fn the_hypothesis_testing_menu_runs_the_variance_and_proportion_tests() {
     ];
     for (item, sheet, column, has_input) in cases {
         let mut h = start(vec![data_file("vartest-menu")]);
-        show_window(&mut h, "Book1 - sample");
+        show_window(&mut h, "Book1 - sample.csv");
         menu_path(&mut h, &["Statistics", "Hypothesis Testing", item]);
         assert!(h.state().analysis.is_some(), "{item} opens its window");
         assert_eq!(has_label(&h, "Input"), has_input, "{item}");
@@ -4304,7 +4309,7 @@ fn the_hypothesis_testing_menu_runs_the_variance_and_proportion_tests() {
 #[test]
 fn the_statistics_menu_makes_a_histogram_graph() {
     let mut h = start(vec![data_file("histogram")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let graphs_before = project(&h).graphs().count();
     menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Frequency Counts..."]);
     click(&mut h, "OK");
@@ -4319,7 +4324,7 @@ fn the_statistics_menu_makes_a_histogram_graph() {
 #[test]
 fn the_statistics_menu_makes_a_discrete_frequency() {
     let mut h = start(vec![data_file("discfreq")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Discrete Frequency..."]);
     for label in ["Count", "Relative Frequency", "Cumulative Frequency", "Case Sensitive", "Sort Data by"] {
         assert!(h.query_by_label(label).is_some(), "{label} is shown");
@@ -4336,7 +4341,7 @@ fn the_statistics_menu_makes_a_discrete_frequency() {
 #[test]
 fn the_statistics_menu_makes_2d_frequency_counts() {
     let mut h = start(vec![data_file("bin2d")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Statistics", "Descriptive Statistics", "2D Frequency Counts/Binning..."]);
     // One group per axis, then the quantity.
     for label in ["Specify Binning Range by", "Minimum Bin Beginning", "Step by"] {
@@ -4597,7 +4602,7 @@ fn after_a_click_into_a_graph_the_next_click_reaches_the_window_title_under_it()
     right_click_at(&mut h, inside);
     close_menus(&mut h);
     assert_eq!(h.state().active, Some(graph_id));
-    click(&mut h, "Title Book1 - sample");
+    click(&mut h, "Title Book1 - sample.csv");
     assert_eq!(h.state().active, Some(book), "the click on the title was not swallowed");
 }
 
@@ -4607,7 +4612,7 @@ fn a_saved_project_reopens_with_its_windows_where_they_were() {
     let file = dir.join("arranged.sheaf");
     let mut h = start(vec![data_file("places")]);
     let (book, graph_id) = window_ids(&h);
-    click(&mut h, "Minimise Book1 - sample");
+    click(&mut h, "Minimise Book1 - sample.csv");
     click(&mut h, "Maximise Graph1 - sample");
     let before = h.state().workspace.places();
     assert_eq!(before.len(), 2);
@@ -4735,7 +4740,7 @@ fn the_statistics_menu_runs_a_two_way_anova_with_text_factors() {
         "dose,batch,response\nlow,1,1\nlow,1,2\nlow,2,4\nlow,2,5\nhigh,1,3\nhigh,1,5\nhigh,2,8\nhigh,2,9\n",
     );
     let mut h = start(vec![data]);
-    show_window(&mut h, "Book1 - design");
+    show_window(&mut h, "Book1 - design.csv");
     menu_path(&mut h, &["Statistics", "ANOVA", "Two-Way ANOVA..."]);
     assert!(h.state().analysis.is_some(), "the two-way ANOVA window is open");
     click(&mut h, "OK");
@@ -4763,7 +4768,7 @@ fn the_descriptive_menu_runs_a_cross_tabulation_of_text_columns() {
         "treated,better\ntreated,better\ntreated,same\ncontrol,same\ncontrol,same\ncontrol,better\ncontrol,same\ntreated,better\n",
     );
     let mut h = start(vec![data]);
-    show_window(&mut h, "Book1 - survey");
+    show_window(&mut h, "Book1 - survey.csv");
     menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Cross Tabulation..."]);
     assert!(h.state().analysis.is_some(), "the cross tabulation window is open");
     for label in
@@ -4793,7 +4798,7 @@ const CROSSTAB_DATA: &str = "x,u,p\ny,v,q\nx,u,r\ny,v,p\nx,v,q\ny,u,r\n";
 #[test]
 fn the_cross_tabulation_input_picker_sets_the_variables_and_offers_no_x_range() {
     let mut h = start(vec![csv_file("crosstab-picker", "survey", CROSSTAB_DATA)]);
-    show_window(&mut h, "Book1 - survey");
+    show_window(&mut h, "Book1 - survey.csv");
     menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Cross Tabulation..."]);
     assert!(has_label(&h, "From row") && !has_label(&h, "X from"), "no X range for a table of factors");
     click(&mut h, "...");
@@ -4819,7 +4824,7 @@ fn the_cross_tabulation_input_picker_sets_the_variables_and_offers_no_x_range() 
 #[test]
 fn applying_a_cross_tabulation_again_with_more_levels_replaces_its_sheet() {
     let mut h = start(vec![csv_file("crosstab-again", "survey", CROSSTAB_DATA)]);
-    show_window(&mut h, "Book1 - survey");
+    show_window(&mut h, "Book1 - survey.csv");
     menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Cross Tabulation..."]);
     let sheets = |h: &Harness<'static, SheafApp>| project(h).workbooks().next().unwrap().sheets.len();
     click(&mut h, "Apply");
@@ -4844,7 +4849,7 @@ fn applying_a_cross_tabulation_again_with_more_levels_replaces_its_sheet() {
 #[test]
 fn the_two_way_anova_window_offers_no_x_range() {
     let mut h = start(vec![csv_file("anova2-xrange", "design", "a,b,y\nl,1,1\nl,2,2\nh,1,3\nh,2,5\n")]);
-    show_window(&mut h, "Book1 - design");
+    show_window(&mut h, "Book1 - design.csv");
     menu_path(&mut h, &["Statistics", "ANOVA", "Two-Way ANOVA..."]);
     assert!(has_label(&h, "From row") && !has_label(&h, "X from"));
 }
@@ -4854,7 +4859,7 @@ fn the_two_way_anova_window_offers_no_x_range() {
 #[test]
 fn the_one_way_anova_window_offers_the_holm_methods_and_dunnett() {
     let mut h = start(vec![data_file("anova-dunnett")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Statistics", "ANOVA", "One-Way ANOVA..."]);
     h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Tukey")).click();
     settle(&mut h);
@@ -4873,7 +4878,7 @@ fn the_one_way_anova_window_offers_the_holm_methods_and_dunnett() {
 #[test]
 fn the_nonparametric_menu_runs_a_mann_whitney_test() {
     let mut h = start(vec![data_file("mannwhitney")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Statistics", "Nonparametric Tests", "Mann-Whitney Test..."]);
     assert!(h.state().analysis.is_some(), "the Mann-Whitney window is open");
     click(&mut h, "OK");
@@ -4890,7 +4895,7 @@ fn the_nonparametric_menu_runs_a_mann_whitney_test() {
 #[test]
 fn the_nonparametric_menu_runs_a_one_sample_signed_rank_test() {
     let mut h = start(vec![data_file("signrank")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Statistics", "Nonparametric Tests", "One-Sample Wilcoxon Signed Rank Test..."]);
     assert!(h.state().analysis.is_some(), "the signed rank window is open");
     click(&mut h, "OK");
@@ -4906,7 +4911,7 @@ fn the_nonparametric_menu_runs_a_one_sample_signed_rank_test() {
 #[test]
 fn the_nonparametric_menu_runs_a_paired_signed_rank_test() {
     let mut h = start(vec![data_file("signrank-paired")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Statistics", "Nonparametric Tests", "Paired Sample Wilcoxon Signed Rank Test..."]);
     assert!(h.state().analysis.is_some(), "the paired window is open");
     click(&mut h, "OK");
@@ -4920,7 +4925,7 @@ fn the_nonparametric_menu_runs_a_paired_signed_rank_test() {
 #[test]
 fn the_nonparametric_menu_runs_a_kruskal_wallis_test() {
     let mut h = start(vec![data_file("kruskal")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Statistics", "Nonparametric Tests", "Kruskal-Wallis ANOVA..."]);
     click(&mut h, "OK");
     let (sheet, value) = result_column(&h, "Value");
@@ -4943,7 +4948,7 @@ fn the_nonparametric_menu_runs_sign_ks_median_and_friedman_tests() {
         ("Friedman ANOVA...", "Friedman", "Value", "Friedman ANOVA"),
     ] {
         let mut h = start(vec![data_file("np-more")]);
-        show_window(&mut h, "Book1 - sample");
+        show_window(&mut h, "Book1 - sample.csv");
         menu_path(&mut h, &["Statistics", "Nonparametric Tests", label]);
         assert!(h.state().analysis.is_some(), "the window of {label} is open");
         click(&mut h, "OK");
@@ -4962,7 +4967,7 @@ fn the_descriptive_menu_runs_the_outlier_tests() {
         [("Grubbs Test...", "Grubbs", "G", "Grubbs test"), ("Dixon's Q-test...", "Dixon", "Q", "Dixon's Q test")]
     {
         let mut h = start(vec![data_file("outlier")]);
-        show_window(&mut h, "Book1 - sample");
+        show_window(&mut h, "Book1 - sample.csv");
         menu_path(&mut h, &["Statistics", "Descriptive Statistics", label]);
         assert!(h.state().analysis.is_some(), "the window of {label} is open");
         click(&mut h, "OK");
@@ -4977,7 +4982,7 @@ fn the_descriptive_menu_runs_the_outlier_tests() {
 #[test]
 fn the_descriptive_menu_fits_distributions() {
     let mut h = start(vec![data_file("distfit")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Distribution Fit..."]);
     assert!(h.state().analysis.is_some(), "the distribution fit window is open");
     click(&mut h, "OK");
@@ -4994,7 +4999,7 @@ fn the_descriptive_menu_fits_distributions() {
 #[test]
 fn the_multivariate_menu_runs_a_principal_component_analysis() {
     let mut h = start(vec![data_file("pca")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let graphs_before = project(&h).graphs().count();
     menu_path(&mut h, &["Statistics", "Multivariate Analysis", "Principal Component Analysis..."]);
     assert!(h.state().analysis.is_some(), "the PCA window is open");
@@ -5020,7 +5025,7 @@ fn the_multivariate_menu_runs_a_principal_component_analysis() {
 #[test]
 fn the_principal_component_window_switches_the_plots() {
     let mut h = start(vec![data_file("pca-plots")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let graphs_before = project(&h).graphs().count();
     menu_path(&mut h, &["Statistics", "Multivariate Analysis", "Principal Component Analysis..."]);
     for label in [
@@ -5058,7 +5063,7 @@ fn the_statistics_menu_draws_a_roc_curve() {
 ",
     );
     let mut h = start(vec![data]);
-    show_window(&mut h, "Book1 - marker");
+    show_window(&mut h, "Book1 - marker.csv");
     let graphs_before = project(&h).graphs().count();
     menu_path(&mut h, &["Statistics", "ROC Curve..."]);
     assert!(h.state().analysis.is_some(), "the ROC window is open");
@@ -5084,7 +5089,7 @@ fn the_descriptive_menu_makes_probability_and_qq_plot_graphs() {
         ("Q-Q Plot...", "QQPlot", ScaleKind::Linear, "Q-Q plot"),
     ] {
         let mut h = start(vec![data_file("probplot")]);
-        show_window(&mut h, "Book1 - sample");
+        show_window(&mut h, "Book1 - sample.csv");
         let graphs_before = project(&h).graphs().count();
         menu_path(&mut h, &["Statistics", "Descriptive Statistics", label]);
         assert!(h.state().analysis.is_some(), "the window of {label} is open");
@@ -5110,7 +5115,7 @@ fn the_descriptive_menu_makes_probability_and_qq_plot_graphs() {
 #[test]
 fn the_descriptive_menu_adds_row_statistics_columns() {
     let mut h = start(vec![data_file("rowstats")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Statistics on Rows..."]);
     assert!(h.state().analysis.is_some(), "the row statistics window is open");
     click(&mut h, "OK");
@@ -5127,7 +5132,7 @@ fn the_descriptive_menu_adds_row_statistics_columns() {
 #[test]
 fn the_statistics_menu_computes_correlation_coefficients() {
     let mut h = start(vec![data_file("corr")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Correlation Coefficient..."]);
     assert!(h.state().analysis.is_some(), "the correlation window is open");
     click(&mut h, "OK");
@@ -5554,7 +5559,7 @@ fn an_auto_result_follows_its_input_in_the_same_undo_step() {
 #[test]
 fn the_mathematics_menu_averages_curves() {
     let mut h = start(vec![data_file("avecurves")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Mathematics", "Average Multiple Curves..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     for label in
@@ -5608,7 +5613,7 @@ fn average_curves_with_one_column_is_refused_in_the_window() {
 #[test]
 fn the_mathematics_menu_finds_the_intersection_of_two_curves() {
     let mut h = start(vec![data_file("intersect")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Mathematics", "Intersect..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     assert!(has_label(&h, "Also list the points where the curves touch without crossing"));
@@ -5626,7 +5631,7 @@ fn the_mathematics_menu_finds_the_intersection_of_two_curves() {
 #[test]
 fn the_mathematics_menu_gives_the_polygon_area_of_each_column() {
     let mut h = start(vec![data_file("polyarea")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Mathematics", "Polygon Area..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -5643,7 +5648,7 @@ fn the_mathematics_menu_gives_the_polygon_area_of_each_column() {
 fn the_polygon_area_window_measures_a_closed_loop() {
     let loop_csv = csv_file("polyloop", "loop", "x,y\n0,0\n2,0\n2,3\n0,3\n");
     let mut h = start(vec![loop_csv]);
-    show_window(&mut h, "Book1 - loop");
+    show_window(&mut h, "Book1 - loop.csv");
     menu_path(&mut h, &["Analysis", "Mathematics", "Polygon Area..."]);
     click(&mut h, "OK");
     let (_, area) = result_column(&h, "Area");
@@ -5965,7 +5970,7 @@ fn the_wizard_pages_drive_the_import_options_and_finish_imports() {
 #[test]
 fn the_wizard_source_page_chooses_the_filter_and_the_import_mode() {
     let mut h = start(vec![data_file("wizard-mode")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let more = data_file("wizard-mode").with_file_name("more.txt");
     std::fs::write(&more, "w\tz\n1\t1\n2\t2\n3\t3\n4\t4\n").unwrap();
     h.state_mut().import_wizard = Some(ImportWizard::new(vec![more]));
@@ -6057,7 +6062,7 @@ fn at(col: usize, row: usize) -> Sel {
 #[test]
 fn arrow_keys_move_the_active_cell_and_shift_extends_the_block() {
     let mut h = start(vec![data_file("arrows")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "4.5");
     assert_eq!(cells(&h), at(1, 1));
     key(&mut h, egui::Key::ArrowDown);
@@ -6083,7 +6088,7 @@ fn arrow_keys_move_the_active_cell_and_shift_extends_the_block() {
 #[test]
 fn ctrl_arrows_home_and_end_jump_to_the_edges() {
     let mut h = start(vec![data_file("jumps")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "4.5");
     key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::ArrowDown);
     assert_eq!(cells(&h), at(1, 3), "the last data row");
@@ -6102,7 +6107,7 @@ fn ctrl_arrows_home_and_end_jump_to_the_edges() {
 #[test]
 fn typing_starts_editing_and_enter_stores_the_value_and_moves_down() {
     let mut h = start(vec![data_file("typing")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "4.5");
     h.event(egui::Event::Text("9".to_string()));
     settle(&mut h);
@@ -6133,7 +6138,7 @@ fn typing_starts_editing_and_enter_stores_the_value_and_moves_down() {
 #[test]
 fn tab_moves_right_shift_tab_left_and_enter_down() {
     let mut h = start(vec![data_file("tab")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "2.5");
     key(&mut h, egui::Key::Tab);
     assert_eq!(cells(&h), at(2, 0));
@@ -6146,7 +6151,7 @@ fn tab_moves_right_shift_tab_left_and_enter_down() {
 #[test]
 fn dragging_over_column_heads_selects_the_columns_in_between() {
     let mut h = start(vec![data_file("headdrag")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let (a, b, c) = (column_id(&h, "A"), column_id(&h, "B"), column_id(&h, "C"));
     let (pa, pc) = (text_pos(&h, "A(X1)"), text_pos(&h, "C(Y1)"));
     drag(&mut h, pa, pc);
@@ -6165,7 +6170,7 @@ fn dragging_over_column_heads_selects_the_columns_in_between() {
 #[test]
 fn dragging_over_row_numbers_selects_the_rows_in_between() {
     let mut h = start(vec![data_file("rowdrag")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let x = text_pos(&h, "Long Name").x;
     let (y1, y3) = (text_pos(&h, "2.5").y, text_pos(&h, "6.5").y);
     drag(&mut h, egui::pos2(x, y1), egui::pos2(x, y3));
@@ -6176,7 +6181,7 @@ fn dragging_over_row_numbers_selects_the_rows_in_between() {
 
 /// Selects the columns B and C of the first workbook with the mouse and returns their ids.
 fn select_b_and_c(h: &mut Harness<'static, SheafApp>) -> (ColumnId, ColumnId) {
-    show_window(h, "Book1 - sample");
+    show_window(h, "Book1 - sample.csv");
     click_text(h, "B(Y1)");
     click_text_with(h, "C(Y1)", egui::Modifiers::COMMAND);
     settle(h);
@@ -6210,6 +6215,48 @@ fn multi_panel_items_make_one_panel_per_selected_column() {
 }
 
 #[test]
+fn stacked_histograms_item_makes_one_shared_bin_panel_per_selected_column() {
+    let mut h = start(vec![data_file("stackhist")]);
+    let (b, c) = select_b_and_c(&mut h);
+    // The bar has a Statistics menu of its own further right; the submenu of Plot is the leftmost.
+    menu_entry(&h, "Plot").click();
+    settle(&mut h);
+    let inner = h
+        .query_all_by_label_contains("Statistics")
+        .filter(|n| n.accesskit_node().label().unwrap_or_default().trim_end_matches(" \u{23f5}") == "Statistics")
+        .min_by(|a, b| a.rect().min.x.total_cmp(&b.rect().min.x))
+        .expect("the Statistics submenu of Plot");
+    inner.click();
+    settle(&mut h);
+    menu_entry(&h, "Stacked Histograms").click();
+    settle(&mut h);
+    assert_eq!(project(&h).graphs().count(), 2);
+    let g = project(&h).graphs().last().unwrap();
+    assert_eq!(g.layers.len(), 2);
+    assert_eq!(g.layers[0].plots[0].y, b, "the first column is the top panel");
+    assert_eq!(g.layers[1].plots[0].y, c);
+    assert_eq!(g.layers[0].plots[0].hist, g.layers[1].plots[0].hist);
+    assert!(g.layers[0].plots[0].hist.bin_size.is_some());
+    assert!(g.page_frame(0).top < g.page_frame(1).top);
+}
+
+#[test]
+fn waterfall_colour_mapping_items_make_colour_mapped_waterfalls() {
+    use sheaf_core::graph::WaterfallColor;
+    for (item, want) in
+        [("Waterfall Y:Color Mapping", WaterfallColor::Y), ("Waterfall Z:Color Mapping", WaterfallColor::Z)]
+    {
+        let mut h = start(vec![data_file("wfmap")]);
+        select_b_and_c(&mut h);
+        menu_path(&mut h, &["Plot", "Y-offset/Waterfall", item]);
+        let g = project(&h).graphs().last().unwrap();
+        assert_eq!(g.layers[0].waterfall_color, want, "{item}");
+        assert_eq!(g.layers[0].plots.len(), 2);
+        assert!(matches!(g.layers[0].stack, Stack::Waterfall { .. }));
+    }
+}
+
+#[test]
 fn y_error_plots_a_scatter_with_the_error_bars_of_the_error_column() {
     let mut h = start(vec![data_file("yerr")]);
     let book = project(&h).workbooks().next().unwrap().id;
@@ -6221,7 +6268,7 @@ fn y_error_plots_a_scatter_with_the_error_bars_of_the_error_column() {
         })
         .unwrap();
     settle(&mut h);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "C(Y1)");
     menu_path(&mut h, &["Plot", "Symbol", "Y Error"]);
     assert_eq!(project(&h).graphs().count(), 2);
@@ -6234,7 +6281,7 @@ fn y_error_plots_a_scatter_with_the_error_bars_of_the_error_column() {
 #[test]
 fn y_error_without_an_error_column_still_plots_but_says_so() {
     let mut h = start(vec![data_file("yerr2")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "B(Y1)");
     menu_path(&mut h, &["Plot", "Symbol", "Y Error"]);
     assert_eq!(project(&h).graphs().count(), 2);
@@ -6287,12 +6334,17 @@ mod clipboard_origin;
 #[path = "ui_tests/clipboard_formats.rs"]
 mod clipboard_formats;
 
+mod add_plot_to_layer;
 mod find_replace;
 mod find_selection;
+mod fit_page;
 mod go_to;
 mod go_to_browser;
 mod go_to_picker;
 mod label_panels;
+mod layer_management;
+#[path = "ui_tests/merge_graphs.rs"]
+mod merge_graphs;
 #[path = "ui_tests/stack_panels.rs"]
 mod stack_panels;
 
@@ -6339,7 +6391,7 @@ fn window_refresh_recalculates_the_waiting_columns_of_the_workbook() {
     settle(&mut h);
     let state = |h: &Harness<'static, SheafApp>| project(h).column(c).unwrap().formula_state;
     assert_eq!(state(&h), sheaf_core::FormulaState::Pending, "Manual: waits for the user");
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     assert_eq!(h.state().active, Some(book));
     // F5 is the key of Window > Refresh.
     h.key_press(egui::Key::F5);
@@ -6376,7 +6428,7 @@ fn sort_range_moves_the_selected_columns_together_and_sort_columns_sorts_each_al
 fn selected_cell_rows_are_preserved_by_simple_and_custom_sort_menus() {
     for custom in [false, true] {
         let mut h = start(vec![data_file(if custom { "partial-nested-sort" } else { "partial-simple-sort" })]);
-        show_window(&mut h, "Book1 - sample");
+        show_window(&mut h, "Book1 - sample.csv");
         select_block(&mut h, "4.5", "10.5");
         if custom {
             menu_path(&mut h, &["Worksheet", "Sort Columns", "Custom..."]);
@@ -6399,7 +6451,7 @@ fn selected_cell_rows_are_preserved_by_simple_and_custom_sort_menus() {
 #[test]
 fn sort_columns_preserves_row_pairs_unless_each_column_is_requested() {
     let mut h = start(vec![data_file("sort-column-modes")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     select_block(&mut h, "4.5", "10.5");
     menu_path(&mut h, &["Worksheet", "Sort Columns", "Ascending"]);
     assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
@@ -6412,7 +6464,7 @@ fn sort_columns_preserves_row_pairs_unless_each_column_is_requested() {
 #[test]
 fn row_header_selection_can_sort_a_range_and_labels_cannot_sort_data() {
     let mut h = start(vec![data_file("row-selection-sort")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let row_x = text_pos(&h, "Long Name").x;
     let a = egui::pos2(row_x, text_pos(&h, "4.5").y);
     let b = egui::pos2(row_x, text_pos(&h, "6.5").y);
@@ -6430,7 +6482,7 @@ fn row_header_selection_can_sort_a_range_and_labels_cannot_sort_data() {
 #[test]
 fn column_header_custom_sort_uses_the_selected_column_and_undoes() {
     let mut h = start(vec![data_file("column-context-custom-sort")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     right_click_text(&mut h, "B(Y1)");
     menu_path(&mut h, &["Sort Column", "Custom..."]);
     assert!(h.state().sort.is_some());
@@ -6445,7 +6497,7 @@ fn column_header_custom_sort_uses_the_selected_column_and_undoes() {
 #[test]
 fn set_values_substitute_picker_and_formula_fill_text_cells() {
     let mut h = start(vec![data_file("substitute")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     right_click_text(&mut h, "C(Y1)");
     click_containing(&mut h, "Set Column Values...");
     click(&mut h, "Function");
@@ -6470,7 +6522,7 @@ fn set_values_substitute_picker_and_formula_fill_text_cells() {
 #[test]
 fn column_label_formula_recalculates_after_a_grid_header_edit() {
     let mut h = start(vec![data_file("header_formula")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     right_click_text(&mut h, "C(Y1)");
     click_containing(&mut h, "Set Column Values...");
     h.event(egui::Event::Text(r#"col(B)[L]$+" ["+col(B)[U]$+"]""#.into()));
@@ -6497,7 +6549,7 @@ fn column_label_formula_recalculates_after_a_grid_header_edit() {
 #[test]
 fn char_and_code_functions_are_available_in_set_values() {
     let mut h = start(vec![data_file("char_code")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     right_click_text(&mut h, "C(Y1)");
     click_containing(&mut h, "Set Column Values...");
     menu_path(&mut h, &["Function", "Text", "char"]);
@@ -6526,7 +6578,7 @@ fn char_and_code_functions_are_available_in_set_values() {
 #[test]
 fn format_compatibility_function_fills_formatted_text_in_set_values() {
     let mut h = start(vec![data_file("format_function")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     right_click_text(&mut h, "C(Y1)");
     click_containing(&mut h, "Set Column Values...");
     let formula = r#"format(col(B),".2")$"#;
@@ -6544,7 +6596,7 @@ fn format_compatibility_function_fills_formatted_text_in_set_values() {
 #[test]
 fn set_values_apply_waits_for_a_change_and_recalculate_defaults_to_manual() {
     let mut h = start(vec![data_file("setvals")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     right_click_text(&mut h, "C(Y1)");
     click_containing(&mut h, "Set Column Values...");
     // Apply is grey until something changes; the drop-down opens on Manual.
@@ -6576,7 +6628,7 @@ fn set_values_apply_waits_for_a_change_and_recalculate_defaults_to_manual() {
 #[test]
 fn set_values_row_range_limits_the_rows_that_are_filled() {
     let mut h = start(vec![data_file("setrows")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     right_click_text(&mut h, "C(Y1)");
     click_containing(&mut h, "Set Column Values...");
     h.event(egui::Event::Text("100".to_string()));
@@ -6597,7 +6649,7 @@ fn set_values_row_range_limits_the_rows_that_are_filled() {
 #[test]
 fn ctrl_g_is_go_to_in_a_workbook_and_export_graphs_in_a_graph() {
     let mut h = start(vec![data_file("ctrl-g")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     ctrl(&mut h, egui::Key::G);
     assert!(h.state().go_to.is_some(), "Go To opened in the workbook");
     assert!(h.state().export.is_none());
@@ -6616,7 +6668,7 @@ fn ctrl_g_is_go_to_in_a_workbook_and_export_graphs_in_a_graph() {
 #[test]
 fn go_to_window_moves_the_cursor_to_the_typed_cell() {
     let mut h = start(vec![data_file("go-to")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Edit", "Go to..."]);
     assert!(h.state().go_to.is_some());
     h.get_by_label("Go to Row").focus();
@@ -6636,7 +6688,7 @@ fn go_to_window_moves_the_cursor_to_the_typed_cell() {
 #[test]
 fn power_and_sample_size_menu_opens_a_dialog_that_makes_a_workbook() {
     let mut h = start(vec![data_file("power")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Statistics", "Power and Sample Size", "Two-Sample t-Test..."]);
     let d = h.state().power.as_ref().expect("the dialog opened");
     assert_eq!(d.kind(), sheaf_core::analysis::PowerKind::TwoSampleT);
@@ -6651,7 +6703,7 @@ fn power_and_sample_size_menu_opens_a_dialog_that_makes_a_workbook() {
 #[test]
 fn ctrl_shift_c_copies_with_the_label_rows() {
     let mut h = start(vec![data_file("copy-labels")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     select_block(&mut h, "2.5", "20.5");
     h.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::C);
     settle(&mut h);
@@ -6661,7 +6713,7 @@ fn ctrl_shift_c_copies_with_the_label_rows() {
 #[test]
 fn the_file_menu_has_recent_graphs_and_no_reimport_only_in_a_graph() {
     let mut h = start(vec![data_file("file-menus")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["File"]);
     assert!(h.query_by_label_contains("Recent Books").is_some());
     assert!(h.query_by_label_contains("Recent Graphs").is_none());
@@ -6691,7 +6743,7 @@ fn the_import_items_differ_in_what_the_chooser_takes_and_csv_presets_the_comma()
 #[test]
 fn the_explorer_keys_f2_delete_and_ctrl_a_work_on_the_highlighted_window() {
     let mut h = start(vec![data_file("explorer-keys")]);
-    h.get_by_label("Book1 - sample").click();
+    h.get_by_label("Book1 - sample.csv").click();
     settle(&mut h);
     assert!(h.state().panels.explorer.focus, "a click in the explorer gives it the keys");
     h.key_press(egui::Key::F2);
@@ -6735,7 +6787,7 @@ fn the_main_title_and_the_status_reference_follow_origins_pattern() {
     assert_eq!(main_title(Some(Path::new("C:/a/p.opj")), true, None), "Sheaf - C:/a/p.opj *");
     assert_eq!(main_title(Some(Path::new("p.opj")), true, Some("Book1".into())), "Sheaf - p.opj * - [Book1 *]");
     let mut h = start(vec![data_file("status-ref")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     assert_eq!(h.state().active_reference(), "1: [Book1]sample!");
     select_block(&mut h, "2.5", "20.5");
     assert_eq!(h.state().active_reference(), "1: [Book1]sample!B:C[1:2]");
@@ -6760,7 +6812,7 @@ fn the_layer_icon_menu_describes_plots_as_origin_does_and_has_the_hint_line() {
 #[test]
 fn typing_with_a_block_selected_edits_its_active_cell_and_enter_and_tab_move_inside_the_block() {
     let mut h = start(vec![data_file("blocktype")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     grid_text(&h, "4.5").click();
     settle(&mut h);
     // The block of the columns "up" and "down" over the first two rows.
@@ -6812,6 +6864,104 @@ fn exchange_axes_swaps_the_columns_and_the_axis_settings_in_one_undo_step() {
     assert_eq!(h.state().doc.undo_label(), Some("Exchange X-Y axes"));
     menu(&mut h, "Edit", "Undo Exchange X-Y axes");
     assert_eq!(graph(&h).layers[0], before);
+}
+
+const OFFSET_MENU: &str = "Offset Grouped Data in Layer";
+
+#[test]
+fn offset_grouped_data_menu_sets_the_stack_mode_through_history_and_ticks_the_current_one() {
+    let mut h = start(vec![data_file("offset-menu")]);
+    assert_eq!(h.state().menu_context().stack, Some(Stack::None), "None is ticked at the start");
+    let undo_before = h.state().doc.undo_label().map(str::to_string);
+    for (entry, want) in [
+        ("Cumulative", Stack::Cumulative),
+        ("Constant", Stack::Constant { step: 1.0 }),
+        ("Auto", Stack::Auto { gap_percent: 8.0 }),
+        ("Individual", Stack::Individual),
+        ("None", Stack::None),
+    ] {
+        menu_path(&mut h, &["Graph", OFFSET_MENU, entry]);
+        assert_eq!(graph(&h).layers[0].stack, want, "{entry}");
+        assert_eq!(h.state().menu_context().stack, Some(want), "the tick follows {entry}");
+    }
+    assert_ne!(h.state().doc.undo_label().map(str::to_string), undo_before);
+    // One undo step per change.
+    menu_path(&mut h, &["Graph", OFFSET_MENU, "Cumulative"]);
+    assert_eq!(h.state().doc.undo_label(), Some("Offset grouped data in layer"));
+    menu(&mut h, "Edit", "Undo Offset grouped data in layer");
+    assert_eq!(graph(&h).layers[0].stack, Stack::None);
+    menu(&mut h, "Edit", "Redo Offset grouped data in layer");
+    assert_eq!(graph(&h).layers[0].stack, Stack::Cumulative);
+}
+
+#[test]
+fn choosing_the_current_offset_mode_is_a_no_op_that_keeps_its_settings() {
+    let mut h = start(vec![data_file("offset-noop")]);
+    h.state_mut().doc.apply("Test", |p| {
+        p.graph_mut(window_ids_of(p)).unwrap().layers[0].stack = Stack::Auto { gap_percent: 25.0 };
+    });
+    let label = h.state().doc.undo_label().map(str::to_string);
+    menu_path(&mut h, &["Graph", OFFSET_MENU, "Auto"]);
+    assert_eq!(graph(&h).layers[0].stack, Stack::Auto { gap_percent: 25.0 }, "the stored gap is kept");
+    assert_eq!(h.state().doc.undo_label().map(str::to_string), label, "no undo step");
+}
+
+#[test]
+fn cumulative_is_disabled_on_a_layer_without_a_line_scatter_or_symbol_plot() {
+    let mut h = start(vec![data_file("offset-cumulative-column")]);
+    assert!(h.state().menu_context().can_cumulate, "a line plot cumulates");
+    menu_path(&mut h, &["Graph", OFFSET_MENU]);
+    assert!(!menu_entry(&h, "Cumulative").accesskit_node().is_disabled());
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    edit_graph(&mut h, |g| g.layers[0].plots.iter_mut().for_each(|p| p.kind = PlotKind::Column));
+    assert!(!h.state().menu_context().can_cumulate);
+    let undo = h.state().doc.undo_label().map(str::to_string);
+    menu_path(&mut h, &["Graph", OFFSET_MENU]);
+    assert!(menu_entry(&h, "Cumulative").accesskit_node().is_disabled());
+    assert!(!menu_entry(&h, "Constant").accesskit_node().is_disabled(), "the other modes still work");
+    menu_entry(&h, "Cumulative").click();
+    settle(&mut h);
+    assert_eq!(graph(&h).layers[0].stack, Stack::None);
+    assert_eq!(h.state().doc.undo_label().map(str::to_string), undo, "no undo step");
+    // The same in Plot Details.
+    assert!(!sheaf_core::stack::layer_cumulates(&graph(&h).layers[0]));
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Stack");
+    assert!(is_disabled(&h, "Cumulative"));
+    assert!(!is_disabled(&h, "Constant"));
+}
+
+fn window_ids_of(p: &Project) -> WindowId {
+    p.graphs().next().unwrap().id
+}
+
+#[test]
+fn the_offset_menu_and_plot_details_stay_in_sync() {
+    let mut h = start(vec![data_file("offset-sync")]);
+    menu_path(&mut h, &["Graph", OFFSET_MENU, "Cumulative"]);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Stack");
+    let radio = |h: &Harness<'static, SheafApp>, label: &str| {
+        h.get(By::new().role(egui::accesskit::Role::RadioButton).label(label)).accesskit_node().toggled()
+    };
+    assert_eq!(radio(&h, "Cumulative"), Some(egui::accesskit::Toggled::True));
+    h.get(By::new().role(egui::accesskit::Role::RadioButton).label("Constant")).click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(h.state().menu_context().stack, Some(Stack::Constant { step: 1.0 }));
+    // And the other way: Plot Details can switch to Cumulative.
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Stack");
+    h.get(By::new().role(egui::accesskit::Role::RadioButton).label("Cumulative")).click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(graph(&h).layers[0].stack, Stack::Cumulative);
 }
 
 #[test]
@@ -7026,7 +7176,7 @@ fn hide_masked_points_is_a_project_switch_with_a_show_label() {
     let mut h = start(vec![mask_data_file("maskhide")]);
     select_only_column(&mut h);
     let ctx = h.ctx.clone();
-    show_window(&mut h, "Book1 - values");
+    show_window(&mut h, "Book1 - values.csv");
     menu_path(&mut h, &["Column", "Mask"]);
     assert!(entry_enabled(&h, "Hide Masked Points"));
     close_menus(&mut h);
@@ -7046,7 +7196,7 @@ fn mask_change_color_and_disable_masking_are_project_wide_undoable_steps() {
     let mut h = start(vec![mask_data_file("maskmenu")]);
     let book = select_only_column(&mut h);
     let ctx = h.ctx.clone();
-    show_window(&mut h, "Book1 - values");
+    show_window(&mut h, "Book1 - values.csv");
     assert_eq!(project(&h).mask_color, 1);
     h.state_mut().apply(Action::MaskColor, &ctx);
     assert_eq!(project(&h).mask_color, 2);
@@ -7265,7 +7415,7 @@ fn set_as_categorical_toggles_and_group_and_subject_are_designations() {
 #[test]
 fn ctrl_a_selects_the_sheet_and_ctrl_or_shift_space_the_columns_or_rows_of_the_block() {
     let mut h = start(vec![data_file("excel-select")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "4.5");
     key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::A);
     assert_eq!(cells(&h), Sel::All);
@@ -7288,7 +7438,7 @@ fn ctrl_a_selects_the_sheet_and_ctrl_or_shift_space_the_columns_or_rows_of_the_b
 #[test]
 fn backspace_empties_the_cell_and_starts_editing_it() {
     let mut h = start(vec![data_file("excel-backspace")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "4.5");
     key(&mut h, egui::Key::Backspace);
     assert_eq!(book_ui(&h).editing.as_ref().map(|e| (e.1, e.2.clone())), Some((1, String::new())));
@@ -7301,7 +7451,7 @@ fn backspace_empties_the_cell_and_starts_editing_it() {
 #[test]
 fn ctrl_enter_stores_the_typed_value_in_every_cell_of_the_block_in_one_undo_step() {
     let mut h = start(vec![data_file("excel-fill")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "2.5");
     key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowRight);
     key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowDown);
@@ -7322,7 +7472,7 @@ fn ctrl_enter_stores_the_typed_value_in_every_cell_of_the_block_in_one_undo_step
 #[test]
 fn ctrl_plus_inserts_and_ctrl_minus_deletes_at_the_selection() {
     let mut h = start(vec![data_file("excel-insert")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "4.5");
     key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::Space);
     key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::Minus);
@@ -7339,7 +7489,7 @@ fn ctrl_plus_inserts_and_ctrl_minus_deletes_at_the_selection() {
 #[test]
 fn ctrl_page_down_and_up_step_through_the_sheets() {
     let mut h = start(vec![data_file("excel-sheets")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let (book, _) = window_ids(&h);
     h.state_mut()
         .doc
@@ -7361,7 +7511,7 @@ fn ctrl_page_down_and_up_step_through_the_sheets() {
 #[test]
 fn clear_worksheet_empties_every_column_in_one_undo_step() {
     let mut h = start(vec![data_file("clearsheet")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Worksheet", "Clear Worksheet..."]);
     assert!(column(&h, "A").is_empty() && column(&h, "C").is_empty());
     assert_eq!(project(&h).workbooks().next().unwrap().sheet().columns.len(), 3, "the columns stay");
@@ -7374,7 +7524,7 @@ fn clear_worksheet_empties_every_column_in_one_undo_step() {
 fn plot_specialized_polar_makes_a_polar_graph_of_the_selected_columns() {
     use sheaf_core::graph::RadiusColumn;
     let mut h = start(vec![data_file("polar-menu")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "C(Y1)");
     let c = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().id;
     let before = project(&h).graphs().count();
@@ -7387,7 +7537,7 @@ fn plot_specialized_polar_makes_a_polar_graph_of_the_selected_columns() {
     assert_eq!(layer.plots[0].y, c);
 
     // Back in the worksheet, the other item.
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "C(Y1)");
     menu_path(&mut h, &["Plot", "Specialized", "Polar r(X) theta(Y)"]);
     let graphs: Vec<_> = project(&h).graphs().collect();
@@ -7398,7 +7548,7 @@ fn plot_specialized_polar_makes_a_polar_graph_of_the_selected_columns() {
 #[test]
 fn the_polar_button_of_the_2d_graphs_bar_makes_a_polar_graph() {
     let mut h = start(vec![data_file("polar-button")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "C(Y1)");
     let before = project(&h).graphs().count();
     bar_button!(h, "2D Graphs", "Polar theta(X) r(Y)").click();
@@ -7636,7 +7786,7 @@ fn column_properties_cuts_the_short_name_like_origin() {
 #[test]
 fn plot_specialized_radar_and_its_toolbar_button_make_a_radar_graph() {
     let mut h = start(vec![data_file("radar-menu")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "C(Y1)");
     let before = project(&h).graphs().count();
     menu_path(&mut h, &["Plot", "Specialized", "Radar"]);
@@ -7647,7 +7797,7 @@ fn plot_specialized_radar_and_its_toolbar_button_make_a_radar_graph() {
     assert_eq!(layer.plots.len(), 1);
     assert_eq!(layer.plots[0].kind, sheaf_core::graph::PlotKind::LineSymbol);
 
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "C(Y1)");
     bar_button!(h, "2D Graphs", "Radar").click();
     settle(&mut h);
@@ -7659,7 +7809,7 @@ fn plot_specialized_radar_and_its_toolbar_button_make_a_radar_graph() {
 #[test]
 fn plot_specialized_ternary_and_its_button_make_a_ternary_graph_of_the_selected_columns() {
     let mut h = start(vec![data_file("ternary-menu")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "B(Y1)");
     let column = |h: &Harness<'static, SheafApp>, name: &str| {
         project(h).workbooks().next().unwrap().sheet().column_by_name(name).unwrap().id
@@ -7675,7 +7825,7 @@ fn plot_specialized_ternary_and_its_button_make_a_ternary_graph_of_the_selected_
     assert_eq!((layer.plots[0].y, layer.plots[0].size_from), (b, Some(c)), "Y, and the next column as Z");
 
     // The 2D Graphs button does the same.
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "B(Y1)");
     bar_button!(h, "2D Graphs", "Ternary").click();
     settle(&mut h);
@@ -7919,7 +8069,7 @@ fn shift_while_drawing_snaps_a_line_and_squares_a_rectangle() {
 #[test]
 fn data_manipulation_items_and_median_filter_open_and_run() {
     let mut h = start(vec![data_file("manip")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     // Both columns are straight lines, so the line through the first and last point removes them.
     menu_path(&mut h, &["Analysis", "Data Manipulation", "Subtract Straight Line..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
@@ -7937,13 +8087,13 @@ fn data_manipulation_items_and_median_filter_open_and_run() {
     }
     assert_eq!(h.state().doc.undo_label(), Some("Subtract straight line"));
 
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Mathematics", "Median Filter..."]);
     click(&mut h, "OK");
     assert_eq!(h.state().doc.undo_label(), Some("Median filter"));
 
     // Translate X writes a new sheet.
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let sheets_before = project(&h).workbooks().next().unwrap().sheets.len();
     menu_path(&mut h, &["Analysis", "Data Manipulation", "Curve Translate X..."]);
     click(&mut h, "OK");
@@ -7954,7 +8104,7 @@ fn data_manipulation_items_and_median_filter_open_and_run() {
 #[test]
 fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_after_x() {
     let mut h = start(vec![data_file("manip2")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     // Two of the Data Manipulation items open their windows (they are no longer greyed) and Cancel changes nothing.
     let undo_before = h.state().doc.undo_label().map(str::to_string);
     for path in [
@@ -8025,7 +8175,7 @@ fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_aft
 #[test]
 fn reduce_duplicate_x_data_runs_from_the_menu_into_origins_columns() {
     let mut h = start(vec![data_file("reducedup")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let sheets_before = project(&h).workbooks().next().unwrap().sheets.len();
     menu_path(&mut h, &["Analysis", "Data Manipulation", "Reduce Duplicate X Data..."]);
     assert!(h.state().analysis.is_some(), "the item opens its window");
@@ -8096,7 +8246,7 @@ fn a_median_filter_made_with_recalculate_auto_follows_the_edited_input() {
 fn the_interpolation_items_open_the_interpolate_window_with_their_method() {
     use sheaf_core::analysis::InterpMethod;
     let mut h = start(vec![data_file("interpitems")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     for (label, method) in [
         ("Linear Interpolation...", InterpMethod::Linear),
         ("Spline Interpolation...", InterpMethod::CubicSpline),
@@ -8123,7 +8273,7 @@ fn view_status_bar_hides_and_shows_the_status_bar() {
 #[test]
 fn find_in_sheets_moves_the_cursor_to_the_cell_with_the_text() {
     let mut h = start(vec![data_file("findsheet")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu(&mut h, "Edit", "Find in Sheets...");
     assert!(h.state().find.is_some(), "the window opens");
     click(&mut h, "String");
@@ -8144,7 +8294,7 @@ fn find_in_sheets_moves_the_cursor_to_the_cell_with_the_text() {
 #[test]
 fn replace_changes_the_cell_at_the_cursor_and_replace_all_every_cell_in_one_step() {
     let mut h = start(vec![data_file("replacesheet")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     menu(&mut h, "Edit", "Replace...");
     click(&mut h, "String");
     {
@@ -8177,7 +8327,7 @@ fn replace_changes_the_cell_at_the_cursor_and_replace_all_every_cell_in_one_step
 #[test]
 fn file_close_hides_the_active_window_and_keeps_its_data() {
     let mut h = start(vec![data_file("fileclose")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let book = project(&h).workbooks().next().unwrap().id;
     assert!(h.state().workspace.is_shown(book));
     menu(&mut h, "File", "Close");
@@ -8188,7 +8338,7 @@ fn file_close_hides_the_active_window_and_keeps_its_data() {
 #[test]
 fn window_duplicate_copies_the_workbook_with_its_own_columns() {
     let mut h = start(vec![data_file("dupwindow")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let before = project(&h).workbooks().count();
     menu(&mut h, "Window", "Duplicate");
     let books: Vec<_> = project(&h).workbooks().collect();
@@ -8223,7 +8373,7 @@ fn file_append_brings_another_projects_windows_in_one_undo_step() {
 #[test]
 fn interpolate_y_from_x_takes_the_x_values_of_a_column() {
     let mut h = start(vec![data_file("interpfromx")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     // B is the curve; C's values (30.5 ... 0.5) are the X values to interpolate at.
     let b = project(&h).workbooks().next().unwrap().sheet().column_by_name("B").unwrap().id;
     let ctx = h.ctx.clone();
@@ -8245,7 +8395,7 @@ fn interpolate_y_from_x_takes_the_x_values_of_a_column() {
 #[test]
 fn a_drag_over_cells_selects_the_block_whatever_the_event_timing() {
     let mut h = start(vec![data_file("tmp-drag")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let (from, to) = (text_pos(&h, "2.5"), text_pos(&h, "10.5"));
     let button = |pos, pressed| egui::Event::PointerButton {
         pos,
@@ -8618,7 +8768,7 @@ fn the_survival_menu_runs_the_kaplan_meier_estimator() {
 ",
     );
     let mut h = start(vec![data]);
-    show_window(&mut h, "Book1 - survival");
+    show_window(&mut h, "Book1 - survival.csv");
     let graphs_before = project(&h).graphs().count();
     menu_path(&mut h, &["Statistics", "Survival Analysis", "Kaplan-Meier Estimator..."]);
     assert!(h.state().analysis.is_some(), "the Kaplan-Meier window is open");
@@ -8642,7 +8792,7 @@ fn the_descriptive_menu_runs_a_graphical_summary() {
     }
     let data = csv_file("gsum", "summary", &text);
     let mut h = start(vec![data]);
-    show_window(&mut h, "Book1 - summary");
+    show_window(&mut h, "Book1 - summary.csv");
     let graphs_before = project(&h).graphs().count();
     menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Graphical Summary..."]);
     assert!(h.state().analysis.is_some(), "the Graphical Summary window is open");
@@ -8691,7 +8841,7 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
 ",
     );
     let mut h = start(vec![data]);
-    show_window(&mut h, "Book1 - clusters");
+    show_window(&mut h, "Book1 - clusters.csv");
     let graphs_before = project(&h).graphs().count();
     menu_path(&mut h, &["Statistics", "Multivariate Analysis", "K-Means Cluster Analysis..."]);
     assert!(h.state().analysis.is_some(), "the k-means window is open");

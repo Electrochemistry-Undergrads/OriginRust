@@ -212,6 +212,7 @@ impl Worksheet {
         }
         self.cond_formats_insert_rows(columns, at, count);
         self.notes_insert_rows(&done, at, count);
+        self.formats_insert_rows(&done, at, count);
         locked
     }
 
@@ -237,7 +238,8 @@ impl Worksheet {
             c.trim_missing_tail();
         }
         self.cond_formats_delete_rows(columns, rows.clone());
-        self.notes_delete_rows(&done, rows);
+        self.notes_delete_rows(&done, rows.clone());
+        self.formats_delete_rows(&done, rows);
         locked
     }
 
@@ -364,6 +366,7 @@ impl Project {
             }
         }
         ws.notes_reorder_rows(&|c| columns.is_empty() || columns.contains(&c), &order, n);
+        ws.formats_reorder_rows(&|c| columns.is_empty() || columns.contains(&c), &order, n);
         // The rows moved, so a filter is applied again to the new order.
         let _ = self.reapply_row_filter(book, sheet);
         Ok(())
@@ -404,6 +407,7 @@ impl Project {
                 if let crate::project::Window::Workbook(b) = w {
                     for sheet in &mut b.sheets {
                         sheet.notes_reorder_rows(&|c| c == id, &order, n);
+                        sheet.formats_reorder_rows(&|c| c == id, &order, n);
                     }
                 }
             }
@@ -571,6 +575,41 @@ mod tests {
         p.reverse_columns(&[o]);
         let ws = &p.workbook(book).unwrap().sheets[0];
         assert_eq!((ws.note(k, 2), ws.note(o, 2)), (Some("three"), Some("ten")));
+    }
+
+    #[test]
+    fn cell_formats_follow_their_rows_through_sorts_inserts_and_deletes() {
+        use crate::cellformat::{CellFormat, FormatTarget};
+        let bold = CellFormat { bold: Some(true), ..Default::default() };
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let k = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![3.0, 1.0, 2.0])).unwrap();
+        let o = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![30.0, 10.0, 20.0])).unwrap();
+        {
+            let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
+            ws.apply_cell_format(FormatTarget::cells(vec![k], 0, Some(0)), bold.clone());
+            ws.apply_cell_format(FormatTarget::cells(vec![o], 1, Some(1)), bold.clone());
+            ws.apply_cell_format(
+                FormatTarget::whole_columns(vec![k]),
+                CellFormat { italic: Some(true), ..Default::default() },
+            );
+        }
+        let at = |p: &Project, c, r| p.workbook(book).unwrap().sheets[0].cell_format_at(c, r).bold;
+        p.sort_sheet(book, 0, k, false).unwrap();
+        assert!(at(&p, k, 2) && !at(&p, k, 0) && at(&p, o, 0) && !at(&p, o, 1));
+        assert!(p.workbook(book).unwrap().sheets[0].cell_format_at(k, 1).italic);
+        // Sorting one column alone moves only that column's formats.
+        p.sort_columns(book, 0, &[k], true).unwrap();
+        assert!(at(&p, k, 0) && !at(&p, k, 2) && at(&p, o, 0));
+        p.reverse_columns(&[o]);
+        assert!(at(&p, o, 2) && !at(&p, o, 0));
+        // Insert rows above and delete rows.
+        let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
+        ws.insert_rows(&[0, 1], 0, 2);
+        assert!(at(&p, k, 2) && at(&p, o, 4));
+        let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
+        ws.delete_rows(&[0, 1], 0..3);
+        assert!(!at(&p, k, 2) && at(&p, o, 1) && !at(&p, o, 0));
     }
 
     #[test]

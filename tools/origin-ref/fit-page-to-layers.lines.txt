@@ -1,0 +1,137 @@
+newbook;
+string bk$ = %H;
+col(1) = data(1,10);
+col(2) = col(1)^2;
+wks.addcol(); col(3) = col(1)*3;
+wks.addcol(); col(4) = 100-col(1)^2;
+?wks.ncols
+?col(2)[3]
+win -a Book1;
+plotxy iy:=[Book1]1!(1,2) plot:=200 ogl:=[<new name:=P0>];
+type -a "CASE default";
+?page.width
+?page.height
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+pfit2l ;
+?page.width
+?page.height
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?page.resolution
+?layer.unit
+win -a Book1;
+plotxy iy:=[Book1]1!(1,2) plot:=200 ogl:=[<new name:=P1>];
+type -a "CASE tight";
+?page.width
+?page.height
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+pfit2l margin:=tight;
+?page.width
+?page.height
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?page.resolution
+?layer.unit
+win -a Book1;
+plotxy iy:=[Book1]1!(1,2) plot:=200 ogl:=[<new name:=P2>];
+type -a "CASE bw10";
+?page.width
+?page.height
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+pfit2l borderwid:=10;
+?page.width
+?page.height
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?page.resolution
+?layer.unit
+win -a Book1;
+plotxy iy:=[Book1]1!(1,2) plot:=200 ogl:=[<new name:=P3>];
+type -a "CASE bw0";
+?page.width
+?page.height
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+pfit2l borderwid:=0;
+?page.width
+?page.height
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?page.resolution
+?layer.unit
+win -a Book1;
+plotxy iy:=[Book1]1!(1,2) plot:=200 ogl:=[<new name:=P4>];
+type -a "CASE height";
+?page.width
+?page.height
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+pfit2l direction:=height;
+?page.width
+?page.height
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?page.resolution
+?layer.unit
+win -a Book1;
+plotxy iy:=[Book1]1!(1,2) plot:=200 ogl:=[<new name:=P5>];
+type -a "CASE width";
+?page.width
+?page.height
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+pfit2l direction:=width;
+?page.width
+?page.height
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?page.resolution
+?layer.unit
+win -a Book1;
+plotxy iy:=[Book1]1!(1,2) plot:=200 ogl:=[<new name:=Q>];
+layer.width=30;
+layer -n;
+layer.left=60; layer.top=20; layer.width=30; layer.height=30;
+type -a "CASE two";
+?page.width
+?page.height
+pfit2l;
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+layer -s 2;
+?layer.left
+?layer.top
+?layer.width
+?layer.height

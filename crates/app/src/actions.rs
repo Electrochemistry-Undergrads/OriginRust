@@ -74,13 +74,15 @@ pub enum SheetOp {
 }
 
 /// An edit of one object of a graph, from the graph window (Origin's right-click menus).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GraphOp {
     /// Change Plot to: line, scatter, line + symbol, column.
     SetPlotKind { layer: usize, plot: usize, kind: PlotKind },
     /// Move to Right Y Axis / Move to Left Y Axis: the plot goes to the right Y layer of its
     /// panel (made when there is none) or back to the panel's own layer.
     MovePlotToAxis { layer: usize, plot: usize, right: bool },
+    /// Move to Layer N: the plot goes to another layer of the graph, with that layer's axes (T61).
+    MovePlotToLayer { layer: usize, plot: usize, to: usize },
     /// Hide Data Plot.
     HidePlot { layer: usize, plot: usize },
     /// Remove Trendline: the plot's last trendline goes.
@@ -94,6 +96,9 @@ pub enum GraphOp {
     /// Exchange X-Y Axes: the settings of the two axes and the X and Y columns of every plot trade places.
     /// A layer with a plot against the row number (no X column) is left as it is.
     ExchangeAxes { layer: usize },
+    /// Graph > Offset Grouped Data in Layer: the layer's stack mode. Choosing the mode the layer
+    /// already has changes nothing and makes no undo step.
+    SetStack { layer: usize, stack: sheaf_core::graph::Stack },
     /// Axis Zoom In and Axis Zoom Out: the axis range shrinks or grows about its middle.
     AxisZoom { layer: usize, y: bool, zoom_in: bool },
     /// Delete on the legend: it is hidden.
@@ -117,6 +122,10 @@ pub enum GraphOp {
     HideLayer { layer: usize },
     /// Hide Other Layers.
     HideOtherLayers { layer: usize },
+    /// Graph > New Layer(Axes) and the Graph toolbar: a layer of `kind` next to the active layer `layer`.
+    AddLayer { layer: usize, kind: sheaf_core::layers::NewLayerKind },
+    /// Delete Layer of the layer icon: the layer goes, its children become independent.
+    DeleteLayer { layer: usize },
 }
 
 /// The tool of a graph window (the Tools toolbar).
@@ -351,6 +360,9 @@ pub enum Action {
     /// Worksheet > Conditional Formatting > Remove Conditional Format: removes the rules that
     /// touch the selection.
     RemoveCondFormat(WindowId),
+    /// Format Cells... (cell, column and row menus; Format > Cell...): the window for the
+    /// formats of the selection.
+    FormatCellsDialog(WindowId),
     /// Cell menu > Add Note... / Edit Note...: the note editor for the single selected cell.
     NoteDialog(WindowId),
     /// Cell menu > Delete Note: removes the note of the single selected cell.
@@ -383,7 +395,14 @@ pub enum Action {
         book: WindowId,
         columns: Vec<ColumnId>,
     },
+    /// Graph > Merge Graph Windows...
+    MergeGraphs,
     LabelPanels {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    /// Plot > Multi-Y > Multiple Y Axes... (T61) for the selected columns (none: the sheet's Y columns).
+    MultiYAxes {
         book: WindowId,
         columns: Vec<ColumnId>,
     },
@@ -412,10 +431,26 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
     },
+    /// Opens Layer Contents for one layer with this plot type chosen (Graph > Add Plot to Layer).
+    AddPlotToLayer {
+        graph: WindowId,
+        layer: usize,
+        kind: sheaf_core::graph::PlotKind,
+    },
     /// Opens Layer Contents (Origin's add, remove, group and order window) for one layer.
     LayerContents {
         graph: WindowId,
         layer: usize,
+    },
+    /// Fit Page to Layers: opens its window (`dialog`) or fits the page with Origin's defaults at once.
+    FitPageToLayers {
+        graph: WindowId,
+        dialog: bool,
+    },
+    /// Opens Layer Management (arrange, size/position and link the layers) for a graph, with a layer selected when given.
+    LayerManagement {
+        graph: WindowId,
+        layer: Option<usize>,
     },
     /// Opens the graph settings on a tab, for one layer, with a plot chosen in the Plots tab.
     GraphProperties {

@@ -2213,7 +2213,12 @@ mod tests {
             Ok(o) => o.value,
             Err(e) => panic!("{}", e.message),
         };
-        assert_eq!(out["comparison_plot"]["file"], json!(path.display().to_string()));
+        // Windows' canonical form carries a `\\?\` prefix that the reported path may not; compare without it.
+        let plain = |p: &str| p.trim_start_matches(r"\\?\").to_string();
+        assert_eq!(
+            plain(out["comparison_plot"]["file"].as_str().unwrap_or_default()),
+            plain(&path.display().to_string())
+        );
         assert!(std::fs::read_to_string(&path).unwrap().contains("p &lt; 0.0001"));
         let _ = std::fs::remove_dir_all(dir);
     }

@@ -210,6 +210,7 @@ fn copy_axis_look(dst: &mut Axis, src: &Axis) {
         minor_ticks: dst.minor_ticks,
         title: dst.title.clone(),
         side: dst.side,
+        offset_pct: dst.offset_pct,
         reverse: dst.reverse,
         first_tick: dst.first_tick,
         axis_breaks: dst.axis_breaks.clone(),
@@ -704,6 +705,16 @@ fn line_and_ticks_tab(ui: &mut egui::Ui, axis: &mut Axis, vertical: bool, id: &s
                         ui.selectable_value(&mut axis.side, AxisSide::Opposite, opposite);
                     });
                 ui.end_row();
+                if vertical {
+                    // Origin's "% From Left" / "% From Right" axis position (graphing spec 21.3): the axis
+                    // line, ticks and labels stand outward from the frame by a share of its width.
+                    ui.label(if axis.side == AxisSide::Opposite { "% From Right" } else { "% From Left" });
+                    ui.add(DragValue::new(&mut axis.offset_pct).range(-100.0..=100.0).speed(0.5).suffix(" %"))
+                        .on_hover_text(
+                            "Outward from the frame, in percent of its width; negative moves the axis inside",
+                        );
+                    ui.end_row();
+                }
                 ui.label("Opposite side");
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut axis.show_opposite, "Line")

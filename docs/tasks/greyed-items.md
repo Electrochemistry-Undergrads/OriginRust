@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **463 greyed items: 319 in the menu bar, 47 on the toolbars, 97 in context menus.**
+original inventory baseline. This is not a new runtime audit. **421 greyed items: 294 in the menu bar, 39 on the toolbars, 88 in context menus.**
 
 ## How to read and keep this file
 
@@ -36,11 +36,11 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T56` | 1 |
 | `T57` | 2 |
 | `T58` | 15 |
-| `T59` | 6 |
-| `T60` | 7 |
-| `T61` | 20 |
-| `T62` | 8 |
-| `T63` | 31 |
+| `T59` | 2 |
+| `T60` | 0 |
+| `T61` | 5 |
+| `T62` | 0 |
+| `T63` | 20 |
 | `B1` | 27 |
 | `B2` | 51 |
 | `B3` | 28 |
@@ -48,7 +48,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B5` | 33 |
 | `B6` | 31 |
 | `B7` | 8 |
-| `B8` | 14 |
+| `B8` | 16 |
 | `B9` | 13 |
 | `B10` | 6 |
 | `B11` | 10 |
@@ -57,10 +57,10 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B14` | 44 |
 | `B15` | 21 |
 | `B16` | 15 |
-| `N` | 19 |
+| `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 90 items, backlog packages (`B`) 354, not planned (`N`) 19.
+Briefs (`T`) hold 45 items, backlog packages (`B`) 356, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -116,14 +116,11 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B4` Symbol: Scatter Central · Column Scatter · Vertical Drop Line
 - `B4` Line + Symbol: Line Series · 2 Point Segment · 3 Point Segment
 - `B4` Column/Bar/Pie: Column + Label · Grouped Columns (indexed data)
-- `T61` Multi-Y: 3Ys Y-YY · 3Ys Y-Y-Y · 4Ys Y-YYY · 4Ys YY-YY · Multiple Y Axes...
-- `T62` Y-offset/Waterfall: Waterfall Y:Color Mapping · Waterfall Z:Color Mapping
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
 - `B15` 3D Symbol/Bar/Vector: 3D Bars · 3D Scatter · 3D Trajectory · 3D Scatter + Error Bar · 3D Vector XYZ XYZ · 3D Vector XYZ dXdYdZ
-- `T62` Statistics: Stacked Histograms
-- `T63` Statistics: Probability Plot · Q-Q Plot
+- `B8` Statistics: Probability Plot · Q-Q Plot
 - `B4` Statistics: Grouped Box Charts · Interval Plot · Histogram + Probabilities · Marginal Histograms · Marginal Box Charts · 2D Kernel Density · QC (X bar R) Chart · Pareto · Scatter Matrix
 - `B14` Contour/Heat Map: Color Fill · B/W Lines + Labels · Gray Scale Map · Heat Map · Polar Contour theta(X) r(Y) · Polar Contour r(X) theta(Y) · Ternary Contour
 - `B14` Profile: Contour Profiles · Image Profiles
@@ -167,12 +164,10 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B14` Spatial Filters: Smooth... · Sharpen... · Edge Detection...
 
 ### Graph
-- `T63` Add Plot to Layer: Line... · Scatter... · Line + Symbol... · Column... · Area...
-- `T60` Layer Management... · Merge Graph Windows... · Fit Layer to Graph · Fit Page to Layers...
+- `N` Fit Layer to Graph
 - `B3` Add Function Graph... · Add Straight Line... · New Table · New Color Scale · Convert to Standard Font Size
-- `T61` New Layer(Axes): Horizontal Axis Layer... · Vertical Axis Layer...
+- `T61` New Layer(Axes): Open Dialog...
 - `B3` Legend: Add Legend Title
-- `T62` Offset Grouped Data in Layer: None · Cumulative · Constant · Auto · Individual
 
 ### Data
 - `B3` Set Display Range · Reset to Full Range · Mark Data Range · Clear Data Markers
@@ -198,14 +193,12 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Menu
 - `B16` Programming Control...
 - `B2` Object Properties...
-- `T61` Layer Properties... [Graph]
 - `B2` Snap Layers to Grid · Snap Objects to Grid [Graph]
-- `T60` Fit Page To Layers [Graph]
 - `B3` Fit Page To Printer [Graph]
 - `B15` Axes: Z Axis... [Graph]
 - `T63` Axis Tick Labels: X Axis Tick Labels... · Y Axis Tick Labels... [Graph]
 - `T58` Axis Titles: X Axis Title... · Y Axis Title... [Graph]
-- `T59` Worksheet... · Cell... [Workbook]
+- `T59` Worksheet... [Workbook]
 - `B6` Snap to Grid · Merge cells [Workbook]
 
 ### Window
@@ -226,31 +219,25 @@ changes. The baseline labels remain open until implementation or a documented re
 
 - `B12` Standard: New Graph
 - `B14` Standard: New Matrix · New Layout · New Notes
-- `T63` Standard: Duplicate
 - `T58` Format: Font name box · Font size box · Bold · Italic · Underline · Superscript · Subscript · Greek · Increase Font Size · Decrease Font Size · Font Color · Fill Color · Line Color
 - `B1` Graph: Zoom In · Zoom Out · Whole Page
-- `T61` Graph: Add Layer (Bottom-X Left-Y) · Add Layer (Top-X Left-Y) · Add Layer (Bottom-X Right-Y) · Add Layer (Top-X Right-Y) · Add Inset Graph
 - `T63` 2D Graphs: Bar · Stacked Area · Box Chart · Histogram · Bubble
 - `B4` 2D Graphs: High-Low-Close
 - `B1` Tools: Zoom In · Zoom Out · Pan
 - `B2` Object Edit: Align Left · Align Right · Align Top · Align Bottom · Align Horizontal Center · Align Vertical Center · Make Same Width · Make Same Height · Group · Ungroup
-- `T63` Object Edit: Bring to Front · Send to Back
 
 ## Context menus
 
 - `B5` Worksheet column header: Copy Columns to... · Remove Links · Swap Columns... · Slide Show of Dependent Graphs · Set Sampling Interval... · Show X Column...
 - `T63` Worksheet column header: Frequency Count...
 - `B6` Worksheet column header: Add or Update Sparklines...
-- `T59` Worksheet column header: Format Cells...
 - `T63` Worksheet column header > Fill Column with: Row Numbers · Uniform Random Numbers · Normal Random Numbers
 - `B5` Worksheet column header > Fill Column with: A set of Numbers... · A set of Date/Time values... · Arbitrary set of Text&Numeric values...
 - `B5` Worksheet data cell: Paste Transpose · Paste Link · Paste Link Transpose · Remove Links · Set as Begin · Set as End
 - `B6` Worksheet data cell: Insert Graph... · Insert Images from Files... · Insert Sparklines... · Insert Variables...
-- `T59` Worksheet data cell: Format Cells...
 - `B6` Worksheet data cell > Insert Arrow: Arrow · Double Arrow
 - `T59` Worksheet data cell > Set Data Style: Default
 - `B6` Worksheet row number: Insert Graph...
-- `T59` Worksheet row number: Format Cells...
 - `B6` Worksheet sheet tab: Add Graph as Sheet... · Add Notes as Sheet · Duplicate Without Data · Navigate...
 - `B6` Worksheet sheet tab > Sheet Name to Show: Short Name · Long Name · Both
 - `B6` Worksheet corner: Column Header · Row Header · Column Grid · Row Grid · Page Break Preview Lines
@@ -268,15 +255,12 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B11` Graph legend: Save Format as Theme...
 - `B3` Graph legend > Legend: Add Legend Title
 - `B2` Graph legend > Copy Format: All · All Style Formats · Text
-- `T60` Graph page: Layer Management...
 - `B12` Graph page: Add Shortcut to Favorites
 - `B1` Graph page: View Full Screen
-- `T61` Graph page > New Layer(Axes): Horizontal Axis Layer... · Vertical Axis Layer...
+- `T61` Graph page > New Layer(Axes): Open Dialog...
 - `B2` Graph page > Copy Format: All · All Style Formats
 - `B11` Graph page > Duplicate (Batch Plotting): Duplicate
-- `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Delete Layer · Double click to open Plot Setup · Layer Properties...
-- `T60` Graph layer icon: Layer Management...
+- `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Double click to open Plot Setup
 - `B12` Explorer folder: Properties...
-- `T63` Explorer window: Duplicate
 
 No greyed item was found in the label-cell menu or the Integrate gadget menu.

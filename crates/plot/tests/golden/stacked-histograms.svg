@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="590.76pt" height="771.84pt" viewBox="0 0 590.76 771.84">
+<rect x="0" y="0" width="590.76" height="771.84" fill="#FFFFFF"/>
+<g id="layer0">
+<clipPath id="clip0"><rect x="88.614" y="77.184" width="443.07" height="205.824"/></clipPath>
+<g class="plots" clip-path="url(#clip0)">
+<rect x="88.614" y="102.912" width="36.923" height="180.096" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<rect x="125.536" y="180.096" width="36.923" height="102.912" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<rect x="162.459" y="231.552" width="36.922" height="51.456" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<rect x="199.382" y="205.824" width="36.922" height="77.184" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<rect x="236.304" y="231.552" width="36.923" height="51.456" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<rect x="273.227" y="257.28" width="36.923" height="25.728" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<rect x="310.149" y="180.096" width="36.923" height="102.912" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<rect x="347.072" y="231.552" width="36.922" height="51.456" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<rect x="383.994" y="205.824" width="36.923" height="77.184" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<rect x="420.917" y="231.552" width="36.923" height="51.456" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<rect x="457.839" y="180.096" width="36.922" height="102.912" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<rect x="494.761" y="102.912" width="36.923" height="180.096" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+</g>
+<g class="overlay">
+<path d="M88.614 283.008L531.684 283.008" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M88.614 77.184L88.614 283.008" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M125.536 283.008L125.536 274.008M310.149 283.008L310.149 274.008M494.761 283.008L494.761 274.008M217.843 283.008L217.843 278.508M402.455 283.008L402.455 278.508" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M88.614 283.008L79.614 283.008M88.614 231.552L79.614 231.552M88.614 180.096L79.614 180.096M88.614 128.64L79.614 128.64M88.614 77.184L79.614 77.184M88.614 257.28L84.114 257.28M88.614 205.824L84.114 205.824M88.614 154.368L84.114 154.368M88.614 102.912L84.114 102.912" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="73.314" y="287.598" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">0</text>
+<text x="73.314" y="236.142" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">2</text>
+<text x="73.314" y="184.686" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">4</text>
+<text x="73.314" y="133.23" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">6</text>
+<text x="73.314" y="81.774" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">8</text>
+<text x="45.594" y="385.92" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 45.594 385.92)">Count</text>
+<rect x="424.984" y="94.784" width="89.1" height="46.2" fill="none" stroke="#000000" stroke-width="0.75"/>
+<rect x="433.784" y="106.884" width="48.4" height="22" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<text x="493.184" y="123.494" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">A</text>
+</g>
+</g>
+<g id="layer1">
+<clipPath id="clip1"><rect x="88.614" y="283.008" width="443.07" height="205.824"/></clipPath>
+<g class="plots" clip-path="url(#clip1)">
+<rect x="88.614" y="488.832" width="36.923" height="0" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<rect x="125.536" y="371.218" width="36.923" height="117.614" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<rect x="162.459" y="312.411" width="36.922" height="176.421" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<rect x="199.382" y="371.218" width="36.922" height="117.614" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<rect x="236.304" y="400.622" width="36.923" height="88.21" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<rect x="273.227" y="430.025" width="36.923" height="58.807" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<rect x="310.149" y="341.815" width="36.923" height="147.017" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<rect x="347.072" y="400.622" width="36.922" height="88.21" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<rect x="383.994" y="371.218" width="36.923" height="117.614" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<rect x="420.917" y="312.411" width="36.923" height="176.421" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<rect x="457.839" y="371.218" width="36.922" height="117.614" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<rect x="494.761" y="488.832" width="36.923" height="0" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+</g>
+<g class="overlay">
+<path d="M88.614 488.832L531.684 488.832" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M88.614 283.008L88.614 488.832" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M125.536 488.832L125.536 479.832M310.149 488.832L310.149 479.832M494.761 488.832L494.761 479.832M217.843 488.832L217.843 484.332M402.455 488.832L402.455 484.332" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M88.614 488.832L79.614 488.832M88.614 430.025L79.614 430.025M88.614 371.218L79.614 371.218M88.614 312.411L79.614 312.411M88.614 459.429L84.114 459.429M88.614 400.622L84.114 400.622M88.614 341.815L84.114 341.815M88.614 283.008L84.114 283.008" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="73.314" y="493.422" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">0</text>
+<text x="73.314" y="434.615" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">2</text>
+<text x="73.314" y="375.808" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">4</text>
+<text x="73.314" y="317.001" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">6</text>
+<rect x="424.984" y="300.608" width="89.1" height="46.2" fill="none" stroke="#000000" stroke-width="0.75"/>
+<rect x="433.784" y="312.708" width="48.4" height="22" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<text x="493.184" y="329.318" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">B</text>
+</g>
+</g>
+<g id="layer2">
+<clipPath id="clip2"><rect x="88.614" y="488.832" width="443.07" height="205.824"/></clipPath>
+<g class="plots" clip-path="url(#clip2)">
+<rect x="88.614" y="694.656" width="36.923" height="0" fill="none" stroke="#0000FF" stroke-width="0.5"/>
+<rect x="125.536" y="694.656" width="36.923" height="0" fill="none" stroke="#0000FF" stroke-width="0.5"/>
+<rect x="162.459" y="694.656" width="36.922" height="0" fill="none" stroke="#0000FF" stroke-width="0.5"/>
+<rect x="199.382" y="511.701" width="36.922" height="182.955" fill="none" stroke="#0000FF" stroke-width="0.5"/>
+<rect x="236.304" y="534.571" width="36.923" height="160.085" fill="none" stroke="#0000FF" stroke-width="0.5"/>
+<rect x="273.227" y="603.179" width="36.923" height="91.477" fill="none" stroke="#0000FF" stroke-width="0.5"/>
+<rect x="310.149" y="534.571" width="36.923" height="160.085" fill="none" stroke="#0000FF" stroke-width="0.5"/>
+<rect x="347.072" y="534.571" width="36.922" height="160.085" fill="none" stroke="#0000FF" stroke-width="0.5"/>
+<rect x="383.994" y="511.701" width="36.923" height="182.955" fill="none" stroke="#0000FF" stroke-width="0.5"/>
+<rect x="420.917" y="694.656" width="36.923" height="0" fill="none" stroke="#0000FF" stroke-width="0.5"/>
+<rect x="457.839" y="694.656" width="36.922" height="0" fill="none" stroke="#0000FF" stroke-width="0.5"/>
+<rect x="494.761" y="694.656" width="36.923" height="0" fill="none" stroke="#0000FF" stroke-width="0.5"/>
+</g>
+<g class="overlay">
+<path d="M88.614 694.656L531.684 694.656" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M88.614 488.832L88.614 694.656" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M125.536 694.656L125.536 703.656M310.149 694.656L310.149 703.656M494.761 694.656L494.761 703.656M217.843 694.656L217.843 699.156M402.455 694.656L402.455 699.156" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M88.614 694.656L79.614 694.656M88.614 648.917L79.614 648.917M88.614 603.179L79.614 603.179M88.614 557.44L79.614 557.44M88.614 511.701L79.614 511.701M88.614 671.787L84.114 671.787M88.614 626.048L84.114 626.048M88.614 580.309L84.114 580.309M88.614 534.571L84.114 534.571M88.614 488.832L84.114 488.832" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="125.536" y="722.916" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">−50</text>
+<text x="310.149" y="722.916" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">0</text>
+<text x="494.761" y="722.916" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">50</text>
+<text x="73.314" y="699.246" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">0</text>
+<text x="73.314" y="653.507" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">2</text>
+<text x="73.314" y="607.769" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">4</text>
+<text x="73.314" y="562.03" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">6</text>
+<text x="73.314" y="516.291" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">8</text>
+<text x="310.149" y="755.736" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">C</text>
+<rect x="424.984" y="506.432" width="89.1" height="46.2" fill="none" stroke="#000000" stroke-width="0.75"/>
+<rect x="433.784" y="518.532" width="48.4" height="22" fill="none" stroke="#0000FF" stroke-width="0.5"/>
+<text x="493.184" y="535.142" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">C</text>
+</g>
+</g>
+</svg>

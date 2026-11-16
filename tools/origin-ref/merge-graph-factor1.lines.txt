@@ -1,0 +1,257 @@
+newbook;
+string bk$ = %H;
+col(1) = data(1,10);
+col(2) = col(1)^2;
+wks.addcol(); col(3) = col(1)*3;
+wks.addcol(); col(4) = 100-col(1)^2;
+?wks.ncols
+?col(2)[3]
+plotxy iy:=[Book1]1!(1,2) plot:=200 ogl:=[<new name:=GA>];
+$page.name$
+?layer.nplots
+win -a Book1;
+plotxy iy:=[Book1]1!(1,3) plot:=200 ogl:=[<new name:=GB>];
+$page.name$
+win -a Book1;
+plotxy iy:=[Book1]1!(1,4) plot:=200 ogl:=[<new name:=GC>];
+$page.name$
+win -a Book1;
+plotxy iy:=[Book1]1!(1,2) plot:=200 ogl:=[<new name:=GD>];
+type -a "CASE 2x2";
+merge_graph option:=project row:=2 col:=2;
+$page.name$
+?page.nlayers
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+win -cd %H;
+type -a "CASE 2x2g0m0";
+merge_graph option:=project row:=2 col:=2 xgap:=0 ygap:=0 leftmg:=0 rightmg:=0 topmg:=0 bottommg:=0;
+$page.name$
+?page.nlayers
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+win -cd %H;
+type -a "CASE 2x2m30";
+merge_graph option:=project row:=2 col:=2 leftmg:=30 rightmg:=30 topmg:=30 bottommg:=30;
+$page.name$
+?page.nlayers
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+win -cd %H;
+type -a "CASE 3x3";
+merge_graph option:=project row:=3 col:=3;
+$page.name$
+?page.nlayers
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+win -cd %H;
+type -a "CASE 2x3";
+merge_graph option:=project row:=2 col:=3;
+$page.name$
+?page.nlayers
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+win -cd %H;
+type -a "CASE 4x4";
+merge_graph option:=project row:=4 col:=4;
+$page.name$
+?page.nlayers
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+win -cd %H;
+type -a "CASE 2x1";
+merge_graph option:=project row:=2 col:=1;
+$page.name$
+?page.nlayers
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+win -cd %H;
+type -a "CASE 1x2";
+merge_graph option:=project row:=1 col:=2;
+$page.name$
+?page.nlayers
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+win -cd %H;
+type -a "CASE 4x1";
+merge_graph option:=project row:=4 col:=1;
+$page.name$
+?page.nlayers
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+win -cd %H;
+type -a "CASE 2x2frame";
+merge_graph option:=project row:=2 col:=2 scalemode:=frame;
+$page.name$
+?page.nlayers
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+win -cd %H;
+type -a "CASE 3x2frame";
+merge_graph option:=project row:=3 col:=2 scalemode:=frame;
+$page.name$
+?page.nlayers
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+win -cd %H;
+type -a "CASE 2x2big";
+merge_graph option:=project row:=2 col:=2 width:=30 height:=20 unit:=inch;
+$page.name$
+?page.nlayers
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+win -cd %H;
+type -a "CASE 2x2portrait";
+merge_graph option:=project row:=2 col:=2 portrait:=portrait;
+$page.name$
+?page.nlayers
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+win -cd %H;
+type -a "CASE 2x2noarr";
+merge_graph option:=project row:=2 col:=2 arrange:=0;
+$page.name$
+?page.nlayers
+?page.width
+?page.height
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+win -cd %H;

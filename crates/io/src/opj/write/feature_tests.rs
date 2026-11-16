@@ -516,7 +516,12 @@ fn hidden_columns_and_column_widths_are_named_in_the_warnings() {
     }];
     let first = b.sheets[0].columns[0].id;
     b.sheets[0].set_note(first, 0, "a note");
+    b.sheets[0].apply_cell_format(
+        sheaf_core::cellformat::FormatTarget::whole_columns(vec![first]),
+        sheaf_core::cellformat::CellFormat { bold: Some(true), ..Default::default() },
+    );
     let all = written(&p).warnings.join(" | ");
+    assert!(all.contains("1 sheet(s) have cell formatting"), "{all}");
     assert!(all.contains("1 cell note(s) are not written"), "{all}");
     assert!(all.contains("1 sheet(s) have frozen panes"), "{all}");
     assert!(all.contains("1 sheet(s) have conditional formatting"), "{all}");

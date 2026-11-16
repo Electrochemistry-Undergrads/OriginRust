@@ -3,7 +3,7 @@ use sheaf_core::condformat::{self, Rule};
 
 fn start_book(tag: &str) -> Harness<'static, SheafApp> {
     let mut h = start(vec![data_file(tag)]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     h
 }
 

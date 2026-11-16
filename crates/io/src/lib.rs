@@ -231,7 +231,8 @@ pub fn import_file_with_excel(
         let r = chi::parse_chi(&text, &stem, chi_opts).map_err(|e| name_file(e, &shown))?;
         return Ok(finish_chi(r, shown, path));
     }
-    let r = ascii::parse_ascii(&text, &stem, ascii_opts).map_err(|e| name_file(e, &shown))?;
+    let file_name = path.file_name().map_or_else(|| stem.clone(), |s| s.to_string_lossy().into_owned());
+    let r = ascii::parse_ascii_named(&text, &file_name, ascii_opts).map_err(|e| name_file(e, &shown))?;
     let mut workbook = r.workbook;
     workbook.source = Some(ImportSource { path: shown, importer: "ascii".to_string() });
     let mut warnings = r.warnings;
@@ -253,6 +254,11 @@ pub fn import_file_with_excel(
 fn finish_chi(r: chi::ChiImport, shown: String, path: &Path) -> Imported {
     let cv = r.scans > 0 || r.technique.to_ascii_lowercase().contains("cyclic voltammetry");
     let mut workbook = r.workbook;
+    // Origin reads these text files with its ASCII import, which keeps the extension in the book's
+    // long name (an imported run1.txt is titled run1.txt).
+    if let Some(name) = path.file_name() {
+        workbook.long_name = name.to_string_lossy().into_owned();
+    }
     workbook.source = Some(ImportSource { path: shown, importer: "chi".to_string() });
     Imported {
         path: path.to_path_buf(),
@@ -300,7 +306,7 @@ mod tests {
         let a = import_file(&dir.join("run1.txt"), ImportKind::Auto, &chi, &ascii).unwrap();
         assert_eq!((a.format, a.suggested_template), ("chi", Template::CyclicVoltammetry));
         assert_eq!(a.workbook.source.as_ref().unwrap().importer, "chi");
-        assert_eq!(a.workbook.long_name, "run1");
+        assert_eq!(a.workbook.long_name, "run1.txt", "the title keeps the extension, as in Origin");
 
         let b = import_file(&dir.join("table.csv"), ImportKind::Auto, &chi, &ascii).unwrap();
         assert_eq!((b.format, b.suggested_template), ("ascii", Template::Line));
@@ -329,7 +335,7 @@ mod tests {
                 let a = import_file(&dir.join(name), kind, &chi, &ascii).unwrap();
                 assert_eq!((a.format, a.suggested_template), ("chi", Template::CyclicVoltammetry), "{name}");
                 assert_eq!(a.workbook.source.as_ref().unwrap().importer, "chi");
-                assert_eq!(a.workbook.long_name, Path::new(name).file_stem().unwrap().to_string_lossy());
+                assert_eq!(a.workbook.long_name, name, "the title is the whole file name");
                 assert!(a.meta.iter().any(|(k, v)| k == "Technique" && v == "Cyclic Voltammetry"));
             }
         }

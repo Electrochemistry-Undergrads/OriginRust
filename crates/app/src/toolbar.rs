@@ -22,6 +22,7 @@ use crate::panels::PanelId;
 use crate::theme;
 use eframe::egui::{self, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Shape, Stroke, Ui, vec2};
 use sheaf_core::Designation;
+use sheaf_core::layers::NewLayerKind;
 use sheaf_core::shape::ShapeKind;
 use sheaf_core::template::Template;
 use std::collections::HashSet;
@@ -160,6 +161,7 @@ pub enum Icon {
     LayerRight,
     LayerBoth,
     Inset,
+    InsetData,
     DataReader,
     Text,
     Arrow,
@@ -238,6 +240,29 @@ fn is_tool(cmd: &Cmd) -> bool {
     matches!(cmd, Cmd::Pointer | Cmd::DataReader | Cmd::TextTool | Cmd::SlopeTool | Cmd::ShapeTool(_))
 }
 
+#[cfg(test)]
+fn is_order(cmd: &Cmd) -> bool {
+    matches!(cmd, Cmd::OrderSelectedShape { .. })
+}
+
+/// A Graph toolbar button that adds a layer of `kind` (the same command as Graph > New Layer(Axes)).
+fn layer_button(icon: Icon, kind: NewLayerKind) -> Item {
+    let tip = match kind {
+        NewLayerKind::Normal => "Add Bottom-X Left-Y Layer",
+        NewLayerKind::TopX => "Add Top-X Layer",
+        NewLayerKind::RightY => "Add Right-Y Layer",
+        NewLayerKind::TopXRightY => "Add Top-X Right-Y Layer",
+        NewLayerKind::Inset => "Add Inset Graph",
+        _ => "Add Inset Graph With Data",
+    };
+    b(icon, tip, Cmd::AddLayer(kind), kind.menu_label())
+}
+
+/// An Object Edit button that reorders the selected drawn shape (no menu entry; state-disabled).
+fn b_order(icon: Icon, tip: &'static str, front: bool) -> Item {
+    Item::Button(Button { icon, tip, cmd: Some(Cmd::OrderSelectedShape { front }), menu: "", on: false })
+}
+
 /// A button for a feature Sheaf lacks.
 fn g(icon: Icon, tip: &'static str) -> Item {
     Item::Button(Button { icon, tip, cmd: None, menu: "", on: false })
@@ -270,7 +295,7 @@ fn build(bar: Bar) -> Vec<Item> {
             b(ImportMany, "Import Multiple ASCII", Cmd::ImportMultiple, "Multiple ASCII"),
             gap(),
             b(Print, "Print the active window", Cmd::Print, "Print"),
-            g(Duplicate, "Duplicate"),
+            b(Duplicate, "Duplicate", Cmd::DuplicateWindow, "Duplicate"),
             gap(),
             b(PanelLeft, "Project Explorer", Cmd::Panel(PanelId::Explorer), "Project Explorer"),
             b(PanelRight, "Object Manager", Cmd::Panel(PanelId::Objects), "Object Manager"),
@@ -326,12 +351,13 @@ fn build(bar: Bar) -> Vec<Item> {
             b(Rescale, "Rescale to Show All", Cmd::Rescale, "Rescale to Show All"),
             b(Exchange, "Exchange X-Y Axes", Cmd::ExchangeAxes, "Exchange X-Y Axes"),
             gap(),
-            g(Layer, "Add Layer (Bottom-X Left-Y)"),
-            g(LayerTop, "Add Layer (Top-X Left-Y)"),
-            g(LayerRight, "Add Layer (Bottom-X Right-Y)"),
-            g(LayerBoth, "Add Layer (Top-X Right-Y)"),
+            layer_button(Layer, NewLayerKind::Normal),
+            layer_button(LayerTop, NewLayerKind::TopX),
+            layer_button(LayerRight, NewLayerKind::RightY),
+            layer_button(LayerBoth, NewLayerKind::TopXRightY),
             gap(),
-            g(Inset, "Add Inset Graph"),
+            layer_button(Inset, NewLayerKind::Inset),
+            layer_button(InsetData, NewLayerKind::InsetWithData),
         ],
         Bar::Graphs2D => vec![
             b(PlotLine, "Line", Cmd::Plot(Template::Line), "Line"),
@@ -376,8 +402,8 @@ fn build(bar: Bar) -> Vec<Item> {
             g(SameWidth, "Make Same Width"),
             g(SameHeight, "Make Same Height"),
             gap(),
-            g(Front, "Bring to Front"),
-            g(Back, "Send to Back"),
+            b_order(Front, "Bring to Front", true),
+            b_order(Back, "Send to Back", false),
             g(Group, "Group"),
             g(Ungroup, "Ungroup"),
         ],
@@ -898,9 +924,12 @@ impl Pen<'_> {
                     self.line(&[(5.0, 11.0), (8.0, 7.0), (12.0, 9.0)], true);
                 }
             }
-            Inset => {
+            Inset | InsetData => {
                 self.rect(1.5, 1.5, 14.5, 14.5, false);
                 self.rect(7.5, 2.5, 13.5, 8.5, true);
+                if icon == InsetData {
+                    self.line(&[(9.0, 7.0), (10.5, 4.5), (12.0, 6.0)], true);
+                }
             }
             DataReader => {
                 self.circle((8.0, 8.0), 4.0, false);
@@ -1147,7 +1176,7 @@ mod tests {
     fn every_button_with_a_command_sends_the_command_of_the_menu_entry_it_is_named_after() {
         for (bar, button) in buttons() {
             let Some(cmd) = &button.cmd else { continue };
-            if is_tool(cmd) {
+            if is_tool(cmd) || is_order(cmd) {
                 assert!(button.menu.is_empty(), "{}: tools have no menu entry", button.tip);
                 continue;
             }
@@ -1173,6 +1202,7 @@ mod tests {
             assert!(!button.on, "{}: {}", bar.name(), button.tip);
             match &button.cmd {
                 Some(cmd) if is_tool(cmd) => assert_eq!(bar, Bar::Tools, "{}", button.tip),
+                Some(cmd) if is_order(cmd) => assert_eq!(bar, Bar::ObjectEdit, "{}", button.tip),
                 Some(_) => assert!(!button.menu.is_empty(), "{}: {} has no menu name", bar.name(), button.tip),
                 None => {}
             }

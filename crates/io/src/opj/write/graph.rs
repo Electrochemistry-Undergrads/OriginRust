@@ -1122,6 +1122,18 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
                 .into(),
         );
     }
+    if layer.waterfall_color != sheaf_core::graph::WaterfallColor::None {
+        notes.push(
+            "the waterfall colour mapping (Y or Z) was not written: the curves went out in their plot colours without a colour scale (the .opj.sheaf companion keeps the mapping)"
+                .into(),
+        );
+    }
+    if layer.stack == Stack::Cumulative {
+        notes.push(
+            "a cumulative stack was written as plain curves (the cumulative offset mode is not written; the .opj.sheaf companion keeps it)"
+                .into(),
+        );
+    }
     if layer.plot_offsets.iter().any(|o| o.x_multiplier != 1.0 || o.y_multiplier != 1.0) {
         notes.push("plot X/Y multipliers were not written; Origin shows the source values with offsets only (the .opj.sheaf companion keeps the multipliers)".into());
     }
@@ -1146,6 +1158,12 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
     }
     if layer.bars.width_pct.is_some() {
         notes.push("the width of column bars (in percent) was not written; the bars reopen with the layer's gap setting instead".into());
+    }
+    if layer.y_axis.offset_pct != 0.0 {
+        notes.push(
+            "the position of a Y axis away from the frame (3Ys/4Ys, Multiple Y Axes) was not written; the axis              reopens at the frame (the .opj.sheaf companion keeps the offset)"
+                .into(),
+        );
     }
     if layer.legend.visible && layer.legend.columns > 1 {
         notes.push("the number of columns of the legend was not written; its entries stand in one column".into());

@@ -5,7 +5,7 @@
 //! (`sheaf-io`) both place the plots with [`places`].
 
 use crate::Project;
-use crate::graph::{Layer, Plot, Stack};
+use crate::graph::{Layer, Plot, PlotKind, Stack};
 
 /// Where one plot of a layer is drawn relative to its data.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -66,7 +66,7 @@ pub fn places(project: &Project, layer: &Layer) -> (Vec<Place>, usize) {
         })
         .collect();
     let offsets: Vec<(f64, f64)> = match layer.stack {
-        Stack::None | Stack::Waterfall { .. } => vec![(0.0, 0.0); members.len()],
+        Stack::None | Stack::Cumulative | Stack::Waterfall { .. } => vec![(0.0, 0.0); members.len()],
         Stack::Constant { step } => (0..members.len()).map(|k| (0.0, finite(k as f64 * finite(step)))).collect(),
         Stack::Individual => members
             .iter()
@@ -98,6 +98,116 @@ pub fn places(project: &Project, layer: &Layer) -> (Vec<Place>, usize) {
         }
     }
     (places, members.len())
+}
+
+/// The Z value of a waterfall curve for Z colour mapping (graphing spec 13.17): the number in the long name of
+/// its Y column, else the number in the column's comments, else the curve's place in the stack counted from 1.
+/// Sheaf's choice; Origin takes Z from the plot's own Z settings (unmeasured).
+pub fn waterfall_z(project: &Project, plot: &Plot, member: usize) -> f64 {
+    let column = project.column(plot.y);
+    let number = |text: &str| text.trim().parse::<f64>().ok().filter(|v| v.is_finite());
+    column.and_then(|c| number(&c.long_name).or_else(|| number(&c.comments))).unwrap_or((member + 1) as f64)
+}
+
+/// True for the plot types that [`Stack::Cumulative`] adds up: lines, scatter and line + symbol.
+fn cumulates(plot: &Plot) -> bool {
+    matches!(plot.kind, PlotKind::Line | PlotKind::Scatter | PlotKind::LineSymbol)
+}
+
+/// True when `layer` has a plot that [`Stack::Cumulative`] would add up (a line, scatter or line + symbol plot).
+pub fn layer_cumulates(layer: &Layer) -> bool {
+    layer.plots.iter().any(cumulates)
+}
+
+/// What [`Stack::Cumulative`] adds to the Y values of each plot of `layer` (graphing spec 13.15),
+/// one entry per plot in plot order, each a vector with one number per row of the plot's Y column;
+/// drawn Y of a row is its Y plus this number. `None` for a plot that is not stacked this way: the
+/// layer is not cumulative, the plot is not a line, scatter or line + symbol plot, or its Y column
+/// holds no numbers (a follower of such a curve gets `None` too).
+///
+/// Sheaf's rules (not measured in Origin): the members are summed in plot order, pointwise by row
+/// index, whatever their X values. A member contributes its Y at a row when the row is shown (in
+/// the plot's row range, passing its row filters, and not masked while Hide Masked Points is on) and finite; otherwise it contributes 0, so one
+/// missing value does not break the curves above it. A hidden member still contributes (spec
+/// 13.3). A curve that follows a member (a fitted curve) is moved by the leader's added amount
+/// at its own X, interpolated linearly along the leader's X (clamped at the ends).
+pub fn cumulative_add(project: &Project, layer: &Layer) -> Vec<Option<Vec<f64>>> {
+    let mut out: Vec<Option<Vec<f64>>> = vec![None; layer.plots.len()];
+    if layer.stack != Stack::Cumulative {
+        return out;
+    }
+    let mut running: Vec<f64> = Vec::new();
+    let mut members: Vec<usize> = Vec::new();
+    for (i, plot) in layer.plots.iter().enumerate() {
+        let Some(y) = project.numeric(plot.y) else { continue };
+        if layer.follows(plot.y).is_some() {
+            continue;
+        }
+        members.push(i);
+        if !cumulates(plot) {
+            continue;
+        }
+        if running.len() < y.len() {
+            running.resize(y.len(), 0.0);
+        }
+        let mut add = running.clone();
+        add.resize(y.len(), 0.0);
+        out[i] = Some(add);
+        let filters = project.plot_row_filters(plot);
+        let (start, end) = row_range(plot, y.len());
+        // With Hide Masked Points a masked row is not drawn, so it adds nothing either.
+        let hidden = project.column(plot.y).and_then(|c| c.active_mask()).filter(|_| project.hide_masked);
+        for (r, &v) in y.iter().enumerate().take(end).skip(start) {
+            if v.is_finite() && filters.iter().all(|f| f.passes(r)) && !hidden.is_some_and(|m| m.contains(&r)) {
+                running[r] += v;
+            }
+        }
+    }
+    for (i, plot) in layer.plots.iter().enumerate() {
+        let Some(leader) = layer.follows(plot.y) else { continue };
+        let Some(y) = project.numeric(plot.y) else { continue };
+        let Some(&j) = members.iter().find(|&&j| layer.plots[j].y == leader) else { continue };
+        let Some(base) = &out[j] else { continue };
+        let lead = &layer.plots[j];
+        let lx = lead.x.and_then(|id| project.numeric(id));
+        // The leader's curve of added amounts, sorted by X.
+        let mut curve: Vec<(f64, f64)> = base
+            .iter()
+            .enumerate()
+            .filter_map(|(r, &b)| {
+                let x = lx.map_or((r + 1) as f64, |x| x.get(r).copied().unwrap_or(f64::NAN));
+                (x.is_finite() && b.is_finite()).then_some((x, b))
+            })
+            .collect();
+        curve.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let fx = plot.x.and_then(|id| project.numeric(id));
+        let add = (0..y.len())
+            .map(|r| {
+                let x = fx.map_or((r + 1) as f64, |x| x.get(r).copied().unwrap_or(f64::NAN));
+                interpolate(&curve, x)
+            })
+            .collect();
+        out[i] = Some(add);
+    }
+    out
+}
+
+/// Linear interpolation of the sorted points `curve` at `x`, clamped at the ends; 0 without points
+/// or for a missing `x`.
+fn interpolate(curve: &[(f64, f64)], x: f64) -> f64 {
+    let (Some(first), Some(last)) = (curve.first(), curve.last()) else { return 0.0 };
+    if !x.is_finite() {
+        return 0.0;
+    }
+    if x <= first.0 {
+        return first.1;
+    }
+    if x >= last.0 {
+        return last.1;
+    }
+    let k = curve.partition_point(|p| p.0 <= x);
+    let (a, b) = (curve[k - 1], curve[k]);
+    if b.0 == a.0 { b.1 } else { a.1 + (b.1 - a.1) * (x - a.0) / (b.0 - a.0) }
 }
 
 /// The offsets of the members in automatic mode (spec 13.4.1), from their extents.

@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn the_symbol_menu_makes_a_scatter_rug_graph_with_rugs_on_the_bottom_and_left_axes() {
     let mut h = start(vec![data_file("rug-menu")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let before = project(&h).graphs().count();
     click_text(&mut h, "C(Y1)");
     menu_path(&mut h, &["Plot", "Symbol", "Scatter + Rug"]);

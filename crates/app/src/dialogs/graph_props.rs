@@ -37,6 +37,8 @@ pub enum PropsTab {
     Legend,
     /// Plot Details on the page of the graph.
     Page,
+    /// Layer Properties: Plot Details with the layer's node and its Background tab.
+    Layer,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -136,6 +138,7 @@ impl GraphPropsDialog {
             PropsTab::Plots => View::Details { node: Node::Layer(layer), tab: DetailTab::LayerContents },
             PropsTab::Legend => View::Details { node: Node::Layer(layer), tab: DetailTab::Legend },
             PropsTab::Page => View::Details { node: Node::Graph, tab: DetailTab::Page },
+            PropsTab::Layer => View::Details { node: Node::Layer(layer), tab: DetailTab::Background },
         };
         GraphPropsDialog {
             graph,
@@ -158,6 +161,7 @@ impl GraphPropsDialog {
             View::Axis { vertical: true, .. } => PropsTab::YAxis,
             View::Details { node: Node::Graph, .. } => PropsTab::Page,
             View::Details { node: Node::Layer(_), tab: DetailTab::Legend } => PropsTab::Legend,
+            View::Details { node: Node::Layer(_), tab: DetailTab::Background } => PropsTab::Layer,
             View::Details { .. } => PropsTab::Plots,
         }
     }

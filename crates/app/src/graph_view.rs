@@ -108,7 +108,7 @@ pub struct GraphUi {
     /// The Data menu tool in use (Mask, Move, Remove Bad Data Points).
     pub data_tool: Option<DataTool>,
     /// What the Data menu tool is dragging.
-    data_drag: Option<data_tools::Drag>,
+    data: data_tools::State,
     /// An object being drawn.
     drawing: Option<Drawing>,
     /// A drawn object being moved.
@@ -159,7 +159,7 @@ impl GraphUi {
     /// Whether a Data menu tool has a drag in progress.
     #[cfg(test)]
     pub fn data_dragging(&self) -> bool {
-        self.data_drag.is_some()
+        self.data.drag.is_some()
     }
 
     /// The tool in use.
@@ -177,6 +177,14 @@ impl GraphUi {
         } else {
             GraphTool::Pointer
         }
+    }
+
+    /// Drops the open menu and the drags, which name layers by index, after layers were renumbered.
+    pub fn reset_layer_interactions(&mut self) {
+        self.menu_on = None;
+        self.shape_drag = None;
+        self.label_drag = None;
+        self.legend_drag = None;
     }
 
     /// Layers with an index-based shape selection, context menu or drag.
@@ -473,10 +481,11 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             to_screen: &to_screen,
             to_page: &to_page,
         };
-        data_tools::show(ui, &painter, &response, &view, tool, &mut state.data_drag, actions);
-        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        data_tools::show(ui, &painter, &response, &view, tool, &mut state.data, actions);
+        // Esc and a right-click (which also opens the context menu) end the mode.
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) || response.secondary_clicked() {
             state.data_tool = None;
-            state.data_drag = None;
+            state.data = data_tools::State::default();
         }
     }
 
@@ -806,6 +815,9 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         tool,
         curve: None,
         layer_curves: Vec::new(),
+        stack: None,
+        can_cumulate: false,
+        selected_shape: None,
     }
 }
 
@@ -855,7 +867,15 @@ fn menu_for(
                 };
                 let book = project.locate(plot.y).map(|(b, _, _)| (b.id, b.name.clone()));
                 let on_right = graph.right_y_member(layer) == Some(layer);
-                menus::graph_plot_menu(layer, p, plot.kind, on_right, book, plot.decor.trendlines.len())
+                menus::graph_plot_menu(
+                    layer,
+                    p,
+                    plot.kind,
+                    on_right,
+                    book,
+                    plot.decor.trendlines.len(),
+                    graph.layers.len(),
+                )
             }
             ObjectKind::XAxis | ObjectKind::YAxis => {
                 let y = kind == ObjectKind::YAxis;
@@ -957,10 +977,12 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::HidePlot { layer, .. }
         | GraphOp::RemoveTrendline { layer, .. }
         | GraphOp::MovePlotToAxis { layer, .. }
+        | GraphOp::MovePlotToLayer { layer, .. }
         | GraphOp::HideAxis { layer, .. }
         | GraphOp::ToggleGrids { layer, .. }
         | GraphOp::Rescale { layer }
         | GraphOp::ExchangeAxes { layer }
+        | GraphOp::SetStack { layer, .. }
         | GraphOp::AxisZoom { layer, .. }
         | GraphOp::HideLegend { layer }
         | GraphOp::ReconstructLegend { layer }
@@ -971,7 +993,9 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::DeleteSlope { layer, .. }
         | GraphOp::OrderShape { layer, .. }
         | GraphOp::HideLayer { layer }
-        | GraphOp::HideOtherLayers { layer } => layer,
+        | GraphOp::HideOtherLayers { layer }
+        | GraphOp::AddLayer { layer, .. }
+        | GraphOp::DeleteLayer { layer } => layer,
     };
     if layer_index >= layers {
         return;
@@ -979,6 +1003,23 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
     if let GraphOp::MovePlotToAxis { layer, plot, right } = op {
         // An empty layer left behind is kept; a request that cannot be met changes nothing.
         let _ = g.set_plot_y_axis(layer, plot, right);
+        return;
+    }
+    if let GraphOp::MovePlotToLayer { layer, plot, to } = op {
+        let _ = g.move_plot_to_layer(layer, plot, to);
+        return;
+    }
+    if let GraphOp::AddLayer { layer, kind } = op {
+        let _ = g.add_layer(kind, layer);
+        return;
+    }
+    if let GraphOp::DeleteLayer { layer } = op {
+        if let Some(r) = resolved {
+            let ranges: Vec<_> =
+                r.iter().map(|l| ((l.x.min, l.x.max, l.x.step), (l.y.min, l.y.max, l.y.step))).collect();
+            g.freeze_linked_ranges(layer, &ranges);
+        }
+        let _ = g.delete_layer(layer);
         return;
     }
     if let GraphOp::HideOtherLayers { layer } = op {
@@ -1023,6 +1064,11 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             for a in [&mut l.x_axis, &mut l.y_axis] {
                 a.min = None;
                 a.max = None;
+            }
+        }
+        GraphOp::SetStack { stack, .. } => {
+            if std::mem::discriminant(&l.stack) != std::mem::discriminant(&stack) {
+                l.stack = stack;
             }
         }
         GraphOp::ExchangeAxes { .. } => {
@@ -1082,7 +1128,12 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             }
         }
         GraphOp::HideLayer { .. } => l.plots.iter_mut().for_each(|p| p.visible = false),
-        GraphOp::HideOtherLayers { .. } | GraphOp::MovePlotToAxis { .. } | GraphOp::UpdateLegend { .. } => {
+        GraphOp::HideOtherLayers { .. }
+        | GraphOp::AddLayer { .. }
+        | GraphOp::DeleteLayer { .. }
+        | GraphOp::MovePlotToAxis { .. }
+        | GraphOp::MovePlotToLayer { .. }
+        | GraphOp::UpdateLegend { .. } => {
             unreachable!("handled above")
         }
     }

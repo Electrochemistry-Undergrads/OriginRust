@@ -27,7 +27,7 @@ fn fixture(tag: &str) -> (Harness<'static, SheafApp>, WindowId) {
         }
     });
     settle(&mut h);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let source = sheet(&h).clone();
     h.state_mut().books.get_mut(&book).unwrap().select_cells(&source, (2, 6), (2, 6));
     settle(&mut h);
@@ -57,6 +57,186 @@ fn browser(h: &mut Harness<'static, SheafApp>) {
 fn add(h: &mut Harness<'static, SheafApp>, name: &str) {
     click(h, name);
     click(h, "Add");
+}
+
+#[test]
+fn browser_exclude_hides_the_exact_column_selects_the_nearest_position_and_keeps_original_ordinals() {
+    for (excluded, retained) in [("B", "D"), ("D", "B")] {
+        let (mut h, book) = fixture(&format!("goto-browser-exclude-{excluded}"));
+        let before = project(&h).clone();
+        let revision = h.state().doc.revision();
+        ctrl(&mut h, egui::Key::G);
+        field(&mut h, "Go to Row", "0");
+        browser(&mut h);
+        assert!(h.get_by_label("Exclude").accesskit_node().is_disabled());
+        let removed = format!("Book1 / Sheet1 / {excluded}(Y): Shared current");
+        click(&mut h, &removed);
+        click(&mut h, "Exclude");
+        assert!(h.query_by_label(&removed).is_none());
+        assert!(
+            h.query_by_label(&format!("Book1 / Sheet1 / {retained}(Y): Shared current")).is_some(),
+            "duplicate long name stays visible"
+        );
+        click(&mut h, "Add");
+        assert!(h.query_by_label("[Book1]Sheet1!C\"Potential\"").is_some(), "C follows B or precedes the final D");
+        click(&mut h, "OK");
+        assert_eq!(
+            h.get_by_label("Go to Column").accesskit_node().value().as_deref(),
+            Some("[Book1]Sheet1!C\"Potential\"")
+        );
+        click(&mut h, "OK");
+        assert_eq!(original_cell(&h, book), Some((2, 5)), "C keeps original ordinal 3 after B is excluded");
+        assert_eq!(project(&h), &before);
+        assert_eq!(h.state().doc.revision(), revision);
+    }
+}
+
+#[test]
+fn browser_exclude_scope_changes_restore_columns_and_clear_the_upper_selection() {
+    let (mut h, book) = fixture("goto-browser-exclude-scope");
+    let before = project(&h).clone();
+    ctrl(&mut h, egui::Key::G);
+    browser(&mut h);
+    click(&mut h, "Book1 / Sheet1 / B(Y): Shared current");
+    click(&mut h, "Exclude");
+    assert!(h.query_by_label("Book1 / Sheet1 / B(Y): Shared current").is_none());
+    click(&mut h, "List Columns");
+    click(&mut h, "in Current Book");
+    assert!(h.query_by_label("Book1 / Sheet1 / B(Y): Shared current").is_some());
+    assert!(h.get_by_label("Add").accesskit_node().is_disabled());
+    assert!(h.get_by_label("Exclude").accesskit_node().is_disabled());
+    click(&mut h, "Book1 / Sheet1 / C(Y): Potential");
+    click(&mut h, "Exclude");
+    click(&mut h, "List Columns");
+    click(&mut h, "in Current Sheet");
+    assert!(h.query_by_label("Book1 / Sheet1 / C(Y): Potential").is_some());
+    assert!(h.get_by_label("Add").accesskit_node().is_disabled());
+    click(&mut h, "Cancel");
+    click(&mut h, "Cancel");
+    assert_eq!(original_cell(&h, book), Some((2, 6)));
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn browser_exclude_is_reset_when_the_browser_is_cancelled_and_reopened() {
+    let (mut h, book) = fixture("goto-browser-exclude-reopen");
+    let before = project(&h).clone();
+    ctrl(&mut h, egui::Key::G);
+    browser(&mut h);
+    click(&mut h, "Book1 / Sheet1 / B(Y): Shared current");
+    click(&mut h, "Exclude");
+    click(&mut h, "Cancel");
+    browser(&mut h);
+    assert!(h.query_by_label("Book1 / Sheet1 / B(Y): Shared current").is_some());
+    assert!(h.get_by_label("Exclude").accesskit_node().is_disabled());
+    click(&mut h, "Cancel");
+    click(&mut h, "Cancel");
+    assert_eq!(original_cell(&h, book), Some((2, 6)));
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn browser_exclude_preserves_an_already_added_range_and_its_original_destination() {
+    let (mut h, book) = fixture("goto-browser-exclude-added");
+    let before = project(&h).clone();
+    ctrl(&mut h, egui::Key::G);
+    field(&mut h, "Go to Row", "0");
+    browser(&mut h);
+    add(&mut h, "Book1 / Sheet1 / B(Y): Shared current");
+    click(&mut h, "Exclude");
+    assert!(h.query_by_label("Book1 / Sheet1 / B(Y): Shared current").is_none());
+    assert!(h.query_by_label("[Book1]Sheet1!B\"Shared current\"").is_some());
+    click(&mut h, "OK");
+    assert_eq!(
+        h.get_by_label("Go to Column").accesskit_node().value().as_deref(),
+        Some("[Book1]Sheet1!B\"Shared current\"")
+    );
+    click(&mut h, "OK");
+    assert_eq!(original_cell(&h, book), Some((1, 1)));
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn browser_exclude_keeps_block_add_disabled_across_an_excluded_column_gap() {
+    let (mut h, book) = fixture("goto-browser-exclude-block");
+    let before = project(&h).clone();
+    ctrl(&mut h, egui::Key::G);
+    browser(&mut h);
+    click(&mut h, "Book1 / Sheet1 / B(Y): Shared current");
+    click(&mut h, "Exclude");
+    click(&mut h, "Book1 / Sheet1 / A(X): Time");
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    settle(&mut h);
+    assert!(h.get_by_label("Add as One Block").accesskit_node().is_disabled());
+    click(&mut h, "Add as One Block");
+    assert!(h.get_by_label("OK").accesskit_node().is_disabled());
+    click(&mut h, "Add");
+    for reference in ["[Book1]Sheet1!A\"Time\"", "[Book1]Sheet1!C\"Potential\"", "[Book1]Sheet1!D\"Shared current\""] {
+        assert!(h.query_by_label(reference).is_some());
+    }
+    assert!(h.query_by_label("[Book1]Sheet1!B\"Shared current\"").is_none());
+    click(&mut h, "Cancel");
+    click(&mut h, "Cancel");
+    assert_eq!(original_cell(&h, book), Some((2, 6)));
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn browser_exclude_multiple_columns_selects_the_first_removed_position_in_either_click_order() {
+    for reverse in [false, true] {
+        let (mut h, book) = fixture(&format!("goto-browser-exclude-multi-{reverse}"));
+        let before = project(&h).clone();
+        ctrl(&mut h, egui::Key::G);
+        field(&mut h, "Go to Row", "0");
+        browser(&mut h);
+        let a = "Book1 / Sheet1 / A(X): Time";
+        let c = "Book1 / Sheet1 / C(Y): Potential";
+        click(&mut h, if reverse { c } else { a });
+        select_with(&mut h, if reverse { a } else { c }, egui::Modifiers::CTRL);
+        click(&mut h, "Exclude");
+        assert!(h.query_by_label(a).is_none());
+        assert!(h.query_by_label(c).is_none());
+        click(&mut h, "Add");
+        assert!(
+            h.query_by_label("[Book1]Sheet1!B\"Shared current\"").is_some(),
+            "first removed row chooses B, reverse={reverse}"
+        );
+        click(&mut h, "OK");
+        click(&mut h, "OK");
+        assert_eq!(original_cell(&h, book), Some((1, 1)));
+        assert_eq!(project(&h), &before);
+    }
+}
+
+#[test]
+fn browser_exclude_all_columns_leaves_no_selection_and_scope_change_restores_them() {
+    let (mut h, book) = fixture("goto-browser-exclude-all");
+    let before = project(&h).clone();
+    ctrl(&mut h, egui::Key::G);
+    browser(&mut h);
+    click(&mut h, "Book1 / Sheet1 / A(X): Time");
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    settle(&mut h);
+    click(&mut h, "Exclude");
+    for row in [
+        "Book1 / Sheet1 / A(X): Time",
+        "Book1 / Sheet1 / B(Y): Shared current",
+        "Book1 / Sheet1 / C(Y): Potential",
+        "Book1 / Sheet1 / D(Y): Shared current",
+    ] {
+        assert!(h.query_by_label(row).is_none());
+    }
+    for label in ["Add", "Exclude", "OK"] {
+        assert!(h.get_by_label(label).accesskit_node().is_disabled());
+    }
+    click(&mut h, "List Columns");
+    click(&mut h, "in Current Book");
+    assert!(h.query_by_label("Book1 / Sheet1 / A(X): Time").is_some());
+    assert!(h.query_by_label("Book1 / Sheet1 / D(Y): Shared current").is_some());
+    click(&mut h, "Cancel");
+    click(&mut h, "Cancel");
+    assert_eq!(original_cell(&h, book), Some((2, 6)));
+    assert_eq!(project(&h), &before);
 }
 
 fn select_with(h: &mut Harness<'static, SheafApp>, label: &str, modifiers: egui::Modifiers) {

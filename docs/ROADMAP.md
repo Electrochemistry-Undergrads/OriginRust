@@ -19,7 +19,7 @@ open until implemented and verified. The underlying milestones were not globally
   escapes, editor and live Format toolbar; [T59](tasks/T59-worksheet-cell-formatting.md), worksheet
   font/style/colour/alignment and Format Cells (toolbar adapter depends on T58).
 - [ ] **P0 stacked figures, wave 2:** [T60](tasks/T60-merge-graphs-layer-management.md), merge
-  existing graphs/Layer Management; [T61](tasks/T61-layers-and-multi-y.md), layers/insets/multi-Y;
+  existing graphs/Layer Management (done 2026-11-15); [T61](tasks/T61-layers-and-multi-y.md), layers/insets/multi-Y;
   [T62](tasks/T62-stack-offset-leftovers.md), remaining offsets/Cumulative/stacked histograms/
   waterfall colour mapping. Reuse working column-built panels, Double-Y and stacked bars/areas.
 - [ ] **Wave 3, independent groups:** [T63](tasks/T63-greyed-items-with-code-2.md), verify and wire
@@ -167,7 +167,8 @@ the default project format.
   - [x] NLFit tabs and lower panel, iteration controls and Fit/Done/Cancel (`nlfit-origin`);
         Set Column Values layout and controls (T09); Column Properties formats and ASCII import
         options in Origin's layout (T19 items 1 and 3)
-  - [x] Export Graphs layout, preview, filename substitution, Apply and image settings (T05);
+  - [x] Export Graphs layout, preview, filename substitution, Apply, image settings and saved
+        Dialog Themes/defaults (T05);
         worksheet export dialog (T07); several graphs in one multi-page PDF (T32)
   - [x] Window/worksheet commands and shortcuts (T01/T02): multi-panel and Y-error plotting,
         Add Error Bars, legend update, Refresh/recalculation, Go to and Explorer rename/delete

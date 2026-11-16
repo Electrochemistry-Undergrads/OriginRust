@@ -717,6 +717,60 @@ Sheaf (`sheaf_plot::render_multipage_pdf`, `crates/plot/src/multipage.rs`):
 
 ---
 
+
+### 9.8 Export Dialog Themes (T05)
+
+**Origin 2016, measured on Windows 2026-11-15.** Five isolated synthetic-graph sessions
+under the reference lock established the row above Image Type, its theme field and flyout.
+The installed profile opened with `<Last used>` selected. The flyout offers Save as
+`<default>`, Save, Save As..., System Default, Delete..., Compare..., Generate Script and
+the available built-in/named themes. Save and Delete are disabled for a built-in selection.
+Save As opens **Theme Save as...**, with Theme Name and OK/Cancel; Cancel returns to the
+export window without exporting. Changing settings adds `*` to the selected named theme.
+System Default cleared the field on this installation; its current image type was affected
+by the installation's preferences, so this is not a fresh factory-format measurement.
+
+A uniquely named PNG theme was saved, the type changed to TIFF and the named theme loaded
+again: combo selections and WM_GETTEXT changed PNG -> TIFF -> PNG with the saved name restored.
+The last bitmap was stale and is excluded as evidence of the restored type. The one generated
+`.ois` was removed after Origin exited. Raw captures and the cleanup manifest remain local in
+`scratch/t05-export-dialog-themes/`; no Origin theme file is included in Sheaf.
+
+The [Dialog Themes guide](https://docs.originlab.com/origin-help/dialog-theme/) describes
+custom default settings, last-confirmed settings and named reusable sets. The
+[export guide](https://docs.originlab.com/user-guide/publishing-and-export/) documents saving
+export settings as dialog themes. Newer versions' graph-specific settings (since 2021) are a
+separate feature; they were not measured in Origin 2016 here.
+
+**Sheaf.** The export window's Dialog Theme flyout saves and loads named settings, overwrites
+a selected named theme with Save, marks modified named settings with `*`, saves a custom
+`<default>`, restores System Default and
+resets the custom default with Reset. Delete... asks for confirmation. Save As and Delete
+prompts disable the export window until answered; Cancel/Escape leave settings files alone.
+Named/default settings can be saved without exporting. Loading a theme changes the dialog,
+not the graph or its undo history, and clears an obsolete overwrite confirmation and preview.
+
+Themes keep the supported format, graph scope, filename/substitution, output folder, overwrite
+rule, multi-page choice, DPI/depth/compression/quality, width/unit and margin/border settings.
+They exclude graph/window ids, preview textures and pending operations. `<Last used>` is
+written only after a successful export, including Apply, not Cancel, an unanswered replacement,
+a failed export or a skip that writes nothing. A settings-write error is reported as a warning;
+an image already exported remains a successful export.
+
+The startup order is a saved custom default, otherwise last used, otherwise Sheaf's existing
+system settings (PNG/24-bit, deliberately retained as described in T05). The injected dialog-theme
+folder holds `graph-export.json` for named/last-used settings and `graph-export-default.json`
+for the custom default. These use the existing locked, atomic theme-store API, separate from
+importer files. A missing settings folder disables persistence. Unknown settings are ignored;
+missing fields use the system settings, and invalid known fields reject the load before any
+control changes. Name whitespace normalization, case-insensitive replacement and the 60-character
+limit are Sheaf's choices, shared with import themes.
+
+Compare, Generate Script, Recent Exports, graph-specific theme attachment and Origin `.ois`
+interchange remain open. Graph Theme application and the preview's Graph tab are still separate
+T05 leftovers; no exporter or renderer behavior changes here.
+
+
 ## 10. Themes and templates
 
 - **Graph theme `.OTH`** (XML, plain): a tree of numeric node ids with values; lists are base64 int32 arrays. A theme only changes the properties it contains; several can be applied, the topmost wins [W:themeref-themeorganizer]. Built-in: `Origin\Themes\Graph` (50 files, e.g. Black on paper, Color Publication, B&W Publication, FDA portrait/landscape, Physical Review Letters, Times New Roman Font, Ticks All In/Out, Line Style and Symbol variants, Fill Pattern variants, Layer No Element Scaling, Speed Mode ON/OFF, Night Sky, Opposite Lines). User themes live in the user Themes folder. Observed ids: page node 4 (6 colour, 10 with 11/12/13 incl. width and height); axes 1073741862 with X 536936487 and Y 537002023; ticks 1073741878 (57 minor, 58 major); grids 1073741887 (66 colour, 67 style, 68 width); list nodes 521 colour list, 522 line style list, 523 symbol shape list, 524 symbol interior list; 262 font for all text (opaque id; Times New Roman = 1852392883) [F:Themes\Graph\*].
@@ -1276,9 +1330,97 @@ then `layer -g`; Y = x, x+1, x+2, x+3 for X = 0..10, so each curve is 10 high); 
   "3" gives 0, 3, 6; "2 5" on four curves gives 0, 2, 7, 9 (the steps between neighbours, repeated).
 
 Sheaf (`graph_details.rs` `stack_tab`): the same Offset group of choices. Constant takes one step, not a
-list; Auto chosen on this tab starts at 8 %; Cumulative, Incremental, Keep Proportion, the X/Y ticks and the
-column/bar options are greyed (no stacked columns yet, GP-COL-01); Waterfall is Sheaf's own extra choice
+list; Auto chosen on this tab starts at 8 %; Cumulative is live for line, scatter and line + symbol plots
+(13.15); Incremental, Keep Proportion, the X/Y ticks and the column/bar options are greyed (no stacked columns
+yet, GP-COL-01); Waterfall is Sheaf's own extra choice
 with its two shifts. The per-plot offsets of Individual stay listed under the group.
+
+### 13.15 Graph > Offset Grouped Data in Layer and Cumulative lines (T62 slice 1)
+
+Origin facts (13.1, 13.14, measured as far as listed there): the submenu has None, Cumulative, Constant, Auto
+and Individual, one of them ticked; Cumulative adds each plot's Y values point by point to those of the plots
+before it. **Not measured** (Sheaf's choices, labelled so): whether the menu items prompt, what Cumulative does
+with missing rows or different X, and the menu's undo text.
+
+Sheaf:
+
+- **Menu.** Graph > Offset Grouped Data in Layer has the five items, live, with a tick on the active layer's
+  present mode. A choice changes the active layer's `stack` as one history step (undo text "Offset grouped data
+  in layer"); the mode the layer already has is a no-op (no history step, the stored values stay). Plot Details'
+  Stack tab edits the same field, so the tick and the radio buttons always agree (Waterfall, Sheaf's own
+  mode, has no menu item and ticks none).
+- **No prompts.** Constant and Auto use stored values as the Stack tab does: a layer not yet in that mode starts
+  at Constant step 1 or Auto gap 8 % (the tab's own start values); individual offsets stay in `plot_offsets`.
+  Origin's own prompting (if any) is unmeasured.
+- **Cumulative rule** (`core/stack.rs` `cumulative_add`): the members (13.3) are summed in plot order,
+  pointwise by **row index**, whatever their X values; plot k is drawn at `Y_k[row] + sum over j<k of Y_j[row]`.
+  A previous plot adds 0 at a row where it is missing (not a finite number), outside its row range, or removed
+  by a worksheet row filter, or hidden by a mask while Hide Masked Points is on (drawing treats those points as
+  gaps, so they add nothing either), so one hole does not break the curves above it; the plot's own missing value stays a
+  gap. Hidden plots still add their share (13.3). A fitted curve following a member is moved by that member's
+  added amount at the fit's own X (linear interpolation along the leader's X, clamped at its ends).
+  Applies to line, scatter and line + symbol plots; other plot types in the layer are drawn as they are and add
+  nothing. Places (`places`) carry no offset in this mode (it is not a pair of offsets), so the `.opj` writer and
+  Individual are unaffected: the writer warns that Cumulative was written as plain curves and the `.sheaf`
+  companion keeps the mode.
+- **Everything follows the drawing.** The plot data (`PlotData.y`), hence automatic axis ranges, filters,
+  symbols, drop lines, labels and error bars, the Data Reader and the Data menu tools (which take the added share
+  back when a point is moved) use the summed Y. The Integrate gadget's shading still follows the source values.
+- **Menu and Plot Details only offer Cumulative where it acts:** the Cumulative item (and the Plot Details
+  Cumulative radio button) is greyed, with the hover reason "Cumulative needs a line, scatter or line + symbol
+  plot in the layer", when the active layer has no such plot (a column, bar or area layer would otherwise tick and
+  add an undo step with no visible change). The other modes are unaffected.
+- **CLI/MCP:** `--stack cumulative` (and the MCP `stack` string).
+
+
+### 13.16 Plot > Statistics > Stacked Histograms (T62 slice 2)
+
+Origin: the command makes one graph with one histogram panel per selected Y column, the panels stacked
+vertically. **Not measured** (all Sheaf's choices): shared versus per-panel bins, panel order, gaps, labels.
+
+Sheaf (`Project::plot_stacked_histograms`; GUI Plot > Statistics > Stacked Histograms; CLI
+`sheaf plot -t stacked-histograms`):
+
+- One panel per Y column that holds numbers (text columns are left out; no numbers at all is an error),
+  **top to bottom in selection order**. The panels reuse `PanelLayout::stack` (one column, no gap, X linked to
+  the first panel so all share one X scale and the inner panels show no X tick labels) with the order turned
+  top-down, and the shared panel helpers `plot_panels`/`panel_layers` of 15.
+- **Shared bins** (provisional): the bin width, first edge and last edge are the ones the histogram rule
+  (frequency-counts automatic bins, measured for single histograms) gives for the **union of the finite values
+  each panel's histogram uses**: the rows its sheet's row filter lets show, and not masked while Hide Masked Points
+  is on (`Project::shown_values`), so a hidden outlier does not widen the shared bins; they are stored explicitly on every plot (`hist`), so the panels have identical bin edges
+  and later editing one panel's bins does not touch the others. Each panel has its own count axis.
+- Each panel gets the next colour of the layer palette (starting at the Histogram template's red).
+- `--panels` and `--y2` (a right Y axis, also refused by `plot_columns_double_y`) are refused with this template; the legend of each panel names its column.
+
+
+### 13.17 Waterfall Y:Color Mapping and Z:Color Mapping (T62 slice 3)
+
+Origin: Plot > Y-offset/Waterfall has Waterfall Y:Color Mapping and Waterfall Z:Color Mapping (3D waterfall is B15).
+**Not measured** (all Sheaf's choices): palettes, levels, scale layout, where Z comes from.
+
+Sheaf (`Layer::waterfall_color` None/Y/Z, `Template::WaterfallY` = `waterfall-y`, `WaterfallZ` = `waterfall-z`;
+GUI Plot > Y-offset/Waterfall; CLI `sheaf plot -t waterfall-y|waterfall-z`): the 2D waterfall of 13.6 (placement
+unchanged), the legend hidden, and:
+
+- **Colours** come from the shared ramp (`plots::map_color`: blue, cyan, green, yellow, red) also used by colour
+  mapped symbols, parallel plots and sunburst plots.
+- **Y mapping:** the line is built exactly as the plain line (the plot's connect mode, axis breaks, missing data
+  with the page's "Connect line across Missing Data", symbol-line gaps: one code path, `draw_line`); only the
+  colouring differs. The final polyline is split into its straight pieces and each is coloured by the mean Y of its
+  two ends (read back off the page in data units, less the curve's stack offset, so it is on the source Y scale; a
+  segment colour, not a gradient inside a segment; runs of one colour are drawn as one path). One scale for the
+  whole layer: the smallest and largest shown Y of all curves. Fill under the curve is not applied to the mapped
+  line; symbols of line + symbol plots keep the plot colour.
+- **Z mapping:** each curve is one colour, from its Z value on a scale from the smallest to the largest Z of the
+  layer. Z is the number in the long name of the curve's Y column; else the number in its comments; else the curve's
+  place in the stack counted from 1 (`core::stack::waterfall_z`).
+- **Colour scale:** `hexbin::draw_color_bar` beside the layer's whole frame (the right end of the back curve),
+  titled Y or Z, ticks at nice values; an equal-valued scale puts one tick in the middle.
+- The mapping is stored in the layer (`waterfall_color`), so it round-trips in `.sheaf`. The `.opj` writer writes
+  the curves in their plot colours, without a scale, and warns (the companion keeps the mapping).
+- A mapping on a layer that is not drawn as a waterfall (linked layers, other stack modes) is ignored.
+
 
 ---
 
@@ -2184,7 +2326,7 @@ Check values [COM]: 3 panels gave (14.99, 63.33, 75, 26.68) for layer 1 and tops
 
 **Arrange Layers** (`layarrange`): 2016 defaults are gaps of 5 and margins of 15 on every side. Width = (100 - left - right - (cols - 1) x h_gap) / cols and height likewise; layers fill the grid row by row from the top left. Check: 4 layers in 4 x 1 gave tops 15, 33.76, 52.51 and 71.26, height 13.75, width 69.99 [COM].
 
-**Merge Graph** (`merge_graph`): 2016 defaults are gaps 5 and 5 and margins 15 (left), 10 (right), 10 (top) and 15 (bottom). 2 graphs gave 2 x 1, 3 gave 2 x 2 with one empty cell and no layer in it, 4 gave 2 x 2 and 5 gave 3 x 2 (fits rows = ceil(sqrt(n)) and cols = ceil(n / rows) [INF]). The rectangles follow the Arrange Layers formula exactly; merged layers are not linked and text is scaled (0.46 for 2 x 2, 0.36 for 3 x 2) [COM].
+**Merge Graph** (`merge_graph`): 2016 defaults are gaps 5 and 5 and margins 15 (left), 10 (right), 10 (top) and 15 (bottom). 2 graphs gave 2 x 1, 3 gave 2 x 2 with one empty cell and no layer in it, 4 gave 2 x 2 and 5 gave 3 x 2 (fits rows = ceil(sqrt(n)) and cols = ceil(n / rows) [INF]). The rectangles follow the Arrange Layers formula exactly; merged layers are not linked and text is scaled (0.46 for 2 x 2, 0.36 for 3 x 2) [COM]. Measured in full in 15.7c.
 
 ### 15.2 Model
 
@@ -2394,6 +2536,129 @@ disabled. UI tests cover the measured grouping/frames, source immutability, para
 comments, selected rows, Column/Scatter, manual dimensions/spacing, invalid geometry, Cancel/Escape
 and one-step Undo/Redo; grid regression cases include the measured 1/2/3/5-group arrangements.
 
+### 15.7c Merge Graph Windows (T60, measured 2026-11-15)
+
+Graph > Merge Graph Windows copies finished graphs into the cells of one new graph. Measured in
+Origin 2016 through `merge_graph` (its interface names and defaults, then 40 scripted merges of stock
+Line graphs and its dialog; probes and outputs in the ignored `re-workspace/scratch/t60/`):
+
+- **Page:** 11.41 x 7.973 in (6846 x 4784 dots at 600 dpi), landscape whatever the sources' pages;
+  Portrait turns it; Width/Height/Unit set another size (a 30 x 20 in page kept every percentage
+  and factor).
+- **Cells:** the Arrange Layers formula (15.1) with gaps 5 and 5 and margins 15 (left), 10 (right),
+  10 (top), 15 (bottom), filled row by row from the top left. 3 x 1 gave (15, 9.992, 75.01, 21.68),
+  tops 36.66 and 63.34; 1 x 3 lefts 15, 41.67, 68.33 (21.66 x 75); ygap 0 heights 25. Rows and
+  columns default to `ceil(sqrt(n))` x `ceil(n / rows)` (2: 2 x 1, 3 and 4: 2 x 2, 5: 3 x 2); an
+  empty cell gets no layer ("Add Extra Layer(s) for Grid" off).
+- **Layers:** a source's layers stay together in its cell; a double-Y source kept its right Y
+  layer linked to its left one (link index remapped, `x.link` 1, frame 100 % of the parent).
+  Merged layers are not linked. The sources are kept ("Keep Source Graphs" on); off deletes them.
+  "Rearrange Layout" off leaves every layer at its source frame (they overlap) with factor 1.
+- **Link Source Graphs:** layers 2 and up get `layer.link` 1 in "% of Linked Layer" units (layer 2
+  of a 3 x 1 at (0, 123, 100, 100)) with `x.link` and `y.link` 0: position only.
+- **Show Axes Frame** (with a gap of 0): the panels with a panel below them get no X tick labels
+  (`x.showlabels` 0), no ticks (`x.ticks` 0) and no X title (`xb.show` 0); the bottom panel keeps
+  all three. In a row (xgap 0) the panels with one on their left lose their Y title, tick labels and
+  ticks. The dialog notes "Overlapping axes/ticks are hidden".
+- **Keep Layer Aspect Ratio:** the layer keeps its width-to-height ratio in percent of each page,
+  as large as fits, at the top left of its cell (3 x 1: 20.57 x 21.68 for a 68.16 x 71.83 source).
+- **Text factor** (`layer.factor`; Scale Mode Auto and "Scale with Layer Frame" gave the same in
+  every case; Fixed Factor sets it): 1 when the cell is at least 68.16 % wide or 71.83 % tall (the
+  stock template layer's size), otherwise `sqrt(w h) / 75.6` (w, h the cell in percent), shown to two
+  decimals: 2 x 2 0.46, 3 x 2 and 2 x 3 0.36, 3 x 3 0.29, 4 x 4 0.20, no gaps and margins 0.66,
+  margins 30 0.23, a 65 x 21.68 cell 0.50 but 70 x 21.68 gives 1, 21.66 x 70 gives 0.52 but 21.66
+  x 74 gives 1. Neither the page nor the source's own layer size (30 x 30, 50 x 50, 80 x 40 %)
+  changed it. 75.6 is fitted (between 75.4 and 75.9); Origin's own formula is not known.
+- **Dialog** (our description): Merge (Active Page, All in Active Folder, ... (Open) by default,
+  All in Project, Specified), Graphs list, Keep Source Graphs, Rearrange Layout, then collapsible
+  Arrange Settings (rows, columns, Add Extra Layer(s) for Grid, Keep Layer Aspect Ratio, Treat Each
+  Source Graph as a Unit (on), Link Source Graphs, Set Layer Width/Height by Common Scale, Show
+  Axes Frame), Spacing (in % of Page Dimension), Page Setup (Orientation, Original Size, Width,
+  Height, Unit), Scale Elements (Scale Mode, Fixed Factor), Add Label (None, A, a, Custom; Top
+  Left/Right Outside/Inside), a preview, OK and Cancel.
+
+**Sheaf** (`sheaf_core::merge`): `MergeOptions` holds these settings with Origin's defaults and
+`Project::merge_graphs` makes the graph (fresh name `Graph<n>`, first source's page style, the
+measured page and cells; `auto_text_factor` multiplies the fonts of axis titles, tick labels,
+legends and text labels). A source whose layers stand side by side on its page is fitted into its
+cell by the box round its unlinked layers (Sheaf's choice: Origin's placement of several unlinked
+layers of one source was not measured); validly linked layers keep their frames, so double-Y and
+stacked sources stay intact. With Link Source Graphs, an unlinked layer that other layers follow (the
+left layer of a double-Y source) stays unlinked, because a linked layer cannot be a parent. Sheaf
+adds **Share X** (`share_x`, `--share-x`): the linked layers also follow the first one's X scale one
+to one, the vertical shared-X figure of the brief. Linking needs Rearrange Layout (the dialog greys
+it with Arrange Settings). A typed page size is used as given. The text factor also scales the
+plots' data labels (unmeasured) and a Fixed Factor applies without rearranging (unmeasured; Auto then
+gives 1 as measured). The app's Merge choice is "All in Project" (default) or "Specified" (a
+checklist with Up and Down): Sheaf has no active folder, so Origin's folder choices and its default
+are not offered.
+Duplicate, missing or non-graph sources, fewer than two graphs, too few cells, a factor outside 0.05
+to 20 and a page side outside 0.5 to 200 in are refused without changing the project. Not built:
+Add Extra Layer(s) for Grid, Set Layer Width/Height by Common Scale, panel labels, the folder
+choices of Merge (Sheaf has no active folder), "Treat Each Source Graph as a Unit" off.
+
+**Command line:** `sheaf merge-graphs PROJECT (--graph NAME ... | --all-graphs) [--rows N]
+[--cols N] [--gap H,V] [--margins L,R,T,B] [--portrait] [--page-size W,H] [--keep-aspect]
+[--link] [--share-x] [--hide-inner] [--text-scale auto|keep|FACTOR] [--remove-sources] [-o FIGURE]
+[--dpi N] [--save PROJECT]`; at least one of `-o` and `--save`.
+
+### 15.7d Layer Management and fitting the page (T60, measured 2026-11-15)
+
+**Origin's Layer Management window** (opened by `laymanage`; our description): a "Layer Selection"
+grid (#, Name, Link to) on the left; tabs Add, Arrange, Size/Position, Link, Axes and Display; a
+preview on the right; the note "Use the Apply buttons on each tab to update your preview graph. Use
+the OK button to apply the changes in preview graph to source graph."; Undo, OK and Cancel.
+- Arrange: Arrange Order (Layer Index Order, Current Position Order), Number of Rows and Columns
+  (1, 1), Add Extra Layer(s) for Grid (on), Keep Layer Aspect Ratio, Treat Linked Layers as a
+  group, Link Layers, Set Layer Width/Height by Common Scale, Show Axes Frame; spacing gaps 5 and
+  5, margins 15, 10, 10, 15 (the merge values, not `layarrange`'s 15 on every side).
+- Size/Position: Option Resize, Move, Swap, Align. Resize and Move take Units (% of Page, inch, cm,
+  mm, pixel, point, % of Reference Layer (default)), a Reference Layer and Width/Height (100, 100)
+  or Left/Top (0, 0); Swap takes two layers and a Reorder tick; Align a Reference Layer and a
+  Direction (Left, Top, Right, Bottom).
+- Link: Link To (None or a layer), X and Y Axis Link (None, Straight(1 to 1) default for X of a
+  linked layer, Align, Custom with X1/X2 or Y1/Y2), Units (% of Linked Layer default) and "When
+  dragged to reposition, also reposition parent layer".
+- Axes (scales; per side Axis, Tick In & Out/In/Out/None, Title, Tick Label, Formula) and Display
+  (Drawing Order; Color, Border Dimensions (% of Layer: 16.6, 10, 12.4, 15.2), Scale Elements:
+  Scale with Layer Frame or Fixed Factor).
+
+**Sheaf's Layer Management** (`sheaf_core::layer_manage`, `dialogs/layer_management.rs`; Graph menu,
+page right-click and layer icon menu, the icon's layer selected): the layer list allows several
+layers; Arrange, Size/Position and Link are built and work on a copy shown as numbered frames on a
+page-shaped preview; Undo takes back the last Apply; OK writes the copy in one undo step; Cancel and
+Escape discard it. Add (T61), Axes and Display are shown disabled, as are Add Extra Layer(s) for Grid
+(Sheaf leaves surplus cells empty), the Common Scale ticks, the Align/Custom links, the Units combo of
+Link and the reposition-parent tick. Arrange with no selection takes every layer; "Treat Linked
+Layers as a group" places a layer with the layers linked to it as one unit; Link Layers links the
+later units to the first in position only. Sheaf choices (not measured): Move in "% of Reference
+Layer" counts from the reference layer's top left corner, a pixel is 1/96 in, the reference layer
+starts at layer 1, and a reference layer that follows a selected layer is refused (it would move
+with it). The Link tab shows the first selected layer's link; Swap with Reorder refuses an order that
+puts a parent after its child.
+
+**Fit Page to Layers** (`pfit2l`; Margin Control Border (default) or Tight, Border Width 5, Adjust
+Direction Height and Width (default), Height Only, Width Only), measured on the stock page: the
+layers keep their size and distance from each other in dots; the page becomes the box round the
+content plus, with Border, the border width in percent of the **old** page on each side (5: 321 of
+6432 and 246 of 4923 dots; 10 twice that); Tight adds about 13 dots. Height Only keeps the page width
+and every left; Width Only the reverse. The content box is the layer frames and the page's
+objects, **not** the tick labels or axis titles: with a border of 0 the layer's left edge became the
+page's (its Y tick labels and title fall off the page) while the box reached 370 dots above the
+frame, where the stock legend stands. A graph with data and an empty one gave the same numbers.
+
+**Fit Layer to Graph** did nothing measurable in Origin 2016: on a one-layer graph (layer moved to
+30, 20, 40, 40 percent, or 130 x 120 at -10, -10) and a two-layer graph, the page size, every layer
+position and the picture were the same before and after, from the menu and by its accelerator, with
+no dialog. What it acts on (a selected object, perhaps) is unknown, so Sheaf leaves it grey (tag `N`).
+
+**Sheaf's Fit Page to Layers** (`Graph::fit_page_to_content`, `sheaf_plot::fit_content_bounds`): Graph
+> Fit Page to Layers... opens Margin Control (Border, Tight), Border Width (5) and Adjust Direction
+(Height and Width, Height Only, Width Only); Format > Fit Page To Layers applies the defaults at once
+(Sheaf choice; whether Origin's Format item asks was not measured). The content box is the layer
+frames and the boxes of legends, text labels, drawn shapes and slope annotations; Tight leaves
+1.56 pt (13 dots at 600 dpi). One undo step.
+
 ### 15.8 Origin project files
 
 The `.opj` reader reads the layers of a panel graph as independent layers with the limits stored in the file, so the owner's panel graphs already draw at Origin's ranges without links (only the second layer of a double-Y graph is linked, by the rule of section 12.7). Where Origin stores `layer.link`, `x.link` and `y.link` was not found in the layer header (section 12.7 lists bytes that differ for the linked layer of a double-Y graph); reading panel links, and writing panel graphs, needs that first.
@@ -2415,7 +2680,8 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 - The `.opj` bytes of layer links (15.8).
 - Owner choices: the page size of stacks with many panels (Origin keeps the page; a 6-panel stack on the upright Line page has panels of about 61 pt), one Y title by default instead of one per panel, panel labels such as (a) and (b) (Merge Graph can add them; not measured), and one colour per panel across the graph instead of Origin's colours per layer (with the cyclic voltammetry palette, every one-curve panel gets the first light blue).
 - Merge Graph's automatic rows and columns were seen only for 2 to 5 graphs.
-- Not tested in Origin: the column assignment of PAN2VERT and PAN4 with several X columns, horizontal stacks, and the defaults of the Layer Management dialog's Arrange tab.
+- Not tested in Origin: the column assignment of PAN2VERT and PAN4 with several X columns and horizontal stacks. The Layer Management Arrange defaults were measured on 2026-11-15 (15.7d).
+- Merge Graph Windows: Origin's own text-factor formula (15.7c fits it), where it places several unlinked layers of one source, what "Treat Each Source Graph as a Unit" off and the Common Scale options change, and its panel labels.
 
 ## 16. Free text labels (P0, GP-TXT-01)
 
@@ -2542,6 +2808,13 @@ Everything below is Sheaf's own choice, unmeasured, and must be checked against 
 - `.opj`: not written; the save warns ("layer 1 has 2 slope annotations that an Origin project file written here cannot hold ...") and the `.opj.sheaf` companion keeps them.
 
 **Not done.** Dragging the label, a free decimals setting, a unit-less "per decade" switch, attaching an annotation to a plot by position instead of by column, annotations across plots, slope annotations in the Graph Slicer or copied with the layer's other objects.
+
+**Object Edit Bring to Front / Send to Back (T63 G).** In Sheaf the two Object Edit toolbar buttons
+dispatch the same `OrderShape` operation as the shape context menu (one undo step, selection follows
+the moved shape). They are enabled only when a drawn shape is selected and the move is possible
+(already frontmost / backmost greys the matching button); text, legend and axis-title selections keep
+them disabled (broader object ordering is B2). Not measured in Origin 2016 yet; the greyed-without-
+selection behaviour follows Origin's convention for Object Edit buttons.
 
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
@@ -3404,6 +3677,11 @@ core edits, is independent of those choices.
 
 ### 20.1 Sheaf's rules
 
+**Superseded in part by 20.4 and 20.6** (Origin measured, Sheaf changed to follow it): the click in Mask mode,
+Remove Bad (pick, then Enter), the undo labels, the reach, the plots a mask acts on (Tab) and the ending of a mode
+are as 20.6 says; the paragraphs below keep their [Sheaf choice] text where 20.6 does not replace it (Move
+entirely, hidden masked points, clipping, Skip Points, waterfall).
+
 - **Any shown plot of any layer [Sheaf choice].** A tool acts on the points of the plots the pointer picks, the
   nearest point that the graph draws within the Data Reader's reach (30 screen points), in any layer; a
   rectangle masks the drawn points of every plot inside it. Sheaf has no active plot (only an active layer), so
@@ -3529,24 +3807,359 @@ designation and the row counted from 1 (`Document::mask_points`, `remove_bad_poi
 - `--show data-tool:mask|move|remove` and `--show mask-points:4,5` (rows from 1 of the first plot) put the
   first graph in a mode or mask rows, for screenshots (the Data Reader's `--show reader` does the same).
 
-### 20.4 To measure on Windows (`tools/origin-ref`)
+### 20.4 Measured in Origin 2016 (`tools/origin-ref`, 1024x768 window, `origin-dialog.ps1 -NoDialog`)
 
-1. Cursor shape while Data > Mask Data Points, Move Data Points and Remove Bad Data Points are on; whether the
-   menu item shows a check mark, and how the mode ends (Esc, double-click, right-click, another tool).
-2. Mask: rectangle or click or both; which plots (active plot, all plots of the layer, all layers); whether
-   the X cell is masked with the Y cell; the effect of Ctrl and Shift (add to, toggle); whether it can unmask
-   from the graph and how (Data > Mask Data Points again on a masked point, or Ctrl).
-3. Remove Bad: whether it sets the Y cell missing or deletes the row (read the worksheet afterwards with
-   LabTalk `wks.nRows` and the cell value), whether the X cell stays, and what happens in a formula column.
-4. Move: whether X and Y both change or only Y, the numbers written (exact or snapped, a rounding step?),
-   behaviour on log axes, with an offset or multiplier, in a column that a formula fills, and on a plot with
-   no X column; whether Shift or Ctrl constrains the direction; whether Esc during a drag cancels it.
-5. Whether each action is one Undo step in Origin (Edit > Undo's text), and whether the worksheet shows the
-   change at once.
-6. Whether the tools work on plots other than line, scatter and line + symbol (column, area, bubble), on
-   a graph with Hide Masked Points on, and on a worksheet with an active filter.
-7. The picking radius and whether a point under the pointer is highlighted first.
-8. Whether points clipped by the axis range, rows that Skip Points leaves without a symbol and the plots of a
-   layer with Show Elements Data off can be picked or masked; and, in a waterfall, whether the tools work on
-   the shifted curves at all.
-9. Move: whether the point follows the drag distance (Sheaf) or jumps to the pointer.
+Setup of every run: a workbook with X = 1..10 (A), Yb = 2X+1 (B), Yc = 20-X (C, plain numbers unless said),
+a Line + Symbol graph (or Scatter) of Yb and Yc against X in a 1024x768 Origin window, mouse and keys sent to
+it, the worksheet read afterwards by LabTalk (`stats` per cell with masking off gives n=0 for a masked or
+missing cell; the cell text with masking on gives `--` only for a missing cell; `wks.nRows`). Screenshots and raw
+runs are local (`re-workspace/scratch/t48`). Everything below is what Origin did; where Sheaf differs it is in 20.5.
+
+**Status of the nine items.** 1 cursor, check mark, ending: measured (Move's cursor not obtainable). 2 Mask: measured.
+3 Remove Bad: measured (what a formula column does: one run, see M3). 4 Move: **unmeasured** (M4). 5 undo: measured
+for Mask and Remove Bad, not for Move. 6 other plot kinds, Hide Masked Points, filter: **unmeasured**. 7 hit radius:
+measured roughly (M7), highlight before the click: none seen. 8 clipped, Skip Points, Show Elements Data, waterfall:
+**unmeasured**. 9 follow vs jump: **unmeasured** (Move). Origin runs are slow (about a minute per ten-row dump)
+and the last session was stopped by its time limit, so these were not reached.
+
+**M1. Menu, cursors, ending a mode.**
+- The graph's Data menu lists, under the three tools, one line per plot of the active layer ("1 g1 [Book1]Sheet1!
+  "X"(X), "Yb"(Y) [1*:10*]", numbered) with a check mark on the **active plot**. The three tool items show no check
+  mark while their mode is on. Origin has an active plot (the first one until another is picked; the Data Reader
+  click on a point of a plot makes that plot active, see M3).
+- Mask Data Points: a custom cursor (an arrow with a small icon at its lower right); the status bar reads that a
+  drag selects a region, Tab toggles the mode and Space toggles the shape; a yellow hint with the same words appears
+  the first time (it has a "do not show again" box). The green box in the toolbar row repeats the text.
+  The Tools toolbar has a mask button (own flyout, M2); the Pointer button is not pressed while Mask is on.
+- Remove Bad Data Points: the graph goes into the **Data Reader** (crosshair cursor, a Data Info window with
+  `[Book1]Sheet1[row]`, X and Y, a green readout `[Book1]Sheet1![5]: X = 5, Y = 11`, status text "Data Reader: Click
+  to read data value. Left/right keys go from point to point ..."); the Data Reader button of the Tools toolbar is
+  pressed. The point is then removed by pressing **Enter** (M3).
+- Move Data Points: the mode shows no change that was visible (no status text, no cursor change, Pointer button
+  stays pressed). The hollow squares seen after a click on a plot are the ordinary **plot selection** (a click on a
+  point selects the plots of the layer, a second click one point with a bold square), not the Move mode.
+  While the mode was on a click on the menu bar did not open the menu (the first click was swallowed) and clicks on
+  points selected nothing.
+- Ending: Esc ends the Mask mode; **right-click** ends it too and opens the graph's context menu (which has Mask,
+  Analysis Markers and Plot Details); a double-click does **not** end it (a drag after it still masks); a click on the
+  Pointer or the Data Reader button ends it (a drag after that changes nothing).
+- Opening the menu with the keyboard (Alt+D, Down, Enter) works as the mouse path.
+
+**M2. Mask Data Points.**
+- Default region mode: a **rectangle** drag. When the button is let go every point of **every plot of the layer**
+  inside the rectangle has its **Y cell masked** (Yb and Yc both, same rows); X cells are not masked. Masked points
+  are drawn in the mask colour (red).
+- **Tab** toggles between "all plots" and "active plot only" (a drag over points of both plots then masked only the
+  active plot's). **Space** toggles the shape between the rectangle and a **freehand closed path** (a drag that
+  traces a path; the points inside the path are masked; a triangle around one point masked just that point and a big
+  loop masked every point inside in both plots). The re-entry state after the menu is chosen again was not measured
+  (every run started fresh with all plots, rectangle).
+- A **click** (no drag) on an unmasked point **masks** it (the point must be within the hit radius, M7); a click on
+  a masked point leaves it masked; Ctrl, Shift or double-click make no difference to a drag or click.
+- The Tools toolbar mask button has a flyout of four modes: Mask Points on Active Plot, Mask Points on All Plots,
+  Unmask Points on Active Plot, Unmask Points on All Plots. A rectangle drag with an Unmask mode **unmasks** the
+  points inside (all plots or the active one). That is the only way to unmask from the graph: the Data menu's tool
+  masks only. The flyout choice reached by the menu path was not kept: choosing Data > Mask Data Points after the
+  flyout's Active Plot mode still masked both plots.
+- Esc, right click and the Pointer or Data Reader button end the mode before a drag, then the drag does nothing.
+- One Undo step per drag or click; Edit shows **"Undo Set Mask Data"** after a mask drag (a second Undo step below
+  it is the graph's creation). The Tools toolbar mask button's tip reads "Mask Points on Active Plot"; the Data
+  Reader tip is "Get data point".
+
+**M3. Remove Bad Data Points** (Data Reader plus Enter).
+- A click on a point (the reader picks it, shows its Data Info) changes nothing by itself. **Enter** then removes
+  the point. The arrow keys Left/Right move the reader from point to point and Enter removes the one reached (after
+  menu choice, no click, two Right keys reached row 7 and Enter removed Yb row 7). Delete, Backspace, Ctrl+Delete,
+  double-click and Ctrl+click do nothing; Enter in the plain Data Reader (button of the toolbar, not via the menu)
+  removes nothing.
+- The system variable `@YPR` (default 1) decides what is removed: with 1 the plot's **Y cell becomes missing**
+  (the row stays: X cell, other columns and `wks.nRows` unchanged, the text `--`); with 0 the **whole worksheet row**
+  is deleted (every column below shifts up, the last row of the data becomes missing).
+- The mode stays on after a removal (a second click and Enter removed a second point; one of the other plot works).
+- One Undo (Ctrl+Z) restores all of it; Edit shows **"Undo Remove Data Point"** (for `@YPR` 1 and 0 and for a
+  formula column).
+- A column set by a Set Column Values formula with Auto recalculation (Yc = 20 - X): Enter on its point: **inconclusive**.
+  The worksheet dump after the run showed no missing cell in the formula column (only the earlier Yb cell), so it is
+  not known whether Origin clears or refuses a formula column; unmeasured.
+
+**M7. Hit radius.** Clicking at a measured pixel distance from a plot's point (below, above, right or left)
+masked it at 2, 4, 6 and 8 pixels and not at 9 and more pixels for the default symbol size; for symbol size 24
+masked at 6, 10 and 14 and not at 15 or more, for symbol size 3 masked up to at least 9. So the radius is about
+the half symbol size plus a margin and not below 8 to 9 pixels. [Re-measured below if better pinned.]
+
+**M4. Move Data Points: not measured.** In about thirty Origin runs (menu by mouse and by Alt+D with the key
+count, with and without a plot or a single point selected first, with the Data Reader point set first, `@MDS=20`
+to enlarge the points, scatter and line + symbol, one and two plots, drags with `SetCursorPos` moves, with relative
+and with absolute `mouse_event` moves, slow and fast, from points and from offsets of 2 to 6 pixels around them, with
+Ctrl, Shift and Alt held, double-click first, click-move-click, arrow keys and Enter) no cell ever changed and the
+screen showed no drag feedback. Whether Move needs input that synthetic mouse events do not give, or a state not
+found, is unknown: what Move writes (X and Y or Y only), snapping, log axes, formula columns, Esc during a drag,
+modifiers and the undo text are all **unmeasured**. Origin's system variable `@MDS` is the size of the points of the
+Move tool (default -1, size 6), which is the only fact found about it.
+
+**M5. Undo.** One step each for a mask drag/click ("Undo Set Mask Data") and for a removal ("Undo Remove Data Point",
+`@YPR` 0 or 1); the worksheet shows the change at once (read right after the action).
+
+### 20.5 Where Sheaf differed from Origin (before part 2; what was done is in 20.6)
+
+1. **Active plot.** Origin has one; Sheaf has none. Origin's Mask default acts on all plots of the layer by region;
+   Tab switches to the active plot, and the toolbar flyout offers active-plot and all-plots modes. Sheaf: the pointer
+   decides, a rectangle masks every plot (same as Origin's default).
+2. **Click in Mask mode.** Origin: a click on an unmasked point masks it, a click on a masked point does nothing,
+   unmasking is only through the Unmask modes (rectangle). Sheaf: a click on a masked point unmasks it, a click on an
+   unmasked point does nothing. Sheaf has no Unmask modes, no Tab (active plot) toggle, no Space (freehand shape).
+3. **Remove Bad.** Origin: pick with the Data Reader (click or Left/Right) and confirm with Enter; Y cell missing
+   (rows kept) with `@YPR` 1, whole row deleted with 0; undo text "Undo Remove Data Point". Sheaf: a click removes at
+   once, always only the Y cell; no row-delete variant; no formula-column difference was measured (the one Origin run
+   was inconclusive; Sheaf refuses).
+4. **Ending.** Origin: right-click ends and opens the context menu, double-click does not end. Sheaf: Esc or Pointer
+   ends (Esc matches; right-click and double-click not defined).
+5. **Menu.** Origin lists the plots under the tools with the active plot checked; Sheaf has no such list. No check
+   on the tool items in either.
+6. **Undo labels.** Origin "Undo Set Mask Data" and "Undo Remove Data Point"; Sheaf "Mask 4 points of B(Y)" and
+   "Remove bad point B(Y) row 12" (Sheaf's own wording may stay).
+7. **Hit radius.** Origin about 8 to 9 pixels for the default symbol (more for larger symbols); Sheaf 30 points.
+8. **Move.** Unmeasured; Sheaf's design stays [Sheaf choice].
+
+### 20.6 What Sheaf does now (part 2, following 20.4)
+
+Changed to match Origin (core unit tests in `graph_data.rs`, UI tests in `ui_tests/graph_data_tools.rs`):
+
+1. **Mask click.** A click on an unmasked point masks it (that plot's Y cell); a click on a masked point leaves it
+   masked and records no undo step. The old rule (click unmasks) was wrong and its test was replaced.
+2. **Plots.** The drag masks the Y cell of every plot of the layer in the region (X cells never). Tab toggles
+   "active plot only" (the label in the corner of the graph names the mode: "Mask rectangle on all plots"). Sheaf's
+   active plot is the first plot until a click picks a point of another plot (Origin: the same, M1). The state is
+   reset when the mode is left, so re-entering starts with all plots; Origin's re-entry is unmeasured.
+3. **Shapes and unmask.** Space switches the rectangle to a freehand closed path (even-odd rule, the points inside
+   the traced path). Origin unmasks only from its Tools toolbar flyout; Sheaf has no such button, so **U** toggles an
+   unmask mode (rectangle, path and click) [Sheaf choice].
+4. **Remove Bad.** A click (or Left/Right, `reader::step`) picks a point, drawn with a heavy ring; **Enter** makes its
+   Y cell missing and the mode stays on; Delete, Backspace and double-click do nothing; Enter with nothing picked
+   does nothing; nothing is picked after a removal. Not built: the row-delete variant of `@YPR` 0 (Sheaf has no
+   system variables) and the starting point of Left/Right without a click (Origin's was not measured; Sheaf needs a
+   pick first). A formula-kept column is still refused with the message (Origin's behaviour was not obtained: one inconclusive run).
+5. **Undo text.** "Set Mask Data" (mask and unmask; Origin's unmask text was not measured) and "Remove Data Point"
+   (Edit shows "Undo Set Mask Data", "Undo Remove Data Point"). Move keeps Sheaf's "Move point B(Y) row 12".
+6. **Reach.** The Mask click picks within max(9, half the symbol size + 2) screen points (default symbol about 9,
+   size 24 about 14: M7, measured for the Mask click only); Remove Bad's click and Move's grab keep 30, like the Data
+   Reader, since no reach was measured for them [Sheaf choice]. The hover ring was dropped (Origin showed no highlight).
+7. **Ending.** Esc or a right-click ends the mode (the right-click also reaches the context menu); a double click does
+   not end it. The Pointer and Data Reader buttons end it as before.
+
+Still different: the Data menu has no plot list with a check on the active plot; no Tools-toolbar mask flyout (U
+instead); Move is Sheaf's design, unmeasured (M4): the reach for the grab (30), X-and-Y, follow-by-distance, undo text
+stay [Sheaf choice]. Unmeasured and left: items 6 and 8 (other plot kinds, Hide Masked Points, filters, clipped
+points, Skip Points, Show Elements Data, waterfall), the exact hit radius, log axes, column plots.
+
+## 21. Layers, insets and three/four Y axes (T61, measured 2026-11-15, Origin 2016)
+
+Everything here was measured in OriginPro 2016 on our own synthetic data (21 rows, X = 0 to 10, five Y columns of very different size) through COM/LabTalk and by driving the menus (`tools/origin-ref`). Raw outputs, pictures and the generator scripts stay in the git-ignored `re-workspace/scratch/t61/`. Anything not listed was **unmeasured**. Layer numbers are 1-based as in LabTalk; frames are in the layer's own unit (`layer.unit` 1 = % of page, 7 = % of linked layer); `showAxes` of an axis is 1 = bottom/left only, 2 = top/right only, 3 = both, 0 = none (`showLabels` follows it).
+
+### 21.1 Graph > New Layer(Axes) and the Graph toolbar
+
+**Menu** (Graph menu of Origin 2016; the short menu shows Add Plot to Layer, Layer Management..., Add Straight Line..., New Layer(Axes), Merge Graph Windows..., Legend, Fit Page to Layers..., Exchange X-Y Axes; the full menu adds Layer Contents... F12, Plot Setup..., Add Error Bars..., Add Function Graph..., Rescale to Show All Ctrl+R, Add Axis Scrollbar, Extract to Graphs..., Apply Palette to Color Map..., Add Graphs to Layout..., Speed Mode..., New Table..., New Color Scale, New Bubble Scale, New XY Scaler, Set Active Layer By Layer Icon Only, Fit Layer to Graph, Offset Grouped Data in Layer, Convert to Standard Font Size). **New Layer(Axes)** has nine items and then a separator and "Open Dialog..." (the `layadd` dialog):
+
+1. Bottom-X Left-Y
+2. Top-X (Linked Y Scale and Dimension)
+3. Right-Y (Linked X Scale and Dimension)
+4. Left-Y (Linked X Scale and Dimension)
+5. Top-X Right-Y (Linked Dimension)
+6. Bottom-X Right-Y (Linked Dimension)
+7. Inset (Linked Dimension)
+8. Inset With Data (Linked Dimension)
+9. No Axes (Linked XY Scale and Dimension)
+
+**There is no "Horizontal Axis Layer..." or "Vertical Axis Layer..." item in Origin 2016** (neither in the menu nor in `layadd`'s `type` list). The two greyed Sheaf items have no reference behaviour and are reassigned (21.8).
+
+**Toolbar.** The vertical Graph toolbar has six layer buttons, top to bottom, with these tooltips: "Add Bottom-X Left-Y Layer" (tooltip text "Add a new layer (X axis at the bottom and Y axis on the left)"), "Add Top-X Layer", "Add Right-Y Layer", "Add Top-X Right-Y Layer", "Add Inset Graph" ("Add a linked inset layer to the active layer") and "Add Inset Graph With Data" ("Add a linked inset layer and include the data from the active layer"). They add the layers of menu items 1, 2, 3, 5, 7 and 8 (the same result in the picture; Bottom-X Right-Y, Left-Y and No Axes have no button). Left-Y and Bottom-X Right-Y exist only in the menu and in `layadd`.
+
+**LabTalk.** `layadd type:=NAME;` with `NAME` = `normal`, `topx`, `righty`, `lefty`, `txry`, `bxry`, `inset`, `insetdata`, `noxy`. The layer is appended as the last layer, becomes the active layer (`page.active` = new index) and is named by `layer.name$` as in the table. `layadd userdef:=1 bottom:=B left:=L top:=T right:=R linkto:=P xaxis:=none|straight|custom yaxis:=none|straight|custom;` makes any combination (measured: `bottom:=1 left:=0 top:=1 right:=1 linkto:=1 xaxis:=straight yaxis:=custom` gave link 1, x.link 1, y.link 2 = custom, both X sides shown (`x.showAxes` 3) and the right Y side (`y.showAxes` 2); `layadd`'s `offset` and `activate` options were not measured).
+
+**Parent.** The parent of the new linked layer is the **active layer** (`layer.link` = its number): with three layers and layer 2 active, `type:=righty` gave link 2; `righty` then `topx` gave the top-X layer link 2. A linked layer's `unit` is 7 (% of linked layer) and its frame is the parent's, `0 0 100 100`.
+
+Measured on a plain Line graph (parent frame left 17.91, top 11.58, width 68.16, height 71.83 % of page; X -2.5 to 12.5, Y -25 to 125; the new layer is empty, so its own scales are the empty defaults 0 to 10, step 2):
+
+| type | `layer.name$` | link | x.link / y.link | frame | axes shown X / Y | scales |
+|---|---|---|---|---|---|---|
+| normal | BottomXLeftY | none (0) | 0 / 0 | unit 1, 15.59 / 8.531 / 68.17 / 71.83 (first run; 20.69 / 7.963 in a second run after data was plotted; the offset from the parent was **not** constant) | 1 / 1 | own |
+| topx | TopX | parent | 0 / 1 (straight) | 0 / 0 / 100 / 100 | 2 / 0 (top line, ticks and labels) | X own, Y = parent's |
+| righty | RightY | parent | 1 (straight) / 0 | 0 / 0 / 100 / 100 | 0 / 2 | X = parent's, Y own |
+| lefty | LeftY | parent | 1 / 0 | 0 / 0 / 100 / 100 | 0 / 1 (a second left axis over the first) | X = parent's, Y own |
+| txry | TopXRightY | parent | 0 / 0 | 0 / 0 / 100 / 100 | 2 / 2 | both own |
+| bxry | BottomXRightY | parent | 0 / 0 | 0 / 0 / 100 / 100 | 1 / 2 | both own |
+| inset | Inset | parent | 0 / 0 | 75 / 0 / 25 / 25 (left / top / width / height, % of linked layer) | 1 / 1 | own (empty 0 to 10) |
+| insetdata | InsetWithData | parent | 0 / 0 | 75 / 0 / 25 / 25 | 1 / 1 | **copied** from the parent (-2.5 to 12.5, -25 to 125) but not linked; the parent's first plot is plotted again in it |
+| noxy | NoAxes | parent | 1 / 1 | 0 / 0 / 100 / 100 | 0 / 0 | both = parent's |
+
+Pictures (PNG exports of each type are in the scratch folder): top-X, right-Y and top-X right-Y layers show ticks pointing out, tick labels and the placeholder titles "X Axis Title" / "Y Axis Title" until data is plotted in them; an empty layer has no curve. The inset is a small box in the parent's top-right corner (left 75 %, top 0 %, 25 % by 25 % of the parent's frame, so it overlaps the parent's own data and legend) with only a bottom X and a left Y axis, no top or right line, and tick label, title and legend fonts scaled down with the layer. Plotting data into any new layer gives it its own legend; with data, right-Y and inset layers show the data's long name and units as the axis title (for example "Sine (mA)"), rotated like the left title, to the right of the right axis. The inset with data keeps the parent's X and Y title text.
+
+Plotting into a new layer: `plotxy iy:=[Book]Sheet!(1,3) plot:=200 ogl:=[Graph1]2!;` (layer 2). Autoscale of an unlinked scale fits that layer's data (an inset's Y became -0.075 to 0.075 for the sine column); a linked scale follows the parent.
+
+### 21.2 Toolbar and menu facts that the app copies
+
+- Undo text after adding any of these layers (button or menu): "Undo Create".
+- The graph shows layer icons "1 2 3 ..." in its top-left corner; the active layer's icon is dark, the others grey (see 21.3).
+
+### 21.3 Layer icon: right-click menu, Hide, Layer Properties
+
+**Icons.** A graph with several layers shows numbered icons in the top-left corner of the window; clicking one makes that layer active. Right-clicking an icon (the same menu for the first and for any other layer) shows:
+
+1. Hide Layer (a check mark when the layer is hidden)
+2. Hide Other Layers
+3. Show Active Layer Only
+4. Set Active Layer By Layer Icon Only
+5. Delete Layer
+6. separator; Layer Contents... (F12); Plot Setup...; Double click to open Plot Setup
+7. separator; Axis...; Layer Properties...; Layer Management...
+8. separator; one row per plot of the layer ("1  [DQ]Sheet1! A(X), B(Y) [1*:21*]", ticked)
+
+(The effects of "Set Active Layer By Layer Icon Only", "Show Active Layer Only" and "Hide Other Layers" were **unmeasured**; only their presence in the icon menu, and for the first also in the Graph menu, is known.)
+
+**Hide Layer** hides everything the layer draws: its curves and its axes, ticks and labels disappear from the window (the other layers keep their positions); it is a toggle on the same menu item. It does not delete anything. It did not add an Undo entry (the Edit menu still said "Undo Create" from the layer added before; weak evidence).
+
+**Layer Properties...** opens the Plot Details dialog (title "Plot Details - Layer Properties") with the layer's node selected in the tree on the left (the tree lists the graph, then Layer1, Layer2, ... each with a check box, and each layer expands to its plots). The right side has five tabs for a layer:
+
+- **Background**: Color (None), Border Style (None), Gradient Fill: Mode (None), Color (Black), Direction (Top Bottom).
+- **Size/Speed**: Layer Area Left / Top / Width / Height with a Units combo (measured for a linked layer: 0, 0, 100, 100, "% of Linked Layer"); "Link Axis Length to Scale with X:Y Ratio" (off, value 1); "When dragged to reposition, also reposition parent layer" (on); Graphic Image Caching (None); Speed Mode, Skip Points if needed: Worksheet data, maximum points per curve (on, 3000), Matrix data (off, 32 by 32).
+- **Display**: Scale Elements: Scale With Layer Frame (selected) or Fixed Factor (0.87 greyed); Show Elements: X Axes, Y Axes, Labels, Data (all on), Frame (off), Z Axes (grey); Data Drawing Options: Clip Data to Frame (on), Data on Top of Axes (off), Grid on Top of Data (off); Clipping Margins (%) Horizontal 0, Vertical 0.
+- **Link Axes Scales**: "Link to" combo (the parent layer, "Layer1"); "Link Axes in Child Layer to Parent"; X Axis Link and Y Axis Link groups each with None / Straight (1 to 1) / Align (X = or Y =) / Custom (X1 =, X2 = or Y1 =, Y2 =). For a right-Y layer: X Straight, Y None.
+- **Stack**: Offset None / Cumulative / Incremental / Constant / Auto (Gap 8, Keep Proportion of Plot Range) / Individual, and the stacked-column options (as section 13.14).
+
+The dialog has OK, Cancel and Apply and a ">>" button; Apply is disabled until something changes. The axis dialog opened by Axis... or by double-clicking an axis ("Y Axis - Layer 3") has a left strip with Bottom, Top, Left, Right (or Horizontal, Vertical when the layer shows one side per direction) and the tabs Scale, Tick Labels, Title, Grids, Line and Ticks, Special Ticks, Breaks. **Line and Ticks** has, per side: Show Line and Ticks, "Use Same Options for Left and Right", Line: Show, Color (Auto), Thickness (0.2, 0.5, 1, 1.5, 2, 3, 4, 5; default 1.5), **Axis Position** with three items and **Percent/Value**; Major Ticks and Minor Ticks: Style (In & Out, In, Out, None; Out), Length (3, 5, 8, 10, 15; major 8), Color, Thickness.
+
+**Axis Position** items: for the left axis "Left", "% From Left", "At Position ="; for the right axis "Right", "% From Right", "At Position =". "% From Right" with 12 draws the right axis 12 % of the layer's width **outside** the frame; "% From Left" with 11 draws the left axis 11 % outside; a negative value moves the axis inside (-50 puts a left axis at 50 % of the layer's width). In LabTalk the left/bottom axis reads as `layer.y.position`, `layer.y.posType`, `layer.x.position`, `layer.x.posType` and the right/top axis as **`layer.y2.position`, `layer.y2.posType`, `layer.x2.position`, `layer.x2.posType`** (`layer.y.opposite` is something else; names such as `axisPos` or `offset` do not exist). `posType` 0 = "Left"/"Right" (at the frame), 1 = "% From ..." (the value is the offset in % of the **X axis length**, outward positive), the "At Position =" type was not read. A hidden side of an axis keeps stale values (for example `posType` 1 with 0 on the left of a right-only layer), so read only the shown side.
+
+### 21.4 Deleting a layer
+
+Right-click icon > Delete Layer deletes the layer at once (no question). LabTalk: `layer -d;` deletes the **active** layer; `layer -d N;` deletes layer N. Undo text in the Edit menu afterwards: **"Undelete frame"** (Ctrl+Z). The icons renumber (4 layers: deleting layer 2 left icons 1 2 3).
+
+Measured on the 3Ys templates (layers linked to each other, all `x.link` straight):
+
+| state | deleted | result |
+|---|---|---|
+| Y-YY: L2 linked to L1, L3 linked to L2 | L2 (a parent) | 2 layers; the old L3 is now L2, **unlinked** (`layer.link` 0), its frame became the parent's absolute rectangle (page % 9.593 / 19.89 / 75.73 / 66.52, same as L1), its own scales, axes and `x.link` = 1 setting stay |
+| same | L1 (the root, and the parent of L2) | 2 layers; the old L2 becomes L1 and is unlinked with the old L1's absolute frame (and keeps its right-only axis, so the graph now has no left axis); the old L3, linked to the old L2, keeps its link to it (now `layer.link` 1, frame 0 0 100 100) |
+| Y-Y-Y: L2 and L3 both linked to L1 | L1 | 2 layers, **both children unlinked** (`layer.link` 0), each with L1's absolute frame, so they sit on top of each other; no axes are added back |
+| Y-YY | L3 (last, no children) | 2 layers, nothing else changes |
+
+So Origin has no refusal and no re-parenting: deleting a parent turns every child into an independent layer that keeps the parent's rectangle, and links of other layers are renumbered. The legend text is **not** rewritten: a four-layer graph whose legend lists layer 1 to 4 plots showed "B, D, E, ???" after deleting layer 2 (the entries are references by layer index, so the one pointing at the removed layer index 4 shows "???").
+
+Not measured: deleting through the icon menu a layer that is a parent (the LabTalk `layer -d` behaviour above is taken as the same command), deleting the only layer, and the effect on `layer.y.link`.
+
+### 21.5 The multi-Y templates (Plot > Multi-Y)
+
+**Menu.** Plot > Multi-Y has: Double-Y, 3Ys Y-YY, 3Ys Y-Y-Y, 4Ys Y-YYY, 4Ys YY-YY, Multiple Y Axes... (21.6). The templates are `3Ys_Y-YY.otp`, `3Ys_Y-Y-Y.otp`, `4Ys_Y-YYY.otp`, `4Ys_YY-YY.otp` (and `DOUBLEY.OTP`) in the program folder. LabTalk: select the Y columns, `worksheet -s 2 0 4 0; worksheet -p 200 3Ys_Y-YY;` (the Plot > Multi-Y item is this call; columns 2 to 4 = three Y columns, column 1 is X). `plotxy ... template:=` was not used.
+
+**Layer count and Y assignment.** The number of layers is fixed by the template (3, 3, 4, 4) **whatever the number of columns**: one Y column still makes all three layers (the two empty layers show a 0 to 1 scale and their axes); the GUI menu item behaved the same for one selected column (no refusal, no message). Y column *i* of the selection (1-based, in column order) goes to layer ((*i* - 1) mod *N*) + 1, so the first *N* columns go one per layer and the next ones go round again: with five Y columns in a 3-layer template layers 1 and 2 hold two plots each and layer 3 one (measured for both 3Ys and 4Ys, 1 to 5 columns). Plots added to a layer that already has one are drawn in the next colour of that layer's sequence (a second curve in layer 1 came out red after a black one; legend line colours in the PNG did not always agree with the curve colours, so legend colours here are **unmeasured**).
+
+**Common to all four templates** (measured with exactly *N* Y columns):
+- Layer 1 is the root (`layer.link` 0), shows the bottom X axis with labels and one left Y axis. Every other layer is linked with `x.link` = 1 (straight), `y.link` = 0 (own scale), frame `0 0 100 100` in % of the linked layer (unit 7), shows no X axis (`x.showAxes` 0) and one Y axis. The X range is shared (-1 to 11 for X = 0..10, the template's autoscale margin 8 %), each Y scale fits its own layer's data.
+- The box is open: no top line and no right line on layer 1 (the right-hand axes belong to the other layers).
+- Every axis (line, ticks and tick labels) uses the "automatic" colour = the colour of its layer's first plot (`layer.y.color` / `y2.color` read -9), thickness 1.5, ticks Out, major length 8. Axis titles: none (the Y title text objects hold " "), so the Y axes are identified by colour and by the legend only; the X title is layer 1's (here "Time (s)").
+- One legend in layer 1 lists every plot of every layer, one row per plot as "long name (units)", in layer order; it sits above the frame (outside it). No other layer has a legend. Approximate positions in the 800 px PNG: 3Ys at the top-left (left edge about 19 % of the width), 4Ys Y-YYY at the top-right corner, 4Ys YY-YY at the top-left (about 18 %).
+- Plot colours are fixed by the template (below), not by the default colour list. The PNG exporter quantises to a palette, so the greens and oranges read as (0, 132, 0) and (255, 132, 0); they are taken as Origin's (0, 128, 0) and (255, 128, 0).
+- Frames are template values, not computed: the frame of layer 1 as % of the page (left / top / width / height) is given per template.
+
+| template | layers | layer 1 frame | layer 1 | layer 2 | layer 3 | layer 4 |
+|---|---|---|---|---|---|---|
+| 3Ys Y-YY | 3 | 9.593 / 19.89 / 75.73 / 66.52 | left axis at the frame, black (0, 0, 0) | right axis at the frame (posType 0, offset 0), red (255, 0, 0); link 1 | right axis `% From Right` **10**, blue (0, 0, 255); **linked to layer 2** (`layer.link` 2) | none |
+| 3Ys Y-Y-Y | 3 | 9.764 / 15.7 / 81.69 / 68.84 | left axis, black | **left** axis `% From Left` **-50** (the axis stands in the middle of the plot, tick labels on its left), red; link 1 | right axis at the frame, blue; link 1 | none |
+| 4Ys Y-YYY | 4 | 6.856 / 21.47 / 67.72 / 64.07 | left, blue (0, 0, 255) | right at the frame, green (0, 128, 0) | right `% From Right` **12**, orange (255, 128, 0) | right `% From Right` **23**, magenta (255, 0, 255) |
+| 4Ys YY-YY | 4 | 14.91 / 21.25 / 68.5 / 63.48 | left, blue | **left** `% From Left` **11**, green | right at the frame, magenta | right `% From Right` **11**, orange |
+
+All of layers 2 to 4 are linked to layer 1 (link 1) except layer 3 of Y-YY. The offsets are in % of the X axis length as in 21.3; in the 800 px pictures the outer axes stand 62 px (Y-YY, 10.2 % of the frame width), 66 and 128 px (Y-YYY, 12.2 and 23.6 %), 59 px (YY-YY left, 10.8 %) from the frame edge, which agrees with the stored 10, 12, 23 and 11 % within the picture's resolution.
+
+**Colour of the data in the templates.** The plot of layer *k* has colour index 1, 2, 4 (3Ys: black, red, blue) or 4, 12, 15, 6 (4Ys Y-YYY: blue, green, orange, magenta) or 4, 12, 6, 15 (YY-YY: blue, green, magenta, orange) in LabTalk's `get %C -c`, which are 1-based entries of Origin's colour list (1 black, 2 red, 4 blue are certain; 12 green, 15 orange and 6 magenta read from the pixels, not from the list). Layer 1's axes and plot in 3Ys are black (the colour is the plot's).
+
+**PNG per template**: `re-workspace/scratch/t61/png/C_3Ys_Y_YY_3.png`, `C_3Ys_Y_Y_Y_3.png`, `C_4Ys_Y_YYY_4.png`, `C_4Ys_YY_YY_4.png` (800 px wide, local only).
+
+**Unmeasured**: the number of columns the GUI warns about (none observed), the effect of selecting columns with two X columns, grouped column selections of several sheets, legend position values in page units, the exact text of any message for too many columns.
+
+### 21.6 Plot > Multi-Y > Multiple Y Axes... (`plotmyaxes`)
+
+**Dialog** ("Plotting: plotmyaxes", description "Customize Multi-Axes plot", with a Dialog Theme row, an Auto Preview check box, Preview, OK, Cancel and a preview pane on the right; the controls, top to bottom):
+
+- **Input**: the selected columns as a range, for example `[Book1]Sheet1!((A,B),(A,C),(A,D),(A,E))` (one X/Y pair per Y column); a range picker button.
+- **Plot Type**: combo Line (default), Scatter, Line+Symbol, Custom.
+- **Axis and Plot Assignment**: "Number of Left Y Axes" (a number with an Auto check box, ticked), "Number of Right Y Axes" (same), "Add Middle Y Axis" (check box, off), a blue summary "4 Y axes and 4 plots in total", "Number of Plots in Each Layer" (text, default 1, hint "Separate numbers by space. Example: 1 2 3") and a blue line "Actual number of plots in each layer : 1 1 1 1".
+- **Options**: "Link Axis Color to Plot" (on), "Show Y Title" (off), "Show Top X Axis" (off), "Y Axes Gap (%)" (a number, shown 10, with an Auto check box, ticked).
+
+LabTalk: `plotmyaxes iy:=[Book]Sheet!(1,2:5) plottype:=line|scatter|linesymb|custom ly:=N ry:=N my:=0|1 number:="2 1 1" axiscolor:=0|1 ytitle:=0|1 topx:=0|1 gap:=G hide:=0|1;` (`plotmyaxes` is an X-Function; `iy` takes several ranges; `ly`, `ry` and `gap` default to `<auto>`).
+
+**What it builds** (Origin 2016, Line template for the frame; layer 1's frame is 17.91 / 11.58 / 68.16 / 71.83 % of the page for a plain Line graph; the new layers are linked as in 21.5: `link` 1, X straight, Y own, frame 0 0 100 100 in % of linked layer):
+
+- With *N* Y columns it makes *N* layers, one plot each, and the default split of axes is `ly` = floor(*N* / 2) left axes and `ry` = *N* - `ly` right axes (measured *N* = 2: 1 and 1; 3: 1 and 2; 4: 2 and 2; 5: 2 and 3; 6: 3 and 3). *N* = 1 makes an ordinary one-layer graph (no extra layer).
+- Layer 1 is the first left axis (at the frame). Layers 2 to `ly` have **left** axes at `% From Left` = gap, 2 gap, ... (10 % steps by default). Layers `ly` + 1 to *N* have **right** axes at `% From Right` = 0, gap, 2 gap, ... (the first right axis is at the frame). With "Add Middle Y Axis" the layer after the left ones is a left axis at `% From Left` **-50** (the middle of the plot), then the right axes follow; the total of axes is still the number of columns (3 columns, middle on: 1 left, the middle, 1 right).
+- `ly:=0` makes layer 1's own axis a right one (right axes at 0, 10, 20 for three columns); `ry:=0` makes all axes left axes (0, 10, 20).
+- Default gap **10** (% of the X axis length); `gap:=20` gave right offsets 0, 20. With `ytitle:=1` and `topx:=1` (and `axiscolor:=0`) the automatic gap was **14** (which of the three options needs the room was not separated); an explicit gap is used as given.
+- The **frame of layer 1 moves** so that the frame plus the outward offsets is centred on the page: left = (100 - W - L - R) / 2 + L, with W = 68.16, L = (number of left offsets) * gap * W / 100 and R = (number of right offsets) * gap * W / 100 (checked on six layouts, for example 12.52 for one right offset, 9.111 for two, 15.92 for one left and one right, 22.73 for two left offsets and none right, 11.15 for one right offset at gap 14); width and top do not change.
+- Plot colours are Origin's default colour list in order, not the template colours of 21.5: black (0, 0, 0), red (255, 0, 0), green (0, 255, 0), blue (0, 0, 255), cyan (0, 255, 255); `plottype:=scatter` draws squares, circles and up-triangles in the same colours. With `axiscolor:=1` (default) each axis line, tick and label takes its plot's colour; `axiscolor:=0` keeps them black (the picture showed black axes). `ytitle:=1` shows "long name (units)" next to each Y axis, rotated like the left title; `topx:=1` shows the top X axis line with ticks and labels on layer 1 (`x.showAxes` 3).
+- A legend lists every plot of every layer (one legend, in layer 1, top-right above the frame).
+- `number:="2 1 1"` with four columns made three layers (the number of layers is the number of numbers) with 2, 1 and 1 plots in them.
+
+**Unmeasured**: `hide:=1`, the `custom` plot type's template choice, the preview, how the dialog refuses a column count that does not fit `ly + ry (+ 1)` (the OK path was not run), the legend text format, the axis title placement values.
+
+### 21.7 Exact LabTalk used (Origin 2016, through COM, one line at a time; setup `newbook name:=DQ sheet:=1 option:=lsname;` and a worksheet with X in column 1)
+
+```
+plotxy iy:=[DQ]1!(1,2) plot:=200 ogl:=[<new>]; win -r %H G1; win -a G1;
+layadd type:=righty;                       // also normal, topx, lefty, txry, bxry, inset, insetdata, noxy
+page.active = 2; layadd type:=righty;      // the parent is the active layer
+layadd userdef:=1 bottom:=1 left:=0 top:=1 right:=1 linkto:=1 xaxis:=straight yaxis:=custom;
+plotxy iy:=[DQ]1!(1,3) plot:=200 ogl:=[G1]2!;
+page.active = 2; layer -d;                 // delete the active layer; "layer -d 1;" deletes layer 1
+double pv0 = layer.link;  pv0 = layer.x.link;  pv0 = layer.y.link;  pv0 = layer.unit;  pv0 = layer.left;
+pv0 = layer.top;  pv0 = layer.width;  pv0 = layer.height;  pv0 = layer.x.from;  pv0 = layer.x.to;
+pv0 = layer.y.from;  pv0 = layer.y.to;  pv0 = layer.x.showAxes;  pv0 = layer.y.showAxes;
+pv0 = layer.y.position;  pv0 = layer.y.posType;  pv0 = layer.y2.position;  pv0 = layer.y2.posType;
+pv0 = layer.y.color;  pv0 = layer.y2.color;
+string ts$ = layer.name$;  ts$ = xb.text$;  ts$ = yl.text$;  ts$ = %C;   // %C after layer.plot = n;
+get %C -c cc;                              // plot colour index
+win -a DQ; worksheet -s 2 0 4 0; worksheet -p 200 3Ys_Y-YY;     // 3Ys_Y-Y-Y, 4Ys_Y-YYY, 4Ys_YY-YY
+plotmyaxes iy:=[DQ]1!(1,2:5) plottype:=line ly:=2 ry:=2 my:=0 number:="1 1 1 1" axiscolor:=1 ytitle:=0 topx:=0 gap:=10;
+expGraph type:=png path:="DIR" filename:=NAME overwrite:=1 tr1.unit:=2 tr1.width:=800;
+```
+
+A LabTalk variable named `v1` to `v9` is not usable in `double v1 = ...;` (the call returned false; the names `pv1` or `q` work). Properties that do not exist read as -1.23456789E-300. `layer.nplots` does not exist here; count a layer's plots by stepping `layer.plot = n;` and watching `%C` repeat (the index clamps at the last plot).
+
+### 21.8 What Sheaf takes from this
+
+- Add Layer buttons and menu: the nine types of 21.1 (the six toolbar ones as buttons). "Horizontal Axis Layer..." and "Vertical Axis Layer..." do not exist in Origin 2016: the greyed items are reassigned to a later task (not implemented).
+- The new layer's parent is the active layer; a linked layer is placed over its parent (% of linked layer 0 0 100 100); the inset is 75 / 0 / 25 / 25 of the parent.
+- Delete: children of the deleted layer become unlinked and keep its absolute rectangle; other links are renumbered; Undo text "Undelete frame"; no confirmation.
+- 3Ys / 4Ys: build as in 21.5; Multiple Y Axes with the defaults of 21.6; an axis position is a percentage of the X axis length, outward positive, one value per shown side.
+
+### 21.9 How Sheaf builds layers (slice 1)
+
+Implemented in `crates/core/src/layers.rs` (`Graph::add_layer`, `Graph::delete_layer`), the Graph > New Layer(Axes) menu, the Graph toolbar (six buttons) and the layer icon menu (Delete Layer, Layer Properties...).
+
+- The nine kinds are as in 21.1. The parent is the active layer; Sheaf's model allows a link only to an unlinked earlier layer, so when the active layer is itself linked the new layer follows that layer's root (Origin chains links; **provisional deviation**). A Bottom-X Left-Y layer is unlinked, has the root's width and height and starts 2.3 % of the page width left and 3.05 % of the page height above it (from one measurement; Origin's offset varied, so the value is Sheaf's own). New layers hide their legend (unmeasured in Origin). Inset With Data copies the parent's limits and major step, its axis title text and its first plot, not its link. Both insets scale their tick label and title fonts by 0.25 (the inset's share of the parent; Origin's Scale With Layer Frame factor is **unmeasured**, provisional). Deleting a layer freezes the X/Y range that a child took from a straight link (the app passes the drawn ranges), as Origin keeps x.from and x.to.
+- Delete follows 21.4: children are unlinked and keep their place on the page (the parent's rectangle for a layer that covers it; for an inset the inset's own place, **unmeasured**), later links are renumbered, no confirmation, undo text "Undelete frame". Deleting the **only** layer is refused (Origin's behaviour unmeasured). After a delete the active layer is the one before the deleted layer (or the first), a selection in a later layer moves up, a selection in the deleted layer is cleared, and Plot Details, Layer Contents, Plot Setup and the drawn-object window of that graph close.
+- Add makes the new layer active and clears the selection; one undo step each ("Create", "Undelete frame").
+- Layer Properties... (Format menu and layer icon) opens Plot Details on the layer's node with the Background tab. Sheaf's layer node keeps its Layer Contents and Legend tabs as well.
+- Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer still hides only the plots, not the axes (Origin hides both; a later slice).
+
+### 21.10 How Sheaf draws a displaced Y axis (slice 2)
+
+`Axis::offset_pct` (Y axis, default 0, kept in `.sheaf` files only when not 0) is Origin's axis position "% From Left" / "% From Right" (21.3): the distance in percent of the frame's **width** (the X axis length), outward positive, negative inward (-50 puts a left axis in the middle). Implemented in `crates/plot/src/axis_offset.rs` and used by the layout.
+
+- The axis line, its ticks, its tick labels and its title move together; the frame, the grid, the data and the line on the opposite edge stay. The left axis of a layer moves left, a right axis moves right.
+- Automatic margins: the labels of the displaced axis count in the label edges of the group, so the frame narrows exactly as it does for a right axis at the frame (the existing "Keeping labels on the page" rule). The offset is a share of the frame as finally fitted.
+- Clipping: data stay clipped to the frame; the axis is drawn outside the clip, in the overlay.
+- Hit testing: the displaced line, ticks and labels are the Y axis object of the layer that owns them; the line at the edge stays the object of the layer whose axis is there.
+- Linked ranges: unchanged (`ScaleLink::Straight` shares the parent's limits, offset or not).
+- Layer Properties/Axis dialog: Line and Ticks tab, Axis Position, a "% From Left" / "% From Right" field (vertical axes). Plot context menu: "Move to Layer > Layer N" (**Sheaf's own design, not measured in Origin**: the item, its label and its place in the menu) moves a plot to another layer with that layer's axes (the existing Move to Right Y Axis stays).
+- The offset is not written to .opj yet (slice 3). A displaced Y title is placed beyond the displaced labels and can collide with the titles of the axes between; the multi-Y templates show no Y titles (21.5) and Origin raises the automatic gap when titles are on (21.6, 14 %); that rule is **unmeasured** in Sheaf.
+- Origin's offset of the X axis (bottom/top) is **unmeasured** and not implemented.
+
+### 21.11 Sheaf rules for the 3Ys / 4Ys templates and Multiple Y Axes (slice 3)
+
+Implemented in `crates/core/src/multi_y.rs` (plans, options), `Template::Multi3YYy`, `Multi3YYY`, `Multi4YYyy` and `Multi4YyYy` (names `3ys-y-yy`, `3ys-y-y-y`, `4ys-y-yyy`, `4ys-yy-yy`; labels "3Ys Y-YY" and so on), `Project::plot_multi_y_template` and `Project::plot_multi_y`, the Plot > Multi-Y menu and `dialogs/multi_y.rs`. The same names work in `sheaf plot -t` and the MCP `plot` tool.
+
+- **Templates** take the frames, sides, offsets and colours of the table in 21.5 (`MultiYKind::plan`). Layer 1 is the root with the bottom X axis; every other layer is linked to it with a straight X scale and its own Y scale, covers it and shows only its Y axis. The box is open, the Y axes have no titles, each axis takes its plot's colour, one legend in layer 1 lists every plot. **Provisional deviation:** layer 3 of Y-YY is linked to layer 1, not to layer 2 (Sheaf links only to an unlinked layer; the X range is the same either way).
+- **Columns** go to layer *i* mod *N* (21.5), N = 3 or 4. Fewer columns than layers still make every layer (Origin did the same, no message); the empty layers draw their axis with a 0 to 1 scale. No column at all is refused ("a multiple Y axes graph needs at least one Y column"). `--y2` and `--panels` are refused with these templates.
+- **Colours**: the layer's colour first, then Origin's colour list without it, so a second plot in the layer takes the next colour. Legend position is **unmeasured**: Sheaf uses top-left (3Ys, YY-YY) and top-right (Y-YYY) inside the frame, Origin puts the legend above the frame.
+- **Multiple Y Axes...** follows 21.6: Plot Type (Line, Scatter, Line + Symbol; Custom is not offered), Number of Left/Right Y Axes with Auto (floor(N/2) left, rest right), Add Middle Y Axis (-50 %), Number of Plots in Each Layer (the sum must equal the number of columns, a layer cannot be empty), Link Axis Color to Plot, Show Y Title, Show Top X Axis (line and ticks only; tick labels on the top axis are not drawn), Y Axes Gap (Auto 10, and 14 when Y titles or the top X axis are on: which of the options causes it is **unmeasured**, Sheaf uses titles or top X; `axiscolor:=0` alone is unmeasured). The first frame is centred with the outward offsets by the formula of 21.6; one Y column makes an ordinary graph with a left axis and the frame at 17.91 %. A count of axes that does not fit the number of layers is reported in the dialog and nothing is made. The Preview button and `hide` are not built.
+- **Files**: `.sheaf` keeps `offset_pct` and the layer links. The `.opj` writer writes one ordinary layer per Y axis but no axis position; the save names "the position of a Y axis away from the frame" so the `.opj.sheaf` companion keeps it (ADR 0008). CLI and MCP have the four template names only; the Multiple Y Axes options are in the app.
+- Goldens: `crates/plot/tests/golden/multi-y-3ys-y-yy.svg`, `-3ys-y-y-y`, `-4ys-y-yyy`, `-4ys-yy-yy` and `multi-y-multiple-axes.svg`.

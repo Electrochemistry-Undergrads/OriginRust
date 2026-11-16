@@ -9,7 +9,7 @@ fn print_follows_the_active_window_and_dispatches_the_graph_command() {
     assert!(empty.get_by_label(BUTTON).accesskit_node().is_disabled());
 
     let mut h = start(vec![data_file("toolbar-print")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let toolbar_enabled = !h.get_by_label(BUTTON).accesskit_node().is_disabled();
     click(&mut h, "File");
     assert_eq!(toolbar_enabled, entry_enabled(&h, "Print... Ctrl+P"));
@@ -28,7 +28,7 @@ fn print_follows_the_active_window_and_dispatches_the_graph_command() {
     assert!(h.state().status.contains("Printing is skipped under test"), "{}", h.state().status);
     assert!(h.state().message.is_none());
 
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let toolbar_enabled = !h.get_by_label(BUTTON).accesskit_node().is_disabled();
     click(&mut h, "File");
     assert_eq!(toolbar_enabled, entry_enabled(&h, "Print... Ctrl+P"));

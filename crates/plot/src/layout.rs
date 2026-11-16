@@ -874,7 +874,7 @@ fn layer_scene(
     }
     // The edge each axis line is drawn on, as a box of no height or width.
     let x_line = Rect { y: if xa.side == AxisSide::Opposite { f.y } else { f.y + f.h }, h: 0.0, ..f };
-    let y_line = Rect { x: if ya.side == AxisSide::Opposite { f.x + f.w } else { f.x }, w: 0.0, ..f };
+    let y_line = Rect { x: crate::axis_offset::y_line_x(ya, f), w: 0.0, ..f };
     let spans = |r: &ResolvedAxis| r.gaps.iter().map(|g| g.span(r.reversed)).collect::<Vec<_>>();
     let gaps = (spans(&geom.x), spans(&geom.y));
     draw_axis_lines(out, xa, ya, f, xp.line, yp.line, &gaps);
@@ -924,6 +924,7 @@ fn layer_scene(
     if layer.display.show_data {
         crate::hexbin::draw_scale(out, layer, pds, geom, m);
         crate::sunburst::draw_scale(out, layer, pds, geom, m);
+        stack::draw_scale(out, layer, pds, geom, m);
     }
     if waterfall.is_none() && layer.display.show_data {
         crate::slope::draw(out, objects, project, layer, index, pds, geom, m);
@@ -1058,7 +1059,16 @@ fn draw_axis_lines(
     let (l, r, t, b) = (f.x, f.x + f.w, f.y, f.y + f.h);
     let shown = |a: &Axis| a.side != AxisSide::Hidden;
     let same = xa.line_width_pt == ya.line_width_pt && xc == yc;
-    if shown(xa) && shown(ya) && xa.show_opposite && ya.show_opposite && same && gaps.0.is_empty() && gaps.1.is_empty()
+    let y_main_x = crate::axis_offset::y_line_x(ya, f);
+    let displaced = y_main_x != if ya.side == AxisSide::Opposite { r } else { l };
+    if shown(xa)
+        && shown(ya)
+        && xa.show_opposite
+        && ya.show_opposite
+        && same
+        && gaps.0.is_empty()
+        && gaps.1.is_empty()
+        && !displaced
     {
         // All four edges in one stroke, so that the corners join cleanly.
         let mut d = String::new();
@@ -1116,7 +1126,8 @@ fn draw_axis_lines(
     let gap_x = &gaps.0;
     // The edge each axis is drawn on, and the edge across from it.
     let (x_main, x_other) = if xa.side == AxisSide::Opposite { (t, b) } else { (b, t) };
-    let (y_main, y_other) = if ya.side == AxisSide::Opposite { (r, l) } else { (l, r) };
+    let y_other = if ya.side == AxisSide::Opposite { l } else { r };
+    let y_main = y_main_x;
     if shown(xa) {
         line(out, (l, x_main), (r, x_main), xa, xc, gap_x);
     }
@@ -1192,6 +1203,7 @@ pub(crate) fn outward_extent(axis: &Axis) -> f64 {
 /// Draws the ticks of one axis on its own edge and, with `opposite_ticks`, on the edge across
 /// (mirrored, so an `In` tick still points into the frame). `horizontal` is true for X.
 fn draw_ticks(out: &mut Vec<Item>, axis: &Axis, resolved: &ResolvedAxis, f: Rect, horizontal: bool, color: Color) {
+    let f = if horizontal { f } else { crate::axis_offset::y_axis_frame(axis, f) };
     // (position of the edge, +1 when "into the frame" is the positive page direction).
     let (main, other) = match (horizontal, axis.side) {
         (_, AxisSide::Hidden) => return,
@@ -1331,6 +1343,8 @@ fn draw_y_labels(
     font: &Font,
     m: &dyn TextMeasurer,
 ) -> f64 {
+    // A displaced axis (graphing spec 21.3) carries its labels outward with it.
+    let f = crate::axis_offset::y_axis_frame(axis, f);
     let right_side = axis.side == AxisSide::Opposite;
     let rug = crate::rug::main_extent(axis, f);
     let tick_end = if right_side { f.x + f.w + outward_extent(axis) + rug } else { f.x - outward_extent(axis) - rug };

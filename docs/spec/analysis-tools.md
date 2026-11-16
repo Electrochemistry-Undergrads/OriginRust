@@ -1358,6 +1358,161 @@ Analysis > Mathematics > XYZ Surface Area... gives the area of the surface throu
 
 **Sheaf's choice** until the window is measured: Analysis > Mathematics > XYZ Surface Area... uses the XYZ columns of the active sheet (X, Y, Z designations as the surface fits do, fitting.md 14), runs the Delaunay triangulation (`sheaf-calc`, new module, one triangulation also usable by the gridding work that other packages plan) and writes a small results sheet or log line with the area, the number of points used and of triangles, and the number of merged duplicates; `sheaf analyze xyz-area` prints the number; rows with a missing X, Y or Z are skipped and counted.
 
+## 19. Wavelets (`dwt`, `idwt`, `wtdenoise`, `wtsmooth`, `cwt`; T96)
+
+Analysis > Signal Processing > Wavelet holds five items, each one an X-Function of OriginPro 2016 (names from the
+X-Function files in `Program Files/OriginLab/Origin2016/X-Functions/Signal Processing/Wavelet`, the labels from
+their descriptions): **Decompose...** = `dwt` (one level of the 1D discrete wavelet transform), **Reconstruction...** =
+`idwt`, **Denoise...** = `wtdenoise`, **Smooth...** = `wtsmooth`, **Continuous Wavelet...** = `cwt`. The folder also has
+`mdwt` (Multi-Scale DWT, several levels into a report sheet), `dwt2`, `idwt2` (2D) and `cw_evaluate`; none of these is
+in the menu list of the inventory, so T96 does not build them. All five scripted fine (`run-labtalk-safe.ps1`, each
+called with named arguments); the windows were opened with `origin-dialog.ps1 -Command "<name> -d;"`. Measured on
+2026-11-16 in Origin 2016; generators and a fixture file (`t96-origin.json`, inputs and Origin outputs) are in
+`tools/origin-ref/t96/`, raw output in `re-workspace/scratch/t96/` (local only). PyWavelets 1.8 was used only to
+identify filters ("pywt-checked"), never as the source of a number.
+
+### 19.1 Wavelets and extension modes (all five items)
+
+- **21 wavelets, in this order** (the combo box and the integer `type` 0 to 20): Haar, DB2 to DB10, Bior1.1, Bior1.3,
+  Bior1.5, Bior2.2, Bior2.4, Bior2.6, Bior2.8, Bior3.1, Bior3.3, Bior3.5, Bior3.7. No Symlets, Coiflets or other
+  families. Default Haar. In the other four items the option strings are `haar, db2..db10, b11, b13, b15, b22, b24,
+  b26, b28, b31, b33, b35, b37` (`type:=db2` and `type:=b13` work as well as the number).
+- **The filters are the usual ones**, with PyWavelets' names `haar`, `db2`..`db10`, `bior1.1`..`bior3.7` (Origin's DBn has
+  2n taps, so DB2 has 4; filter lengths L: Haar 2, DBn 2n, Bior1.1 2, 1.3 6, 1.5 10, 2.2 6, 2.4 10, 2.6 14, 2.8 18, 3.1 4,
+  3.3 8, 3.5 12, 3.7 16). All 21 decompositions below equal `dec_lo`/`dec_hi` of the wavelet to 1e-15.
+- **Extension mode** ("Extension Mode", in Reconstruction "Boundary"): `Periodic` (default) or `Zero-padded`.
+
+### 19.2 Decompose (`dwt`)
+
+`dwt ix:=<Y column> type:=<0..20> ext:=<0 periodic, 1 zero-padded> ca:=<new> cd:=<new>`. The X column of the book is
+ignored. One level only. Two new columns are appended at the right end of the sheet: the approximation (long name `DWT_CA1`,
+comment `Approx Coeff of DB2 dwt on B`) and the detail (`DWT_CD1`, `Detail Coeff of DB2 dwt on B`); a second call counts up
+(`DWT_CA2`, ...). The comment names the wavelet in the combo's spelling and the input column's short name.
+
+- With `x[m]` the signal and `lo`, `hi` the decomposition filters (pywt `dec_lo`, `dec_hi`, taps `0..L-1`):
+  **`ca[k] = sum_j lo[j] x[2k+1-j]`, `cd[k] = sum_j hi[j] x[2k+1-j]`.**
+- **Periodic**: indices modulo `n`, `k = 0..n/2-1`, so `n/2` coefficients each. An odd `n` is refused (the call returns
+  false, nothing is written; `n = 21` refused, `n = 16` works).
+- **Zero-padded**: `x = 0` outside `0..n-1`, `k = 0..floor((n+L-1)/2)-1`, so `floor((n+L-1)/2)` coefficients each (n = 16:
+  Haar 8, DB2 9, DB3 10, DB4 11, ..., DB10 17; n = 21 works: Bior1.3 gives 13). This is `pywt.dwt(x, w, mode='zero')`
+  exactly (all 21 wavelets, 1e-15).
+- Periodic is **not** pywt's `periodization` (that is a circular shift of it); the formula above matches all 21 wavelets to
+  1e-15 (`tools/origin-ref/t96/a3.py`).
+
+### 19.3 Reconstruction (`idwt`)
+
+`idwt ca:=<column> cd:=<column> type:=<n> ext:=<n> ox:=<new>`. Output: one new column (long name `IDWT_Result1`, comment
+`DB2 idwt of C, D`). With `rl`, `rh` the reconstruction filters (pywt `rec_lo`, `rec_hi`), `N = len(ca)` and
+`m = 2k + j - (L-2)`: **`y[m] += ca[k] rl[j] + cd[k] rh[j]`** for `k = 0..N-1`, `j = 0..L-1`.
+
+- **Periodic**: `m` wraps modulo `2N`; output length `2N`. **Zero-padded**: terms with `m` outside `0..2N-L+1` are dropped; output
+  length `2N - L + 2` (`N = 9`, DB2: 16 values, the length `dwt` took in). Checked against Origin for DB2 on unit coefficients
+  (`ca` or `cd` one at a time, every position, both modes, 1e-16, `idwt1.out`); other wavelets are not checked on their own,
+  only through decompose-then-reconstruct in the model.
+- Unequal lengths (DB2): the output length follows `ca`; a shorter `cd` counts as zeros (periodic, 5 and 3 values give 10), a
+  longer `cd` is cut to `ca` (zero-padded, 5 and 6 values give 8, the same as 5 and 5).
+- Coefficients not made by `dwt` are accepted (random `ca` and `cd` of 5 values worked).
+
+### 19.4 Denoise (`wtdenoise`)
+
+`wtdenoise iy:=(Xcol,Ycol) type:=<name> ext:=periodic|pad0 thrt:=custom|sqtwolog level:=<1..7> thrd:=<percent>`. Defaults Haar,
+periodic, custom, level 1, 50. Output: two new columns, `Denoised X1` (a copy of the input X) and `Denoised Y1` (comment
+`1 level(s) 50% threshold DB2 denoise of B`), counting up on the next call. The result has the input's length.
+
+- **Levels allowed** (a larger value returns false and writes nothing): periodic `floor(log2 n) - 1` (n = 16: 3, 17: 3, 32: 4,
+  64: 5, 100: 5, 128: 6), zero-padded `floor(log2 n)` (16: 4, 17: 4, 32: 5, 64: 6, 100: 6, 128: 7), the same for Haar, DB2 and
+  DB4. **Haar with zero-padded is refused at every level when `n` is a power of two** (16, 32, 64, 128) and works for n = 17
+  and 100; not explained.
+- **`custom` is hard thresholding of the detail coefficients of levels 1 to `level` with one common threshold
+  `T = thrd/100 * max |d|`, the maximum taken over all those levels; coefficients with `|d| >= T` stay unchanged, the others
+  become 0; the approximation is never touched.** Equal to 1e-15 to the model (decompose `level` times as in 19.2, threshold, rebuild as in 19.3) in the cases of the fixture
+(128 noisy points, levels 1 to 4, `thrd` 0, 25, 50, 100, five wavelets, periodic); `thrd = 0` returns the input. At exactly 100%
+only the maximum coefficient stays (`>=`): three of the four levels kept it, level 3 did not (rounding of `100/100 * max`); Sheaf
+keeps `>=` and accepts that difference.
+- **`sqtwolog` ignores `thrd`.** It is the same hard rule on levels 1 to `level` with one common threshold `T` that does **not**
+  scale with the data (the same signal times 0.1, 1 and 10 gives the same `T`) and depends only on `n`. Measured by
+  dropped-below and kept-above brackets on designed signals (db2, periodic, level 1; `sqtwolog_threshold_brackets` in the
+  fixture): n = 128: 1.861 to 1.908; 256: 2.0526 to 2.0600; 512: 2.1847 to 2.1959; 1024: 2.3269 to 2.3302; 2048: 2.4377 to
+  2.4593; the brackets for n = 24, 32, 48, 64, 96 are wider (1.6 to 2.2) and all contain 1.88. For n >= 256, `T = 0.6595 sqrt(2 ln(n/2))` fits all four brackets; for n <= 128
+  `T` is about 1.88 and flat. **The rule behind `T` is not found** (it is not the universal threshold `sigma sqrt(2 ln n)`: no
+  `sigma` from the data enters). Sheaf's choice until it is found: the brackets as a table for the lengths measured, the fit
+  above beyond 2048, and a note in the dialog's description line.
+- **Boundary samples.** The first and last `L - 2` samples of the output differ from the model in some cases: six designed
+  signals (db2, periodic, level 1, `thrd` 50: one coefficient `d[0] = 10` kept; `d[0] = 3` dropped next to a kept 10; with
+  approximation `a[0] = 5`) differ at samples 0, 1, 14, 15 of 16 by up to 0.9 (`denoise_boundary` in the fixture), while the same
+  signals with `thrd` 1 (everything kept) come back exactly. The 24 noisy-signal cases do not show it. Not resolved; the model is
+  right for samples `L-2 .. n-L+1`, the fixture decides the rest.
+
+### 19.5 Smooth (`wtsmooth`)
+
+`wtsmooth iy:=(Xcol,Ycol) type:=<name> ext:=periodic|pad0 cutoff:=<percent>`; defaults Haar, periodic, 20. Output: `WT Smoothed X1`
+(the input X) and `WT Smooth Y1`, comment `20% cutoff DB2 smooth of B`. There is no level input: **the signal is decomposed to the
+deepest allowed level** (19.4; n = 128 periodic: 6 levels, 126 detail coefficients). The detail coefficients are laid out as
+`[cD_J, ..., cD_2, cD_1]` (coarsest first) and **the last `K` of them are set to 0, `K = floor(cutoff/100 * N)`**, `N` the number
+of detail coefficients: the finest level goes first and, inside a level, the last coefficients go first (n = 128, cutoff 20:
+`K = 25`, the last 25 of level 1; cutoff 50: `K = 63`, all of level 1 but its first; cutoff 70: all of level 1 and the last 24 of
+level 2; cutoff 90: levels 1 to 3 and the last of level 4). The approximation stays; the signal is rebuilt (19.3). Cutoff 100 leaves
+the approximation only. It is a position rule, not a size rule: large coefficients at the end go and small ones at the start stay
+(db2, periodic, n = 128, noisy signal, cutoff 0, 5, 10, 20, 30, 50, 70, 90, 100, equal to 1e-15, except as listed next).
+
+- n = 128 with cutoff 0 and 1 gave `K = 2`, not 0 or 1 (Haar, DB2, DB4, Bior1.3); n = 64 and n = 100 with cutoff 0 return the input.
+- Zero-padded: depth `floor(log2 n)`, `N` the sum of the coefficient counts (n = 128, DB2: depth 7, N = 140; cutoff 50 gave
+  `K = 70`, cutoff 100 gave 140), but n = 100 zero-padded at 50 zeroed exactly the 51 finest coefficients, not
+  `floor(0.5 * 112)`, and periodic n = 100 (odd length 25 at level 2) has no exact fit yet. Open.
+
+### 19.6 Continuous Wavelet (`cwt`)
+
+`cwt ix1:=<signal column> ix2:=<scale column> type:=<0 Morlet, 1 DGauss, 2 MexHat> param:=<wave number> upf:=<0|1> pf:=<new>
+rcoef:=<range> mcoef:=<matrix> plot:=<0|1>`. Defaults: Morlet, wave number 5 (the combo offers 5, 6, 7, 8, 9, 10, 15, 20 and is
+editable; 3 was refused, 5 and 8 work), `upf` 0, `plot` 1. Output `rcoef` defaults to a **new sheet `CWTResults1` in the input's
+book: one row per signal sample, one column per scale in the order of the scale column, real numbers, no X column**; the first column
+is named `Coefficient`, the next ones `A`, `B`, ... (long names empty), the comment of every column is `cwt of A, B` (the signal's
+and the scale column's names). A script call made no graph and no matrix (`plot:=1` and `mcoef:=<new>` did nothing), and
+`pf:=<new>` with `upf:=1` wrote no column; with `upf:=1` the coefficients change (the scale column then holds frequencies), how is
+not worked out.
+
+What the numbers are (a unit impulse at row `m`, 64 points, scales 1 to 8; `cwt1.out`, `cwt2.out`):
+
+- The response is shift invariant and linear (an impulse of 2 at row 20 gives twice the response of 1 at row 32, moved by 12 rows).
+- **Every response is centred half a sample after the impulse**: symmetric (Morlet, MexHat, DGauss with an even `param`) or
+  antisymmetric (DGauss, `param` 5) about row `m + 0.5`, never about `m`.
+- Morlet (real part): `A(a) cos(5 d / a) exp(-d^2 / (2 a^2))`, `d = row - (m + 0.5)`, up to a sign that alternates with the
+  half-sample offset, `a` the scale; fitted for `a` = 2, 4, 8 with the Gaussian width exactly `a` and `A(a) sqrt(a)` = 0.756, 0.935,
+  0.984, which is `1 - 1/a^2` (to 0.01). Scale 1 does not fit (the carrier is above the Nyquist rate).
+- MexHat: `A(a) (1 - t^2) exp(-t^2/2)`, `t = d / a`, fitted to 1e-4 at `a` = 1.5 to 8, with `A(a) sqrt(a)` rising to 0.8673
+  (= `2 / (sqrt(3) pi^(1/4))`, the usual normalisation) from below: 0.8415, 0.8614, 0.8651, 0.8665 at `a` = 2, 4, 6, 8.
+- DGauss: the parity follows `param` (odd antisymmetric, even symmetric); the shape is not a plain Hermite function of `d / a`
+  (fit errors 0.2 to 0.5 for orders 1 to 5); not identified.
+
+So the **continuous wavelets are measured as tables (fixture), not derived**. The closed form with its half-sample offset and the
+small-scale deficit (probably the wavelet sampled and normalised on the sample grid) is the first open point.
+
+### 19.7 The windows
+
+Titles `Decompose: dwt`, `Reconstruction: idwt`, `Denoise: wtdenoise`, `Smooth: wtsmooth`, `Continuous Wavelet: cwt`: plain
+X-Function windows (a Dialog Theme row on Denoise and Smooth, a one-line Description, the fields, OK and Cancel, a status line
+under the fields: `Please select a data range for input.` on Decompose and Reconstruction, `Please select an XYRange of input
+data` on Denoise and Smooth, `You must have numeric data to run this analysis` on Continuous Wavelet). Fields, in order:
+
+| Window | Fields (default) |
+|---|---|
+| Decompose | Recalculate (Manual); Input (range); Wavelet Type && Order (Haar, 21 entries); Extension Mode (Periodic, Zero-padded); Approx Coefficient (`<new>`); Detail Coefficient (`<new>`) |
+| Reconstruction | Recalculate; Approximation Coefficients; Detail Coefficients; Wavelet Type (Haar); Boundary (Periodic, Zero-padded); Output (`<new>`) |
+| Denoise | Recalculate; Input; Wavelet Type (Haar); Extension Mode (Periodic); Output (`(<new>,<new>)`); Threshold Type (custom, sqtwolog); Thresholding Level (1 to 7, 1); Threshold of every Level (%) (50, slider 0 to 100); a preview pane on the right with Auto Preview and Preview buttons |
+| Smooth | Recalculate; Input; Wavelet Type; Extension Mode; Output (`(<new>,<new>)`); Cutoff (%) (20, slider 0 to 100); the same preview pane |
+| Continuous Wavelet | Recalculate; Discrete Signal; Scale; Wavelet Type (Morlet, DGauss, MexHat); Wave Number (5, editable list); Use Pseudo-Frequency (unchecked); Coefficient (checked, `[<input>]<new>!1`); Coefficient Matrix (unchecked) |
+
+The Decompose label reads `Wavelet Type && Order` (two ampersands, as in the file). The menu itself was not opened; the item order
+is the inventory's (greyed-items.md).
+
+### 19.8 Not measured
+
+The comment spelling for Haar in Decompose, what `Recalculate` does for these five, the preview pane's drawing, the Results Log
+lines, missing values in the input (a blank cell in Denoise: the call succeeded, the output was not read), the menu itself, the
+image plot and the coefficient matrix of `cwt` (no script route; the window's "Coefficient Matrix" check and the plot made after
+OK), the pseudo-frequency output, `mdwt`, `dwt2`, `idwt2`, whether `cwt` refuses scales below 1, non-uniform X, and the open
+rules of 19.4 (boundary samples, `sqtwolog` threshold) and 19.5 (non-power-of-two lengths, `K` at cutoff 0 and 1).
+
 ## Files
 
 `tools/iir-fir-ref.py` makes the scipy numbers of section 17 (not Origin).

@@ -24,6 +24,13 @@ exports. Font-family switches, combined scripts and other special colour tags re
 editor/toolbar work stays with its owners.
 Formatting, strict workspace all-target Clippy and 3,677 combined tests pass (eight existing
 ignored); inventory 407 and all eight Python tooling tests pass.
+Editor slice (`codex/t58-text-editor`): free-label Text window selection/caret buttons and
+live export-renderer preview are implemented; Unicode selections, nested/toggled formats,
+Normal, empty drafts, Cancel/Apply/history and saved-project preservation are covered.
+Origin's documented Text-tab workflow and explicitly unmeasured choices are recorded in
+graphing 7.5. Title/legend editor reuse, the two title menu entries, inline font/colour
+selection and combined-script insertion remain open; the separate Format/renderer claims
+retain their scopes. This does not complete all of step 2 or the whole brief.
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

@@ -47,6 +47,7 @@ mod surface_fit;
 mod switcher;
 mod symbol_line_gaps;
 mod symbol_line_order;
+mod text_editor;
 mod toolbar_print;
 mod treemap;
 mod view_modes;

@@ -670,6 +670,38 @@ new SVG and font-independent stroke PNG goldens also check the channel values di
 
 ---
 
+### 7.5 Text label selection editor (T58)
+
+Origin's [Text Object Properties, Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/)
+documents selection/caret formatting buttons above a raw text box and a formatted preview below.
+The buttons insert commands around selected text or insert an empty command group at the caret.
+This is a documentation reference, not a fresh measurement of Origin's dialog geometry.
+
+Sheaf's free-label Text window now offers Normal, bold, italic, underline, strikethrough,
+superscript, subscript and Greek. A button keeps the raw characters outside the selected range
+and returns focus to the selected body. With no selection, typing enters the empty group.
+Selecting `-2` in `cm-2` and choosing superscript produces `cm\+(-2)`; Unicode cursor offsets
+are characters, not UTF-8 bytes. Applying the same format to its complete selected body removes
+that wrapper. Normal removes complete inline formatting wrappers from the selection and its
+immediate surrounding wrappers, preserving literal `\v(...)`, substitution and Unicode escapes.
+These toggle/Normal details are Sheaf choices, not measured Origin rules. The existing whole-label
+Bold/Italic checkboxes still change the base font; Normal affects inline markup only.
+
+The preview uses the public graph export renderer with an isolated one-label graph. It therefore
+shares the published parser, glyphs, script layout, colours, decorations and rotation with exports.
+Its cache changes with text, font, rotation or display scale. It fits large text into a bounded
+preview and reports text over 8,192 characters or excessive dimensions without truncating the
+stored text. Size and base styles also update the preview. Buttons and preview do not mutate the
+project: OK/Apply performs the existing single history operation; Cancel discards the draft.
+A new draft containing only empty formatting groups adds no invisible label.
+
+The button labels, compact layout and Ctrl+B/I/U/G and Ctrl+= / Ctrl+Shift+= bindings are
+Sheaf choices based on the published command forms and existing shortcut map; their behaviour
+inside Origin's properties dialog has not been measured. Font/colour selection for an inline
+range, combined-script insertion and reuse for titles/legend remain open. The shared Format
+bar remains a separate target-dispatch implementation. No renderer/model/persistence changes
+are introduced by this editor slice.
+
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
 
 | Group | Plots | Priority |
@@ -2784,7 +2816,7 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 **Desktop app.**
 - Graph > Add Text... and the page's right-click "Add Text...": open the Text window for a new label in the active layer, placed in the middle of its frame (`0.5, 0.5`).
 - The Text tool of the Tools toolbar: a click on the page places the label at that point in the layer under the click (a click outside every frame uses the active layer) and opens the Text window. The tool ends after one label, or with Esc.
-- The Text window has the text (several lines; escapes allowed), Size, Bold, Italic and Rotation, and OK, Apply and Cancel. A new label is in the project only after OK or Apply; Cancel, or OK with no text, adds none. OK or Apply on an existing label with no text is refused with a message (Delete removes a label).
+- The Text window has inline formatting buttons, text (several lines; escapes allowed), Size, Bold, Italic, Rotation and a rendered preview (7.5), and OK, Apply and Cancel. A new label is in the project only after OK or Apply; Cancel, or OK with no text, adds none. OK or Apply on an existing label with no text is refused with a message (Delete removes a label).
 - Double click on a label, or its right-click "Properties...", opens the window for it. A click selects it; dragging it moves it (the selection handles follow the pointer; the label moves when the button is let go). Delete removes it.
 - Each of Add text, Edit text, Move text and Delete text is one undo step.
 - `sheaf-app --show text:N` opens the Text window of the N-th label of the first graph (for pictures).

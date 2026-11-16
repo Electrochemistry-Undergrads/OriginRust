@@ -87,6 +87,15 @@ ignored), including all ten paired-script regressions and the real legend/tick/r
 case. The 340-item inventory and eight Python tooling tests pass. All workspace tests ran
 with four test threads, retaining every test and assertion; source/golden hashes stayed fixed.
 
+Custom RGB editor slice (`codex/t58-custom-text-colors`): Text color > Custom RGB... adds
+validated Red/Green/Blue fields and an explicit draft choice using the published RGB renderer
+encoding (graphing 7.9). Menus stay open while editing; invalid values cannot be applied.
+The existing selection/caret, style/literal/reference preservation, history and persistence
+paths are reused, including the newly published font-family and paired-script renderer rules.
+No renderer, base-font, project-model or worksheet formatting behaviour changes. Full named
+Classic palette expansion and other editor insertion controls remain separate work.
+Custom RGB validation results follow after the combined checks.
+
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

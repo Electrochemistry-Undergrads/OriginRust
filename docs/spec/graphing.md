@@ -869,6 +869,30 @@ font. Native and Origin-companion saves retain the raw colour markup. The menu o
 bounded subset; broader/custom colour controls, inline family selection and combined-script
 insertion remain separate work.
 
+### 7.9 Custom RGB text colours (T58 editor)
+
+Text color > Custom RGB... in the shared label/title/legend editor has Red, Green and Blue
+fields, a swatch and Apply color. Each field accepts a whole number from 0 through 255;
+invalid or empty values disable the choice and show the permitted range. The fields start
+from the object's base font colour. A named palette choice also seeds them; subsequent typed
+values stay in the current editor's picker. No alpha or persistent picker preference is added.
+
+Editing the fields or dismissing the menus does not change the text draft, automatic-text
+state or project. Apply color closes both menus, formats the original selection (or inserts
+a group at the caret) and restores typing focus to the text. The result is still a draft
+until the Text window's Apply/OK. Other styles, script columns, font-family groups, literal
+blocks and legend name references keep their existing meaning. Repeating the same RGB
+choice on the selection is idempotent; existing history and project round trips apply.
+
+The command reuses the measured opaque RGB text encoding in 7.3:
+`0x01000001 + r + 256*g + 65536*b`, written as a decimal colour escape. This includes Black
+and White at the existing tag boundaries. The renderer/parser and base font are unchanged.
+Origin's [Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/) documents
+font-colour selection, formatting and preview; this compact numeric submenu, validation
+policy and explicit draft choice are Sheaf UI choices, not a newly measured Origin layout.
+The eight named colours from 7.8 remain available; a full named Classic palette and other
+editor insertion controls remain separate work.
+
 ### 7.10 Paired subscript and superscript columns (T58 renderer)
 
 Origin's [escape-sequence reference](https://docs.originlab.com/origin-help/escape-sequences/)

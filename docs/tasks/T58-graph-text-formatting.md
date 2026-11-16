@@ -139,6 +139,21 @@ related formatting UI/helper/preview tests, inventory 306 and eight Python tooli
 with unchanged source/goldens on combined T104/T105/T106/T60 source. Fresh desktop font-search
 and Times draft-preview captures from the tested executable were inspected.
 
+Paired-script editor (`codex/t58-paired-script-editor`): Paired scripts in the shared label/
+title/legend editor provides lower/upper text fields and inserts the existing measured paired
+column syntax. Raw selection seeds the lower branch; either branch can be empty. Literal
+commas, Unicode, styles/fonts and outside text survive, while unsafe fragments and legend
+sample/row-spanning selections remain unchanged. The action stays a draft, restores typing
+focus after the column, and reuses preview/Apply/OK/Cancel/history/persistence. Six UI and four
+helper regressions cover actual shared-column glyphs, scope, syntax, stale projects and saves.
+Graphing 7.10 separates the existing native renderer measurements from this Sheaf UI policy.
+Native whole-object Bold/Italic differences, special escape aliases, other palette lists/storage
+and further properties-dialog measurements remain open.
+Fmt, strict workspace/all-target Clippy, all 4,262 workspace tests (eight ignored), all 120
+related formatting UI/helper/preview tests, inventory 304 and eight Python tooling tests pass
+with unchanged source/goldens on integrated T107 source. Fresh desktop script fields
+and shared-column draft preview from the tested executable were inspected.
+
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

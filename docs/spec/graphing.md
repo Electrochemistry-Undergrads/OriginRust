@@ -702,11 +702,25 @@ is **unestablished**; this is not evidence of Origin's internal style storage. T
 font controls on graph annotations; it does not settle that 2016 selection-state difference.
 
 Sheaf choices: the size box accepts finite 1 to 1000 pt values and commits on Enter; Escape or
-leaving the box cancels the draft. Font Color offers eight named basic RGB colours (black, red,
-green, blue, cyan, magenta, yellow, white). Origin's Auto, full system/custom palettes and palette
-management remain open. Family selection is restricted to installed families; fallback rendering
+leaving the box cancels the draft. Font Color keeps eight named basic RGB colours (black, red,
+green, blue, cyan, magenta, yellow, white) and adds the other 16 through More Classic colors,
+completing the 24 Classic entries measured in 7.2. Origin's Auto, other system/custom lists and
+palette management remain open. Family selection is restricted to installed families; fallback rendering
 retains its existing behaviour. Text-window selection controls and the T59 worksheet adapter
 are separate slices.
+
+Classic graph-font palette follow-up (2026-11-16): all 24 swatch-centre RGB triples from the
+accepted selected-legend Font Color screenshot (`scratch/t58-format-toolbar/whole-object/`)
+match the independent worksheet palette measurements and the 7.2 EMF controls. Dark Yellow is
+128/128/0, Olive 0/128/0 and Royal 0/0/160; the original Green remains 0/255/0. The fresh pilot
+refused an existing foreign Origin instance before COM creation; no new native colour-change
+result is claimed. The accepted earlier red-swatch mutation and palette pixels remain the
+reference. The compact named submenu is Sheaf layout, rather than Origin’s swatch layout.
+It shares the existing worksheet-font presets while keeping worksheet Custom... and graph
+object Fill/Line palettes separate. Both menu levels close after a choice. All four text targets,
+rendered RGB, unchanged raw markup/styles, no-op/stale requests, one-step Undo and project/companion
+roundtrips are covered by graph-toolbar regressions; explicit inline colour escapes retain their
+existing precedence over the base font. No renderer, model or persistence fields change.
 
 `text_format::{Snapshot, Target, Change, Request}` separates widget changes from target application.
 T59 can add its cell target behind the same toolbar. Requests capture graph/layer/object plus
@@ -761,10 +775,10 @@ A new draft containing only empty formatting groups adds no invisible label.
 
 The button labels, compact layout and Ctrl+B/I/U/G and Ctrl+= / Ctrl+Shift+= bindings are
 Sheaf choices based on the published command forms and existing shortcut map; their behaviour
-inside Origin's properties dialog has not been measured. Font/colour selection for an inline
-range, combined-script insertion and reuse for titles/legend remain open. The shared Format
-bar remains a separate target-dispatch implementation. No renderer/model/persistence changes
-are introduced by this editor slice.
+inside Origin's properties dialog has not been measured. Inline colour selection is covered
+in 7.8/7.9, family selection below, and title/legend reuse in 7.7. Combined-script insertion
+remains open. The shared Format bar remains a separate target-dispatch implementation.
+No renderer/model/persistence changes are introduced by this editor slice.
 
 ### 7.6 Inline font families (T58 graph text)
 
@@ -813,6 +827,29 @@ family-sensitive widths and decoration geometry, rotation, Greek/literal/Unicode
 name bounds, an empty font database and EPS/EMF/PDF/SVG output. New SVG and stroke-only PNG
 goldens use deliberately different deterministic test-family metrics; those synthetic
 metrics are not Origin measurements or installed-font rasterization fixtures.
+
+**Inline family picker (2026-11-16, `codex/t58-inline-font-family`).** The shared label/title/
+legend editor adds Text font, with a case-insensitive search of installed family names. Names
+must fit the existing full-name grammar: nonempty, no edge whitespace, at most 64 characters,
+no control characters, parentheses or backslashes. It uses the existing font database; no new
+font loading, fallback, parser, model or export behaviour is added. The accepted Origin EMF
+controls above establish the full-name escapes and Symbol mapping; this picker layout and its
+selection/replacement policy are Sheaf choices, without a new Origin GUI-selection measurement.
+
+A choice writes `\f:Family(...)` around the selected raw text, or inserts an empty group at the
+caret, restores the selected body and returns keyboard focus to the text box. Inside the chosen
+range, existing family wrappers are replaced; other styles, colours, scripts and literal blocks
+remain intact. Repeating the same family on its selected group is idempotent. A neutral style
+probe reuses the editor's raw-fragment validation before family replacement; the actual family
+change retains the renderer's documented start/end of Symbol Greek mapping. Invalid names and
+unsafe fragments add no markup. The object's base font stays unchanged.
+
+Search/dismissal alone keeps automatic text automatic and adds no history. A changed family
+remains a draft until Apply/OK; Cancel discards only unapplied edits. Legend samples and line
+boundaries stay outside text-format groups, while name substitutions remain raw. All four text
+targets use the existing preview, rendering, one-step history and project/companion save paths.
+The six UI and four private-helper regressions cover these rules, installed-family output,
+Unicode/script selection, styles/literals, Symbol transitions, stale generation and persistence.
 
 ### 7.7 Axis-title and legend text editors (T58)
 

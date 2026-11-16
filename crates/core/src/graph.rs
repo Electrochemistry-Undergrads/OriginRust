@@ -344,7 +344,7 @@ pub struct Layer {
     /// Straight lines at an axis value with a value label (T67, graphing spec "Straight lines").
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub straight_lines: Vec<crate::straight_line::StraightLine>,
-    /// Colour scales and bubble scales beside the frame (T80, graphing spec 26).
+    /// Colour scales and bubble scales beside the frame (T80, graphing spec 27).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scales: Vec<crate::layer_scale::LayerScale>,
     /// Significance brackets between groups of a multiple comparisons plot (T64, graphing spec 17.7): the pairs

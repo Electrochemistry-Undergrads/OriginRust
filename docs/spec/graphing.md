@@ -1873,8 +1873,8 @@ Measured through COM (`plot:=219` with the HIST template, `plot:=206` with BOX; 
 Measured through COM: `plotxy iy:=[Book]Sheet1!(1,2) plot:=201 ogl:=[<new template:=BUBBLE>]` with the third column set as Z (`wks.col3.type=5`; X is 4 and Y 1) draws the bubbles (the plot type numbers 245 to 247 gave nothing). Probe: X 1..8, Y 2 4 3 6 5 7 6 8, Z 1 4 2 9 3 6 8 5.
 
 - Bubbles are open circles in the first colour (black rings). Their width is linear in Z from the smallest to the largest value: measured on the 800 px export 2.5, 5, 7, 9, 12, 14, 19 and 22 px (about 2.4 to 21 pt) for Z = 1, 2, 3, 4, 5, 6, 8, 9. Sheaf uses 2 pt to 20 pt (the outline adds the rest).
-- Origin adds a size legend beside the frame (title = the Z column, four circles labelled 1.00, 3.66, 6.32, 8.98: the smallest value and three equal steps to the largest). Drawn only by Add Bubble Scale (section 26).
-- Colour mapped symbols: Origin's default colour map was not measured (no plot number reached the Color Mapped command); Sheaf maps the smallest to the largest Z over blue, cyan, green, yellow and red. Graph > New Color Scale and the legend's Add Color Scale draw one (section 26).
+- Origin adds a size legend beside the frame (title = the Z column, four circles labelled 1.00, 3.66, 6.32, 8.98: the smallest value and three equal steps to the largest). Drawn only by Add Bubble Scale (section 27).
+- Colour mapped symbols: Origin's default colour map was not measured (no plot number reached the Color Mapped command); Sheaf maps the smallest to the largest Z over blue, cyan, green, yellow and red. Graph > New Color Scale and the legend's Add Color Scale draw one (section 27).
 - Model: `Plot::size_from` and `Plot::color_from` name the Z column (found from the Z designation after the Y column by `Project::z_column_for`); `Template::Bubble`, `ColorMapped`, `BubbleColorMapped`; CLI `-t bubble` needs a project file with a Z column. `.opj`: written as plain scatter, the save warns.
 
 ### 14.17 Pie; what was seen of polar (T12)
@@ -4581,7 +4581,71 @@ Sheaf: `Project::add_graph(Template::default())` (the Line template, which carri
 axes with nothing to plot run 0 to 1. The graph is one undo step ("New graph") and is shown in front.
 UNMEASURED Sheaf choices: the axis ranges and the look of an empty layer.
 
-## 26. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
+## 26. Copy Format and Paste Format (T72, measured 2026-11-15/16, Origin 2016)
+
+Measured in OriginPro 2016 on our own synthetic data (X = 1 to 10, Y = 2X+1 and 20-X, Line + Symbol graphs). One styled source graph ("Src": axis colours, tick-label sizes and colours, layer background yellow, x scale 2 to 8, layer width 40 % and top 5 %, page width 5200, a text label of size 40 in red, plot colours, symbol size and shape) and untouched targets of the same data; clicks, right-clicks and menu choices sent by `tools/origin-ref/origin-dialog.ps1 -NoDialog` (`@CLICK`, `@RCLICK`, `@MOVE`, `@KEY`, `@SHOT`), the layer, axis, page and text-object properties read back with `?layer.x.color`, `?layer.x.label.pt`, `?layer.color`, `?layer.x.from`, `?layer.width`, `?txName.fsize` and so on (raw outputs and pictures are local: `re-workspace/scratch/t72/`). Anything not listed is **unmeasured**.
+
+### 26.1 Method notes (for repeating this)
+
+- Origin's collapsible menus hide items and re-order the short form by use. Unticking Tools > Options > Miscellaneous > Enable Collapsible Menus and pressing OK did not stick (the box read ticked again in the next instance), so each run used the keyboard: Up then Enter on an open menu expands it (the last item is the chevron). A submenu opens on a click on its parent item (a plain mouse move does not open it); an item inside it reacts to a click only after the pointer was moved onto it first.
+- **The format clipboard survives a restart of Origin** (a copy made in an earlier instance was pasted in a later one), so a run that pastes without copying uses a stale clipboard. Fonts once pasted the Colors of the run before for this reason.
+- The Apply Formats window appears about 4 s after the menu click; a screenshot at 1.5 s showed nothing and looked as if the command had done nothing.
+- `get <dataset> -c/-z/-k`, `range ... .symbol.size` and `page.color` did not read plot or page formats back in this build (zero or False); plot formats were judged from pictures only.
+
+### 26.2 Where the commands are
+
+- **Edit menu** (a graph window): Undo, Copy, Copy Page, **Copy Format** ▸, **Paste Format...**, Find in Project... in the short form; the full form adds Cut, Paste, Paste Link, Paste Link Transpose, Paste Special, Clear, Insert New Object, Links, Button Edit Mode, Update Client. Copy Format ▸, full: **All** | **All Style Formats**, **Colors**, **Fonts**, **Background**, **Symbol, Line and Fill** | **Dimensions**, **Scales** | **Text**. With an axis selected, Edit > Copy Format > All copied an *axis* format (Paste Format... then showed the axis check boxes, 26.5).
+- **Graph page context menu** (right-click on the page outside the layer), full form: Paste, Paste Link, Paste Link Transpose, Add Text..., Add/Modify Layer Title, Insert Images From Files..., Insert OLE Object ▸, Layer Management..., Add Axis Scrollbar ▸, New Layer(Axes) ▸, Extract to Graphs..., Copy Sparkline, Fit Page To Layers..., Fit Page To Printer, Show Active Layer Only, Set Active Layer By Layer Icon Only, Print View, Rotate Page, Add Shortcut to Favorites, Go to Original Folder, Copy Page, Export Graphs..., Send Graphs to PowerPoint..., View Full Screen, Print..., Mask ▸, **Copy Format** ▸, **Paste Format**, Save Format as Theme..., Paste Operation. Its Copy Format ▸: **Page Background**, **Legend Translation Mode**, **Dimensions**, **Scales** | **Colors**, **Fonts**, **Background**, **All Style Formats** | **All** (no Symbol, Line and Fill and no Text here; the order in the short form follows use).
+- The item after Copy Format is **Paste Format** (no dots, acts at once) when the clipboard holds a graph format, and **Paste Format To** ▸ when it holds an axis format; its first level on the page menu is Bottom Axes ▸, All X Axes ▸, All Axes ▸, All ▸ (second level not opened). In the Edit menu it is always **Paste Format...** with dots (26.5).
+- **Layer area context menu** (right-click inside the layer frame, no object under the pointer) has Copy Format ▸, Paste Format and Save Format as Theme... as well, among Plot Setup... items; its Copy Format list was not opened.
+- **Axis context menu** (click the axis line first, then right-click it): Hide Axis, Hide Grids (ticked when grids are hidden), Rescale To Show All (Ctrl+R), Axis Zoom In, Axis Zoom Out, Center | **Copy Format** ▸, **Paste Format To** ▸ (only with an axis format on the clipboard), Save Format as Theme... | Scale..., Tick Labels..., Properties.... Copy Format ▸: **Styles**, **Scales**, **Dimensions** | **All**. Paste Format To ▸: **Tick Direction**, **Ticks**, **Line**, **Tick Labels**, **Title Styles**, **Colors**, **Thickness**, **Styles** | **Scales** | **Title Dimensions**, **Title Text** | **All** (the same twelve names as the Apply Formats check boxes).
+- **Legend context menu** (select the legend, right-click its frame edge; a right-click on an entry gives only Hide Data Plot and Hide Others): Plot Details..., Legend ▸, Add Color Scale, Add Bubble Scale, Cut, Copy, Delete, Bring to the front, Push to the back, Bring to front of data, Push to back of data, Programming Control..., Properties... | **Copy Format** ▸, Save Format as Theme.... Copy Format ▸: **Styles**, **Dimensions** | **All**. No Paste Format appeared with an empty or axis clipboard; what a legend format does when pasted is unmeasured.
+- **Save Format as Theme...** (B11, not this slice) lists "Formats to Save": All, Colormap, All Styles, Fonts, Colors, Symbol, Line and Fill, Dimension, Scale, Background, Text: the category names behind the Copy Format choices.
+
+### 26.3 Graph: what each Copy Format choice copies (page menu or Edit menu to another graph's Paste Format)
+
+Pasted into an untouched graph of the same data and read back (changed properties only):
+
+- **All**: axis colours (x 2, y 3), tick-label sizes (30, 26) and colour (4), axis thickness, layer background colour, **x scale ends (2 to 8)**, **layer width, left and top** (40, 17.9, 5.0), **page width** (5200), the text object's size (40) and colour (2) **and its text** (the target's own label read "SourceText" afterwards, the object kept its name), plot line and symbol colours, symbol sizes, line style (dashed) and the legend. One step, no window.
+- **All Style Formats**: colours, fonts and thickness (axis colours, tick-label sizes and colour, y thickness, layer background, text size and colour). **Not** the scale ends, the layer and page size or the text content.
+- **Colors**: axis line colours, tick-label colour, layer background colour, text colour, plot line and symbol colours; not sizes, fonts, scales or text content.
+- **Fonts**: tick-label sizes (x 30, y 26) and the text object's size (40); no colours.
+- **Dimensions**: layer width, left and top and the page width; the layer height was not tested (it equalled the source's).
+- **Scales**: the x scale ends (2 to 8); the y ends were the same in both graphs, so whether y follows is unmeasured.
+- **Background**: the layer background colour (7), and, unexplained, both axis thicknesses read 4 and the text colour read 2 afterwards (repeated in a second run); what Background includes beyond the fill is unmeasured.
+- Not measured: Symbol, Line and Fill and Text (Edit menu only), Page Background and Legend Translation Mode (no readable change; the page colour cannot be set by LabTalk here), Copy Format with objects selected on the page (a text label, a drawn shape).
+- **Undo text: "Undo Apply Theme"** (Edit menu, Ctrl+Z) after a graph paste.
+
+### 26.4 Axis
+
+- With the Src X axis selected, Copy Format > All and, in the target with its X axis selected, Paste Format To > All: **only that axis changed**: line colour (2), tick-label size (30) and colour (4) and the scale (2 to 8). The Y axis (colour, label size, thickness, ends), the layer width and background and the text size stayed. The picture shows the axis, its ticks and numbers recoloured. Undo text again "Undo Apply Theme".
+- Styles, Scales and Dimensions of the axis menu were not pasted one by one: unmeasured (the twelve Paste Format To names are the Apply Formats check boxes).
+
+### 26.5 Edit > Paste Format... (the Apply Formats window)
+
+- Opens a modeless window titled **Apply Formats**, slowly (about 4 s). **Apply From**: Clipboard (default) or Theme File (a list and a "..." button), and a Description line. With an **axis** format on the clipboard: **Formats to Apply**: All (ticked, the rest greyed while All is ticked), Line, Colors, Scales, Tick Direction, Tick Labels, Thickness, Title Dimensions, Ticks, Title Styles, Styles, Title Text; **Apply Scope** ("Selection" with an axis selected, "Active Graph" when the page is active), and then **Apply To** ("Bottom Axes"). Buttons: a pencil tool button with a chevron (its menu was not opened), Save, Save As..., **Undo Apply**, **Apply**, **Close**.
+- With a **graph** format on the clipboard (seen once, the grid still empty then): a Property / Value grid, List View and Collections check boxes, **Apply Selected Properties Only**, **Apply Scope** "Active Graph", Undo Apply, Apply, Close. The grid contents, the scope list and what Apply does there were not measured.
+
+### 26.6 Mismatches (Copy Format All of a two-plot, one-layer graph)
+
+- No message appeared. A target with **one plot** took the first plot's colours and symbol size (its symbol shape and line colour did not visibly follow: reason unmeasured); a target with **three plots** got the two source styles on plots 1 and 2 and a third, blue dashed, large-triangle style on plot 3 (not derived from anything we set); a target with **two layers**: the active layer read back with the source's values (the other layer was not read).
+- Graph clipboard onto an axis, and legend clipboards: not measured. An axis clipboard with the page active offers Paste Format To (Bottom Axes first); nothing was pasted that way.
+
+### 26.7 What Sheaf takes from this (T72)
+
+- The format clipboard has a type: Page, Axis or Legend; the paste command offered follows the type (Paste Format for a page format, Paste Format To for an axis format; Edit > Paste Format... opens Apply Formats).
+- Build the measured lists as they are (26.2) and the property groups of 26.3 and 26.4; undo text "Apply Theme". Choices that were not measured (Symbol, Line and Fill, Text, Page Background, Legend Translation Mode, legend paste, mismatched plots and layers) are Sheaf's own: plot formats go to plots by index with surplus plots left alone; the target layer is the active one; say so in the item's status.
+
+### 26.8 As built (T72 step 2)
+
+- Core `crates/core/src/format_clip.rs`: a copy holds the formatted values of every layer (or of one axis) and the groups the choice copies; a paste applies the groups it asks for that the copy holds. Groups: Dimensions (layer left, top, width; page width, not heights), Scales (scale type, limits, steps, reverse, first tick, minor ticks, rescale margin, both axes), Colors, Fonts (family, size, bold, italic; colours stay), Background (layer colour, gradient, border), Thickness (axis line and tick width), Symbol/Line/Fill (the plots' whole line and symbol style), Text (the words of the text labels). All = all eight; All Style Formats = Colors, Fonts, Background, Thickness, Symbol/Line/Fill (no Dimensions, Scales, Text); Colors also takes the layer background colour and the plots' line and symbol colours; Fonts takes tick-label, title, legend and text fonts.
+- Sheaf's own choices where Origin was not measured: layers and plots are paired by position, surplus target layers and plots are left as they are, surplus source ones are dropped; text labels are paired by position and are never created; a paste that changes nothing makes no undo step; the y axis follows Scales; the fill under a curve is not part of Symbol/Line/Fill. The clipboard is inside the program (a second Sheaf window does not see it, and it does not survive a restart, which Origin's does).
+- Enabled (measured behaviour): Edit > Copy Format ▸ All, All Style Formats, Colors, Fonts, Background, Dimensions, Scales; Edit > Paste Format... (the Apply Formats window: Apply From Clipboard, one check box per group the clipboard holds or Scales and Styles for an axis format, Apply To for an axis, Undo Apply, Apply, Close; the grid Origin shows for a graph format is unmeasured, so this window is Sheaf's reading of it); page menu Copy Format (same items) and Paste Format; axis menu Copy Format ▸ All and Paste Format To ▸ All. One undo step "Apply Theme" each.
+- Left greyed (not measured): Symbol/Line/Fill and Text (Edit), Page Background and Legend Translation Mode (page), axis Styles, Scales, Dimensions and the eleven other Paste Format To choices, the page menu's Paste Format To submenus, all of the legend's Copy Format (Styles, Dimensions, All).
+
+- Added after review: Edit > Copy Format with an axis selected copies an axis format (All, All Style Formats and Scales map to the axis parts; Colors, Fonts, Background and Dimensions copy nothing, since an axis format for them is unmeasured); the context menus and Paste Format To follow the clipboard kind. Colors and axis styles also carry the "follows plot colour" flags (Sheaf's reading; unmeasured in Origin). Dimensions pastes a layer frame only between layers of the same kind (root to root, linked to linked) because a linked frame is relative to its parent; mixed pairs are left alone (unmeasured in Origin).
+
+## 27. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
 
 Not measured: Origin 2016 is on Windows only and this slice was built on macOS from Origin's help, so everything
 below that is not a quoted fact is an unmeasured Sheaf choice. The one measured fact is in 14.16 (the bubble size

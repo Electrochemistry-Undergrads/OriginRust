@@ -21,6 +21,7 @@ pub mod extract;
 pub mod fit_page;
 pub mod fitting;
 pub mod format;
+pub mod format_clip;
 pub mod formula;
 pub mod graph;
 pub mod graph_data;

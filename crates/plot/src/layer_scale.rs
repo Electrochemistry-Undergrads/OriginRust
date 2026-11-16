@@ -1,4 +1,4 @@
-//! Colour scales and bubble scales of a layer (T80, graphing spec 26): the objects behind Graph > New
+//! Colour scales and bubble scales of a layer (T80, graphing spec 27): the objects behind Graph > New
 //! Color Scale and the legend's Add Color Scale / Add Bubble Scale.
 //!
 //! A colour scale is the bar the hexbin, sunburst and waterfall plots draw (`hexbin::draw_color_bar`) over

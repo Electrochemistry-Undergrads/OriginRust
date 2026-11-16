@@ -1,4 +1,4 @@
-//! Colour scales and bubble scales of a layer (T80, graphing spec 26).
+//! Colour scales and bubble scales of a layer (T80, graphing spec 27).
 
 use super::*;
 use crate::tests::{doc, svg_of, texts};

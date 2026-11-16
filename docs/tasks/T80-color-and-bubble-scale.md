@@ -1,7 +1,7 @@
 # T80: New Color Scale, Add Color Scale, Add Bubble Scale (B3, slice 4)
 
-**Status:** done 2026-11-16 (branch `color-scale`, Claude macOS, no Origin; graphing 26). Left: dragging a scale, a properties dialog, a Map link to a chosen plot, a CLI flag, scales for the other plot kinds.
-**Size:** M. **Spec:** [graphing](../spec/graphing.md) section 26 and 14.16. **Inventory:** Graph > New Color Scale (1); Graph legend: Add Color Scale, Add Bubble Scale (2).
+**Status:** done 2026-11-16 (branch `color-scale`, Claude macOS, no Origin; graphing 27). Left: dragging a scale, a properties dialog, a Map link to a chosen plot, a CLI flag, scales for the other plot kinds.
+**Size:** M. **Spec:** [graphing](../spec/graphing.md) section 27 and 14.16. **Inventory:** Graph > New Color Scale (1); Graph legend: Add Color Scale, Add Bubble Scale (2).
 
 ## Goal
 
@@ -13,7 +13,7 @@ context menu in one undo step, drawn in every export, selectable and deletable, 
 
 Only the bubble size legend is measured (graphing 14.16). The rest is from Origin's help (colorscale, bubblescale
 pages, [W]); defaults, placement and enabling rules are undocumented, so Sheaf's choices are marked unmeasured in
-graphing 26.
+graphing 27.
 
 ## Where
 

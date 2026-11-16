@@ -1,4 +1,4 @@
-//! Colour scales and bubble scales of a layer (T80, graphing spec 26): Origin's Graph > New Color
+//! Colour scales and bubble scales of a layer (T80, graphing spec 27): Origin's Graph > New Color
 //! Scale and the legend's Add Color Scale / Add Bubble Scale. A scale is an object beside the layer's
 //! frame that describes a plot whose symbols take their colour (colour scale) or size (bubble scale)
 //! from a Z column. Sheaf links a scale to the first visible plot of the layer that is mapped that way.

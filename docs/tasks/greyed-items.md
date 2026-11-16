@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **365 greyed items: 265 in the menu bar, 19 on the toolbars, 81 in context menus.**
+original inventory baseline. This is not a new runtime audit. **372 greyed items: 257 in the menu bar, 19 on the toolbars, 96 in context menus.**
 
 ## How to read and keep this file
 
@@ -47,12 +47,13 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T69` | 0 |
 | `T70` | 0 |
 | `T71` | 0 |
+| `T72` | 25 |
 | `T73` | 0 |
 | `T75` | 0 |
 | `T76` | 0 |
 | `T78` | 0 |
 | `T80` | 0 |
-| `B2` | 51 |
+| `B2` | 33 |
 | `B3` | 19 |
 | `B4` | 23 |
 | `B5` | 33 |
@@ -69,7 +70,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 42 items, backlog packages (`B`) 303, not planned (`N`) 20.
+Briefs (`T`) hold 67 items, backlog packages (`B`) 285, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -100,8 +101,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B16` Button Edit Mode [Workbook, Graph]
 - `B2` Cut · Copy · Paste · Clear [Graph]
 - `N` Insert New Object · Links · Update Client [Graph]
-- `B2` Copy Format: All · All Style Formats · Colors · Fonts · Background · Symbol/Line/Fill · Dimensions · Scales · Text [Graph]
-- `B2` Paste Format... [Graph]
+- `T72` Copy Format: Symbol/Line/Fill · Text [Graph]
 - `B7` Find in Project [Graph]
 
 ### View
@@ -235,7 +235,8 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B6` Worksheet corner: Column Header · Row Header · Column Grid · Row Grid · Page Break Preview Lines
 - `B6` Worksheet corner > Row Labels for Column Label Rows: Long Name · Units · Comments · F(x)= · Sparklines · Parameters
 - `B11` Graph axis: Save Format as Theme...
-- `B2` Graph axis > Copy Format: All · All Style Formats · Axis
+- `T72` Graph axis > Copy Format: Styles · Scales · Dimensions
+- `T72` Graph axis > Paste Format To: Tick Direction · Ticks · Line · Tick Labels · Title Styles · Colors · Thickness · Styles · Scales · Title Dimensions · Title Text
 - `B2` Graph axis title: Cut · Copy · Bring to the front · Push to the back
 - `B2` Graph text label: Cut · Copy · Bring to the front · Push to the back
 - `B2` Graph drawn shape: Cut · Copy
@@ -243,10 +244,11 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B16` Graph legend: Programming Control...
 - `B11` Graph legend: Save Format as Theme...
 - `B3` Graph legend > Legend: Add Legend Title
-- `B2` Graph legend > Copy Format: All · All Style Formats · Text
+- `T72` Graph legend > Copy Format: Styles · Dimensions · All
 - `B12` Graph page: Add Shortcut to Favorites
 - `T61` Graph page > New Layer(Axes): Open Dialog...
-- `B2` Graph page > Copy Format: All · All Style Formats
+- `T72` Graph page > Copy Format: Page Background · Legend Translation Mode
+- `T72` Graph page > Paste Format To: Bottom Axes · All X Axes · All Axes · All
 - `B11` Graph page > Duplicate (Batch Plotting): Duplicate
 - `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Double click to open Plot Setup
 - `B12` Explorer folder: Properties...

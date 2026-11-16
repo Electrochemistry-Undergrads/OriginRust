@@ -30,6 +30,7 @@ use eframe::egui::{
     self, Color32, Key, KeyboardShortcut, Modifiers, Stroke, TextStyle,
     text::{LayoutJob, TextFormat},
 };
+use sheaf_core::format_clip::{AxisPart, GraphPart};
 use sheaf_core::graph::{PlotKind, Stack};
 use sheaf_core::sheetops::{MaskOp, MoveTo};
 use sheaf_core::template::Template;
@@ -333,6 +334,26 @@ pub enum Cmd {
     },
     /// Edit > Copy Page: the graph as a picture on the clipboard.
     CopyPage,
+    /// Copy Format of the whole graph (Edit menu, page menu): what the clipboard takes (T72).
+    CopyGraphFormat(sheaf_core::format_clip::GraphPart),
+    /// Edit > Copy Format: the graph format, or the format of the selected axis (T72).
+    EditCopyFormat(sheaf_core::format_clip::GraphPart),
+    /// Copy Format of one axis.
+    CopyAxisFormat {
+        layer: usize,
+        y: bool,
+        part: sheaf_core::format_clip::AxisPart,
+    },
+    /// Paste Format of the page menu: every group the graph format holds, at once.
+    PasteGraphFormat,
+    /// Paste Format To of an axis: the parts the axis format holds.
+    PasteAxisFormat {
+        layer: usize,
+        y: bool,
+        part: sheaf_core::format_clip::AxisPart,
+    },
+    /// Edit > Paste Format...: the Apply Formats window.
+    PasteFormatDialog,
     /// Gadgets > Integrate: starts the Integrate gadget on the active plot.
     IntegrateGadget,
     /// A command of the open gadget's right-click menu.
@@ -791,21 +812,22 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
             "Button Edit Mode",
             "Update Client",
         ]));
-        v.push(grey_sub(
-            "Copy Format",
+        v.push(graph_copy_format_menu(
+            true,
             &[
-                "All",
-                "All Style Formats",
-                "Colors",
-                "Fonts",
-                "Background",
-                "Symbol/Line/Fill",
-                "Dimensions",
-                "Scales",
-                "Text",
+                ("All", Some(GraphPart::All)),
+                ("All Style Formats", Some(GraphPart::AllStyle)),
+                ("Colors", Some(GraphPart::Colors)),
+                ("Fonts", Some(GraphPart::Fonts)),
+                ("Background", Some(GraphPart::Background)),
+                ("Symbol/Line/Fill", None),
+                ("Dimensions", Some(GraphPart::Dimensions)),
+                ("Scales", Some(GraphPart::Scales)),
+                ("Text", None),
             ],
         ));
-        v.extend(greys(&["Paste Format...", "-"]));
+        v.push(item("Paste Format...", Cmd::PasteFormatDialog));
+        v.push(sep());
         v.push(grey_keyed("Find in Project", plain_key(Key::F3)));
     }
     v
@@ -1956,12 +1978,29 @@ pub fn graph_plot_menu(
     v
 }
 
+/// A Copy Format submenu of a graph: an item per choice; `None` is a choice Sheaf has not measured
+/// and keeps greyed. A "-" label is a separator.
+fn graph_copy_format_menu(edit: bool, choices: &[(&str, Option<GraphPart>)]) -> Entry {
+    sub(
+        "Copy Format",
+        choices
+            .iter()
+            .map(|(label, part)| match (*label, part) {
+                ("-", _) => sep(),
+                (_, Some(part)) if edit => item(label, Cmd::EditCopyFormat(*part)),
+                (_, Some(part)) => item(label, Cmd::CopyGraphFormat(*part)),
+                (_, None) => grey(label),
+            })
+            .collect(),
+    )
+}
+
 /// The menu of an axis. `grids` tells whether the axis shows grid lines now.
 /// `page` is the page point that was right-clicked (Center puts the value there in the middle).
 pub fn graph_axis_menu(layer: usize, y: bool, grids: bool, page: (f64, f64)) -> Vec<Entry> {
     let tab = if y { PropsTab::YAxis } else { PropsTab::XAxis };
     let at = Cmd::GraphPropsAt { layer, tab, plot: None };
-    vec![
+    let mut menu = vec![
         item("Hide Axis", Cmd::GraphEdit(GraphOp::HideAxis { layer, y })),
         item(if grids { "Hide Grids" } else { "Show Grids" }, Cmd::GraphEdit(GraphOp::ToggleGrids { layer, y })),
         sep(),
@@ -1970,13 +2009,55 @@ pub fn graph_axis_menu(layer: usize, y: bool, grids: bool, page: (f64, f64)) -> 
         item("Axis Zoom Out", Cmd::GraphEdit(GraphOp::AxisZoom { layer, y, zoom_in: false })),
         item("Center", Cmd::GraphEdit(GraphOp::AxisCenter { layer, y, page })),
         sep(),
-        grey_sub("Copy Format", &["All", "All Style Formats", "Axis"]),
+        axis_copy_format_menu(layer, y),
         grey("Save Format as Theme..."),
         sep(),
         item("Scale...", at.clone()),
         item("Tick Labels...", at.clone()),
         item("Properties...", at),
-    ]
+    ];
+    // Paste Format To shows once an axis format is on the clipboard (Origin, spec 24).
+    if crate::format_clip_ui::kind() == Some(crate::format_clip_ui::ClipKind::Axis) {
+        menu.insert(9, axis_paste_format_menu(layer, y));
+    }
+    menu
+}
+
+/// Copy Format of an axis: Styles, Scales and Dimensions have not been measured for what they take
+/// and stay greyed; All takes styles and scale (measured).
+fn axis_copy_format_menu(layer: usize, y: bool) -> Entry {
+    sub(
+        "Copy Format",
+        vec![
+            grey("Styles"),
+            grey("Scales"),
+            grey("Dimensions"),
+            sep(),
+            item("All", Cmd::CopyAxisFormat { layer, y, part: AxisPart::All }),
+        ],
+    )
+}
+
+/// Paste Format To of an axis, Origin's twelve choices; All is measured, the others are greyed.
+fn axis_paste_format_menu(layer: usize, y: bool) -> Entry {
+    let mut v = greys(&[
+        "Tick Direction",
+        "Ticks",
+        "Line",
+        "Tick Labels",
+        "Title Styles",
+        "Colors",
+        "Thickness",
+        "Styles",
+        "-",
+        "Scales",
+        "-",
+        "Title Dimensions",
+        "Title Text",
+        "-",
+    ]);
+    v.push(item("All", Cmd::PasteAxisFormat { layer, y, part: AxisPart::All }));
+    sub("Paste Format To", v)
 }
 
 /// The menu of an axis title.
@@ -2078,7 +2159,7 @@ pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool) -> Vec
         grey("Programming Control..."),
         item("Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Legend, plot: None }),
         sep(),
-        grey_sub("Copy Format", &["All", "All Style Formats", "Text"]),
+        grey_sub("Copy Format", &["Styles", "Dimensions", "-", "All"]),
         grey("Save Format as Theme..."),
     ]
 }
@@ -2106,9 +2187,37 @@ pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
         sep(),
         keyed("Rescale To Show All", ctrl(Key::R), Cmd::GraphEdit(GraphOp::Rescale { layer })),
         item("Page Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Page, plot: None }),
-        grey_sub("Copy Format", &["All", "All Style Formats"]),
+        graph_copy_format_menu(
+            false,
+            &[
+                ("Page Background", None),
+                ("Legend Translation Mode", None),
+                ("Dimensions", Some(GraphPart::Dimensions)),
+                ("Scales", Some(GraphPart::Scales)),
+                ("-", None),
+                ("Colors", Some(GraphPart::Colors)),
+                ("Fonts", Some(GraphPart::Fonts)),
+                ("Background", Some(GraphPart::Background)),
+                ("All Style Formats", Some(GraphPart::AllStyle)),
+                ("-", None),
+                ("All", Some(GraphPart::All)),
+            ],
+        ),
+        page_paste_format_entry(),
         grey_sub("Duplicate (Batch Plotting)", &["Duplicate"]),
     ]
+}
+
+/// Paste Format of the page menu: it acts at once for a graph format; for an axis format Origin
+/// shows Paste Format To with Bottom Axes, All X Axes, All Axes and All (their submenus are
+/// unmeasured, so they stay greyed); with nothing copied it is greyed.
+fn page_paste_format_entry() -> Entry {
+    use crate::format_clip_ui::{ClipKind, kind};
+    match kind() {
+        Some(ClipKind::Graph) => item("Paste Format", Cmd::PasteGraphFormat),
+        Some(ClipKind::Axis) => grey_sub("Paste Format To", &["Bottom Axes", "All X Axes", "All Axes", "All"]),
+        None => grey("Paste Format"),
+    }
 }
 
 /// The menu of a layer icon (the numbered button at the top left of the page). `plots` names the
@@ -2654,6 +2763,16 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::EditText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label }
         }
         Cmd::CopyPage => Action::CopyPage(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::CopyGraphFormat(part) => Action::CopyGraphFormat { graph: c.graph.ok_or(NEED_GRAPH)?, part: *part },
+        Cmd::EditCopyFormat(part) => Action::EditCopyFormat { graph: c.graph.ok_or(NEED_GRAPH)?, part: *part },
+        Cmd::CopyAxisFormat { layer, y, part } => {
+            Action::CopyAxisFormat { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y, part: *part }
+        }
+        Cmd::PasteGraphFormat => Action::PasteGraphFormat { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::PasteAxisFormat { layer, y, part } => {
+            Action::PasteAxisFormat { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y, part: *part }
+        }
+        Cmd::PasteFormatDialog => Action::PasteFormatDialog { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,

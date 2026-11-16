@@ -1045,6 +1045,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         layer_curves: Vec::new(),
         stack: None,
         can_cumulate: false,
+        selected_shape: None,
     }
 }
 

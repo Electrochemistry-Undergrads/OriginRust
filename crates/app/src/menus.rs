@@ -41,6 +41,7 @@ pub const NOT_YET: &str = "Not available in Sheaf yet";
 const NEED_BOOK: &str = "Activate a workbook window first";
 pub const NO_CUMULATIVE: &str = "Cumulative needs a line, scatter or line + symbol plot in the layer";
 const NEED_GRAPH: &str = "Activate a graph window first";
+const NEED_SHAPE: &str = "Select a drawn object first";
 const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
 const NEED_CELLS: &str = "Select cells, columns or rows first";
@@ -276,6 +277,10 @@ pub enum Cmd {
     WholePage,
     /// The Pan tool of the Tools toolbar.
     PanTool,
+    /// Object Edit toolbar Bring to Front / Send to Back: reorders the selected drawn shape.
+    OrderSelectedShape {
+        front: bool,
+    },
     /// Properties of a slope annotation.
     EditSlope {
         layer: usize,
@@ -418,6 +423,8 @@ pub struct MenuContext<'a> {
     pub stack: Option<sheaf_core::graph::Stack>,
     /// True when the active layer has a plot that Cumulative stacking applies to (line, scatter, line + symbol).
     pub can_cumulate: bool,
+    /// The selected drawn shape of the active graph as (layer, shape index, shapes in that layer).
+    pub selected_shape: Option<(usize, usize, usize)>,
 }
 
 impl<'a> MenuContext<'a> {
@@ -2445,6 +2452,16 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::DataTool(tool) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Data(*tool) },
         Cmd::TextTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Text },
         Cmd::ShapeTool(kind) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Draw(*kind) },
+        Cmd::OrderSelectedShape { front } => {
+            let (layer, shape, len) = c.selected_shape.ok_or(NEED_SHAPE)?;
+            if (*front && shape + 1 >= len) || (!*front && shape == 0) {
+                return Err(if *front { "Already at the front" } else { "Already at the back" });
+            }
+            Action::GraphEdit {
+                graph: c.graph.ok_or(NEED_GRAPH)?,
+                op: GraphOp::OrderShape { layer, shape, front: *front },
+            }
+        }
         Cmd::SlopeTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Slope },
         Cmd::ZoomIn => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ZoomIn },
         Cmd::PanTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pan },
@@ -2924,6 +2941,7 @@ mod tests {
             layer_curves: Vec::new(),
             stack: None,
             can_cumulate: false,
+            selected_shape: None,
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);

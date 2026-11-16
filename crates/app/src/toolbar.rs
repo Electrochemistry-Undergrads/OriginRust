@@ -240,6 +240,11 @@ fn is_tool(cmd: &Cmd) -> bool {
     matches!(cmd, Cmd::Pointer | Cmd::DataReader | Cmd::TextTool | Cmd::SlopeTool | Cmd::PanTool | Cmd::ShapeTool(_))
 }
 
+#[cfg(test)]
+fn is_order(cmd: &Cmd) -> bool {
+    matches!(cmd, Cmd::OrderSelectedShape { .. })
+}
+
 /// A Graph toolbar button that adds a layer of `kind` (the same command as Graph > New Layer(Axes)).
 fn layer_button(icon: Icon, kind: NewLayerKind) -> Item {
     let tip = match kind {
@@ -251,6 +256,11 @@ fn layer_button(icon: Icon, kind: NewLayerKind) -> Item {
         _ => "Add Inset Graph With Data",
     };
     b(icon, tip, Cmd::AddLayer(kind), kind.menu_label())
+}
+
+/// An Object Edit button that reorders the selected drawn shape (no menu entry; state-disabled).
+fn b_order(icon: Icon, tip: &'static str, front: bool) -> Item {
+    Item::Button(Button { icon, tip, cmd: Some(Cmd::OrderSelectedShape { front }), menu: "", on: false })
 }
 
 /// A button for a feature Sheaf lacks.
@@ -394,8 +404,8 @@ fn build(bar: Bar) -> Vec<Item> {
             g(SameWidth, "Make Same Width"),
             g(SameHeight, "Make Same Height"),
             gap(),
-            g(Front, "Bring to Front"),
-            g(Back, "Send to Back"),
+            b_order(Front, "Bring to Front", true),
+            b_order(Back, "Send to Back", false),
             g(Group, "Group"),
             g(Ungroup, "Ungroup"),
         ],
@@ -1170,7 +1180,7 @@ mod tests {
     fn every_button_with_a_command_sends_the_command_of_the_menu_entry_it_is_named_after() {
         for (bar, button) in buttons() {
             let Some(cmd) = &button.cmd else { continue };
-            if is_tool(cmd) {
+            if is_tool(cmd) || is_order(cmd) {
                 assert!(button.menu.is_empty(), "{}: tools have no menu entry", button.tip);
                 continue;
             }
@@ -1196,6 +1206,7 @@ mod tests {
             assert!(!button.on, "{}: {}", bar.name(), button.tip);
             match &button.cmd {
                 Some(cmd) if is_tool(cmd) => assert_eq!(bar, Bar::Tools, "{}", button.tip),
+                Some(cmd) if is_order(cmd) => assert_eq!(bar, Bar::ObjectEdit, "{}", button.tip),
                 Some(_) => assert!(!button.menu.is_empty(), "{}: {} has no menu name", bar.name(), button.tip),
                 None => {}
             }

@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **416 greyed items: 291 in the menu bar, 37 on the toolbars, 88 in context menus.**
+original inventory baseline. This is not a new runtime audit. **414 greyed items: 291 in the menu bar, 35 on the toolbars, 88 in context menus.**
 
 ## How to read and keep this file
 
@@ -40,7 +40,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T60` | 0 |
 | `T61` | 5 |
 | `T62` | 0 |
-| `T63` | 22 |
+| `T63` | 20 |
 | `T65` | 0 |
 | `B1` | 20 |
 | `B2` | 51 |
@@ -61,7 +61,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 47 items, backlog packages (`B`) 349, not planned (`N`) 20.
+Briefs (`T`) hold 45 items, backlog packages (`B`) 349, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -225,7 +225,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B4` 2D Graphs: High-Low-Close
 - `B1` Tools: Zoom In · Zoom Out
 - `B2` Object Edit: Align Left · Align Right · Align Top · Align Bottom · Align Horizontal Center · Align Vertical Center · Make Same Width · Make Same Height · Group · Ungroup
-- `T63` Object Edit: Bring to Front · Send to Back
 
 ## Context menus
 

@@ -1,6 +1,14 @@
 # T58: Graph text formatting and the Format toolbar
 
 **Status:** open; recovered and refined 2026-11-15 from the paused cloud planning session.
+First renderer slice (`codex/text-decorations`): inline underline/strikethrough now use nested
+run styles and shared paths, with resolved-face OpenType metrics, script/rotation/anchor and
+export regressions, plus SVG and font-independent stroke PNG goldens. Six Origin 2016 Arial
+controls are recorded in graphing 7.1. This leaves the rest of step 1 and steps 2-4 open;
+all 15 UI inventory locations still await wiring. This rendering work is separate from the multiple-comparisons plot
+(`T64-significance-plot.md`). Formatting, strict workspace all-target Clippy and the combined
+3,624-test suite pass (eight existing ignored); the 421-item inventory and eight Python tooling
+tests also pass.
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

@@ -549,6 +549,44 @@ Frame tab (none, line, shadow...), position by anchor corner, size, arrange vert
 | `%(...)` | substitution |
 Unsupported codes and a bare backslash are dropped silently. Literal backslash: `\\`. Examples: `i / \g(m)A`, `cm\+(-1)`, `H\-(2)O`.
 
+### 7.1 Sheaf underline and strikethrough rendering (T58 graph text)
+
+The first `T58-graph-text-formatting.md` rendering slice (2026-11-15,
+`codex/text-decorations`) draws `\u(text)` and `\s(text)` using shared scene paths. The
+[Origin escape reference](https://docs.originlab.com/origin-help/escape-sequences/) defines
+these two operations. Nested decorations inherit bold/italic, size and baseline shifts and
+end with their own closing parenthesis. In `\u(a\+(2)b)`, the raised, smaller `2` has its own
+raised, thinner underline. Titles, free labels, legends and tick-label prefixes/suffixes use
+the same placement function. A single decorated run retains the renderer's original anchor.
+
+OriginPro 2016 controls are local in `scratch/text-decorations/origin-verified.lines.txt` and
+`origin-facts.json`. A successful 3200 x 2449 PNG export shows six 32 pt Arial cases: plain,
+underline, strike, both, a decorated superscript, and 90-degree text. The `ABCdef` underline
+covers 456 pixels and is 10 pixels thick; the strike covers 456 pixels and is 7 pixels thick.
+The rotated underline is vertical and 10 pixels thick. Nested script underlines move with
+their glyphs. Initial invalid/timeout export attempts and the unavailable SVG export are
+excluded from these observations. The successful export uses a fresh synthetic data graph.
+
+System-font layout reads each resolved face's OpenType `post` underline and `OS/2` strikeout
+metrics, cached by face (including bold/italic). Their positions describe the stroke's top;
+the scene converts to a stroke centre and a downward Y axis, then scales and rotates with
+the run ([post](https://learn.microsoft.com/en-us/typography/opentype/spec/post),
+[OS/2](https://learn.microsoft.com/en-us/typography/opentype/otspec190/os2)). On this machine,
+Arial has 2048 units/em: underline top -217, thickness 150; strikeout top 530, thickness 102.
+These thicknesses agree with the observed raster widths after rounding. Pixel differences
+from native font rasterization, baseline rounding and fallback fonts remain.
+
+For a missing font table or a fixed-metric measurer, Sheaf uses fallback em values:
+underline centre 0.14 below baseline/thickness 0.07; strikeout centre 0.23 above/thickness 0.05.
+These rounded fallback values are Sheaf choices. Existing text measurers can retain their
+width-only implementation through default metric methods. Every backend draws the same
+decoration paths: screen/PNG/PDF through SVG, and direct EPS/EMF. Tests cover nesting limits,
+anchors, rotation, script scaling, font style/colour, title/legend/label/tick placement and
+export. The SVG golden includes text; the PNG golden isolates stroke geometry so font
+installation differences do not change it. This slice adds no model fields. Per-run colour
+and font switching, combined scripts, editor/toolbar formatting and whole-object underline
+remain open in the graph-text brief.
+
 ---
 
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
@@ -2770,6 +2808,13 @@ Everything below is Sheaf's own choice, unmeasured, and must be checked against 
 - `.opj`: not written; the save warns ("layer 1 has 2 slope annotations that an Origin project file written here cannot hold ...") and the `.opj.sheaf` companion keeps them.
 
 **Not done.** Dragging the label, a free decimals setting, a unit-less "per decade" switch, attaching an annotation to a plot by position instead of by column, annotations across plots, slope annotations in the Graph Slicer or copied with the layer's other objects.
+
+**Object Edit Bring to Front / Send to Back (T63 G).** In Sheaf the two Object Edit toolbar buttons
+dispatch the same `OrderShape` operation as the shape context menu (one undo step, selection follows
+the moved shape). They are enabled only when a drawn shape is selected and the move is possible
+(already frontmost / backmost greys the matching button); text, legend and axis-title selections keep
+them disabled (broader object ordering is B2). Not measured in Origin 2016 yet; the greyed-without-
+selection behaviour follows Origin's convention for Object Edit buttons.
 
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 

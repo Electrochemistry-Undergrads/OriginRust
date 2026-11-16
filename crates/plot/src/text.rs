@@ -3,7 +3,7 @@
 
 use crate::fonts::TextMeasurer;
 use crate::markup::{self, Run};
-use crate::scene::{Anchor, Item, TextItem};
+use crate::scene::{Anchor, Item, Stroke, TextItem, push_num};
 use sheaf_core::graph::Font;
 
 /// Ascent used for vertical placement, as a fraction of the font size.
@@ -58,10 +58,13 @@ pub fn place(
             rotate_ccw,
         })
     };
-    if runs.len() == 1 && runs[0].rise == 0.0 {
+    let single = runs.len() == 1 && runs[0].rise == 0.0;
+    if single {
         // One plain run: let the renderer align it with its own font metrics.
         items.push(item(&runs[0], x, y, anchor));
-        return;
+        if !runs[0].underline && !runs[0].strikeout {
+            return;
+        }
     }
     let total = runs_width(m, &runs, font, size);
     let mut cursor = match anchor {
@@ -75,7 +78,32 @@ pub fn place(
         // Local frame: x along the text, y down. Rotate counter-clockwise on a y-down page.
         let px = x + cursor * cos + dy * sin;
         let py = y - cursor * sin + dy * cos;
-        items.push(item(run, px, py, Anchor::Start));
-        cursor += m.width(&run.text, &run_font(font, run), size * run.scale);
+        if !single {
+            items.push(item(run, px, py, Anchor::Start));
+        }
+        let font = run_font(font, run);
+        let run_size = size * run.scale;
+        let width = m.width(&run.text, &font, run_size);
+        for metrics in
+            [run.underline.then(|| m.underline_metrics(&font)), run.strikeout.then(|| m.strikeout_metrics(&font))]
+                .into_iter()
+                .flatten()
+        {
+            let offset = metrics.center * run_size;
+            let mut d = String::from("M");
+            push_num(&mut d, px + offset * sin);
+            d.push(' ');
+            push_num(&mut d, py + offset * cos);
+            d.push('L');
+            push_num(&mut d, px + width * cos + offset * sin);
+            d.push(' ');
+            push_num(&mut d, py - width * sin + offset * cos);
+            items.push(Item::Path {
+                d,
+                fill: None,
+                stroke: Some(Stroke::solid(font.color, metrics.thickness * run_size)),
+            });
+        }
+        cursor += width;
     }
 }

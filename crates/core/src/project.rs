@@ -1009,6 +1009,28 @@ impl Project {
         if template == Template::Lollipop {
             self.make_lollipop(graph, ys);
         }
+        // Origin's DROPLINE and ColumnLabel templates (graphing 18.12): the scatter with vertical drop lines,
+        // the column plot with its values written above.
+        if matches!(template, Template::VerticalDropLine | Template::ColumnLabel)
+            && let Some(g) = self.graph_mut(graph)
+        {
+            if template == Template::VerticalDropLine {
+                // DROPLINE steps the symbol shape through the group (square, circle, ...), the plain
+                // scatter does not (both measured).
+                for l in &mut g.layers {
+                    l.group_style.symbol_type = crate::graph::Increment::ByOne;
+                    l.apply_group_increments();
+                }
+            }
+            for p in g.layers.iter_mut().flat_map(|l| l.plots.iter_mut()) {
+                if template == Template::VerticalDropLine {
+                    p.decor.drop.vertical.on = true;
+                } else {
+                    p.decor.labels.enable = true;
+                    p.decor.labels.position = crate::graph::LabelPosition::Above;
+                }
+            }
+        }
         if let Some(g) = self.graph_mut(graph) {
             // A new graph has no colors chosen by the user, so spread the palette over all plots.
             if let Some(l) = g.layers.first_mut() {

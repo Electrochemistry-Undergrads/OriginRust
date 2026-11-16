@@ -60,7 +60,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 
 ## Current priority briefs
 
-All six are **open**. The older index below retains implementation history and partial leftovers.
+All six are **open** (T72, measured, joins them). The older index below retains implementation history and partial leftovers.
 
 | Brief | Wave | Size | Scope and dependency |
 |---|---|---|---|
@@ -82,6 +82,7 @@ All six are **open**. The older index below retains implementation history and p
 | [T74](T74-fill-column-patterns.md) | Fill Column With: A set of Numbers, Date/Time values, Text & Numeric values (Origin patternN/D/T) | M | done 2026-11-16 (workbook-model 13c); left: Origin's window layout, text quoting |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
+| [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: Origin measured (graphing 24); Copy Format and Paste Format on graph, axis and legend, Apply Formats window; left: object cut/copy/paste, align, group, order (rest of B2) |
 
 ## Index
 
@@ -149,6 +150,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T56](T56-user-graph-templates.md) | Save Template As and Plot > User Templates (a graph's look without data, applied to new columns; CLI `--template`) | M | done 2026-11-15 (graphing.md 24): Save Template As, Plot > User Templates, Manage, `sheaf plot -t NAME`; left: Origin measurements |
 | [T64](T64-significance-plot.md) | Multiple comparisons plot with significance brackets | M | done 2026-11-15 (statistics 23, `significance-plot`, macOS); left: two-way ANOVA, paired and one-sample, Origin measurements, editable brackets |
 | [T77](T77-new-graph-and-project-without-data.md) | File > New > Graph and Standard New Graph (empty graph from the default template), Save Project without Data... and Duplicate Project without Data (B12 slice) | M | done 2026-11-16 (`new-graph-nodata`, graphing.md 25, project-file-format.md); Origin behaviour of the two project items unmeasured |
+| [T72](T72-copy-paste-format.md) | Copy Format and Paste Format on graph, axis and legend (B2 slice 1) | M | open; Origin 2016 measured (graphing 26), Rust built (core module, menus, Apply Formats window) |
 
 For every active claim (including matrices/contour/heatmaps), read the current
 [HANDOFF table](../../HANDOFF.md). This index is not a second claims ledger. Older branches and

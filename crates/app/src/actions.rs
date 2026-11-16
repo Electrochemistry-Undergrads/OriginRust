@@ -632,6 +632,40 @@ pub enum Action {
     },
     /// Copy Page: the graph as a picture on the clipboard.
     CopyPage(WindowId),
+    /// Copy Format of a whole graph (T72).
+    CopyGraphFormat {
+        graph: WindowId,
+        part: sheaf_core::format_clip::GraphPart,
+    },
+    /// Edit > Copy Format: the format of the selected axis when an axis is selected (Origin does
+    /// the same), else of the whole graph.
+    EditCopyFormat {
+        graph: WindowId,
+        part: sheaf_core::format_clip::GraphPart,
+    },
+    /// Copy Format of one axis.
+    CopyAxisFormat {
+        graph: WindowId,
+        layer: usize,
+        y: bool,
+        part: sheaf_core::format_clip::AxisPart,
+    },
+    /// Paste Format of a graph format onto the graph, every group it holds.
+    PasteGraphFormat {
+        graph: WindowId,
+    },
+    /// Paste Format To: an axis format onto one axis.
+    PasteAxisFormat {
+        graph: WindowId,
+        layer: usize,
+        y: bool,
+        part: sheaf_core::format_clip::AxisPart,
+    },
+    /// Edit > Paste Format...: the Apply Formats window.
+    PasteFormatDialog {
+        graph: WindowId,
+        layer: usize,
+    },
     /// Gadgets > Integrate on a graph.
     StartIntegrate {
         graph: WindowId,

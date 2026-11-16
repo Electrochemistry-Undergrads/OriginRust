@@ -126,10 +126,18 @@ fn check(setup: &PageSetup) -> Result<(f64, f64), PlotError> {
     Ok(area)
 }
 
+fn sheet_table(sheet: &Worksheet) -> SheetTable<'_> {
+    SheetTable::with_metrics(sheet, PrintStyle::default(), &|style, size| {
+        let em = crate::worksheet_font(style.font.unwrap_or(FAMILY), style.bold, style.italic)
+            .map_or(1.2, |f| f.line_height_em);
+        size * em + 2.0
+    })
+}
+
 /// How many pages the sheet prints on and the printed area.
 pub fn sheet_pages(sheet: &Worksheet, setup: &PageSetup) -> Result<SheetPages, PlotError> {
     let area = check(setup)?;
-    let table = SheetTable::new(sheet, PrintStyle::default());
+    let table = sheet_table(sheet);
     Ok(SheetPages { area, count: table.pages(area.0, area.1).len() })
 }
 
@@ -139,7 +147,7 @@ pub fn sheet_pages(sheet: &Worksheet, setup: &PageSetup) -> Result<SheetPages, P
 pub fn render_sheet_emf_pages(sheet: &Worksheet, setup: &PageSetup) -> Result<Vec<Vec<u8>>, PlotError> {
     let area = check(setup)?;
     let fonts = SystemFonts::shared();
-    let table = SheetTable::new(sheet, PrintStyle::default());
+    let table = sheet_table(sheet);
     let pages = table.pages(area.0, area.1);
     Ok(pages
         .iter()
@@ -165,7 +173,7 @@ fn paper_svgs<'a>(
 /// The sheet as a vector PDF, one paper-sized page per table page, the table inside the margins.
 pub fn render_sheet_pdf(sheet: &Worksheet, setup: &PageSetup) -> Result<Vec<u8>, PlotError> {
     let area = check(setup)?;
-    let table = SheetTable::new(sheet, PrintStyle::default());
+    let table = sheet_table(sheet);
     multipage::svgs_to_pdf(paper_svgs(&table, setup, area), SystemFonts::shared())
 }
 
@@ -179,7 +187,7 @@ pub fn render_sheet_raster(
 ) -> Result<Raster, PlotError> {
     let area = check(setup)?;
     let fonts = SystemFonts::shared();
-    let table = SheetTable::new(sheet, PrintStyle::default());
+    let table = sheet_table(sheet);
     let pages = table.pages(area.0, area.1);
     let slot = pages.get(page).ok_or_else(|| PlotError::Size(format!("the sheet has no page {}", page + 1)))?;
     let scene = scene_of(&table.draw_page(slot, pages.len()), area, (0.0, 0.0), fonts);
@@ -316,7 +324,7 @@ mod tests {
             (text.family.as_str(), text.color, text.anchor),
             ("Courier New", Color::rgb(200, 0, 0), Anchor::Middle)
         );
-        assert_eq!(text.size, 18.0 * 8.0 / 12.0);
+        assert_eq!(text.size, 18.0 * 8.0 / 9.0);
         let plain = items
             .iter()
             .find_map(|i| match i {

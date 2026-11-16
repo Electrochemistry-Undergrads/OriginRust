@@ -238,6 +238,14 @@ pub enum Action {
         kind: crate::dialogs::fill_pattern::FillKind,
         columns: Vec<ColumnId>,
     },
+    /// Column > Set Sampling Interval...: open its window for these columns.
+    SetSamplingInterval {
+        columns: Vec<ColumnId>,
+    },
+    /// Column > Show X Column...: open its window for these columns.
+    ShowXColumn {
+        columns: Vec<ColumnId>,
+    },
     /// Plot > User Templates > a saved one: plot the columns in its look.
     PlotUserTemplate {
         book: WindowId,

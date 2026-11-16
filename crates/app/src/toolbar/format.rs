@@ -36,7 +36,7 @@ pub(super) fn show(
                             button.icon,
                             false,
                         );
-                        response.on_disabled_hover_text("Select a graph title, text label or legend");
+                        response.on_disabled_hover_text("Select a graph title, text label, legend or worksheet cells");
                     } else {
                         draw_button(ui, Bar::Format, button, c, actions);
                     }
@@ -56,11 +56,12 @@ pub(super) fn show(
                         continue;
                     }
                 };
-                let response = ui.add(egui::Button::new("").selected(on).min_size(vec2(CELL, CELL)));
+                let enabled = !matches!(button.icon, Icon::Bigger | Icon::Smaller) || state.scaling_enabled();
+                let response = ui.add_enabled(enabled, egui::Button::new("").selected(on).min_size(vec2(CELL, CELL)));
                 response.widget_info(|| {
                     egui::WidgetInfo::selected(
                         egui::WidgetType::SelectableLabel,
-                        true,
+                        enabled,
                         on,
                         format!("Format toolbar: {}", button.tip),
                     )
@@ -69,7 +70,7 @@ pub(super) fn show(
                     ui.painter(),
                     Rect::from_center_size(response.rect.center(), vec2(16.0, 16.0)),
                     button.icon,
-                    true,
+                    enabled,
                 );
                 if response.clicked() {
                     actions.push(Action::FormatText(state.request(change)));
@@ -96,9 +97,10 @@ fn families() -> &'static [String] {
 
 fn family(ui: &mut Ui, state: Option<&Snapshot>, actions: &mut Vec<Action>) {
     let capture_id = ui.id().with("format_family_capture");
-    ui.add_enabled_ui(state.is_some(), |ui| {
+    let enabled = state.is_some();
+    ui.add_enabled_ui(enabled, |ui| {
         let captured = ui.data_mut(|d| d.get_temp::<Snapshot>(capture_id)).or_else(|| state.cloned());
-        let current = state.map_or("Default: Arial", |s| s.font.family.as_str());
+        let current = state.map_or("Default: Arial", |s| if s.mixed.family { "" } else { s.font.family.as_str() });
         let response = egui::ComboBox::from_id_salt("format_family")
             .width(118.0)
             .selected_text(current)
@@ -117,26 +119,35 @@ fn family(ui: &mut Ui, state: Option<&Snapshot>, actions: &mut Vec<Action>) {
         {
             ui.data_mut(|d| d.insert_temp(capture_id, state.clone()));
         }
-        response.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, state.is_some(), "Format toolbar: Font")
-        });
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, enabled, "Format toolbar: Font"));
         response.on_hover_text("Font");
     });
 }
 
 fn size(ui: &mut Ui, state: Option<&Snapshot>, actions: &mut Vec<Action>) {
     if state.is_none() {
-        disabled_text_box(ui, "0", 44.0, "Format toolbar: Font Size", "Select a graph title, text label or legend");
+        disabled_text_box(
+            ui,
+            "0",
+            44.0,
+            "Format toolbar: Font Size",
+            "Select a graph title, text label, legend or worksheet cells",
+        );
         return;
     }
-    let source = state.map_or_else(|| "0".to_string(), |s| s.font.size_pt.to_string());
+    let source = state.map_or_else(|| "0".to_string(), Snapshot::size_text);
     let id = ui.id().with(("format_size", state.map(|s| format!("{:?}/{}/{}", s.target, s.generation, s.revision))));
     let mut text = ui.data_mut(|data| data.get_temp::<String>(id)).unwrap_or_else(|| source.clone());
+    // A single-line editor may surrender focus and consume Enter while it is drawn.
+    // Capture the keys and ownership before constructing it.
+    let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+    let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
+    let had_focus = ui.memory(|m| m.has_focus(id));
     let response = ui.add_enabled(state.is_some(), egui::TextEdit::singleline(&mut text).id(id).desired_width(40.0));
     response.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, state.is_some(), "Format toolbar: Font Size")
     });
-    if response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+    if (had_focus || response.has_focus() || response.lost_focus()) && enter {
         if let Some(state) = state
             && let Ok(size) = text.parse::<f64>()
         {
@@ -144,12 +155,12 @@ fn size(ui: &mut Ui, state: Option<&Snapshot>, actions: &mut Vec<Action>) {
         }
         response.surrender_focus();
         text = source.clone();
-    } else if response.lost_focus() || (response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
+    } else if response.lost_focus() || ((had_focus || response.has_focus()) && escape) {
         text = source;
         response.surrender_focus();
     }
     ui.data_mut(|data| data.insert_temp(id, text));
-    response.on_hover_text("Font Size (1–1000 pt); Enter applies, Escape cancels");
+    response.on_hover_text(state.map_or("Font Size", Snapshot::size_help));
 }
 
 fn colors(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {

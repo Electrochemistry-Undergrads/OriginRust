@@ -1461,6 +1461,12 @@ pub(crate) fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_ax
         return project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default();
     }
     let x = pd.plot.x.and_then(|id| project.column(id));
+    if x.is_none()
+        && let Some(s) = project.column(pd.plot.y).and_then(|c| c.sampling.as_ref())
+    {
+        // A sampling interval names the X axis by its long name and units (T84).
+        return s.title();
+    }
     match x.or_else(|| data::label_column(project, axis, Dim::X, Some(pd))) {
         Some(c) => c.axis_title(),
         None => "Row".to_string(),

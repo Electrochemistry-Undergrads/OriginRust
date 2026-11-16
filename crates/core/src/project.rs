@@ -747,12 +747,13 @@ impl Project {
     // ----- plots ---------------------------------------------------------
 
     /// Adds a plot of column `y` to a layer of a graph. The X column and a
-    /// Y-error column are found from the column designations of the sheet.
+    /// Y-error column are found from the column designations of the sheet; a column with a
+    /// sampling interval gets no X column, its plot uses the interval (as Origin's does).
     /// The plot takes the layer's default style and its next palette color.
     pub fn add_plot(&mut self, graph: WindowId, layer: usize, y: ColumnId) -> Result<(), ProjectError> {
         let (_, sheet, _) = self.locate(y).ok_or(ProjectError::NoSuchColumn(y))?;
         let index = sheet.column_index(y).expect("column is in this sheet");
-        let x = sheet.x_for(index).map(|c| c.id);
+        let x = if sheet.columns[index].sampling.is_some() { None } else { sheet.x_for(index).map(|c| c.id) };
         let y_error = sheet.y_error_for(index).map(|c| c.id);
         let x_error = sheet.x_error_for(index).map(|c| c.id);
         self.add_plot_xy(graph, layer, x, y, y_error)?;

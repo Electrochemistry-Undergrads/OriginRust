@@ -43,6 +43,7 @@ pub mod panels;
 pub mod project;
 pub mod reshape;
 pub mod rowfilter;
+pub mod sampling;
 pub mod scales;
 pub mod shape;
 pub mod sheet_print;

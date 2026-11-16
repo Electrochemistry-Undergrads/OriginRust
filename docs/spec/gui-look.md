@@ -609,7 +609,7 @@ Pictures: `gr-plain.png`, `gr-graph.png`, `grc-*.png`, `gdlg-*.png`; second stud
   [seen 2, `gr-titlebar.png`].
 - **Right-click, legend** [seen 2, `legend.png`]: the legend is selected first (eight green
   diamond handles on its corners and edges), then the menu: Plot Details..., Legend (submenu),
-  Add Color Scale (grey), Add Bubble Scale (grey), | Cut (Ctrl+X), Copy (Ctrl+C), Delete
+  Add Color Scale, Add Bubble Scale (enabled with a colour or size mapped plot, T80), | Cut (Ctrl+X), Copy (Ctrl+C), Delete
   (Delete), | Bring to the front, Push to the back, Bring to front of data (grey), Push to
   back of data, | Programming Control..., Properties..., | Copy Format (submenu), Save Format
   as Theme.... No chevron.

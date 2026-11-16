@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 375 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 372 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -102,7 +102,8 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T67](T67-add-straight-line.md) | Add Straight Line (B3 slice 1) | M | 0 |
 | [x] | [T70](T70-axis-center-fit-page-to-printer.md) | Axis Center and Fit Page To Printer (B3 slice 2) | S | 0 |
 | [x] | [T73](T73-change-xy-ungroup.md) | Change X, Change Y, Ungroup on a plot (B3 slice 3) | S | 0 |
-| [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 22 |
+| [x] | [T80](T80-color-and-bubble-scale.md) | New Color Scale, legend Add Color Scale and Add Bubble Scale (B3 slice 4) | M | 0 |
+| [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 19 |
 | [x] | [T71](T71-point-segments.md) | 2 and 3 Point Segment plots (B4 slice 2) | S | 0 |
 | [x] | [T75](T75-scatter-central.md) | Scatter Central (B4 slice 3) | S | 0 |
 | [x] | [T76](T76-grouped-indexed-plots.md) | Grouped Columns (indexed data), Grouped Box Charts (B4 slice) | M | 0 |
@@ -121,7 +122,7 @@ Backlog packages: write the brief first (step 3 above).
 - **B3.** Small independent tools; split freely. Add Straight Line and Add Function Graph reuse
   drawn shapes and the fit library's functions (`sheaf simulate`, T47). Display range and markers
   are T48's leftovers (graphing 20.4). New Color Scale and Add Bubble Scale reuse the colour scale
-  that hexbin and parallel plots draw.
+  that hexbin and parallel plots draw: done (T80).
 - **B4.** One commit per type as in T12. Order by use in the owner's field: Vertical Drop Line,
   Column + Label, Grouped Columns (indexed data), Grouped Box Charts, Interval Plot, Histogram +
   Probabilities, Marginal Histograms and Box Charts (two extra layers: do after T61), Pareto, QC

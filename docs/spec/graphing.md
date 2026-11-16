@@ -1553,7 +1553,23 @@ Sheaf:
 ### 13.16 Plot > Statistics > Stacked Histograms (T62 slice 2)
 
 Origin: the command makes one graph with one histogram panel per selected Y column, the panels stacked
-vertically. **Not measured** (all Sheaf's choices): shared versus per-panel bins, panel order, gaps, labels.
+vertically.
+
+**Measured 2026-11-16 in Origin 2016** (Plot > Statistics > Stacked Histograms on three columns A, B, C of
+200, 150 and 100 deterministic values, `re-workspace/scratch/t62-origin`, PNG `stackhist.png`):
+- A portrait page (the export was 1600 x 2089 px) with three layers. Layer 1 holds the **first** selected
+  column and sits at the **bottom** (top 66.67 %), layer 3 the last one at the top (top 10 %); every layer is
+  at left 25 %, width 70 %, height 23.33 %, so the panels are 5 % of the page apart (not touching).
+- **Each panel has its own bins and its own X scale** (A: -2.5..2.5 step 2 with bins of 0.5; B: -2..5 step 2,
+  bins of 0.5; C: -1.6..-0.4 step 0.2, bins of 0.1) and its own count axis (0..60, 0..34, 0..23). Every
+  panel shows its X tick labels; only the bottom panel has the X title (the first column's name); every
+  panel has the Y title "Count".
+- Every panel is drawn the same way: red outline and a red diagonal hatch on white, not the next colour of a
+  list; each panel has its own legend at its top right (overlapping the panel above).
+
+**Differences from Sheaf's provisional rules below (to change in a code slice):** panel order (Sheaf puts the
+first column at the top), shared bins and linked X (Origin: per-panel bins and scales), colours (Origin: the
+same red hatch everywhere), page orientation and the gaps between panels.
 
 Sheaf (`Project::plot_stacked_histograms`; GUI Plot > Statistics > Stacked Histograms; CLI
 `sheaf plot -t stacked-histograms`):
@@ -1574,7 +1590,20 @@ Sheaf (`Project::plot_stacked_histograms`; GUI Plot > Statistics > Stacked Histo
 ### 13.17 Waterfall Y:Color Mapping and Z:Color Mapping (T62 slice 3)
 
 Origin: Plot > Y-offset/Waterfall has Waterfall Y:Color Mapping and Waterfall Z:Color Mapping (3D waterfall is B15).
-**Not measured** (all Sheaf's choices): palettes, levels, scale layout, where Z comes from.
+
+**Measured 2026-11-16 in Origin 2016** (four Gaussian columns B..E against A, both menu items,
+`re-workspace/scratch/t62-origin`, `waterY.png`, `waterZ.png`):
+- Both draw Origin's oblique waterfall: a skewed three-sided frame with grey grid lines, the curves set back
+  one behind the other along a Z axis whose ticks are labelled with the column names (B at the back, E at the
+  front), the Y axis on the right; no legend and no colour scale.
+- **The colour runs from red at the low end through orange, yellow, green and cyan to blue at the high end**
+  (the reverse of Sheaf's blue-to-red ramp).
+- Y mapping colours each curve along its length by its Y value on one scale for the layer (baselines red, the
+  tallest peak blue, a peak half as high green-yellow); the colour changes smoothly along the curve.
+- Z mapping gives each curve one colour by its place: B red, C yellow, D cyan, E blue.
+
+**Differences from Sheaf's provisional rules below:** the ramp direction (Origin red low, blue high) and the
+oblique 3D-looking frame of Origin's waterfall template (Sheaf's waterfall is the flat 2D offset of 13.6).
 
 Sheaf (`Layer::waterfall_color` None/Y/Z, `Template::WaterfallY` = `waterfall-y`, `WaterfallZ` = `waterfall-z`;
 GUI Plot > Y-offset/Waterfall; CLI `sheaf plot -t waterfall-y|waterfall-z`): the 2D waterfall of 13.6 (placement
@@ -1873,8 +1902,8 @@ Measured through COM (`plot:=219` with the HIST template, `plot:=206` with BOX; 
 Measured through COM: `plotxy iy:=[Book]Sheet1!(1,2) plot:=201 ogl:=[<new template:=BUBBLE>]` with the third column set as Z (`wks.col3.type=5`; X is 4 and Y 1) draws the bubbles (the plot type numbers 245 to 247 gave nothing). Probe: X 1..8, Y 2 4 3 6 5 7 6 8, Z 1 4 2 9 3 6 8 5.
 
 - Bubbles are open circles in the first colour (black rings). Their width is linear in Z from the smallest to the largest value: measured on the 800 px export 2.5, 5, 7, 9, 12, 14, 19 and 22 px (about 2.4 to 21 pt) for Z = 1, 2, 3, 4, 5, 6, 8, 9. Sheaf uses 2 pt to 20 pt (the outline adds the rest).
-- Origin adds a size legend beside the frame (title = the Z column, four circles labelled 1.00, 3.66, 6.32, 8.98: the smallest value and three equal steps to the largest). Not drawn by Sheaf.
-- Colour mapped symbols: Origin's default colour map was not measured (no plot number reached the Color Mapped command); Sheaf maps the smallest to the largest Z over blue, cyan, green, yellow and red. No colour scale is drawn.
+- Origin adds a size legend beside the frame (title = the Z column, four circles labelled 1.00, 3.66, 6.32, 8.98: the smallest value and three equal steps to the largest). Drawn only by Add Bubble Scale (section 27).
+- Colour mapped symbols: Origin's default colour map was not measured (no plot number reached the Color Mapped command); Sheaf maps the smallest to the largest Z over blue, cyan, green, yellow and red. Graph > New Color Scale and the legend's Add Color Scale draw one (section 27).
 - Model: `Plot::size_from` and `Plot::color_from` name the Z column (found from the Z designation after the Y column by `Project::z_column_for`); `Template::Bubble`, `ColorMapped`, `BubbleColorMapped`; CLI `-t bubble` needs a project file with a Z column. `.opj`: written as plain scatter, the save warns.
 
 ### 14.17 Pie; what was seen of polar (T12)
@@ -4644,3 +4673,47 @@ Pasted into an untouched graph of the same data and read back (changed propertie
 - Left greyed (not measured): Symbol/Line/Fill and Text (Edit), Page Background and Legend Translation Mode (page), axis Styles, Scales, Dimensions and the eleven other Paste Format To choices, the page menu's Paste Format To submenus, all of the legend's Copy Format (Styles, Dimensions, All).
 
 - Added after review: Edit > Copy Format with an axis selected copies an axis format (All, All Style Formats and Scales map to the axis parts; Colors, Fonts, Background and Dimensions copy nothing, since an axis format for them is unmeasured); the context menus and Paste Format To follow the clipboard kind. Colors and axis styles also carry the "follows plot colour" flags (Sheaf's reading; unmeasured in Origin). Dimensions pastes a layer frame only between layers of the same kind (root to root, linked to linked) because a linked frame is relative to its parent; mixed pairs are left alone (unmeasured in Origin).
+
+## 27. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
+
+Not measured: Origin 2016 is on Windows only and this slice was built on macOS from Origin's help, so everything
+below that is not a quoted fact is an unmeasured Sheaf choice. The one measured fact is in 14.16 (the bubble size
+legend: four circles at the smallest Z and three equal steps up to the largest, the step truncated to two decimals,
+labelled 1.00, 3.66, 6.32, 8.98 for Z 1..9, titled with the Z column).
+
+Origin's documentation [W] (https://www.originlab.com/doc/origin-help/colorscale,
+https://www.originlab.com/doc/origin-help/bubblescale):
+- A colour scale is an object of the layer reached by Insert > Color Scale, its toolbar button and the legend's Add
+  Color Scale. It can follow a plot's colour map (Fill > Map) or stand alone, and has its own Colour Scale Control
+  dialog (Fill, Levels, Labels, Layout, Title, Line and Ticks). A Bubble + Color Map plot gets a bubble scale by
+  default but no colour scale: the user adds it.
+- A bubble scale is a label-type object, a legend of sample bubbles with numeric labels, for any symbol plot that
+  uses size indexing; Layout is Linear (a row) or Nested; Levels by increment, count or dataset.
+- When the items are enabled, where the objects land by default and what they take as defaults are undocumented.
+
+Sheaf (this slice):
+- Model: `Layer::scales: Vec<LayerScale>` (`sheaf_core::layer_scale`; serde default, skipped while empty,
+  `FORMAT_VERSION` unchanged). `LayerScale { kind: Color | Bubble, title: Option<String> }`. A scale describes the
+  first visible plot of its layer that has `color_from` (colour) or `size_from` (bubble); there is no Map setting.
+  A scale whose layer has no such plot draws nothing and takes no room.
+- Where: right of the frame, side by side in the order they were added, each in a slot of the width the hexbin
+  colour scale takes (`hexbin::scale_reserve`; the bubble scale 6 pt less than that plus its widest circle), the
+  room added to the layer's label edges (`layer_scale::reserve`). Not drawn on polar and ternary layers.
+- Colour scale: the bar of `hexbin::draw_color_bar` (64 strips of `plots::map_color`, title in the Y title font,
+  nice ticks from `sunburst::scale_ticks` over `plots::z_range`, the smallest to the largest finite Z of the
+  plot's rows). Title: the Z column's name.
+- Bubble scale: four circles of the plot's symbol style, sized as the symbols are (`BUBBLE_MIN_PT` to
+  `BUBBLE_MAX_PT`, linear in Z) at Z = lo + k * step, smallest at the top, labels with two decimals in the Y tick font,
+  titled with the Z column; one circle when all values are equal. The step follows the measured 14.16 rule: `(hi -
+  lo) / 3` truncated to two decimals (Z 1..9 gives 2.66 and labels 1.00, 3.66, 6.32, 8.98), and the exact step when
+  that truncation gives zero. The truncation rule is inferred from that one measurement, not confirmed on other ranges.
+- Items: Graph > New Color Scale (active layer) is enabled when the active layer has a colour mapped plot, else
+  grey with a reason; the legend context menu's Add Color Scale / Add Bubble Scale are enabled when the layer has a
+  colour (size) mapped plot. One undo step each ("Add color scale", "Add bubble scale"). Graph > New Bubble Scale
+  (listed in ui-command-map) is not in Sheaf's menu.
+- Selecting: a click picks a scale (`ObjectKind::Scale(i)`, rank of the legend), Delete or its context menu removes
+  it ("Delete scale"), a double click opens Plot Details. Selection JSON: `{"kind": "scale", "index": n}`.
+- Files: `.sheaf` keeps scales; `.opj` writer leaves them out and the save warns (the companion keeps them).
+- Not done: moving by dragging, a properties dialog (orientation, levels, labels, background, nested layout), a
+  Map link to a chosen plot, scales for other plot kinds (hexbin, sunburst, waterfall, parallel keep drawing their
+  own), a CLI flag, the real default colour map.

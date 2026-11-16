@@ -1553,7 +1553,23 @@ Sheaf:
 ### 13.16 Plot > Statistics > Stacked Histograms (T62 slice 2)
 
 Origin: the command makes one graph with one histogram panel per selected Y column, the panels stacked
-vertically. **Not measured** (all Sheaf's choices): shared versus per-panel bins, panel order, gaps, labels.
+vertically.
+
+**Measured 2026-11-16 in Origin 2016** (Plot > Statistics > Stacked Histograms on three columns A, B, C of
+200, 150 and 100 deterministic values, `re-workspace/scratch/t62-origin`, PNG `stackhist.png`):
+- A portrait page (the export was 1600 x 2089 px) with three layers. Layer 1 holds the **first** selected
+  column and sits at the **bottom** (top 66.67 %), layer 3 the last one at the top (top 10 %); every layer is
+  at left 25 %, width 70 %, height 23.33 %, so the panels are 5 % of the page apart (not touching).
+- **Each panel has its own bins and its own X scale** (A: -2.5..2.5 step 2 with bins of 0.5; B: -2..5 step 2,
+  bins of 0.5; C: -1.6..-0.4 step 0.2, bins of 0.1) and its own count axis (0..60, 0..34, 0..23). Every
+  panel shows its X tick labels; only the bottom panel has the X title (the first column's name); every
+  panel has the Y title "Count".
+- Every panel is drawn the same way: red outline and a red diagonal hatch on white, not the next colour of a
+  list; each panel has its own legend at its top right (overlapping the panel above).
+
+**Differences from Sheaf's provisional rules below (to change in a code slice):** panel order (Sheaf puts the
+first column at the top), shared bins and linked X (Origin: per-panel bins and scales), colours (Origin: the
+same red hatch everywhere), page orientation and the gaps between panels.
 
 Sheaf (`Project::plot_stacked_histograms`; GUI Plot > Statistics > Stacked Histograms; CLI
 `sheaf plot -t stacked-histograms`):
@@ -1574,7 +1590,20 @@ Sheaf (`Project::plot_stacked_histograms`; GUI Plot > Statistics > Stacked Histo
 ### 13.17 Waterfall Y:Color Mapping and Z:Color Mapping (T62 slice 3)
 
 Origin: Plot > Y-offset/Waterfall has Waterfall Y:Color Mapping and Waterfall Z:Color Mapping (3D waterfall is B15).
-**Not measured** (all Sheaf's choices): palettes, levels, scale layout, where Z comes from.
+
+**Measured 2026-11-16 in Origin 2016** (four Gaussian columns B..E against A, both menu items,
+`re-workspace/scratch/t62-origin`, `waterY.png`, `waterZ.png`):
+- Both draw Origin's oblique waterfall: a skewed three-sided frame with grey grid lines, the curves set back
+  one behind the other along a Z axis whose ticks are labelled with the column names (B at the back, E at the
+  front), the Y axis on the right; no legend and no colour scale.
+- **The colour runs from red at the low end through orange, yellow, green and cyan to blue at the high end**
+  (the reverse of Sheaf's blue-to-red ramp).
+- Y mapping colours each curve along its length by its Y value on one scale for the layer (baselines red, the
+  tallest peak blue, a peak half as high green-yellow); the colour changes smoothly along the curve.
+- Z mapping gives each curve one colour by its place: B red, C yellow, D cyan, E blue.
+
+**Differences from Sheaf's provisional rules below:** the ramp direction (Origin red low, blue high) and the
+oblique 3D-looking frame of Origin's waterfall template (Sheaf's waterfall is the flat 2D offset of 13.6).
 
 Sheaf (`Layer::waterfall_color` None/Y/Z, `Template::WaterfallY` = `waterfall-y`, `WaterfallZ` = `waterfall-z`;
 GUI Plot > Y-offset/Waterfall; CLI `sheaf plot -t waterfall-y|waterfall-z`): the 2D waterfall of 13.6 (placement
@@ -2514,7 +2543,7 @@ Origin's documented facts (documentation only, **not measured**; no Origin was a
 ranges, MAD), stacking, two-row table tick labels, more than two group levels, Grouped Scatter, panels or pages split by a
 group, themes (half box, violin, ...), colour indexed by the main group, and a measurement of all of it in Origin 2016.
 
-### 14.29 Interval Plot and Pareto chart (T82)
+### 14.29 Interval Plot and Pareto chart (T83)
 
 Use: Plot > Statistics > Interval Plot and Pareto. Status: written from Origin's documentation on a machine without Origin;
 nothing here was measured, so every choice not listed as documented is Sheaf's and **unmeasured**.
@@ -4009,6 +4038,17 @@ grouped. Sheaf: `Template::VerticalDropLine` (scatter, `decor.drop.vertical` on,
 `Template::ColumnLabel` (column, data labels on, position Above, a quarter of the font size, 5.5 pt, above);
 data labels of grouped columns and bars are now centred on their own bar. CLI `-t vertical-drop-line`, `-t
 column-label`.
+
+### 18.14 Column Scatter (T79, measured 2026-11-16)
+
+Origin 2016's Plot > Symbol > Column Scatter draws every selected Y column as points standing at its
+position 1, 2, ... in plot order: filled diamonds of size 8 coloured by the group (black, red, ...), no
+line, the points of a column spread sideways by a jitter (within about +-0.15), the X axis from 0.5 to
+n + 0.5 with one tick per column labelled with its name, the Y title "Range", the usual legend. Sheaf:
+`PlotKind::ColumnScatter` and template `column-scatter` (menu, `sheaf plot -t column-scatter`), placed
+by the box chart's category axis; the jitter is a fixed golden-ratio sequence within +-0.15 (Sheaf's
+choice: Origin's rule was not measured). Trendlines, rugs and slopes do not use the jittered X. `.opj`
+writes a scatter of the data with a warning.
 
 ### 18.13 Scatter Central (T75, measured 2026-11-15)
 

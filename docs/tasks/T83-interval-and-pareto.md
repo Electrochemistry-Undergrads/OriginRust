@@ -1,4 +1,4 @@
-# T82: Interval Plot and Pareto (B4 slice)
+# T83: Interval Plot and Pareto (B4 slice)
 
 **Status:** Done 2026-11-16 (Claude macOS, branch `interval-pareto`; graphing 14.29). Built from Origin's documentation on a
 machine without Origin: every choice the documentation does not give is Sheaf's and **unmeasured** (14.29).

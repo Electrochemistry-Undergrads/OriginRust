@@ -19,6 +19,9 @@ pub enum Template {
     /// Scatter plot whose axes cross in the middle of the layer (Origin's "Scatter Central", 2016): both
     /// axes at -50 %, the frame drawn as a closed box.
     ScatterCentral,
+    /// Origin's Plot > Symbol > Column Scatter (2016): every Y column as filled diamonds (size 8) standing at
+    /// 1, 2, 3, ... with a small jitter, the X axis named by the columns, the Y title "Range" (measured, T79).
+    ColumnScatter,
     /// Line plot with a symbol on every point.
     LineSymbol,
     /// Cyclic voltammetry overlay: smooth lines without markers, no grid,
@@ -157,16 +160,16 @@ pub enum Template {
     /// Origin's Plot > Statistics > Grouped Box Charts (X-Function plot_gboxindexed, T76): the box chart
     /// template; the rows of one data column are split by one or two group columns.
     GroupedBox,
-    /// Origin's Plot > Statistics > Interval Plot (BoxInterval template, T82): one point per Y column at its
+    /// Origin's Plot > Statistics > Interval Plot (BoxInterval template, T83): one point per Y column at its
     /// mean, with an error bar (SD, SE or a confidence interval).
     IntervalPlot,
-    /// Origin's Plot > Statistics > Pareto (plot_paretoraw, ParetoRaw template, T82): the counts of the distinct
+    /// Origin's Plot > Statistics > Pareto (plot_paretoraw, ParetoRaw template, T83): the counts of the distinct
     /// values of a column as columns in descending order, with the cumulative percent on a right axis of 0 to 100.
     Pareto,
 }
 
 impl Template {
-    pub const ALL: [Template; 61] = [
+    pub const ALL: [Template; 62] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -228,6 +231,7 @@ impl Template {
         Template::Segment3,
         Template::ScatterRug,
         Template::ScatterCentral,
+        Template::ColumnScatter,
     ];
 
     /// The name used on the command line and in menus.
@@ -236,6 +240,7 @@ impl Template {
             Template::Line => "line",
             Template::Scatter => "scatter",
             Template::ScatterCentral => "scatter-central",
+            Template::ColumnScatter => "column-scatter",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
@@ -302,6 +307,7 @@ impl Template {
             Template::Line => "Line",
             Template::Scatter => "Scatter",
             Template::ScatterCentral => "Scatter Central",
+            Template::ColumnScatter => "Column Scatter",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
@@ -404,6 +410,13 @@ impl Template {
             Template::Line => general(id, name, PlotKind::Line),
             Template::Scatter => general(id, name, PlotKind::Scatter),
             Template::ScatterCentral => scatter_central(id, name),
+            Template::ColumnScatter => {
+                let mut g = general(id, name, PlotKind::ColumnScatter);
+                let s = &mut g.layers[0].default_symbol;
+                s.shape = SymbolShape::Diamond;
+                s.size_pt = 8.0;
+                g
+            }
             Template::LineSymbol => general(id, name, PlotKind::LineSymbol),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
@@ -1072,6 +1085,24 @@ mod tests {
         assert_eq!(l.y_axis.auto_range, AutoRange::SymmetricZero);
     }
 
+    /// Origin 2016's Column Scatter template (T79).
+    #[test]
+    fn column_scatter_template_makes_filled_diamonds_without_a_line() {
+        use crate::{ColumnData, Designation, Project};
+        let mut p = Project::new();
+        let book = p.add_workbook("T");
+        let y1 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 5.0, 2.0])).unwrap();
+        let y2 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 1.0, 4.0])).unwrap();
+        let g = p.plot_columns(Template::ColumnScatter, &[y1, y2]).unwrap();
+        let layer = &p.graph(g).unwrap().layers[0];
+        assert!(layer.plots.iter().all(|q| q.kind == PlotKind::ColumnScatter));
+        assert!(!PlotKind::ColumnScatter.has_line() && PlotKind::ColumnScatter.has_symbols());
+        let s = &layer.plots[0].symbol;
+        assert_eq!((s.shape, s.size_pt, s.filled, s.color), (SymbolShape::Diamond, 8.0, true, Color::BLACK));
+        assert_ne!(layer.plots[0].symbol.color, layer.plots[1].symbol.color, "the palette steps");
+        assert_eq!(Template::ColumnScatter.label(), "Column Scatter");
+    }
+
     #[test]
     fn template_names_round_trip() {
         for t in Template::ALL {
@@ -1089,7 +1120,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 61);
+        assert_eq!(Template::ALL.len(), 62);
+        assert_eq!(Template::from_name("column-scatter"), Some(Template::ColumnScatter));
         assert_eq!(Template::from_name("scatter-central"), Some(Template::ScatterCentral));
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
         assert_eq!(Template::from_name("violin"), Some(Template::Violin));

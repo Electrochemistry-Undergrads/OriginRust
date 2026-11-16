@@ -172,6 +172,7 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::Stacked100Area => "100% Stacked Area",
         PlotKind::Histogram => "Histogram",
         PlotKind::Box => "Box Chart",
+        PlotKind::ColumnScatter => "Column Scatter",
         PlotKind::Violin => "Violin Plot",
         PlotKind::ViolinBox => "Violin with Box",
         PlotKind::ViolinPoint => "Violin with Point",
@@ -265,6 +266,7 @@ pub fn dialog_body(
                                 PlotKind::Stacked100Area,
                                 PlotKind::Histogram,
                                 PlotKind::Box,
+                                PlotKind::ColumnScatter,
                                 PlotKind::Violin,
                                 PlotKind::ViolinBox,
                                 PlotKind::ViolinPoint,
@@ -846,7 +848,7 @@ fn plot_tab_body(
         DetailTab::ErrorBar
             if matches!(graph.layers[l].plots[p].stat, Some(sheaf_core::graph::StatPlot::Interval { .. })) =>
         {
-            // Interval plot (T82): the error bar of the mean, the same for every interval point of the layer.
+            // Interval plot (T83): the error bar of the mean, the same for every interval point of the layer.
             use sheaf_core::graph::{IntervalError, StatPlot};
             let (mut error, mut level) = match graph.layers[l].plots[p].stat {
                 Some(StatPlot::Interval { error, level }) => (error, level),

@@ -215,7 +215,7 @@ fn the_plots_draw_and_other_box_and_column_plots_are_untouched() {
     assert!(l.plots[0].boxed.is_some() && l.plots[0].gboxes.is_empty() && l.plots[0].categories.is_none());
 }
 
-// ---- Interval plot and Pareto chart (T82) ----
+// ---- Interval plot and Pareto chart (T83) ----
 
 fn stat_project(template: Template) -> (Project, WindowId) {
     let mut p = Project::new();

@@ -1,4 +1,4 @@
-//! `sheaf plot -t interval-plot` and `-t pareto` (T82).
+//! `sheaf plot -t interval-plot` and `-t pareto` (T83).
 
 use sheaf_core::graph::{IntervalError, PlotKind, StatPlot};
 use std::path::PathBuf;

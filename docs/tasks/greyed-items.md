@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **370 greyed items: 255 in the menu bar, 19 on the toolbars, 96 in context menus.**
+original inventory baseline. This is not a new runtime audit. **369 greyed items: 254 in the menu bar, 19 on the toolbars, 96 in context menus.**
 
 ## How to read and keep this file
 
@@ -52,11 +52,12 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T75` | 0 |
 | `T76` | 0 |
 | `T78` | 0 |
+| `T79` | 0 |
 | `T80` | 0 |
-| `T82` | 0 |
+| `T83` | 0 |
 | `B2` | 33 |
 | `B3` | 19 |
-| `B4` | 21 |
+| `B4` | 20 |
 | `B5` | 33 |
 | `B6` | 31 |
 | `B7` | 8 |
@@ -71,7 +72,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 67 items, backlog packages (`B`) 283, not planned (`N`) 20.
+Briefs (`T`) hold 67 items, backlog packages (`B`) 282, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -116,7 +117,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Plot
 - `T63` Line: Horizontal Step · Vertical Step · Spline Connected
-- `B4` Symbol: Column Scatter
 - `B4` Line + Symbol: Line Series
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall

@@ -1126,7 +1126,7 @@ impl Project {
         Ok(graph)
     }
 
-    /// Creates an interval plot ([`Template::IntervalPlot`], T82): one plot per numeric column in `ys`, each the
+    /// Creates an interval plot ([`Template::IntervalPlot`], T83): one plot per numeric column in `ys`, each the
     /// mean of its column at the next position 1, 2, ... with a 95 % confidence interval as error bar.
     pub fn plot_interval(&mut self, ys: &[ColumnId]) -> Result<WindowId, ProjectError> {
         for y in ys {
@@ -1158,7 +1158,7 @@ impl Project {
         Ok(graph)
     }
 
-    /// Creates a Pareto chart ([`Template::Pareto`], T82) of the cells of column `y` (text or numbers): columns of
+    /// Creates a Pareto chart ([`Template::Pareto`], T83) of the cells of column `y` (text or numbers): columns of
     /// the count of each distinct value, most frequent first, in the left layer, and the cumulative percent as a
     /// line with symbols in a right-axis layer fixed to 0 - 100.
     pub fn plot_pareto(&mut self, y: ColumnId) -> Result<WindowId, ProjectError> {

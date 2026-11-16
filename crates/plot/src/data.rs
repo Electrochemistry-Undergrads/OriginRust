@@ -64,12 +64,15 @@ pub(crate) struct PlotData<'a> {
     pub bar: Option<BarSlot>,
     /// The statistics a box chart plot draws; `None` for other kinds.
     pub boxed: Option<BoxStats>,
+    /// For a column scatter plot, `(position, column name)`: the plot stands at 1, 2, 3, ... in plot order
+    /// and its X values are the position plus a jitter; `None` for other kinds.
+    pub column_at: Option<(f64, String)>,
     /// The boxes of a grouped box chart plot of indexed data (T76), one per level of the main group present in
     /// its subset, at dodged positions; empty for other plots.
     pub gboxes: Vec<BoxStats>,
     /// The names of the categories at 1, 2, ... of a plot of indexed data (the levels of its main group).
     pub categories: Option<Vec<String>>,
-    /// The name of the one position of an interval plot point (T82): its column's name.
+    /// The name of the one position of an interval plot point (T83): its column's name.
     pub slot_label: Option<String>,
     /// The density silhouette a violin plot draws (its box statistics are in `boxed`); `None`
     /// for other kinds.
@@ -264,7 +267,7 @@ fn indexed_data(project: &Project, pd: &mut PlotData, slot: usize, slots: usize)
     true
 }
 
-/// The points of an interval plot or Pareto chart (T82). An interval plot point is the mean of the plot's visible
+/// The points of an interval plot or Pareto chart (T83). An interval plot point is the mean of the plot's visible
 /// numbers at position `slot` (1, 2, ... in plot order) with the half width of its error bar as `err` (NaN for
 /// fewer than two numbers). A Pareto plot is read from the cells of its column: its categories are the distinct
 /// values, most frequent first, at 1, 2, ...; the bars are the counts, the curve the running percent.
@@ -570,6 +573,15 @@ fn attach_waterfall_colors(project: &Project, layer: &Layer, plots: &mut [PlotDa
     }
 }
 
+/// The X value of the `k`-th row of the column scatter plot at position `g + 1` (0-based `g`): the position
+/// plus a fixed pseudo-random shift of up to 0.15 either way (the golden-ratio sequence, so the picture is the
+/// same every time). Origin's points stayed within about +-0.15 of their column (measured); its jitter rule
+/// itself was not measured, so the sequence is Sheaf's choice.
+fn column_jitter(g: usize, k: usize) -> f64 {
+    let u = ((k as f64 + 1.0) * 0.618_033_988_749_894_9).fract();
+    (g + 1) as f64 + (u - 0.5) * 0.30
+}
+
 /// The drawable plots of a layer, in plot order, with their stack offsets. A plot that is hidden
 /// or whose Y column is missing or not numeric is skipped (a hidden plot still keeps its place in
 /// the stack).
@@ -578,6 +590,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
     let mut cumulative = sheaf_core::stack::cumulative_add(project, layer);
     let mut plots = Vec::new();
     let mut boxes = 0usize;
+    let mut scatter_columns = 0usize;
     let mut ridges = 0usize;
     let mut intervals = 0usize;
     // The visible grouped box plots of indexed data share the width of a box; each has its slot.
@@ -636,6 +649,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             member: place.member,
             bar: None,
             boxed: None,
+            column_at: None,
             gboxes: Vec::new(),
             categories: None,
             slot_label: None,
@@ -760,6 +774,14 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.xerr = None;
                 pd.base = None;
                 pd.boxed = Some(stats);
+            }
+            PlotKind::ColumnScatter => {
+                scatter_columns += 1;
+                // Every row stands at the plot's position, spread by Sheaf's own deterministic jitter
+                // (Origin's rule was not measured; its points stayed within about +-0.15).
+                let pos = scatter_columns as f64;
+                pd.x = Some(Cow::Owned((0..pd.y.len()).map(|k| column_jitter(scatter_columns - 1, k)).collect()));
+                pd.column_at = Some((pos, project.plot_label(plot)));
             }
             PlotKind::Ridgeline => {
                 // Masked rows are left out, as in a violin; filtered rows too.

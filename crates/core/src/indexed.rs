@@ -49,7 +49,7 @@ pub fn sort_levels(levels: &mut [String]) {
     levels.sort_by(|a, b| compare(numeric, a, b));
 }
 
-/// The cells of `col` counted per distinct value (T82, Pareto chart): `(value as text, count)`, most frequent first,
+/// The cells of `col` counted per distinct value (T83, Pareto chart): `(value as text, count)`, most frequent first,
 /// values with the same count in the order of their first cell. Empty cells are not counted (Sheaf's choice).
 pub fn counts_descending(col: &Column) -> Vec<(String, usize)> {
     let mut out: Vec<(String, usize)> = Vec::new();

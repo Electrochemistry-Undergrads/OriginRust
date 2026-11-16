@@ -671,7 +671,7 @@ pub struct Indexed {
     pub error: IndexedError,
 }
 
-/// The error bar of an interval plot point (T82).
+/// The error bar of an interval plot point (T83).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IntervalError {
@@ -684,7 +684,7 @@ pub enum IntervalError {
     Ci,
 }
 
-/// A plot whose points are computed from its Y column's cells instead of read from them (T82).
+/// A plot whose points are computed from its Y column's cells instead of read from them (T83).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StatPlot {

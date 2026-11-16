@@ -1944,7 +1944,7 @@ pub fn sheet_tab_menu(shown: sheaf_core::sheet_tab::SheetLabel) -> Vec<Entry> {
         sub("Sheet Name to Show", names),
         item("Name and Comments...", Cmd::Sheet(SheetOp::RenameDialog)),
         sep(),
-        grey("Navigate..."),
+        item("Navigate...", Cmd::Sheet(SheetOp::Navigate)),
     ]
 }
 

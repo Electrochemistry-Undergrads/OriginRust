@@ -83,6 +83,8 @@ pub enum SheetOp {
     ShowName(sheaf_core::sheet_tab::SheetLabel),
     /// The corner menu's View switches: show or hide a label row, the row labels or grid lines (T92).
     ToggleView(sheaf_core::sheet_view::ViewSwitch),
+    /// Navigate...: the window that lists the sheets and goes to one (T93).
+    Navigate,
     /// Open the window that asks for a new name.
     RenameDialog,
 }

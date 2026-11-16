@@ -1,6 +1,6 @@
 # T93: Sheet tab Navigate...
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `sheet-navigate`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13h): Origin's Navigate Worksheets window measured; Sheaf's lists the sheets and goes to the picked one. Left: Actions menu, Apply Reorder.
 **Size:** S. **Source:** greyed inventory package B6 (the sheet tab's Navigate...).
 **Spec:** `docs/spec/workbook-model.md` (with the sheet tab section 13h).
 

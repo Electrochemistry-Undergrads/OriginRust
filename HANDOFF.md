@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **335 listed item locations** at the planning
-  baseline (235 menu bar, 19 toolbar, 81 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **334 listed item locations** at the planning
+  baseline (235 menu bar, 19 toolbar, 80 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -361,7 +361,6 @@ captures pass with source hashes unchanged.
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
 | `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
 | `hist-prob` | Claude Windows, session fe4b37eb | B4 slice as new brief T85: Plot > Statistics > Histogram + Probabilities (histogram with the cumulative probability curve on a right axis); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no other B4 plots (T83 interval/Pareto is done) or other sessions' scopes |
-| `sheet-navigate` | Claude Windows, "t30-origin" | B6 slice as new brief T93: the sheet tab Navigate... (Origin measured), app window/menu only | claimed 2026-11-16; worktree swap-transpose, build target/wf-excel; no other B6 items |
 | `fit-surface-more` | Claude Windows, "continue all tasks" | B8 slice as new brief T91: Simulate Surface, Compare Datasets, Nonlinear Implicit Curve Fit, XYZ Surface Area; crates/fit + calc, core tools, Fitting/Mathematics windows, ops CLI, fitting.md/analysis-tools.md | claimed 2026-11-16; no wavelets, peaks, Probability/Q-Q, stats tools |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 

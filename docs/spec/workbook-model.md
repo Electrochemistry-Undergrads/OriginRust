@@ -738,6 +738,11 @@ Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-
   filter. One undo step ("Duplicate sheet without data").
 - The `.opj` written here does not hold the long name or the choice: the save warning names the sheets,
   and the companion keeps them.
+- **Navigate...** (T93) opens "Navigate Worksheets - Book1" in Origin 2016: a table of the sheets (Index,
+  Creation Index, Name with the short name, Columns, Size(KB), Comments, Type "Flat Sheet", Source), the
+  active sheet selected, an Actions menu and Apply Reorder (greyed), OK and Close. Sheaf's window has Index,
+  Name, Long Name, Columns and Rows; clicking picks a sheet, OK or a double click goes to it, Close or
+  Escape closes. Not done: Actions, Apply Reorder.
 
 ## 13i. Worksheet corner menu (T92, measured 2026-11-16, Origin 2016)
 

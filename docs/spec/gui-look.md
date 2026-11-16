@@ -629,7 +629,7 @@ Origin 2016 (scripted clicks and pictures, scratch `re-workspace/scratch/t60/zoo
   Tool**: drag the page (or arrow keys) to pan, mouse wheel (or + and -) to zoom; "+" zooms by 1.25
   and "-" by 0.85 about the middle of the view, an arrow key moves about 2 points; a click with it
   changes nothing.
-- View > Zoom All is a presentation of all graphs (Escape ends it), not a zoom.
+- View > Zoom All: corrected in graphing 23.1 (a zoom of the active graph so that all objects, also those outside the page, fit; the "Hit ESC" reminder belongs to Full Screen).
 
 Sheaf (`crates/app/src/graph_zoom.rs`, `graph_view.rs`): the same Zoom In mode (one click, x2,
 re-centred, up to 3200 %), Zoom Out by halves to 25 %, Whole Page, the Zoom-Panning tool (drag, +/-
@@ -639,7 +639,7 @@ the wheel scrolling a zoomed page (Shift+wheel sideways) and Ctrl+wheel zooming 
 (Sheaf's choices: Origin's wheel without the tool was not measured). Zoom is per window, screen-only
 and not saved; every click, drag and hit-test goes through the zoomed transform. The page raster is
 capped at 4096 px a side (the texture is stretched beyond that). Not built: the zoom combo, Scale
-In/Scale Out (they stay grey), Zoom All, the margin Origin lets the view scroll past the page.
+In/Scale Out and Zoom All (T69, measured in graphing 23; they stay grey), the margin Origin lets the view scroll past the page.
 
 ## 5. Dialogs, as seen
 

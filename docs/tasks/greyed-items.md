@@ -43,7 +43,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T63` | 20 |
 | `T65` | 0 |
 | `T66` | 10 |
-| `B1` | 3 |
+| `T69` | 3 |
 | `B2` | 51 |
 | `B3` | 28 |
 | `B4` | 30 |
@@ -62,7 +62,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 55 items, backlog packages (`B`) 332, not planned (`N`) 20.
+Briefs (`T`) hold 58 items, backlog packages (`B`) 329, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -108,7 +108,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Quick Help · Smart Hint Log
 - `B12` View Windows: None · Windows in Active Folder · Active Folder and Subfolders
 - `B6` Actively Update Plots · Page Break Preview Lines [Workbook]
-- `B1` Zoom All [Graph]
+- `T69` Zoom All [Graph]
 - `T66` Show: Active Layer Indicator · Axis Layer Icons · Object Grid · Layer Grid · Frame · Labels · Data · Active Layer Only · Master Items on Screen [Graph]
 - `T66` Show Data Info [Graph]
 
@@ -223,7 +223,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T58` Format: Font name box · Font size box · Bold · Italic · Underline · Superscript · Subscript · Greek · Increase Font Size · Decrease Font Size · Font Color · Fill Color · Line Color
 - `T63` 2D Graphs: Bar · Stacked Area · Box Chart · Histogram · Bubble
 - `B4` 2D Graphs: High-Low-Close
-- `B1` Tools: Zoom In · Zoom Out
+- `T69` Tools: Zoom In · Zoom Out
 - `B2` Object Edit: Align Left · Align Right · Align Top · Align Bottom · Align Horizontal Center · Align Vertical Center · Make Same Width · Make Same Height · Group · Ungroup
 
 ## Context menus

@@ -25,7 +25,7 @@ and hit-test keeps working at any zoom.
 - **Zoom Out acts at once**: from 200 % it went back to 100 % without a click.
 - At 100 % the whole page shows in the window (the combo said 100% with the page fitted to the
   window when the graph opened).
-- **Zoom All** is a different thing: a presentation of all graphs with a reminder ("Hit ESC to exit,
+- **Zoom All** (corrected by T69, graphing 23.1: it is a zoom of the active graph to all objects; the reminder below is Full Screen's) was first noted as a different thing: a presentation of all graphs with a reminder ("Hit ESC to exit,
   arrow keys to shift to different graphs, Home and End to the first and last graph"); not in this
   slice.
 - Not measured yet (measure in step 1, `tools/origin-ref/origin-screenshot.ps1` style steps): the

@@ -756,16 +756,36 @@ request/staleness rules, own `Action::FormatObject`). Origin's online
 four as acting on selected characters and does not document whole-object behaviour. Fill and
 line/border colour are described on Origin's
 [Style toolbar](https://docs.originlab.com/origin-help/style-toolbar) as setting the fill or line
-colour of the selected object; Sheaf shows them in the Format row (gui-look.md, Format and Style toolbar description). Sheaf choices,
-all **unmeasured** (Origin 2016 measurement remains open): the four text buttons wrap the whole
+colour of the selected object; Sheaf shows them in the Format row (gui-look.md, Format and Style toolbar description). Sheaf whole-text choices,
+**unmeasured** in Origin 2016: the four text buttons wrap the whole
 text in one `\u(`, `\+(`, `\-(` or `\g(` group, or remove that group when the text is exactly one
 such group (nesting counted as the parser does; `\u(a)b` is wrapped, not unwrapped; a group may
 span lines, so multi-line text is one group) and show pressed when wrapped; they apply to free
 labels and to X/Y titles with their own non-empty text, not to the legend or automatic titles.
-Fill Color (palette: None plus the eight basic colours) sets a rectangle's or circle's fill and a
+Fill Color (palette: None plus the 24 Classic colours) sets a rectangle's or circle's fill and a
 visible legend's background; Line Color sets a drawn object's or straight line's colour. Both are
 disabled with a hover reason elsewhere (the legend frame has no colour field). The selection
 survives; undo labels are "Format graph text" and "Format graph object". No model fields added.
+
+Classic object-colour follow-up (2026-11-16): a fresh private Origin 2016 graph contained a
+named rectangle and a named straight line. For each index 1 through 24, the rectangle's
+`fillColor` and `color` and the line's `color` were set to that index. All commands succeeded;
+all three getters returned the assigned index. Each independently exported EMF contains at
+least two matching pen and two matching solid-brush records with the RGB triples in 7.2,
+including Royal 0/0/160, Wine 128/0/0 and Dark Gray 64/64/64. The Royal export was inspected.
+The isolated `Origin.Application` instance and watchdog closed; pre-existing process identities
+were identical before/after. Evidence: ignored `scratch/t58-object-classic-colors` (24 EMFs,
+checked script/log, native-proof.json and native-royal.png). The public properties and creation
+syntax are documented in [Graphic Objects](https://docs.originlab.com/labtalk/ref/graphic-objs/)
+and [Draw](https://docs.originlab.com/labtalk/ref/draw-cmd/).
+
+Sheaf retains the eight basic choices in the root Fill/Line menu and puts the other 16 in
+More Classic colors. This grouping, the visible-legend background mapping and the supported
+target restrictions remain Sheaf UI choices; no native toolbar geometry or legend-background
+measurement is claimed. Extra choices use the original captured target/revision/generation,
+close both menus, preserve the selection, and have the same one-step Undo and unchanged/stale
+no-op rules. The public eight-colour palette constant and font/worksheet controls are unchanged.
+Custom object RGB, Auto, other lists and palette storage remain open.
 
 
 ---
@@ -3282,6 +3302,40 @@ and Scale Elements remain disabled in this dialog. Native mixed-value interactio
 existing Sheaf layer drawing order are not changed by this slice. Supporting current docs:
 [Display tab](https://docs.originlab.com/origin-help/laymanage-displaytab/) and
 [Layer properties](https://docs.originlab.com/labtalk/ref/layer-obj/).
+
+**Display > Color > Border Fill Color and Border Color** (T60 follow-up, Origin 2016,
+2026-11-16): these use a rectangle outside the plot frame. A fresh standard Origin-template
+three-point Line graph starts with Background Color, Border Fill Color and Border Color at
+None. Its frame is left 17.91, top 11.58, width 68.16, height 71.83 percent of the page.
+Border Dimensions shows left 16.6, top 10, right 12.4, bottom 15.2 percent of the layer.
+These are measured fixture values, not defaults established for every template.
+
+Separate fresh graphs were used for a red outline and a red fill, chosen through the settled
+Display palette, Apply and OK. Both checked PNG exports are 800 x 612 pixels. In each,
+the red rectangle's inclusive bounds are (53, 27) to (756, 577), matching the rounded bounds
+from expanding the layer frame by those four percentages of its width/height. The plot frame
+itself is approximately (143, 71) to (689, 510). The outline surrounds the plot and its margins;
+the fill colors both the plot interior and the expanded margins. In the fill export, pixels
+(80, 300), (400, 300) and (400, 50) are red while (10, 10) stays white; those four samples
+are white in the outline control. `layer.color` stays 0 (None), `layer.border` stays 0 and
+the frame percentages do not change. `layer.border` is the separate legacy ornament setting
+(off/shadow/marble/whiteout/blackout); it is not either of these colour controls.
+
+Accepted settled control captures, property readbacks, exports and hashes are recorded in
+ignored scratch `t60-layer-border-display/native-border-proof.json`. Export calls returning
+False and the interrupted first fill run are excluded; the accepted replacement fill completed
+with its own Origin instance and helpers closed. Other sessions' instances were preserved.
+These controls establish the geometry and independence from Background Color; multi-layer
+mixed/selection behavior, overlap drawing order and changes to Border Dimensions remain open.
+
+**Backend prerequisite:** Sheaf's existing `Layer.background` fills the plot frame, and
+`BackgroundStyle.border` strokes that same frame (`plot/fill.rs`, called from `plot/layout.rs`).
+There is no separately stored border fill or four border outsets. Reusing those fields would
+change the wrong rectangle or the independent background colour. Keep both Display colour
+controls disabled until a separately represented layer-relative rectangle, independent fill
+and outline, rendering and persistence are implemented with preview/history/roundtrip tests.
+Preserve the existing plot-frame border semantics and the published Background Color control.
+This measurement slice changes no Rust code, model, renderer, file format or enabled inventory.
 
 **Fit Page to Layers** (`pfit2l`; Margin Control Border (default) or Tight, Border Width 5, Adjust
 Direction Height and Width (default), Height Only, Width Only), measured on the stock page: the

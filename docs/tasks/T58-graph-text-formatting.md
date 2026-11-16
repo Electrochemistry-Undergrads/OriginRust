@@ -200,6 +200,19 @@ one undo step. In its text editor, select characters and apply scripts, Greek or
 with buttons and preview. Screen and every export must agree. Examples: `H\-(2)O`, `\g(m)A`,
 `j / mA cm\+(-2)` and a bold panel letter.
 
+Classic object Fill/Line palette follow-up (`codex/t58-object-classic-colors`): the existing
+rectangle/circle/legend-fill and drawn-object/straight-line targets offer all 24 Classic colours,
+retaining the basic eight and adding More Classic colors. Fresh Origin 2016 rectangle/line
+getters and 24 EMF pen/brush controls establish the RGB values (graphing 7.4). Menu grouping
+and legend mapping remain explicit Sheaf choices. Existing captured requests, selection,
+history and saves are reused; no model, renderer, IO or public basic-palette change.
+Custom object RGB, Auto, other lists and palette storage remain open.
+Fmt, strict workspace/all-target Clippy and all 4,307 tests pass on the integrated worksheet
+label-size source (eight ignored), including
+five new object regressions and all 23 related palette/object tests; inventory293 and eight
+Python tests pass. Source/goldens stayed frozen; current submenu and colour-effect desktop
+captures were inspected and all own app/reference/helper actors closed.
+
 ## Origin facts
 
 Recorded in gui-look 1/4 and the command map: the font box says "Default: Arial", the selected

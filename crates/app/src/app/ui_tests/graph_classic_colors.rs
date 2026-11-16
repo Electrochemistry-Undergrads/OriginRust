@@ -181,7 +181,7 @@ fn graph_font_extras_keep_shape_fill_and_line_palettes_separate() {
     for prefix in ["Fill Color", "Line Color"] {
         click(&mut h, &format!("Format toolbar: {prefix}"));
         assert!(h.query_by_label(&format!("{prefix}: Red")).is_some());
-        assert!(h.query_by_label(&format!("{prefix}: More Classic colors")).is_none());
+        assert!(h.query_by_label(&format!("{prefix}: More Classic colors")).is_some());
         assert!(h.query_by_label(&format!("{prefix}: Royal")).is_none());
         h.key_press(egui::Key::Escape);
         settle(&mut h);

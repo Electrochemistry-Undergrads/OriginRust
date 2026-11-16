@@ -612,7 +612,7 @@ Long Name, Units, Comments and F(x)=. Data is initially selected; the dialog dis
 as its application priority. Data initially has Rich Text off, Allow Enter/Wrap Text/Float on,
 Disable Editing/Show Missing as Blank off, and separate unchecked Font and Color override switches.
 These controls address worksheet categories. Further Data-font measurements below establish
-family/size and future-column behavior; other category mutations remain unmeasured.
+family/size and future-column behavior; label-size measurements follow below.
 
 **Data category fonts (Origin 2016, 2026-11-16).** `wproperties execute:=get iotrgui:=tr`
 returns the Data font size through `tr.TextControl.FontControl.Size`; changing that child to
@@ -634,13 +634,32 @@ large text clips. A later manual cell-font edit can grow its row based on neighb
 Sheaf retains its existing derived-height policy: effective Data fonts grow/shrink rows in the
 grid, print and image paths. Persistent event-driven/sticky heights remain separate work.
 
+**Label category sizes (Origin 2016, 2026-11-16).** Five isolated synthetic cases use
+`wproperties execute:=get iotrgui:=tr`, set `tr.TextControl.ApplyTo$` to Long Name, Units,
+Comments or Column Labels, change `tr.TextControl.FontControl.Size`, then execute `set`.
+Long Name18 changes only Alpha/Beta; Units18 changes only V/mA; Comments18 changes only
+note A/B. New C inherits the corresponding Gamma/nA/note C size. Other label categories and
+data retain 9. Column Labels18 followed by Long Name24 gives specific24 over the other labels18;
+reversing those operations retains the specific24, including new C. Category changes keep
+fixed 16 px label heights and clip larger text. No family or manual-label precedence was established:
+`wcellfmt` get failed in 2016, one toolbar attempt had no glyph effect and another found no
+visible combo. Those attempts and an identity-snapshot race are excluded. Five accepted cases,
+screenshots, scripts and PID/start-time cleanup hashes remain in ignored
+`t59-label-default-fonts/native-proof.json`. Each new private COM instance and guard closed;
+preexisting process identities were preserved. No global input was used for these label probes.
+
 Sheaf enables Format > Worksheet... (F4) with a separate Worksheet Properties window, a Format
-section and Data Apply To category. Font family/size reach all current and future data cells;
+section and Data, Long Name, Units and Comments Apply To categories. Data family/size reach
+all current and future data cells;
 manual per-range properties take precedence. Drafts and Cancel/Escape are inert, each Apply/OK
 is one Undo step, and stale document/sheet requests close. Unchanged OK creates no history.
-The compact layout and changed-properties application are Sheaf choices. The native Font
-apply-mask checkbox is omitted. Standard, headers and all label categories are disabled;
-their propagation/precedence rules need separate measurement. Other worksheet tabs and color/
+The three supported label categories expose point size only and reach existing/future columns
+independently. Switching categories retains drafts; Apply/OK writes all changed drafts together.
+The compact layout, draft policy and manual-label precedence are Sheaf choices; manual-label
+priority remains unverified against Native. Existing derived label heights remain in use.
+The native Font apply-mask checkbox is omitted. Label family, Standard, headers, bulk Column
+Labels and F(x)= controls remain disabled; further mutation/precedence rules need measurement.
+Other worksheet tabs and color/
 text-control defaults remain unavailable. The [official Format tab reference](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
 and [wproperties reference](https://docs.originlab.com/x-function/ref/wproperties/) describe the
 current interface; the 2016 observations above come from the local synthetic probes.

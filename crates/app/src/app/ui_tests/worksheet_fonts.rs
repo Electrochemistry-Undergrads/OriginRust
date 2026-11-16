@@ -185,3 +185,105 @@ fn worksheet_fonts_survive_native_project_and_opj_companion_reopen() {
         assert_eq!(column(&back, "B"), [2.5, 4.5, 6.5, 8.5]);
     }
 }
+
+fn category(h: &mut Harness<'static, SheafApp>, current: &str, next: &str) {
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value(current)).click();
+    settle(h);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, next).click();
+    settle(h);
+}
+
+#[test]
+fn label_category_drafts_apply_together_with_manual_priority_and_one_undo() {
+    let mut h = start_sheet("worksheet-label-font-drafts");
+    let id = project(&h).workbooks().next().unwrap().id;
+    let b = sheet(&h).columns[1].id;
+    h.state_mut().doc.apply("Seed label styles", |p| {
+        let sheet = p.workbook_mut(id).unwrap().sheet_mut();
+        sheet.columns[0].long_name = "Alpha".into();
+        sheet.columns[1].long_name = "Beta".into();
+        sheet.columns[0].units = "mV".into();
+        sheet.columns[0].comments = "Note".into();
+        sheet.apply_cell_format(
+            FormatTarget::label_rows(vec![b], vec![LabelKind::LongName]),
+            CellFormat { size_pt: Some(12.0), bold: Some(true), ..Default::default() },
+        );
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    open(&mut h);
+    category(&mut h, "Data", "Long Name");
+    size(&mut h, "18");
+    category(&mut h, "Long Name", "Units");
+    size(&mut h, "20");
+    category(&mut h, "Units", "Comments");
+    size(&mut h, "24");
+    category(&mut h, "Comments", "Long Name");
+    click(&mut h, "Apply");
+    assert_eq!(painted_size(&h, "Alpha"), [24.0]);
+    assert_eq!(painted_size(&h, "Beta"), [16.0]);
+    assert_eq!(painted_size(&h, "mV"), [20.0 * 4.0 / 3.0]);
+    assert_eq!(painted_size(&h, "Note"), [32.0]);
+    assert_eq!(painted_size(&h, "4.5"), [12.0]);
+    assert!(sheet(&h).font_defaults.data.is_none());
+    assert_eq!(sheet(&h).cell_formats.len(), 1);
+    let applied = project(&h).clone();
+    let rev = h.state().doc.revision();
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.revision(), rev);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+    menu(&mut h, "Edit", "Redo");
+    assert_eq!(project(&h), &applied);
+    open(&mut h);
+    category(&mut h, "Data", "Comments");
+    size(&mut h, "30");
+    category(&mut h, "Comments", "Units");
+    size(&mut h, "40");
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h), &applied);
+}
+
+#[test]
+fn label_only_defaults_reopen_in_both_project_formats_and_style_future_columns() {
+    let mut h = start_sheet("worksheet-label-font-save");
+    let id = project(&h).workbooks().next().unwrap().id;
+    open(&mut h);
+    category(&mut h, "Data", "Long Name");
+    size(&mut h, "18");
+    category(&mut h, "Long Name", "Units");
+    size(&mut h, "12");
+    category(&mut h, "Units", "Comments");
+    size(&mut h, "24");
+    click(&mut h, "OK");
+    h.state_mut().doc.apply("New column", |p| {
+        let col =
+            p.add_column(id, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(vec![101.0])).unwrap();
+        let column = p.workbook_mut(id).unwrap().sheet_mut().column_mut(col).unwrap();
+        column.long_name = "Gamma".into();
+        column.width = Some(20);
+    });
+    settle(&mut h);
+    assert_eq!(painted_size(&h, "Gamma"), [24.0]);
+    assert_eq!(painted_size(&h, "101"), [12.0]);
+    let out = sheaf_io::opj::write(project(&h)).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("cell formatting")));
+    let svg = sheaf_plot::sheet_image_svg(sheet(&h)).unwrap();
+    assert!(svg.contains("Gamma"));
+    for extension in ["sheaf", "opj"] {
+        let path = data_file("worksheet-label-font-output").with_extension(extension);
+        h.state_mut().save_to(path.clone());
+        if extension == "opj" {
+            assert!(sheaf_io::save::companion_path(&path).exists());
+        }
+        let back = start(vec![path]);
+        assert_eq!(sheet(&back).font_defaults, sheet(&h).font_defaults);
+        assert!(sheet(&back).cell_formats.is_empty());
+        let s = sheet(&back);
+        for c in &s.columns {
+            assert_eq!(s.format_index().resolve_label(s, c.id, &LabelKind::LongName).size_pt, Some(18.0));
+            assert!(s.cell_format_at(c.id, 999_999).is_default());
+        }
+        assert_eq!(column(&back, "B"), [2.5, 4.5, 6.5, 8.5]);
+    }
+}

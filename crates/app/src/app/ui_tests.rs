@@ -41,6 +41,7 @@ mod live;
 mod lollipop;
 mod multi_y;
 mod new_graph;
+mod object_classic_colors;
 mod offset_multipliers;
 mod parallel;
 mod recent;

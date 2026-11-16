@@ -60,7 +60,10 @@ and style/literal/reference preservation (graphing 7.8). The renderer and base f
 Automatic text stays automatic when the menu is dismissed; changed colour remains a draft until
 Apply/OK. Existing history and native/Origin-companion persistence are used. Broader/custom
 colour controls, inline family selection and combined-script insertion remain separate work.
-Validation results are recorded after the combined checks.
+Formatting, strict workspace all-target Clippy and 3,981 combined tests pass
+(eight existing ignored), including all 29 related editor UI/helper/preview tests.
+Inventory validation, eight Python tooling tests and three inspected desktop captures pass;
+the editor/test source hashes remain unchanged through validation and capture.
 
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.

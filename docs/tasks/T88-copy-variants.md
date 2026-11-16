@@ -1,6 +1,6 @@
 # T88: Copy formula, Copy label rows, Copy formula and label rows, Copy All
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `copy-variants`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13.4c): Origin's clipboard text measured for all four (and the existing Copy including label rows), whole columns only as Origin greys them for a block, Ctrl+J / Ctrl+Alt+J / Ctrl+Shift+A. Left: where Origin puts user parameter rows; which command Ctrl+Shift+J runs in Origin's workbook.
 **Size:** S. **Source:** greyed inventory package B5 (Edit > Copy submenu on a workbook).
 **Spec:** `docs/spec/workbook-model.md`, clipboard sections (13.4).
 

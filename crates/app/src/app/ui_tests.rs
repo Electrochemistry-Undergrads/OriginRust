@@ -64,6 +64,7 @@ mod toolbar_print;
 mod treemap;
 mod view_modes;
 mod violin;
+mod worksheet_controls;
 mod worksheet_format_toolbar;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
@@ -8878,6 +8879,7 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
     assert_eq!(h.state().doc.undo_label(), Some("K-means cluster analysis"));
 }
 
+mod copy_variants;
 mod data_range;
 mod fill_pattern;
 mod sampling;

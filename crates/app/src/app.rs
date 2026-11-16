@@ -2679,16 +2679,22 @@ impl SheafApp {
         match op {
             CellOp::Copy(_) | CellOp::Cut => {
                 let kind = if let CellOp::Copy(k) = op { k } else { CopyKind::Plain };
+                let part = if let CopyKind::Part(p) = kind { p } else { sheaf_core::clipboard::CopyPart::Values };
                 let options = CopyOptions {
                     // Copy never drops digits: a copy and paste inside Sheaf must give back the same numbers.
                     full_precision: true,
                     label_rows: kind == CopyKind::WithLabels,
+                    part,
                 };
                 let text = sheet.copy_text(&t.columns, t.rows.clone(), options);
                 let external = sheet.copy_external_text(
                     &t.columns,
                     t.rows.clone(),
-                    CopyOptions { full_precision: kind == CopyKind::FullPrecision, label_rows: options.label_rows },
+                    CopyOptions {
+                        full_precision: kind == CopyKind::FullPrecision,
+                        label_rows: options.label_rows,
+                        part,
+                    },
                 );
                 self.worksheet_clipboard.write(ctx, &external, &text);
                 self.copied = text;
@@ -3547,6 +3553,9 @@ impl SheafApp {
                 })
                 .unwrap_or_default(),
             cells: book.and_then(|b| self.books.get(&b)).is_some_and(|s| s.sel != Sel::None),
+            whole_columns: book
+                .and_then(|b| self.books.get(&b))
+                .is_some_and(|s| matches!(s.sel, Sel::Columns | Sel::All)),
             undo: self.doc.undo_label(),
             redo: self.doc.redo_label(),
             undo_ai: self.can_undo_ai_changes(),
@@ -3639,8 +3648,38 @@ impl SheafApp {
         out
     }
 
-    /// Keyboard shortcuts: the keys written in the menu table (Origin's keys for the commands
-    /// Sheaf has), and nothing else.
+    /// Cell-format keys take precedence over graph-only keys such as Ctrl+I.
+    fn worksheet_format_keys(&mut self, ctx: &egui::Context) {
+        use crate::text_format::Change;
+        while let Some((index, key)) = ctx.input(|i| {
+            i.events.iter().enumerate().find_map(|(index, event)| match event {
+                egui::Event::Key { key, pressed: true, modifiers, .. }
+                    if matches!(key, egui::Key::B | egui::Key::I | egui::Key::U)
+                        && modifiers.command
+                        && !modifiers.shift
+                        && !modifiers.alt =>
+                {
+                    Some((index, *key))
+                }
+                _ => None,
+            })
+        }) {
+            let Some(state) = self.text_format().filter(|s| s.worksheet.is_some()) else { break };
+            // Consume individual presses so repeated/different shortcuts keep their event order.
+            ctx.input_mut(|i| {
+                i.events.remove(index);
+            });
+            let change = match key {
+                egui::Key::B => Change::Bold(!state.font.bold),
+                egui::Key::I => Change::Italic(!state.font.italic),
+                egui::Key::U => Change::Underline(!state.worksheet.expect("worksheet key target").underline),
+                _ => unreachable!(),
+            };
+            self.apply(Action::FormatText(state.request(change)), ctx);
+        }
+    }
+
+    /// Menu shortcuts and contextual worksheet cell-format keys.
     fn shortcuts(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         // A widget with the keyboard is a text field, except the grid itself (it takes the
         // keyboard when a cell is clicked so that Tab and the arrows stay with it).
@@ -3662,6 +3701,9 @@ impl SheafApp {
         // F2, Delete and Ctrl+A belong to the Project Explorer while it has the keyboard.
         if !typing && !self.dialog_open() {
             explorer::handle_keys(ctx, &mut self.panels.explorer, self.doc.project(), actions);
+        }
+        if !typing && !self.panels.explorer.focus && !egui::Popup::is_any_open(ctx) && !self.dialog_open() {
+            self.worksheet_format_keys(ctx);
         }
         // The cursor keys, Tab, Enter and typing belong to the cells of the active worksheet,
         // unless a text field, a menu or a dialog has the keyboard.
@@ -3707,9 +3749,15 @@ impl SheafApp {
                 if typing && !menus::works_while_typing(&cmd) {
                     continue;
                 }
-                // Ctrl+G is Go to in a workbook and Export Graphs in a graph: a key goes to the
-                // command that can run now.
-                let shared = matches!(cmd, menus::Cmd::GoToCell | menus::Cmd::ExportGraph);
+                // Ctrl+G is Go to in a workbook and Export Graphs in a graph, Ctrl+J Copy formula
+                // and Copy Page (as in Origin): a key goes to the command that can run now.
+                let shared = matches!(
+                    cmd,
+                    menus::Cmd::GoToCell
+                        | menus::Cmd::ExportGraph
+                        | menus::Cmd::CopyPage
+                        | menus::Cmd::Copy(crate::actions::CopyKind::Part(sheaf_core::clipboard::CopyPart::Formula))
+                );
                 let action = menus::resolve(&cmd, &menu_ctx);
                 if shared && action.is_err() {
                     continue;

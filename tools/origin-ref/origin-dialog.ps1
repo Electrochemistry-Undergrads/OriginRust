@@ -185,6 +185,13 @@ public static class DlgOpen {
       [Sheaf.AfterInput]::Key([byte]$vk, $l.StartsWith('@KEYDOWN:')); Start-Sleep -Milliseconds 200; continue
     }
     if ($l.StartsWith('@KEY:')) { [System.Windows.Forms.SendKeys]::SendWait($l.Substring(5)); Start-Sleep -Milliseconds 800; continue }  # SendKeys notation
+    if ($l.StartsWith('@CLIP:')) {
+      # "@CLIP:path.txt" saves the clipboard's text (what an Edit > Copy item put there), UTF-8.
+      # Read in a separate STA process: a background job is MTA and sees an empty clipboard.
+      $dest = $l.Substring(6)
+      & powershell.exe -NoProfile -STA -Command "`$c = Get-Clipboard -Raw; if (`$null -eq `$c) { `$c = '' }; [IO.File]::WriteAllText('$dest', `$c, [Text.UTF8Encoding]::new(`$false))"
+      "saved clipboard " + $dest; continue
+    }
     if ($l.StartsWith('@ECHO:')) { '== ' + $l.Substring(6); continue }  # a label in the output
     if ($l -eq '@CURSOR') { "cursor = " + [Sheaf.AfterInput]::CursorName(); continue }
     if ($l.StartsWith('@CURSORSHOT:')) { [Sheaf.AfterInput]::CursorShot($l.Substring(12)); "saved cursor " + $l.Substring(12); continue }

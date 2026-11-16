@@ -1,6 +1,6 @@
 //! The worksheet adapter for the shared Format toolbar. No data values are edited here.
 
-use crate::text_format::{Change, Mixed, Snapshot, Target};
+use crate::text_format::{Change, Mixed, Snapshot, Target, WorksheetStyle};
 use sheaf_core::cellformat::{CellFormat, FormatIndex, FormatTarget, MAX_CELL_PT, MIN_CELL_PT, ResolvedStyle};
 use sheaf_core::graph::Font;
 use sheaf_core::{Color, Document, WindowId, Worksheet};
@@ -16,6 +16,8 @@ struct Values {
     size: f32,
     bold: bool,
     italic: bool,
+    underline: bool,
+    fill: Option<Color>,
     color: Color,
 }
 
@@ -26,6 +28,8 @@ impl Values {
             size: style.size_pt.unwrap_or(9.0),
             bold: style.bold,
             italic: style.italic,
+            underline: style.underline,
+            fill: style.fill,
             color: style.text_color.unwrap_or(Color::BLACK),
         }
     }
@@ -69,11 +73,15 @@ impl Cache {
             mixed.size |= first.size != value.size;
             mixed.bold |= first.bold != value.bold;
             mixed.italic |= first.italic != value.italic;
+            mixed.underline |= first.underline != value.underline;
+            mixed.fill |= first.fill != value.fill;
             mixed.color |= first.color != value.color;
         });
         // Origin's B/I buttons follow the first selected cell even in a mixed selection.
         let font = first.font();
-        let snapshot = Snapshot { target, font, mixed, generation: doc.generation(), revision: doc.revision() };
+        let worksheet = Some(WorksheetStyle { underline: first.underline, fill: first.fill });
+        let snapshot =
+            Snapshot { target, font, mixed, worksheet, generation: doc.generation(), revision: doc.revision() };
         self.0.replace(Some(snapshot.clone()));
         Some(snapshot)
     }
@@ -152,6 +160,8 @@ pub fn apply(doc: &mut Document, book: WindowId, sheet: usize, target: FormatTar
     match change {
         Change::Bold(value) => patch.bold = Some(value),
         Change::Italic(value) => patch.italic = Some(value),
+        Change::Underline(value) => patch.underline = Some(value),
+        Change::Fill(value) => patch.fill = Some(value.unwrap_or(Color::TRANSPARENT)),
         Change::Color(color) => patch.text_color = Some(color),
         Change::Family(name) => {
             let name = name.trim();
@@ -187,6 +197,8 @@ pub fn apply(doc: &mut Document, book: WindowId, sheet: usize, target: FormatTar
         visit(ws, &target, &index, |_, style| {
             changed |= patch.bold.is_some_and(|v| v != style.bold)
                 || patch.italic.is_some_and(|v| v != style.italic)
+                || patch.underline.is_some_and(|v| v != style.underline)
+                || patch.fill.is_some_and(|v| if v.a == 0 { style.fill.is_some() } else { style.fill != Some(v) })
                 || patch.font.as_ref().is_some_and(|v| {
                     if v.is_empty() { style.font.is_some() } else { v.as_str() != style.font.unwrap_or("Arial") }
                 })

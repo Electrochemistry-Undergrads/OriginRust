@@ -1264,8 +1264,8 @@ fn draw_error_bars(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
 /// Smallest and largest symbol width of a bubble plot, in points: Origin scales the width linearly
 /// with the Z value, from the smallest to the largest (measured: 8 points with Z from 1 to 9 gave
 /// rings 2.4 and 21 pt wide, 5 pt at Z = 2, 15 pt at Z = 6).
-const BUBBLE_MIN_PT: f64 = 2.0;
-const BUBBLE_MAX_PT: f64 = 20.0;
+pub(crate) const BUBBLE_MIN_PT: f64 = 2.0;
+pub(crate) const BUBBLE_MAX_PT: f64 = 20.0;
 
 /// The colour of a colour mapped symbol at `t` in 0..1: blue, cyan, green, yellow, red (a stand-in:
 /// Origin's default colour map was not measured).
@@ -1285,14 +1285,14 @@ pub(crate) fn map_color(t: f64) -> sheaf_core::Color {
 
 /// The position of `v` between the smallest and largest finite value of `z[from..to]`, 0..1; 0.5
 /// when all values are equal.
-fn z_range(z: &[f64], pd: &PlotData) -> (f64, f64) {
+pub(crate) fn z_range(z: &[f64], pd: &PlotData) -> (f64, f64) {
     pd.rows()
         .filter_map(|r| z.get(r))
         .filter(|x| x.is_finite())
         .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(*x), b.max(*x)))
 }
 
-fn z_fraction((lo, hi): (f64, f64), v: f64) -> f64 {
+pub(crate) fn z_fraction((lo, hi): (f64, f64), v: f64) -> f64 {
     if hi > lo { ((v - lo) / (hi - lo)).clamp(0.0, 1.0) } else { 0.5 }
 }
 

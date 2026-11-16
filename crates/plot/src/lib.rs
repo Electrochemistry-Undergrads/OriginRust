@@ -21,6 +21,7 @@ mod fill;
 mod fonts;
 mod hexbin;
 pub mod hit;
+mod layer_scale;
 mod layout;
 mod legend;
 mod margin;
@@ -71,6 +72,8 @@ mod hexbin_tests;
 mod label_frame_tests;
 #[cfg(test)]
 mod label_whiteout_tests;
+#[cfg(test)]
+mod layer_scale_tests;
 #[cfg(test)]
 mod layers_tests;
 #[cfg(test)]
@@ -505,6 +508,7 @@ pub fn fit_content_bounds(project: &Project, graph: WindowId) -> Result<Option<(
                     | ObjectKind::Shape(_)
                     | ObjectKind::Slope(_)
                     | ObjectKind::StraightLine(_)
+                    | ObjectKind::Scale(_)
             ) && o.bounds.w.is_finite()
                 && o.bounds.h.is_finite()
             {

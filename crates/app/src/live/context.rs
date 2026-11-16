@@ -88,6 +88,9 @@ impl<'a> Context<'a> {
                             ObjectKind::StraightLine(i) => {
                                 layer.straight_lines.get(i).map(|_| json!({"kind": "straight_line", "index": i + 1}))
                             }
+                            ObjectKind::Scale(i) => {
+                                layer.scales.get(i).map(|_| json!({"kind": "scale", "index": i + 1}))
+                            }
                             ObjectKind::Shape(i) => {
                                 layer.shapes.get(i).map(|_| json!({"kind": "shape", "index": i + 1}))
                             }

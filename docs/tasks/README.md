@@ -71,6 +71,7 @@ All six are **open**. The older index below retains implementation history and p
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
 | [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring; claim letters A–K independently |
 | [T65](T65-graph-view-zoom-pan.md) | 4 (B1), P1 | M | Done 2026-11-15: Zoom In mode, Zoom Out, Whole Page, Zoom-Panning tool; left: zoom combo, Scale In/Out, Zoom All |
+| [T67](T67-add-straight-line.md) | 4 (B3), P1 | M | Add Straight Line (Origin's addline); in progress 2026-11-15 (`straight-line`) |
 
 ## Index
 
@@ -137,7 +138,6 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T57](T57-deconvolution-stft.md) | Deconvolution and STFT (Signal Processing) | M | claimed 2026-11-15 (`deconv-stft`, Claude macOS "violin") |
 | [T56](T56-user-graph-templates.md) | Save Template As and Plot > User Templates (a graph's look without data, applied to new columns; CLI `--template`) | M | open; stopped 2026-11-15: unverified core/io start on remote branch `user-templates` (`449ef7b`), free to continue or restart |
 | [T64](T64-significance-plot.md) | Multiple comparisons plot with significance brackets | M | done 2026-11-15 (statistics 23, `significance-plot`, macOS); left: two-way ANOVA, paired and one-sample, Origin measurements, editable brackets |
-| [T67](T67-add-straight-line.md) | 4 (B3), P1 | M | Add Straight Line (Origin's addline); in progress 2026-11-15 (`straight-line`) |
 
 For every active claim (including matrices/contour/heatmaps), read the current
 [HANDOFF table](../../HANDOFF.md). This index is not a second claims ledger. Older branches and

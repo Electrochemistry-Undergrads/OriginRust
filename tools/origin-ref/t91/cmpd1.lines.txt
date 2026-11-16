@@ -1,0 +1,18 @@
+newbook;
+col(A) = data(0.5, 10, 0.5);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 20, 1);
+col(B) = 1 + 3*exp(-col(A)/2) + 0.05*sin(37*col(D)) + 0.04*sin(101.3*col(D));
+col(C) = 1.2 + 2.6*exp(-col(A)/2.3) + 0.05*sin(29*col(D)) + 0.04*sin(83.1*col(D));
+nlbegin iy:=(1,2) func:=ExpDec1 nltree:=tt;
+nlfit;
+nlend output:=1;
+nlbegin iy:=(1,3) func:=ExpDec1 nltree:=tt;
+nlfit;
+nlend output:=1;
+fitcmpdata result1:=[Book1]FitNL1 result2:=[Book1]FitNL2 param:=1 statics:=1 name1:=First name2:=Second rt:=<new name:=cmpD>;
+#[Book1]Sheet1
+#[Book1]FitNL1
+#[Book1]FitNL2
+#[Book1]cmpD

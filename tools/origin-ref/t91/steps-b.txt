@@ -1,0 +1,4 @@
+xpts=@T:9,3
+ypts=@T:12,2
+noise=@T:13,0
+ok=@B:OK|@W:4000

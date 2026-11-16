@@ -1333,6 +1333,29 @@ filter as an app, so its menu place is not known). Command line: `sheaf analyze 
 --stop2 F] [--pass-weight W] [--stop-weight W] [--magnitude-unit db|linear] [--ripple R] [--attenuation A]
 [--forward-backward]` (alias `fir`; MCP `fir_filter`).
 
+## 18. XYZ Surface Area (`xyzarea`; T91)
+
+Analysis > Mathematics > XYZ Surface Area... gives the area of the surface through scattered (X, Y, Z) points. Measured in Origin 2016 on 2026-11-16 (`tools/origin-ref/t91/xyzarea.lines.txt`, cases in `xyzarea-cases.json`, raw output in `re-workspace/scratch/t91/xyzarea.out.txt`); `xyzarea` runs from a script.
+
+- The X-Function: `xyzarea iz:=(1,2,3) area:=aa` (input XYZ range of three columns; output `area`, a number). It writes **no sheet and no report**: only the number, returned in the variable (the Messages Log was not read). The window was not opened.
+- **Method (checked with scipy, not Origin's code): the Delaunay triangulation of the points projected on the XY plane, the surface area is the sum of the areas of the 3D triangles** `0.5 |(p2 - p1) x (p3 - p1)|`. Origin equals `scipy.spatial.Delaunay` + that sum to 1e-15 relative in every case that has a unique triangulation:
+
+  | Case (z) | Points | Origin | Delaunay sum |
+  |---|---|---|---|
+  | plane `2x + 3y`, 5 by 5 grid on 0 to 1 | 25 | 3.7416573867739404 (exact sqrt(14)) | same |
+  | paraboloid `x^2 + y^2`, 6 by 6 grid | 36 | 1.8561937972253828 | 1.8561937972253826 |
+  | the same, 11 by 11 grid | 121 | 1.8602226321628541 | 1.8602226321628539 |
+  | one triangle (0,0,0), (1,0,0), (0,1,2) | 3 | 1.1180339887498949 | sqrt(5)/2 |
+  | flat unit square | 4 | 1 | 1 |
+  | `sin(3x) y + x` on 25 random points of the unit square (seed 7) | 25 | 1.1947142916930125 | 1.1947142916930125 |
+
+  (The grid cases are cocircular: both diagonals of every cell give the same area for these symmetric surfaces, so they do not show which diagonal Origin takes.)
+- **Duplicate (x, y) points are merged by averaging their Z**: the points (0,0,0), (1,0,1), (0,1,2), (1,1,3) and (1,1,5) gave 3.09557356477856, which is the area of the square surface with z(1,1) = 4 (1.2247449 + 1.8708287); a triangulation that kept z = 3 gives 2.4494897 (what scipy returns) and z = 5 gives 3.774 or 3.992.
+- Too few or degenerate points (two points; four collinear points in XY): no result, the output variable is left unset (the `area` argument keeps its previous value) and the call returns false; the message was not read.
+- Not measured: the window (title, controls: the input range selector, the Output field), whether the result also goes to the Results Log or a sheet when run from the menu, the number of decimals shown, the diagonal choice on cocircular points, tolerance for nearly duplicate points, missing values in the input, the maximum point count, and a Z column not designated Z.
+
+**Sheaf's choice** until the window is measured: Analysis > Mathematics > XYZ Surface Area... uses the XYZ columns of the active sheet (X, Y, Z designations as the surface fits do, fitting.md 14), runs the Delaunay triangulation (`sheaf-calc`, new module, one triangulation also usable by the gridding work that other packages plan) and writes a small results sheet or log line with the area, the number of points used and of triangles, and the number of merged duplicates; `sheaf analyze xyz-area` prints the number; rows with a missing X, Y or Z are skipped and counted.
+
 ## Files
 
 `tools/iir-fir-ref.py` makes the scipy numbers of section 17 (not Origin).

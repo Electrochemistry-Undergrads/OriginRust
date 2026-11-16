@@ -149,3 +149,12 @@ entry, hence the fill is repeated; the "Input Data" group remembers whether it w
 the input book; `$wcol(c)[r]$` lines in the after file print its cells. `g3.py` has the data generators. The numbers and
 data of all runs are in `stats6/t81-origin.compact.json` (`t81-make-compact.py` rebuilds it from the raw output, which stays in
 the scratch folder). Findings: `docs/spec/statistics.md`, sections 24 to 26.
+
+## Simulate Surface, Compare Datasets, implicit fit, XYZ Surface Area (T91)
+
+`t91/` holds the line scripts and data: `xyzarea.lines.txt` (+ `xyzarea-cases.json`; `xyzarea` is scriptable and returns the
+area in a variable), `imp1.lines.txt` (+ `circle-data.json`; a circle fitted with `nlbegin ... func:=Circle`),
+`cmpd1.lines.txt` and `cmpd3.lines.txt` (`fitcmpdata` returns false from a script), `run.sh` and the `steps-*.txt` files (open
+`simsurface` and `fitcmpdata` through the menu with `origin-dialog.ps1 -MenuClicks`: eight or twelve separate `{DOWN}` keys
+after `K:%a;K:F`; edit boxes are numbered from 0). What they showed is in `docs/spec/fitting.md` 16-18 and
+`docs/spec/analysis-tools.md` 18.

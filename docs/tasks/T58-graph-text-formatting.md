@@ -207,7 +207,8 @@ getters and 24 EMF pen/brush controls establish the RGB values (graphing 7.4). M
 and legend mapping remain explicit Sheaf choices. Existing captured requests, selection,
 history and saves are reused; no model, renderer, IO or public basic-palette change.
 Custom object RGB, Auto, other lists and palette storage remain open.
-Fmt, strict workspace/all-target Clippy and all 4,301 tests pass (eight ignored), including
+Fmt, strict workspace/all-target Clippy and all 4,307 tests pass on the integrated worksheet
+label-size source (eight ignored), including
 five new object regressions and all 23 related palette/object tests; inventory293 and eight
 Python tests pass. Source/goldens stayed frozen; current submenu and colour-effect desktop
 captures were inspected and all own app/reference/helper actors closed.

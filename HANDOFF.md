@@ -77,8 +77,8 @@ Classic colours through the basic eight plus More Classic colors. Fresh private 
 rectangle/line getters and 24 EMF pen/brush controls confirm the RGB values; menu grouping and
 legend mapping remain Sheaf choices. Five new UI regressions cover every colour and supported
 target, rendered primitives, one-step Undo, unchanged/dismissed/stale requests, SVG and native/
-companion saves. Fmt, strict workspace/all-target Clippy, all 4,301 workspace tests (eight ignored),
-all 23 related palette/object tests, inventory293 and eight Python tests pass with frozen source/
+companion saves. Fmt, strict workspace/all-target Clippy, all 4,307 workspace tests (eight ignored) on the integrated worksheet label-size
+source, all 23 related palette/object tests, inventory293 and eight Python tests pass with frozen source/
 goldens. Current submenu and Royal-fill/Orange-outline desktop captures were inspected; all
 own app/reference/helper actors closed. Only the existing object-menu hook and a private helper
 change production code; the basic palette contract and model/renderer/IO stay intact. Only this

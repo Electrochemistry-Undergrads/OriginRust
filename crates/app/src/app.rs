@@ -2097,10 +2097,11 @@ impl SheafApp {
                     }
                 });
             }
-            Action::FullScreen(graph) => {
+            Action::FullScreen(graph) if self.full_screen.is_none() => {
                 self.full_screen = Some(crate::view_modes::FullScreen::new(graph, !self.full_screen_reminder_off));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
             }
+            Action::FullScreen(_) => {}
             Action::DataEdit(edit) => self.data_edit(edit),
             Action::AddText { graph, layer, at } => {
                 let state = self.graphs.entry(graph).or_default();
@@ -4615,8 +4616,11 @@ impl eframe::App for SheafApp {
             self.pending = Some(Pending::Quit);
         }
         self.active = self.workspace.active();
-        self.shortcuts(ctx, &mut actions);
         let full = self.full_screen.is_some();
+        // Full Screen shows only the page: the editing shortcuts stay off while it is up.
+        if !full {
+            self.shortcuts(ctx, &mut actions);
+        }
 
         if !full {
             egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| self.menu_bar(ui, &mut actions));

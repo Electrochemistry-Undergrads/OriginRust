@@ -201,7 +201,8 @@ impl Document {
     /// Reverts the last step. Returns its label, or `None` if there was nothing to undo.
     pub fn undo(&mut self) -> Option<String> {
         let step = self.undo.pop()?;
-        let current = std::mem::replace(&mut self.project, step.project);
+        let mut current = std::mem::replace(&mut self.project, step.project);
+        self.keep_view_modes(&mut current);
         let current_state = std::mem::replace(&mut self.state, step.state);
         self.redo.push(Step { label: step.label.clone(), project: current, state: current_state, merge_token: 0 });
         self.dirty = self.saved_state != Some(self.state);
@@ -209,9 +210,17 @@ impl Document {
         Some(step.label)
     }
 
+    /// View modes are view state, not an undo step: undo and redo keep the modes now in
+    /// effect (for windows that still exist) instead of rolling them back with the snapshot.
+    fn keep_view_modes(&mut self, swapped_out: &mut Project) {
+        let modes = std::mem::take(&mut swapped_out.view_modes);
+        self.project.view_modes = modes.into_iter().filter(|(w, _)| self.project.window(*w).is_some()).collect();
+    }
+
     pub fn redo(&mut self) -> Option<String> {
         let step = self.redo.pop()?;
-        let current = std::mem::replace(&mut self.project, step.project);
+        let mut current = std::mem::replace(&mut self.project, step.project);
+        self.keep_view_modes(&mut current);
         let current_state = std::mem::replace(&mut self.state, step.state);
         self.undo.push(Step { label: step.label.clone(), project: current, state: current_state, merge_token: 0 });
         self.dirty = self.saved_state != Some(self.state);
@@ -238,6 +247,21 @@ impl Document {
 mod tests {
     use super::*;
     use crate::column::{ColumnData, Designation};
+
+    #[test]
+    fn undo_and_redo_keep_the_view_mode() {
+        use crate::project::ViewMode;
+        let mut doc = Document::new(Project::new());
+        let g = doc.apply("New workbook", |p| p.add_workbook(""));
+        doc.apply("Edit", |p| {
+            p.add_workbook("");
+        });
+        doc.adjust_view(|p| p.set_view_mode(g, ViewMode::Window));
+        doc.undo();
+        assert_eq!(doc.project().view_mode(g), ViewMode::Window);
+        doc.redo();
+        assert_eq!(doc.project().view_mode(g), ViewMode::Window);
+    }
 
     #[test]
     fn undo_and_redo_restore_data_and_structure() {

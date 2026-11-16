@@ -1,6 +1,6 @@
 # T106: Import Filters Manager
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `import-filters`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", import-ascii.md "Import Filters Manager"): Origin's Filter Manager measured (a table of import file types); Sheaf's lists its importers' file types and the saved import settings with Delete. Left: Supported/Drag&Drop switches, Customize Menu, Edit.
 **Size:** S. **Source:** greyed inventory package B13 (Tools > Import Filters Manager...).
 **Spec:** `docs/spec/import-ascii.md`, "Dialog themes".
 

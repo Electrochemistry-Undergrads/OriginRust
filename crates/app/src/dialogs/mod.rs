@@ -18,6 +18,7 @@ pub mod export;
 pub mod export_excel;
 pub mod export_sheet;
 pub mod fill_pattern;
+pub mod filter_manager;
 pub mod filter_options;
 pub mod find;
 pub mod find_project;

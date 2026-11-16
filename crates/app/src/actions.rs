@@ -316,6 +316,8 @@ pub enum Action {
     ThemeOrganizer,
     /// Tools > Fitting Function Organizer...: browse the built-in fit functions.
     FitOrganizer,
+    /// Tools > Import Filters Manager...: the import file types and the saved import settings.
+    FilterManager,
     /// Plot > System Templates...: the window of the built-in templates, for these columns.
     SystemTemplates {
         book: WindowId,

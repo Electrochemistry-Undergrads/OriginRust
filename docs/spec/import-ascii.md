@@ -667,3 +667,16 @@ Measure on Windows with `tools/origin-ref` (screenshots of the theme drop-down a
 5. How the Import Wizard's Import Filter list relates to the Dialog Theme of impASC (the same files or not).
 6. Whether OK records `<last used>` only when the import succeeds.
 7. Whether the theme name box accepts a typed new name directly (Save As without a prompt).
+
+## Import Filters Manager (T106, measured 2026-11-16, Origin 2016)
+
+Tools > Import Filters Manager... opens Origin's **Filter Manager** (screenshot `re-workspace/scratch/t106`,
+local only): a table of the import filters with the columns Filter, Folder (System), Supported (a tick),
+File Extensions and Drag&Drop Exclusion (ASCII `*.txt;*.dat;*.asc`, CDF, CSV `*.CSV`, DiademDAT, DSC, DT,
+EarthProbe, EDF, Excel `*.xls;*.xlsx;*.xlsm`, Famos, HDF5, HEKA, Igorpro, Image, ISF, JCAMP, JNB, ...) and
+the buttons Customize Menu..., Edit, Apply and Cancel.
+
+Sheaf's Filter Manager (`dialogs/filter_manager.rs`) lists the file types its importers read (Filter,
+Folder System, Read by, File Extensions: ASCII, CSV, CH Instruments, Excel, Origin project) and, below,
+the saved settings of each import window (the Dialog Themes of this file, by window) with Delete. Not
+done: Supported and Drag&Drop Exclusion switches, Customize Menu..., Edit (Sheaf's filters are fixed).

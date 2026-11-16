@@ -8986,6 +8986,7 @@ mod copy_variants;
 mod corner_menu;
 mod data_range;
 mod fill_pattern;
+mod filter_manager;
 mod find_project;
 mod fit_organizer;
 mod graph_themes;

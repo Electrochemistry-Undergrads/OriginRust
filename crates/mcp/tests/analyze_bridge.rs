@@ -261,6 +261,7 @@ fn bridged_tools_give_the_numbers_of_the_command_line() {
         &["fir-filter", "--y", "B", "--order", "30", "--cutoff", "10", "--window", "blackman"],
     );
     parity(&dir, "polygon_area", &["A"], json!({}), &["polygon-area", "--y", "A"]);
+    parity(&dir, "xyz_area", &["A", "B", "C"], json!({}), &["xyz-area", "--y", "A,B,C"]);
     parity(&dir, "hilbert", &["A"], json!({}), &["hilbert", "--y", "A"]);
 }
 

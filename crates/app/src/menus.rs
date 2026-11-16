@@ -250,6 +250,8 @@ pub enum Cmd {
     FitMore(FitMoreKind),
     /// Analysis > Fitting > Simulate Curve...
     SimulateCurve,
+    /// Analysis > Fitting > Simulate Surface...
+    SimulateSurface,
     /// The graph settings of the active layer on a tab.
     GraphProps(PropsTab),
     /// Graph > Layer Contents... (F12): Origin's own window for the plots of a layer; `None` is the
@@ -1337,7 +1339,7 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Normalize Columns...", Cmd::Analyze(AnalysisKind::Normalize)),
                 item("Average Multiple Curves...", Cmd::Analyze(AnalysisKind::AverageCurves)),
                 item("Polygon Area...", Cmd::Analyze(AnalysisKind::PolygonArea)),
-                grey("XYZ Surface Area..."),
+                item("XYZ Surface Area...", Cmd::Analyze(AnalysisKind::XyzArea)),
                 item("Median Filter...", Cmd::Analyze(AnalysisKind::MedianFilter)),
                 grey("Special Filter..."),
                 grey("Inverse..."),
@@ -1364,17 +1366,17 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Multiple Linear Regression...", Cmd::FitMore(FitMoreKind::Multiple)),
                 sep(),
                 keyed("Nonlinear Curve Fit...", ctrl(Key::Y), Cmd::Fit(FitKind::BuiltIn)),
-                grey("Nonlinear Implicit Curve Fit..."),
+                item("Nonlinear Implicit Curve Fit...", Cmd::FitMore(FitMoreKind::Implicit)),
                 item("Nonlinear Surface Fit...", Cmd::Fit(FitKind::Surface)),
                 sep(),
                 item("Simulate Curve...", Cmd::SimulateCurve),
-                grey("Simulate Surface..."),
+                item("Simulate Surface...", Cmd::SimulateSurface),
                 sep(),
                 item("Exponential Fit...", Cmd::Fit(FitKind::Exponential)),
                 item("Single Peak Fit...", Cmd::Fit(FitKind::SinglePeak)),
                 item("Sigmoidal Fit...", Cmd::Fit(FitKind::Sigmoidal)),
                 sep(),
-                grey("Compare Datasets..."),
+                item("Compare Datasets...", Cmd::FitMore(FitMoreKind::CompareDatasets)),
                 item("Compare Models...", Cmd::FitMore(FitMoreKind::Compare)),
                 item("Rank Models...", Cmd::FitMore(FitMoreKind::Rank)),
             ],
@@ -2787,6 +2789,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         },
         // The window needs no data: with no workbook it makes a new one.
         Cmd::SimulateCurve => Action::SimulateCurve { book: c.book.or(c.curve.map(|(book, _)| book)) },
+        Cmd::SimulateSurface => Action::SimulateSurface { book: c.book.or(c.curve.map(|(book, _)| book)) },
         Cmd::FitMore(kind) => match (c.book, c.curve) {
             (Some(book), _) => Action::FitMore { book, column: c.selected.first().copied(), kind: *kind },
             (None, Some((book, y))) if c.kind == WindowKind::Graph => {

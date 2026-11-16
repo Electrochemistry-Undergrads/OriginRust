@@ -293,7 +293,13 @@ pub fn run_job_to(project: &mut Project, target: &Target, job: Job, output: &ana
             return Ok(run);
         }
     };
-    let columns = if target.y.is_empty() {
+    let columns = if target.y.is_empty() && matches!(tool, Tool::XyzArea) {
+        // XYZ Surface Area works on the Z column with its Y and X, not on the plotted Y columns.
+        let found = project.workbook(book).and_then(|b| b.sheets.get(sheet)).and_then(analysis::xyz_default_columns);
+        found
+            .map(|c| c.to_vec())
+            .ok_or_else(|| anyhow!("the sheet has no X, Y and Z columns; name them with --y X,Y,Z"))?
+    } else if target.y.is_empty() {
         project.default_plot_columns(book, sheet, Template::Line)
     } else {
         named_columns(project, book, sheet, &target.y)?

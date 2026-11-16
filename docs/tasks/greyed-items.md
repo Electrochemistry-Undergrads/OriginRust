@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **332 greyed items: 233 in the menu bar, 19 on the toolbars, 80 in context menus.**
+original inventory baseline. This is not a new runtime audit. **328 greyed items: 229 in the menu bar, 19 on the toolbars, 80 in context menus.**
 
 ## How to read and keep this file
 
@@ -57,13 +57,14 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T81` | 0 |
 | `T82` | 0 |
 | `T83` | 0 |
+| `T91` | 0 |
 | `B2` | 33 |
 | `B3` | 19 |
 | `B4` | 19 |
 | `B5` | 13 |
 | `B6` | 23 |
 | `B7` | 6 |
-| `B8` | 13 |
+| `B8` | 9 |
 | `B9` | 13 |
 | `B11` | 10 |
 | `B12` | 12 |
@@ -74,7 +75,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 64 items, backlog packages (`B`) 248, not planned (`N`) 20.
+Briefs (`T`) hold 64 items, backlog packages (`B`) 244, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -138,9 +139,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B16` Worksheet Script...
 
 ### Analysis
-- `B8` Mathematics: XYZ Surface Area...
 - `B14` Mathematics: Special Filter... · Inverse...
-- `B8` Fitting: Nonlinear Implicit Curve Fit... · Simulate Surface... · Compare Datasets...
 - `B14` Signal Processing > FFT: 2D FFT... · 2D IFFT...
 - `T57` Signal Processing: Deconvolution... · STFT...
 - `B8` Signal Processing > Wavelet: Decompose... · Reconstruction... · Denoise... · Smooth... · Continuous Wavelet...

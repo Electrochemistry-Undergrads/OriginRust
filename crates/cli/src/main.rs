@@ -17,8 +17,10 @@
 mod analyze;
 mod commands;
 mod fit;
+mod fit_datasets;
 mod merge;
 mod simulate;
+mod simulate_surface;
 
 use clap::{ArgMatches, CommandFactory, FromArgMatches, parser::ValueSource};
 use sheaf_ops::args;

@@ -37,6 +37,7 @@ use crate::dialogs::reshape::{ReshapeDialog, ReshapeOutcome};
 use crate::dialogs::row_filter::RowFilterDialog;
 use crate::dialogs::set_values::SetValuesDialog;
 use crate::dialogs::shape_object::ShapeDialog;
+use crate::dialogs::simsurface::{Outcome as SimulateSurfaceOutcome, SimulateSurfaceDialog};
 use crate::dialogs::simulate::{Outcome as SimulateOutcome, SimulateDialog};
 use crate::dialogs::slope_object::SlopeDialog;
 use crate::dialogs::sort::{SortDialog, SortOutcome};
@@ -168,6 +169,7 @@ pub struct SheafApp {
     merge_graphs: Option<MergeGraphsDialog>,
     label_panels: Option<LabelPanelsDialog>,
     simulate: Option<SimulateDialog>,
+    simulate_surface: Option<SimulateSurfaceDialog>,
     column_props: Option<ColumnPropsDialog>,
     text_dialog: Option<TextDialog>,
     shape_dialog: Option<ShapeDialog>,
@@ -300,6 +302,7 @@ impl SheafApp {
             merge_graphs: None,
             label_panels: None,
             simulate: None,
+            simulate_surface: None,
             column_props: None,
             text_dialog: None,
             shape_dialog: None,
@@ -836,6 +839,7 @@ impl SheafApp {
         self.fit_page = None;
         self.label_panels = None;
         self.simulate = None;
+        self.simulate_surface = None;
         self.column_props = None;
         self.set_values = None;
         self.export = None;
@@ -2012,6 +2016,9 @@ impl SheafApp {
                 }
             }
             Action::SimulateCurve { book } => self.simulate = Some(SimulateDialog::new(self.doc.project(), book)),
+            Action::SimulateSurface { book } => {
+                self.simulate_surface = Some(SimulateSurfaceDialog::new(self.doc.project(), book));
+            }
             Action::SortSheet { column, descending } => self.sort_sheet(column, descending),
             Action::SortRange { columns, descending } => self.sort_selected(columns, descending, true),
             Action::SortColumns { columns, descending } => self.sort_selected(columns, descending, false),
@@ -3902,6 +3909,7 @@ impl SheafApp {
             || self.merge_graphs.is_some()
             || self.label_panels.is_some()
             || self.simulate.is_some()
+            || self.simulate_surface.is_some()
             || self.column_props.is_some()
             || self.text_dialog.is_some()
             || self.shape_dialog.is_some()
@@ -4283,6 +4291,17 @@ impl SheafApp {
                 }
             }
         }
+        if let Some(d) = &mut self.simulate_surface {
+            match d.show(ctx, &mut self.doc) {
+                SimulateSurfaceOutcome::Open => {}
+                SimulateSurfaceOutcome::Closed => self.simulate_surface = None,
+                SimulateSurfaceOutcome::Done { book, message } => {
+                    self.simulate_surface = None;
+                    self.focus(book);
+                    self.say(message);
+                }
+            }
+        }
         if let Some(column) = self.graph_props.as_mut().and_then(|d| d.take_show_workbook())
             && let Some((book, _, _)) = self.doc.project().locate(column)
         {
@@ -4404,6 +4423,22 @@ impl SheafApp {
                     let mut lines = o.comparison.warnings.clone();
                     lines.splice(0..0, o.reports.iter().flat_map(fit_report_lines));
                     self.logs.result(o.message.clone(), lines);
+                    self.panels.reveal(PanelId::Results);
+                    self.say(o.message);
+                }
+                FitMoreOutcome::CompareDatasets(o) => {
+                    self.fit_more = None;
+                    self.show_sheet(o.book, o.sheet);
+                    let mut lines = o.comparison.warnings.clone();
+                    lines.splice(0..0, o.reports.iter().flat_map(fit_report_lines));
+                    self.logs.result(o.message.clone(), lines);
+                    self.panels.reveal(PanelId::Results);
+                    self.say(o.message);
+                }
+                FitMoreOutcome::Implicit(o) => {
+                    self.fit_more = None;
+                    self.show_sheet(o.book, o.param_sheet);
+                    self.logs.result(o.message.clone(), fit_report_lines(&o.report));
                     self.panels.reveal(PanelId::Results);
                     self.say(o.message);
                 }
@@ -5098,6 +5133,15 @@ impl SheafApp {
                         d.choose_function_named(arg);
                     }
                     self.simulate = Some(d);
+                }
+                // simulate-surface or simulate-surface:FUNCTION opens Analysis > Fitting > Simulate Surface.
+                "simulate-surface" => {
+                    let book = project.workbooks().next().map(|b| b.id);
+                    let mut d = SimulateSurfaceDialog::new(self.doc.project(), book);
+                    if !arg.is_empty() {
+                        d.choose_function_named(arg);
+                    }
+                    self.simulate_surface = Some(d);
                 }
                 "label-panels" => {
                     let book = project.workbooks().next().map(|b| b.id);

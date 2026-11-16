@@ -504,6 +504,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             (target, Job::Tool(Tool::Intersect(analysis::IntersectSpec { include_touching: touching })))
         }
         AnalyzeTool::PolygonArea { target } => (target, Job::Tool(Tool::PolygonArea)),
+        AnalyzeTool::XyzArea { target } => (target, Job::Tool(Tool::XyzArea)),
         AnalyzeTool::SubtractLine { target, x1, x2, y1, y2 } => (
             target,
             Job::Tool(Tool::SubtractLine(analysis::SubtractLineSpec {

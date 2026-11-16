@@ -90,6 +90,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T88](T88-copy-variants.md) | Edit > Copy: Copy formula, Copy label rows, Copy formula and label rows, Copy All | S | done 2026-11-16 (workbook-model 13.4c); left: user parameter rows in Origin's text |
 | [T89](T89-copy-columns-to.md) | Copy Columns to... (Origin colcopy) | S | done 2026-11-16 (workbook-model 13g); left: Ignore Hidden Rows, system parameter rows |
 | [T90](T90-sheet-tab-names.md) | Sheet tab: Duplicate Without Data, Sheet Name to Show, sheet long name | M | done 2026-11-16 (workbook-model 13h); left: sheet comments |
+| [T91](T91-simulate-surface-compare-implicit-area.md) | Simulate Surface, Compare Datasets, Nonlinear Implicit Curve Fit, XYZ Surface Area (B8 slice) | L | done 2026-11-16 (`fit-surface-more`, Claude Windows); Origin measured (fitting.md 16-18, analysis-tools.md 18); all four items built; Compare Datasets' test and report layout are Sheaf's own (Origin's not measured), the implicit fit does Circle and Ellipse (PlaneMod not) |
 | [T92](T92-worksheet-corner-menu.md) | Worksheet corner menu: label rows, column/row headers, grid lines | M | done 2026-11-16 (workbook-model 13i); left: Column/Row Header switches, other label rows |
 | [T93](T93-sheet-navigate.md) | Sheet tab Navigate... | S | done 2026-11-16 (workbook-model 13h); left: Actions, Apply Reorder |
 | [T94](T94-sampling-interval-row.md) | Sampling Interval label row (corner menu switch) | S | open: measured (workbook-model 13i), not built; waits for T59's label-row/layout work |

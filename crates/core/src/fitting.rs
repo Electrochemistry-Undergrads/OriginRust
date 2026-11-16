@@ -31,8 +31,10 @@ pub use sheaf_fit::FitReport as Report;
 pub use sheaf_fit::FitStatus;
 pub use sheaf_fit::compare::{Comparison, Ranked, Verdict};
 
+mod datasets;
 mod more;
 mod surface;
+pub use datasets::{CompareDatasetsOptions, CompareDatasetsOutcome, ImplicitOutcome, ImplicitRequest};
 pub use more::{CompareOutcome, MultiRegOutcome, MultiRegRequest, RankOutcome};
 pub use sheaf_fit::nlsf::Algorithm;
 use sheaf_fit::{Bands, FitError, FitReport};

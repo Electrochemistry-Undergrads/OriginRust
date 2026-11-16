@@ -362,6 +362,8 @@ checked against `--root`. CLI enum values use their clap spellings, for example
 parameters:[{name, start}]}]}`: the built-in functions that `simulate_curve` draws, with the starting value of each
 parameter.
 
+**`simulate_surface`** `{function?, params?, x_min?, x_max?, x_points?, y_min?, y_max?, y_points?, noise?, seed?, book?, values?}` (T91, fitting.md 16): XYZ data of one of Origin's 22 surface functions on a grid as a new sheet `SimulateSurface1`, with the values of Origin's window for what is not given; the reply has `book`, `sheet`, `x_column`, `y_column`, `z_column`, `function`, `points`, `notes`, `message` and, up to 1000 points, `x`, `y` and `z`.
+
 **`simulate_curve`** `{function?, params?, from?, to?, points?, log?, x_of?, book?, sheet?, plot?, image?, values?}`
 (`docs/spec/fitting.md` section 13). Writes the X and Y columns of a built-in fit function to a new sheet
 `Simulate<n>` of the workbook, at the X values `from` to `to` (defaults: the function's range in Origin's window, Gauss -1 to 5, see fitting.md 13.1) in `points` steps (default 200),

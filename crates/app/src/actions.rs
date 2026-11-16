@@ -383,6 +383,10 @@ pub enum Action {
     SimulateCurve {
         book: Option<WindowId>,
     },
+    /// Analysis > Fitting > Simulate Surface: the window, with the active workbook if there is one.
+    SimulateSurface {
+        book: Option<WindowId>,
+    },
     /// Sort the rows of the sheet that holds this column by the column's values.
     SortSheet {
         column: ColumnId,

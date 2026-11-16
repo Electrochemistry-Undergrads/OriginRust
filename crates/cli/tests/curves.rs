@@ -76,6 +76,34 @@ fn polygon_area_prints_the_table() {
 }
 
 #[test]
+fn xyz_area_prints_the_surface_area_of_the_x_y_z_columns() {
+    let dir = scratch("xyzarea");
+    let data = file(
+        &dir,
+        "x,y,z
+0,0,0
+1,0,2
+0,1,3
+1,1,5
+",
+    );
+    let (ok, stdout, stderr) = sheaf(&["analyze", "xyz-area", data.to_str().unwrap()]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Area") && stdout.contains("XYZArea1"), "{stdout}");
+    assert!(stdout.contains("3.74165738677394"), "sqrt(14): {stdout}");
+    // Two points are not a surface.
+    let few = file(
+        &dir,
+        "x,y,z
+0,0,0
+1,1,1
+",
+    );
+    let (ok, _, stderr) = sheaf(&["analyze", "xyz-area", few.to_str().unwrap()]);
+    assert!(!ok && stderr.contains("at least three"), "{stderr}");
+}
+
+#[test]
 fn average_on_a_cycle_is_refused_unless_the_curves_share_their_x() {
     let dir = scratch("cycle");
     // Two scans with their own, turning X: refused with a hint to choose the rows of one sweep.

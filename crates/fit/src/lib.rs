@@ -12,15 +12,18 @@
 
 pub mod bands;
 pub mod compare;
+pub mod compare_data;
 pub mod dist;
 pub mod fdf;
 pub mod global;
+pub mod implicit;
 pub mod library;
 pub mod linear;
 pub mod multi;
 pub mod multipeak;
 pub mod nlsf;
 pub mod report;
+pub mod simsurface;
 pub mod simulate;
 pub mod surface;
 pub mod xerr;

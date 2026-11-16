@@ -233,6 +233,11 @@ pub enum Action {
     SaveTemplateAs(WindowId),
     /// Plot > User Templates > Manage...: rename and delete the saved templates.
     ManageTemplates,
+    /// Column > Fill Column With > a pattern: open its window for these columns.
+    FillPattern {
+        kind: crate::dialogs::fill_pattern::FillKind,
+        columns: Vec<ColumnId>,
+    },
     /// Plot > User Templates > a saved one: plot the columns in its look.
     PlotUserTemplate {
         book: WindowId,

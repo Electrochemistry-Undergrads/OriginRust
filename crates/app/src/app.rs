@@ -197,6 +197,8 @@ pub struct SheafApp {
     template_prompt: Option<crate::dialogs::user_templates::SaveTemplatePrompt>,
     /// Plot > User Templates > Manage.
     template_manager: Option<crate::dialogs::user_templates::TemplateManager>,
+    /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values.
+    fill_pattern: Option<crate::dialogs::fill_pattern::FillPatternDialog>,
     /// The saved user templates as last read from the folder (at start and after a change).
     user_templates: Vec<String>,
     power: Option<PowerDialog>,
@@ -312,6 +314,7 @@ impl SheafApp {
             go_to: None,
             template_prompt: None,
             template_manager: None,
+            fill_pattern: None,
             user_templates: startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default(),
             power: None,
             find: None,
@@ -2367,6 +2370,9 @@ impl SheafApp {
                     Some(crate::dialogs::user_templates::TemplateManager::new(self.user_templates.clone()));
             }
             Action::PlotUserTemplate { book, columns, name } => self.plot_user_template(book, columns, &name),
+            Action::FillPattern { kind, columns } => {
+                self.fill_pattern = Some(crate::dialogs::fill_pattern::FillPatternDialog::new(kind, columns));
+            }
             Action::ReloadRecent => {
                 self.recent.reload();
                 ctx.request_repaint();
@@ -2989,6 +2995,35 @@ impl SheafApp {
         }
     }
 
+    /// The Fill Column With pattern window: OK fills every chosen column, one undo step.
+    fn show_fill_pattern(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::fill_pattern::FillOutcome;
+        let Some(d) = &mut self.fill_pattern else { return };
+        match d.show(ctx) {
+            FillOutcome::Open => {}
+            FillOutcome::Closed => self.fill_pattern = None,
+            FillOutcome::Fill(columns, pattern) => {
+                let seed = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(1, |t| t.as_nanos() as u64);
+                let filled = self.doc.edit("Fill column", |p| {
+                    let mut rows = 0;
+                    for (k, c) in columns.iter().enumerate() {
+                        rows = p.fill_pattern(*c, &pattern, seed.wrapping_add(k as u64))?;
+                    }
+                    Ok::<usize, sheaf_core::fill_pattern::FillError>(rows)
+                });
+                match filled {
+                    Ok(rows) => {
+                        self.fill_pattern = None;
+                        self.say(format!("Filled {} column(s), {rows} rows each", columns.len()));
+                    }
+                    Err(e) => d.set_problem(e.to_string()),
+                }
+            }
+        }
+    }
+
     /// Reads the template names again after a change.
     fn refresh_user_templates(&mut self) {
         self.user_templates =
@@ -3588,6 +3623,7 @@ impl SheafApp {
             || self.go_to.is_some()
             || self.template_prompt.is_some()
             || self.template_manager.is_some()
+            || self.fill_pattern.is_some()
             || self.power.is_some()
             || self.find.is_some()
             || self.sort.is_some()
@@ -4236,6 +4272,7 @@ impl SheafApp {
             }
         }
         self.show_template_windows(ctx);
+        self.show_fill_pattern(ctx);
         if let Some(d) = &mut self.find {
             let book = d.book;
             match d.show(ctx) {

@@ -18,6 +18,8 @@ open until implemented and verified. The underlying milestones were not globally
 - [ ] **P0 formatting, wave 1:** [T58](tasks/T58-graph-text-formatting.md), graph text styling,
   escapes, editor and live Format toolbar; [T59](tasks/T59-worksheet-cell-formatting.md), worksheet
   font/style/colour/alignment and Format Cells (toolbar adapter depends on T58).
+  T58 whole-object graph font/size/Bold/Italic/basic colour controls and shared dispatch are implemented;
+  remaining toolbar controls/editor and T59 cell adapter are separate (graphing 7.4).
 - [ ] **P0 stacked figures, wave 2:** [T60](tasks/T60-merge-graphs-layer-management.md), merge
   existing graphs/Layer Management (done 2026-11-15); [T61](tasks/T61-layers-and-multi-y.md), layers/insets/multi-Y;
   [T62](tasks/T62-stack-offset-leftovers.md), remaining offsets/Cumulative/stacked histograms/

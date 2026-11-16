@@ -1552,6 +1552,16 @@ impl SheafApp {
         self.say(format!("Undone {count} AI change{}", if count == 1 { "" } else { "s" }));
     }
 
+    /// A snapshot of the selected whole text object. Dialog editors own their own selection.
+    fn text_format(&self) -> Option<crate::text_format::Snapshot> {
+        if self.dialog_open() || self.books.values().any(|b| b.editing.is_some() || b.editing_label.is_some()) {
+            return None;
+        }
+        let graph = self.active?;
+        let (layer, object) = self.graphs.get(&graph)?.selected?;
+        crate::text_format::Snapshot::graph(&self.doc, graph, layer, object)
+    }
+
     // ----- actions -------------------------------------------------------
 
     fn apply(&mut self, action: Action, ctx: &egui::Context) {
@@ -1611,6 +1621,11 @@ impl SheafApp {
                 self.clear_changed_shape_selections(selected, None);
             }
             Action::UndoAiChanges => self.undo_ai_changes(ctx),
+            Action::FormatText(request) => {
+                if self.text_format().is_some_and(|state| state.target == request.target) {
+                    crate::text_format::apply(&mut self.doc, request);
+                }
+            }
             Action::NewWorkbook => {
                 self.doc.apply("New workbook", |p| {
                     let book = p.add_workbook("");
@@ -4627,6 +4642,7 @@ impl eframe::App for SheafApp {
         }
         if !full {
             let c = self.menu_context();
+            let format = self.text_format();
             let tb = &self.toolbars;
             let bar_frame = || egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(3, 1));
             if tb.shown(Bar::Standard) {
@@ -4638,7 +4654,7 @@ impl eframe::App for SheafApp {
             if tb.any(&second) {
                 egui::TopBottomPanel::top("toolbar_second")
                     .frame(bar_frame())
-                    .show(ctx, |ui| toolbar::show_row(ui, &second, tb, &c, &mut actions));
+                    .show(ctx, |ui| toolbar::show_row_with_format(ui, &second, tb, &c, format.as_ref(), &mut actions));
             }
             if !self.status_bar_hidden {
                 egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| self.status_bar(ui));

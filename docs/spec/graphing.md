@@ -622,6 +622,47 @@ restoration, inherited opacity, style/script combinations, anchors, rotation, de
 colours, overflow/literal cases, SVG/PNG goldens and EPS/EMF/PDF output. The PNG golden isolates
 decoration strokes from installed glyph fonts and checks every RGB value directly.
 
+
+### 7.4 Whole-object Format toolbar (T58 slice 3)
+
+The shared Format bar now targets a selected free label, legend, X title or Y title in the
+active graph, including automatically generated titles. Font family lists installed families;
+size, Bold, Italic, Increase/Decrease Font Size and Font Color change the existing object's
+`Font`. Text, escapes, worksheet values and other objects are preserved. One action is one
+Undo step. Undo/Redo and `.sheaf` / `.opj` with its companion retain all five font fields.
+The same scene carries the chosen face, style and colour into the screen and exports.
+
+OriginPro 2016 whole-object controls (2026-11-15, local `scratch/t58-format-toolbar/`): a
+single-selected legend shows 22 pt and `Default: Arial`. Selecting Times New Roman changes its
+font index to 325 on this installation; clicking the red swatch changes its colour index to 2.
+Neither operation rewrites `legend.text$`. Entering 18 in the size box changes `legend.fsize`
+to 18. Increase/decrease from 10 gives 12/8; from 14, 17/12; from 18, 22/15; from 30, 36/25.
+From 22, Increase gives 26 and Decrease returns 26 to 22. Sheaf uses `round(size * 1.2)` and
+`round(size / 1.2)`, matching these controls. Screenshots with selection handles and property
+reads establish the target; stale export snapshots and attempts obscured by tooltips or missing
+the smaller legend are excluded. The final refreshed Original-theme EMF contains Times New Roman.
+
+The tested native single-selected legend did **not** change style on Bold/Italic clicks;
+its text stayed unchanged. Sheaf deliberately exposes whole-object Bold/Italic through its
+existing font flags to meet this brief's whole-object goal. Their native whole-object parity
+is **unestablished**; this is not evidence of Origin's internal style storage. The current
+[Format toolbar reference](https://docs.originlab.com/origin-help/format-toolbar/) documents
+font controls on graph annotations; it does not settle that 2016 selection-state difference.
+
+Sheaf choices: the size box accepts finite 1 to 1000 pt values and commits on Enter; Escape or
+leaving the box cancels the draft. Font Color offers eight named basic RGB colours (black, red,
+green, blue, cyan, magenta, yellow, white). Origin's Auto, full system/custom palettes and palette
+management remain open. Family selection is restricted to installed families; fallback rendering
+retains its existing behaviour. Underline, scripts, Greek and Fill/Line Color remain disabled
+in this toolbar until their own whole-object semantics/model support are implemented. Text-window
+selection controls and the T59 worksheet adapter are separate slices.
+
+`text_format::{Snapshot, Target, Change, Request}` separates widget changes from target application.
+T59 can add its cell target behind the same toolbar. Requests capture graph/layer/object plus
+document generation and revision. Dispatch rechecks active selection and dialog/cell editing state;
+invalid, unchanged or stale requests add no history. Open family/colour lists retain their original
+target rather than following a later selection. No model or file-format fields were added.
+
 ---
 
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]

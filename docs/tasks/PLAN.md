@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 407 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 400 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -65,7 +65,7 @@ their files do not overlap; the "Main files" column shows where each one works.
 
 | ✓ | Package | What | Size | Origin needed | Greyed items | Main files |
 |---|---|---|---|---|---|---|
-| [ ] | [T58](T58-graph-text-formatting.md) | Format toolbar on graph text; underline, strikethrough and colour and font escapes; formatting buttons and preview in the text window; Axis Titles menu items | L | for the toolbar's exact behaviour; build first without | 15 | `plot/markup.rs`, `plot/text.rs`, backends, `app/toolbar.rs`, `dialogs/text_object.rs` |
+| [ ] | [T58](T58-graph-text-formatting.md) | Format toolbar on graph text; underline, strikethrough and colour and font escapes; formatting buttons and preview in the text window; Axis Titles menu items | L | for the toolbar's exact behaviour; build first without | 8 | `plot/markup.rs`, `plot/text.rs`, backends, `app/toolbar.rs`, `dialogs/text_object.rs` |
 | [ ] | [T59](T59-worksheet-cell-formatting.md) | Format Cells: font style, colours and alignment of worksheet cells; Format toolbar on a cell selection | L | for the Format Cells window | 2 | `core/worksheet.rs` (new `cellformat.rs`), `app/grid.rs`, new dialog |
 
 T58 goes first (it builds the toolbar's dispatch); T59 can start on its model and dialog at once.

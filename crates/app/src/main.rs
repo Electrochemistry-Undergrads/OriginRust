@@ -43,6 +43,7 @@ mod panels;
 mod reader;
 mod recent;
 mod switcher;
+mod text_format;
 mod theme;
 mod toolbar;
 mod view_modes;

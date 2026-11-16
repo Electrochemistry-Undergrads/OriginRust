@@ -709,11 +709,11 @@ target rather than following a later selection. No model or file-format fields w
 
 Underline, Superscript, Subscript, Greek, Fill Color and Line Color (`object_format`, same
 request/staleness rules, own `Action::FormatObject`). Origin's online
-[Format toolbar help](https://docs.originlab.com/origin-help/format-toolbar/) describes the first
+[Format toolbar help](https://docs.originlab.com/origin-help/format-toolbar/) [W] describes the first
 four as acting on selected characters and does not document whole-object behaviour. Fill and
 line/border colour are described on Origin's
 [Style toolbar](https://docs.originlab.com/origin-help/style-toolbar) as setting the fill or line
-colour of the selected object; Sheaf shows them in the Format row (gui-look 50-52). Sheaf choices,
+colour of the selected object; Sheaf shows them in the Format row (gui-look.md, Format and Style toolbar description). Sheaf choices,
 all **unmeasured** (Origin 2016 measurement remains open): the four text buttons wrap the whole
 text in one `\u(`, `\+(`, `\-(` or `\g(` group, or remove that group when the text is exactly one
 such group (nesting counted as the parser does; `\u(a)b` is wrapped, not unwrapped; a group may

@@ -160,8 +160,39 @@ pub fn toggle(text: &str, markup: Markup) -> String {
         let prefix = markup.prefix();
         text[prefix.len()..text.len() - 1].to_string()
     } else {
-        format!("{}{text})", markup.prefix())
+        let escaped = escape_unmatched(text);
+        let wrapped = format!("{}{escaped})", markup.prefix());
+        // Greek would remap the letters, so the visible text is compared through a neutral group.
+        let same_text = sheaf_plot::markup::plain(&format!("\\u({escaped})")) == sheaf_plot::markup::plain(text);
+        // Text whose parentheses are tangled with an unclosed escape (`x\(`) cannot be wrapped
+        // safely; leave it as it is rather than corrupt it.
+        if is_wrapped(&wrapped, markup) && same_text { wrapped } else { text.to_string() }
     }
+}
+
+/// Replaces each unmatched `(` or `)` with its decimal escape (`\(40)`, `\(41)`) so that a group
+/// closed with a bare `)` still ends where it should and the text looks the same.
+fn escape_unmatched(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut unmatched = vec![false; chars.len()];
+    let mut open: Vec<usize> = Vec::new();
+    for (i, &c) in chars.iter().enumerate() {
+        match c {
+            '(' => open.push(i),
+            ')' if open.pop().is_none() => unmatched[i] = true,
+            _ => {}
+        }
+    }
+    open.into_iter().for_each(|i| unmatched[i] = true);
+    let mut out = String::with_capacity(text.len());
+    for (i, c) in chars.into_iter().enumerate() {
+        match (unmatched[i], c) {
+            (true, '(') => out.push_str("\\(40)"),
+            (true, _) => out.push_str("\\(41)"),
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// Reject stale frames, invalid input and no-ops before creating an undo step.
@@ -175,6 +206,9 @@ pub fn apply(doc: &mut Document, request: Request) -> bool {
         Change::Markup(markup) => {
             let Some(old) = text(project, request.target) else { return false };
             let new = toggle(old, markup);
+            if new == old {
+                return false;
+            }
             doc.apply("Format graph text", |p| {
                 let l = &mut p.graph_mut(graph).expect("validated graph").layers[layer];
                 match object {
@@ -219,6 +253,17 @@ pub fn apply(doc: &mut Document, request: Request) -> bool {
 mod tests {
     use super::*;
     use sheaf_plot::markup::plain;
+
+    #[test]
+    fn unbalanced_parentheses_survive_wrapping() {
+        for t in ["f(x", "1) a", "a)b", "((", "x)(y"] {
+            let w = toggle(t, Markup::Underline);
+            assert!(is_wrapped(&w, Markup::Underline), "{t}: {w}");
+            assert_eq!(plain(&w.replacen("\\u(", "\\b(", 1)), plain(t), "{t}");
+        }
+        // An unclosed escape cannot be wrapped safely: unchanged.
+        assert_eq!(toggle("x\\(", Markup::Underline), "x\\(");
+    }
 
     #[test]
     fn wraps_and_unwraps_the_whole_text() {

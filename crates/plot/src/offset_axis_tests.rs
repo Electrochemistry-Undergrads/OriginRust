@@ -204,3 +204,27 @@ fn an_x_axis_offset_moves_line_labels_and_title_and_its_hit_box() {
         other => panic!("{other:?}"),
     }
 }
+
+#[test]
+fn scatter_central_titles_stand_at_the_ends_of_the_moved_axes() {
+    let (x, shape) = super::tests::golden_data();
+    let (p, g) = super::tests::project(Template::ScatterCentral, x, vec![shape(1.0)]);
+    let f = geoms(&p, g)[0].frame;
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let texts: Vec<&scene::TextItem> = scene.layers[0]
+        .overlay
+        .iter()
+        .filter_map(|i| match i {
+            scene::Item::Text(t) => Some(t),
+            _ => None,
+        })
+        .collect();
+    // Y title: unrotated, above the frame top, at the Y axis line's x (the horizontal middle).
+    let y_title = texts.iter().find(|t| {
+        t.rotate_ccw == 0.0 && t.y < f.y && (t.x - (f.x + 0.5 * f.w)).abs() < 1e-2 && t.anchor == scene::Anchor::Middle
+    });
+    assert!(y_title.is_some(), "no horizontal title above the frame: {f:?}");
+    // X title: rotated, left of the frame, at the X axis line's y (the vertical middle).
+    let x_title = texts.iter().find(|t| t.rotate_ccw != 0.0 && t.x < f.x && (t.y - (f.y + 0.5 * f.h)).abs() < 1e-2);
+    assert!(x_title.is_some(), "no rotated title left of the frame: {f:?}");
+}

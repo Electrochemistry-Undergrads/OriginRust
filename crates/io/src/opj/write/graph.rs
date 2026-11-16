@@ -1177,6 +1177,12 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
                 .into(),
         );
     }
+    if layer.x_axis.offset_pct != 0.0 {
+        notes.push(
+            "the position of an X axis away from the frame (Scatter Central) was not written; the axis reopens at the frame (the .opj.sheaf companion keeps the offset)"
+                .into(),
+        );
+    }
     if layer.legend.visible && layer.legend.columns > 1 {
         notes.push("the number of columns of the legend was not written; its entries stand in one column".into());
     }

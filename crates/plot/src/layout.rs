@@ -897,7 +897,9 @@ fn layer_scene(
     let y_edge = (ya.side != AxisSide::Hidden).then(|| draw_y_labels(out, ya, &geom.y, f, &yp.labels, m));
     rec(objects, out, start, ObjectKind::YAxis, &[]);
     let start = out.len();
-    if let Some(edge) = x_edge {
+    if x_edge.is_some() && xa.offset_pct < 0.0 && xa.offset_pct.is_finite() && x_title == TitlePlace::Own {
+        draw_x_title_inward(out, project, xa, f, pds, crate::axis_offset::x_line_y(xa, f), &xp.title, m);
+    } else if let Some(edge) = x_edge {
         match x_title {
             TitlePlace::Own => draw_x_title(out, project, xa, f, pds, edge, &xp.title, m),
             TitlePlace::Shared => {}
@@ -908,7 +910,9 @@ fn layer_scene(
     }
     rec(objects, out, start, ObjectKind::XTitle, &[]);
     let start = out.len();
-    if let Some(edge) = y_edge {
+    if y_edge.is_some() && ya.offset_pct < 0.0 && ya.offset_pct.is_finite() && y_title == TitlePlace::Own {
+        draw_y_title_inward(out, project, ya, f, pds, crate::axis_offset::y_line_x(ya, f), &yp.title, m);
+    } else if let Some(edge) = y_edge {
         match y_title {
             TitlePlace::Own => draw_y_title(out, project, ya, f, pds, edge, &yp.title, m),
             TitlePlace::Shared => {}
@@ -1472,6 +1476,50 @@ fn draw_y_title(
         labels_edge - 0.6 * size - DESCENT * size
     };
     text::place(out, m, &title, font, size, (x, f.y + f.h / 2.0), Anchor::Middle, 90.0);
+}
+
+/// Title of an X axis moved into the frame (Origin's Scatter Central): rotated 90 degrees like a Y
+/// title, just left of the frame's left edge, centred on the axis line's page y `line_y`.
+#[allow(clippy::too_many_arguments)]
+fn draw_x_title_inward(
+    out: &mut Vec<Item>,
+    project: &Project,
+    axis: &Axis,
+    f: Rect,
+    pds: &[PlotData],
+    line_y: f64,
+    font: &Font,
+    m: &dyn TextMeasurer,
+) {
+    if !axis.show_title {
+        return;
+    }
+    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, false));
+    let size = axis.title_font.size_pt;
+    let x = f.x - 0.6 * size - DESCENT * size;
+    text::place(out, m, &title, font, size, (x, line_y), Anchor::Middle, 90.0);
+}
+
+/// Title of a Y axis moved into the frame (Origin's Scatter Central): horizontal, centred on the axis
+/// line's page x `line_x`, just above the frame's top edge.
+#[allow(clippy::too_many_arguments)]
+fn draw_y_title_inward(
+    out: &mut Vec<Item>,
+    project: &Project,
+    axis: &Axis,
+    f: Rect,
+    pds: &[PlotData],
+    line_x: f64,
+    font: &Font,
+    m: &dyn TextMeasurer,
+) {
+    if !axis.show_title {
+        return;
+    }
+    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, true));
+    let size = axis.title_font.size_pt;
+    let baseline = f.y - 0.6 * size - DESCENT * size;
+    text::place(out, m, &title, font, size, (line_x, baseline), Anchor::Middle, 0.0);
 }
 
 // ----- legend --------------------------------------------------------------------------------

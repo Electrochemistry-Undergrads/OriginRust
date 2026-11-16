@@ -455,9 +455,13 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     // Data read-out under the pointer, in the layer under it.
     if let Some(pos) = response.hover_pos() {
         let (px, py) = to_page(pos);
-        if let Some(g) = t.geometry.iter().rev().find(|g| {
+        if let Some((_, g)) = t.geometry.iter().enumerate().rev().find(|(i, g)| {
             let f = &g.frame;
-            px >= f.x && px <= f.x + f.w && py >= f.y && py <= f.y + f.h
+            doc.project().graph(graph_id).and_then(|g| g.layers.get(*i)).is_some_and(|l| !l.display.hidden)
+                && px >= f.x
+                && px <= f.x + f.w
+                && py >= f.y
+                && py <= f.y + f.h
         }) {
             let (x, y) = g.page_to_data(px, py);
             painter.text(
@@ -1155,7 +1159,13 @@ fn menu_for(
                 Some((l, ObjectKind::Plot(p))) if l == layer => Some(p),
                 _ => None,
             };
-            menus::layer_icon_menu(layer, graph.layers.len(), &plots, active)
+            let mut entries = menus::layer_icon_menu(layer, graph.layers.len(), &plots, active);
+            if graph.layers.get(layer).is_some_and(|l| l.display.hidden)
+                && let Some(menus::Entry::Item(item)) = entries.first_mut()
+            {
+                item.label = "\u{2713} Hide Layer".into();
+            }
+            entries
         }
         MenuTarget::Hit(Hit::Object { layer, kind }) => match kind {
             ObjectKind::Plot(p) => {
@@ -1513,7 +1523,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
                 }
             }
         }
-        GraphOp::HideLayer { .. } => l.plots.iter_mut().for_each(|p| p.visible = false),
+        GraphOp::HideLayer { .. } => l.display.hidden = !l.display.hidden,
         GraphOp::HideOtherLayers { .. }
         | GraphOp::AddLayer { .. }
         | GraphOp::DeleteLayer { .. }

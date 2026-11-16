@@ -86,6 +86,8 @@ mod label_whiteout_tests;
 #[cfg(test)]
 mod layer_scale_tests;
 #[cfg(test)]
+mod layer_visibility_tests;
+#[cfg(test)]
 mod layers_tests;
 #[cfg(test)]
 mod legend_tests;

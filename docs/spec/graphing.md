@@ -776,8 +776,8 @@ A new draft containing only empty formatting groups adds no invisible label.
 The button labels, compact layout and Ctrl+B/I/U/G and Ctrl+= / Ctrl+Shift+= bindings are
 Sheaf choices based on the published command forms and existing shortcut map; their behaviour
 inside Origin's properties dialog has not been measured. Inline colour selection is covered
-in 7.8/7.9, family selection below, and title/legend reuse in 7.7. Combined-script insertion
-remains open. The shared Format bar remains a separate target-dispatch implementation.
+in 7.8/7.9, family selection below, title/legend reuse in 7.7, and paired-script insertion
+in 7.10. The shared Format bar remains a separate target-dispatch implementation.
 No renderer/model/persistence changes are introduced by this editor slice.
 
 ### 7.6 Inline font families (T58 graph text)
@@ -976,7 +976,33 @@ existing 24-level escape limit; deeper content and malformed unclosed groups kee
 Sheaf's existing tolerant parser convention, which was not measured in Origin.
 SVG glyph/stroke and font-independent stroke PNG goldens, exact scene geometry,
 rotation/anchors, effective-font width, EMF positions, EPS and PDF exercise this path.
-No editor insertion control, new project field, font backend or UI command is added.
+The renderer slice adds no project field or font backend; editor insertion follows below.
+
+**Paired-script editor insertion (2026-11-16, `codex/t58-paired-script-editor`).** Paired
+scripts in the shared label/title/legend editor opens Subscript text and Superscript text fields.
+The selected raw text seeds the lower branch; the upper starts empty. With only a caret, both
+start empty. Insert scripts requires at least one nonempty field and writes the existing
+`\=(sub,sup)` form into the draft. Either individual branch may be empty. Focus returns to the
+raw text box with the caret after the column, so subsequent typing is ordinary text.
+
+Literal top-level commas in either field use the measured `\v(,)` form; commas inside balanced
+markup/literal groups stay intact. Unmatched literal parentheses use the existing Unicode
+escapes. Incomplete formatting groups and unsafe selection fragments cannot be inserted.
+An inline pair cannot span rows or contain legend sample controls: select text within one
+legend entry instead. Normal entry text and raw name references remain editable; symbol and
+row selections stay unchanged. The existing raw-fragment validation and 24-level parser bound
+remain in use. This limited two-field UI, lower-branch seeding and caret policy are Sheaf
+choices; the earlier twenty quoted native controls and four size controls above establish
+rendering syntax, not a new Origin properties-dialog insertion measurement.
+
+Nested styles, colours, families and paired columns use the unchanged renderer. Only the
+selected raw fragment is replaced; base fonts and worksheet values stay intact. Editing these
+fields or dismissing the menu leaves automatic text and history unchanged. Insert changes
+only the editor draft; Apply/OK makes the existing single history step, and Cancel discards
+unapplied changes. Preview and screen/export share the same placement. Six UI and four private
+helper regressions cover shared-column glyph positions, Unicode/focus, commas/literal blocks,
+styles/fonts/nesting, unsafe fragments, automatic text, cancellation, stale generation and
+label saves and title/legend project/companion roundtrips.
 
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
 

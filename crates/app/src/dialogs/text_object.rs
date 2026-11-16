@@ -11,6 +11,7 @@ use sheaf_plot::scene::ObjectKind;
 
 mod editor;
 mod family;
+mod paired;
 mod palette;
 mod preview;
 use editor::Format;
@@ -40,6 +41,7 @@ pub struct TextDialog {
     preview: preview::Preview,
     colors: palette::Picker,
     families: family::Picker,
+    scripts: paired::Picker,
 }
 
 impl TextDialog {
@@ -58,6 +60,7 @@ impl TextDialog {
             size: font.size_pt,
             colors: palette::Picker::new(font.color),
             families: family::Picker::default(),
+            scripts: paired::Picker::default(),
             bold: font.bold,
             italic: font.italic,
             font,
@@ -85,6 +88,7 @@ impl TextDialog {
             font: l.font.clone(),
             colors: palette::Picker::new(l.font.color),
             families: family::Picker::default(),
+            scripts: paired::Picker::default(),
             text: l.text.clone(),
             size: l.font.size_pt,
             bold: l.font.bold,
@@ -209,6 +213,7 @@ impl TextDialog {
                 }
                 let edit_id = ui.make_persistent_id("text_object_content");
                 let mut command = None;
+                let mut scripts = None;
                 if ctx.memory(|m| m.has_focus(edit_id)) {
                     for (key, shift, format) in [
                         (egui::Key::B, false, Format::Bold),
@@ -260,14 +265,40 @@ impl TextDialog {
                         })
                         .0
                         .on_hover_text("Set the font of selected text, or insert text in that font at the caret");
+                    let response = egui::containers::menu::MenuButton::new("Paired scripts")
+                        .config(
+                            egui::containers::menu::MenuConfig::new()
+                                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+                        )
+                        .ui(ui, |ui| {
+                            if let Some(pair) = self.scripts.show(ui) {
+                                scripts = Some(pair);
+                                ui.close();
+                            }
+                        })
+                        .0;
+                    if response.clicked() {
+                        self.scripts.start(&self.text, self.selection, self.object == Some(ObjectKind::Legend));
+                    }
                 });
-                if let Some(format) = command {
+                let formatting = command.is_some() || scripts.is_some();
+                if formatting {
                     let before = self.text.clone();
-                    self.selection = if self.object == Some(ObjectKind::Legend) {
-                        editor::apply_legend(&mut self.text, self.selection, format)
-                    } else {
-                        editor::apply(&mut self.text, self.selection, format)
-                    };
+                    if let Some((sub, sup)) = scripts {
+                        self.selection = paired::insert(
+                            &mut self.text,
+                            self.selection,
+                            self.object == Some(ObjectKind::Legend),
+                            &sub,
+                            &sup,
+                        );
+                    } else if let Some(format) = command {
+                        self.selection = if self.object == Some(ObjectKind::Legend) {
+                            editor::apply_legend(&mut self.text, self.selection, format)
+                        } else {
+                            editor::apply(&mut self.text, self.selection, format)
+                        };
+                    }
                     if self.text != before {
                         self.automatic = false;
                     }
@@ -298,7 +329,7 @@ impl TextDialog {
                 if let Some(selection) = output.cursor_range {
                     self.selection = selection;
                 }
-                if self.focus || command.is_some() {
+                if self.focus || formatting {
                     output.response.request_focus();
                     self.focus = false;
                 }

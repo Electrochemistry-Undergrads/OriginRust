@@ -174,7 +174,7 @@ fn clear(chars: &[char], depth: usize, kind: Clear) -> String {
 }
 
 /// Escape unmatched parentheses in a selected raw-text fragment. Unclosed markup stays untouched.
-fn safe_body(chars: &[char]) -> Option<String> {
+pub(super) fn safe_body(chars: &[char]) -> Option<String> {
     let mut opens = Vec::new();
     let mut escape = vec![false; chars.len()];
     for (index, ch) in chars.iter().enumerate() {
@@ -186,7 +186,7 @@ fn safe_body(chars: &[char]) -> Option<String> {
     }
     for index in opens {
         if (0..index).any(|i| prefix_end(chars, i) == Some(index + 1))
-            || (index >= 2 && chars[index - 2] == '\\' && matches!(chars[index - 1], 'v' | 'x'))
+            || (index >= 2 && chars[index - 2] == '\\' && matches!(chars[index - 1], 'v' | 'x' | '='))
         {
             return None;
         }

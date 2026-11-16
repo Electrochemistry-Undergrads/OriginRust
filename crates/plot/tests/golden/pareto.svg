@@ -26,8 +26,8 @@
 <g id="layer1">
 <clipPath id="clip1"><rect x="138.237" y="68.41" width="526.086" height="424.343"/></clipPath>
 <g class="plots" clip-path="url(#clip1)">
-<path d="M225.918 280.581L401.28 139.134L576.642 68.41" fill="none" stroke="#0000FF" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M221.418 276.081L230.418 276.081L230.418 285.081L221.418 285.081ZM396.78 134.634L405.78 134.634L405.78 143.634L396.78 143.634ZM572.142 63.91L581.142 63.91L581.142 72.91L572.142 72.91Z" fill="#0000FF"/>
+<path d="M155.773 492.753L296.062 280.581L471.424 139.134L646.786 68.41" fill="none" stroke="#0000FF" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M151.273 488.253L160.273 488.253L160.273 497.253L151.273 497.253ZM291.562 276.081L300.562 276.081L300.562 285.081L291.562 285.081ZM466.924 134.634L475.924 134.634L475.924 143.634L466.924 143.634ZM642.286 63.91L651.286 63.91L651.286 72.91L642.286 72.91Z" fill="#0000FF"/>
 </g>
 <g class="overlay">
 <path d="M664.323 68.41L664.323 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>

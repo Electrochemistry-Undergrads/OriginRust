@@ -448,7 +448,15 @@ impl Template {
             Template::Ternary => ternary(id, name),
             Template::Lollipop => general(id, name, PlotKind::Scatter),
             Template::VerticalDropLine => general(id, name, PlotKind::Scatter),
-            Template::IntervalPlot => from_red(general(id, name, PlotKind::Scatter)),
+            Template::IntervalPlot => {
+                // The mean is a solid circle (documented: the box chart template with the box hidden).
+                let mut g = from_red(general(id, name, PlotKind::Scatter));
+                for l in &mut g.layers {
+                    l.default_symbol.shape = SymbolShape::Circle;
+                    l.default_symbol.filled = true;
+                }
+                g
+            }
             Template::ColumnLabel | Template::GroupedColumns | Template::Pareto => {
                 from_red(column(id, name, PlotKind::Column))
             }
@@ -1656,6 +1664,8 @@ mod tests {
         assert_eq!(Template::from_name("pareto"), Some(Template::Pareto));
         assert_eq!((Template::IntervalPlot.label(), Template::Pareto.label()), ("Interval Plot", "Pareto"));
         assert_eq!(Template::IntervalPlot.new_graph(WindowId(1), "G").layers[0].default_kind, PlotKind::Scatter);
+        let sym = Template::IntervalPlot.new_graph(WindowId(1), "G").layers[0].default_symbol.clone();
+        assert!((sym.shape, sym.filled) == (SymbolShape::Circle, true));
         assert_eq!(Template::Pareto.new_graph(WindowId(1), "G").layers[0].default_kind, PlotKind::Column);
 
         let mut p = Project::new();

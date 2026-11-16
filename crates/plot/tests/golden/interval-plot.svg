@@ -4,9 +4,9 @@
 <clipPath id="clip0"><rect x="138.237" y="68.41" width="526.086" height="424.343"/></clipPath>
 <g class="plots" clip-path="url(#clip0)">
 <path d="M269.758 180.033L269.758 296.261M265.758 180.033L273.758 180.033M265.758 296.261L273.758 296.261" fill="none" stroke="#FF0000" stroke-width="0.5"/>
-<path d="M265.258 233.647L274.258 233.647L274.258 242.647L265.258 242.647Z" fill="#FF0000"/>
+<path d="M265.258 238.147A4.5 4.5 0 1 0 274.258 238.147A4.5 4.5 0 1 0 265.258 238.147Z" fill="#FF0000"/>
 <path d="M532.801 100.855L532.801 460.308M528.801 100.855L536.801 100.855M528.801 460.308L536.801 460.308" fill="none" stroke="#00FF00" stroke-width="0.5"/>
-<path d="M528.301 276.081L537.301 276.081L537.301 285.081L528.301 285.081Z" fill="#00FF00"/>
+<path d="M528.301 280.581A4.5 4.5 0 1 0 537.301 280.581A4.5 4.5 0 1 0 528.301 280.581Z" fill="#00FF00"/>
 </g>
 <g class="overlay">
 <path d="M138.237 492.753L664.323 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
@@ -32,9 +32,9 @@
 <text x="122.937" y="87.145" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">16</text>
 <text x="75.417" y="280.581" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 75.417 280.581)">A</text>
 <rect x="557.623" y="86.01" width="89.1" height="74.8" fill="none" stroke="#000000" stroke-width="0.75"/>
-<path d="M586.123 104.61L595.123 104.61L595.123 113.61L586.123 113.61Z" fill="#FF0000"/>
+<path d="M586.123 109.11A4.5 4.5 0 1 0 595.123 109.11A4.5 4.5 0 1 0 586.123 109.11Z" fill="#FF0000"/>
 <text x="625.823" y="114.72" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">A</text>
-<path d="M586.123 133.21L595.123 133.21L595.123 142.21L586.123 142.21Z" fill="#00FF00"/>
+<path d="M586.123 137.71A4.5 4.5 0 1 0 595.123 137.71A4.5 4.5 0 1 0 586.123 137.71Z" fill="#00FF00"/>
 <text x="625.823" y="143.32" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">B</text>
 </g>
 </g>

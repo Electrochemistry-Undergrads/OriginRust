@@ -2528,6 +2528,9 @@ docs.originlab.com/x-function/ref/plot_paretoraw, .../plot_paretobin]:
   template ParetoRaw). Bars from most to least significant. The cumulative percent is a line with symbols in a new layer
   whose right Y axis always runs 0 to 100 (option `cum`, default on); drop lines at 80, a count table, combining small
   categories into "Other" and groups are options. Fill, gap, colours, tie order and missing values are not given.
+- Pareto, raw data, option `symr` (default 1): the cumulative-percent symbols sit at the right edge of each bar, and the
+  cumulative line starts at (0, 0), the left edge of the first bar at 0 %. Sheaf copies both (placed from the drawn bar
+  width, so they follow the layer's gap); the first and the last point carry no data labels.
 
 **What Sheaf does** (unmeasured unless listed above):
 
@@ -2537,7 +2540,8 @@ docs.originlab.com/x-function/ref/plot_paretoraw, .../plot_paretobin]:
   `pareto`), no dialog. Model: the new per-plot field `Plot.stat` (`StatPlot::{Interval{error, level}, Pareto,
   ParetoCumulative}`), skipped in `.sheaf` while empty. `.opj` export writes plain plots of the data column with a save
   warning; user templates refuse these graphs; a right Y axis is refused for both.
-- Interval Plot: one `Scatter` plot per selected numeric Y column, at X = 1, 2, ... in plot order, named by the column on
+- Interval Plot: one `Scatter` plot per selected numeric Y column (symbol: a filled circle, as documented; colours and
+  size are Sheaf's), at X = 1, 2, ... in plot order, named by the column on
   the X axis (like box charts; no X title). The symbol is the mean of the finite numbers; the error bar is symmetric:
   the Student-t confidence interval of the mean (default, level 95 %, the Graphical Summary's `mean_confidence_limits`,
   statistics 22), or the SD (n - 1) or SE. A column of one number has no bar. Plot Details > Error Bar chooses
@@ -2548,8 +2552,8 @@ docs.originlab.com/x-function/ref/plot_paretoraw, .../plot_paretobin]:
   (ties in the order of first occurrence; empty cells are not counted; numbers compare as text without a trailing ".0");
   the categories are the tick labels at 1..K, the X title is the column's. The right layer (the usual linked right-Y layer)
   holds a `LineSymbol` plot of the running percent of the counted cells, Y axis fixed to 0 - 100, titles "Count" and
-  "Cumulative %". Sheaf adds no drop lines, count table, "Other" merge, symbol at the right bar edge, binned-data input
-  or groups.
+  "Cumulative %". The cumulative points are at the bar right edges, with an extra first point (0, 0) at the left edge of the first
+  bar (documented, above). Sheaf adds no drop lines, count table, "Other" merge, binned-data input or groups.
 - Tests: `crates/core/src/template.rs`, `crates/plot/src/grouped_tests.rs` (hand-computed mean, SD, SE, t quantiles and
   Pareto percentages; goldens `interval-plot.svg`, `pareto.svg`), `crates/app/src/app/ui_tests/grouped_indexed.rs`,
   `crates/cli/tests/interval_pareto.rs`, `crates/io/src/opj/write/graph_feature_tests.rs`.

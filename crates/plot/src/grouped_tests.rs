@@ -287,19 +287,28 @@ fn interval_plot_draws_symbols_bars_and_column_names() {
     let svg = svg_of(&p, g);
     let t = texts(&doc(&svg));
     assert!(t.iter().any(|s| s == "A") && t.iter().any(|s| s == "B" || s == "Y"), "{t:?}");
+    // The mean is a solid circle (the documented BoxInterval look).
+    let sym = p.graph(g).unwrap().layers[0].plots[0].symbol.clone();
+    assert!(sym.shape == sheaf_core::graph::SymbolShape::Circle && sym.filled);
     compare_golden("interval-plot", &svg);
 }
 
 #[test]
 fn pareto_counts_sorts_and_accumulates() {
-    let (p, g) = stat_project(Template::Pareto);
-    let gr = p.graph(g).unwrap();
-    let bars = data::collect(&p, &gr.layers[0]);
-    let line = data::collect(&p, &gr.layers[1]);
+    let (mut p, g) = stat_project(Template::Pareto);
+    let layers = data::collect_graph(&p, p.graph(g).unwrap());
+    let (bars, line) = (&layers[0], &layers[1]);
     assert_eq!(bars.plots[0].categories.as_deref(), Some(&["scratch".to_string(), "dent".into(), "crack".into()][..]));
     assert_vec(&bars.plots[0].y, &[3.0, 2.0, 1.0]);
-    assert_vec(line.plots[0].x.as_deref().unwrap(), &[1.0, 2.0, 3.0]);
-    assert_vec(&line.plots[0].y, &[50.0, 50.0 * 5.0 / 3.0, 100.0]);
+    // Origin's symr = 1: the line starts at (0, 0) at the left edge of the first bar and its symbols sit at the
+    // right edge of each bar; the default gap is 20 %, so a bar is 0.8 wide.
+    assert_vec(line.plots[0].x.as_deref().unwrap(), &[0.6, 1.4, 2.4, 3.4]);
+    assert_vec(&line.plots[0].y, &[0.0, 50.0, 50.0 * 5.0 / 3.0, 100.0]);
+    // The edges follow the drawn bars: a gap of 50 % makes them 0.5 wide.
+    p.graph_mut(g).unwrap().layers[0].bars.gap_pct = 50.0;
+    let layers = data::collect_graph(&p, p.graph(g).unwrap());
+    assert_vec(layers[1].plots[0].x.as_deref().unwrap(), &[0.75, 1.25, 2.25, 3.25]);
+    p.graph_mut(g).unwrap().layers[0].bars.gap_pct = 20.0;
     let svg = svg_of(&p, g);
     let t = texts(&doc(&svg));
     for want in ["scratch", "dent", "crack", "Count", "Cumulative %", "100"] {

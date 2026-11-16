@@ -46,6 +46,7 @@ use crate::dialogs::straight_line::StraightLineDialog;
 use crate::dialogs::text_object::TextDialog;
 use crate::dialogs::trendline::{Outcome as TrendlineOutcome, TrendlineDialog};
 use crate::dialogs::worksheet_color::WorksheetColorDialog;
+use crate::dialogs::worksheet_fonts::WorksheetFontsDialog;
 use crate::graph_scale::{self, ScaleTool};
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi, Sel};
@@ -191,6 +192,7 @@ pub struct SheafApp {
     cond_format: Option<CondFormatDialog>,
     pub(crate) cell_note: Option<CellNoteDialog>,
     pub(crate) cell_format: Option<CellFormatDialog>,
+    pub(crate) worksheet_fonts: Option<WorksheetFontsDialog>,
     pub(crate) worksheet_color: Option<WorksheetColorDialog>,
     reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
@@ -342,6 +344,7 @@ impl SheafApp {
             cond_format: None,
             cell_note: None,
             cell_format: None,
+            worksheet_fonts: None,
             worksheet_color: None,
             reshape: None,
             export: None,
@@ -886,6 +889,7 @@ impl SheafApp {
         self.cond_format = None;
         self.cell_note = None;
         self.cell_format = None;
+        self.worksheet_fonts = None;
         self.worksheet_color = None;
         self.reshape = None;
         self.sort = None;
@@ -2180,6 +2184,9 @@ impl SheafApp {
                     Ok(range) => self.cond_format = CondFormatDialog::new(&self.doc, book, kind, range),
                     Err(why) => self.warn(why),
                 }
+            }
+            Action::WorksheetFontsDialog(book) => {
+                self.worksheet_fonts = WorksheetFontsDialog::new(&self.doc, book);
             }
             Action::FormatCellsDialog(book) => match self.format_target(book) {
                 Ok(target) => self.cell_format = CellFormatDialog::new(&self.doc, book, target),
@@ -4278,6 +4285,7 @@ impl SheafApp {
             || self.cond_format.is_some()
             || self.cell_note.is_some()
             || self.cell_format.is_some()
+            || self.worksheet_fonts.is_some()
             || self.worksheet_color.is_some()
             || self.reshape.is_some()
             || self.export.is_some()
@@ -4835,6 +4843,11 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.cell_format = None;
+        }
+        if let Some(d) = &mut self.worksheet_fonts
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.worksheet_fonts = None;
         }
         if let Some(d) = &mut self.worksheet_color {
             let (open, request) = d.show(ctx);

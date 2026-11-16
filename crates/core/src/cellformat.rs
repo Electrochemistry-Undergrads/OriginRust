@@ -278,6 +278,7 @@ struct Seg {
 pub struct FormatIndex {
     cells: HashMap<ColumnId, Vec<Seg>>,
     labels: HashMap<ColumnId, Vec<u32>>,
+    has_default_fonts: bool,
 }
 
 /// The stretches of one column from its ranges (`(span, range index)` in range order).
@@ -337,7 +338,7 @@ fn segments(sheet: &Worksheet, ranges: &[(usize, usize, u32)]) -> Vec<Seg> {
 
 impl FormatIndex {
     pub fn new(sheet: &Worksheet) -> Self {
-        let mut ix = FormatIndex::default();
+        let mut ix = FormatIndex { has_default_fonts: !sheet.font_defaults.is_empty(), ..Default::default() };
         let mut spans: HashMap<ColumnId, Vec<(usize, usize, u32)>> = HashMap::new();
         for (i, r) in sheet.cell_formats.iter().enumerate() {
             match &r.target {
@@ -361,11 +362,15 @@ impl FormatIndex {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.cells.is_empty() && self.labels.is_empty()
+        self.cells.is_empty() && self.labels.is_empty() && !self.has_default_fonts
     }
 
     /// The format of a data cell of `sheet` (the sheet the index was built from).
     pub fn resolve<'a>(&self, sheet: &'a Worksheet, column: ColumnId, row: usize) -> ResolvedStyle<'a> {
+        sheet.font_defaults.data_style(self.resolve_manual(sheet, column, row))
+    }
+
+    fn resolve_manual<'a>(&self, sheet: &'a Worksheet, column: ColumnId, row: usize) -> ResolvedStyle<'a> {
         let Some(list) = self.cells.get(&column) else { return ResolvedStyle::default() };
         let at = list.partition_point(|s| s.first <= row);
         let Some(seg) = at.checked_sub(1).map(|i| &list[i]).filter(|s| row <= s.last) else {

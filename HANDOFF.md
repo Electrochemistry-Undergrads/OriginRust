@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **293 listed item locations** at the planning
-  baseline (198 menu bar, 18 toolbar, 77 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **292 listed item locations** at the planning
+  baseline (197 menu bar, 18 toolbar, 77 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -70,6 +70,17 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## Latest integration
+
+T58 empty font-family syntax (`codex/t58-font-aliases`, 2026-11-16): `\f:(...)` stays
+literal instead of silently dropping its wrapper. The accepted older N6 record and 21 fresh
+Origin 2016 controls establish literal text, Courier/Times inheritance and restoration.
+Default/short names that matched ordinary fallback do not add unmeasured alias mappings;
+modern special defaults remain separate. Three regressions cover parsing, styles/width and
+SVG/EPS/EMF/raster output. Fmt, strict workspace/all-target Clippy, all 4,296 tests (eight
+ignored), all 11 font regressions, inventory 293 and eight Python tests pass with frozen
+source/goldens and four test threads. Native and current-CLI PNG/SVG outputs were inspected.
+Only the parser guard and tests change; no font resolver, model, editor or backend changes.
+Own claim/window released by this push; broader T58 work remains partial.
 
 **T58 custom RGB graph-font toolbar colours (2026-11-16, Windows):** Font Color >
 Custom RGB... provides 0 to 255 fields, a preview, Apply/Cancel and valid Enter for selected
@@ -513,12 +524,27 @@ were inspected and hashed. Formatting, strict workspace all-target Clippy, 4,205
 (8 existing ignored), inventory, eight Python tooling tests and frozen source/goldens pass.
 T59 remains partial; category defaults and sticky heights are separate work.
 
+**T59 worksheet Data font defaults (`codex/t59-worksheet-default-fonts`):** Format > Worksheet
+(F4) opens separate worksheet-wide Data family/point-size controls with installed-font search.
+One optional setting reaches current/future data cells below manual range fonts; labels retain
+their own styles. Grid caching, print/images, native project saves, OPJ companion loss reporting
+and bounded Excel snapshot styles share the same effective fonts. Native measurements establish
+future-column behavior, manual12 over Data20 and the Font checkbox's apply-mask behavior.
+Sheaf retains its existing derived row heights; Native fixed/sticky heights and other categories
+remain open (GUI3/workbook13b/T59). Fmt, strict workspace all-target Clippy and 4,293 tests pass
+(8 existing ignored), including all11 new regressions. Inventory/tooling, independent
+openpyxl output review, frozen source/goldens and inspected fresh desktop captures pass. All
+own builders, Native instances, desktop helpers and guards are terminal. Only this claim/window
+is released; other sessions' claims are preserved.
+
 ## In flight (check for recent edits before claiming)
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t58-object-classic-colors` | Codex Windows | T58 remaining 24 Classic Fill/Line Color toolbar choices for existing supported graph-object targets; Native measurement first | claimed 2026-11-16; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels` reused after public34780d03/FULL4296/all actors and shippingCI terminal. Bounded toolbar/format.rs existing object-colour UI branch +new private child helper (object_format.rs contract read-only), own regressions/registry and graphing7.4/T58 metadata. Keep public PALETTE eight basic entries/callers intact; existing targets/request/history/stale contract only. No graph_view/actions/shape geometry/resize/T24 source, Core/model/renderer/IO production changes, font toolbar/editor/aliases, worksheet/T59 fonts/pickers, layer-management/T60, gadgets/stats/fitting/MCP/import/clipboard/T112 or reserved modules/ROOT pending paths. No product window. |
+| `codex/t59-label-default-fonts` | Codex Windows | T59 remaining worksheet label-category font defaults, Native inheritance/manual-family-size/future-column measurements first; first mutators Long Name, Units and Comments only if established | claimed 2026-11-16; sequential reuse OWN CLEAN `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` after public00021dc3/FULL4293/all own actors and shippingCI terminal. Bounded optional label-font fields in existing sheet_fonts +cellformat label fallback, private worksheet_fonts dialog category state and own tests/registry, effective XLSX label style/omission warning and existing OPJ loss condition only as required; GUI3/workbook13b/T59 metadata. Measure Column Labels hierarchy and remaining Data/manual cross-property precedence read-only before decisions; bulk Column Labels implementation only if scope/behavior clear. Preserve published Data-font behavior unless a measured correction is required. Formula/parameter-specific and Standard/header mutators stay disabled; no formula/parameter text/evaluation/insertion/substitution or their modules, category colors/text controls/sticky heights/T27, graph editor/toolbar/palettes/render/fonts/T58/T60/T61, gadgets/stats/fitting/MCP/import/clipboard, reserved T26/T29/T16item6 or ROOT pending paths. Native-only narrowing allowed; no product hold. Claim public BEFORE Graphify/source/spec/Native. |
+| `t22-origin` | Claude Windows, "axis-breaks" | T22 leftovers, docs only: Origin 2016 measurements of Intersect (output order, touching points, coincident stretches, shared vertices) and Polygon Area with fewer than three points (analysis-curve-math Unmeasured 7, 10) | claimed 2026-11-16; spec text only, no code (no free build folder, 12 GB disk); no other sessions' scopes |
 | `codex/t60-layer-border-display` | Codex Windows | T60 Layer Management Display Border Fill/Border Color: measure first, wire only existing supported layer fields | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` reused afteraae34725/FULL4274/all own actors and CI terminal. Bounded dialogs/layer_management.rs +new private border helper if supported, own tests/registry, graphing15.7/T60/index/roadmap/parity; existing preview/selected-layer/history/stale paths. Preserve published Background Color; unsupported border settings remain disabled with measured constraints. No Core/model/renderer/IO production changes, Drawing Order/Dimensions/Add/Axes/merge/layer lifecycle, graph_view/shapes/gadgets, T58 editor/toolbar/palette, worksheet defaults/T59, stockT109, stats/fitting/MCP/import/clipboard, reserved tasks/formula-parameter labels or ROOT pending files. Respect T10913:56-14:15; no own product hold. |
-| `codex/t59-worksheet-default-fonts` | Codex Windows | T59 worksheet category font defaults; first product slice Data family/size; other label categories measured separately | claimed 2026-11-16; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` after23e89f2c. Native Data18/newC18, manual12 over Data20, actual Times New Roman/newC serif and Font-checkbox apply-mask measured; all own Native actors/guards/helpers closed, ignored proof retained. Compatible optional model/new sheet_fonts module +cellformat fallback, grid format-cache condition, NEW private Data-font dialog and only own F4/state/dispatch/menu/registry deltas, effective XLSX blank styles/snapshot warning, OPJ existing loss condition and one explicit batch initializer field using its existing reset policy. Own regressions/GUI3/workbook13b/T59/inventory metadata only. No color defaults/text controls, label/Standard/header mutators, vertical alignment/sticky heights/T27 layout, graph editor/palette/renderer/fonts/T61/T102/T101, stats/fitting/MCP/clipboard/import algorithms, reserved tasks/formula labels or ROOT pending files. NO PRODUCT HOLD: the 14:30-14:55 slot is RELEASED EARLY after final desktop review exposed excessive dialog width. Model/IO and all4289 tests pass; only the new private dialog width needs a bounded correction and fresh visual/full checks. Ready T111 may publish immediately. Product push only after final fmt/strict ALL-TARGET Clippy/full tests and desktop proof; other claims preserved. |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |

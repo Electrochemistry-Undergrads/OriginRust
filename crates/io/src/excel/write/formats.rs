@@ -33,6 +33,9 @@ impl<'a> Formats<'a> {
     /// never manufacture a million blank rows, nor stretch the exported data to a remote range.
     pub(super) fn blank_ranges(&self, column: ColumnId) -> Vec<Range<usize>> {
         let limit = self.sheet.row_count();
+        if !self.sheet.font_defaults.is_empty() {
+            return (limit > 0).then_some(0..limit).into_iter().collect();
+        }
         let mut ranges: Vec<_> = self
             .sheet
             .cell_formats
@@ -60,6 +63,12 @@ impl<'a> Formats<'a> {
     }
 
     pub(super) fn warn_omissions(&self, labels: &[Option<LabelKind>], warnings: &mut Vec<String>) {
+        if !self.sheet.font_defaults.is_empty() {
+            warnings.push(format!(
+                "sheet '{}': worksheet default fonts are exported as current-cell styles; future cells use Excel defaults",
+                self.sheet.name
+            ));
+        }
         let rows = self.sheet.row_count();
         let mut outside = false;
         let mut omitted_labels = false;

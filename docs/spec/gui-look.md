@@ -611,8 +611,39 @@ The Format tab's Apply To list is Standard, Column Labels, Data, Column Header, 
 Long Name, Units, Comments and F(x)=. Data is initially selected; the dialog displays Data > Standard
 as its application priority. Data initially has Rich Text off, Allow Enter/Wrap Text/Float on,
 Disable Editing/Show Missing as Blank off, and separate unchecked Font and Color override switches.
-These controls address worksheet categories. Their mutation,
-inheritance and future-column rules have not been measured; F4 stays grey until that model exists.
+These controls address worksheet categories. Further Data-font measurements below establish
+family/size and future-column behavior; other category mutations remain unmeasured.
+
+**Data category fonts (Origin 2016, 2026-11-16).** `wproperties execute:=get iotrgui:=tr`
+returns the Data font size through `tr.TextControl.FontControl.Size`; changing that child to
+18 and executing `set` changes existing cells and a newly added C column. The UI Font group
+has family and size controls. Selecting Times New Roman with an actual dropdown/keyboard
+commit, then applying 20 pt, gives serif glyphs in existing and newly added columns. A manually
+formatted A1 at 12 pt keeps that size after a worksheet Data change to 20; neighboring cells
+and new C use 20. All synthetic values (A=1..5, B=2*A, C=101..105) remain unchanged.
+Unchecking Font and pressing Apply leaves existing and new-column Data18 intact: this checkbox
+controls which settings the dialog applies, not an operation that removes an inherited font.
+The parent FontControl is a tree, not a supported numeric property; error-30.3 parent scalar
+results are excluded, as are uncommitted family selections and early paint frames. The Face
+getter's numeric rendering is not used as a font identifier. The successful actors, screenshots,
+control lists and PID/start-time cleanup proofs stay in ignored scratch
+`t59-worksheet-default-fonts/`; each owned Origin, helper and guard closed.
+
+Changing this worksheet category does **not** auto-fit Origin's existing fixed-height rows;
+large text clips. A later manual cell-font edit can grow its row based on neighboring text.
+Sheaf retains its existing derived-height policy: effective Data fonts grow/shrink rows in the
+grid, print and image paths. Persistent event-driven/sticky heights remain separate work.
+
+Sheaf enables Format > Worksheet... (F4) with a separate Worksheet Properties window, a Format
+section and Data Apply To category. Font family/size reach all current and future data cells;
+manual per-range properties take precedence. Drafts and Cancel/Escape are inert, each Apply/OK
+is one Undo step, and stale document/sheet requests close. Unchanged OK creates no history.
+The compact layout and changed-properties application are Sheaf choices. The native Font
+apply-mask checkbox is omitted. Standard, headers and all label categories are disabled;
+their propagation/precedence rules need separate measurement. Other worksheet tabs and color/
+text-control defaults remain unavailable. The [official Format tab reference](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+and [wproperties reference](https://docs.originlab.com/x-function/ref/wproperties/) describe the
+current interface; the 2016 observations above come from the local synthetic probes.
 
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,

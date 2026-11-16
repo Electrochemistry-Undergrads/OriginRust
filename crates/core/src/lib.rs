@@ -52,6 +52,7 @@ pub mod rowfilter;
 pub mod sampling;
 pub mod scales;
 pub mod shape;
+pub mod sheet_fonts;
 pub mod sheet_print;
 pub mod sheet_tab;
 pub mod sheet_view;

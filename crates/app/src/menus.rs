@@ -192,6 +192,8 @@ pub enum Cmd {
     RemoveCondFormat,
     /// Format Cells... for the selected cells, rows, columns or label cell.
     FormatCells,
+    /// Format > Worksheet (F4): worksheet-wide Data font defaults.
+    WorksheetFonts,
     /// Cell menu > Add Note... / Edit Note...: the note editor for the selected cell.
     EditNote,
     /// Cell menu > Delete Note.
@@ -1758,7 +1760,7 @@ fn format_menu(kind: WindowKind) -> Vec<Entry> {
         ],
         _ => vec![
             grey("Menu"),
-            grey_keyed("&Worksheet...", plain_key(Key::F4)),
+            keyed("&Worksheet...", plain_key(Key::F4), Cmd::WorksheetFonts),
             item("&Column...", Cmd::ColumnProperties),
             item("Cell...", Cmd::FormatCells),
             sep(),
@@ -2832,6 +2834,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             Action::CondFormatDialog { book: book?, kind: *kind }
         }
+        Cmd::WorksheetFonts => Action::WorksheetFontsDialog(book?),
         Cmd::FormatCells => {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             Action::FormatCellsDialog(book?)

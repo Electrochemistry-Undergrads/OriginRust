@@ -71,4 +71,5 @@ pub mod trendline;
 pub mod user_templates;
 pub mod wavelet;
 pub mod worksheet_color;
+pub mod worksheet_fonts;
 pub mod xyz_options;

@@ -203,11 +203,12 @@ fn escape_at(chars: &[char], pos: usize, st: &Style) -> Option<(Escape, usize)> 
             let start = pos + 3;
             let open = (start..chars.len().min(start + MAX_FONT_NAME + 1)).find(|&i| chars[i] == '(')?;
             let name: String = chars[start..open].iter().collect();
-            if name.contains(['\\', ')']) {
+            // Origin 2016 renders an empty-name escape literally (graphing 7.6).
+            if name.is_empty() || name.contains(['\\', ')']) {
                 return None;
             }
             inner.greek = name.trim().eq_ignore_ascii_case("symbol");
-            if !name.is_empty() && name.trim() == name {
+            if name.trim() == name {
                 inner.family = Some(name);
             }
             Some((Escape::Styled(inner), open + 1))

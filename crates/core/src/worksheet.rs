@@ -51,6 +51,9 @@ pub struct Worksheet {
     /// Cell formats (see [`crate::cellformat`]): ranges of columns and rows; later ranges win.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cell_formats: Vec<crate::cellformat::FormatRange>,
+    /// Category fonts under per-range formatting (T59); absent in older project files.
+    #[serde(default, skip_serializing_if = "crate::sheet_fonts::WorksheetFonts::is_empty")]
+    pub font_defaults: crate::sheet_fonts::WorksheetFonts,
     /// Set on the report sheet of a one-way ANOVA with a means comparison and of a two-sample t-test: the groups
     /// the report was made from, so that "Multiple Comparisons Plot" (T64) can draw them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -70,6 +73,7 @@ impl Worksheet {
             cond_formats: Vec::new(),
             notes: Vec::new(),
             cell_formats: Vec::new(),
+            font_defaults: Default::default(),
             comparison_source: None,
         }
     }

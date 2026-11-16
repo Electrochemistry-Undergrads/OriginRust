@@ -577,8 +577,19 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
 - **Dialog scope.** Set Data Style > More... reuses the selected-range Format Cells window.
   Origin 2016 has no Default data-style command; Rich Text/Wrap Text/Float remain separate,
   unsupported text controls (B5). Its Worksheet Properties Format tab instead has category
-  defaults (Data > Standard, plus headers and label categories); the current range model does
-  not implement that layer, so F4 stays disabled (GUI 3, measurements 2026-11-16).
+  defaults (Data > Standard, plus headers and label categories). F4 now opens a separate
+  Data-font default dialog; other categories remain disabled (GUI 3, measurements 2026-11-16).
+- **Data font defaults.** Optional `Worksheet.font_defaults.data` holds a family/point size;
+  old files omit the empty field. Resolution fills missing manual family/size from that default,
+  preserving every other manual/conditional property and keeping labels independent. One sparse
+  setting reaches future columns and arbitrarily remote rows without per-cell records. Clone,
+  duplicate and project/companion save carry it with the worksheet. The existing batch ReplaceSheet
+  path starts with default formatting, matching its existing range-format reset policy. The grid
+  cache includes defaults even when no manual ranges exist. Print/image and Excel reuse effective
+  style resolution. `.opj` warns and requires its full `.sheaf` companion for these fonts.
+  Excel writes current values and blank cells inside the used rectangle; it cannot retain Sheaf's
+  future-cell inheritance, and import still does not read cell styles. Category labels, Standard/
+  header defaults and persistent row-height changes remain outside this slice.
 - **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe

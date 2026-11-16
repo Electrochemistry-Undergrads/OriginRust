@@ -9,9 +9,8 @@ fn swapped_columns_take_everything_along_as_colswap() {
     let mut p = Project::new();
     let book = p.add_workbook("Book1");
     let mut ids = Vec::new();
-    for (k, v) in [vec![1.0, 2.0], vec![10.0, 20.0], vec![100.0, 200.0], vec![7.0, 8.0], vec![5.0, 6.0]]
-        .into_iter()
-        .enumerate()
+    for (k, v) in
+        [vec![1.0, 2.0], vec![10.0, 20.0], vec![100.0, 200.0], vec![7.0, 8.0], vec![5.0, 6.0]].into_iter().enumerate()
     {
         let d = if k == 0 { Designation::X } else { Designation::Y };
         ids.push(p.add_column(book, 0, d, ColumnData::numeric(v)).unwrap());
@@ -33,7 +32,10 @@ fn swapped_columns_take_everything_along_as_colswap() {
     let names: Vec<&str> = ws.columns.iter().map(|c| c.short_name.as_str()).collect();
     assert_eq!(names, ["A", "D", "C", "B", "E"], "Origin's order after colswap");
     let (d, b) = (&ws.columns[1], &ws.columns[3]);
-    assert_eq!((d.long_name.as_str(), d.units.as_str(), d.designation, d.width), ("Dee", "mm", Designation::YError, None));
+    assert_eq!(
+        (d.long_name.as_str(), d.units.as_str(), d.designation, d.width),
+        ("Dee", "mm", Designation::YError, None)
+    );
     assert_eq!((b.long_name.as_str(), b.designation, b.width), ("Bee", Designation::Y, Some(12)));
     assert_eq!(d.numeric().unwrap(), [7.0, 8.0]);
     // One column is not a swap.

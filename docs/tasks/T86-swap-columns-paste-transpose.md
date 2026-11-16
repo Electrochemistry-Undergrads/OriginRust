@@ -1,6 +1,6 @@
 # T86: Swap Columns and Paste Transpose
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `swap-transpose`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13e): Swap Columns as measured `colswap` (exactly two columns exchange places with all their properties; otherwise refused), Paste Transpose in the Edit menu and the data cell menu by the ordinary paste rules. Left: Paste Transpose measured in Origin (menu-only).
 **Size:** S. **Source:** greyed inventory package B5 (the column header's Swap Columns..., Edit > Paste
 Transpose and the data cell's Paste Transpose).
 **Spec:** `docs/spec/workbook-model.md` (a new section next to the clipboard sections).

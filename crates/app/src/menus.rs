@@ -2540,7 +2540,13 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             Action::Cells { book, op: CellOp::Copy(*kind) }
         }
-        Cmd::Cut | Cmd::Paste | Cmd::PasteTranspose | Cmd::Clear | Cmd::InsertCells | Cmd::DeleteCells | Cmd::Mask(_) => {
+        Cmd::Cut
+        | Cmd::Paste
+        | Cmd::PasteTranspose
+        | Cmd::Clear
+        | Cmd::InsertCells
+        | Cmd::DeleteCells
+        | Cmd::Mask(_) => {
             let book = book?;
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             let op = match cmd {

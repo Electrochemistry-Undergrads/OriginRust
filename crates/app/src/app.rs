@@ -1761,7 +1761,8 @@ impl SheafApp {
                         .locate(a)
                         .and_then(|(b, s, _)| Some((b.id, b.sheets.iter().position(|x| std::ptr::eq(x, s))?)))
                         .ok_or("the column is gone")?;
-                    let ws = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index)).ok_or("the sheet is gone")?;
+                    let ws =
+                        p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index)).ok_or("the sheet is gone")?;
                     if ws.swap_columns(a, b) { Ok(()) } else { Err("select two columns of the same sheet") }
                 });
                 match swapped {

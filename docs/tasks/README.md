@@ -79,6 +79,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T75](T75-scatter-central.md) | 4 (B4), P1 | S | Done 2026-11-16: Scatter Central (axes crossing in the middle, X axis offset) |
 | [T79](T79-column-scatter.md) | 4 (B4), P1 | S | Done 2026-11-16: Column Scatter |
 | [T82](T82-line-series.md) | 4 (B4), P1 | S | Done 2026-11-16: Line Series (one plot, k-point segments, helper sheet) |
+| [T85](T85-histogram-probabilities.md) | 4 (B4), P1 | S | Histogram + Probabilities; in progress 2026-11-16 (`hist-prob`) |
 | [T76](T76-grouped-indexed-plots.md) | Plot > Column/Bar/Pie > Grouped Columns (indexed data), Plot > Statistics > Grouped Box Charts (B4 slice) | M | Done 2026-11-16 (`grouped-indexed`, graphing 14.28, Origin docs only, unmeasured); left: dialog, raw-data statistics, stacking, table tick labels, more than two groups |
 | [T83](T83-interval-and-pareto.md) | Plot > Statistics > Interval Plot and Pareto (B4 slice) | M | Done 2026-11-16 (`interval-pareto`, graphing 14.29, Origin docs only, unmeasured); left: dialogs, binned Pareto, groups, drop lines, count table |
 | [T80](T80-color-and-bubble-scale.md) | 4 (B3), P2 | M | Done 2026-11-16: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (layer scale objects, graphing 27); left: dragging, properties dialog, Map link |

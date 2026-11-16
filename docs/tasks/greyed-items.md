@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **381 greyed items: 278 in the menu bar, 20 on the toolbars, 83 in context menus.**
+original inventory baseline. This is not a new runtime audit. **377 greyed items: 275 in the menu bar, 19 on the toolbars, 83 in context menus.**
 
 ## How to read and keep this file
 
@@ -58,7 +58,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B9` | 13 |
 | `B10` | 6 |
 | `B11` | 10 |
-| `B12` | 16 |
+| `B12` | 12 |
 | `B13` | 7 |
 | `B14` | 44 |
 | `B15` | 21 |
@@ -66,7 +66,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 42 items, backlog packages (`B`) 319, not planned (`N`) 20.
+Briefs (`T`) hold 42 items, backlog packages (`B`) 315, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -76,7 +76,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### File
 - `B14` New: Matrix... · Image · Excel · Layout · Notes · Function Plot
-- `B12` New: Graph
 - `B11` New: From Template
 - `T63` Open Excel...
 - `B12` Open Sample Projects
@@ -84,8 +83,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B11` Save Workbook As Analysis Template... [Workbook]
 - `N` Add Word Bookmarks to Analysis Template... [Workbook]
 - `B11` Batch Processing... [Workbook, Graph]
-- `B12` Save Project without Data...
-- `B12` Duplicate Project without Data
 - `B14` Import: Image... · Binary 2D Array... [no window, Workbook]
 - `B12` Import: Re-Import Directly · Re-Import... [no window, Workbook]
 - `T63` Export: Graph as Image... · Multi-Page PDF... [no window, Workbook]
@@ -220,7 +217,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ## Toolbars
 
-- `B12` Standard: New Graph
 - `B14` Standard: New Matrix · New Layout · New Notes
 - `T63` 2D Graphs: Bar · Stacked Area · Box Chart · Histogram · Bubble
 - `B4` 2D Graphs: High-Low-Close

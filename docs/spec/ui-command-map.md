@@ -64,6 +64,7 @@ The ids 507, 510, 511, 532 are assigned by guess from their contents (INFER).
 - Open... [Ctrl+O]; Open Excel... [Ctrl+E]; Open Sample OPJ; Append... (merge another project in);
   Close.
 - Save Project [Ctrl+S]; Save Project As...
+- New > Graph, Save Project without Data... and Duplicate Project without Data (work, T77).
 - Save Window As... (works, T54: a workbook or a graph with its books to a `.sheafbook` or `.sheafgraph`);
   Save Template As...: writes the active window as a template (still greyed).
 - Save Workbook As Analysis Template...; Add Word Bookmarks to Analysis Template...;

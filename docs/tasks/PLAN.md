@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 381 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 377 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -165,7 +165,7 @@ Backlog packages: write the brief first (step 3 above).
 |---|---|---|---|---|
 | [ ] | [T56](T56-user-graph-templates.md) | Save Template As and user graph templates (open; unverified start on branch `user-templates`) | M | 1 |
 | [ ] | B11 | Templates and themes: template library, From Template, analysis templates, Batch Processing, batch-plotting Duplicate, Theme Organizer, Save Format as Theme | L | 10 |
-| [ ] | B12 | Project and window management: New Graph, save/duplicate project without data, Re-Import, worksheet as image, View Windows, Folders List, folder Properties, sample projects | M | 16 |
+| [ ] | B12 | Project and window management: Re-Import (New Graph, save/duplicate project without data: T77, done), worksheet as image, View Windows, Folders List, folder Properties, sample projects | M | 12 |
 | [ ] | B13 | Tools: Options window, System Variables, Fitting Function Builder and Organizer, Import Filters Manager, project protection, audit log | L | 7 |
 
 - **B11** depends on T56. Analysis templates depend on recalculating analysis results (T03).

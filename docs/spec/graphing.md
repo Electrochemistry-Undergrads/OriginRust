@@ -4508,3 +4508,11 @@ datasets are styled, the default folder and name).
 - Tests: `crates/core/src/user_template/tests.rs`, `crates/io/src/user_templates/tests.rs`,
   `crates/plot/src/user_template_tests.rs`, `crates/app/src/app/ui_tests/user_templates.rs`,
   `crates/cli/tests/user_templates.rs`.
+
+## 25. File > New > Graph and the Standard toolbar's New Graph (T77)
+
+Origin's documentation (not measured, Origin 2016 is on Windows only) says both open an empty graph
+built from the default graph template, named Graph1, Graph2, ..., with no shortcut. [W]
+Sheaf: `Project::add_graph(Template::default())` (the Line template, which carries the owner defaults), no plots;
+axes with nothing to plot run 0 to 1. The graph is one undo step ("New graph") and is shown in front.
+UNMEASURED Sheaf choices: the axis ranges and the look of an empty layer.

@@ -64,6 +64,18 @@ Write to a temporary file in the same folder, then rename it over the target, so
 saving never leaves a half-written project. JSON is pretty-printed (two-space indent) so that it is
 readable and diffs are small.
 
+## Projects without data (T77)
+
+File > Save Project without Data... and File > Duplicate Project without Data use `Project::without_data()`.
+Origin 2016 does not document the two items; the nearest documented feature is Clone Project
+(`clrAllData`, mode 0: clear all data, keep windows and operations). [W] The rest is an UNMEASURED
+Sheaf choice. Kept: windows and places, names, column labels, units, designations, number formats,
+formulas, graphs. Removed: every value (a column keeps its storage kind), masks, cell notes, cell and
+conditional formats, row filters, analysis marks and links, report comparison sources.
+Save writes this copy to a file of the person's choice (`.opj` or `.sheaf`) and leaves the open
+project, its file name and its unsaved state alone. Duplicate asks about unsaved changes, then the
+copy replaces the open project as an unsaved UNTITLED project; the old file is not touched.
+
 ## Compatibility promise
 
 Version 1 files stay readable by all later versions. A change that old readers cannot ignore raises

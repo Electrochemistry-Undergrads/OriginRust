@@ -965,8 +965,16 @@ number matches (the p-value to 1e-9 relative, the normal tail of `statrs`).
   columns cut-off, 1 - specificity, sensitivity. The cut-offs are the midpoints between neighbouring
   distinct values (0.15 between 0.1 and 0.2) and, at the ends, the smallest value - 1 and the largest + 1
   (-0.3 and 5.8 for data from 0.7 to 4.8), or 0 and 1 when every value lies in [0, 1]. Copied (Sheaf keeps
-  its order from (0, 0) to (1, 1)); with "Positive v.s. Low" the same rule mirrored (not measured).
-- Not measured: Speed Mode, "Positive v.s. Low", text states, several data columns, other confidence levels.
+  its order from (0, 0) to (1, 1)).
+- **"Positive v.s. Low"** (2026-11-15, `r-lowA`, `r-lowB`): the area is 1 - A of the same data, the standard error,
+  p-value and interval half-width are unchanged, and the cut-offs are the same midpoints and ends; the rows still run by
+  rising cut-off, which is now from (0, 0) (nobody positive below the smallest value - 1) to (1, 1). As Sheaf.
+- **Text states** (`r-txt`): a column of "no"/"yes" offers the values in order of appearance; with "yes" positive the
+  numbers are those of the numeric case (area 0.9375, SE 0.0897587913521567). As Sheaf.
+- **Speed Mode**: chosen by a message to the Threshold Method list it gave exactly the interpolated result on the
+  overlap set; that this setting took is not confirmed (a message did not set the positive value either), so Speed
+  Mode is still not measured and not built.
+- Not measured: several data columns, other confidence levels.
 
 ## 20 Kaplan-Meier estimator (measured against Origin 2016)
 

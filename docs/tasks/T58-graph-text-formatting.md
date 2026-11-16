@@ -32,6 +32,9 @@ Bold/Italic difference; Sheaf's whole-font flags are explicit choices. No render
 worksheet adapter or new model/file-format fields in this slice. UI regressions cover selection,
 Undo/Redo, validation, stale actions/palettes, SVG and native/companion saves. Remaining steps are
 still open; the renderer and text-editor results above are preserved.
+Formatting, strict workspace all-target Clippy and the combined 3,713-test suite pass
+(8 existing ignored), with all seven toolbar UI regressions, source-hash checks,
+the 397-item inventory and eight Python tooling tests; a desktop capture was inspected.
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

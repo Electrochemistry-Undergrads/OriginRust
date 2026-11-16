@@ -3,6 +3,8 @@
 //! `tools/origin-ref/t96/t96-origin.json`; every output there was read from Origin. Tolerance 1e-12
 //! (the decompositions agree to 1e-15).
 
+#![allow(clippy::approx_constant)] // Origin's outputs contain sqrt 2 as printed
+
 #[path = "fixtures/wavelet_origin.rs"]
 mod data;
 

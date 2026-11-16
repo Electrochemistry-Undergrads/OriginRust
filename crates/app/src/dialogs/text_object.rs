@@ -10,6 +10,7 @@ use sheaf_core::{Document, WindowId};
 use sheaf_plot::scene::ObjectKind;
 
 mod editor;
+mod palette;
 mod preview;
 use editor::Format;
 
@@ -225,6 +226,16 @@ impl TextDialog {
                             command = Some(format);
                         }
                     }
+                    ui.menu_button("Text color", |ui| {
+                        for color in palette::TextColor::ALL {
+                            if ui.button(color.label()).clicked() {
+                                command = Some(Format::Color(color));
+                                ui.close();
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text("Color selected text, or insert colored text at the caret");
                 });
                 if let Some(format) = command {
                     let before = self.text.clone();

@@ -799,6 +799,28 @@ editing choice using the published renderer, not a measured Origin command-rewri
 The existing screenshot hooks accept `--show text:x`, `text:y` and `text:legend` for the first
 layer of the first graph, alongside the existing `text:N` label hook.
 
+### 7.8 Selected-text colour palette (T58)
+
+The shared label, axis-title and legend editor has a Text color menu beside its formatting
+buttons. Black, Red, Green, Blue, Cyan, Magenta, Yellow and White use the existing Classic
+text colours from 7.2: entries 1–7 and 18. Classic Green is bright green and White is entry 18,
+not entry 8 (olive). No parser, glyph, export or base-font rules change.
+
+Origin's [Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/) documents
+font-colour selection alongside its raw text editor, selection formatting and preview.
+This compact eight-name menu and the following rewrite policy are Sheaf choices, not a newly
+measured Origin palette or command algorithm. A choice colours the selected characters, or
+inserts a colour group at the caret for typing. Existing colour groups within that selection
+are replaced while scripts, font/style groups, literal blocks and raw substitutions remain.
+Choosing the same colour again is idempotent. Normal removes inline colour with other inline
+formatting. Legend samples and row boundaries stay outside text-format groups as in 7.7.
+
+Opening and dismissing the palette does not choose custom automatic text. A changed colour
+is a draft until Apply/OK, shares the existing Undo step and preview, and preserves the base
+font. Native and Origin-companion saves retain the raw colour markup. The menu offers this
+bounded subset; broader/custom colour controls, inline family selection and combined-script
+insertion remain separate work.
+
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
 
 | Group | Plots | Priority |

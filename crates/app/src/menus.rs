@@ -808,11 +808,12 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(item("Paste Transpose", Cmd::PasteTranspose));
         v.extend(greys(&["Paste Link", "Paste Link Transpose", "Paste Special", "-", "Select..."]));
         v.push(keyed("C&lear", plain_key(Key::Delete), Cmd::Clear));
-        v.push(item("Insert", Cmd::InsertCells));
+        v.push(item("I&nsert", Cmd::InsertCells));
         v.push(item("&Delete", Cmd::DeleteCells));
         v.extend(greys(&["Remove Links", "-"]));
         v.push(item("Set As Begin", Cmd::SetRangeEnd(RangeEnd::Begin)));
-        v.push(item("Set As End", Cmd::SetRangeEnd(RangeEnd::End)));
+        // Every letter of its text is taken; it takes S from the greyed Paste Link.
+        v.push(item("&Set As End", Cmd::SetRangeEnd(RangeEnd::End)));
         v.push(item("Reset to Full Range", Cmd::ResetFullRange));
         v.push(sep());
         v.push(grey_keyed("Find in Project...", plain_key(Key::F3)));

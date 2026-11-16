@@ -91,6 +91,8 @@ pub struct AxisFormat {
 #[derive(Clone, Debug, PartialEq)]
 struct LayerFormat {
     frame: Frame,
+    /// The layer is validly linked: its frame is then relative to its parent, not to the page.
+    linked: bool,
     x: Axis,
     y: Axis,
     background: Option<Color>,
@@ -130,8 +132,10 @@ pub fn copy_graph(graph: &Graph, part: GraphPart) -> FormatClip {
         layers: graph
             .layers
             .iter()
-            .map(|l| LayerFormat {
+            .enumerate()
+            .map(|(i, l)| LayerFormat {
                 frame: l.frame,
+                linked: graph.link_parent(i).is_some(),
                 x: l.x_axis.clone(),
                 y: l.y_axis.clone(),
                 background: l.background,
@@ -173,6 +177,8 @@ fn paste_scale(to: &mut Axis, from: &Axis) {
 
 fn paste_axis_styles(to: &mut Axis, from: &Axis) {
     to.color = from.color;
+    to.color_follows_plot = from.color_follows_plot;
+    to.title_color_follows_plot = from.title_color_follows_plot;
     to.tick_color = from.tick_color;
     to.line_width_pt = from.line_width_pt;
     to.tick_width_pt = from.tick_width_pt;
@@ -184,8 +190,10 @@ fn paste_axis_styles(to: &mut Axis, from: &Axis) {
     to.minor_tick_len_pt = from.minor_tick_len_pt;
 }
 
-fn paste_layer(to: &mut Layer, from: &LayerFormat, has: &dyn Fn(Group) -> bool) {
-    if has(Group::Dimensions) {
+/// `to_linked`: the target layer is validly linked. A frame is pasted only between layers of the
+/// same kind, since a linked frame is relative to its parent and a root frame to the page.
+fn paste_layer(to: &mut Layer, to_linked: bool, from: &LayerFormat, has: &dyn Fn(Group) -> bool) {
+    if has(Group::Dimensions) && to_linked == from.linked {
         to.frame.left = from.frame.left;
         to.frame.top = from.frame.top;
         to.frame.width = from.frame.width;
@@ -196,6 +204,8 @@ fn paste_layer(to: &mut Layer, from: &LayerFormat, has: &dyn Fn(Group) -> bool) 
         }
         if has(Group::Colors) {
             t.color = f.color;
+            t.color_follows_plot = f.color_follows_plot;
+            t.title_color_follows_plot = f.title_color_follows_plot;
             t.tick_color = f.tick_color;
             t.tick_font.color = f.tick_font.color;
             t.title_font.color = f.title_font.color;
@@ -253,8 +263,9 @@ pub fn paste_graph(graph: &mut Graph, clip: &FormatClip, parts: &[Group]) -> boo
     if has(Group::Dimensions) {
         graph.page.width_pt = f.page_width_pt;
     }
-    for (layer, from) in graph.layers.iter_mut().zip(&f.layers) {
-        paste_layer(layer, from, &has);
+    let linked: Vec<bool> = (0..graph.layers.len()).map(|i| graph.link_parent(i).is_some()).collect();
+    for ((layer, from), to_linked) in graph.layers.iter_mut().zip(&f.layers).zip(linked) {
+        paste_layer(layer, to_linked, from, &has);
     }
     true
 }
@@ -521,5 +532,49 @@ mod tests {
         assert!(!paste_axis(&mut dst, 0, false, &g, AxisPart::All));
         assert!(copy_axis(&src, 5, false, AxisPart::All).is_none());
         assert!(!paste_axis(&mut dst, 5, false, &x, AxisPart::All));
+    }
+
+    #[test]
+    fn colors_paste_carries_the_follow_plot_flags() {
+        let (mut src, mut dst) = pair();
+        dst.layers[0].y_axis.color_follows_plot = true;
+        dst.layers[0].y_axis.title_color_follows_plot = true;
+        src.layers[0].y_axis.color = Color::RED;
+        let clip = copy_graph(&src, GraphPart::Colors);
+        assert!(paste_graph(&mut dst, &clip, GraphPart::Colors.groups()));
+        let y = &dst.layers[0].y_axis;
+        assert_eq!(y.color, Color::RED);
+        assert!(!y.color_follows_plot && !y.title_color_follows_plot);
+        // An axis paste of styles carries them too.
+        let mut dst2 = Template::Line.new_graph(WindowId(3), "D2");
+        dst2.layers[0].y_axis.color_follows_plot = true;
+        let axis = copy_axis(&src, 0, true, AxisPart::Styles).unwrap();
+        assert!(paste_axis(&mut dst2, 0, true, &axis, AxisPart::Styles));
+        assert!(!dst2.layers[0].y_axis.color_follows_plot);
+    }
+
+    #[test]
+    fn dimensions_paste_skips_layers_of_another_link_kind() {
+        let (src, mut dst) = pair();
+        let mut second = dst.layers[0].clone();
+        second.link = Some(crate::graph::LayerLink { parent: 0, x: Default::default(), y: Default::default() });
+        dst.layers.push(second);
+        let before_linked = dst.layers[1].frame;
+        let clip = copy_graph(&src, GraphPart::Dimensions);
+        paste_graph(&mut dst, &clip, GraphPart::Dimensions.groups());
+        assert_eq!(dst.layers[0].frame.left, 0.2, "a root frame goes to a root layer");
+        assert_eq!(dst.layers[1].frame, before_linked);
+        // A linked source frame does not go onto a root target.
+        let mut linked_src = src.clone();
+        linked_src.layers.push(linked_src.layers[0].clone());
+        linked_src.layers[1].link =
+            Some(crate::graph::LayerLink { parent: 0, x: Default::default(), y: Default::default() });
+        linked_src.layers[1].frame.left = 0.05;
+        let (_, mut root_dst) = pair();
+        root_dst.layers.push(root_dst.layers[0].clone());
+        let root_before = root_dst.layers[1].frame;
+        let clip = copy_graph(&linked_src, GraphPart::Dimensions);
+        paste_graph(&mut root_dst, &clip, GraphPart::Dimensions.groups());
+        assert_eq!(root_dst.layers[1].frame, root_before);
     }
 }

@@ -610,6 +610,12 @@ pub enum Action {
         graph: WindowId,
         part: sheaf_core::format_clip::GraphPart,
     },
+    /// Edit > Copy Format: the format of the selected axis when an axis is selected (Origin does
+    /// the same), else of the whole graph.
+    EditCopyFormat {
+        graph: WindowId,
+        part: sheaf_core::format_clip::GraphPart,
+    },
     /// Copy Format of one axis.
     CopyAxisFormat {
         graph: WindowId,

@@ -2225,6 +2225,29 @@ impl SheafApp {
                     self.say("Format copied");
                 }
             }
+            Action::EditCopyFormat { graph, part } => {
+                use sheaf_core::format_clip::{AxisPart, GraphPart};
+                use sheaf_plot::scene::ObjectKind;
+                let axis = match self.graphs.get(&graph).and_then(|s| s.selected) {
+                    Some((layer, ObjectKind::XAxis)) => Some((layer, false)),
+                    Some((layer, ObjectKind::YAxis)) => Some((layer, true)),
+                    _ => None,
+                };
+                if let Some((layer, y)) = axis {
+                    // Origin copies an axis format here; only the parts an axis holds are measured.
+                    let part = match part {
+                        GraphPart::All => Some(AxisPart::All),
+                        GraphPart::AllStyle => Some(AxisPart::Styles),
+                        GraphPart::Scales => Some(AxisPart::Scales),
+                        _ => None,
+                    };
+                    if let Some(part) = part {
+                        self.apply(Action::CopyAxisFormat { graph, layer, y, part }, ctx);
+                    }
+                } else {
+                    self.apply(Action::CopyGraphFormat { graph, part }, ctx);
+                }
+            }
             Action::CopyAxisFormat { graph, layer, y, part } => {
                 if crate::format_clip_ui::copy_axis(&self.doc, graph, layer, y, part) {
                     self.say("Format copied");

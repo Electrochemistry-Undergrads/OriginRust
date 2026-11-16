@@ -113,15 +113,34 @@ pub struct ApplyFormats {
 
 impl ApplyFormats {
     pub fn new(graph: WindowId, layer: usize) -> Self {
-        let mut checks = Vec::new();
-        if let Some(FormatClip::Graph(f)) = held() {
-            checks = f.groups().iter().map(|g| (*g, true)).collect();
+        let mut w = ApplyFormats {
+            graph,
+            layer,
+            checks: Vec::new(),
+            axis_scales: true,
+            axis_styles: true,
+            y_axis: false,
+            applied: false,
+        };
+        w.sync_checks();
+        w
+    }
+
+    /// Rebuilds the group check boxes when the clipboard holds another graph format than the one
+    /// they were made for (the window is modeless: Copy Format may run while it is open).
+    fn sync_checks(&mut self) {
+        let groups: Vec<Group> = match held() {
+            Some(FormatClip::Graph(f)) => f.groups().to_vec(),
+            _ => Vec::new(),
+        };
+        if self.checks.iter().map(|(g, _)| *g).ne(groups.iter().copied()) {
+            self.checks = groups.into_iter().map(|g| (g, true)).collect();
         }
-        ApplyFormats { graph, layer, checks, axis_scales: true, axis_styles: true, y_axis: false, applied: false }
     }
 
     /// Draws the window. Returns `false` when it was closed.
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut Document) -> bool {
+        self.sync_checks();
         let mut open = true;
         let mut close = false;
         egui::Window::new("Apply Formats").id(egui::Id::new("apply_formats")).open(&mut open).resizable(false).show(

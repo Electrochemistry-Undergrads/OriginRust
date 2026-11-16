@@ -324,6 +324,8 @@ pub enum Cmd {
     CopyPage,
     /// Copy Format of the whole graph (Edit menu, page menu): what the clipboard takes (T72).
     CopyGraphFormat(sheaf_core::format_clip::GraphPart),
+    /// Edit > Copy Format: the graph format, or the format of the selected axis (T72).
+    EditCopyFormat(sheaf_core::format_clip::GraphPart),
     /// Copy Format of one axis.
     CopyAxisFormat {
         layer: usize,
@@ -757,17 +759,20 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
             "Button Edit Mode",
             "Update Client",
         ]));
-        v.push(graph_copy_format_menu(&[
-            ("All", Some(GraphPart::All)),
-            ("All Style Formats", Some(GraphPart::AllStyle)),
-            ("Colors", Some(GraphPart::Colors)),
-            ("Fonts", Some(GraphPart::Fonts)),
-            ("Background", Some(GraphPart::Background)),
-            ("Symbol/Line/Fill", None),
-            ("Dimensions", Some(GraphPart::Dimensions)),
-            ("Scales", Some(GraphPart::Scales)),
-            ("Text", None),
-        ]));
+        v.push(graph_copy_format_menu(
+            true,
+            &[
+                ("All", Some(GraphPart::All)),
+                ("All Style Formats", Some(GraphPart::AllStyle)),
+                ("Colors", Some(GraphPart::Colors)),
+                ("Fonts", Some(GraphPart::Fonts)),
+                ("Background", Some(GraphPart::Background)),
+                ("Symbol/Line/Fill", None),
+                ("Dimensions", Some(GraphPart::Dimensions)),
+                ("Scales", Some(GraphPart::Scales)),
+                ("Text", None),
+            ],
+        ));
         v.push(item("Paste Format...", Cmd::PasteFormatDialog));
         v.push(sep());
         v.push(grey_keyed("Find in Project", plain_key(Key::F3)));
@@ -1876,13 +1881,14 @@ pub fn graph_plot_menu(
 
 /// A Copy Format submenu of a graph: an item per choice; `None` is a choice Sheaf has not measured
 /// and keeps greyed. A "-" label is a separator.
-fn graph_copy_format_menu(choices: &[(&str, Option<GraphPart>)]) -> Entry {
+fn graph_copy_format_menu(edit: bool, choices: &[(&str, Option<GraphPart>)]) -> Entry {
     sub(
         "Copy Format",
         choices
             .iter()
             .map(|(label, part)| match (*label, part) {
                 ("-", _) => sep(),
+                (_, Some(part)) if edit => item(label, Cmd::EditCopyFormat(*part)),
                 (_, Some(part)) => item(label, Cmd::CopyGraphFormat(*part)),
                 (_, None) => grey(label),
             })
@@ -2071,19 +2077,22 @@ pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
         sep(),
         keyed("Rescale To Show All", ctrl(Key::R), Cmd::GraphEdit(GraphOp::Rescale { layer })),
         item("Page Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Page, plot: None }),
-        graph_copy_format_menu(&[
-            ("Page Background", None),
-            ("Legend Translation Mode", None),
-            ("Dimensions", Some(GraphPart::Dimensions)),
-            ("Scales", Some(GraphPart::Scales)),
-            ("-", None),
-            ("Colors", Some(GraphPart::Colors)),
-            ("Fonts", Some(GraphPart::Fonts)),
-            ("Background", Some(GraphPart::Background)),
-            ("All Style Formats", Some(GraphPart::AllStyle)),
-            ("-", None),
-            ("All", Some(GraphPart::All)),
-        ]),
+        graph_copy_format_menu(
+            false,
+            &[
+                ("Page Background", None),
+                ("Legend Translation Mode", None),
+                ("Dimensions", Some(GraphPart::Dimensions)),
+                ("Scales", Some(GraphPart::Scales)),
+                ("-", None),
+                ("Colors", Some(GraphPart::Colors)),
+                ("Fonts", Some(GraphPart::Fonts)),
+                ("Background", Some(GraphPart::Background)),
+                ("All Style Formats", Some(GraphPart::AllStyle)),
+                ("-", None),
+                ("All", Some(GraphPart::All)),
+            ],
+        ),
         page_paste_format_entry(),
         grey_sub("Duplicate (Batch Plotting)", &["Duplicate"]),
     ]
@@ -2624,6 +2633,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::CopyPage => Action::CopyPage(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::CopyGraphFormat(part) => Action::CopyGraphFormat { graph: c.graph.ok_or(NEED_GRAPH)?, part: *part },
+        Cmd::EditCopyFormat(part) => Action::EditCopyFormat { graph: c.graph.ok_or(NEED_GRAPH)?, part: *part },
         Cmd::CopyAxisFormat { layer, y, part } => {
             Action::CopyAxisFormat { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y, part: *part }
         }

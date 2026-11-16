@@ -215,7 +215,8 @@ fn the_clipboard_kind_chooses_the_paste_menu() {
     assert!(h.query_by_label("Paste Format").is_none());
     pick(&mut h, "Paste Format To");
     assert!(disabled(&h, "Bottom Axes") && disabled(&h, "All Axes"), "its choices are unmeasured");
-    // A graph format gives the axis menu no Paste Format To.
+    // A graph format gives the axis menu no Paste Format To (no axis selected, so Edit copies the graph).
+    h.state_mut().graphs.values_mut().next().unwrap().selected = None;
     menu_path(&mut h, &["Edit", "Copy Format", "All"]);
     right_click_on(&mut h, ObjectKind::XAxis);
     assert!(not_toolbar(&h, "Paste Format To").is_empty());
@@ -241,4 +242,25 @@ fn edit_menu_copy_format_lists_nine_choices_with_symbol_and_text_greyed() {
     for label in ["Symbol/Line/Fill", "Text"] {
         assert!(disabled(&h, label), "{label} is greyed until measured");
     }
+}
+
+#[test]
+fn edit_copy_format_with_an_axis_selected_copies_the_axis_format() {
+    let mut h = start(vec![data_file("fmt-editaxis")]);
+    styled(&mut h);
+    h.state_mut().graphs.values_mut().next().unwrap().selected = Some((0, ObjectKind::XAxis));
+    settle(&mut h);
+    menu_path(&mut h, &["Edit", "Copy Format", "All"]);
+    assert_eq!(crate::format_clip_ui::kind(), Some(crate::format_clip_ui::ClipKind::Axis));
+}
+
+#[test]
+fn the_window_follows_the_clipboard_while_it_is_open() {
+    let mut h = start(vec![data_file("fmt-sync")]);
+    menu_path(&mut h, &["Edit", "Copy Format", "Fonts"]);
+    menu(&mut h, "Edit", "Paste Format...");
+    assert!(h.query_by_label("Background").is_none());
+    menu_path(&mut h, &["Edit", "Copy Format", "All"]);
+    settle(&mut h);
+    assert!(h.query_by_label("Background").is_some(), "the check boxes follow the new clip");
 }

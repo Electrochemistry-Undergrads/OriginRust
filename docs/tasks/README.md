@@ -143,7 +143,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T57](T57-deconvolution-stft.md) | Deconvolution and STFT (Signal Processing) | M | claimed 2026-11-15 (`deconv-stft`, Claude macOS "violin") |
 | [T56](T56-user-graph-templates.md) | Save Template As and Plot > User Templates (a graph's look without data, applied to new columns; CLI `--template`) | M | open; stopped 2026-11-15: unverified core/io start on remote branch `user-templates` (`449ef7b`), free to continue or restart |
 | [T64](T64-significance-plot.md) | Multiple comparisons plot with significance brackets | M | done 2026-11-15 (statistics 23, `significance-plot`, macOS); left: two-way ANOVA, paired and one-sample, Origin measurements, editable brackets |
-| [T72](T72-copy-paste-format.md) | Copy Format and Paste Format on graph, axis and legend (B2 slice 1) | M | open; Origin 2016 measured (graphing 24), Rust not started |
+| [T72](T72-copy-paste-format.md) | Copy Format and Paste Format on graph, axis and legend (B2 slice 1) | M | open; Origin 2016 measured (graphing 24), Rust built (core module, menus, Apply Formats window) |
 
 For every active claim (including matrices/contour/heatmaps), read the current
 [HANDOFF table](../../HANDOFF.md). This index is not a second claims ledger. Older branches and

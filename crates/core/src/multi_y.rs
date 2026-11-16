@@ -86,6 +86,14 @@ impl MultiYKind {
         }
     }
 
+    /// Stock legend properties shared by empty templates and plots made from columns.
+    /// The independently constructed Multiple Y Axes dialog plans do not use these defaults.
+    pub(crate) fn apply_legend_defaults(&self, graph: &mut Graph) {
+        graph.layers[0].legend.font.size_pt = if *self == Self::FourYyYy { 20.0 } else { 22.0 };
+        graph.layers[0].legend.background = None;
+        graph.layers[0].legend.frame = false;
+    }
+
     /// The measured frame, axes and colours (graphing spec 21.5).
     pub fn plan(&self) -> MultiYPlan {
         use AxisSide::{Normal as L, Opposite as R};
@@ -93,22 +101,22 @@ impl MultiYKind {
             MultiYKind::ThreeYYy => (
                 (0.09593, 0.1989, 0.7573, 0.6652),
                 vec![axis(L, 0.0, BLACK), axis(R, 0.0, RED), axis(R, 10.0, BLUE)],
-                LegendPosition::TopLeft,
+                LegendPosition::ManualTopLeft { x: 0.12482036542804353, y: -0.21129770992366412 },
             ),
             MultiYKind::ThreeYYY => (
                 (0.09764, 0.157, 0.8169, 0.6884),
                 vec![axis(L, 0.0, BLACK), axis(L, MIDDLE_OFFSET_PCT, RED), axis(R, 0.0, BLUE)],
-                LegendPosition::TopLeft,
+                LegendPosition::ManualTopLeft { x: 0.15074229158736202, y: -0.19563293006786664 },
             ),
             MultiYKind::FourYYyy => (
                 (0.06856, 0.2147, 0.6772, 0.6407),
                 vec![axis(L, 0.0, BLUE), axis(R, 0.0, GREEN), axis(R, 12.0, ORANGE), axis(R, 23.0, MAGENTA)],
-                LegendPosition::TopRight,
+                LegendPosition::ManualTopLeft { x: 1.002754820936639, y: -0.3123018389346861 },
             ),
             MultiYKind::FourYyYy => (
                 (0.1491, 0.2125, 0.685, 0.6348),
                 vec![axis(L, 0.0, BLUE), axis(L, 11.0, GREEN), axis(R, 0.0, MAGENTA), axis(R, 11.0, ORANGE)],
-                LegendPosition::TopLeft,
+                LegendPosition::ManualTopLeft { x: 0.05832955061280075, y: -0.27712 },
             ),
         };
         MultiYPlan {

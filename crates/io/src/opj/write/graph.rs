@@ -622,6 +622,10 @@ impl Writer {
                 LegendPosition::BottomLeft => {
                     (frame_pt.left + w / 2.0 + margin, frame_pt.top + frame_pt.height - h / 2.0 - margin)
                 }
+                LegendPosition::ManualTopLeft { x, y } => {
+                    notes.push("the top-left legend anchor was written as a fixed position".into());
+                    (frame_pt.left + x * frame_pt.width + w / 2.0, frame_pt.top + y * frame_pt.height + h / 2.0)
+                }
                 LegendPosition::Manual { x, y } => {
                     (frame_pt.left + x * frame_pt.width, frame_pt.top + y * frame_pt.height)
                 }

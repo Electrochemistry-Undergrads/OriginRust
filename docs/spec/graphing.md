@@ -4750,10 +4750,62 @@ Implemented in `crates/core/src/multi_y.rs` (plans, options), `Template::Multi3Y
 
 - **Templates** take the frames, sides, offsets and colours of the table in 21.5 (`MultiYKind::plan`). Layer 1 is the root with the bottom X axis; every other layer is linked to it with a straight X scale and its own Y scale, covers it and shows only its Y axis. The box is open, the Y axes have no titles, each axis takes its plot's colour, one legend in layer 1 lists every plot. **Provisional deviation:** layer 3 of Y-YY is linked to layer 1, not to layer 2 (Sheaf links only to an unlinked layer; the X range is the same either way).
 - **Columns** go to layer *i* mod *N* (21.5), N = 3 or 4. Fewer columns than layers still make every layer (Origin did the same, no message); the empty layers draw their axis with a 0 to 1 scale. No column at all is refused ("a multiple Y axes graph needs at least one Y column"). `--y2` and `--panels` are refused with these templates.
-- **Colours**: the layer's colour first, then Origin's colour list without it, so a second plot in the layer takes the next colour. Legend position is **unmeasured**: Sheaf uses top-left (3Ys, YY-YY) and top-right (Y-YYY) inside the frame, Origin puts the legend above the frame.
+- **Colours**: the layer's colour first, then Origin's colour list without it, so a second plot in the layer takes the next colour. The stock legend anchors, logical font sizes and background are measured and implemented in 21.12; shared spacing and extra-column membership remain provisional.
 - **Multiple Y Axes...** follows 21.6: Plot Type (Line, Scatter, Line + Symbol; Custom is not offered), Number of Left/Right Y Axes with Auto (floor(N/2) left, rest right), Add Middle Y Axis (-50 %), Number of Plots in Each Layer (the sum must equal the number of columns, a layer cannot be empty), Link Axis Color to Plot, Show Y Title, Show Top X Axis (line and ticks only; tick labels on the top axis are not drawn), Y Axes Gap (Auto 10, and 14 when Y titles or the top X axis are on: which of the options causes it is **unmeasured**, Sheaf uses titles or top X; `axiscolor:=0` alone is unmeasured). The first frame is centred with the outward offsets by the formula of 21.6; one Y column makes an ordinary graph with a left axis and the frame at 17.91 %. A count of axes that does not fit the number of layers is reported in the dialog and nothing is made. The Preview button and `hide` are not built.
 - **Files**: `.sheaf` keeps `offset_pct` and the layer links. The `.opj` writer writes one ordinary layer per Y axis but no axis position; the save names "the position of a Y axis away from the frame" so the `.opj.sheaf` companion keeps it (ADR 0008). CLI and MCP have the four template names only; the Multiple Y Axes options are in the app.
 - Goldens: `crates/plot/tests/golden/multi-y-3ys-y-yy.svg`, `-3ys-y-y-y`, `-4ys-y-yyy`, `-4ys-yy-yy` and `multi-y-multiple-axes.svg`.
+
+### 21.12 Stock multi-Y legend anchors (T61 follow-up)
+
+Measured in Origin 2016 on 2026-11-16, using our own X = 0,1,2 and synthetic Y columns
+named Alpha, Beta, Gamma, Delta and Extra. Four normal controls, twelve long-name/one-Y/
+five-Y controls and eight post-export readbacks are in local
+`scratch/multi-y-template-legends/{templates,vary,post}.*`; EMF records and property
+readbacks are retained there. The private runner held the reference mutex, refused existing
+COM instances and closed its own instance; all three runs completed normally.
+
+Origin's [graphical object guide](https://docs.originlab.com/labtalk/guide/creating-and-accessing-graphical-objs/)
+defines `x1`/`y1` as the top-left in axis units. The table converts their post-export
+readbacks to fractions of the layer frame: `(x1-x.from)/(x.to-x.from)` and
+`(y.to-y1)/(y.to-y.from)`. This avoids depending on the data scale or text width.
+
+| Stock template | Left / frame width | Top / frame height | Legend font size |
+|---|---:|---:|---:|
+| 3Ys Y-YY | 0.1248203654 | -0.2112977099 | 22 pt |
+| 3Ys Y-Y-Y | 0.1507422916 | -0.1956329301 | 22 pt |
+| 4Ys Y-YYY | 1.0027548209 | -0.3123018389 | 22 pt |
+| 4Ys YY-YY | 0.0583295506 | -0.2771200000 | 20 pt |
+
+The values were identical for one and five Y columns despite their different Y ranges.
+Longer names expand rightward from the same left edge, rather than moving the left edge
+around a fixed centre. Native properties report layer attachment, automatic text anchor,
+black text, and no background (`attach=0`, `anchor=0`, `color=1`, `background=0`);
+EMF controls identify Arial. A blank `font$` and experimental unsupported property reads
+were excluded from conclusions. Negative top fractions place the legend above the frame;
+the Y-YYY legend also starts just beyond its right edge.
+
+Sheaf's compatible `LegendPosition::ManualTopLeft { x, y }` retains this anchor as labels
+grow, while the existing `Manual` remains centre-based. The new anchor aligns the visible
+sample/glyph/frame bounds used for picking, excluding unpainted internal padding. A measured
+first pass followed by centre placement keeps the last row above the plot rather than
+allowing a padded-box offset to collide with a top tick label. The four named template plans use
+the measured points, font sizes, no frame and no background. Independently constructed Multiple Y
+Axes dialog plans keep their existing defaults. The existing Legend properties page labels
+the coordinates as top-left and allows values outside the frame without clamping on Apply.
+The Cartesian and parallel legend/scale paths handle the new anchor consistently.
+
+`.sheaf` and Origin companions preserve the anchor variant. The `.opj` writer places the
+annotation rectangle using its top-left plus half its width/height, and warns that the
+anchor was written as a fixed position. A bare native reopen therefore has the existing
+centre-based representation; the companion restores dynamic top-left placement.
+
+This closes the provisional **anchor/font/background** defaults in 21.11. It does not
+establish exact native row spacing, padding or symbol lengths: those still use Sheaf's
+shared legend metrics. Native raw template text references the first plot of each layer,
+but the five-column export showed additional labels not explained by the raw text readback;
+extra-column legend membership and empty-layer row translation remain follow-ups. The
+existing automatic graph-wide legend contents are unchanged. No layer assignment, axes,
+links, dialog-plan defaults or worksheet behavior is changed here.
 
 ## 22. Graph view modes, Show toggles and Full Screen (T66, measured 2026-11-15, Origin 2016)
 

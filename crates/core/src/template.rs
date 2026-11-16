@@ -421,7 +421,9 @@ impl Template {
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
             Template::Multi3YYy | Template::Multi3YYY | Template::Multi4YYyy | Template::Multi4YyYy => {
-                self.multi_y().expect("multi-Y template").plan().graph(Template::Line, id, name)
+                let mut g = self.multi_y().expect("multi-Y template").plan().graph(Template::Line, id, name);
+                self.multi_y().expect("multi-Y template").apply_legend_defaults(&mut g);
+                g
             }
             Template::StackedLines => stacked_lines(id, name),
             Template::Waterfall => waterfall(id, name),

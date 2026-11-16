@@ -11,7 +11,7 @@
 /// limits match d2 = 1.692569 for n = 3, not the rounded 1.693), D3 and D4 the three-decimal table values
 /// (Origin's range limit is 2.575 R bar for n = 3).
 const CONSTANTS: [(f64, f64, f64, f64); 9] = [
-    (1.128379, 0.852502, 0.0, 3.267),
+    (std::f64::consts::FRAC_2_SQRT_PI, 0.852502, 0.0, 3.267),
     (1.692569, 0.888368, 0.0, 2.575),
     (2.058751, 0.879808, 0.0, 2.282),
     (2.325929, 0.864082, 0.0, 2.115),

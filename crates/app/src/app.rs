@@ -207,6 +207,8 @@ pub struct SheafApp {
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
     copied: String,
+    /// Edit > Paste Transpose asked for the clipboard: the next pasted text is transposed.
+    paste_transposed: bool,
     worksheet_clipboard: crate::wks_clipboard::WorksheetClipboard,
     /// The pixel size of the last page put on the clipboard by Copy Page.
     copied_page: Option<[usize; 2]>,
@@ -321,6 +323,7 @@ impl SheafApp {
             sort: None,
             sheet_name: None,
             copied: String::new(),
+            paste_transposed: false,
             worksheet_clipboard: crate::wks_clipboard::WorksheetClipboard::default(),
             copied_page: None,
             about: false,
@@ -1740,6 +1743,20 @@ impl SheafApp {
                     self.say("The columns are already there");
                 }
             }
+            Action::SwapColumns(a, b) => {
+                let swapped = self.doc.edit("Swap columns", |p| {
+                    let (book, sheet_index) = p
+                        .locate(a)
+                        .and_then(|(b, s, _)| Some((b.id, b.sheets.iter().position(|x| std::ptr::eq(x, s))?)))
+                        .ok_or("the column is gone")?;
+                    let ws = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index)).ok_or("the sheet is gone")?;
+                    if ws.swap_columns(a, b) { Ok(()) } else { Err("select two columns of the same sheet") }
+                });
+                match swapped {
+                    Ok(()) => self.say("Swapped the two columns"),
+                    Err(e) => self.warn(format!("Could not swap: {e}")),
+                }
+            }
             Action::HideColumns(columns) => {
                 self.doc.apply("Hide columns", |p| {
                     for id in &columns {
@@ -2605,7 +2622,7 @@ impl SheafApp {
         };
         let target = self.books.get(&book).and_then(|s| s.target(sheet));
         let Some(t) = target else {
-            if op == CellOp::Paste || matches!(op, CellOp::PasteText(_)) {
+            if matches!(op, CellOp::Paste | CellOp::PasteTranspose | CellOp::PasteText(_)) {
                 self.warn("Click a cell first: the pasted text starts there".to_string());
             }
             return;
@@ -2670,14 +2687,23 @@ impl SheafApp {
                 self.say(format!("{changed} cell(s) changed"));
             }
             CellOp::Insert | CellOp::Delete => self.insert_or_delete(book, sheet_index, &t, op == CellOp::Insert),
-            CellOp::Paste => {
+            CellOp::Paste | CellOp::PasteTranspose => {
                 // The system answers with the text in a later frame (an `Event::Paste`).
+                self.paste_transposed = op == CellOp::PasteTranspose;
                 ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
             }
             CellOp::PasteText(text) => {
                 let text = self.worksheet_clipboard.for_paste(text);
                 let (col, row) = t.top_left;
-                match self.doc.edit("Paste", |p| p.paste_text(book, sheet_index, col, row, &text)) {
+                let transposed = std::mem::take(&mut self.paste_transposed);
+                let label = if transposed { "Paste transpose" } else { "Paste" };
+                match self.doc.edit(label, |p| {
+                    if transposed {
+                        p.paste_text_transposed(book, sheet_index, col, row, &text)
+                    } else {
+                        p.paste_text(book, sheet_index, col, row, &text)
+                    }
+                }) {
                     Ok(report) => {
                         let mut status = format!("Pasted {} row(s) of {} column(s)", report.rows, report.columns);
                         if report.columns_added > 0 {

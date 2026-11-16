@@ -223,6 +223,12 @@ fn is_missing(text: &str) -> bool {
     t.is_empty() || t == "--"
 }
 
+/// Rows become columns and columns rows; short rows give empty cells.
+pub fn transpose_table(table: Vec<Vec<String>>) -> Vec<Vec<String>> {
+    let width = table.iter().map(Vec::len).max().unwrap_or(0);
+    (0..width).map(|j| table.iter().map(|r| r.get(j).cloned().unwrap_or_default()).collect()).collect()
+}
+
 /// Splits pasted text into rows and fields. Tabs outside quoted fields take precedence over
 /// commas outside quoted fields; otherwise every line is one field. Double-quoted fields may
 /// contain separators and line breaks; doubled quotes stand for one. Unclosed or non-field
@@ -344,7 +350,30 @@ impl Project {
         row: usize,
         text: &str,
     ) -> Result<PasteReport, ProjectError> {
-        let table = parse_table(text);
+        self.paste_table(book, sheet, col, row, parse_table(text))
+    }
+
+    /// Edit > Paste Transpose (T86): pastes as [`Project::paste_text`] does, with the rows of the
+    /// text as columns and its columns as rows. Short rows of the text give empty cells.
+    pub fn paste_text_transposed(
+        &mut self,
+        book: WindowId,
+        sheet: usize,
+        col: usize,
+        row: usize,
+        text: &str,
+    ) -> Result<PasteReport, ProjectError> {
+        self.paste_table(book, sheet, col, row, transpose_table(parse_table(text)))
+    }
+
+    fn paste_table(
+        &mut self,
+        book: WindowId,
+        sheet: usize,
+        col: usize,
+        row: usize,
+        table: Vec<Vec<String>>,
+    ) -> Result<PasteReport, ProjectError> {
         let mut report =
             PasteReport { rows: table.len(), columns: table.first().map_or(0, Vec::len), ..Default::default() };
         if table.is_empty() {

@@ -243,6 +243,19 @@ impl Worksheet {
         locked
     }
 
+    /// Column > Swap Columns (T86, Origin's `colswap`): the two columns exchange places, each
+    /// taking everything of its own along (names, labels, designation, format, width, formula).
+    /// Returns false unless both ids are columns of this sheet and differ.
+    pub fn swap_columns(&mut self, a: ColumnId, b: ColumnId) -> bool {
+        match (self.column_index(a), self.column_index(b)) {
+            (Some(i), Some(j)) if i != j => {
+                self.columns.swap(i, j);
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Moves the columns with these ids by one step or to an end of the sheet, keeping their
     /// order among themselves. Returns false when nothing moved.
     pub fn move_columns(&mut self, ids: &[ColumnId], to: MoveTo) -> bool {

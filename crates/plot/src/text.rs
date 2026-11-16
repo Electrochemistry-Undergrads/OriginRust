@@ -15,6 +15,7 @@ fn run_font(font: &Font, run: &Run) -> Font {
     let mut f = font.clone();
     f.bold |= run.bold;
     f.italic |= run.italic;
+    f.color = run.color.unwrap_or(font.color);
     f
 }
 
@@ -53,7 +54,7 @@ pub fn place(
             size: size * run.scale,
             bold: font.bold || run.bold,
             italic: font.italic || run.italic,
-            color: font.color,
+            color: run.color.unwrap_or(font.color),
             anchor,
             rotate_ccw,
         })

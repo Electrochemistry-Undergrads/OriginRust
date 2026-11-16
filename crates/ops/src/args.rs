@@ -869,6 +869,19 @@ pub struct StyleArgs {
     /// Interval plots: the confidence level in percent of --interval-error ci, above 0 and below 100 (default 95).
     #[arg(long, value_name = "PERCENT")]
     pub interval_level: Option<f64>,
+    /// Scatter matrices (-t scatter-matrix): the cells shown: square (default, every pair both ways round), upper or
+    /// lower (the diagonal and the cells above or below it).
+    #[arg(long, value_name = "DISPLAY")]
+    pub matrix_display: Option<String>,
+    /// Scatter matrices: what the diagonal cells show: none (default) or histogram of the column.
+    #[arg(long, value_name = "SHOW")]
+    pub matrix_diagonal: Option<String>,
+    /// Scatter matrices: the gap between cells in percent of the page, from 0 to 10 (default 0).
+    #[arg(long, value_name = "PCT")]
+    pub matrix_gap: Option<f64>,
+    /// Scatter matrices: leave the column names out of the diagonal cells.
+    #[arg(long)]
+    pub matrix_no_names: bool,
     /// Sunburst plots (-t sunburst): where the first wedge starts, in degrees counter-clockwise from 3 o'clock
     /// (default 90: 12 o'clock; the wedges go clockwise).
     #[arg(long, value_name = "DEGREES", allow_hyphen_values = true)]
@@ -972,7 +985,9 @@ pub struct PlotArgs {
     /// shown in the legend): the mean of each group as columns (see --group-error) or a box per group;
     /// interval-plot draws the mean of each Y column with an error bar (see --interval-error); pareto counts the
     /// distinct values of the one Y column (text or numbers) as columns, most frequent first, with the cumulative
-    /// percent on a right axis of 0 to 100.
+    /// percent on a right axis of 0 to 100; scatter-matrix plots every pair of the Y columns (2 to 8; -y may also
+    /// name X columns) in an n x n grid of layers, column c on X and row r on Y, with the column names on the
+    /// diagonal (see the --matrix-* options).
     /// A name that is none of these plots with the user template of that name (File > Save Template As in
     /// the desktop app; see --templates-dir).
     #[arg(short, long)]

@@ -9000,6 +9000,7 @@ mod new_from_template;
 mod qc_chart;
 mod reimport;
 mod sampling;
+mod scatter_matrix;
 mod sheet_navigate;
 mod sheet_tab;
 mod stats3;

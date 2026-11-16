@@ -20,7 +20,7 @@ pub fn category(t: Template) -> &'static str {
         DoubleY | Multi3YYy | Multi3YYY | Multi4YYyy | Multi4YyYy | StackedLines | Waterfall | WaterfallY
         | WaterfallZ => "Multi-Curve",
         Histogram | StackedHistograms | BoxChart | GroupedBox | IntervalPlot | Pareto | Violin | ViolinBox
-        | ViolinPoint | ViolinQuartile | ViolinStick | HalfViolin | Ridgeline => "Statistics",
+        | ViolinPoint | ViolinQuartile | ViolinStick | HalfViolin | Ridgeline | ScatterMatrix => "Statistics",
         Area | StackedArea | Stacked100Area | FillArea => "Area",
         _ => "Specialized",
     }

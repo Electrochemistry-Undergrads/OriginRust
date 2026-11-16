@@ -5461,7 +5461,67 @@ Probed with X = 1..50 and Y = 10 sin(X/5), B selected.
   - **Differences from Origin:** shapes are drawn over the data, so the region hides the curve under it
     (Origin draws the curve on top). The axes keep Sheaf's automatic ranges.
 
-## 35. Wind rose: Plot > Specialized > Wind Rose - Binned Data, Wind Rose - Raw Data (T113, 2026-11-16, **not measured**)
+## 35. Scatter matrix: Plot > Statistics > Scatter Matrix (T114, 2026-11-16, Origin's documentation, not measured)
+
+Built on macOS without Origin. The behaviour follows OriginLab's published pages for the menu item and its
+`plot_matrix` X-Function (option names and defaults). Nothing was measured in Origin 2016, which may have had
+the older, simpler `plotmatrix`.
+
+- Input:
+  - Origin takes two or more selected columns, every one of them a variable whatever its designation.
+  - Sheaf takes 2 to 8 numeric columns (8 x 8 = 64 layers, the most a grid has), in selection order. With no
+    selection it takes the sheet's numeric Y columns, whatever their units.
+  - A selection that includes a text column is refused.
+- Layout: one graph, one layer per cell of an n x n grid, the cells row by row from the top left.
+  - The cell in row r, column c plots column c (X) against column r (Y).
+  - So a grid column shares its X variable and a grid row its Y variable. Cells (r, c) and (c, r) are the same
+    pair either way round.
+- Options (Origin's names, its defaults first):
+  - **Matrix Display:** Square (every cell), Upper Triangular (the diagonal and the cells right of it), or
+    Lower Triangular (the diagonal and the cells left of it). Cells left out get no layer.
+  - **Show in Diagonal Cells:** None, or Histogram (the variable's histogram with automatic bins, counts from
+    0).
+  - **Variables in Diagonal Cells:** on. The column's long name (else its short name) is written in its
+    diagonal cell, in the middle, or near the top above a histogram.
+  - **Gap:** 0 to 10 % of the page between neighbouring cells, 0 by default.
+  - Origin's Mixed display, box chart and distribution curves on the diagonal, Show Tick and Label modes,
+    confidence ellipse, linear fit with Pearson's r / adjusted R² / equation labels, significance marks,
+    grouping and listwise missing values are not built. The dialog shows the ellipse, the fit and the
+    listwise switch disabled.
+- Sheaf's own choices (unmeasured):
+  - **Page and cells:** a square page as tall as the default page (8.205 in). The grid sits inside margins of
+    14 % (left), 4 % (right and top) and 12 % (bottom). An upper matrix mirrors them: 4 % left, 14 % right,
+    12 % top and 4 % bottom.
+  - **Tick labels:** only the outer cells carry tick labels. In a square or lower matrix that is the bottom
+    row (X) and the left column (Y). In an upper matrix it is the top row and the right column, with both
+    axes of every cell moved to those sides. A diagonal histogram never labels its counts.
+  - **Axes and marks:** no axis titles and no legends. Each cell is a closed box with inward ticks and no minor
+    ticks. The symbols are filled black squares.
+  - **Sizes:** symbols (6 pt), tick labels (18 pt) and tick lengths shrink by 2/n from three variables on.
+    Symbols stop at 2.5 pt, labels at 9 pt, and ticks at half length.
+  - **Ranges:** every cell gets its X variable's limits and step on X, and its Y variable's on Y, so a grid
+    column or row lines up even with missing values. A diagonal histogram's counts are the exception: they
+    start at 0 on an automatic scale.
+    - The limits are the automatic range of the variable's finite values (T20's rule, the limits a scatter
+      of it gets alone). A constant variable gets one unit either side.
+    - The step is the automatic one, widened along 1, 2, 5, 10 until the range has at most 5 steps, so that
+      the labels of small cells do not run together.
+  - **Diagonal names:** each is written at 1.25 times the tick-label size. A long name is made smaller so that
+    it takes at most 80 % of the cell's width, assuming an average glyph of 0.55 em. It is centred across the
+    cell, at mid-height, or 10 % from the top above a histogram, where a tall bar can run under it.
+  - **Recalculation:** the graph is not recalculated from the dialog's settings, as Origin's lock icon does.
+    The limits are fixed when the graph is made and stay as they are when the data changes.
+- Sheaf:
+  - `Project::plot_scatter_matrix(columns, &ScatterMatrixOptions)` in `core/scatter_matrix.rs`, with the
+    template `scatter-matrix`. Plot > Statistics > Scatter Matrix opens the options window. OK makes the graph
+    in one undo step.
+  - CLI: `sheaf plot -t scatter-matrix [--matrix-display square|upper|lower] [--matrix-diagonal
+    none|histogram] [--matrix-gap PCT] [--matrix-no-names]`.
+  - MCP: the `plot` tool's `matrix_*` options.
+  - The graph is ordinary scatter, histogram and empty layers with text labels, so `.sheaf` and `.opj` save it
+    with no new fields.
+
+## 36. Wind rose: Plot > Specialized > Wind Rose - Binned Data, Wind Rose - Raw Data (T113, 2026-11-16, **not measured**)
 
 Origin 2016 lists both items under Plot > Specialized (seen in the menu on 2026-11-16). The probes could
 not run: Origin's COM class was unregistered on the test machine (REGDB_E_CLASSNOTREG). This section

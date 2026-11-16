@@ -1145,7 +1145,9 @@ fn plot_menu() -> Vec<Entry> {
                 ],
                 greys(&["2D Kernel Density"]),
                 vec![item("QC (X bar R) Chart", Cmd::Plot(Template::QcXbarR))],
-                greys(&["Scatter Matrix", "Probability Plot", "Q-Q Plot"]),
+                // Every letter of the label was taken; C moves Marginal Box Charts to n.
+                vec![item("S&catter Matrix", Cmd::Plot(Template::ScatterMatrix))],
+                greys(&["Probability Plot", "Q-Q Plot"]),
             ]
             .concat(),
         ),

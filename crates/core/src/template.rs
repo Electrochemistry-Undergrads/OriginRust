@@ -38,6 +38,8 @@ pub enum Template {
     MarginalBoxCharts,
     /// Plot > Statistics > QC (X bar R) Chart (T111): the range chart and, linked above it, the mean chart.
     QcXbarR,
+    /// Plot > Statistics > Scatter Matrix (T114): every pair of the selected columns in an n x n grid of layers.
+    ScatterMatrix,
     /// Plot > Specialized > Zoom (T112): the whole curve with a region rectangle, and the region enlarged below.
     Zoom,
     /// Plot > Specialized > Wind Rose - Binned Data and Wind Rose - Raw Data (T113).
@@ -190,7 +192,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 75] = [
+    pub const ALL: [Template; 76] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -263,6 +265,7 @@ impl Template {
         Template::MarginalHistograms,
         Template::MarginalBoxCharts,
         Template::QcXbarR,
+        Template::ScatterMatrix,
         Template::Zoom,
         Template::WindRoseBinned,
         Template::WindRoseRaw,
@@ -285,6 +288,7 @@ impl Template {
             Template::MarginalHistograms => "marginal-histograms",
             Template::MarginalBoxCharts => "marginal-box-charts",
             Template::QcXbarR => "qc-xbar-r",
+            Template::ScatterMatrix => "scatter-matrix",
             Template::Zoom => "zoom",
             Template::WindRoseBinned => "wind-rose-binned",
             Template::WindRoseRaw => "wind-rose-raw",
@@ -365,6 +369,7 @@ impl Template {
             Template::MarginalHistograms => "Marginal Histograms",
             Template::MarginalBoxCharts => "Marginal Box Charts",
             Template::QcXbarR => "QC (X bar R) Chart",
+            Template::ScatterMatrix => "Scatter Matrix",
             Template::Zoom => "Zoom",
             Template::WindRoseBinned => "Wind Rose - Binned Data",
             Template::WindRoseRaw => "Wind Rose - Raw Data",
@@ -488,6 +493,11 @@ impl Template {
             Template::MarginalHistograms => marginal(id, name, PlotKind::MarginalHistogram),
             Template::MarginalBoxCharts => marginal(id, name, PlotKind::MarginalBox),
             Template::QcXbarR => qc_xbar_r(id, name),
+            Template::ScatterMatrix => {
+                let mut g = general(id, name, PlotKind::Scatter);
+                crate::scatter_matrix::template_layer(&mut g);
+                g
+            }
             Template::Zoom => zoom(id, name),
             Template::WindRoseBinned | Template::WindRoseRaw => wind_rose(id, name),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
@@ -1348,10 +1358,11 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 75);
+        assert_eq!(Template::ALL.len(), 76);
         assert_eq!(Template::from_name("wind-rose-raw"), Some(Template::WindRoseRaw));
         assert_eq!(Template::from_name("zoom"), Some(Template::Zoom));
         assert_eq!(Template::from_name("qc-xbar-r"), Some(Template::QcXbarR));
+        assert_eq!(Template::from_name("scatter-matrix"), Some(Template::ScatterMatrix));
         assert_eq!(Template::from_name("marginal-histograms"), Some(Template::MarginalHistograms));
         assert_eq!(Template::from_name("marginal-box-charts"), Some(Template::MarginalBoxCharts));
         assert_eq!(Template::from_name("ohlc-volume"), Some(Template::OhlcVolume));

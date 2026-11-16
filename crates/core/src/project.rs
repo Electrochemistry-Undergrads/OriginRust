@@ -308,6 +308,12 @@ pub enum ProjectError {
     StockColumns(&'static str),
     #[error("{0}")]
     MarginalColumns(&'static str),
+    #[error("a scatter matrix needs 2 to {max} numeric columns (got {0}); select two or more columns", max = crate::scatter_matrix::MAX_VARIABLES)]
+    ScatterMatrixColumns(usize),
+    #[error("a scatter matrix plots numbers; column {0} holds text")]
+    ScatterMatrixText(String),
+    #[error("the gap between scatter matrix cells must be from 0 to 10 percent of the page")]
+    ScatterMatrixGap,
     #[error("an X bar R chart takes subgroups of 2 to 10 values and a column with numbers (asked for {0})")]
     QcSubgroup(usize),
     #[error("a zoom graph needs a Y column; select one or more")]
@@ -934,7 +940,8 @@ impl Project {
         };
         let ys: Vec<&Column> =
             ws.columns.iter().filter(|c| c.designation == Designation::Y && c.data.is_numeric()).collect();
-        if template == Template::DoubleY || template.multi_y().is_some() {
+        // A scatter matrix compares variables of any unit (T114).
+        if template == Template::DoubleY || template == Template::ScatterMatrix || template.multi_y().is_some() {
             return ys.iter().map(|c| c.id).collect();
         }
         if template == Template::Ternary {
@@ -1013,6 +1020,9 @@ impl Project {
         if template == Template::QcXbarR {
             let y = *ys.first().ok_or(ProjectError::QcSubgroup(crate::qc::DEFAULT_GROUP))?;
             return self.plot_qc_xbar_r(y, crate::qc::DEFAULT_GROUP).map(|(_, g)| g);
+        }
+        if template == Template::ScatterMatrix {
+            return self.plot_scatter_matrix(ys, &crate::scatter_matrix::ScatterMatrixOptions::default());
         }
         if template == Template::Lollipop && ys.len() < 2 {
             return Err(ProjectError::LollipopNeedsTwoColumns(ys.len()));

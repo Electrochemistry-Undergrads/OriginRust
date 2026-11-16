@@ -24,7 +24,8 @@ open until implemented and verified. The underlying milestones were not globally
   installed faces and derived row geometry; Set Data Style > More opens Format Cells. Worksheet defaults, vertical alignment,
   sticky heights, full palettes and remaining measurements stay open (GUI 3).
 - [ ] **P0 stacked figures, wave 2:** [T60](tasks/T60-merge-graphs-layer-management.md), merge
-  existing graphs/Layer Management (done 2026-11-15); [T61](tasks/T61-layers-and-multi-y.md), layers/insets/multi-Y;
+  existing graphs/Layer Management (base done 2026-11-15; Display Background Color added;
+  border fill/outline measured and disabled pending separate geometry/storage, graphing 15.7d); [T61](tasks/T61-layers-and-multi-y.md), layers/insets/multi-Y;
   [T62](tasks/T62-stack-offset-leftovers.md), remaining offsets/Cumulative/stacked histograms/
   waterfall colour mapping. Reuse working column-built panels, Double-Y and stacked bars/areas.
 - [ ] **Wave 3, independent groups:** [T63](tasks/T63-greyed-items-with-code-2.md), verify and wire

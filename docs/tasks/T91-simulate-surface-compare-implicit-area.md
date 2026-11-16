@@ -1,7 +1,7 @@
 # T91: Simulate Surface, Compare Datasets, Nonlinear Implicit Curve Fit, XYZ Surface Area (B8 slice)
 
-**Status:** claimed 2026-11-16 (Claude Windows, branch `fit-surface-more`). Origin 2016 measured the same day
-(`docs/spec/fitting.md` 16-18, `docs/spec/analysis-tools.md` 18). **Built:** XYZ Surface Area (calc `xyzarea`, `Tool::XyzArea`, window, `sheaf analyze xyz-area`) and Simulate Surface (`sheaf_fit::simsurface`, `Tool::SimulateSurface`, window, `sheaf simulate-surface`, MCP `simulate_surface`); the implicit fit and Compare Datasets are open.
+**Status:** done 2026-11-16 (Claude Windows, branch `fit-surface-more`). Origin 2016 measured the same day
+(`docs/spec/fitting.md` 16-18, `docs/spec/analysis-tools.md` 18). **Built:** XYZ Surface Area (calc `xyzarea`, `Tool::XyzArea`, window, `sheaf analyze xyz-area`); Simulate Surface (`sheaf_fit::simsurface`, `Tool::SimulateSurface`, window, `sheaf simulate-surface`, MCP `simulate_surface`); Nonlinear Implicit Curve Fit (`sheaf_fit::implicit`, `Project::fit_implicit`, window, `sheaf fit-implicit`; Circle and Ellipse, orthogonal distance regression); Compare Datasets (`sheaf_fit::compare_data`, `Project::compare_datasets`, window, `sheaf compare-datasets`). **Open:** PlaneMod (three-variable implicit function), MCP tools for the implicit fit and Compare Datasets, Origin's Compare Datasets report (needs two fits made in the NLFit window).
 **Size:** L. **Spec:** `docs/spec/fitting.md` sections 16 (Simulate Surface), 17 (Compare Datasets), 18 (Nonlinear
 Implicit Curve Fit); `docs/spec/analysis-tools.md` section 18 (XYZ Surface Area).
 **Inventory:** Analysis > Fitting > Simulate Surface...; Compare Datasets...; Nonlinear Implicit Curve Fit...;

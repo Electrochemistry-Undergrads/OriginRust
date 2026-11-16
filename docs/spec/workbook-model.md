@@ -564,6 +564,11 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   (GUI 3, 2026-11-16) confirm per-cell U and Ctrl+B/I/U, Fill Color/None, and data-only whole-column
   underline distinct from label underline. Sheaf uses one Undo per key or palette change, leaves
   source columns/formulas alone and rejects stale requests and effective no-ops.
+- **Dialog scope.** Set Data Style > More... reuses the selected-range Format Cells window.
+  Origin 2016 has no Default data-style command; Rich Text/Wrap Text/Float remain separate,
+  unsupported text controls (B5). Its Worksheet Properties Format tab instead has category
+  defaults (Data > Standard, plus headers and label categories); the current range model does
+  not implement that layer, so F4 stays disabled (GUI 3, measurements 2026-11-16).
 - **Conditional formats.** Conditional fill and text colour override manual ones; bold, italic,
   underline, font, size and alignment stay manual.
 - **Maintenance.** Row insert/delete shift, grow, shrink or drop spans of the affected columns

@@ -1902,7 +1902,10 @@ pub fn cell_menu_for(noted: bool) -> Vec<Entry> {
     }
     v.push(mask_menu());
     v.push(cond_format_menu());
-    v.push(grey_sub("Set Data Style", &["Default"]));
+    v.push(sub(
+        "Set Data Style",
+        vec![grey("Rich Text"), grey("Wrap Text"), grey("Float"), item("More...", Cmd::FormatCells)],
+    ));
     v
 }
 

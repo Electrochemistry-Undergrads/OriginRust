@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **333 listed item locations** at the planning
-  baseline (235 menu bar, 19 toolbar, 79 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **335 listed item locations** at the planning
+  baseline (235 menu bar, 19 toolbar, 81 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -70,6 +70,16 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## Latest integration
+
+T59 worksheet dialog/menu audit (`codex/t59-worksheet-dialog`, 2026-11-16): measured Origin
+2016 Set Data Style > More... now opens the existing selected-range Format Cells window with
+Apply/Cancel/Undo. The fictitious Default placeholder is replaced by the actual disabled Rich
+Text, Wrap Text and Float choices (future B5 text controls). Worksheet Properties/F4 has separate
+category defaults; its nine Apply To targets and visible dialog defaults are recorded in GUI 3,
+and F4 remains grey pending the proper model. Fmt, strict workspace/all-target Clippy, all 4,051
+workspace tests (8 ignored), all 40 related UI regressions and the 338-item inventory pass on
+current fonts/paired-script/T90 source, with unchanged source/goldens and freshly rebuilt,
+inspected submenu/More desktop captures. Only own claim/window released; T59 remains partial.
 
 T58 paired sub/superscript columns: `\=(sub,sup)` now uses Origin-measured shared left
 columns and maximum branch advance, with nested style/font/colour/Greek restoration,
@@ -346,7 +356,6 @@ captures pass with source hashes unchanged.
 |---|---|---|---|
 | `codex/multi-y-template-legends` | Codex Windows | T61 remainder: Origin-measured legend defaults for three/four-Y templates | claimed/refined 2026-11-16 after native controls; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`. Bounded core multi_y.rs defaults + compatible LegendPosition top-left variant (graph.rs), plot legend placement, existing Legend position fields in app dialogs/graph_details.rs, .opj graph annotation writer/warning, isolated regressions/template goldens and T61/graphing docs. Necessary anchor expansion measured before code edits; no other model fields, layer management/contents, graph-view/shapes/actions, toolbar/menus, worksheet/T59/T90, fitting/stats/MCP, T58 editor/colours, reserved tasks or ROOT pending files. Holding PRODUCT main pushes for T90 and conditional T59 window; claim updates are docs-only. |
 | `codex/t58-custom-text-colors` | Codex Windows | T58 step 2 custom RGB text-colour choice in shared label/title/legend editor | claimed 2026-11-16; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` sequentially reused after shipped b701ca20/all actors terminal; private palette/picker, editor prefix adapter and ephemeral TextDialog RGB state, new own UI/helper tests and registration, graphing 7.9/T58. Existing published RGB markup only; no Core/model/IO/renderer/fonts/parser/backends (text-run-fonts), full Classic24 expansion, worksheet/shared Format controller (T59), general menus/actions/dispatch, graph_view/shapes/layers, legend title, stats/calc/MCP, formula/parameter labels, reserved T26/T27/T29/T16 item6 or pending ROOT files. |
-| `codex/t59-worksheet-dialog` | Codex Windows | T59 slice 3: Origin worksheet-format/category measurements and measured Set Data Style > More... path to existing selected-range Format Cells; correct unsupported text-control placeholders | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` sequentially reused after shipped b79d6e99 and all actors terminal; existing/new private worksheet formatting dialog/helpers, bounded Format/cell-menu entries/actions/dispatch, own UI tests and registration, GUI 3/workbook 13b/T59. Existing cell-format model first. No clipboard/Copy variants (T88), sampling/data range, graph text/editor/toolbar/renderer/fonts/markup, general grid/layout/print (T27) or IO writer, calc/stats/MCP/formula-parameter labels, reserved T26/T29/T16 item6 or ROOT pending files. Requested final main PRODUCT-push integration window 2026-11-16 06:40 through 07:05 Central Standard Time; T90 and paired scripts have both published/released. Please batch other product pushes outside the active slot so one combined validation can finish; docs-only claims are fine. Releases on publication, failure or deadline. |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |

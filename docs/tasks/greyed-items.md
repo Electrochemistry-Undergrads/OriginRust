@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **333 greyed items: 235 in the menu bar, 19 on the toolbars, 79 in context menus.**
+original inventory baseline. This is not a new runtime audit. **335 greyed items: 235 in the menu bar, 19 on the toolbars, 81 in context menus.**
 
 ## How to read and keep this file
 
@@ -36,7 +36,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T56` | 1 |
 | `T57` | 2 |
 | `T58` | 0 |
-| `T59` | 2 |
+| `T59` | 1 |
 | `T60` | 0 |
 | `T61` | 5 |
 | `T62` | 0 |
@@ -60,7 +60,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B2` | 33 |
 | `B3` | 19 |
 | `B4` | 19 |
-| `B5` | 10 |
+| `B5` | 13 |
 | `B6` | 24 |
 | `B7` | 8 |
 | `B8` | 13 |
@@ -74,7 +74,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 65 items, backlog packages (`B`) 248, not planned (`N`) 20.
+Briefs (`T`) hold 64 items, backlog packages (`B`) 251, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -221,7 +221,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B5` Worksheet data cell: Paste Link · Paste Link Transpose · Remove Links
 - `B6` Worksheet data cell: Insert Graph... · Insert Images from Files... · Insert Sparklines... · Insert Variables...
 - `B6` Worksheet data cell > Insert Arrow: Arrow · Double Arrow
-- `T59` Worksheet data cell > Set Data Style: Default
+- `B5` Worksheet data cell > Set Data Style: Rich Text · Wrap Text · Float
 - `B6` Worksheet row number: Insert Graph...
 - `B6` Worksheet sheet tab: Add Graph as Sheet... · Add Notes as Sheet · Navigate...
 - `B6` Worksheet corner: Parameters · Sampling Interval · Sparklines · Filter · Categories · Column Header · Row Header · Page Break Preview Lines

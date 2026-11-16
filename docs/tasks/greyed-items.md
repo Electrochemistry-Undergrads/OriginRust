@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **339 greyed items: 238 in the menu bar, 19 on the toolbars, 82 in context menus.**
+original inventory baseline. This is not a new runtime audit. **336 greyed items: 235 in the menu bar, 19 on the toolbars, 82 in context menus.**
 
 ## How to read and keep this file
 
@@ -54,6 +54,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T78` | 0 |
 | `T79` | 0 |
 | `T80` | 0 |
+| `T81` | 0 |
 | `T82` | 0 |
 | `T83` | 0 |
 | `B2` | 33 |
@@ -62,7 +63,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B5` | 10 |
 | `B6` | 27 |
 | `B7` | 8 |
-| `B8` | 16 |
+| `B8` | 13 |
 | `B9` | 13 |
 | `B11` | 10 |
 | `B12` | 12 |
@@ -73,7 +74,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 65 items, backlog packages (`B`) 254, not planned (`N`) 20.
+Briefs (`T`) hold 65 items, backlog packages (`B`) 251, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -146,10 +147,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T57` Signal Processing: Deconvolution... · STFT...
 - `B8` Signal Processing > Wavelet: Decompose... · Reconstruction... · Denoise... · Smooth... · Continuous Wavelet...
 - `B8` Peaks and Baseline: Multiple Peak Fit · Batch Peak Analysis Using Theme...
-
-### Statistics
-- `B8` Descriptive Statistics: Partial Correlation Coefficient...
-- `B8` ANOVA: Three-Way ANOVA... · Repeated Measures ANOVA...
 
 ### Image
 - `B14` Adjustments: Brightness... · Contrast... · Gamma... · Levels...

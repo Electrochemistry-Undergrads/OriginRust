@@ -8883,6 +8883,7 @@ mod data_range;
 mod fill_pattern;
 mod sampling;
 mod sheet_tab;
+mod stats3;
 mod swap_transpose;
 #[path = "ui_tests/trendline.rs"]
 mod trendline;

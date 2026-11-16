@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="155pt" height="120pt" viewBox="0 0 155 120">
+<rect x="0" y="0" width="155" height="120" fill="#FFFFFF"/>
+<g id="layer0">
+<clipPath id="clip0"><rect x="0" y="0" width="155" height="120"/></clipPath>
+<g class="plots" clip-path="url(#clip0)">
+</g>
+<g class="overlay">
+<text x="10" y="25" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="20" fill="#0D4781">MMMMiiii</text>
+<path d="M10 27.8L98 27.8" fill="none" stroke="#0D4781" stroke-width="1.4"/>
+<text x="10" y="60" font-family="'Times New Roman', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="20" fill="#0D4781">MMMMiiii</text>
+<path d="M10 62L74 62" fill="none" stroke="#0D4781" stroke-width="0.6"/>
+<text x="10" y="95" font-family="'Courier New', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="20" fill="#0D4781">MMMMiiii</text>
+<path d="M10 99L138 99" fill="none" stroke="#0D4781" stroke-width="0.8"/>
+</g>
+</g>
+</svg>

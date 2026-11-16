@@ -65,6 +65,15 @@ Formatting, strict workspace all-target Clippy and 3,981 combined tests pass
 Inventory validation, eight Python tooling tests and three inspected desktop captures pass;
 the editor/test source hashes remain unchanged through validation and capture.
 
+Fourth renderer slice (`codex/text-run-fonts`): full-name inline font-family switches now
+reach run measurement, glyphs and decoration metrics, including nested restoration,
+styles/scripts/Greek and rotation. Graphing 7.6 records nineteen native family/name controls
+and their limits; eight regressions plus SVG/stroke PNG goldens cover the shared export
+path. Combined scripts and special colour/name aliases remain open. Editor and shared
+Format toolbar work stay with their owners.
+Formatting, strict workspace all-target Clippy and 4,037 combined tests pass (eight existing ignored).
+The 340-item inventory and eight Python tooling tests pass; all workspace tests ran
+with four test threads, retaining every test and assertion.
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;
@@ -97,9 +106,9 @@ layout. Record unmeasured choices explicitly; do not describe them as measured O
 
 ## Where
 
-- `crates/plot/src/markup.rs`: `Run` carries bold/italic/underline/strikeout/colour/scale/rise.
-  `\u`, `\s` and indexed/RGB `\cN` render through shared text placement. `\f:Name` currently changes Symbol/Greek mapping, **not the
-  font family**. Keep nesting limits and `plain()` while extending runs.
+- `crates/plot/src/markup.rs`: `Run` carries bold/italic/underline/strikeout/colour/family/scale/rise.
+  `\u`, `\s`, indexed/RGB `\cN` and full-name `\f:Name` render through shared text placement.
+  Keep nesting limits, Greek mapping and `plain()` while extending runs.
 - `crates/plot/src/text.rs`, `scene.rs` and backends (`svg.rs`, `eps.rs`, `emf.rs`, raster/PDF):
   carry run font/colour and decoration geometry, including rotation.
 - `crates/core/src/graph.rs`: `Font` has family, size, bold, italic and colour; add underline

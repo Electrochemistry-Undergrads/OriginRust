@@ -28,19 +28,22 @@ pub struct Run {
     pub strikeout: bool,
     /// An explicit palette or RGB colour, or the label's own colour when absent.
     pub color: Option<Color>,
+    /// An inline font family, or the label's own family when absent.
+    pub family: Option<String>,
     /// Size relative to the label's font size (1 for normal text).
     pub scale: f64,
     /// Baseline shift in units of the label's font size; positive is up.
     pub rise: f64,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct Style {
     bold: bool,
     italic: bool,
     underline: bool,
     strikeout: bool,
     color: Option<Color>,
+    family: Option<String>,
     greek: bool,
     scale: f64,
     rise: f64,
@@ -61,6 +64,7 @@ pub fn parse(text: &str) -> Vec<Run> {
         underline: false,
         strikeout: false,
         color: None,
+        family: None,
         greek: false,
         scale: 1.0,
         rise: 0.0,
@@ -74,7 +78,7 @@ pub fn plain(text: &str) -> String {
     parse(text).into_iter().map(|r| r.text).collect()
 }
 
-fn push(out: &mut Vec<Run>, c: char, st: Style) {
+fn push(out: &mut Vec<Run>, c: char, st: &Style) {
     let c = if st.greek { greek(c) } else { c };
     if let Some(last) = out.last_mut()
         && last.bold == st.bold
@@ -82,6 +86,7 @@ fn push(out: &mut Vec<Run>, c: char, st: Style) {
         && last.underline == st.underline
         && last.strikeout == st.strikeout
         && last.color == st.color
+        && last.family == st.family
         && last.scale == st.scale
         && last.rise == st.rise
     {
@@ -95,6 +100,7 @@ fn push(out: &mut Vec<Run>, c: char, st: Style) {
         underline: st.underline,
         strikeout: st.strikeout,
         color: st.color,
+        family: st.family.clone(),
         scale: st.scale,
         rise: st.rise,
     });
@@ -117,8 +123,8 @@ const MAX_FONT_NAME: usize = 64;
 
 /// Recognises an escape starting at the backslash at `pos`. Returns what it does and the index of
 /// the first character inside its parentheses.
-fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
-    let mut inner = st;
+fn escape_at(chars: &[char], pos: usize, st: &Style) -> Option<(Escape, usize)> {
+    let mut inner = st.clone();
     let code = *chars.get(pos + 1)?;
     if code == '(' {
         return Some((Escape::Decimal, pos + 2));
@@ -162,7 +168,7 @@ fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
         return Some((esc, pos + 3));
     }
     match code {
-        // `\f:Name(..)`: the font itself is not switched (labels keep their own font), but a
+        // `\f:Name(..)`: select this family for the span. A
         // switch away from the Symbol font ends Greek mapping, and a switch to it starts it.
         'f' if chars.get(pos + 2) == Some(&':') => {
             let start = pos + 3;
@@ -172,6 +178,9 @@ fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
                 return None;
             }
             inner.greek = name.trim().eq_ignore_ascii_case("symbol");
+            if !name.is_empty() && name.trim() == name {
+                inner.family = Some(name);
+            }
             Some((Escape::Styled(inner), open + 1))
         }
         // Size percentages retain their four-digit limit; colour codes use a bounded u32.
@@ -268,30 +277,30 @@ fn parse_seq(chars: &[char], pos: &mut usize, st: Style, in_escape: bool, depth:
         let c = chars[*pos];
         if c == '\\'
             && depth < MAX_DEPTH
-            && let Some((esc, start)) = escape_at(chars, *pos, st)
+            && let Some((esc, start)) = escape_at(chars, *pos, &st)
         {
             *pos = start;
             match esc {
                 Escape::Styled(inner) => parse_seq(chars, pos, inner, true, depth + 1, out),
                 Escape::Literal => {
-                    let plain = Style { greek: false, ..st };
-                    take_enclosed(chars, pos).chars().for_each(|c| push(out, c, plain));
+                    let plain = Style { greek: false, ..st.clone() };
+                    take_enclosed(chars, pos).chars().for_each(|c| push(out, c, &plain));
                 }
                 Escape::Unicode => {
                     let code = take_enclosed(chars, pos);
                     let ch =
                         u32::from_str_radix(code.trim(), 16).ok().and_then(char::from_u32).filter(|c| !c.is_control());
                     match ch {
-                        Some(ch) => push(out, ch, Style { greek: false, ..st }),
-                        None => format!("\\x({code})").chars().for_each(|c| push(out, c, st)),
+                        Some(ch) => push(out, ch, &Style { greek: false, ..st.clone() }),
+                        None => format!("\\x({code})").chars().for_each(|c| push(out, c, &st)),
                     }
                 }
                 Escape::Decimal => {
                     let code = take_enclosed(chars, pos);
                     let ch = code.trim().parse::<u32>().ok().and_then(char::from_u32).filter(|c| !c.is_control());
                     match ch {
-                        Some(ch) => push(out, ch, Style { greek: false, ..st }),
-                        None => format!("\\({code})").chars().for_each(|c| push(out, c, st)),
+                        Some(ch) => push(out, ch, &Style { greek: false, ..st.clone() }),
+                        None => format!("\\({code})").chars().for_each(|c| push(out, c, &st)),
                     }
                 }
             }
@@ -308,7 +317,7 @@ fn parse_seq(chars: &[char], pos: &mut usize, st: Style, in_escape: bool, depth:
                 parens -= 1;
             }
         }
-        push(out, c, st);
+        push(out, c, &st);
         *pos += 1;
     }
 }

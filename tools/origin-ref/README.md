@@ -136,3 +136,16 @@ with its options. Run them with `run-labtalk-lines.ps1`; the findings are in `do
 a second vertical one) and prints the objects it makes and their ends, attachment, colour, style, width and the
 label's text, place and size; `addline-labels.lines.txt` adds lines with each label location and a fixed format,
 then rescales Y to see whether the ends follow. Findings: `docs/tasks/T67-add-straight-line.md` and graphing.
+
+## Partial correlation, three-way and repeated measures ANOVA (T81)
+
+`stats6/gp.py` and `gp2.py` write the line scripts of the `pcorrcoef` runs (report sheet read cell by cell after
+`page.active = 2`, plain sheet after `page.active = 3`; `pp.py` and `cells.py` read the raw output). The three ANOVA
+tools (`ANOVAThreeWay`, `ANOVAOneWayRM`, `ANOVATwoWayRM`) have no script arguments, so they are run through their dialogs:
+`origin-dialog.ps1 -Setup DATA.labtalk.txt -MenuClicks "1011,192;391,43;392,109;<item>;<Open Dialog...>" -StepsFile
+dialog-steps/*.steps.txt -AfterFile CELLS.txt` (the first click closes a floating Results Log; menu positions move when
+Origin adds "Last used" entries, so take a picture first with `origin-screenshot.ps1`; typed range boxes sometimes lose an
+entry, hence the fill is repeated; the "Input Data" group remembers whether it was open). The result lands as a new sheet in
+the input book; `$wcol(c)[r]$` lines in the after file print its cells. `g3.py` has the data generators. The numbers and
+data of all runs are in `stats6/t81-origin.compact.json` (`t81-make-compact.py` rebuilds it from the raw output, which stays in
+the scratch folder). Findings: `docs/spec/statistics.md`, sections 24 to 26.

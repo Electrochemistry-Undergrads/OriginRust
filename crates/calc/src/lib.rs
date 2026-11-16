@@ -10,6 +10,7 @@
 
 pub mod anova;
 pub mod anova2;
+pub mod anova3;
 pub mod baseline;
 pub mod bin2d;
 pub mod coherence;
@@ -42,10 +43,12 @@ pub mod normality;
 pub mod normalize;
 pub mod nptests;
 pub mod outlier;
+pub mod partcorr;
 pub mod pca;
 pub mod peakchain;
 pub mod peaks;
 pub mod power;
+pub mod rmanova;
 pub mod roc;
 pub mod signal;
 pub mod smooth;
@@ -64,6 +67,10 @@ pub use anova::{
     qtukey,
 };
 pub use anova2::{TwoWayAnova, TwoWayError, TwoWayRow, anova_two_way};
+pub use anova3::{
+    Effect as ThreeWayEffect, EffectPower, Levene, MAX_THREE_WAY_LEVELS, ThreeWayAnova, ThreeWayError, ThreeWayTerms,
+    anova_three_way,
+};
 pub use baseline::{BaselineMethod, subtract_baseline, subtract_constant, subtract_line};
 pub use bin2d::{AxisBins, AxisLayout, Bin, Bin2d, Bin2dOptions, Bin2dStat, axis_layout, bin2d};
 pub use coherence::{CoherenceOptions, CoherenceResult, CoherenceWindow, coherence, coherence_window};
@@ -122,6 +129,7 @@ pub use nptests::{
     SIGN_EXACT_MAX_N, SignTest, friedman, ks_two_sample, median_test, sign_test,
 };
 pub use outlier::{DixonQ, Grubbs, OutlierError, OutlierSide, dixon_q, grubbs};
+pub use partcorr::{PartialCorr, PartialCorrError, partial_correlation};
 pub use pca::{EigenTest, Pca, PcaError, PcaOptions, pca};
 pub use peakchain::{
     BaselineStat, ChainBaseline, ChainError, ChainOptions, ChainResult, FindMethod, FindOptions, LimitMode, PeakInfo,
@@ -131,6 +139,10 @@ pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};
 pub use power::{
     PowerError, PowerTest, SampleSizes, anova_power, anova_powers, anova_sample_sizes, pnf, pnt, t_power, t_powers,
     t_sample_sizes,
+};
+pub use rmanova::{
+    Correction as RmCorrection, Multivariate as RmMultivariate, RmAnova, RmBetween, RmEffect, RmError, RmLevel, RmRow,
+    RmTerm, Sphericity as RmSphericity, rm_anova,
 };
 pub use roc::{Roc, RocError, RocOptions, RocPoint, roc};
 pub use signal::{convolve, correlate, hilbert};

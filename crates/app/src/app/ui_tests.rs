@@ -25,6 +25,7 @@ mod fit_datasets;
 mod format_bar_rest;
 mod format_clip;
 mod frozen_panes;
+mod graph_classic_colors;
 mod graph_data_tools;
 mod graph_scale;
 mod graph_zoom;

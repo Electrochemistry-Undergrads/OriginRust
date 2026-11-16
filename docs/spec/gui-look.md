@@ -129,7 +129,8 @@ Origin 2016 numeric measurement was made by this entry-point review.
 ### Format bar: selected graph text (Sheaf, T58 slice 3)
 
 For a selected title, label or legend, the bar shows its installed font family and point size,
-pressed Bold/Italic state, size increase/decrease and a Font Color menu. Without a text target,
+pressed Bold/Italic state, size increase/decrease and a Font Color menu with all 24 Classic
+colours (eight basic choices plus More Classic colors; graphing 7.4). Without a text target,
 or while a dialog/cell editor owns editing, these controls are disabled; the size reads 0.
 Enter commits a size draft; Escape or loss of focus cancels it. Text and worksheet numbers are
 unchanged. Graphing 7.4 records the Origin 2016 size/font/colour controls and the unresolved
@@ -588,7 +589,8 @@ Sheaf keeps the eight existing named choices and adds **More Classic colors** wi
 choice; Origin uses swatches. These choices use the existing captured range requests, effective
 no-op checks and one-step Undo, including independent labels and compact whole columns. Both
 menu levels close after a choice; the separate Custom... RGB chooser remains available. Graph
-palettes and the T58 text editor keep their own lists. Other native colour lists and palette
+Fill/Line palettes and the T58 text editor keep their own controls; graph Font Color now shares
+these 24 presets (graphing 7.4). Other native colour lists and palette
 storage remain open.
 
 Cells use installed regular/bold/italic faces with UI glyph fallbacks; missing styles use the

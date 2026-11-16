@@ -112,6 +112,19 @@ eight Python tooling tests, unchanged source/goldens and inspected desktop contr
 the combined T61/T103 source. Other colour lists/palette storage and remaining editor
 insertion controls stay open.
 
+Full Classic graph-toolbar palette (`codex/t58-classic-toolbar-colors`): selected labels,
+legends and X/Y titles now offer all 24 measured Classic font colours through the existing
+captured font requests. More Classic colors reuses the worksheet presets; worksheet custom RGB
+and graph object Fill/Line retain their own controls. Five graph regressions exercise every
+colour on all four text targets and rendered output, entire-project scope and one-step Undo,
+no-op/stale requests, styles/SVG and native/companion roundtrips. Graphing 7.4 records the accepted
+Origin palette pixels and the explicitly excluded fresh pilot. The shared text editor is unchanged.
+Remaining editor family/script insertion, other native colour lists and palette storage stay open.
+Fmt, strict workspace/all-target Clippy, all 4,238 workspace tests (eight ignored), all 100
+related formatting UI/helper/preview tests, inventory 306 and eight Python tooling tests pass
+on combined T104/T105/T106/T60 source, with unchanged source/goldens. Fresh desktop
+submenu and Royal captures from the tested executable were inspected.
+
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

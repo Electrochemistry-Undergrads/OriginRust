@@ -176,7 +176,7 @@ fn extra_presets_reject_stale_selection_revision_and_project_generation() {
 }
 
 #[test]
-fn classic_submenus_keep_custom_rgb_reachable_and_graph_palette_independent() {
+fn classic_submenus_share_graph_presets_but_keep_custom_rgb_worksheet_only() {
     let mut h = start_sheet("worksheet-classic-graph-guard");
     extra(&mut h, false, "Olive");
     let before = project(&h).clone();
@@ -193,8 +193,14 @@ fn classic_submenus_keep_custom_rgb_reachable_and_graph_palette_independent() {
     assert_eq!(graph_ui(&h).selected, Some((0, ObjectKind::Legend)));
     click(&mut h, "Format toolbar: Font Color");
     assert!(h.query_by_label("Font Color: Green").is_some());
-    assert!(h.query_by_label("Font Color: More Classic colors").is_none());
+    assert!(h.query_by_label("Font Color: More Classic colors").is_some());
     assert!(h.query_by_label("Font Color: Royal").is_none());
     assert!(h.query_by_label("Font Color: Custom...").is_none());
+    click(&mut h, "Font Color: More Classic colors");
+    click(&mut h, "Font Color: Royal");
+    let mut expected = before.clone();
+    expected.graph_mut(id).unwrap().layers[0].legend.font.color = sheaf_core::Color::rgb(0, 0, 160);
+    assert_eq!(project(&h), &expected, "graph presets preserve worksheet styles and target only graph text");
+    menu(&mut h, "Edit", "Undo");
     assert_eq!(project(&h), &before);
 }

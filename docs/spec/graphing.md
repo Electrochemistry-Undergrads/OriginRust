@@ -702,11 +702,25 @@ is **unestablished**; this is not evidence of Origin's internal style storage. T
 font controls on graph annotations; it does not settle that 2016 selection-state difference.
 
 Sheaf choices: the size box accepts finite 1 to 1000 pt values and commits on Enter; Escape or
-leaving the box cancels the draft. Font Color offers eight named basic RGB colours (black, red,
-green, blue, cyan, magenta, yellow, white). Origin's Auto, full system/custom palettes and palette
-management remain open. Family selection is restricted to installed families; fallback rendering
+leaving the box cancels the draft. Font Color keeps eight named basic RGB colours (black, red,
+green, blue, cyan, magenta, yellow, white) and adds the other 16 through More Classic colors,
+completing the 24 Classic entries measured in 7.2. Origin's Auto, other system/custom lists and
+palette management remain open. Family selection is restricted to installed families; fallback rendering
 retains its existing behaviour. Text-window selection controls and the T59 worksheet adapter
 are separate slices.
+
+Classic graph-font palette follow-up (2026-11-16): all 24 swatch-centre RGB triples from the
+accepted selected-legend Font Color screenshot (`scratch/t58-format-toolbar/whole-object/`)
+match the independent worksheet palette measurements and the 7.2 EMF controls. Dark Yellow is
+128/128/0, Olive 0/128/0 and Royal 0/0/160; the original Green remains 0/255/0. The fresh pilot
+refused an existing foreign Origin instance before COM creation; no new native colour-change
+result is claimed. The accepted earlier red-swatch mutation and palette pixels remain the
+reference. The compact named submenu is Sheaf layout, rather than Origin’s swatch layout.
+It shares the existing worksheet-font presets while keeping worksheet Custom... and graph
+object Fill/Line palettes separate. Both menu levels close after a choice. All four text targets,
+rendered RGB, unchanged raw markup/styles, no-op/stale requests, one-step Undo and project/companion
+roundtrips are covered by graph-toolbar regressions; explicit inline colour escapes retain their
+existing precedence over the base font. No renderer, model or persistence fields change.
 
 `text_format::{Snapshot, Target, Change, Request}` separates widget changes from target application.
 T59 can add its cell target behind the same toolbar. Requests capture graph/layer/object plus

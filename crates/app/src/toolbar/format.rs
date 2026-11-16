@@ -172,8 +172,8 @@ fn size(ui: &mut Ui, state: Option<&Snapshot>, actions: &mut Vec<Action>) {
 }
 
 // Origin Classic entries 8-17 and 19-24; the other eight remain in the basic menu.
-// RGB values measured from Origin 2016 worksheet swatches, GUI 3.
-const WORKSHEET_CLASSIC_EXTRA: [(&str, sheaf_core::Color); 16] = [
+// RGB values measured from Origin 2016 graph/worksheet swatches (graphing 7.2/7.4, GUI 3).
+const CLASSIC_EXTRA: [(&str, sheaf_core::Color); 16] = [
     ("Dark Yellow", sheaf_core::Color::rgb(128, 128, 0)),
     ("Navy", sheaf_core::Color::rgb(0, 0, 128)),
     ("Purple", sheaf_core::Color::rgb(128, 0, 128)),
@@ -192,10 +192,10 @@ const WORKSHEET_CLASSIC_EXTRA: [(&str, sheaf_core::Color); 16] = [
     ("Dark Gray", sheaf_core::Color::rgb(64, 64, 64)),
 ];
 
-fn worksheet_classic(ui: &mut Ui, captured: &Snapshot, fill: bool, actions: &mut Vec<Action>) {
+fn classic_colors(ui: &mut Ui, captured: &Snapshot, fill: bool, actions: &mut Vec<Action>) {
     let prefix = if fill { "Fill Color" } else { "Font Color" };
     let response = ui.menu_button(format!("{prefix}: More Classic colors"), |ui| {
-        for (name, color) in WORKSHEET_CLASSIC_EXTRA {
+        for (name, color) in CLASSIC_EXTRA {
             if ui.button(format!("{prefix}: {name}")).clicked() {
                 ui.close();
                 return Some(color);
@@ -228,8 +228,8 @@ fn colors(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
                     ui.close();
                 }
             }
+            classic_colors(ui, &captured, false, actions);
             if captured.worksheet.is_some() {
-                worksheet_classic(ui, &captured, false, actions);
                 ui.separator();
                 if ui.button("Font Color: Custom...").clicked() {
                     use crate::dialogs::worksheet_color::{Kind, WorksheetColorDialog};
@@ -297,7 +297,7 @@ fn worksheet_fill(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
                     ui.close();
                 }
             }
-            worksheet_classic(ui, &captured, true, actions);
+            classic_colors(ui, &captured, true, actions);
             ui.separator();
             if ui.button("Fill Color: Custom...").clicked() {
                 use crate::dialogs::worksheet_color::{Kind, WorksheetColorDialog};

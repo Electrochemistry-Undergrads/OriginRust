@@ -825,6 +825,19 @@ fn polyline_path(d: &mut String, pts: &[(f64, f64)], connect: Connect) {
                 line_to(d, w[1].0, w[1].1);
             }
         }
+        Connect::Segment2 | Connect::Segment3 => {
+            // groups of 2 (3) points counted from the first point of the piece; a last group with a
+            // single point draws no line
+            let n = if connect == Connect::Segment2 { 2 } else { 3 };
+            for (k, group) in pts.chunks(n).enumerate() {
+                if k > 0 {
+                    move_to(d, group[0].0, group[0].1);
+                }
+                for &(x, y) in &group[1..] {
+                    line_to(d, x, y);
+                }
+            }
+        }
         Connect::Spline => {
             let mono = pts.windows(2).all(|w| w[1].0 > w[0].0) || pts.windows(2).all(|w| w[1].0 < w[0].0);
             if pts.len() < 3 || !mono {

@@ -149,6 +149,36 @@ pub struct PlotSpec {
     /// plot's numeric colour column (default: the last Y column); `none` colours every line in the plot colour.
     pub group: Option<String>,
     pub style: Style,
+    /// The folder of the user graph templates (T56) that a template name not among the built-in ones
+    /// is looked up in. `None` (MCP, and requests that do not ask) uses no user template; the command
+    /// line fills it from `--templates-dir`, `$SHEAF_TEMPLATES_DIR` or the settings folder.
+    #[serde(skip)]
+    pub templates_dir: Option<std::path::PathBuf>,
+}
+
+/// The variable that names the folder of the user graph templates for the command line.
+pub const TEMPLATES_DIR_ENV: &str = "SHEAF_TEMPLATES_DIR";
+
+/// The folder of the user graph templates: the flag, else `$SHEAF_TEMPLATES_DIR`, else `templates` in
+/// the settings folder; `None` when there is no settings folder.
+pub fn templates_dir(flag: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
+    if let Some(dir) = flag {
+        return Some(dir.to_path_buf());
+    }
+    if let Some(dir) = std::env::var_os(TEMPLATES_DIR_ENV).filter(|v| !v.is_empty()) {
+        return Some(std::path::PathBuf::from(dir));
+    }
+    sheaf_io::user_templates::default_dir()
+}
+
+/// The saved user template a `-t` name stands for: only a name that is not a built-in template, and
+/// only with a template folder.
+fn user_template_for(a: &PlotSpec) -> Result<Option<sheaf_core::UserTemplate>> {
+    let (Some(name), Some(dir)) = (a.template.as_deref(), a.templates_dir.as_deref()) else { return Ok(None) };
+    if Template::from_name(name).is_some() || !sheaf_io::user_templates::exists(dir, name) {
+        return Ok(None);
+    }
+    Ok(Some(sheaf_io::user_templates::load(dir, name)?))
 }
 
 impl PlotSpec {
@@ -254,6 +284,19 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
     a.validate()?;
     let graph = if let Some(name) = &a.graph {
         pick_graph(project, Some(name))?
+    } else if let Some(user) = user_template_for(a)? {
+        if a.panels.is_some() || a.overlay || !a.y2.is_empty() || a.group.is_some() {
+            bail!(
+                "a user template plots one sheet's Y columns; leave out --panels, --y2, --group and extra input files"
+            );
+        }
+        let book = pick_book(project, a.book.as_deref())?;
+        let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
+        let (left, _) = axis_columns(project, book, sheet, Template::Line, a)?;
+        if left.is_empty() {
+            bail!("there are no numeric Y columns to plot");
+        }
+        project.plot_with_user_template(&user, &left)?
     } else if let Some(p) = &a.panels {
         panel_graph(project, template_from(a.template.as_deref(), suggested)?, p, a)?
     } else if a.overlay {
@@ -901,7 +944,11 @@ pub fn template_from(name: Option<&str>, fallback: Template) -> Result<Template>
         None => Ok(fallback),
         Some(n) => Template::from_name(n).ok_or_else(|| {
             let names: Vec<&str> = Template::ALL.iter().map(Template::name).collect();
-            anyhow!("unknown template '{}'; choose one of: {}", n, names.join(", "))
+            anyhow!(
+                "unknown template '{}'; choose one of: {} (or a user template saved with File > Save Template As)",
+                n,
+                names.join(", ")
+            )
         }),
     }
 }

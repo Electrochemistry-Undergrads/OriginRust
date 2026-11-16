@@ -4656,3 +4656,26 @@ fn column_labels_are_centred_on_their_own_bar_in_a_group() {
         assert_eq!(over, 1, "one label centred over the bar at {centre}");
     }
 }
+
+/// Origin's 2 and 3 Point Segment (line connection 2 and 3, measured 2026-11-15): the points are
+/// joined in pairs (threes) counted from the first point; a last lone point draws no line.
+#[test]
+fn segment_connections_join_points_in_pairs_and_threes() {
+    let (mut p, g) =
+        project(Template::Line, (0..9).map(f64::from).collect(), vec![(0..9).map(|i| f64::from(i * i)).collect()]);
+    let set = |p: &mut Project, c| p.graph_mut(g).unwrap().layers[0].plots[0].line.connect = c;
+    let path_of = |p: &Project| {
+        let d = svg_of(p, g);
+        paths_in(with_class(&doc(&d), "plots")[0])[0].attribute("d").unwrap().to_string()
+    };
+    set(&mut p, Connect::Segment2);
+    let two = path_of(&p);
+    // 9 points: pairs 1-2, 3-4, 5-6, 7-8 and the lone 9th: 4 moves, 4 lines (the 9th starts a move only)
+    assert_eq!((two.matches('M').count(), two.matches('L').count()), (5, 4), "{two}");
+    set(&mut p, Connect::Segment3);
+    let three = path_of(&p);
+    assert_eq!((three.matches('M').count(), three.matches('L').count()), (3, 6), "{three}");
+    let g2 = p.plot_columns(Template::Segment2, &[p.graph(g).unwrap().layers[0].plots[0].y]).unwrap();
+    assert_eq!(p.graph(g2).unwrap().layers[0].plots[0].line.connect, Connect::Segment2);
+    assert_eq!(Template::from_name("segment3"), Some(Template::Segment3));
+}

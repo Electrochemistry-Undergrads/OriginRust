@@ -118,6 +118,8 @@ mod treemap_tests;
 #[cfg(test)]
 mod trend_tests;
 #[cfg(test)]
+mod user_template_tests;
+#[cfg(test)]
 mod violin_tests;
 
 pub use eps::EpsOutput;

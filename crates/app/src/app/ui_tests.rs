@@ -6354,6 +6354,7 @@ mod label_panels;
 mod layer_management;
 #[path = "ui_tests/merge_graphs.rs"]
 mod merge_graphs;
+mod segments;
 #[path = "ui_tests/stack_panels.rs"]
 mod stack_panels;
 
@@ -8866,3 +8867,4 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
 
 #[path = "ui_tests/trendline.rs"]
 mod trendline;
+mod user_templates;

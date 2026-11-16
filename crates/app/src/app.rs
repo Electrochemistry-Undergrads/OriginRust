@@ -95,6 +95,9 @@ pub struct Startup {
     /// The folder of saved dialog settings (`import-themes`: importer files and separate graph-export
     /// files); `None` hides the theme rows and writes nothing (tests pass a temporary folder).
     pub themes_dir: Option<PathBuf>,
+    /// The folder of the user graph templates (File > Save Template As, Plot > User Templates);
+    /// `None` greys both and writes nothing (tests pass a temporary folder).
+    pub templates_dir: Option<PathBuf>,
     /// Turn the AI link on at start (`--mcp`). It is never saved: a run starts with it off.
     pub mcp: bool,
     /// The run folders the AI link may listen in, best first. `None` has no folder, so the link
@@ -184,6 +187,12 @@ pub struct SheafApp {
     print_preview: Option<PrintPreview>,
     rename: Option<RenameDialog>,
     go_to: Option<GoToDialog>,
+    /// File > Save Template As: the name prompt.
+    template_prompt: Option<crate::dialogs::user_templates::SaveTemplatePrompt>,
+    /// Plot > User Templates > Manage.
+    template_manager: Option<crate::dialogs::user_templates::TemplateManager>,
+    /// The saved user templates as last read from the folder (at start and after a change).
+    user_templates: Vec<String>,
     power: Option<PowerDialog>,
     find: Option<FindDialog>,
     sort: Option<SortDialog>,
@@ -294,6 +303,9 @@ impl SheafApp {
             print_preview: None,
             rename: None,
             go_to: None,
+            template_prompt: None,
+            template_manager: None,
+            user_templates: startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default(),
             power: None,
             find: None,
             sort: None,
@@ -2274,6 +2286,19 @@ impl SheafApp {
                 }
             }
             Action::SaveWindowAs(id) => self.save_window_as(id),
+            Action::SaveTemplateAs(graph) => {
+                let name = self.doc.project().graph(graph).map(|g| g.name.clone()).unwrap_or_default();
+                self.template_prompt = Some(crate::dialogs::user_templates::SaveTemplatePrompt::new(
+                    graph,
+                    &name,
+                    self.user_templates.clone(),
+                ));
+            }
+            Action::ManageTemplates => {
+                self.template_manager =
+                    Some(crate::dialogs::user_templates::TemplateManager::new(self.user_templates.clone()));
+            }
+            Action::PlotUserTemplate { book, columns, name } => self.plot_user_template(book, columns, &name),
             Action::ReloadRecent => {
                 self.recent.reload();
                 ctx.request_repaint();
@@ -2828,6 +2853,93 @@ impl SheafApp {
         }
     }
 
+    /// Plot > User Templates > a saved template: the selected Y columns in its look (T56,
+    /// graphing.md 24). The template is read from its file at the time of the click.
+    fn plot_user_template(&mut self, book: WindowId, columns: Vec<ColumnId>, name: &str) {
+        let Some(dir) = self.startup.templates_dir.clone() else { return };
+        let template = match sheaf_io::user_templates::load(&dir, name) {
+            Ok(t) => t,
+            Err(e) => {
+                self.message = Some(("Could not read the template".to_string(), e.to_string()));
+                return;
+            }
+        };
+        let ys = self.plot_y_columns(book, columns, Template::Line);
+        if ys.is_empty() {
+            self.warn("Nothing to plot: select one or more numeric Y columns".to_string());
+            return;
+        }
+        match self.doc.edit("Plot columns", |p| p.plot_with_user_template(&template, &ys)) {
+            Ok(_) => self.say(format!("Plotted {} column(s) with the template {}", ys.len(), template.name)),
+            Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+        }
+    }
+
+    /// Reads the template names again after a change.
+    fn refresh_user_templates(&mut self) {
+        self.user_templates =
+            self.startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default();
+    }
+
+    /// The Save Template As prompt and the Manage window.
+    fn show_template_windows(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::user_templates::{ManagerOutcome, PromptOutcome};
+        let dir = self.startup.templates_dir.clone();
+        if let Some(prompt) = &mut self.template_prompt {
+            match prompt.show(ctx) {
+                PromptOutcome::Open => {}
+                PromptOutcome::Closed => self.template_prompt = None,
+                PromptOutcome::Save(name) => {
+                    let graph = prompt.graph;
+                    let made = self
+                        .doc
+                        .project()
+                        .graph(graph)
+                        .ok_or_else(|| "the graph was closed".to_string())
+                        .and_then(|g| sheaf_core::UserTemplate::from_graph(&name, g).map_err(|e| e.to_string()))
+                        .and_then(|t| {
+                            let dir = dir.as_deref().ok_or_else(|| "there is no template folder".to_string())?;
+                            sheaf_io::user_templates::save(dir, &t).map_err(|e| e.to_string())
+                        });
+                    match made {
+                        Ok(saved) => {
+                            self.template_prompt = None;
+                            self.refresh_user_templates();
+                            let verb = if saved.replaced { "Replaced" } else { "Saved" };
+                            self.say(format!("{verb} the template {} (Plot > User Templates)", saved.name));
+                        }
+                        Err(e) => prompt.set_error(e),
+                    }
+                }
+            }
+        }
+        if let Some(m) = &mut self.template_manager {
+            let outcome = m.show(ctx, dir.as_deref());
+            let Some(dir) = dir else { return };
+            match outcome {
+                ManagerOutcome::Open => {}
+                ManagerOutcome::Closed => self.template_manager = None,
+                ManagerOutcome::Rename { from, to } => match sheaf_io::user_templates::rename(&dir, &from, &to) {
+                    Ok(new) => {
+                        let names = sheaf_io::user_templates::names(&dir);
+                        m.set_names(names.clone());
+                        m.select(&new);
+                        self.user_templates = names;
+                    }
+                    Err(e) => m.set_error(e.to_string()),
+                },
+                ManagerOutcome::Delete(name) => match sheaf_io::user_templates::delete(&dir, &name) {
+                    Ok(_) => {
+                        let names = sheaf_io::user_templates::names(&dir);
+                        m.set_names(names.clone());
+                        self.user_templates = names;
+                    }
+                    Err(e) => m.set_error(e.to_string()),
+                },
+            }
+        }
+    }
+
     /// Plot > Symbol > Y Error: a scatter plot; the error bars come from the Y error column that
     /// follows each Y column (Column > Set As > Y Error).
     fn plot_y_error(&mut self, book: WindowId, columns: Vec<ColumnId>, x: bool) {
@@ -3095,6 +3207,8 @@ impl SheafApp {
             recent_imports: self.recent.imports(),
             recent_books: self.recent.books(),
             recent_graphs: self.recent.graphs(),
+            user_templates: &self.user_templates,
+            templates: self.startup.templates_dir.is_some(),
             panels: self.panels.shown_flags(),
             ai_link: self.live.active(),
             layer: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer),
@@ -3293,6 +3407,8 @@ impl SheafApp {
             || self.print_preview.is_some()
             || self.rename.is_some()
             || self.go_to.is_some()
+            || self.template_prompt.is_some()
+            || self.template_manager.is_some()
             || self.power.is_some()
             || self.find.is_some()
             || self.sort.is_some()
@@ -3926,6 +4042,7 @@ impl SheafApp {
                 }
             }
         }
+        self.show_template_windows(ctx);
         if let Some(d) = &mut self.find {
             let book = d.book;
             match d.show(ctx) {

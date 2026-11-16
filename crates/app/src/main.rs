@@ -77,6 +77,7 @@ fn main() -> eframe::Result {
         recent_path: sheaf_io::recent::default_path(),
         themes_dir: sheaf_io::themes::default_dir(),
         templates_dir: sheaf_io::user_templates::default_dir(),
+        graph_themes_dir: sheaf_io::graph_themes::default_dir(),
         mcp_dirs: Some(sheaf_io::recovery::run_dir_candidates()),
         ..Default::default()
     };
@@ -91,6 +92,7 @@ fn main() -> eframe::Result {
             "--no-themes" => startup.themes_dir = None,
             "--templates-dir" => startup.templates_dir = args.next().map(PathBuf::from),
             "--no-templates" => startup.templates_dir = None,
+            "--graph-themes-dir" => startup.graph_themes_dir = args.next().map(PathBuf::from),
             "--mcp" => startup.mcp = true,
             _ => startup.paths.push(PathBuf::from(arg)),
         }

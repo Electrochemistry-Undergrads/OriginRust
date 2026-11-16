@@ -5057,3 +5057,26 @@ Name, Use Associated X; each copy is `<long name or name> - Copy` and its axes r
 (Origin's default answer). One undo step for all the copies. The graph page's right-click menu has the same
 submenu with Duplicate (a plain copy, as Window > Duplicate) first. Not done: the Graph Short/Long Name
 fields (Sheaf names the copies itself), books as a whole.
+
+## 29. Graph themes: Save Format as Theme and Theme Organizer (T102, measured 2026-11-16, Origin 2016)
+
+Measured with screenshots (`re-workspace/scratch/t102`, local only):
+
+- **Theme Organizer** (Tools, F7): "A system theme can be applied automatically when making new graphs";
+  Current system theme (Dark Colors & Light Grids); tabs Graph, Worksheet, Dialog, Function; a list with
+  Name, Size, Path (System or User) and Date (Origin's system themes listed first, e.g. B&W Publication);
+  "Right-click to set system theme or to choose other operations"; Apply Theme to (Current Graph), Apply
+  Now, Undo Apply; Exclude increment lists (ticked); Close.
+- **Save Format as Theme...** (an axis's right-click menu, after Copy Format): Name of the new theme
+  (**Theme1**, a list of the existing names), Description, Current System Theme (read-only), Set as System
+  Theme, Formats to Save (All ticked and the rest greyed: Colormap, All Styles, Fonts, Colors, Symbol Line
+  and Fill, Dimension, Scale, Background, Text), OK, Cancel.
+
+Sheaf (`sheaf_io::graph_themes`, windows `dialogs/graph_themes.rs`): Save Format as Theme... on an axis
+copies the axis's format as Copy Format > All does (section 26) and saves it as `<name>.json` in
+`graph-themes` of the settings folder (`--graph-themes-dir DIR` at start), with the description and the time;
+the name starts as the first free ThemeN and a theme of the same name is replaced. Theme Organizer lists the
+saved themes (Name, Size, Path User, Date); Apply Now gives the current graph's every axis the theme (one
+undo step, "Apply theme"); Delete removes a theme. Sheaf ships no system themes (Origin's are its own) and
+has no system theme, Worksheet/Dialog/Function tabs, Undo Apply button (Edit > Undo does it) or Formats to
+Save choice yet; the legend's Save Format as Theme stays grey until a legend format can be copied.

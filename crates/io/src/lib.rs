@@ -11,6 +11,7 @@ pub mod chi_bin;
 mod error;
 pub mod excel;
 pub mod export;
+pub mod graph_themes;
 pub mod opj;
 pub mod opju;
 pub mod project_file;

@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **312 greyed items: 215 in the menu bar, 19 on the toolbars, 78 in context menus.**
+original inventory baseline. This is not a new runtime audit. **310 greyed items: 214 in the menu bar, 19 on the toolbars, 77 in context menus.**
 
 ## How to read and keep this file
 
@@ -67,7 +67,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B7` | 6 |
 | `B8` | 4 |
 | `B9` | 13 |
-| `B11` | 7 |
+| `B11` | 5 |
 | `B12` | 4 |
 | `B13` | 7 |
 | `B14` | 44 |
@@ -76,7 +76,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 64 items, backlog packages (`B`) 228, not planned (`N`) 20.
+Briefs (`T`) hold 64 items, backlog packages (`B`) 226, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -170,7 +170,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Apps on File Exchange...
 - `B13` Protection: Protect Project... · Audit Log
 - `B13` Fitting Function Builder... · Fitting Function Organizer... · Import Filters Manager...
-- `B11` Theme Organizer...
 - `B14` Virtual Matrix Manager...
 - `B16` Package Manager... · Custom Menu Organizer... · X-Function Builder... · X-Function Script Samples...
 - `B16` R Console... · Rserve Console... · Python Console...
@@ -217,7 +216,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B6` Worksheet row number: Insert Graph...
 - `B6` Worksheet sheet tab: Add Graph as Sheet... · Add Notes as Sheet
 - `B6` Worksheet corner: Parameters · Sampling Interval · Sparklines · Filter · Categories · Column Header · Row Header · Page Break Preview Lines
-- `B11` Graph axis: Save Format as Theme...
 - `T72` Graph axis > Copy Format: Styles · Scales · Dimensions
 - `T72` Graph axis > Paste Format To: Tick Direction · Ticks · Line · Tick Labels · Title Styles · Colors · Thickness · Styles · Scales · Title Dimensions · Title Text
 - `B2` Graph axis title: Cut · Copy · Bring to the front · Push to the back

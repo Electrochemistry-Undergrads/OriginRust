@@ -30,6 +30,7 @@ pub mod go_to;
 pub mod graph_axis;
 pub mod graph_details;
 pub mod graph_props;
+pub mod graph_themes;
 pub mod import;
 pub mod import_excel;
 pub mod import_theme;

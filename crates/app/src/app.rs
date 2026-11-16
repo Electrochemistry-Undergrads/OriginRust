@@ -103,6 +103,8 @@ pub struct Startup {
     /// The folder of the user graph templates (File > Save Template As, Plot > User Templates);
     /// `None` greys both and writes nothing (tests pass a temporary folder).
     pub templates_dir: Option<PathBuf>,
+    /// Where graph themes are kept (Save Format as Theme, Theme Organizer); `None` greys them out.
+    pub graph_themes_dir: Option<PathBuf>,
     /// Turn the AI link on at start (`--mcp`). It is never saved: a run starts with it off.
     pub mcp: bool,
     /// The run folders the AI link may listen in, best first. `None` has no folder, so the link
@@ -217,6 +219,9 @@ pub struct SheafApp {
     batch_plot: Option<crate::dialogs::batch_plot::BatchPlotDialog>,
     /// The explorer folder's Properties....
     folder_props: Option<crate::dialogs::folder_props::FolderPropsDialog>,
+    /// Save Format as Theme (with the copied axis format) and the Theme Organizer (T102).
+    save_theme: Option<(crate::dialogs::graph_themes::SaveThemeDialog, sheaf_core::format_clip::FormatClip)>,
+    theme_organizer: Option<crate::dialogs::graph_themes::ThemeOrganizer>,
     /// The Project Explorer's active folder when last checked, so that a change brings a window of the
     /// new folder forward (View Windows, T100).
     last_folder: Vec<usize>,
@@ -349,6 +354,8 @@ impl SheafApp {
             find_spec: Default::default(),
             batch_plot: None,
             folder_props: None,
+            save_theme: None,
+            theme_organizer: None,
             last_folder: Vec::new(),
             show_x: None,
             user_templates: startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default(),
@@ -1814,6 +1821,27 @@ impl SheafApp {
             }
             Action::ExportWorksheetImage(book) => self.export_worksheet_image(book),
             Action::Reimport { book, choose } => self.reimport(book, choose),
+            Action::SaveAxisTheme { graph, layer, y } => {
+                let Some(dir) = self.startup.graph_themes_dir.clone() else {
+                    self.warn("Sheaf has no settings folder for graph themes");
+                    return;
+                };
+                let clip = self.doc.project().graph(graph).and_then(|g| {
+                    sheaf_core::format_clip::copy_axis(g, layer, y, sheaf_core::format_clip::AxisPart::All)
+                });
+                if let Some(clip) = clip {
+                    let existing = sheaf_io::graph_themes::list(&dir).into_iter().map(|e| e.name).collect();
+                    let name = sheaf_io::graph_themes::next_name(&dir);
+                    self.save_theme = Some((crate::dialogs::graph_themes::SaveThemeDialog::new(name, existing), clip));
+                }
+            }
+            Action::ThemeOrganizer => {
+                let entries =
+                    self.startup.graph_themes_dir.as_deref().map(sheaf_io::graph_themes::list).unwrap_or_default();
+                let graph = self.active.is_some_and(|a| self.doc.project().graph(a).is_some());
+                self.theme_organizer =
+                    Some(crate::dialogs::graph_themes::ThemeOrganizer { entries, selected: None, graph });
+            }
             Action::ViewWindows(mode) => {
                 if self.doc.project().view_windows != mode {
                     self.doc.apply("View windows", |p| p.view_windows = mode);
@@ -3210,6 +3238,64 @@ impl SheafApp {
         }
     }
 
+    /// Save Format as Theme and the Theme Organizer (T102).
+    fn show_graph_themes(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::graph_themes::{OrganizerOutcome, SaveThemeOutcome};
+        let dir = self.startup.graph_themes_dir.clone();
+        if let Some((d, clip)) = &mut self.save_theme {
+            match d.show(ctx) {
+                SaveThemeOutcome::Open => {}
+                SaveThemeOutcome::Closed => self.save_theme = None,
+                SaveThemeOutcome::Save { name, description } => {
+                    let theme = sheaf_io::graph_themes::GraphTheme {
+                        name,
+                        description,
+                        saved: String::new(),
+                        format: clip.clone(),
+                    };
+                    match dir.as_deref().map(|dir| sheaf_io::graph_themes::save(dir, theme)) {
+                        Some(Ok(path)) => {
+                            self.save_theme = None;
+                            self.say(format!("Saved the theme {}", path.display()));
+                        }
+                        Some(Err(e)) => d.error = Some(e),
+                        None => self.save_theme = None,
+                    }
+                }
+            }
+        }
+        let Some(o) = &mut self.theme_organizer else { return };
+        match o.show(ctx) {
+            OrganizerOutcome::Open => {}
+            OrganizerOutcome::Closed => self.theme_organizer = None,
+            OrganizerOutcome::Delete(name) => {
+                if let Some(dir) = dir.as_deref() {
+                    sheaf_io::graph_themes::delete(dir, &name);
+                    o.entries = sheaf_io::graph_themes::list(dir);
+                    o.selected = None;
+                }
+            }
+            OrganizerOutcome::Apply(name) => {
+                let Some(graph) = self.active.filter(|a| self.doc.project().graph(*a).is_some()) else { return };
+                let theme = dir
+                    .as_deref()
+                    .ok_or_else(|| "no theme folder".to_string())
+                    .and_then(|d| sheaf_io::graph_themes::load(d, &name));
+                match theme {
+                    Ok(t) => {
+                        self.doc.apply("Apply theme", |p| {
+                            if let Some(g) = p.graph_mut(graph) {
+                                apply_graph_theme(g, &t.format);
+                            }
+                        });
+                        self.say(format!("Applied the theme {name}"));
+                    }
+                    Err(e) => self.warn(e),
+                }
+            }
+        }
+    }
+
     /// Folder Properties: OK renames the folder and keeps its comments, one undo step.
     fn show_folder_props(&mut self, ctx: &egui::Context) {
         use crate::dialogs::folder_props::FolderOutcome;
@@ -4122,6 +4208,8 @@ impl SheafApp {
             || self.find_project.is_some()
             || self.batch_plot.is_some()
             || self.folder_props.is_some()
+            || self.save_theme.is_some()
+            || self.theme_organizer.is_some()
             || self.show_x.is_some()
             || self.power.is_some()
             || self.find.is_some()
@@ -4814,6 +4902,7 @@ impl SheafApp {
         self.show_find_project(ctx);
         self.show_batch_plot(ctx);
         self.show_folder_props(ctx);
+        self.show_graph_themes(ctx);
         if self.panels.explorer.folder != self.last_folder {
             self.last_folder = self.panels.explorer.folder.clone();
             self.follow_folder();
@@ -5799,6 +5888,25 @@ fn panel_data<'a>(
         .unwrap_or_else(|| "UNTITLED".to_string());
     let props_plot = props.as_ref().filter(|d| Some(d.graph) == active).map(GraphPropsDialog::selected_plot);
     PanelData { project: doc.project(), active, project_name, props_plot, logs }
+}
+
+/// Theme Organizer's Apply Now on a graph (T102): an axis theme goes to every axis of every layer, a
+/// graph theme to the whole graph.
+pub(crate) fn apply_graph_theme(g: &mut sheaf_core::graph::Graph, format: &sheaf_core::format_clip::FormatClip) {
+    use sheaf_core::format_clip::{AxisPart, FormatClip, paste_axis, paste_graph};
+    match format {
+        FormatClip::Axis(_) => {
+            for layer in 0..g.layers.len() {
+                for y in [false, true] {
+                    paste_axis(g, layer, y, format, AxisPart::All);
+                }
+            }
+        }
+        FormatClip::Graph(f) => {
+            let groups = f.groups().to_vec();
+            paste_graph(g, format, &groups);
+        }
+    }
 }
 
 /// The importer a book's source file is read again with (Re-Import, T98); `None` for a book not

@@ -8986,6 +8986,7 @@ mod corner_menu;
 mod data_range;
 mod fill_pattern;
 mod find_project;
+mod graph_themes;
 mod reimport;
 mod sampling;
 mod sheet_navigate;

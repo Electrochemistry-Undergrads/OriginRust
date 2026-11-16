@@ -1,4 +1,4 @@
-//! Origin 2016 runs of the T81 tools: partial correlation (`pcorrcoef`) and three-way ANOVA (`ANOVAThreeWay`).
+//! Origin 2016 runs of the T81 tools: partial correlation (`pcorrcoef`), three-way ANOVA (`ANOVAThreeWay`) and the one- and two-way repeated measures ANOVA.
 //! The data and printed numbers of the runs are in `fixtures/origin_t81_data.rs` (generated from
 //! `tools/origin-ref/stats6/t81-origin.compact.json`); the means comparison, descriptive, Levene and power
 //! values of the balanced three-way run are copied from the report sheet cell by cell (scratch dump
@@ -8,7 +8,9 @@
 #[path = "fixtures/origin_t81_data.rs"]
 mod data;
 
-use sheaf_calc::{MeansComparison, ThreeWayEffect as Effect, ThreeWayTerms, anova_three_way, partial_correlation};
+use sheaf_calc::{
+    MeansComparison, RmTerm, ThreeWayEffect as Effect, ThreeWayTerms, anova_three_way, partial_correlation, rm_anova,
+};
 
 fn close(got: f64, want: f64, rel: f64, what: &str) {
     if want.is_nan() {
@@ -195,4 +197,206 @@ fn three_way_levene_and_power_of_the_balanced_run() {
             assert!((g.1 - w).abs() < 6e-5, "{e:?} N={}: got {}, want {w}", g.0, g.1);
         }
     }
+}
+
+/// The one-way repeated measures run (8 subjects, 4 levels): table rows, Mauchly, epsilons, multivariate tests,
+/// between-subjects rows, level statistics and the means comparison blocks, as printed by Origin.
+#[test]
+fn one_way_repeated_measures_reproduces_the_origin_run() {
+    let r = rm_anova(&data::rm1_data(), &[4], false).unwrap();
+    let e = r.effect(RmTerm::A).unwrap();
+    close(e.ss, 64.39032, 0.0, "SS");
+    close(e.ss_error, 28.76007, 0.0, "SS error");
+    // Sphericity assumed, Greenhouse-Geisser, Huynh-Feldt, lower bound: DF, MS, p; error DF and MS.
+    let want = [
+        (3.0, 21.46344, 1.40272e-5, 21.0, 1.36953),
+        (2.89097, 22.27288, 1.93022e-5, 20.23682, 1.42118),
+        (3.0, 21.46344, 1.40272e-5, 21.0, 1.36953),
+        (1.0, 64.39032, 0.00547, 7.0, 4.10858),
+    ];
+    for (row, w) in e.rows.iter().zip(want) {
+        close(row.df, w.0, 0.0, "df");
+        close(row.mean_sq, w.1, 0.0, "ms");
+        close(row.f, 15.67215, 0.0, "F");
+        close(row.p, w.2, 2e-4, "p");
+        close(row.df_error, w.3, 0.0, "error df");
+        close(row.mean_sq_error, w.4, 0.0, "error ms");
+    }
+    let s = e.sphericity.unwrap();
+    close(s.w, 0.94848, 0.0, "W");
+    close(s.chi_sq, 0.30267, 0.0, "chi-square");
+    assert_eq!(s.df, 5.0);
+    close(s.p, 0.99759, 0.0, "Mauchly p");
+    close(s.greenhouse_geisser, 0.96366, 0.0, "GG");
+    assert_eq!(s.huynh_feldt, 1.0);
+    close(s.lower_bound, 0.33333, 0.0, "LB");
+    let m = e.multivariate.unwrap();
+    close(m.pillai, 0.85546, 0.0, "Pillai");
+    close(m.wilks, 0.14454, 0.0, "Wilks");
+    close(m.hotelling, 5.91835, 0.0, "Hotelling");
+    close(m.roy, 5.91835, 0.0, "Roy");
+    close(m.f, 9.86391, 0.0, "multivariate F");
+    assert_eq!((m.df, m.df_error), (3.0, 5.0));
+    close(m.p, 0.01532, 0.0, "multivariate p");
+    close(r.intercept.ss, 15121.48321, 0.0, "intercept SS");
+    close(r.intercept.f, 804.75036, 0.0, "intercept F");
+    close(r.intercept.p, 1.73883e-8, 2e-4, "intercept p");
+    close(r.subjects.ss, 131.53195, 0.0, "subjects SS");
+    assert_eq!(r.subjects.df, 7.0);
+    close(r.subjects.mean_sq, 18.79028, 0.0, "subjects MS");
+
+    let levels = r.level_stats(RmTerm::A, 0.05);
+    let want = [
+        (19.75074, 0.96025, 17.4801, 22.02137),
+        (21.21604, 0.59138, 19.81765, 22.61442),
+        (22.41076, 0.94481, 20.17663, 24.64489),
+        (23.57499, 0.83539, 21.59961, 25.55037),
+    ];
+    for (l, w) in levels.iter().zip(want) {
+        close(l.mean, w.0, 0.0, "mean");
+        close(l.se, w.1, 0.0, "se");
+        close(l.lcl, w.2, 1e-6, "lcl");
+        close(l.ucl, w.3, 1e-6, "ucl");
+    }
+
+    // Means comparisons: pair order (1,2) (1,3) (1,4) (2,3) (2,4) (3,4), diff = mean(i) - mean(j), stat unsigned.
+    let diff = [-1.4653, -2.66003, -3.82425, -1.19473, -2.35895, -1.16423];
+    type Block = (MeansComparison, [f64; 6], [f64; 6], [f64; 6], [f64; 6]);
+    let blocks: [Block; 5] = [
+        (
+            MeansComparison::Tukey,
+            [3.54149, 6.42903, 9.24285, 2.88754, 5.70136, 2.81382],
+            [0.08833, 9.39239e-4, 9.98939e-6, 0.20491, 0.00312, 0.22344],
+            [-3.09624, -4.29097, -5.45519, -2.82567, -3.98989, -2.79517],
+            [0.16564, -1.02908, -2.19331, 0.43622, -0.72801, 0.46672],
+        ),
+        (
+            MeansComparison::Bonferroni,
+            [2.50421, 4.54601, 6.53568, 2.0418, 4.03147, 1.98967],
+            [0.12354, 0.00106, 1.07282e-5, 0.3236, 0.00362, 0.35884],
+            [-3.16926, -4.36399, -5.52821, -2.89869, -4.06291, -2.86819],
+            [0.23866, -0.95606, -2.12029, 0.50924, -0.65499, 0.53974],
+        ),
+        (
+            MeansComparison::Sidak,
+            [2.50421, 4.54601, 6.53568, 2.0418, 4.03147, 1.98967],
+            [0.11735, 0.00106, 1.07282e-5, 0.28298, 0.00361, 0.30928],
+            [-3.16377, -4.35849, -5.52272, -2.89319, -4.05742, -2.86269],
+            [0.23317, -0.96156, -2.12578, 0.50374, -0.66048, 0.53424],
+        ),
+        (
+            MeansComparison::FisherLsd,
+            [2.50421, 4.54601, 6.53568, 2.0418, 4.03147, 1.98967],
+            [0.02059, 1.76174e-4, 1.78804e-6, 0.05393, 6.0265e-4, 0.05981],
+            [-2.68215, -3.87688, -5.0411, -2.41158, -3.5758, -2.38108],
+            [-0.24845, -1.44317, -2.6074, 0.02213, -1.1421, 0.05263],
+        ),
+        (
+            MeansComparison::Scheffe,
+            [2.50421, 4.54601, 6.53568, 2.0418, 4.03147, 1.98967],
+            [0.13205, 0.00209, 2.74805e-5, 0.27356, 0.00641, 0.2945],
+            [-3.24178, -4.4365, -5.60073, -2.9712, -4.13543, -2.9407],
+            [0.31118, -0.88355, -2.04777, 0.58175, -0.58247, 0.61225],
+        ),
+    ];
+    for (method, stat, p, lcl, ucl) in blocks {
+        let list = r.compare(method, 0.05);
+        assert_eq!(list.len(), 6);
+        for (k, c) in list.iter().enumerate() {
+            let what = format!("{} pair {k}", method.label());
+            close(c.diff, diff[k], 0.0, &format!("{what} diff"));
+            close(c.se, 0.58513, 0.0, &format!("{what} se"));
+            close(c.stat, stat[k], 0.0, &format!("{what} stat"));
+            close(c.p, p[k], 3e-4, &format!("{what} p"));
+            close(c.lcl, lcl[k], 3e-4, &format!("{what} lcl"));
+            close(c.ucl, ucl[k], 3e-4, &format!("{what} ucl"));
+        }
+    }
+    // Holm: the pairs by increasing p with thresholds 0.05 / 6, 0.05 / 5, ...
+    let pairs = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)];
+    let holm = r.compare(MeansComparison::HolmBonferroni, 0.05);
+    let order: Vec<usize> = holm.iter().map(|c| pairs.iter().position(|p| *p == (c.i, c.j)).unwrap()).collect();
+    assert_eq!(order, vec![2, 1, 4, 0, 3, 5]);
+    for (c, a) in holm.iter().zip([0.05 / 6.0, 0.01, 0.0125, 0.05 / 3.0]) {
+        close(c.alpha, a, 1e-4, "holm alpha");
+    }
+    let sidak = r.compare(MeansComparison::HolmSidak, 0.05);
+    close(sidak[0].alpha, 0.00851, 1e-3, "holm-sidak alpha");
+    close(sidak[3].alpha, 0.01695, 1e-3, "holm-sidak alpha 4");
+}
+
+/// The two-way repeated measures run (6 subjects, 2 x 3 cells, interaction on).
+#[test]
+fn two_way_repeated_measures_reproduces_the_origin_run() {
+    let r = rm_anova(&data::rm2_data(), &[2, 3], true).unwrap();
+    // (term, SS, DF, error SS, error DF, F, p) of the sphericity-assumed row.
+    let want = [
+        (RmTerm::A, 29.07798, 1.0, 9.07567e-5, 5.0, 1.60197e6, 5.84335e-15),
+        (RmTerm::B, 0.05025, 2.0, 7.64333, 10.0, 0.03287, 0.96777),
+        (RmTerm::Ab, 0.15591, 2.0, 8.33368, 10.0, 0.09354, 0.91149),
+    ];
+    for (term, ss, df, sse, dfe, f, p) in want {
+        let e = r.effect(term).unwrap();
+        close(e.ss, ss, 0.0, "SS");
+        close(e.ss_error, sse, 1e-5, "SS error");
+        close(e.rows[0].df, df, 0.0, "df");
+        close(e.rows[0].df_error, dfe, 0.0, "error df");
+        close(e.rows[0].f, f, 1e-5, "F");
+        close(e.rows[0].p, p, 1e-4, "p");
+        // The lower bound row.
+        close(e.rows[3].df, 1.0, 0.0, "lower bound df");
+        close(e.rows[3].df_error, dfe / df, 0.0, "lower bound error df");
+    }
+    let b = r.effect(RmTerm::B).unwrap();
+    close(b.rows[1].df, 1.93858, 0.0, "B GG df");
+    close(b.rows[1].df_error, 9.6929, 0.0, "B GG error df");
+    close(b.rows[1].p, 0.9649, 0.0, "B GG p");
+    close(b.rows[3].p, 0.86324, 0.0, "B LB p");
+    let s = b.sphericity.unwrap();
+    for (got, want, what) in [
+        (s.w, 0.96832, "W"),
+        (s.chi_sq, 0.12878, "chi-square"),
+        (s.df, 2.0, "df"),
+        (s.p, 0.93764, "p"),
+        (s.greenhouse_geisser, 0.96929, "GG"),
+        (s.huynh_feldt, 1.0, "HF"),
+        (s.lower_bound, 0.5, "LB"),
+    ] {
+        close(got, want, 0.0, &format!("B Mauchly {what}"));
+    }
+    let ab = r.effect(RmTerm::Ab).unwrap();
+    let s = ab.sphericity.unwrap();
+    close(s.w, 0.98814, 0.0, "AB W");
+    close(s.chi_sq, 0.04771, 0.0, "AB chi-square");
+    close(s.p, 0.97643, 0.0, "AB p");
+    close(s.greenhouse_geisser, 0.98828, 0.0, "AB GG");
+    close(ab.rows[1].df, 1.97656, 0.0, "AB GG df");
+    close(ab.rows[1].p, 0.90962, 0.0, "AB GG p");
+    assert!(r.effect(RmTerm::A).unwrap().sphericity.is_none(), "one degree of freedom: no sphericity");
+    close(r.intercept.ss, 39236.00333, 0.0, "intercept SS");
+    close(r.intercept.f, 2181.60088, 0.0, "intercept F");
+    close(r.intercept.p, 8.4964e-8, 2e-4, "intercept p");
+    close(r.subjects.ss, 89.9248, 0.0, "subjects SS");
+    close(r.subjects.mean_sq, 17.98496, 0.0, "subjects MS");
+
+    // Descriptive statistics of A, B and the cells: mean, SE, limits.
+    let a = r.level_stats(RmTerm::A, 0.05);
+    for (l, w) in a.iter().zip([(32.11473, 0.7067, 30.2981, 33.93137), (33.9122, 0.70692, 32.095, 35.7294)]) {
+        close(l.mean, w.0, 0.0, "A mean");
+        close(l.se, w.1, 0.0, "A se");
+        close(l.lcl, w.2, 1e-5, "A lcl");
+        close(l.ucl, w.3, 1e-5, "A ucl");
+    }
+    let bl = r.level_stats(RmTerm::B, 0.05);
+    let want = [(33.02463, 0.68089, 31.27435), (33.05261, 0.72852, 31.17988), (32.96316, 0.79485, 30.91994)];
+    for (l, w) in bl.iter().zip(want) {
+        close(l.mean, w.0, 0.0, "B mean");
+        close(l.se, w.1, 0.0, "B se");
+        close(l.lcl, w.2, 1e-5, "B lcl");
+    }
+    let cells = r.level_stats(RmTerm::Ab, 0.05);
+    close(cells[0].mean, 32.21895, 0.0, "cell mean");
+    close(cells[0].se, 0.67432, 0.0, "cell se");
+    close(cells[5].se, 0.88034, 0.0, "last cell se");
+    close(cells[5].ucl, 36.17298, 1e-6, "last cell ucl");
 }

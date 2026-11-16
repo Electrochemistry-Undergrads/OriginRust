@@ -48,6 +48,7 @@ pub mod pca;
 pub mod peakchain;
 pub mod peaks;
 pub mod power;
+pub mod rmanova;
 pub mod roc;
 pub mod signal;
 pub mod smooth;
@@ -137,6 +138,10 @@ pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};
 pub use power::{
     PowerError, PowerTest, SampleSizes, anova_power, anova_powers, anova_sample_sizes, pnf, pnt, t_power, t_powers,
     t_sample_sizes,
+};
+pub use rmanova::{
+    Correction as RmCorrection, Multivariate as RmMultivariate, RmAnova, RmBetween, RmEffect, RmError, RmLevel, RmRow,
+    RmTerm, Sphericity as RmSphericity, rm_anova,
 };
 pub use roc::{Roc, RocError, RocOptions, RocPoint, roc};
 pub use signal::{convolve, correlate, hilbert};

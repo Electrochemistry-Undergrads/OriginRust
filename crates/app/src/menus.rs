@@ -1137,15 +1137,11 @@ fn plot_menu() -> Vec<Entry> {
                     item("Stacked Histograms", Cmd::Plot(Template::StackedHistograms)),
                 ],
                 vec![item("Pareto", Cmd::Plot(Template::Pareto))],
-                greys(&[
-                    "Marginal Histograms",
-                    "Marginal Box Charts",
-                    "2D Kernel Density",
-                    "QC (X bar R) Chart",
-                    "Scatter Matrix",
-                    "Probability Plot",
-                    "Q-Q Plot",
-                ]),
+                vec![
+                    item("Marginal Histograms", Cmd::Plot(Template::MarginalHistograms)),
+                    item("Marginal Box Charts", Cmd::Plot(Template::MarginalBoxCharts)),
+                ],
+                greys(&["2D Kernel Density", "QC (X bar R) Chart", "Scatter Matrix", "Probability Plot", "Q-Q Plot"]),
             ]
             .concat(),
         ),

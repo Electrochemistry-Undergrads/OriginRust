@@ -186,6 +186,8 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::HighLowClose => "High-Low-Close",
         PlotKind::Candlestick => "Japanese Candlestick",
         PlotKind::OhlcBar => "OHLC Bar",
+        PlotKind::MarginalHistogram => "Marginal Histogram",
+        PlotKind::MarginalBox => "Marginal Box",
         PlotKind::Parallel => "Parallel Plot",
         PlotKind::ParallelIndex => "Parallel Index",
         PlotKind::Treemap => "Treemap",

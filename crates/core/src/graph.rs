@@ -1552,6 +1552,12 @@ pub enum PlotKind {
     Candlestick,
     /// Origin's OHLC Bar Chart (T108): a high-low line with open (left) and close (right) ticks per row.
     OhlcBar,
+    /// A marginal histogram (T110): the bins of the plot's Y column drawn along the margin of
+    /// [`PlotDecor::marginal`] (lying on their side in the right margin).
+    MarginalHistogram,
+    /// A marginal box chart (T110): the box of the plot's Y column, lying in the top margin or standing in the
+    /// right one.
+    MarginalBox,
     /// Origin's Parallel Plot (2019, Parallel.otpu): the plot's Y column is one vertical axis; every row is a
     /// line through the axes of all the layer's parallel plots, coloured by a numeric column (graphing spec 14.25).
     Parallel,
@@ -1601,6 +1607,10 @@ impl PlotKind {
     }
 
     /// True for [`PlotKind::Parallel`] and [`PlotKind::ParallelIndex`].
+    pub fn is_marginal(&self) -> bool {
+        matches!(self, PlotKind::MarginalHistogram | PlotKind::MarginalBox)
+    }
+
     pub fn is_stock(&self) -> bool {
         matches!(self, PlotKind::HighLowClose | PlotKind::Candlestick | PlotKind::OhlcBar)
     }
@@ -1838,6 +1848,9 @@ pub struct PlotDecor {
     /// The price columns and colours of a stock plot (T108).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stock: Option<crate::stock::StockSpec>,
+    /// The margin a marginal histogram or box stands in (T110).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub marginal: Option<crate::marginal::MarginalSide>,
 }
 
 pub use sheaf_calc::trend::TrendKind;

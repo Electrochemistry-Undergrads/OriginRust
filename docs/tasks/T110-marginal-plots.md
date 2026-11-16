@@ -1,6 +1,6 @@
 # T110: Marginal Histograms and Marginal Box Charts
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `marginal-plots`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 32): both measured (three layers and their frames, bins, colours, box size) and built as new plot kinds in linked margin layers. Left: Origin's Min-Max whiskers with markers, its count-axis rounding, the scatter axes without end margins.
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Statistics > Marginal Histograms,
 Marginal Box Charts).
 **Spec:** `docs/spec/graphing.md` (a new section).

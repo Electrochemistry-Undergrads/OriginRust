@@ -51,6 +51,10 @@ pub(crate) fn draw_plot(
     m: &dyn TextMeasurer,
 ) {
     let plot = pd.plot;
+    if plot.kind.is_marginal() {
+        crate::marginal_plot::draw_marginal(out, pd, geom);
+        return;
+    }
     if plot.kind.is_stock() {
         crate::stock_plot::draw_stock(out, pd, geom);
         return;

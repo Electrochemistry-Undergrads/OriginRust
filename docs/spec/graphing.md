@@ -5280,3 +5280,35 @@ Probed with X = 1..5 (and 1..8) and Open, High, Low, Close columns.
   the plot, not in the template) and `stock-line`. Sheaf's price layer leaves the usual margin at the X
   ends where Origin ran exactly from the first to the last X. The .opj writer saves the first
   price column as a scatter plot and warns.
+
+## 32. Marginal plots: Plot > Statistics > Marginal Histograms, Marginal Box Charts (T110, measured 2026-11-16, Origin 2016)
+
+Probed with twelve (X, Y) points selected as A(X), B(Y).
+
+- Both make a three-layer graph:
+  - Layer 1 is the scatter of B against A, at left 15 %, top 25.01 %, width 60 %, height 60 % of the page.
+  - Layer 2 is linked to layer 1 at left 0, top -33.01 %, width 100 %, height 33.01 % (in units of layer
+    1), so it sits directly above. It shares the X scale and holds the X values' histogram or box.
+  - Layer 3 is linked at left 100 %, top 0, width 33.01 %, height 100 %, directly right. It shares the Y
+    scale and holds the Y values' histogram (bars lying on their side) or a standing box.
+  - No legends; the margins show no tick labels or titles.
+- **Marginal Histograms:**
+  - Black scatter dots. Light grey (192, 192, 192) bars with black edges.
+  - The bins were 2 wide from 0 for values from 1.2 to 8.8.
+  - The count axes start at 0: 0 to 7 for a largest count of 6, 0 to 4.5 for 4.
+  - Each margin draws only the base line under its bars, which closes the scatter's frame. The scatter
+    itself has only its bottom and left axes.
+- **Marginal Box Charts:**
+  - Blue scatter dots. Red boxes, each about 0.4 of the box layer's 0.5 to 1.5 position span wide.
+  - The top box lies along X; the right one stands along Y.
+  - Each box has a median line and the mean as a small hollow square. The whiskers reached the minimum and
+    maximum, marked with crosses, for data without outliers.
+  - The scatter's frame is closed; the box layers draw no axes. Origin's scatter Y axis ran -2.5 to 12.5.
+- Sheaf: plot kinds `marginal_histogram` and `marginal_box`, with the margin in `PlotDecor::marginal`
+  (`top`, `right`); templates `marginal-histograms` and `marginal-box-charts`. Plot > Statistics takes one Y
+  column with its X column.
+  - Sheaf's choices: bins come from the histogram's automatic binning. Box whiskers follow Sheaf's box chart
+    rule (1.5 IQR, outliers drawn as small crosses). The scatter dots are 4 pt circles, and the scatter's
+    axes keep Sheaf's usual end margins.
+  - The .opj writer saves the margins as scatter plots of their values, with a warning.
+

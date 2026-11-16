@@ -784,6 +784,9 @@ impl Writer {
         if has(&|k| k.is_horizontal()) {
             notes.push("horizontal bars were written as vertical columns".into());
         }
+        if has(&|k| k.is_marginal()) {
+            notes.push("marginal histograms and box charts were written as scatter plots of their values".into());
+        }
         if has(&|k| k.is_stock()) {
             notes.push("stock plots were written as scatter plots of their first price column".into());
         }
@@ -804,6 +807,7 @@ impl Writer {
                 // The arrows are not written; the start points keep the data (named in the save warning).
                 PlotKind::VectorXyam | PlotKind::VectorXyxy => CurveKind::Scatter,
                 PlotKind::HighLowClose | PlotKind::Candlestick | PlotKind::OhlcBar => CurveKind::Scatter,
+                PlotKind::MarginalHistogram | PlotKind::MarginalBox => CurveKind::Scatter,
                 PlotKind::LineSymbol => CurveKind::LineSymbol,
                 PlotKind::Column
                 | PlotKind::StackedColumn

@@ -44,6 +44,7 @@ pub use worksheet_font::{WorksheetFont, worksheet_font};
 mod slope;
 mod straight_line;
 pub use slope::{NOT_USABLE as SLOPE_NOT_USABLE, check_point as slope_check_point};
+mod marginal_plot;
 mod stack;
 mod stock_plot;
 mod sunburst;
@@ -91,6 +92,8 @@ mod legend_tests;
 mod lollipop_tests;
 #[cfg(test)]
 mod margin_tests;
+#[cfg(test)]
+mod marginal_plot_tests;
 #[cfg(test)]
 mod multi_y_legend_tests;
 #[cfg(test)]

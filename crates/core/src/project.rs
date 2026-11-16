@@ -306,6 +306,8 @@ pub enum ProjectError {
     VectorColumns(&'static str),
     #[error("{0}")]
     StockColumns(&'static str),
+    #[error("{0}")]
+    MarginalColumns(&'static str),
     #[error("a lollipop plot needs two or more Y columns (got {0}); select at least two Y columns")]
     LollipopNeedsTwoColumns(usize),
     #[error("a lollipop plot cannot have a right Y axis; use one Y axis or another template")]
@@ -991,6 +993,9 @@ impl Project {
         if matches!(template, Template::HighLowClose | Template::Candlestick | Template::OhlcBar | Template::OhlcVolume)
         {
             return self.plot_stock(template, ys);
+        }
+        if matches!(template, Template::MarginalHistograms | Template::MarginalBoxCharts) {
+            return self.plot_marginal(template, ys);
         }
         if template == Template::Lollipop && ys.len() < 2 {
             return Err(ProjectError::LollipopNeedsTwoColumns(ys.len()));

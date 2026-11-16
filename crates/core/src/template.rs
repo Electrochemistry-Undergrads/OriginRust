@@ -33,6 +33,9 @@ pub enum Template {
     OhlcVolume,
     /// Plot > Stock > Line (T109): the line template with the theme colour list.
     StockLine,
+    /// Plot > Statistics > Marginal Histograms and Marginal Box Charts (T110).
+    MarginalHistograms,
+    MarginalBoxCharts,
     /// Line plot with a symbol on every point.
     LineSymbol,
     /// Cyclic voltammetry overlay: smooth lines without markers, no grid,
@@ -180,7 +183,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 69] = [
+    pub const ALL: [Template; 71] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -250,6 +253,8 @@ impl Template {
         Template::OhlcBar,
         Template::OhlcVolume,
         Template::StockLine,
+        Template::MarginalHistograms,
+        Template::MarginalBoxCharts,
     ];
 
     /// The name used on the command line and in menus.
@@ -266,6 +271,8 @@ impl Template {
             Template::OhlcBar => "ohlc-bar",
             Template::OhlcVolume => "ohlc-volume",
             Template::StockLine => "stock-line",
+            Template::MarginalHistograms => "marginal-histograms",
+            Template::MarginalBoxCharts => "marginal-box-charts",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
@@ -340,6 +347,8 @@ impl Template {
             Template::OhlcBar => "OHLC Bar Chart",
             Template::OhlcVolume => "OHLC-Volume",
             Template::StockLine => "Stock Line",
+            Template::MarginalHistograms => "Marginal Histograms",
+            Template::MarginalBoxCharts => "Marginal Box Charts",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
@@ -457,6 +466,8 @@ impl Template {
             Template::OhlcBar => general(id, name, PlotKind::OhlcBar),
             Template::OhlcVolume => ohlc_volume(id, name),
             Template::StockLine => themed(general(id, name, PlotKind::Line)),
+            Template::MarginalHistograms => marginal(id, name, PlotKind::MarginalHistogram),
+            Template::MarginalBoxCharts => marginal(id, name, PlotKind::MarginalBox),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
             Template::Multi3YYy | Template::Multi3YYY | Template::Multi4YYyy | Template::Multi4YyYy => {
@@ -976,6 +987,64 @@ fn ohlc_volume(id: WindowId, name: &str) -> Graph {
     g
 }
 
+/// Origin's Marginal Histograms and Marginal Box Charts (T110, measured): the scatter at 15 %, 25.01 %,
+/// 60 % x 60 % of the page and two layers linked to it, a third of its size, above it (sharing X) and right
+/// of it (sharing Y). The margins draw no tick labels or titles; no legends.
+fn marginal(id: WindowId, name: &str, kind: PlotKind) -> Graph {
+    let hist = kind == PlotKind::MarginalHistogram;
+    let mut g = general(id, name, PlotKind::Scatter);
+    let scatter = &mut g.layers[0];
+    scatter.frame = Frame { left: 0.15, top: 0.2501, width: 0.6, height: 0.6 };
+    scatter.legend.visible = false;
+    // Small dots, not the scatter template's squares (measured: about 4 pt circles).
+    scatter.default_symbol.shape = SymbolShape::Circle;
+    scatter.default_symbol.size_pt = 4.0;
+    // The histogram graph's scatter has its bottom and left axes only (the margins' base lines close the
+    // box); the box chart graph's scatter is a closed box.
+    for axis in [&mut scatter.x_axis, &mut scatter.y_axis] {
+        axis.show_opposite = !hist;
+        axis.opposite_ticks = false;
+    }
+    let base = right_y_layer(scatter, 0);
+    let margin = |mut l: Layer, frame: Frame, x_shared: bool| {
+        l.frame = frame;
+        l.default_kind = kind;
+        l.link = Some(LayerLink {
+            parent: 0,
+            x: if x_shared { ScaleLink::Straight } else { ScaleLink::None },
+            y: if x_shared { ScaleLink::None } else { ScaleLink::Straight },
+        });
+        for axis in [&mut l.x_axis, &mut l.y_axis] {
+            axis.side = AxisSide::Hidden;
+            axis.show_opposite = false;
+            axis.show_title = false;
+            axis.show_tick_labels = false;
+            axis.major_tick = TickDirection::None;
+            axis.minor_tick = TickDirection::None;
+            axis.minor_ticks = 0;
+        }
+        if hist {
+            // The base line of the bars: the X axis line under the top bars, the Y axis line left of the right ones.
+            let shared = if x_shared { &mut l.x_axis } else { &mut l.y_axis };
+            shared.side = AxisSide::Normal;
+        }
+        // The counts start at 0 (measured); a box stands at 1 in a 0.5 to 1.5 span (measured).
+        let own = if x_shared { &mut l.y_axis } else { &mut l.x_axis };
+        if hist {
+            own.min = Some(0.0);
+        } else {
+            own.min = Some(0.5);
+            own.max = Some(1.5);
+        }
+        l
+    };
+    let top = margin(base.clone(), Frame { left: 0.0, top: -0.3301, width: 1.0, height: 0.3301 }, true);
+    let right = margin(base, Frame { left: 1.0, top: 0.0, width: 0.3301, height: 1.0 }, false);
+    g.layers.push(top);
+    g.layers.push(right);
+    g
+}
+
 fn double_y(id: WindowId, name: &str) -> Graph {
     let mut g = general(id, name, PlotKind::Line);
     let layer = &mut g.layers[0];
@@ -1181,7 +1250,9 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 69);
+        assert_eq!(Template::ALL.len(), 71);
+        assert_eq!(Template::from_name("marginal-histograms"), Some(Template::MarginalHistograms));
+        assert_eq!(Template::from_name("marginal-box-charts"), Some(Template::MarginalBoxCharts));
         assert_eq!(Template::from_name("ohlc-volume"), Some(Template::OhlcVolume));
         assert_eq!(Template::from_name("stock-line"), Some(Template::StockLine));
         assert_eq!(Template::from_name("candlestick"), Some(Template::Candlestick));

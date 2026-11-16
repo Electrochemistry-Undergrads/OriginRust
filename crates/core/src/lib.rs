@@ -38,6 +38,7 @@ pub mod layer_scale;
 pub mod layers;
 pub mod line_series;
 pub mod localtime;
+pub mod marginal;
 pub mod merge;
 pub mod multi_y;
 pub mod notes;

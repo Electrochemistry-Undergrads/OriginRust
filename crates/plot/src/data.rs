@@ -101,6 +101,8 @@ pub(crate) struct PlotData<'a> {
     pub vector: Option<crate::vector_plot::VectorData>,
     /// The prices of a stock plot (T108); `None` for other kinds.
     pub stock: Option<crate::stock_plot::StockData>,
+    /// The bins or box of a marginal plot (T110); `None` for other kinds.
+    pub marginal: Option<crate::marginal_plot::MarginalData>,
     /// The lines and axes of a layer's parallel plots, held by the first of them; `None` for other plots.
     pub parallel: Option<Box<crate::parallel::ParallelData>>,
     /// What a treemap plot draws; `None` for other kinds.
@@ -677,6 +679,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             hex: None,
             vector: None,
             stock: None,
+            marginal: None,
             parallel: None,
             treemap: None,
             sunburst: None,
@@ -822,6 +825,18 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.xerr = None;
                 pd.base = None;
                 pd.ridge = Some(ridge);
+            }
+            PlotKind::MarginalHistogram | PlotKind::MarginalBox => {
+                let values = pd.visible_values().into_owned();
+                let side = plot.decor.marginal.unwrap_or(sheaf_core::marginal::MarginalSide::Top);
+                let bins = plot.kind == PlotKind::MarginalHistogram;
+                pd.marginal = crate::marginal_plot::MarginalData::new(&values, side, &plot.hist, bins);
+                // The bars or box are not points on the axes; their extent counts through `marginal`.
+                pd.end = pd.start;
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
             }
             PlotKind::HighLowClose | PlotKind::Candlestick | PlotKind::OhlcBar => {
                 let stock = plot.decor.stock.map(|s| crate::stock_plot::StockData::new(project, &pd, s, pd.y.len()));
@@ -1092,6 +1107,12 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
         }
     };
     for pd in pds {
+        if let Some(m) = &pd.marginal {
+            let (a, b) = m.extent(dim == Dim::X);
+            add(a);
+            add(b);
+            continue;
+        }
         // Stock plots: every row's high and low (and open and close) count for the Y axis.
         if let Some(s) = &pd.stock
             && dim == Dim::Y

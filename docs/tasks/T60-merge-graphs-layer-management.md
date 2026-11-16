@@ -6,10 +6,20 @@ Merge Graph Windows (core `merge.rs`, dialog, `sheaf merge-graphs`), Layer Manag
 Size/Position, Link; core `layer_manage.rs`), Fit Page to Layers (dialog and Format item). Fit Layer to
 Graph did nothing measurable in Origin and is tagged `N`. Left: Merge's folder choices, extra layers
 for empty cells and Common Scale options, panel labels, the merge preview; Layer Management's Add
-(T61), Axes and Display tabs; MCP tool for merging. **Size:** L, merge then management.
+(T61), Axes and remaining Display controls; MCP tool for merging. **Size:** L, merge then management.
+Background-colour follow-up (`codex/t60-layer-display`, 2026-11-16): Display > Color >
+Background Color supports selected layers, None, basic presets and opaque RGB. Native two-layer
+Apply/Cancel/OK/mixed/None measurements are recorded in graphing 15.7d. Preview/history/no-op
+and stale-source guards preserve other layer settings; existing render/native/companion save
+paths are reused without model changes. Drawing Order, border colours/dimensions and element
+scaling remain disabled. Fmt, strict workspace/all-target Clippy and all 4,229 workspace tests
+pass (eight ignored), including six new semantic regressions and all 17 Layer Management tests.
+Inventory 308 and eight Python tooling tests pass; source and goldens stayed frozen, using four
+test threads. The desktop Display/RGB preview and independent PNG export were inspected.
+
 **Branch:** `merge-graphs`. **Priority:** P0, wave 2, owner's stacked-figure priority.
 **Spec:** [graphing](../spec/graphing.md) 15 (add Merge Graph Windows and Layer Management
-subsections); ADR 0009. **Inventory:** 7 locations tagged `T60`.
+subsections); ADR 0009. **Inventory:** 0 locations tagged `T60`.
 **Ownership:** copying/arranging existing layers, merge and management dialogs, fit-layer/page.
 T61 owns adding/deleting individual layers and insets. Agree on shared helpers before merging.
 

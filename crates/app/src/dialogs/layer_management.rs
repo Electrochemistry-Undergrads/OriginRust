@@ -11,6 +11,9 @@ use sheaf_core::graph::{Graph, Layer, ScaleLink};
 use sheaf_core::layer_manage::{AlignEdge, ArrangeOptions, ArrangeOrder, SizeUnit};
 use sheaf_core::{Document, Project, WindowId};
 
+mod background;
+use background::BackgroundDraft;
+
 const HINT: &str = "Use the Apply buttons on each tab to update your preview graph. Use the OK button to apply the changes in preview graph to source graph.";
 const NOT_YET: &str = "Not available in Sheaf yet";
 
@@ -55,6 +58,8 @@ pub struct LayerManagementDialog {
     graph: WindowId,
     /// The preview: a copy of the graph that the Apply buttons change.
     work: Graph,
+    /// The source layers at opening: OK must not overwrite an edit made behind this window.
+    source_layers: Vec<Layer>,
     /// The layers before each Apply, newest last.
     history: Vec<Vec<Layer>>,
     selected: BTreeSet<usize>,
@@ -76,6 +81,7 @@ pub struct LayerManagementDialog {
     link_y: ScaleLink,
     /// The layer whose link the Link tab shows (the first selected one when the tab was drawn).
     link_shown_for: Option<usize>,
+    background: BackgroundDraft,
     problem: Option<String>,
 }
 
@@ -89,6 +95,7 @@ impl LayerManagementDialog {
         let selected = layer.filter(|&l| l < work.layers.len()).into_iter().collect();
         Some(Self {
             graph,
+            source_layers: work.layers.clone(),
             work,
             history: Vec::new(),
             selected,
@@ -109,6 +116,7 @@ impl LayerManagementDialog {
             link_x: ScaleLink::None,
             link_y: ScaleLink::None,
             link_shown_for: None,
+            background: BackgroundDraft::default(),
             problem: None,
         })
     }
@@ -132,6 +140,7 @@ impl LayerManagementDialog {
     fn undo(&mut self) {
         if let Some(layers) = self.history.pop() {
             self.work.layers = layers;
+            self.background.invalidate();
             self.problem = None;
         }
     }
@@ -144,6 +153,8 @@ impl LayerManagementDialog {
         match doc.project().graph(self.graph) {
             Some(g) if self.history.is_empty() && g.layers.len() != self.work.layers.len() => {
                 self.work = g.clone();
+                self.source_layers = g.layers.clone();
+                self.background.invalidate();
                 self.selected.retain(|&i| i < self.work.layers.len());
             }
             Some(_) => {}
@@ -175,7 +186,8 @@ impl LayerManagementDialog {
                             Tab::Arrange => self.arrange_tab(ui),
                             Tab::SizePosition => self.size_tab(ui),
                             Tab::Link => self.link_tab(ui),
-                            Tab::Add | Tab::Axes | Tab::Display => unavailable(ui),
+                            Tab::Display => self.display_tab(ui),
+                            Tab::Add | Tab::Axes => unavailable(ui),
                         }
                     });
                     ui.vertical(|ui| self.preview(ui));
@@ -202,8 +214,13 @@ impl LayerManagementDialog {
 
     /// OK: writes the preview's layers to the graph as one undo step (nothing when no Apply was made).
     fn commit(&mut self, doc: &mut Document) -> Outcome {
-        if self.history.is_empty() {
+        if self.history.is_empty() || self.work.layers == self.source_layers {
             return Outcome::Closed;
+        }
+        if doc.project().graph(self.graph).is_some_and(|g| g.layers != self.source_layers) {
+            self.problem =
+                Some("The graph layers changed while this window was open. Cancel and reopen Layer Management.".into());
+            return Outcome::Open;
         }
         let layers = self.work.layers.clone();
         let id = self.graph;
@@ -431,7 +448,19 @@ impl LayerManagementDialog {
         }
     }
 
-    /// The page with the frames of the layers numbered 1 to n; the selected layers are filled.
+    fn display_tab(&mut self, ui: &mut egui::Ui) {
+        let selection = self.selection();
+        if let Some(color) = self.background.show(ui, &self.work, &selection) {
+            self.apply(|g| {
+                for &i in &selection {
+                    g.layers[i].background = color;
+                }
+                Ok(())
+            });
+        }
+    }
+
+    /// The page with numbered layer frames, their backgrounds and a selection tint.
     fn preview(&self, ui: &mut egui::Ui) {
         ui.strong("Preview");
         let (pw, ph) = (self.work.page.width_pt.max(1.0), self.work.page.height_pt.max(1.0));
@@ -439,7 +468,8 @@ impl LayerManagementDialog {
         let size = egui::vec2(width, (width as f64 * ph / pw) as f32);
         let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 0.0, Color32::WHITE);
+        let page = self.work.page.background;
+        painter.rect_filled(rect, 0.0, Color32::from_rgba_unmultiplied(page.r, page.g, page.b, page.a));
         painter.rect_stroke(rect, 0.0, Stroke::new(1.0_f32, Color32::GRAY), egui::StrokeKind::Inside);
         for i in 0..self.work.layers.len() {
             let f = self.work.page_frame(i);
@@ -447,6 +477,9 @@ impl LayerManagementDialog {
                 rect.min + egui::vec2(f.left as f32 * size.x, f.top as f32 * size.y),
                 egui::vec2(f.width as f32 * size.x, f.height as f32 * size.y),
             );
+            if let Some(c) = self.work.layers[i].background {
+                painter.rect_filled(r, 0.0, Color32::from_rgba_unmultiplied(c.r, c.g, c.b, c.a));
+            }
             let on = self.selected.contains(&i);
             if on {
                 painter.rect_filled(r, 0.0, Color32::from_rgba_unmultiplied(70, 130, 220, 70));

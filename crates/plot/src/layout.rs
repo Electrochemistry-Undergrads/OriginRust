@@ -383,6 +383,22 @@ fn group_geometry(
                 own(i, Dim::X, &l.x_axis)
             };
             let y = if shares(i, Dim::Y) { root_y.clone() } else { own(i, Dim::Y, &l.y_axis) };
+            // A zoom layer (T112) shows the extent of the root's region rectangle.
+            if i != root
+                && let Some(r) = l.zoom.and_then(|k| rl.shapes.get(k))
+            {
+                let span = |a: &ResolvedAxis, u1: f64, u2: f64| {
+                    let (v1, v2) = (a.from_unit(u1), a.from_unit(u2));
+                    (v1.min(v2), v1.max(v2))
+                };
+                let (x0, x1) = span(&root_x, r.x1, r.x2);
+                // Frame fractions run down from the top; axis units run up from the bottom.
+                let (y0, y1) = span(&root_y, 1.0 - r.y1, 1.0 - r.y2);
+                if x1 > x0 && y1 > y0 && [x0, x1, y0, y1].iter().all(|v| v.is_finite()) {
+                    let fixed = |a: &Axis, lo: f64, hi: f64| Axis { min: Some(lo), max: Some(hi), ..a.clone() };
+                    return (own(i, Dim::X, &fixed(&l.x_axis, x0, x1)), own(i, Dim::Y, &fixed(&l.y_axis, y0, y1)));
+                }
+            }
             (x, y)
         })
         .collect();

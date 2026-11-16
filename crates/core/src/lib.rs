@@ -65,6 +65,7 @@ pub mod user_template;
 pub mod vector;
 pub mod without_data;
 pub mod worksheet;
+pub mod zoom;
 
 pub use clipboard::{CopyOptions, PasteReport};
 pub use color::Color;

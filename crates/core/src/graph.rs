@@ -366,6 +366,10 @@ pub struct Layer {
     /// of the parent's frame instead of the page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<LayerLink>,
+    /// Origin's Zoom graph (T112): the index of a rectangle among the shapes of the layer's link root whose
+    /// extent, in the root's data, is this layer's X and Y range. Moving the rectangle moves the zoom.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zoom: Option<usize>,
     /// How the plots are moved against each other so that they do not overlap (stacked lines,
     /// waterfall). Only the drawing moves; the data stay as they are.
     #[serde(default, skip_serializing_if = "Stack::is_none")]

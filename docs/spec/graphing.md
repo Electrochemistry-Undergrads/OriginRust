@@ -5479,3 +5479,27 @@ Probed with 20 values in column B, selected alone.
   - Left out: the hatched band, the statistics table, the "Make QC Chart" panel, and a Num Sigma setting.
   - `plot_columns` with the template (the CLI) uses subgroups of 3.
 
+## 34. Zoom graph: Plot > Specialized > Zoom (T112, measured 2026-11-16, Origin 2016)
+
+Probed with X = 1..50 and Y = 10 sin(X/5), B selected.
+
+- Two layers:
+  - **Layer 1** (the whole curve) sits at left 16 %, top 8 %, width 75 %, height 30 % of the page. It is a
+    closed box with grey (128, 128, 128) major grid lines, and has no axis titles or legend. Its axes ran
+    -10 to 60 and -15.4 to 15.4.
+  - **Layer 2** (the zoom) is linked at left -5.979 %, top 127.1 %, width 106 %, height 152 % (in units of
+    layer 1), so it sits below it, a little wider. It has a cyan (0, 255, 255) background and bottom and
+    left axes only.
+- Layer 1 holds a cyan rectangle with a blue edge: the region. Layer 2's X and Y ranges are exactly the
+  region's (-5.7125 to 7.704 and -2.759 to 6.716). Dragging the rectangle in Origin moves the zoom.
+- The region starts centred on the first data point. Its size is 0.19167 of layer 1's width and 0.30764
+  of its height.
+- Sheaf (`Project::plot_zoom`, template `zoom`):
+  - **Zoom field:** `Layer::zoom` names the rectangle among the root layer's shapes, and the layout gives the
+    zoom layer that rectangle's extent in the root's data. Moving or resizing the rectangle like any other
+    shape moves the zoom.
+  - **Placing the region:** `sheaf_plot::place_zoom_regions` centres the region on the first point on the
+    resolved axes. The app and the CLI call it after plotting.
+  - **Differences from Origin:** shapes are drawn over the data, so the region hides the curve under it
+    (Origin draws the curve on top). The axes keep Sheaf's automatic ranges.
+

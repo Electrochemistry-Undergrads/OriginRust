@@ -376,6 +376,7 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         }
     };
     apply_style(project, graph, &a.style, a.panels.is_some())?;
+    sheaf_plot::place_zoom_regions(project, graph);
     Ok(graph)
 }
 

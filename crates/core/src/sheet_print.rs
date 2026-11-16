@@ -13,6 +13,9 @@ use crate::page_setup::PageSetup;
 use crate::worksheet::Worksheet;
 use std::ops::Range;
 
+mod row_heights;
+pub use row_heights::RowHeights;
+
 /// The measures of a printed table, in points.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct PrintStyle {
@@ -118,10 +121,21 @@ pub struct SheetTable<'a> {
     /// the grid does.
     formats: FormatIndex,
     cond: Option<CellStyles>,
+    row_heights: RowHeights,
+    label_heights: Vec<f64>,
 }
 
 impl<'a> SheetTable<'a> {
     pub fn new(sheet: &'a Worksheet, style: PrintStyle) -> Self {
+        Self::with_metrics(sheet, style, &|_, size| size * 1.2 + 2.0)
+    }
+
+    /// Supply installed font line metrics without coupling the model to a font database.
+    pub fn with_metrics(
+        sheet: &'a Worksheet,
+        style: PrintStyle,
+        line_height: &dyn Fn(ResolvedStyle<'_>, f64) -> f64,
+    ) -> Self {
         let cols: Vec<usize> = (0..sheet.columns.len()).filter(|&i| !sheet.columns[i].hidden).collect();
         let n = sheet.row_count();
         let rows = sheet.shown_rows(n).unwrap_or_else(|| (0..n).collect());
@@ -130,7 +144,25 @@ impl<'a> SheetTable<'a> {
         labels.retain(|l| cols.iter().any(|&c| !l.text(&sheet.columns[c]).is_empty()));
         let formats = sheet.format_index();
         let cond = (!sheet.cond_formats.is_empty()).then(|| crate::condformat::evaluate(sheet, &sheet.cond_formats));
-        SheetTable { sheet, cols, rows, labels, style, formats, cond }
+        let height = |st: ResolvedStyle<'_>| {
+            if st.size_pt.is_none() && st.font.is_none() {
+                return style.row_h;
+            }
+            let size = st.size_pt.map_or(style.font_pt, |p| {
+                f64::from(crate::cellformat::clamp_cell_pt(p)) * style.font_pt / GRID_BODY_PT
+            });
+            line_height(st, size).max(style.row_h)
+        };
+        let row_heights = RowHeights::new(sheet, &formats, style.row_h, height).shown(&rows);
+        let label_heights = labels
+            .iter()
+            .map(|l| {
+                cols.iter()
+                    .map(|&c| height(formats.resolve_label(sheet, sheet.columns[c].id, &l.kind())))
+                    .fold(style.row_h, f64::max)
+            })
+            .collect();
+        SheetTable { sheet, cols, rows, labels, style, formats, cond, row_heights, label_heights }
     }
 
     /// The manual format of a data cell with the conditional colours over it.
@@ -183,7 +215,7 @@ impl<'a> SheetTable<'a> {
 
     /// Height of the head: the grey name row and the label rows.
     pub fn head_height(&self) -> f64 {
-        self.style.row_h * (1 + self.labels.len()) as f64
+        self.style.row_h + self.label_heights.iter().sum::<f64>()
     }
 
     /// Width in points of each printed column.
@@ -198,9 +230,10 @@ impl<'a> SheetTable<'a> {
     /// The pages of a printed area `area_w` x `area_h` points, in printing order.
     pub fn pages(&self, area_w: f64, area_h: f64) -> Vec<PageSlot> {
         let footer = self.style.footer_h;
-        paginate(
+        let mut pages = Vec::new();
+        for col in paginate(
             &self.column_widths(),
-            self.row_count(),
+            0,
             &PageBox {
                 area_w,
                 area_h: area_h - footer,
@@ -208,7 +241,25 @@ impl<'a> SheetTable<'a> {
                 row_h: self.style.row_h,
                 rownum_w: self.style.rownum_w,
             },
-        )
+        ) {
+            let mut start = 0;
+            loop {
+                let top = self.row_heights.offset(start);
+                let room = (area_h - footer - self.head_height()).max(0.0);
+                let mut end = self.row_heights.row_at(top + room + 1e-9).min(self.row_count());
+                // row_at returns the row at an exact boundary; a partial row belongs on the next page.
+                if self.row_heights.offset(end) > top + room + 1e-8 {
+                    end = end.saturating_sub(1);
+                }
+                end = end.max(start.saturating_add(1)).min(self.row_count());
+                pages.push(PageSlot { number: pages.len() + 1, rows: start..end, cols: col.cols.clone() });
+                if end >= self.row_count() {
+                    break;
+                }
+                start = end;
+            }
+        }
+        pages
     }
 
     /// The pages of the sheet on the paper of `setup`: the area inside the margins.
@@ -229,7 +280,10 @@ impl<'a> SheetTable<'a> {
         let cols: Vec<usize> = slot.cols.clone().collect();
         let rows: Vec<usize> = slot.rows.clone().collect();
         let width: f64 = s.rownum_w + cols.iter().map(|&c| widths[c]).sum::<f64>();
-        let height = head_h + rows.len() as f64 * s.row_h;
+        let body_top = self.row_heights.offset(slot.rows.start);
+        let row_top = |r| head_h + self.row_heights.offset(r) - body_top;
+        let label_top = |i: usize| s.row_h + self.label_heights[..i].iter().sum::<f64>();
+        let height = row_top(slot.rows.end);
         // Fills first so the grid is drawn over them.
         ops.push(PrintOp::Fill { x: 0.0, y: 0.0, w: width, h: s.row_h, color: head_fill });
         ops.push(PrintOp::Fill { x: 0.0, y: s.row_h, w: width, h: head_h - s.row_h, color: label_fill });
@@ -242,22 +296,23 @@ impl<'a> SheetTable<'a> {
                 let column = &self.sheet.columns[self.cols[c]];
                 for (i, l) in self.labels.iter().enumerate() {
                     if let Some(color) = self.formats.resolve_label(self.sheet, column.id, &l.kind()).fill {
-                        ops.push(PrintOp::Fill { x, y: s.row_h * (1 + i) as f64, w: cw, h: s.row_h, color });
+                        ops.push(PrintOp::Fill { x, y: label_top(i), w: cw, h: self.label_heights[i], color });
                     }
                 }
-                for (j, &r) in rows.iter().enumerate() {
+                for &r in &rows {
                     if let Some(color) = self.cell_style(column, self.rows[r]).fill {
-                        ops.push(PrintOp::Fill { x, y: head_h + s.row_h * j as f64, w: cw, h: s.row_h, color });
+                        ops.push(PrintOp::Fill { x, y: row_top(r), w: cw, h: self.row_heights.height(r), color });
                     }
                 }
                 x += cw;
             }
         }
         // The grid.
-        let mut y = 0.0;
-        for _ in 0..=(1 + self.labels.len() + rows.len()) {
+        for y in std::iter::once(0.0)
+            .chain((0..=self.labels.len()).map(label_top))
+            .chain(rows.iter().map(|r| row_top(r + 1)))
+        {
             ops.push(PrintOp::Line { x1: 0.0, y1: y, x2: width, y2: y, width: s.grid_pt, color: line });
-            y += s.row_h;
         }
         let mut x = 0.0;
         ops.push(PrintOp::Line { x1: x, y1: 0.0, x2: x, y2: height, width: s.grid_pt, color: line });
@@ -269,14 +324,17 @@ impl<'a> SheetTable<'a> {
             x += widths[c];
             ops.push(PrintOp::Line { x1: x, y1: 0.0, x2: x, y2: height, width: s.grid_pt, color: line });
         }
-        let base = |row_top: f64| row_top + (s.row_h + s.font_pt * 0.7) / 2.0 - 0.5;
+        let base = |top: f64, height: f64, size: f64| top + (height + size * 0.7) / 2.0 - 0.5;
+        let cell_size = |st: &ResolvedStyle<'_>| {
+            st.size_pt.map_or(s.font_pt, |p| f64::from(crate::cellformat::clamp_cell_pt(p)) * s.font_pt / GRID_BODY_PT)
+        };
         // Head: names, then the label rows.
         for (k, &c) in cols.iter().enumerate() {
             let (cx, cw) = (xs[k], widths[c]);
             let pos = self.cols[c];
             ops.push(PrintOp::Text {
                 x: cx + cw / 2.0,
-                y: base(0.0),
+                y: base(0.0, s.row_h, s.font_pt),
                 max_w: cw - 2.0 * s.pad,
                 text: head_name(self.sheet, pos),
                 align: Align::Center,
@@ -290,13 +348,20 @@ impl<'a> SheetTable<'a> {
                     continue;
                 }
                 let st = self.formats.resolve_label(self.sheet, self.sheet.columns[pos].id, &l.kind());
-                ops.push(self.cell_text(cx, cw, base(s.row_h * (1 + i) as f64), text, Align::Left, &st));
+                ops.push(self.cell_text(
+                    cx,
+                    cw,
+                    base(label_top(i), self.label_heights[i], cell_size(&st)),
+                    text,
+                    Align::Left,
+                    &st,
+                ));
             }
         }
         for (i, l) in self.labels.iter().enumerate() {
             ops.push(PrintOp::Text {
                 x: s.rownum_w - s.pad,
-                y: base(s.row_h * (1 + i) as f64),
+                y: base(label_top(i), self.label_heights[i], s.font_pt),
                 max_w: s.rownum_w - 2.0 * s.pad,
                 text: l.title(),
                 align: Align::Right,
@@ -306,11 +371,11 @@ impl<'a> SheetTable<'a> {
             });
         }
         // Body: row numbers and the cells as the sheet shows them.
-        for (j, &r) in rows.iter().enumerate() {
-            let top = head_h + s.row_h * j as f64;
+        for &r in &rows {
+            let top = row_top(r);
             ops.push(PrintOp::Text {
                 x: s.rownum_w - s.pad,
-                y: base(top),
+                y: base(top, self.row_heights.height(r), s.font_pt),
                 max_w: s.rownum_w - 2.0 * s.pad,
                 text: (self.rows[r] + 1).to_string(),
                 align: Align::Right,
@@ -329,7 +394,14 @@ impl<'a> SheetTable<'a> {
                 let (cx, cw) = (xs[k], widths[c]);
                 let default = if numeric { Align::Right } else { Align::Left };
                 let st = self.cell_style(column, self.rows[r]);
-                ops.push(self.cell_text(cx, cw, base(top), text, default, &st));
+                ops.push(self.cell_text(
+                    cx,
+                    cw,
+                    base(top, self.row_heights.height(r), cell_size(&st)),
+                    text,
+                    default,
+                    &st,
+                ));
             }
         }
         if s.footer_h > 0.0 {
@@ -408,7 +480,7 @@ pub struct TextFmt {
 
 /// The font size of the grid's body text in points; a formatted size is scaled by the ratio of
 /// the printed font to this, so that a cell looks as big next to the others as it does on screen.
-const GRID_BODY_PT: f64 = 12.0;
+const GRID_BODY_PT: f64 = 9.0;
 
 /// One printed page: which of the table's shown rows and visible columns it holds.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -626,8 +698,8 @@ mod tests {
         let ops = t.draw_page(&pages[0], 1);
         let PrintOp::Text { size: small, .. } = text_op(&ops, "t1") else { unreachable!() };
         let PrintOp::Text { size: big, .. } = text_op(&ops, "t2") else { unreachable!() };
-        assert_eq!(*small, f64::from(MIN_CELL_PT) * 8.0 / 12.0);
-        assert_eq!(*big, f64::from(MAX_CELL_PT) * 8.0 / 12.0);
+        assert_eq!(*small, f64::from(MIN_CELL_PT) * 8.0 / 9.0);
+        assert_eq!(*big, f64::from(MAX_CELL_PT) * 8.0 / 9.0);
     }
 
     #[test]
@@ -643,7 +715,7 @@ mod tests {
         assert_eq!(fmt.family.as_deref(), Some("Courier New"));
         assert_eq!(fmt.color, Some(Color::rgb(200, 0, 0)));
         assert_eq!(*align, Align::Center);
-        assert_eq!(*size, 24.0 * 8.0 / 12.0, "scaled like the printed font");
+        assert_eq!(*size, 24.0 * 8.0 / 9.0, "scaled like the printed font");
         // The cell's centre: the row number column (30) plus two 50 pt columns plus half of the third.
         assert_eq!(*x, 30.0 + 100.0 + 25.0);
         let PrintOp::Text { bold, fmt, align, .. } = text_op(&ops, "t1") else { unreachable!() };
@@ -654,7 +726,8 @@ mod tests {
             .collect();
         assert_eq!(fills.len(), 1, "one filled cell");
         let PrintOp::Fill { x, w, h, y, .. } = fills[0] else { unreachable!() };
-        assert_eq!((*x, *w, *h), (130.0, 50.0, 12.0));
+        assert_eq!((*x, *w), (130.0, 50.0));
+        assert!(*h > 24.0, "the large font grows its printed row");
         assert_eq!(*y, t.head_height() + 12.0, "the second data row");
     }
 

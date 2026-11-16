@@ -62,6 +62,7 @@ mod toolbar_print;
 mod treemap;
 mod view_modes;
 mod violin;
+mod worksheet_format_toolbar;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {
@@ -8875,6 +8876,7 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
 }
 
 mod fill_pattern;
+mod sampling;
 mod swap_transpose;
 #[path = "ui_tests/trendline.rs"]
 mod trendline;

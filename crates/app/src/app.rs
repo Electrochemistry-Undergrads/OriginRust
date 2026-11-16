@@ -199,6 +199,9 @@ pub struct SheafApp {
     template_manager: Option<crate::dialogs::user_templates::TemplateManager>,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values.
     fill_pattern: Option<crate::dialogs::fill_pattern::FillPatternDialog>,
+    /// Column > Set Sampling Interval... and Show X Column....
+    sampling: Option<crate::dialogs::sampling::SamplingDialog>,
+    show_x: Option<crate::dialogs::sampling::ShowXDialog>,
     /// The saved user templates as last read from the folder (at start and after a change).
     user_templates: Vec<String>,
     power: Option<PowerDialog>,
@@ -215,6 +218,7 @@ pub struct SheafApp {
     about: bool,
     /// Which toolbars are shown.
     toolbars: Toolbars,
+    worksheet_format: crate::worksheet_format::Cache,
     /// View > Status Bar turned the status bar off.
     status_bar_hidden: bool,
     /// View > Full Screen is on (T66): one graph's page over the whole screen until Esc.
@@ -317,6 +321,8 @@ impl SheafApp {
             template_prompt: None,
             template_manager: None,
             fill_pattern: None,
+            sampling: None,
+            show_x: None,
             user_templates: startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default(),
             power: None,
             find: None,
@@ -328,6 +334,7 @@ impl SheafApp {
             copied_page: None,
             about: false,
             toolbars: Toolbars::default(),
+            worksheet_format: Default::default(),
             status_bar_hidden: false,
             full_screen: None,
             full_screen_reminder_off: false,
@@ -1617,6 +1624,11 @@ impl SheafApp {
             return None;
         }
         let graph = self.active?;
+        if let Some(book) = self.doc.project().workbook(graph) {
+            let sheet = book.active_sheet.min(book.sheets.len().checked_sub(1)?);
+            let range = grid::format_target(self.books.get(&graph)?, &book.sheets[sheet]).ok()?;
+            return self.worksheet_format.snapshot(&self.doc, graph, sheet, range);
+        }
         let (layer, object) = self.graphs.get(&graph)?.selected?;
         crate::text_format::Snapshot::graph(&self.doc, graph, layer, object)
     }
@@ -2390,6 +2402,14 @@ impl SheafApp {
             Action::FillPattern { kind, columns } => {
                 self.fill_pattern = Some(crate::dialogs::fill_pattern::FillPatternDialog::new(kind, columns));
             }
+            Action::SetSamplingInterval { columns } => {
+                let current =
+                    columns.first().and_then(|c| self.doc.project().column(*c)).and_then(|c| c.sampling.as_ref());
+                self.sampling = Some(crate::dialogs::sampling::SamplingDialog::new(columns.clone(), current));
+            }
+            Action::ShowXColumn { columns } => {
+                self.show_x = Some(crate::dialogs::sampling::ShowXDialog::new(columns));
+            }
             Action::ReloadRecent => {
                 self.recent.reload();
                 ctx.request_repaint();
@@ -3018,6 +3038,55 @@ impl SheafApp {
         match self.doc.edit("Plot columns", |p| p.plot_with_user_template(&template, &ys)) {
             Ok(_) => self.say(format!("Plotted {} column(s) with the template {}", ys.len(), template.name)),
             Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+        }
+    }
+
+    /// Set Sampling Interval and Show X Column: OK changes every chosen column, one undo step.
+    fn show_sampling(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::sampling::{SamplingOutcome, ShowXOutcome};
+        if let Some(d) = &mut self.sampling {
+            match d.show(ctx) {
+                SamplingOutcome::Open => {}
+                SamplingOutcome::Closed => self.sampling = None,
+                SamplingOutcome::Set { columns, x0, inc, long_name, units } => {
+                    let set = self.doc.edit("Set sampling interval", |p| {
+                        p.set_sampling_interval(&columns, x0, inc, &long_name, &units)
+                    });
+                    match set {
+                        Ok(()) => {
+                            self.sampling = None;
+                            let what = if x0 == 1.0 && inc == 1.0 {
+                                "Cleared the sampling interval"
+                            } else {
+                                "Set the sampling interval"
+                            };
+                            self.say(format!("{what} of {} column(s)", columns.len()));
+                        }
+                        Err(e) => d.set_problem(e.to_string()),
+                    }
+                }
+            }
+        }
+        if let Some(d) = &mut self.show_x {
+            match d.show(ctx) {
+                ShowXOutcome::Open => {}
+                ShowXOutcome::Closed => self.show_x = None,
+                ShowXOutcome::Show { columns, clear } => {
+                    let shown = self.doc.edit("Show X column", |p| {
+                        for c in &columns {
+                            p.show_x_column(*c, clear)?;
+                        }
+                        Ok::<(), sheaf_core::sampling::SamplingError>(())
+                    });
+                    match shown {
+                        Ok(()) => {
+                            self.show_x = None;
+                            self.say(format!("Showed the X of {} column(s)", columns.len()));
+                        }
+                        Err(e) => d.set_problem(e.to_string()),
+                    }
+                }
+            }
         }
     }
 
@@ -3650,6 +3719,8 @@ impl SheafApp {
             || self.template_prompt.is_some()
             || self.template_manager.is_some()
             || self.fill_pattern.is_some()
+            || self.sampling.is_some()
+            || self.show_x.is_some()
             || self.power.is_some()
             || self.find.is_some()
             || self.sort.is_some()
@@ -4299,6 +4370,7 @@ impl SheafApp {
         }
         self.show_template_windows(ctx);
         self.show_fill_pattern(ctx);
+        self.show_sampling(ctx);
         if let Some(d) = &mut self.find {
             let book = d.book;
             match d.show(ctx) {

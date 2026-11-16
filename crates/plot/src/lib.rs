@@ -38,6 +38,8 @@ mod rug;
 pub mod scene;
 mod shapes;
 mod sheet;
+mod worksheet_font;
+pub use worksheet_font::{WorksheetFont, worksheet_font};
 mod slope;
 mod straight_line;
 pub use slope::{NOT_USABLE as SLOPE_NOT_USABLE, check_point as slope_check_point};
@@ -98,6 +100,8 @@ mod parallel_tests;
 mod ridgeline_tests;
 #[cfg(test)]
 mod rug_tests;
+#[cfg(test)]
+mod sampling_tests;
 #[cfg(test)]
 mod skip_tests;
 #[cfg(test)]

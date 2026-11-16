@@ -88,6 +88,9 @@ pub enum Cmd {
     ManageTemplates,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values (T74).
     FillPattern(FillKind),
+    /// Column > Set Sampling Interval... and Show X Column... (T84).
+    SetSamplingInterval,
+    ShowXColumn,
     /// File > Import > Single ASCII (Ctrl+K).
     Import,
     ImportMultiple,
@@ -1168,8 +1171,8 @@ fn column_menu() -> Vec<Entry> {
             ],
         ),
         sep(),
-        grey("Set Sampling Interval..."),
-        grey("Show X Column..."),
+        item("Set Sampling Interval...", Cmd::SetSamplingInterval),
+        item("Show X Column...", Cmd::ShowXColumn),
         sep(),
         keyed("Add &New Columns...", ctrl(Key::D), Cmd::AddColumns),
         hide_menu(),
@@ -1771,7 +1774,9 @@ pub fn column_header_menu() -> Vec<Entry> {
             item("Arbitrary set of Text&&Numeric values...", Cmd::FillPattern(FillKind::Text)),
         ],
     ));
-    v.extend(greys(&["Set Sampling Interval...", "Show X Column...", "-"]));
+    v.push(item("Set Sampling Interval...", Cmd::SetSamplingInterval));
+    v.push(item("Show X Column...", Cmd::ShowXColumn));
+    v.push(sep());
     v.push(filter_menu());
     v.push(mask_menu());
     v.push(item("Mask Cells by Condition...", Cmd::MaskByCondition));
@@ -2466,6 +2471,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SaveProjectAs => Action::SaveProjectAs,
         Cmd::SaveWindowAs => Action::SaveWindowAs(c.active.ok_or(NEED_WINDOW)?),
         Cmd::FillPattern(kind) => Action::FillPattern { kind: *kind, columns: some()? },
+        Cmd::SetSamplingInterval => Action::SetSamplingInterval { columns: some()? },
+        Cmd::ShowXColumn => Action::ShowXColumn { columns: some()? },
         Cmd::SaveTemplateAs => {
             if !c.templates {
                 return Err(NO_TEMPLATE_FOLDER);

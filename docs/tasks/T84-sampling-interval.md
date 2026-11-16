@@ -1,6 +1,6 @@
 # T84: Set Sampling Interval and Show X Column
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `sampling-interval`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13d): both items in the Column menu and the column header menu, measured in Origin 2016 (plots use the interval even with an X column to the left; Show X Column inserts a Disregard column, or an X column and clears the interval; no interval fails), `.sheaf` keeps it, the `.opj` save warning names it. Left: reading Origin's interval from `.opj`, analysis tools using it, the sampling-interval label row.
 **Size:** M. **Source:** greyed inventory package B5 (Column > Set Sampling Interval... and Show X Column...,
 and the same two items of the column-header context menu).
 **Spec:** a new section in `docs/spec/workbook-model.md` ("Sampling interval").

@@ -70,12 +70,12 @@ fn whole_legend_styles_toggle_and_undo_without_rewriting_text_or_data() {
 fn font_size_family_and_color_apply_through_the_shared_controls() {
     let mut h = start_graph("format-toolbar-font");
     select(&mut h, ObjectKind::Legend);
-    enter_size(&mut h, "22");
-    assert_eq!(graph(&h).layers[0].legend.font.size_pt, 22.0);
+    enter_size(&mut h, "18");
+    assert_eq!(graph(&h).layers[0].legend.font.size_pt, 18.0);
     click(&mut h, "Format toolbar: Increase Font Size");
-    assert_eq!(graph(&h).layers[0].legend.font.size_pt, 26.0);
-    click(&mut h, "Format toolbar: Decrease Font Size");
     assert_eq!(graph(&h).layers[0].legend.font.size_pt, 22.0);
+    click(&mut h, "Format toolbar: Decrease Font Size");
+    assert_eq!(graph(&h).layers[0].legend.font.size_pt, 18.0);
     click(&mut h, "Format toolbar: Font Color");
     click(&mut h, "Font Color: Red");
     assert_eq!(graph(&h).layers[0].legend.font.color, sheaf_core::Color::rgb(255, 0, 0));
@@ -95,7 +95,7 @@ fn font_size_family_and_color_apply_through_the_shared_controls() {
     assert_eq!(graph(&h).layers[0].legend.font.family, first_family);
     let before = project(&h).clone();
     let revision = h.state().doc.revision();
-    for text in ["0", "-2", "NaN", "inf", "1001", "bad", "22"] {
+    for text in ["0", "-2", "NaN", "inf", "1001", "bad", "18"] {
         enter_size(&mut h, text);
         assert_eq!(project(&h), &before, "invalid or unchanged input: {text}");
         assert_eq!(h.state().doc.revision(), revision);
@@ -178,6 +178,7 @@ fn toolbar_fonts_survive_native_and_origin_companion_round_trips_and_export() {
     click(&mut h, "Format toolbar: Bold");
     click(&mut h, "Format toolbar: Italic");
     enter_size(&mut h, "30");
+    assert_eq!(graph(&h).layers[0].legend.font.size_pt, 30.0);
     click(&mut h, "Format toolbar: Font Color");
     click(&mut h, "Font Color: Blue");
     let expected = graph(&h).layers[0].legend.font.clone();

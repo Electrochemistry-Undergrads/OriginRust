@@ -65,7 +65,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | Brief | Wave | Size | Scope and dependency |
 |---|---|---|---|
 | [T58](T58-graph-text-formatting.md) | 1, P0 | L | Renderer slices published; selected graph text font/size/Bold/Italic/colour toolbar, shared dispatch and the six remaining Format-bar graph targets added (graphing 7.4); editor, title menu items, measurement and T59 adapter separate |
-| [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell format model, drawing and Format Cells done (unmeasured); toolbar adapter, Format > Worksheet, Set Data Style after T58 slice 3 |
+| [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell model/dialog and worksheet toolbar font/size/Bold/Italic/basic text colours; installed faces and derived row/print geometry (basic Origin toolbar measured); left: worksheet-wide dialog, Set Data Style, underline/fill/shortcuts and remaining measurements |
 | [T60](T60-merge-graphs-layer-management.md) | 2, P0 | L | Done 2026-11-15: Merge Graph Windows (dialog, CLI), Layer Management (Arrange, Size/Position, Link), Fit Page to Layers; left: merge folders/labels/preview, Add/Axes/Display tabs, MCP |
 | [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Done 2026-11-15 (graphing 21): nine Add Layer kinds, insets, Delete Layer, Layer Properties, displaced Y axes and Move to Layer, 3Ys/4Ys templates and Multiple Y Axes (CLI `-t 3ys-y-yy` etc.); left: Open Dialog..., three layer-icon items, Origin's legend in the templates |
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
@@ -84,7 +84,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T80](T80-color-and-bubble-scale.md) | 4 (B3), P2 | M | Done 2026-11-16: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (layer scale objects, graphing 27); left: dragging, properties dialog, Map link |
 | [T78](T78-recent-lists.md) | 4 (B10), P1 | S | Done 2026-11-16: Most Recently Used lists in Plot, Worksheet, Analysis, Statistics menus and Recent Exports (File > Export and graph window) |
 | [T74](T74-fill-column-patterns.md) | Fill Column With: A set of Numbers, Date/Time values, Text & Numeric values (Origin patternN/D/T) | M | done 2026-11-16 (workbook-model 13c); left: Origin's window layout, text quoting |
-| [T84](T84-sampling-interval.md) | Set Sampling Interval and Show X Column (Origin colint/colshowx) | M | claimed 2026-11-16 (`sampling-interval`, Claude Windows) |
+| [T84](T84-sampling-interval.md) | Set Sampling Interval and Show X Column (Origin colint/colshowx) | M | done 2026-11-16 (workbook-model 13d); left: reading the interval from `.opj`, analysis tools, the label row |
 | [T86](T86-swap-columns-paste-transpose.md) | Swap Columns and Paste Transpose (Origin colswap, Paste Transpose) | S | claimed 2026-11-16 (`swap-transpose`, Claude Windows) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |

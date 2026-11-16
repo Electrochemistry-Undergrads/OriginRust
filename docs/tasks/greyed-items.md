@@ -48,9 +48,10 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T70` | 0 |
 | `T71` | 0 |
 | `T73` | 0 |
+| `T75` | 1 |
 | `B2` | 51 |
 | `B3` | 22 |
-| `B4` | 26 |
+| `B4` | 25 |
 | `B5` | 33 |
 | `B6` | 31 |
 | `B7` | 8 |
@@ -66,7 +67,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 42 items, backlog packages (`B`) 319, not planned (`N`) 20.
+Briefs (`T`) hold 43 items, backlog packages (`B`) 318, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -117,7 +118,8 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Plot
 - `T63` Line: Horizontal Step · Vertical Step · Spline Connected
-- `B4` Symbol: Scatter Central · Column Scatter
+- `B4` Symbol: Column Scatter
+- `T75` Symbol: Scatter Central
 - `B4` Line + Symbol: Line Series
 - `B4` Column/Bar/Pie: Grouped Columns (indexed data)
 - `B15` Y-offset/Waterfall: 3D Waterfall

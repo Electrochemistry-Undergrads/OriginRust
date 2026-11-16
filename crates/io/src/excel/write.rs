@@ -1,9 +1,12 @@
 //! Writing worksheets as an `.xlsx` workbook.
 
+mod formats;
+
 use super::{EMPTY_LABEL, dates};
 use crate::error::IoError;
 use crate::save::write_atomically;
 use rust_xlsxwriter::{Format, Workbook as XlsxBook};
+use sheaf_core::cellformat::LabelKind;
 use sheaf_core::format::NumberFormat;
 use sheaf_core::{Column, ColumnData, Workbook, Worksheet};
 use std::path::{Path, PathBuf};
@@ -153,14 +156,6 @@ fn write_sheet(
     if cols.len() > MAX_COLUMNS {
         return Err(format!("it has {} columns and Excel holds {MAX_COLUMNS}", cols.len()));
     }
-    // Per-cell fonts and colours would have to be combined with each column's number format into
-    // one Excel format per cell style; that is left for later and said here.
-    if !sheet.cell_formats.is_empty() {
-        warnings.push(format!(
-            "Sheet '{}': cell formatting (font, size, bold, italic, underline, colours, alignment) is not written to the Excel file.",
-            sheet.name
-        ));
-    }
     // Long name, units and comments are told apart by their place: up to three rows right above
     // the data, in that order. A row that is written because a later one needs it, or that no
     // column fills, holds only the invisible `EMPTY_LABEL` in its first cell, so that the importer
@@ -170,15 +165,19 @@ fn write_sheet(
     let units_row = comments_row || (opts.units && any(|c| &c.units));
     let long_row = units_row || (opts.long_names && any(|c| &c.long_name));
     let mut labels: Vec<Vec<&str>> = Vec::new();
+    let mut kinds = Vec::new();
     if opts.short_names {
         labels.push(cols.iter().map(|c| c.short_name.as_str()).collect());
+        kinds.push(None);
     }
     let label_rows: [(bool, bool, fn(&Column) -> &str); 3] = [
         (long_row, opts.long_names, |c| &c.long_name),
         (units_row, opts.units, |c| &c.units),
         (comments_row, opts.comments, |c| &c.comments),
     ];
-    for (written, wanted, text) in label_rows {
+    for ((written, wanted, text), kind) in
+        label_rows.into_iter().zip([LabelKind::LongName, LabelKind::Units, LabelKind::Comments])
+    {
         if !written {
             continue;
         }
@@ -189,16 +188,23 @@ fn write_sheet(
             *first = EMPTY_LABEL;
         }
         labels.push(line);
+        // An unwanted placeholder row exists only to retain the later label's position.
+        kinds.push(wanted.then_some(kind));
     }
     let rows = sheet.row_count();
     if labels.len() + rows > MAX_ROWS {
         return Err(format!("it has {rows} rows and Excel holds {MAX_ROWS}"));
     }
+    let formats = formats::Formats::new(sheet);
+    formats.warn_omissions(&kinds, warnings);
     let err = |e: rust_xlsxwriter::XlsxError| e.to_string();
     for (r, line) in labels.iter().enumerate() {
         for (c, text) in line.iter().enumerate() {
-            if !text.is_empty() {
-                target.write_string(r as u32, c as u16, clip(text)).map_err(err)?;
+            let format = formats.label(cols[c].id, kinds[r].as_ref());
+            if text.is_empty() {
+                target.write_blank(r as u32, c as u16, &format).map_err(err)?;
+            } else {
+                target.write_string_with_format(r as u32, c as u16, clip(text), &format).map_err(err)?;
             }
         }
     }
@@ -209,7 +215,18 @@ fn write_sheet(
         if let Some(w) = width {
             target.set_column_width(c as u16, w).map_err(err)?;
         }
-        write_column(target, col, c as u16, top, format.as_ref(), &mut notes).map_err(err)?;
+        write_column(target, col, c as u16, top, format.as_ref(), &formats, &mut notes).map_err(err)?;
+        for range in formats.blank_ranges(col.id) {
+            for row in range {
+                let has_value = col.numeric().and_then(|v| v.get(row)).is_some_and(|v| v.is_finite())
+                    || col.data.text_cell(row).is_some_and(|s| !s.is_empty());
+                if !has_value && !formats.data_style(col.id, row).is_default() {
+                    target
+                        .write_blank(top + row as u32, c as u16, &formats.data(col.id, row, format.as_ref()))
+                        .map_err(err)?;
+                }
+            }
+        }
     }
     let leading = (0..rows).take_while(|&r| row_is_blank(cols, r)).count();
     let trailing = if leading == rows { 0 } else { (0..rows).rev().take_while(|&r| row_is_blank(cols, r)).count() };
@@ -297,6 +314,7 @@ fn write_column(
     c: u16,
     top: u32,
     format: Option<&Format>,
+    formats: &formats::Formats<'_>,
     notes: &mut Notes,
 ) -> Result<(), rust_xlsxwriter::XlsxError> {
     let is_date = matches!(col.format, NumberFormat::Date(_) | NumberFormat::DateTime(..));
@@ -320,10 +338,7 @@ fn write_column(
             (x, format)
         };
         let r = top + row as u32;
-        match format {
-            Some(f) => target.write_number_with_format(r, c, value, f).map(|_| ()),
-            None => target.write_number(r, c, value).map(|_| ()),
-        }
+        target.write_number_with_format(r, c, value, &formats.data(col.id, row, format)).map(|_| ())
     };
     match &col.data {
         ColumnData::Numeric(v) => {
@@ -336,7 +351,7 @@ fn write_column(
                 if s.chars().count() > MAX_TEXT {
                     notes.clipped += 1;
                 }
-                target.write_string(top + row as u32, c, clip(s))?;
+                target.write_string_with_format(top + row as u32, c, clip(s), &formats.data(col.id, row, None))?;
             }
         }
         ColumnData::Mixed { numbers, texts } => {
@@ -346,14 +361,22 @@ fn write_column(
                         if s.chars().count() > MAX_TEXT {
                             notes.clipped += 1;
                         }
-                        target.write_string(top + row as u32, c, clip(s))?;
+                        target.write_string_with_format(
+                            top + row as u32,
+                            c,
+                            clip(s),
+                            &formats.data(col.id, row, None),
+                        )?;
                     }
                     None => put_number(target, row, *x)?,
                 }
             }
             // Text cells below the last number.
             for (row, s) in texts.range(numbers.len()..) {
-                target.write_string(top + *row as u32, c, clip(s))?;
+                if s.chars().count() > MAX_TEXT {
+                    notes.clipped += 1;
+                }
+                target.write_string_with_format(top + *row as u32, c, clip(s), &formats.data(col.id, *row, None))?;
             }
         }
     }

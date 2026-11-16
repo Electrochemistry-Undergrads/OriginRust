@@ -1754,3 +1754,163 @@ fn rmanova_two_way_has_an_error_term_per_effect() {
     let (ok, _, err) = sheaf(&["analyze", "rmanova", file, "--y", "a,y,s", "--two-way"]);
     assert!(!ok && err.contains("FACTOR_A,FACTOR_B,DATA,SUBJECT"), "{err}");
 }
+
+/// The rows of an exported sheet that are numbers (the header rows are not).
+fn numeric_rows(text: &str) -> Vec<Vec<f64>> {
+    text.lines().filter_map(|l| l.split(',').map(|v| v.parse::<f64>().ok()).collect::<Option<Vec<f64>>>()).collect()
+}
+
+/// 16 samples of a ramp (column "ramp", 0..15) and a short pair of Haar coefficient columns.
+fn wavelet_file(dir: &Path) -> PathBuf {
+    let s = std::f64::consts::SQRT_2;
+    // x = 4 2 5 5 1 7 0 0: ca = (6 10 8 0) / sqrt2, cd = (2 0 -6 0) / sqrt2 (Haar, Origin's alignment).
+    let (ca, cd) = ([6.0 / s, 10.0 / s, 8.0 / s, 0.0], [2.0 / s, 0.0, -6.0 / s, 0.0]);
+    let mut text = String::from("t,ramp,ca,cd\n");
+    for i in 0..16 {
+        let (a, d) = if i < 4 { (ca[i].to_string(), cd[i].to_string()) } else { (String::new(), String::new()) };
+        text.push_str(&format!("{i},{i},{a},{d}\n"));
+    }
+    let path = dir.join("wavelet.csv");
+    std::fs::write(&path, text).unwrap();
+    path
+}
+
+#[test]
+fn wavelet_decompose_writes_the_coefficients_and_reconstruct_gives_them_back() {
+    let dir = scratch("wavelet");
+    let data = wavelet_file(&dir);
+    let out = dir.join("dwt.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "wavelet-decompose",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--wavelet",
+        "haar",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Wavelet decomposition"), "{stdout}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    let rows: Vec<Vec<f64>> = numeric_rows(&text);
+    assert_eq!(rows.len(), 8);
+    // Ramp 0, 1, 2, ..: ca[k] = (x[2k] + x[2k+1]) / sqrt2, cd[k] = (x[2k] - x[2k+1]) / sqrt2 = -1 / sqrt2.
+    assert!((rows[0][0] - 1.0 / 2f64.sqrt()).abs() < 1e-12 && (rows[0][1] + 1.0 / 2f64.sqrt()).abs() < 1e-12);
+    assert!(text.lines().nth(1).unwrap().contains("Approx Coeff of Haar dwt on"), "{text}");
+
+    let out = dir.join("idwt.csv");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "wavelet-reconstruct",
+        data.to_str().unwrap(),
+        "--y",
+        "ca",
+        "--with",
+        "cd",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let got: Vec<f64> = numeric_rows(&std::fs::read_to_string(&out).unwrap()).into_iter().map(|r| r[0]).collect();
+    let want = [4.0, 2.0, 5.0, 5.0, 1.0, 7.0, 0.0, 0.0];
+    assert_eq!(got.len(), 8);
+    for (g, w) in got.iter().zip(want) {
+        assert!((g - w).abs() < 1e-12, "{got:?}");
+    }
+}
+
+#[test]
+fn wavelet_denoise_and_smooth_run_and_refuse_what_origin_refuses() {
+    let dir = scratch("wavelet-denoise");
+    let data = wavelet_file(&dir);
+    let out = dir.join("den.csv");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "wavelet-denoise",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--wavelet",
+        "db2",
+        "--level",
+        "2",
+        "--percent",
+        "0",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    // A threshold of 0 % keeps every coefficient: the ramp comes back.
+    let rows = numeric_rows(&std::fs::read_to_string(&out).unwrap());
+    assert_eq!(rows.len(), 16);
+    for (i, r) in rows.iter().enumerate() {
+        assert!((r[1] - i as f64).abs() < 1e-9, "row {i}: {r:?}");
+    }
+    // Four levels do not fit 16 periodic points (limit 3), as in Origin.
+    let (ok, _, stderr) = sheaf(&["analyze", "wavelet-denoise", data.to_str().unwrap(), "--y", "ramp", "--level", "4"]);
+    assert!(!ok && stderr.contains("level 4"), "{stderr}");
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "wavelet-smooth", data.to_str().unwrap(), "--y", "ramp", "--wavelet", "x"]);
+    assert!(!ok && stderr.contains("not a wavelet"), "{stderr}");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "wavelet-smooth",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--wavelet",
+        "db2",
+        "--cutoff",
+        "50",
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Wavelet smoothing"), "{stdout}");
+}
+
+#[test]
+fn cwt_writes_one_column_per_scale_and_refuses_what_origin_refuses() {
+    let dir = scratch("cwt");
+    // A unit impulse at row 8 of 16, and the scales 1, 2.9, 4.
+    let mut text = String::from(
+        "t,sig,scale
+",
+    );
+    for i in 0..16 {
+        let s = ["1", "2.9", "4"].get(i).copied().unwrap_or("");
+        text.push_str(&format!(
+            "{i},{},{s}
+",
+            if i == 8 { 1 } else { 0 }
+        ));
+    }
+    let data = dir.join("cwt.csv");
+    std::fs::write(&data, text).unwrap();
+    let out = dir.join("cwt-out.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "cwt",
+        data.to_str().unwrap(),
+        "--y",
+        "sig",
+        "--with",
+        "scale",
+        "--wavelet",
+        "mexhat",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Continuous wavelet") && stdout.contains("CWTResults1"), "{stdout}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    let rows = numeric_rows(&text);
+    assert_eq!(rows.len(), 16);
+    assert_eq!(rows[0].len(), 3);
+    // Scale 2.9 is cut to 2, so its column differs from scale 4 and both are centred half a sample after the impulse.
+    assert!((rows[8][1] - rows[9][1]).abs() < 1e-12 && (rows[7][1] - rows[10][1]).abs() < 1e-12, "{rows:?}");
+    assert!(text.contains("cwt of B, C"), "{text}");
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "cwt", data.to_str().unwrap(), "--y", "sig", "--with", "scale", "--param", "3"]);
+    assert!(!ok && stderr.contains("wave number"), "{stderr}");
+}

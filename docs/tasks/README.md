@@ -95,6 +95,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T93](T93-sheet-navigate.md) | Sheet tab Navigate... | S | done 2026-11-16 (workbook-model 13h); left: Actions, Apply Reorder |
 | [T94](T94-sampling-interval-row.md) | Sampling Interval label row (corner menu switch) | S | open: measured (workbook-model 13i), not built; waits for T59's label-row/layout work |
 | [T95](T95-find-in-project.md) | Find in Project (F3) | M | done 2026-11-16 (workbook-model 13j); left: folders, notes, Within |
+| [T96](T96-wavelets.md) | Wavelets: Decompose, Reconstruction, Denoise, Smooth, Continuous Wavelet (B8 slice) | L | done 2026-11-16 (`wavelets`, Claude Windows); Origin measured (analysis-tools.md 19, fixtures `tools/origin-ref/t96/t96-origin.json`); all five items built; Continuous Wavelet reproduces Origin's `cwt` to 1e-14 (Origin's pseudo-frequency output, coefficient matrix and image plot are not built, no script route); open corners: `sqtwolog` threshold, denoise boundary samples, Smooth for non-power-of-two lengths |
 | [T97](T97-worksheet-as-image.md) | Export > Worksheet as Image... (Origin expWks) | S | done 2026-11-16 (workbook-model 13k); left: other types, several sheets |
 | [T98](T98-reimport.md) | File > Import > Re-Import Directly, Re-Import... (Origin reimport) | S | done 2026-11-16 (workbook-model 13l); left: stored import options |
 | [T99](T99-batch-plotting.md) | Duplicate (Batch Plotting): With New Sheets/Books, With New Columns | M | done 2026-11-16 (graphing 28); left: Graph Short/Long Name fields |

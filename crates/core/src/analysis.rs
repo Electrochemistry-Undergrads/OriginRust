@@ -56,11 +56,15 @@ pub use multivariate::{KmeansSpec, PcaSpec};
 pub use roc::RocSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
+pub use sheaf_calc::{CwtWavelet, Wavelet, WaveletExtension};
 pub use sheaf_fit::simulate::Spacing as SimulateSpacing;
 pub use simsurface::SimulateSurfaceSpec;
 pub use simulate::{SimulateCurveSpec, SimulateX};
 pub use summary::{GraphArrangement, GraphSummarySpec};
 pub use survival::KaplanMeierSpec;
+pub use wavelet::{
+    CwtSpec, WaveletDecomposeSpec, WaveletDenoiseSpec, WaveletReconstructSpec, WaveletSmoothSpec, WaveletThresholdKind,
+};
 pub use xyzarea::default_columns as xyz_default_columns;
 
 /// The multi-peak fit of [`PeakChainSpec`]: a sum of peaks on `baseline`, one peak for every peak
@@ -926,6 +930,16 @@ pub enum Tool {
     Envelope(EnvelopeSpec),
     Coherence(CoherenceSpec),
     Decimate(DecimateSpec),
+    /// Signal Processing > Wavelet > Decompose (Origin's `dwt`, measured; analysis-tools.md 19.2).
+    WaveletDecompose(WaveletDecomposeSpec),
+    /// Signal Processing > Wavelet > Reconstruction (Origin's `idwt`, measured; analysis-tools.md 19.3).
+    WaveletReconstruct(WaveletReconstructSpec),
+    /// Signal Processing > Wavelet > Denoise (Origin's `wtdenoise`, measured; analysis-tools.md 19.4).
+    WaveletDenoise(WaveletDenoiseSpec),
+    /// Signal Processing > Wavelet > Smooth (Origin's `wtsmooth`, measured; analysis-tools.md 19.5).
+    WaveletSmooth(WaveletSmoothSpec),
+    /// Signal Processing > Wavelet > Continuous Wavelet (Origin's `cwt`, measured; analysis-tools.md 19.6).
+    ContinuousWavelet(CwtSpec),
     /// Mathematics > Trace Interpolation (Origin's `interp1trace`, measured; analysis-tools.md 16).
     TraceInterp(TraceInterpSpec),
     /// Data Manipulation: subtract the straight line through two points.
@@ -1029,6 +1043,11 @@ impl Tool {
             Tool::Envelope(_) => "Envelope",
             Tool::Coherence(_) => "Coherence",
             Tool::Decimate(_) => "Decimation",
+            Tool::WaveletDecompose(_) => "Wavelet decomposition",
+            Tool::WaveletReconstruct(_) => "Wavelet reconstruction",
+            Tool::WaveletDenoise(_) => "Wavelet denoising",
+            Tool::WaveletSmooth(_) => "Wavelet smoothing",
+            Tool::ContinuousWavelet(_) => "Continuous wavelet transform",
             Tool::TraceInterp(_) => "Trace interpolation",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
@@ -1119,6 +1138,11 @@ impl Tool {
             Tool::Envelope(_) => "Envelope",
             Tool::Coherence(_) => "Coherence",
             Tool::Decimate(_) => "Decimate",
+            Tool::WaveletDecompose(_) => "DWT",
+            Tool::WaveletReconstruct(_) => "IDWT",
+            Tool::WaveletDenoise(_) => "WTDenoise",
+            Tool::WaveletSmooth(_) => "WTSmooth",
+            Tool::ContinuousWavelet(_) => "CWTResults",
             Tool::TraceInterp(_) => "TraceInterp",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
@@ -1845,6 +1869,7 @@ mod simulate;
 mod statistics;
 mod summary;
 mod survival;
+mod wavelet;
 mod xyzarea;
 pub use manip::{
     MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
@@ -2610,6 +2635,21 @@ impl Project {
                         data: ColumnData::numeric(dy),
                     });
                 }
+            }
+            Tool::WaveletDecompose(spec) => wavelet::run_decompose(spec, &inputs, &mut on_sheet)?,
+            Tool::WaveletReconstruct(spec) => {
+                let (_, _, dcol) = self.locate(spec.detail).ok_or(AnalysisError::NoSuchColumn(spec.detail))?;
+                let dshort = dcol.short_name.clone();
+                let detail = dcol.numeric().ok_or_else(|| AnalysisError::NotNumeric(dshort.clone()))?;
+                wavelet::run_reconstruct(spec, &inputs, detail, &dshort, &mut on_sheet)?
+            }
+            Tool::WaveletDenoise(spec) => wavelet::run_denoise(spec, &inputs, &mut on_sheet)?,
+            Tool::WaveletSmooth(spec) => wavelet::run_smooth(spec, &inputs, &mut on_sheet)?,
+            Tool::ContinuousWavelet(spec) => {
+                let (_, _, scol) = self.locate(spec.scales).ok_or(AnalysisError::NoSuchColumn(spec.scales))?;
+                let sshort = scol.short_name.clone();
+                let scales = scol.numeric().ok_or_else(|| AnalysisError::NotNumeric(sshort.clone()))?;
+                wavelet::run_cwt(spec, &inputs, scales, &sshort, &mut on_sheet)?
             }
             Tool::TraceInterp(spec) => {
                 if spec.points < 2 {

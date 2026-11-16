@@ -1432,9 +1432,15 @@ fn analysis_menu() -> Vec<Entry> {
                 item("IIR Filter...", Cmd::Analyze(AnalysisKind::IirFilter)),
                 item("FIR Filter...", Cmd::Analyze(AnalysisKind::FirFilter)),
                 grey("STFT..."),
-                grey_sub(
+                sub(
                     "Wavelet",
-                    &["Decompose...", "Reconstruction...", "Denoise...", "Smooth...", "Continuous Wavelet..."],
+                    vec![
+                        item("Decompose...", Cmd::Analyze(AnalysisKind::WaveletDecompose)),
+                        item("Reconstruction...", Cmd::Analyze(AnalysisKind::WaveletReconstruct)),
+                        item("Denoise...", Cmd::Analyze(AnalysisKind::WaveletDenoise)),
+                        item("Smooth...", Cmd::Analyze(AnalysisKind::WaveletSmooth)),
+                        item("Continuous Wavelet...", Cmd::Analyze(AnalysisKind::ContinuousWavelet)),
+                    ],
                 ),
             ],
         ),

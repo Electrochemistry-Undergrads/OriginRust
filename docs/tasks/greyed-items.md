@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **380 greyed items: 277 in the menu bar, 20 on the toolbars, 83 in context menus.**
+original inventory baseline. This is not a new runtime audit. **375 greyed items: 258 in the menu bar, 19 on the toolbars, 98 in context menus.**
 
 ## How to read and keep this file
 
@@ -47,19 +47,21 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T69` | 0 |
 | `T70` | 0 |
 | `T71` | 0 |
+| `T72` | 25 |
 | `T73` | 0 |
 | `T75` | 0 |
-| `B2` | 51 |
+| `T76` | 0 |
+| `T78` | 0 |
+| `B2` | 33 |
 | `B3` | 22 |
-| `B4` | 25 |
+| `B4` | 23 |
 | `B5` | 33 |
 | `B6` | 31 |
 | `B7` | 8 |
 | `B8` | 16 |
 | `B9` | 13 |
-| `B10` | 6 |
 | `B11` | 10 |
-| `B12` | 16 |
+| `B12` | 12 |
 | `B13` | 7 |
 | `B14` | 44 |
 | `B15` | 21 |
@@ -67,7 +69,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 42 items, backlog packages (`B`) 318, not planned (`N`) 20.
+Briefs (`T`) hold 67 items, backlog packages (`B`) 288, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -77,7 +79,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### File
 - `B14` New: Matrix... · Image · Excel · Layout · Notes · Function Plot
-- `B12` New: Graph
 - `B11` New: From Template
 - `T63` Open Excel...
 - `B12` Open Sample Projects
@@ -85,14 +86,10 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B11` Save Workbook As Analysis Template... [Workbook]
 - `N` Add Word Bookmarks to Analysis Template... [Workbook]
 - `B11` Batch Processing... [Workbook, Graph]
-- `B12` Save Project without Data...
-- `B12` Duplicate Project without Data
 - `B14` Import: Image... · Binary 2D Array... [no window, Workbook]
 - `B12` Import: Re-Import Directly · Re-Import... [no window, Workbook]
 - `T63` Export: Graph as Image... · Multi-Page PDF... [no window, Workbook]
 - `B12` Export: Worksheet as Image... [no window, Workbook]
-- `B10` Export: Recent Exports [no window, Workbook]
-- `B10` Recent Exports [Graph]
 
 ### Edit
 - `B5` Copy: Copy formula · Copy label rows · Copy formula and label rows · Copy All [Workbook]
@@ -103,8 +100,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B16` Button Edit Mode [Workbook, Graph]
 - `B2` Cut · Copy · Paste · Clear [Graph]
 - `N` Insert New Object · Links · Update Client [Graph]
-- `B2` Copy Format: All · All Style Formats · Colors · Fonts · Background · Symbol/Line/Fill · Dimensions · Scales · Text [Graph]
-- `B2` Paste Format... [Graph]
+- `T72` Copy Format: Symbol/Line/Fill · Text [Graph]
 - `B7` Find in Project [Graph]
 
 ### View
@@ -120,19 +116,17 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T63` Line: Horizontal Step · Vertical Step · Spline Connected
 - `B4` Symbol: Column Scatter
 - `B4` Line + Symbol: Line Series
-- `B4` Column/Bar/Pie: Grouped Columns (indexed data)
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
 - `B15` 3D Symbol/Bar/Vector: 3D Bars · 3D Scatter · 3D Trajectory · 3D Scatter + Error Bar · 3D Vector XYZ XYZ · 3D Vector XYZ dXdYdZ
 - `B8` Statistics: Probability Plot · Q-Q Plot
-- `B4` Statistics: Grouped Box Charts · Interval Plot · Histogram + Probabilities · Marginal Histograms · Marginal Box Charts · 2D Kernel Density · QC (X bar R) Chart · Pareto · Scatter Matrix
+- `B4` Statistics: Interval Plot · Histogram + Probabilities · Marginal Histograms · Marginal Box Charts · 2D Kernel Density · QC (X bar R) Chart · Pareto · Scatter Matrix
 - `B14` Contour/Heat Map: Color Fill · B/W Lines + Labels · Gray Scale Map · Heat Map · Polar Contour theta(X) r(Y) · Polar Contour r(X) theta(Y) · Ternary Contour
 - `B14` Profile: Contour Profiles · Image Profiles
 - `B4` Specialized: Wind Rose · Piper · Smith Chart · High-Low-Close · Vector XYAM · Vector XYXY · Zoom
 - `B4` Stock: High-Low-Close · Japanese Candlestick · OHLC Bar Chart · OHLC-Volume · Line
 - `B11` System Templates...
-- `B10` Most Recently Used
 
 ### Column
 - `T63` Fill Column With: Row Numbers · Uniform Random Numbers · Normal Random Numbers
@@ -144,7 +138,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B7` Pivot Table...
 - `B14` Convert to Matrix: Direct · XYZ Gridding · Extract
 - `B16` Worksheet Script...
-- `B10` Most Recently Used Items
 
 ### Analysis
 - `B8` Mathematics: XYZ Surface Area...
@@ -154,12 +147,10 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T57` Signal Processing: Deconvolution... · STFT...
 - `B8` Signal Processing > Wavelet: Decompose... · Reconstruction... · Denoise... · Smooth... · Continuous Wavelet...
 - `B8` Peaks and Baseline: Multiple Peak Fit · Batch Peak Analysis Using Theme...
-- `B10` Most Recently Used Items
 
 ### Statistics
 - `B8` Descriptive Statistics: Partial Correlation Coefficient...
 - `B8` ANOVA: Three-Way ANOVA... · Repeated Measures ANOVA...
-- `B10` Most Recently Used Items
 
 ### Image
 - `B14` Adjustments: Brightness... · Contrast... · Gamma... · Levels...
@@ -221,7 +212,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ## Toolbars
 
-- `B12` Standard: New Graph
 - `B14` Standard: New Matrix · New Layout · New Notes
 - `T63` 2D Graphs: Bar · Stacked Area · Box Chart · Histogram · Bubble
 - `B4` 2D Graphs: High-Low-Close
@@ -244,7 +234,8 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B6` Worksheet corner: Column Header · Row Header · Column Grid · Row Grid · Page Break Preview Lines
 - `B6` Worksheet corner > Row Labels for Column Label Rows: Long Name · Units · Comments · F(x)= · Sparklines · Parameters
 - `B11` Graph axis: Save Format as Theme...
-- `B2` Graph axis > Copy Format: All · All Style Formats · Axis
+- `T72` Graph axis > Copy Format: Styles · Scales · Dimensions
+- `T72` Graph axis > Paste Format To: Tick Direction · Ticks · Line · Tick Labels · Title Styles · Colors · Thickness · Styles · Scales · Title Dimensions · Title Text
 - `B2` Graph axis title: Cut · Copy · Bring to the front · Push to the back
 - `B2` Graph text label: Cut · Copy · Bring to the front · Push to the back
 - `B2` Graph drawn shape: Cut · Copy
@@ -253,10 +244,11 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B16` Graph legend: Programming Control...
 - `B11` Graph legend: Save Format as Theme...
 - `B3` Graph legend > Legend: Add Legend Title
-- `B2` Graph legend > Copy Format: All · All Style Formats · Text
+- `T72` Graph legend > Copy Format: Styles · Dimensions · All
 - `B12` Graph page: Add Shortcut to Favorites
 - `T61` Graph page > New Layer(Axes): Open Dialog...
-- `B2` Graph page > Copy Format: All · All Style Formats
+- `T72` Graph page > Copy Format: Page Background · Legend Translation Mode
+- `T72` Graph page > Paste Format To: Bottom Axes · All X Axes · All Axes · All
 - `B11` Graph page > Duplicate (Batch Plotting): Duplicate
 - `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Double click to open Plot Setup
 - `B12` Explorer folder: Properties...

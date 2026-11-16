@@ -23,12 +23,14 @@ use crate::dialogs::fit_more::FitMoreKind;
 use crate::dialogs::graph_props::PropsTab;
 use crate::dialogs::reshape::ReshapeKind;
 use crate::gadget::GadgetOp;
+use crate::mru::{self, MruMenu};
 use crate::panels::PanelId;
 use crate::recent::{self, RecentKind};
 use eframe::egui::{
     self, Color32, Key, KeyboardShortcut, Modifiers, Stroke, TextStyle,
     text::{LayoutJob, TextFormat},
 };
+use sheaf_core::format_clip::{AxisPart, GraphPart};
 use sheaf_core::graph::{PlotKind, Stack};
 use sheaf_core::sheetops::{MaskOp, MoveTo};
 use sheaf_core::template::Template;
@@ -68,6 +70,9 @@ pub enum WindowKind {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Cmd {
     NewProject,
+    NewGraph,
+    SaveProjectNoData,
+    DuplicateProjectNoData,
     NewWorkbook,
     OpenProject,
     SaveProject,
@@ -326,6 +331,26 @@ pub enum Cmd {
     },
     /// Edit > Copy Page: the graph as a picture on the clipboard.
     CopyPage,
+    /// Copy Format of the whole graph (Edit menu, page menu): what the clipboard takes (T72).
+    CopyGraphFormat(sheaf_core::format_clip::GraphPart),
+    /// Edit > Copy Format: the graph format, or the format of the selected axis (T72).
+    EditCopyFormat(sheaf_core::format_clip::GraphPart),
+    /// Copy Format of one axis.
+    CopyAxisFormat {
+        layer: usize,
+        y: bool,
+        part: sheaf_core::format_clip::AxisPart,
+    },
+    /// Paste Format of the page menu: every group the graph format holds, at once.
+    PasteGraphFormat,
+    /// Paste Format To of an axis: the parts the axis format holds.
+    PasteAxisFormat {
+        layer: usize,
+        y: bool,
+        part: sheaf_core::format_clip::AxisPart,
+    },
+    /// Edit > Paste Format...: the Apply Formats window.
+    PasteFormatDialog,
     /// Gadgets > Integrate: starts the Integrate gadget on the active plot.
     IntegrateGadget,
     /// A command of the open gadget's right-click menu.
@@ -349,6 +374,8 @@ pub enum Cmd {
     AppendProject,
     /// Clear Recent Projects / Imports / Books / Graphs.
     ClearRecent(RecentKind),
+    /// Clear Recent Exports.
+    ClearRecentExports,
     /// View > Project Explorer and the other panels.
     Panel(PanelId),
     Cascade,
@@ -370,6 +397,10 @@ pub enum Entry {
     Recent(RecentKind),
     /// The saved user graph templates of Plot > User Templates (T56), from the context.
     UserTemplates,
+    /// The numbered Most Recently Used commands of the menu (T78), from the context.
+    Mru(MruMenu),
+    /// The entries of Recent Exports (T78): files written by exports, from the context.
+    Exports,
 }
 
 #[derive(Clone)]
@@ -428,6 +459,9 @@ pub struct MenuContext<'a> {
     pub recent_imports: &'a [PathBuf],
     pub recent_books: &'a [PathBuf],
     pub recent_graphs: &'a [PathBuf],
+    /// The Most Recently Used command keys per menu (list name to keys) and the recent exports.
+    pub recent_commands: &'a std::collections::BTreeMap<String, Vec<String>>,
+    pub recent_exports: &'a [sheaf_io::recent::ExportEntry],
     /// The saved user graph templates (Plot > User Templates), and whether there is a template
     /// folder at all (File > Save Template As and Manage are greyed without one).
     pub user_templates: &'a [String],
@@ -594,6 +628,20 @@ fn plain_key(key: Key) -> KeyboardShortcut {
     KeyboardShortcut::new(Modifiers::NONE, key)
 }
 
+/// No Most Recently Used commands (for contexts that keep none).
+pub static NO_COMMANDS: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
+
+/// The Most Recently Used item at the end of the Plot, Worksheet, Analysis and Statistics menus
+/// (a submenu in Origin's Plot menu; Sheaf uses one in all four, Sheaf's choice).
+fn mru_submenu(label: &str, menu: MruMenu) -> Entry {
+    sub(label, vec![Entry::Mru(menu)])
+}
+
+/// Recent Exports: a submenu of the files exports wrote, a separator and Clear.
+fn exports_submenu() -> Entry {
+    sub("Recent Exports", vec![Entry::Exports, sep(), item("Clear Recent Exports", Cmd::ClearRecentExports)])
+}
+
 /// A submenu of one recent list: the entries, a separator and Clear.
 fn recent_submenu(label: &str, kind: RecentKind) -> Entry {
     sub(label, vec![Entry::Recent(kind), sep(), item(&format!("Clear {label}"), Cmd::ClearRecent(kind))])
@@ -604,8 +652,13 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         sub(
             "&New",
             [
-                vec![keyed("&Project", ctrl(Key::N), Cmd::NewProject), item("&Worksheet...", Cmd::NewWorkbook)],
-                greys(&["Matrix...", "Graph", "Image", "From Template", "Excel", "Layout", "Notes", "Function Plot"]),
+                vec![
+                    keyed("&Project", ctrl(Key::N), Cmd::NewProject),
+                    item("&Worksheet...", Cmd::NewWorkbook),
+                    grey("Matrix..."),
+                    item("&Graph", Cmd::NewGraph),
+                ],
+                greys(&["Image", "From Template", "Excel", "Layout", "Notes", "Function Plot"]),
             ]
             .concat(),
         ),
@@ -642,8 +695,8 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     }
     v.extend([
         sep(),
-        grey("Save Project without Data..."),
-        grey("Duplicate Project without Data"),
+        item("Save Project without Data...", Cmd::SaveProjectNoData),
+        item("Duplicate Project without Data", Cmd::DuplicateProjectNoData),
         sep(),
         keyed("&Print...", ctrl(Key::P), Cmd::Print),
         item("Print Pre&view", Cmd::PrintPreview),
@@ -681,7 +734,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     if kind == WindowKind::Graph {
         // Origin's graph menu has Export Graphs... where the workbook has the Export submenu.
         v.push(keyed("E&xport Graphs...", ctrl(Key::G), Cmd::ExportGraph));
-        v.push(grey("Recent Exports"));
+        v.push(exports_submenu());
     } else {
         v.push(sub(
             "E&xport",
@@ -691,7 +744,8 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                     item("&Worksheet as ASCII...", Cmd::ExportWorksheet),
                     item("Worksheet as E&xcel...", Cmd::ExportExcel),
                 ],
-                greys(&["Graph as Image...", "Worksheet as Image...", "Multi-Page PDF...", "Recent Exports"]),
+                greys(&["Graph as Image...", "Worksheet as Image...", "Multi-Page PDF..."]),
+                vec![exports_submenu()],
             ]
             .concat(),
         ));
@@ -753,21 +807,22 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
             "Button Edit Mode",
             "Update Client",
         ]));
-        v.push(grey_sub(
-            "Copy Format",
+        v.push(graph_copy_format_menu(
+            true,
             &[
-                "All",
-                "All Style Formats",
-                "Colors",
-                "Fonts",
-                "Background",
-                "Symbol/Line/Fill",
-                "Dimensions",
-                "Scales",
-                "Text",
+                ("All", Some(GraphPart::All)),
+                ("All Style Formats", Some(GraphPart::AllStyle)),
+                ("Colors", Some(GraphPart::Colors)),
+                ("Fonts", Some(GraphPart::Fonts)),
+                ("Background", Some(GraphPart::Background)),
+                ("Symbol/Line/Fill", None),
+                ("Dimensions", Some(GraphPart::Dimensions)),
+                ("Scales", Some(GraphPart::Scales)),
+                ("Text", None),
             ],
         ));
-        v.extend(greys(&["Paste Format...", "-"]));
+        v.push(item("Paste Format...", Cmd::PasteFormatDialog));
+        v.push(sep());
         v.push(grey_keyed("Find in Project", plain_key(Key::F3)));
     }
     v
@@ -881,7 +936,7 @@ fn plot_menu() -> Vec<Entry> {
             [
                 vec![item("&Column", Cmd::Plot(Template::Column))],
                 vec![item("Column + Label", Cmd::Plot(Template::ColumnLabel))],
-                greys(&["Grouped Columns (indexed data)"]),
+                vec![item("Grouped Columns (indexed data)", Cmd::Plot(Template::GroupedColumns))],
                 vec![
                     item("Bar", Cmd::Plot(Template::Bar)),
                     item("Stacked Column", Cmd::Plot(Template::StackedColumn)),
@@ -963,7 +1018,7 @@ fn plot_menu() -> Vec<Entry> {
             "S&tatistics",
             [
                 vec![item("Box Chart", Cmd::Plot(Template::BoxChart))],
-                greys(&["Grouped Box Charts", "Interval Plot"]),
+                vec![item("Grouped Box Charts", Cmd::Plot(Template::GroupedBox)), grey("Interval Plot")],
                 vec![
                     item("Violin Plot", Cmd::Plot(Template::Violin)),
                     item("Violin with Box", Cmd::Plot(Template::ViolinBox)),
@@ -1058,7 +1113,7 @@ fn plot_menu() -> Vec<Entry> {
             ],
         ),
         sep(),
-        grey("Most Recently Used"),
+        mru_submenu("Most Recently Used", MruMenu::Plot),
     ]
 }
 
@@ -1199,7 +1254,7 @@ fn worksheet_menu() -> Vec<Entry> {
         grey("Worksheet Script..."),
         // Sheaf's "keep only the rows matching a condition" is Origin's worksheet query.
         item("Worksheet &Query...", Cmd::FilterRows),
-        grey("Most Recently Used Items"),
+        mru_submenu("Most Recently Used Items", MruMenu::Worksheet),
     ]
 }
 
@@ -1312,7 +1367,7 @@ fn analysis_menu() -> Vec<Entry> {
             ],
         ),
         sep(),
-        grey("Most Recently Used Items"),
+        mru_submenu("Most Recently Used Items", MruMenu::Analysis),
     ]
 }
 
@@ -1400,7 +1455,7 @@ fn statistics_menu() -> Vec<Entry> {
         sep(),
         item("&ROC Curve...", Cmd::Analyze(AnalysisKind::Roc)),
         sep(),
-        grey("Most Recently Used Items"),
+        mru_submenu("Most Recently Used Items", MruMenu::Statistics),
     ]
 }
 
@@ -1918,12 +1973,29 @@ pub fn graph_plot_menu(
     v
 }
 
+/// A Copy Format submenu of a graph: an item per choice; `None` is a choice Sheaf has not measured
+/// and keeps greyed. A "-" label is a separator.
+fn graph_copy_format_menu(edit: bool, choices: &[(&str, Option<GraphPart>)]) -> Entry {
+    sub(
+        "Copy Format",
+        choices
+            .iter()
+            .map(|(label, part)| match (*label, part) {
+                ("-", _) => sep(),
+                (_, Some(part)) if edit => item(label, Cmd::EditCopyFormat(*part)),
+                (_, Some(part)) => item(label, Cmd::CopyGraphFormat(*part)),
+                (_, None) => grey(label),
+            })
+            .collect(),
+    )
+}
+
 /// The menu of an axis. `grids` tells whether the axis shows grid lines now.
 /// `page` is the page point that was right-clicked (Center puts the value there in the middle).
 pub fn graph_axis_menu(layer: usize, y: bool, grids: bool, page: (f64, f64)) -> Vec<Entry> {
     let tab = if y { PropsTab::YAxis } else { PropsTab::XAxis };
     let at = Cmd::GraphPropsAt { layer, tab, plot: None };
-    vec![
+    let mut menu = vec![
         item("Hide Axis", Cmd::GraphEdit(GraphOp::HideAxis { layer, y })),
         item(if grids { "Hide Grids" } else { "Show Grids" }, Cmd::GraphEdit(GraphOp::ToggleGrids { layer, y })),
         sep(),
@@ -1932,13 +2004,55 @@ pub fn graph_axis_menu(layer: usize, y: bool, grids: bool, page: (f64, f64)) -> 
         item("Axis Zoom Out", Cmd::GraphEdit(GraphOp::AxisZoom { layer, y, zoom_in: false })),
         item("Center", Cmd::GraphEdit(GraphOp::AxisCenter { layer, y, page })),
         sep(),
-        grey_sub("Copy Format", &["All", "All Style Formats", "Axis"]),
+        axis_copy_format_menu(layer, y),
         grey("Save Format as Theme..."),
         sep(),
         item("Scale...", at.clone()),
         item("Tick Labels...", at.clone()),
         item("Properties...", at),
-    ]
+    ];
+    // Paste Format To shows once an axis format is on the clipboard (Origin, spec 24).
+    if crate::format_clip_ui::kind() == Some(crate::format_clip_ui::ClipKind::Axis) {
+        menu.insert(9, axis_paste_format_menu(layer, y));
+    }
+    menu
+}
+
+/// Copy Format of an axis: Styles, Scales and Dimensions have not been measured for what they take
+/// and stay greyed; All takes styles and scale (measured).
+fn axis_copy_format_menu(layer: usize, y: bool) -> Entry {
+    sub(
+        "Copy Format",
+        vec![
+            grey("Styles"),
+            grey("Scales"),
+            grey("Dimensions"),
+            sep(),
+            item("All", Cmd::CopyAxisFormat { layer, y, part: AxisPart::All }),
+        ],
+    )
+}
+
+/// Paste Format To of an axis, Origin's twelve choices; All is measured, the others are greyed.
+fn axis_paste_format_menu(layer: usize, y: bool) -> Entry {
+    let mut v = greys(&[
+        "Tick Direction",
+        "Ticks",
+        "Line",
+        "Tick Labels",
+        "Title Styles",
+        "Colors",
+        "Thickness",
+        "Styles",
+        "-",
+        "Scales",
+        "-",
+        "Title Dimensions",
+        "Title Text",
+        "-",
+    ]);
+    v.push(item("All", Cmd::PasteAxisFormat { layer, y, part: AxisPart::All }));
+    sub("Paste Format To", v)
 }
 
 /// The menu of an axis title.
@@ -2029,7 +2143,7 @@ pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
         grey("Programming Control..."),
         item("Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Legend, plot: None }),
         sep(),
-        grey_sub("Copy Format", &["All", "All Style Formats", "Text"]),
+        grey_sub("Copy Format", &["Styles", "Dimensions", "-", "All"]),
         grey("Save Format as Theme..."),
     ]
 }
@@ -2057,9 +2171,37 @@ pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
         sep(),
         keyed("Rescale To Show All", ctrl(Key::R), Cmd::GraphEdit(GraphOp::Rescale { layer })),
         item("Page Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Page, plot: None }),
-        grey_sub("Copy Format", &["All", "All Style Formats"]),
+        graph_copy_format_menu(
+            false,
+            &[
+                ("Page Background", None),
+                ("Legend Translation Mode", None),
+                ("Dimensions", Some(GraphPart::Dimensions)),
+                ("Scales", Some(GraphPart::Scales)),
+                ("-", None),
+                ("Colors", Some(GraphPart::Colors)),
+                ("Fonts", Some(GraphPart::Fonts)),
+                ("Background", Some(GraphPart::Background)),
+                ("All Style Formats", Some(GraphPart::AllStyle)),
+                ("-", None),
+                ("All", Some(GraphPart::All)),
+            ],
+        ),
+        page_paste_format_entry(),
         grey_sub("Duplicate (Batch Plotting)", &["Duplicate"]),
     ]
+}
+
+/// Paste Format of the page menu: it acts at once for a graph format; for an axis format Origin
+/// shows Paste Format To with Bottom Axes, All X Axes, All Axes and All (their submenus are
+/// unmeasured, so they stay greyed); with nothing copied it is greyed.
+fn page_paste_format_entry() -> Entry {
+    use crate::format_clip_ui::{ClipKind, kind};
+    match kind() {
+        Some(ClipKind::Graph) => item("Paste Format", Cmd::PasteGraphFormat),
+        Some(ClipKind::Axis) => grey_sub("Paste Format To", &["Bottom Axes", "All X Axes", "All Axes", "All"]),
+        None => grey("Paste Format"),
+    }
 }
 
 /// The menu of a layer icon (the numbered button at the top left of the page). `plots` names the
@@ -2126,7 +2268,7 @@ pub fn show_context(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actio
             // Close-set rows: the long lists of Origin's menus are about 17 px per item there too.
             ui.spacing_mut().interact_size.y = 16.0;
             ui.spacing_mut().item_spacing.y = 1.0;
-            show_entries(ui, entries, c, actions);
+            show_entries(ui, entries, c, actions, None);
         },
     );
 }
@@ -2140,6 +2282,7 @@ fn walk<'a>(entries: &'a [Entry], f: &mut dyn FnMut(&'a Item)) {
             Entry::Item(i) => f(i),
             Entry::Submenu(s) => walk(&s.entries, f),
             Entry::Separator | Entry::Windows | Entry::Recent(_) | Entry::UserTemplates => {}
+            Entry::Mru(_) | Entry::Exports => {}
         }
     }
 }
@@ -2283,6 +2426,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
     let sorting = || if c.sorting_columns.is_empty() { Err(NEED_COLUMNS) } else { Ok(c.sorting_columns.clone()) };
     Ok(match cmd {
         Cmd::NewProject => Action::NewProject,
+        Cmd::NewGraph => Action::NewGraph,
+        Cmd::SaveProjectNoData => Action::SaveProjectWithoutData,
+        Cmd::DuplicateProjectNoData => Action::DuplicateProjectWithoutData,
         Cmd::NewWorkbook => Action::NewWorkbook,
         Cmd::OpenProject => Action::OpenProject,
         Cmd::SaveProject => Action::SaveProject,
@@ -2596,6 +2742,16 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::EditText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label }
         }
         Cmd::CopyPage => Action::CopyPage(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::CopyGraphFormat(part) => Action::CopyGraphFormat { graph: c.graph.ok_or(NEED_GRAPH)?, part: *part },
+        Cmd::EditCopyFormat(part) => Action::EditCopyFormat { graph: c.graph.ok_or(NEED_GRAPH)?, part: *part },
+        Cmd::CopyAxisFormat { layer, y, part } => {
+            Action::CopyAxisFormat { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y, part: *part }
+        }
+        Cmd::PasteGraphFormat => Action::PasteGraphFormat { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::PasteAxisFormat { layer, y, part } => {
+            Action::PasteAxisFormat { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y, part: *part }
+        }
+        Cmd::PasteFormatDialog => Action::PasteFormatDialog { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,
@@ -2611,6 +2767,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
                 return Err("The list is empty");
             }
             Action::ClearRecent(*kind)
+        }
+        Cmd::ClearRecentExports => {
+            if c.recent_exports.is_empty() {
+                return Err("The list is empty");
+            }
+            Action::ClearRecentExports
         }
         Cmd::Panel(p) => Action::TogglePanel(*p),
         Cmd::Cascade => Action::Cascade,
@@ -2695,11 +2857,12 @@ pub fn show_bar(ui: &mut egui::Ui, c: &MenuContext, actions: &mut Vec<Action>) {
         for menu in bar(c.kind) {
             let response = ui.menu_button(label_job(ui, &menu.label, false), |ui| {
                 ui.set_min_width(180.0);
-                show_entries(ui, &menu.entries, c, actions);
+                show_entries(ui, &menu.entries, c, actions, MruMenu::from_name(&menu.name()));
             });
-            if menu.name() == "File" {
+            // The lists of the menus that show recent entries are read again each time one opens.
+            if menu.name() == "File" || MruMenu::from_name(&menu.name()).is_some() {
                 // The recent files are read again each time File opens, not every frame.
-                let key = ui.id().with("file menu was open");
+                let key = ui.id().with(("menu was open", menu.name()));
                 let open = response.inner.is_some();
                 let was = ui.data(|d| d.get_temp::<bool>(key)).unwrap_or(false);
                 if open && !was {
@@ -2721,7 +2884,15 @@ pub fn show_bar(ui: &mut egui::Ui, c: &MenuContext, actions: &mut Vec<Action>) {
     });
 }
 
-fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: &mut Vec<Action>) {
+/// `used` is the menu the entries belong to when it keeps a Most Recently Used list: a command run
+/// from it is recorded there.
+fn show_entries(
+    ui: &mut egui::Ui,
+    entries: &[Entry],
+    c: &MenuContext,
+    actions: &mut Vec<Action>,
+    used: Option<MruMenu>,
+) {
     for entry in entries {
         match entry {
             Entry::Separator => {
@@ -2730,7 +2901,7 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
             Entry::Submenu(s) => {
                 let response = ui.menu_button(label_job(ui, &s.label, true), |ui| {
                     ui.set_min_width(160.0);
-                    show_entries(ui, &s.entries, c, actions);
+                    show_entries(ui, &s.entries, c, actions, used);
                 });
                 // `--show menu:File>Recent Projects` holds the submenu open for a picture.
                 if c.open.is_some_and(|o| o.split('>').skip(1).any(|sub| sub == plain(&s.label))) {
@@ -2743,6 +2914,8 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
             }
             Entry::Recent(kind) => show_recent(ui, *kind, c, actions),
             Entry::UserTemplates => show_user_templates(ui, c, actions),
+            Entry::Mru(menu) => show_mru(ui, *menu, c, actions),
+            Entry::Exports => show_exports(ui, c, actions),
             Entry::Windows => {
                 for (n, (id, title)) in c.windows.iter().enumerate() {
                     let label = format!("&{} {title}", n + 1);
@@ -2806,6 +2979,12 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                 match resolved {
                     Some(Ok(action)) => {
                         if response.clicked() {
+                            if let (Some(menu), Some(cmd)) = (used, &it.cmd)
+                                && mru::recordable(cmd)
+                            {
+                                // First, so that it sees the window the command was run on.
+                                actions.push(Action::UsedCommand { menu, cmd: cmd.clone() });
+                            }
                             actions.push(action);
                             ui.close();
                         }
@@ -2843,6 +3022,63 @@ fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &m
                 RecentKind::Projects | RecentKind::Books | RecentKind::Graphs => Action::OpenRecent(path.clone(), kind),
                 RecentKind::Imports => Action::ImportRecent(path.clone()),
             });
+            ui.close();
+        }
+    }
+}
+
+/// The Most Recently Used commands of a menu: numbered, newest first, each looked up again in the
+/// bar and resolved against the current selection (greyed with the reason when it cannot run now).
+/// An empty list shows a greyed "(none)". Sheaf's choice, docs/spec/recent-lists.md 2.
+fn show_mru(ui: &mut egui::Ui, menu: MruMenu, c: &MenuContext, actions: &mut Vec<Action>) {
+    let keys = c.recent_commands.get(&menu.list_name()).map_or(&[][..], Vec::as_slice);
+    let entries: Vec<(&String, &Item)> =
+        keys.iter().filter_map(|k| mru::find(bar(c.kind), menu, k).map(|i| (k, i))).collect();
+    if entries.is_empty() {
+        ui.add_enabled(false, egui::Button::new(label_job(ui, "(none)", true)));
+        return;
+    }
+    for (n, (key, it)) in entries.into_iter().enumerate() {
+        let Some(cmd) = &it.cmd else { continue };
+        let resolved = resolve(cmd, c);
+        let job = label_job(ui, &recent::numbered(n, &plain(&it.label)), true);
+        let response = ui.add_enabled(resolved.is_ok(), egui::Button::new(job));
+        if response.contains_pointer() {
+            crate::panels::set_hint(ui.ctx(), key);
+        }
+        match resolved {
+            Ok(action) => {
+                if response.on_hover_text(key).clicked() {
+                    actions.push(Action::UsedCommand { menu, cmd: cmd.clone() });
+                    actions.push(action);
+                    ui.close();
+                }
+            }
+            Err(reason) => {
+                response.on_disabled_hover_text(reason);
+            }
+        }
+    }
+}
+
+/// The entries of Recent Exports: the files exports wrote, numbered like the other recent lists,
+/// the full path as the tooltip; a click opens the export again on the same window (Sheaf's choice).
+fn show_exports(ui: &mut egui::Ui, c: &MenuContext, actions: &mut Vec<Action>) {
+    if c.recent_exports.is_empty() {
+        ui.add_enabled(false, egui::Button::new(label_job(ui, "(none)", true)));
+        return;
+    }
+    for (n, e) in c.recent_exports.iter().enumerate() {
+        // `entry_text` drops the extension, which an exported file needs; a dummy one takes its place.
+        let shown = recent::entry_text(&PathBuf::from(format!("{}.x", e.path.display())), RECENT_ENTRY_CHARS);
+        let full = e.path.display().to_string();
+        let response = ui.add(egui::Button::new(label_job(ui, &recent::numbered(n, &shown), true)));
+        let response = response.on_hover_text(format!("{full}\n{}", e.window));
+        if response.contains_pointer() {
+            crate::panels::set_hint(ui.ctx(), &full);
+        }
+        if response.clicked() {
+            actions.push(Action::OpenRecentExport(e.clone()));
             ui.close();
         }
     }
@@ -3079,6 +3315,8 @@ mod tests {
             recent_imports: &[],
             recent_books: &[],
             recent_graphs: &[],
+            recent_commands: &crate::menus::NO_COMMANDS,
+            recent_exports: &[],
             user_templates: &[],
             templates: false,
             panels: [true; 4],

@@ -199,6 +199,12 @@ fn resolve_dim(
         let names: Vec<String> = ridges.iter().map(|r| r.label.clone()).collect();
         crate::ticks::label_from_cells(&mut r, &names);
         r
+    } else if dim == Dim::X && sources.iter().any(|pd| pd.categories.is_some()) {
+        // Indexed data (T76): one category per level of the main group, at 1, 2, ...
+        let names = sources.iter().find_map(|pd| pd.categories.clone()).unwrap_or_default();
+        let mut r = crate::ticks::resolve_category(axis, Some((1.0, names.len() as f64)));
+        crate::ticks::label_from_cells(&mut r, &names);
+        r
     } else if dim == Dim::X && !boxes.is_empty() {
         // Box charts: one category per box, named by its column.
         let mut r = crate::ticks::resolve_category(axis, Some((1.0, boxes.len() as f64)));
@@ -1405,6 +1411,10 @@ fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -
         } else {
             project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default()
         };
+    }
+    if !y_axis && let Some(ix) = &pd.plot.indexed {
+        // Indexed data: the X axis is named by the main group column.
+        return project.column(ix.group).map(|c| c.axis_title()).unwrap_or_default();
     }
     if pd.boxed.is_some() && !y_axis {
         return String::new();

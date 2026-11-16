@@ -643,6 +643,34 @@ pub struct TreemapLevel {
 
 pub use sheaf_calc::treemap::Layout as TreemapLayout;
 
+/// The error bars of a grouped column plot (T76).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexedError {
+    /// No error bars (Sheaf's default; Origin's default is undocumented).
+    #[default]
+    None,
+    /// The sample standard deviation (n - 1) of the rows of a bar.
+    Sd,
+    /// The standard error of the mean of the rows of a bar.
+    Se,
+}
+
+/// Indexed data on a column or box plot (T76, Origin's plot_gindexed and plot_gboxindexed): the plot's Y column
+/// holds all the values, and the rows are split by the levels of `group` (the categories on the X axis) and, in
+/// one plot per level, by a second column.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Indexed {
+    /// The main group column: one bar or box per level, in sorted order at 1, 2, ...
+    pub group: ColumnId,
+    /// The second group column and the level this plot shows (the plot's legend text is the level).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subset: Option<(ColumnId, String)>,
+    /// Error bars of a grouped column plot.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub error: IndexedError,
+}
+
 /// The settings of a treemap plot (Origin 2025b Treemap plot, graphing spec 14.26). The plot's own Y column is
 /// the value column; the category columns are named here, the first the root level. Every field is skipped when
 /// written while it has its default, so older files load unchanged.

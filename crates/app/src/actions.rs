@@ -213,6 +213,12 @@ pub enum ImportPick {
 #[derive(Debug, Clone)]
 pub enum Action {
     NewProject,
+    /// File > New > Graph and the Standard toolbar button: an empty graph.
+    NewGraph,
+    /// File > Save Project without Data...: a copy without values to a file of its own.
+    SaveProjectWithoutData,
+    /// File > Duplicate Project without Data: an unsaved copy without values replaces the project.
+    DuplicateProjectWithoutData,
     OpenProject,
     SaveProject,
     SaveProjectAs,
@@ -621,6 +627,40 @@ pub enum Action {
     },
     /// Copy Page: the graph as a picture on the clipboard.
     CopyPage(WindowId),
+    /// Copy Format of a whole graph (T72).
+    CopyGraphFormat {
+        graph: WindowId,
+        part: sheaf_core::format_clip::GraphPart,
+    },
+    /// Edit > Copy Format: the format of the selected axis when an axis is selected (Origin does
+    /// the same), else of the whole graph.
+    EditCopyFormat {
+        graph: WindowId,
+        part: sheaf_core::format_clip::GraphPart,
+    },
+    /// Copy Format of one axis.
+    CopyAxisFormat {
+        graph: WindowId,
+        layer: usize,
+        y: bool,
+        part: sheaf_core::format_clip::AxisPart,
+    },
+    /// Paste Format of a graph format onto the graph, every group it holds.
+    PasteGraphFormat {
+        graph: WindowId,
+    },
+    /// Paste Format To: an axis format onto one axis.
+    PasteAxisFormat {
+        graph: WindowId,
+        layer: usize,
+        y: bool,
+        part: sheaf_core::format_clip::AxisPart,
+    },
+    /// Edit > Paste Format...: the Apply Formats window.
+    PasteFormatDialog {
+        graph: WindowId,
+        layer: usize,
+    },
     /// Gadgets > Integrate on a graph.
     StartIntegrate {
         graph: WindowId,
@@ -662,6 +702,16 @@ pub enum Action {
     ImportRecent(std::path::PathBuf),
     /// Clear Recent Projects / Imports / Books / Graphs.
     ClearRecent(crate::recent::RecentKind),
+    /// A command ran from the Plot, Worksheet, Analysis or Statistics menu (or its Most Recently
+    /// Used list): it goes to the top of that menu's list.
+    UsedCommand {
+        menu: crate::mru::MruMenu,
+        cmd: crate::menus::Cmd,
+    },
+    /// File > Export > Recent Exports: open the export of that file again on its window.
+    OpenRecentExport(sheaf_io::recent::ExportEntry),
+    /// Clear Recent Exports.
+    ClearRecentExports,
     /// Remove a window from the project.
     DeleteWindow(WindowId),
     /// Put a window into a folder of the project explorer (the path of indices; empty is the root).

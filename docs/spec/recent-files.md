@@ -64,7 +64,7 @@ Until then every number and wording below is Sheaf's own choice.
 | Missing file | a message in the Messages log and a dialog naming the file; the entry is removed |
 | Not a regular file | a folder, or a link to one, is reported and never opened or imported; the entry is removed |
 | Books, graphs | T54: File > Recent Books and Recent Graphs list the window files (`.sheafbook`, `.sheafgraph`, `window-files.md`) that were saved with Save Window As or opened; same length (15), order, canonical form and rules as the projects (Sheaf's choices, not measured: whether Origin lists files that were saved) |
-| Exports | Recent Exports stays greyed: Sheaf cannot repeat an export (no saved export settings) |
+| Exports | Recent Exports lists the files successful exports wrote (T78, `recent-lists.md` 3) |
 | Import again | with the default settings of the file's type, as if the file had been dropped on the window |
 | What is listed | a project file opened or saved (Open, Save, Save As, command line, drag and drop, the list itself), and a data file imported (menu, drag and drop, command line); not recovered projects, not the autosave files, not templates |
 | Batch import | the files are pushed one after the other in import order, so the last one imported is first |
@@ -135,7 +135,7 @@ entries are dropped; each list is cut to 15; unknown keys are ignored. Reading t
   `...` when longer than 48 characters and a name longer than 60 characters loses its middle (Sheaf's
   choices, not measured); the tooltip and the hint line
   show the whole path. A `&` in a file name is doubled so it is not an accelerator. Recent Exports
-  stays greyed.
+  lists the files exports wrote (T78, `recent-lists.md`).
 - **Reading.** The menus are drawn every frame, so they read the lists from memory and the file is
   not touched while drawing. The file is read at start and once each time the File menu opens (so a
   change by another instance shows), not again while it stays open.
@@ -196,7 +196,7 @@ an opened project first in the list and in the file; Save and Save As; failed op
 a click reopens a project, and asks about unsaved changes first (Cancel keeps everything, Don't save
 opens); a missing file and a folder are reported and removed; an imported CSV listed and imported again
 by a click; batch order; a failed import not listed; a missing import reported and removed; Clear on
-each list; "(none)" and greyed Clear; Recent Exports grey and Recent Books and Graphs submenus; the file read when File
+each list; "(none)" and greyed Clear; Recent Exports (T78), Recent Books and Graphs submenus; the file read when File
 opens and not each frame; another instance's entries kept; lists survive a restart; no file means no
 lists; fifteen entries at most, numbered to F; an `.opj` save the writer refused lists the
 companion, not the missing `.opj`; on Unix an import with a name that is not valid text is listed

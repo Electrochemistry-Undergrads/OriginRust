@@ -741,6 +741,12 @@ impl Writer {
                     .into(),
             );
         }
+        if plots.iter().any(|r| r.plot.indexed.is_some()) {
+            notes.push(
+                "grouped columns and grouped box charts of indexed data were written as plain plots of their data column; the group columns and the grouping were not written"
+                    .into(),
+            );
+        }
         if has(&|k| k.is_ridgeline()) {
             notes.push("ridgeline charts were written as plain columns of their data".into());
         }

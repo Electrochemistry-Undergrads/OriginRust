@@ -4679,3 +4679,13 @@ fn segment_connections_join_points_in_pairs_and_threes() {
     assert_eq!(p.graph(g2).unwrap().layers[0].plots[0].line.connect, Connect::Segment2);
     assert_eq!(Template::from_name("segment3"), Some(Template::Segment3));
 }
+
+#[test]
+fn a_new_graph_without_any_plot_lays_out_and_renders() {
+    let mut p = Project::new();
+    let g = p.add_graph(Template::default());
+    layout_geometry(&p, g).unwrap();
+    layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    svg_of(&p, g);
+    assert!(!crate::render_png(&p, g, 96.0).unwrap().is_empty());
+}

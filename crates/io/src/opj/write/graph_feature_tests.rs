@@ -776,6 +776,22 @@ fn sunbursts_are_written_as_column_plots_with_a_save_warning() {
 }
 
 #[test]
+fn grouped_indexed_plots_are_written_as_plain_plots_with_a_save_warning() {
+    let mut p = source();
+    line_graph(&mut p, |l| {
+        l.plots[0].kind = sheaf_core::graph::PlotKind::Column;
+        l.plots[0].indexed =
+            Some(sheaf_core::graph::Indexed { group: l.plots[0].y, subset: None, error: Default::default() });
+    });
+    let (_, out) = round_trip(&p);
+    assert!(
+        out.warnings.iter().any(|w| w.contains("grouped columns and grouped box charts of indexed data were written")),
+        "{:?}",
+        out.warnings
+    );
+}
+
+#[test]
 fn violin_plots_are_written_as_plain_columns_with_a_save_warning() {
     for kind in [sheaf_core::graph::PlotKind::Violin, sheaf_core::graph::PlotKind::HalfViolin] {
         let mut p = source();

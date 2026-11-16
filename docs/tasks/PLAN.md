@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 380 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 375 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -97,14 +97,16 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T65](T65-graph-view-zoom-pan.md) | Graph view zoom and pan (B1 slice 1): Zoom In mode, Zoom Out, Whole Page, Pan | M | 0 |
 | [ ] | [T66](T66-graph-view-modes.md) | Graph view modes (Print, Page, Window, Draft), Show > Layer Icons and Full Screen done; the nine other Show items and Show Data Info wait for measurement (B1 slice 2) | M | 10 |
 | [x] | [T69](T69-zoom-all-scale-tools.md) | Graph view, the rest of B1: View > Zoom All and the Tools-bar Scale In / Scale Out (measured in graphing 23) | S | 0 |
-| [ ] | B2 | Graph objects: cut/copy/paste, Copy/Paste Format, align, same size, group, order across object kinds, snap to grid | L | 51 |
+| [ ] | [T72](T72-copy-paste-format.md) | Copy Format and Paste Format on graph, axis and legend (B2 slice 1) | M | 25 |
+| [ ] | B2 | Graph objects: cut/copy/paste, align, same size, group, order across object kinds, snap to grid (Copy/Paste Format is T72) | L | 33 |
 | [x] | [T67](T67-add-straight-line.md) | Add Straight Line (B3 slice 1) | M | 0 |
 | [x] | [T70](T70-axis-center-fit-page-to-printer.md) | Axis Center and Fit Page To Printer (B3 slice 2) | S | 0 |
 | [x] | [T73](T73-change-xy-ungroup.md) | Change X, Change Y, Ungroup on a plot (B3 slice 3) | S | 0 |
 | [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 22 |
 | [x] | [T71](T71-point-segments.md) | 2 and 3 Point Segment plots (B4 slice 2) | S | 0 |
 | [x] | [T75](T75-scatter-central.md) | Scatter Central (B4 slice 3) | S | 0 |
-| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 25 |
+| [x] | [T76](T76-grouped-indexed-plots.md) | Grouped Columns (indexed data), Grouped Box Charts (B4 slice) | M | 0 |
+| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label; Grouped Columns (indexed data) and Grouped Box Charts done as [T76](T76-grouped-indexed-plots.md)): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 23 |
 
 - **B1.** The graph view draws the page to fit the window. Add a view transform (zoom factor and
   scroll offset) in `crates/app/src/graph_view.rs` so hit-testing (`sheaf_plot::hit`) still works,
@@ -112,9 +114,9 @@ Backlog packages: write the brief first (step 3 above).
   are T66 (measured in graphing 22); Zoom All and the Tools-bar magnifiers (Scale In / Scale Out) are T69 (measured in graphing 23).
 - **B2.** Continues T24 (drawn shapes; ordering inside one layer and resize handles are done or in
   flight). Needs one ordering for all objects of a page (labels, legend, shapes, axis titles), an
-  object clipboard, the nine Copy Format choices with Paste Format, and the Object Edit toolbar on
+  object clipboard, and the Object Edit toolbar on
   a multi-selection (the view has single selection today: `selected: Option<(usize, ObjectKind)>`).
-  Split it: (a) multi-selection and align/same size, (b) cut/copy/paste, (c) copy/paste format,
+  Split it: (a) multi-selection and align/same size, (b) cut/copy/paste, (c) copy/paste format (done as T72, measured in graphing 24),
   (d) grouping and ordering across kinds.
 - **B3.** Small independent tools; split freely. Add Straight Line and Add Function Graph reuse
   drawn shapes and the fit library's functions (`sheaf simulate`, T47). Display range and markers
@@ -150,7 +152,7 @@ Backlog packages: write the brief first (step 3 above).
 | [ ] | [T57](T57-deconvolution-stft.md) | Deconvolution and STFT (claimed 2026-11-15) | M | 2 |
 | [ ] | B8 | Analysis and statistics: wavelets, Multiple Peak Fit, batch peak analysis, implicit fit, Simulate Surface, Compare Datasets, XYZ Surface Area, partial correlation, three-way and repeated-measures ANOVA | L | 16 |
 | [ ] | B9 | Gadgets on the graph (Statistics, Quick Fit, Quick Peaks, Differentiate, Interpolate, Intersect, FFT, Rise Time, Cluster, Vertical Cursor, ...) | L | 13 |
-| [ ] | B10 | Most Recently Used lists in the Plot, Worksheet, Analysis and Statistics menus; Recent Exports | S | 6 |
+| [x] | [T78](T78-recent-lists.md) | Most Recently Used lists in the Plot, Worksheet, Analysis and Statistics menus; Recent Exports (B10) | S | 0 |
 
 - **B8.** One brief per tool family, each checked against Origin where it can be scripted and
   against scipy/statsmodels otherwise. Multiple Peak Fit first (peak fitting is daily work; reuse
@@ -158,7 +160,7 @@ Backlog packages: write the brief first (step 3 above).
 - **B9.** The Integrate gadget exists (`crates/app/src/gadget.rs`): the region of interest, its
   menu and its live result. Turn it into a shared gadget frame, then add one gadget per commit;
   most reuse an existing analysis tool.
-- **B10.** Reuse `crates/app/src/recent.rs` (T38).
+- **B10.** Done as T78.
 
 ## Wave 7: project, templates and settings
 
@@ -166,7 +168,7 @@ Backlog packages: write the brief first (step 3 above).
 |---|---|---|---|---|
 | [ ] | [T56](T56-user-graph-templates.md) | Save Template As and user graph templates (open; unverified start on branch `user-templates`) | M | 1 |
 | [ ] | B11 | Templates and themes: template library, From Template, analysis templates, Batch Processing, batch-plotting Duplicate, Theme Organizer, Save Format as Theme | L | 10 |
-| [ ] | B12 | Project and window management: New Graph, save/duplicate project without data, Re-Import, worksheet as image, View Windows, Folders List, folder Properties, sample projects | M | 16 |
+| [ ] | B12 | Project and window management: Re-Import, worksheet as image, View Windows, Folders List, folder Properties, sample projects (New Graph and save/duplicate project without data done as T77) | M | 12 |
 | [ ] | B13 | Tools: Options window, System Variables, Fitting Function Builder and Organizer, Import Filters Manager, project protection, audit log | L | 7 |
 
 - **B11** depends on T56. Analysis templates depend on recalculating analysis results (T03).

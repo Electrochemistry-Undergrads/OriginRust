@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **380 listed item locations** at the planning
-  baseline (277 menu bar, 20 toolbar, 83 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **375 listed item locations** at the planning
+  baseline (258 menu bar, 19 toolbar, 98 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -77,6 +77,31 @@ Graphing 7.6 records the native selected-face controls and name/fallback limits;
 regressions and SVG/stroke PNG goldens cover standard-family and shared export behaviour.
 Combined scripts and special aliases remain open; editor and Format-toolbar claims remain
 with their owners.
+
+T72 Copy Format / Paste Format (B2 slice 1, branch `copy-format`, graphing 26, Origin 2016 measured): Edit,
+page and axis menus copy a graph or axis format (All, All Style Formats, Colors, Fonts, Background, Dimensions,
+Scales; axis All) and paste it as one "Apply Theme" undo step; Edit > Paste Format... opens Apply Formats (its
+graph-clipboard grid is Sheaf's reading, unmeasured). Unmeasured choices stay grey; the clipboard is in-app only.
+
+T78 recent lists (`recent-lists`, macOS, no Origin): Most Recently Used submenus at the end of the Plot,
+Worksheet, Analysis and Statistics menus (up to 10 menu-bar commands each, newest first, re-resolved against the
+current window when chosen) and Recent Exports (files written by graph, ASCII and Excel exports; choosing one reopens
+that export dialog on its window and folder). Both persist in `recent.json` (T38). New `app/mru.rs`, spec
+`recent-lists.md`; Origin's theme entries and re-run semantics are unmeasured (B10 done).
+
+T77 New Graph and projects without data (`new-graph-nodata`, macOS, no Origin): File > New > Graph and the
+Standard toolbar's New Graph add an empty graph from the default template (one undo step); File > Save Project
+without Data... writes a copy with every value, mask, note, format, filter and fit mark removed (structure,
+formulas and graphs kept), never over the open project's own file; Duplicate Project without Data offers to save,
+then opens that copy as an untitled project (as Origin's later Clone Project). New `core/without_data.rs`.
+Origin 2016's behaviour of the two items is undocumented; unmeasured choices in graphing 25 and project-file-format.
+
+T76 grouped indexed plots (`grouped-indexed`, macOS, no Origin; renumbered from T75): Plot > Column/Bar/Pie >
+Grouped Columns (indexed data) and Plot > Statistics > Grouped Box Charts split one data column by one or two
+group columns (selection: group columns + one Y column; `sheaf plot -t grouped-columns|grouped-box --group G1[,G2]`).
+Sorted categories on X, one plot per subgroup level (legend), mean bars with optional SD/SE (Plot Details Error Bar
+tab, `--group-error`), dodged boxes with the existing box statistics. New `core/indexed.rs`, `Plot.indexed`.
+Origin's dialog, statistic choices, table tick labels and >2 groups are leftovers (graphing 14.28, unmeasured).
 
 T75 (`scatter-central`, B4 slice 3): Plot > Symbol > Scatter Central as Origin 2016's (both axes at
 -50 %, boxed frame, titles at the axis ends); `Axis::offset_pct` now works for X (graphing 18.13).
@@ -229,18 +254,16 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `t62-origin` | Claude Windows, "axis-breaks" | T62 leftovers, docs only: Origin 2016 measurements of Stacked Histograms (graphing 13.16) and Waterfall Y/Z Color Mapping (13.17); differences recorded for a later code slice | claimed 2026-11-16; spec and brief text only, no code; no other sessions' scopes |
 | `codex/t58-title-editors` | Codex Windows, t58-title-editors | T58 slice 2 remainder: reuse selection editor/preview for existing X/Y axis titles and existing legend content; wire the two title entries | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` reused after completed 7bf66f6f; TextDialog/helpers, narrow graph-properties text hooks and existing-target menus/actions/app dispatch, own UI tests; read-only plot/lib.rs axis-title facade and layout::first_title visibility only, forwarding existing rules without render changes; graphing 7.7. Read-only plot/lib axis-title and cropped-scene facades reuse existing resolvers/SVG/raster; layout first_title visibility only, no rendering behaviour changes or font-owner registration edits. No T70 new legend title, shared Format/T59 adapter/toolbar/grid, renderer/fonts/markup (text-run-fonts), new core model fields, formula/parameter labels, graph_view/shape/layer/view tools, stats/other dialogs or pending root/index/roadmap |
 | `codex/t59-format-toolbar` | Codex Windows | T59 step 3 first slice: worksheet Format toolbar target, mixed-state/Undo/persistence/UI tests and Origin measurements; measured font drawing and font-derived row geometry dependency fixes | claimed/refined 2026-11-15; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points`; app/grid + new worksheet-font/geometry helpers, bounded core sheet_print + plot/sheet styled-cell font/geometry and plot/lib helper export as needed; existing cell-format fields only/no new persistent model fields; no graph fonts/markup/text/layout/backends (text-run-fonts), graph editor (t58-text-editor), printer dialogs/page/range/workflows, T69/T70/T54 or other scopes |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
 | `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
-| `copy-format` | Claude Windows, "continue all tasks" | B2 slice 1 as new brief T72: Copy Format (All, style groups) and Paste Format on graph, axis, legend and page; new core format_clip.rs, menu items, Paste Format dialog | claimed 2026-11-15; no shape selection/resize, object align/group/order, object cut/copy/paste, T58/T59 toolbar |
 | `b5-fill` | Claude Windows, "t30-origin" | B5 slice as new brief T74: Column > Fill Column With A set of Numbers / Date/Time values / Text&Numeric values (Origin patternN/D/T, measured), menus and column-header context menu | claimed 2026-11-15; worktree wf_c03644a9-997-1, build target/wf-excel; not Row Numbers/random fills (T63), no other B5 items |
-| `grouped-indexed` | Claude macOS, "mac-format-bar" | B4 slice as new brief T76 (renumbered from T75, which `scatter-central` also took): Plot > Column/Bar/Pie > Grouped Columns (indexed data) and Plot > Statistics > Grouped Box Charts (data grouped by an index/category column) | claimed 2026-11-15; worktree `.claude/worktrees/grouped-indexed`, `target/wt-grouped`; core template/plot grouping, plot drawing, Plot menu items, ops/mcp template names, graphing spec section, T75 brief. Built from Origin's documentation on macOS (no Origin), unmeasured choices labelled. Not Line Series, Column Scatter, other statistics/stock/specialized plots, T71 segments or other sessions' scopes |
-| `new-graph-nodata` | Claude macOS, "mac-format-bar" | B12 slice as new brief T77: File > New > Graph and Standard toolbar New Graph (empty graph from the default template), File > Save Project without Data... and Duplicate Project without Data | claimed 2026-11-16; worktree `.claude/worktrees/new-graph-nodata`, `target/wt-nodata`; app File menu/Standard toolbar items, io/core project copy without data, own tests, spec section, T77 brief. Built from Origin's documentation on macOS (no Origin). Not Re-Import, Worksheet as Image, View Windows, folders, sample projects, B6 sheet-tab Duplicate Without Data or other sessions' scopes |
-| `recent-lists` | Claude macOS, "mac-format-bar" | B10 as new brief T78: Most Recently Used lists in the Plot, Worksheet, Analysis and Statistics menus; File > Export > Recent Exports and the graph Recent Exports | claimed 2026-11-16; worktree `.claude/worktrees/recent-lists`, `target/wt-recent2`; app recent.rs/new MRU module, the six menu entries, export history reuse (T05 last successful exports), own tests, spec section, T78 brief. Built from Origin's documentation on macOS. Not the plot types themselves (T76), File recent files (T38) behaviour changes, export dialog themes or other sessions' scopes |
 | `column-scatter` | Claude Windows, session fe4b37eb | B4 slice as new brief T79: Plot > Symbol > Column Scatter (Y columns as scatter by column position with Origin's offset/jitter, categorical X labels); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not Grouped Columns/T76, Line Series or statistics plots; no other sessions' scopes |
+| `color-scale` | Claude macOS, "mac-format-bar" | B3 slice as new brief T80: Graph > New Color Scale and the legend context menu's Add Color Scale / Add Bubble Scale (a colour-scale object for colour-mapped plots, a bubble-size scale for bubble plots) | claimed 2026-11-16; worktree `.claude/worktrees/color-scale`, `target/wt-cscale`; core layer object, plot drawing (reusing hexbin's colour bar), Graph menu/legend context items, hit/selection if needed, .sheaf/.opj, spec section, T80 brief. Built from Origin's documentation on macOS (no Origin). Not Add Legend Title, New Table, Function Graph, display range/markers, T72 Copy/Paste Format or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

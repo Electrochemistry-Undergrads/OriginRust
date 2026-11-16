@@ -234,6 +234,8 @@ pub struct ExportDialog {
     preview: Option<(egui::TextureHandle, String)>,
     /// Set when existing files need a yes: the files, and whether the window closes after writing.
     pending: Option<bool>,
+    /// The files the last successful export wrote, with the graph of each, until taken (Recent Exports).
+    written: Vec<(WindowId, PathBuf)>,
 }
 
 /// What happened in one frame of the dialog.
@@ -274,7 +276,13 @@ impl ExportDialog {
             show_preview: true,
             preview: None,
             pending: None,
+            written: Vec::new(),
         }
+    }
+
+    /// The files written since the last call, each with the graph it shows (for Recent Exports).
+    pub fn take_written(&mut self) -> Vec<(WindowId, PathBuf)> {
+        std::mem::take(&mut self.written)
     }
 
     fn layout(&self) -> ExportLayout {
@@ -390,6 +398,7 @@ impl ExportDialog {
             {
                 return ExportOutcome::Failed(e.to_string());
             }
+            self.written = vec![(jobs[0].0, file.clone())];
             let outcome = if close {
                 ExportOutcome::Saved(file.clone())
             } else {
@@ -411,6 +420,7 @@ impl ExportDialog {
                 return ExportOutcome::Failed(e.to_string());
             }
         }
+        self.written = jobs.clone();
         let outcome = if close {
             ExportOutcome::Saved(jobs[jobs.len() - 1].1.clone())
         } else if jobs.len() == 1 {

@@ -120,7 +120,7 @@ fn zero_and_malformed_codes_preserve_the_existing_text_boundary() {
         assert_eq!(texts(&items)[0].text, "text");
         assert_eq!(texts(&items)[0].color, Color::RED);
     }
-    for source in [r"\c-1(text)", r"\c(text)", r"\c16777471(text)", r"\c4294967296(text)", r"\c00000000002(text)"] {
+    for source in [r"\c-1(text)", r"\c(text)", r"\c33554433(text)", r"\c4294967296(text)", r"\c00000000002(text)"] {
         assert_eq!(crate::markup::plain(source), source);
     }
     assert_eq!(crate::markup::plain(r"\v(\c4(x))"), r"\c4(x)");

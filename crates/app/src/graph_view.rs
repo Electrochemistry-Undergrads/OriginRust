@@ -278,6 +278,7 @@ impl GraphUi {
             ObjectKind::Label(label) => GraphOp::DeleteLabel { layer, label },
             ObjectKind::Shape(shape) => GraphOp::DeleteShape { layer, shape },
             ObjectKind::Slope(slope) => GraphOp::DeleteSlope { layer, slope },
+            ObjectKind::StraightLine(line) => GraphOp::DeleteStraightLine { layer, line },
             _ => return None,
         };
         self.selected = None;
@@ -432,6 +433,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     };
     let to_page = |p: Pos2| (f64::from((p.x - image_rect.left()) / fit), f64::from((p.y - image_rect.top()) / fit));
     let to_screen = |(x, y): (f64, f64)| image_rect.min + egui::vec2(x as f32 * fit, y as f32 * fit);
+    // (a straight line that is not Selectable has no hit object, so clicks pass through it)
     let pick = |p: Pos2| hit_test(&t.scene, to_page(p), f64::from(PICK_TOLERANCE / fit));
 
     // The selection, drawn over the picture.
@@ -809,6 +811,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                 ObjectKind::Label(label) => Some(Action::EditText { graph: graph_id, layer, label }),
                 ObjectKind::Shape(shape) => Some(Action::EditShape { graph: graph_id, layer, shape }),
                 ObjectKind::Slope(slope) => Some(Action::EditSlope { graph: graph_id, layer, slope }),
+                ObjectKind::StraightLine(line) => Some(Action::EditStraightLine { graph: graph_id, layer, line }),
             },
             Hit::Layer(layer) => Some(open(layer, PropsTab::Plots, None)),
             Hit::Page => Some(open(state.active_layer, PropsTab::Page, None)),
@@ -1169,6 +1172,7 @@ fn menu_for(
             ObjectKind::Label(k) => menus::graph_label_menu(layer, k),
             ObjectKind::Shape(k) => menus::graph_shape_menu(layer, k),
             ObjectKind::Slope(k) => menus::graph_slope_menu(layer, k),
+            ObjectKind::StraightLine(k) => menus::graph_straight_line_menu(layer, k),
         },
         MenuTarget::Hit(Hit::Layer(layer)) => menus::graph_page_menu(layer),
         MenuTarget::Hit(Hit::Page) => menus::graph_page_menu(0),
@@ -1269,6 +1273,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::DeleteLabel { layer, .. }
         | GraphOp::DeleteShape { layer, .. }
         | GraphOp::DeleteSlope { layer, .. }
+        | GraphOp::DeleteStraightLine { layer, .. }
         | GraphOp::OrderShape { layer, .. }
         | GraphOp::HideLayer { layer }
         | GraphOp::HideOtherLayers { layer }
@@ -1392,6 +1397,11 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         GraphOp::DeleteSlope { slope, .. } => {
             if slope < l.slopes.len() {
                 l.slopes.remove(slope);
+            }
+        }
+        GraphOp::DeleteStraightLine { line, .. } => {
+            if line < l.straight_lines.len() {
+                l.straight_lines.remove(line);
             }
         }
         GraphOp::OrderShape { shape, front, .. } => {

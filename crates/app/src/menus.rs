@@ -269,6 +269,13 @@ pub enum Cmd {
     TextTool,
     /// The Slope tool of the Tools toolbar.
     SlopeTool,
+    /// Graph > Add Straight Line...
+    AddStraightLine,
+    /// Properties of a straight line.
+    EditStraightLine {
+        layer: usize,
+        line: usize,
+    },
     /// View > Zoom In (Ctrl+I): the mode in which the next click on the page zooms in.
     ZoomIn,
     /// View > Zoom Out (Ctrl+M).
@@ -833,7 +840,7 @@ fn plot_menu() -> Vec<Entry> {
                     grey("Column Scatter"),
                 ],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
-                greys(&["Vertical Drop Line"]),
+                vec![item("Vertical Drop Line", Cmd::Plot(Template::VerticalDropLine))],
                 vec![item("Lollipop Plot", Cmd::Plot(Template::Lollipop))],
                 vec![
                     item("Bubble", Cmd::Plot(Template::Bubble)),
@@ -854,7 +861,8 @@ fn plot_menu() -> Vec<Entry> {
             "Column/Bar/&Pie",
             [
                 vec![item("&Column", Cmd::Plot(Template::Column))],
-                greys(&["Column + Label", "Grouped Columns (indexed data)"]),
+                vec![item("Column + Label", Cmd::Plot(Template::ColumnLabel))],
+                greys(&["Grouped Columns (indexed data)"]),
                 vec![
                     item("Bar", Cmd::Plot(Template::Bar)),
                     item("Stacked Column", Cmd::Plot(Template::StackedColumn)),
@@ -1398,7 +1406,7 @@ fn graph_menu() -> Vec<Entry> {
         item("Layer Management...", Cmd::LayerManagement(None)),
         item("Add Error Bars...", Cmd::AddErrorBars),
         grey("Add Function Graph..."),
-        grey("Add Straight Line..."),
+        item("Add Straight Line...", Cmd::AddStraightLine),
         item("Add Text...", Cmd::AddText),
         new_layer_menu(),
         item("Merge Graph Windows...", Cmd::MergeGraphs),
@@ -1920,6 +1928,15 @@ pub fn graph_slope_menu(layer: usize, slope: usize) -> Vec<Entry> {
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteSlope { layer, slope })),
         sep(),
         item("Properties...", Cmd::EditSlope { layer, slope }),
+    ]
+}
+
+/// The menu of a straight line.
+pub fn graph_straight_line_menu(layer: usize, line: usize) -> Vec<Entry> {
+    vec![
+        keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteStraightLine { layer, line })),
+        sep(),
+        item("Properties...", Cmd::EditStraightLine { layer, line }),
     ]
 }
 
@@ -2488,6 +2505,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ZoomAll => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::ZoomAll },
         Cmd::ScaleIn => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ScaleIn },
         Cmd::ScaleOut => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ScaleOut },
+        Cmd::AddStraightLine => Action::AddStraightLine { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
+        Cmd::EditStraightLine { layer, line } => {
+            Action::EditStraightLine { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, line: *line }
+        }
         Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
         Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
         Cmd::FullScreen => Action::FullScreen(c.graph.ok_or(NEED_GRAPH)?),

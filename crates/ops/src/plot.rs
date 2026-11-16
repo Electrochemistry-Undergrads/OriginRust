@@ -8,6 +8,7 @@ use anyhow::{Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 use sheaf_core::graph::{Graph, LineStyle, Stack, TextLabel, TickDirection, TickLabelSource, TrendKind, Trendline};
 use sheaf_core::panels::{MAX_PANELS, PanelLayout, PanelOrder};
+use sheaf_core::straight_line::{StraightLine, StraightLineLabel};
 use sheaf_core::template::{STACK_AUTO_DEFAULT, Template};
 use sheaf_core::{Color, ColumnId, Project, WindowId};
 
@@ -107,6 +108,10 @@ pub struct Style {
     pub draw: Vec<String>,
     /// Slope annotations on the first plot of the first layer, each "ROW_A,ROW_B" (worksheet rows from 1).
     pub slope: Vec<String>,
+    /// Vertical straight lines on the first layer, each "VALUE" or "VALUE,LOCATION".
+    pub vline: Vec<String>,
+    /// Horizontal straight lines on the first layer, each "VALUE" or "VALUE,LOCATION".
+    pub hline: Vec<String>,
 }
 
 /// A graph with several panels.
@@ -528,6 +533,12 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
     let labels: Vec<(String, f64, f64)> = s.label.iter().map(|v| parse_label(v)).collect::<Result<_>>()?;
     let shapes: Vec<sheaf_core::shape::Shape> = s.draw.iter().map(|v| parse_draw(v)).collect::<Result<_>>()?;
     let slopes: Vec<(usize, usize)> = s.slope.iter().map(|v| parse_slope(v)).collect::<Result<_>>()?;
+    let mut straight: Vec<StraightLine> = Vec::new();
+    for (option, vertical, values) in [("--vline", true, &s.vline), ("--hline", false, &s.hline)] {
+        for v in values {
+            straight.push(parse_straight_line(option, v, vertical)?);
+        }
+    }
     let slope_plot = project.graph(graph).and_then(|g| g.layers.first()).and_then(|l| l.plots.first()).cloned();
     if !slopes.is_empty() {
         let Some(plot) = &slope_plot else { bail!("--slope needs a plot in the first layer to mark the slope on") };
@@ -633,6 +644,10 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
     }
     if let Some(layer) = g.layers.first_mut() {
         layer.shapes.extend(shapes);
+        for mut line in straight {
+            line.name = StraightLine::next_name(&layer.straight_lines, line.vertical);
+            layer.straight_lines.push(line);
+        }
         if let Some(plot) = &slope_plot {
             layer.slopes.extend(slopes.iter().map(|&(a, b)| sheaf_core::graph::SlopeAnnotation::for_plot(plot, a, b)));
         }
@@ -663,6 +678,28 @@ pub fn parse_draw(value: &str) -> Result<sheaf_core::shape::Shape> {
         bail!("--draw \"{value}\": \"{at}\" is not four numbers X1,Y1,X2,Y2; {usage}");
     }
     Ok(Shape::new(kind, (n[0], n[1]), (n[2], n[3])))
+}
+
+/// Reads one `--vline` or `--hline` value, "VALUE" or "VALUE,LOCATION" (top, bottom, left or right).
+pub fn parse_straight_line(option: &str, value: &str, vertical: bool) -> Result<StraightLine> {
+    let usage = format!(
+        "{option} must look like \"VALUE\" or \"VALUE,LOCATION\" with LOCATION top, bottom, left or right, for example {option} 0.5,bottom"
+    );
+    let (number, location) = match value.split_once(',') {
+        Some((n, l)) => (n, Some(l)),
+        None => (value, None),
+    };
+    let Some(at) = number.trim().parse::<f64>().ok().filter(|v| v.is_finite()) else {
+        bail!("{option} \"{value}\": \"{}\" is not a number; {usage}", number.trim());
+    };
+    let mut line = StraightLine::new(vertical, at);
+    if let Some(l) = location {
+        let Some(loc) = StraightLineLabel::parse(l) else {
+            bail!("{option} \"{value}\": \"{}\" is not a label location; {usage}", l.trim());
+        };
+        line.location = loc;
+    }
+    Ok(line)
 }
 
 /// Reads one `--slope` value, "ROW_A,ROW_B": two different row numbers as the worksheet shows them (from 1);

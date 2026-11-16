@@ -533,7 +533,7 @@ Frame tab (none, line, shadow...), position by anchor corner, size, arrange vert
 | `\=(sub,sup)` | sub and superscript together (`\v(,)` for literal comma) |
 | `\g(text)` | Greek letters (`\g(a)` alpha, `\g(m)` mu) |
 | `\f:Name(text)` | font by name |
-| `\cN(text)` | colour by palette position N (base U12) |
+| `\cN(text)` | indexed or RGB-tagged colour (7.2-7.3) |
 | `\pN(text)` | size as percent of current (200 doubles) |
 | `\xHHHH(...)` | Unicode by hex code, e.g. `\x(03b8)` |
 | `\(code)` | character by ASCII code |
@@ -584,7 +584,7 @@ decoration paths: screen/PNG/PDF through SVG, and direct EPS/EMF. Tests cover ne
 anchors, rotation, script scaling, font style/colour, title/legend/label/tick placement and
 export. The SVG golden includes text; the PNG golden isolates stroke geometry so font
 installation differences do not change it. This slice adds no model fields. Per-run font
-switching, tagged RGB codes, combined scripts, editor/toolbar formatting and whole-object underline
+switching, combined scripts, editor/toolbar formatting and whole-object underline
 remain open in the graph-text brief.
 
 ### 7.2 Indexed text colours (T58 graph text)
@@ -610,8 +610,9 @@ For positive untagged numeric indices, Origin uses the low byte as a one-based p
 position; byte values outside 1-24 give black. Independent vector controls confirm 258 red,
 280 dark gray, 9999 orange, and black for 25, 99, 255, 256, 257, 281, 512, 1000 and 65535.
 Leading zeros work (`\c0002` is red). Sheaf accepts at most ten decimal digits, checks u32
-overflow and handles values below 0x01000000 as palette indices. Tagged RGB/special-colour
-encodings and signed codes remain literal text pending separate support.
+overflow. Untagged values through 0x01000000 use the palette lookup; the boundary itself
+is black. RGB-tagged values follow 7.3; other special-colour encodings and signed codes
+remain literal text pending separate support.
 
 Zero retains Sheaf's previous neutral style and preserves its enclosed text. Origin's `\c0`
 and `\c00` controls instead displayed only a literal `\c` fragment; that invalid-index
@@ -621,6 +622,51 @@ fields are added. The `text_color_tests` cover the native palette and boundary f
 restoration, inherited opacity, style/script combinations, anchors, rotation, decoration
 colours, overflow/literal cases, SVG/PNG goldens and EPS/EMF/PDF output. The PNG golden isolates
 decoration strokes from installed glyph fonts and checks every RGB value directly.
+
+
+### 7.3 RGB text colours (T58 graph text)
+
+`codex/text-run-rgb` (2026-11-15) extends `\cN(text)` to RGB codes without adding
+model fields or changing global palettes. The [Color function reference](https://docs.originlab.com/labtalk/ref/color-func/)
+distinguishes internal colour codes from plain RGB decimals. OriginPro 2016 scalar controls
+confirm `Color(r,g,b) = 0x01000000 + r + 256*g + 65536*b`. Text escapes use a **one-based**
+colour code: add one to that return value to reproduce exactly the requested RGB. Using the
+return value verbatim instead subtracts one from the entire 24-bit colour, including borrows
+between channels; it does not merely clamp the red channel.
+
+The independent native captures in `scratch/text-run-rgb/` (`rgb.lines.txt` and
+`rgb-boundaries.lines.txt`, their scalar outputs and EMF exports) establish these cases:
+
+| Escape N | EMF text RGB |
+|---|---|
+| 16777216 | (0,0,0), palette/tag boundary |
+| 16777471 | (254,0,0) |
+| 16842496 | (255,254,0) |
+| 33488896 | (255,255,254) |
+| 33554431 | (254,255,255) |
+| 25249549 | (12,71,129) |
+| 22426642 | (17,52,86) |
+| 22352368 | (239,17,85) |
+| 16974337 | (0,2,3) |
+| 18890880 | (127,64,32) |
+| 16777217 / 16777218 | (0,0,0) / (1,0,0) |
+| 16842497 / 33488897 | (0,255,0) / (0,0,255) |
+| 33554432 | (255,255,255) |
+| 25249550 / 22426643 / 22352369 | (13,71,129) / (18,52,86) / (240,17,85) |
+
+Thus the supported RGB range is 0x01000001 through 0x02000000 inclusive: subtract one,
+then decode the low three bytes as R, G and B. The preceding 0x01000000 control is black;
+0x02000001 produced black natively but belongs to another tag and stays literal in Sheaf.
+Signed Auto/None and other special tags remain unsupported. Existing decimal-digit/overflow,
+literal-wrapper and nesting limits apply. Native reference coordinates identify each control;
+EMF creation order is reversed and PNG quantization is excluded from these numeric fixtures.
+
+The native `\c25249549(a\c2(b)c)d` control returns to (12,71,129) after red `b`, and to
+the label's (200,100,20) for `d`. Sheaf uses the same existing run-colour path for glyphs,
+underline and strikeout, including nested font/script styles and rotated text. Explicit RGB
+is opaque, while text outside the span retains its parent's alpha. Seven focused regressions
+cover the measured values, boundaries, nesting, glyph placement and EPS/EMF/PDF/SVG output;
+new SVG and font-independent stroke PNG goldens also check the channel values directly.
 
 ---
 
@@ -2851,6 +2897,32 @@ the moved shape). They are enabled only when a drawn shape is selected and the m
 them disabled (broader object ordering is B2). Not measured in Origin 2016 yet; the greyed-without-
 selection behaviour follows Origin's convention for Object Edit buttons.
 
+### 17.7 Straight lines (T67, measured 2026-11-15)
+
+Origin 2016's Graph > Add Straight Line (`addline`; probes `tools/origin-ref/addline-*.lines.txt`):
+Type Vertical (default) or Horizontal, At Value (0), Color (black), Style (Solid, Dash, Dot, Dash
+Dot, Dash Dot Dot, Short Dash, Short Dot, Short Dash Dot), Label Display Format (auto: the axis'
+tick label format; ".2" gives two decimals), Label Location Top (default), Bottom, Left or Right,
+Selectable and Moveable (on), Name. It makes the line (`vline`, `vline1`, ..., `hline`, ... or the
+name) and its label (`<name>Text`), 0.5 pt wide, attached to the layer's scales; a vertical line
+runs from the Y axis' from to its to at X = value, and these ends stay where they were after a
+rescale. The label is the value, in the line's colour and the layer's text size, its centre 5 % of
+the axis span from the line: a vertical line's Top label above the frame, Bottom below it, Left and
+Right beside the line half-way up; a horizontal line's Top label above the line at the middle of
+the X range, Bottom below it, Left and Right outside the frame's edges at the line's Y.
+
+**Sheaf** (`sheaf_core::straight_line::StraightLine` in `Layer::straight_lines`; drawn by
+`plot/src/straight_line.rs`): the same options and names, label placement and formats (the 5 % is
+taken of the frame, which is the axis span on linear axes; on log axes in the frame too, unmeasured);
+a line whose value is outside the axis range is not drawn; `span` keeps the ends the app's dialog saw
+(None, as the command line makes them, runs across the frame). Graph > Add Straight Line... opens the
+window; OK adds the line in one undo step; a click on the line or its label selects it (after axes
+and plots, which a line across the frame would otherwise hide), Delete removes it, a double click or
+Properties edits it ("Straight Line"). A line that is not Selectable lets clicks through. Moveable is
+stored but dragging a line is not built (shown disabled). `sheaf plot --vline X[,top|bottom|left|right]`
+and `--hline Y` add lines to the first layer. `.sheaf` keeps them; `.opj` leaves them out with a
+warning and the companion keeps them.
+
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
 Measured on 2026-11-13 by opening Origin's Plot Details on a line plot (`tools/origin-ref/origin-dialog.ps1`,
@@ -3709,6 +3781,19 @@ items). Measured elsewhere (workbook-model 13.1a): worksheet masks, Mask Change 
 Masked Points. Nothing of the graph tools themselves has been measured. Every choice below is labelled
 **[Sheaf choice]** (made without Origin, change it when measured) or **[?]** (not known). The mechanism, the
 core edits, is independent of those choices.
+
+### 18.12 Vertical Drop Line and Column + Label (T68, measured)
+
+Origin 2016's Plot > Symbol > Vertical Drop Line and Plot > Column/Bar/Pie > Column + Label are its `DROPLINE`
+and `ColumnLabel` templates, measured 2026-11-15 by plotting through them and exporting 1600 px PNGs
+(`re-workspace/scratch/t68`): DROPLINE draws the scatter's symbols and a 0.5 pt vertical drop line in each plot's
+colour from every point to the bottom of the frame (the axis, not zero); with two plots the symbols go square,
+circle (the plain scatter keeps squares). ColumnLabel draws the column plot (red, green, ...) with each value
+written above its own column in Arial 22 pt, about 5.8 pt above the top, centred on the bar also when columns are
+grouped. Sheaf: `Template::VerticalDropLine` (scatter, `decor.drop.vertical` on, symbol type By One) and
+`Template::ColumnLabel` (column, data labels on, position Above, a quarter of the font size, 5.5 pt, above);
+data labels of grouped columns and bars are now centred on their own bar. CLI `-t vertical-drop-line`, `-t
+column-label`.
 
 ### 20.1 Sheaf's rules
 

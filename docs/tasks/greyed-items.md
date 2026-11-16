@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **404 greyed items: 284 in the menu bar, 33 on the toolbars, 87 in context menus.**
+original inventory baseline. This is not a new runtime audit. **401 greyed items: 281 in the menu bar, 33 on the toolbars, 87 in context menus.**
 
 ## How to read and keep this file
 
@@ -43,10 +43,11 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T63` | 20 |
 | `T65` | 0 |
 | `T66` | 10 |
+| `T67` | 0 |
 | `T69` | 0 |
 | `B2` | 51 |
-| `B3` | 28 |
-| `B4` | 30 |
+| `B3` | 27 |
+| `B4` | 28 |
 | `B5` | 33 |
 | `B6` | 31 |
 | `B7` | 8 |
@@ -62,7 +63,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 55 items, backlog packages (`B`) 329, not planned (`N`) 20.
+Briefs (`T`) hold 55 items, backlog packages (`B`) 326, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -113,9 +114,9 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Plot
 - `T63` Line: Horizontal Step · Vertical Step · Spline Connected
-- `B4` Symbol: Scatter Central · Column Scatter · Vertical Drop Line
+- `B4` Symbol: Scatter Central · Column Scatter
 - `B4` Line + Symbol: Line Series · 2 Point Segment · 3 Point Segment
-- `B4` Column/Bar/Pie: Column + Label · Grouped Columns (indexed data)
+- `B4` Column/Bar/Pie: Grouped Columns (indexed data)
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
@@ -165,7 +166,7 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Graph
 - `N` Fit Layer to Graph
-- `B3` Add Function Graph... · Add Straight Line... · New Table · New Color Scale · Convert to Standard Font Size
+- `B3` Add Function Graph... · New Table · New Color Scale · Convert to Standard Font Size
 - `T61` New Layer(Axes): Open Dialog...
 - `B3` Legend: Add Legend Title
 

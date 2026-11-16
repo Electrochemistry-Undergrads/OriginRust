@@ -116,6 +116,8 @@ pub enum GraphOp {
     DeleteShape { layer: usize, shape: usize },
     /// Delete on a slope annotation.
     DeleteSlope { layer: usize, slope: usize },
+    /// Delete on a straight line.
+    DeleteStraightLine { layer: usize, line: usize },
     /// Move a drawn object to the top or bottom of its own layer's shape stack.
     OrderShape { layer: usize, shape: usize, front: bool },
     /// Hide Layer (every plot of the layer is hidden).
@@ -565,6 +567,17 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
         slope: usize,
+    },
+    /// Graph > Add Straight Line...: opens the window for a new line in `layer`.
+    AddStraightLine {
+        graph: WindowId,
+        layer: usize,
+    },
+    /// Opens the window of a straight line (double click, Properties).
+    EditStraightLine {
+        graph: WindowId,
+        layer: usize,
+        line: usize,
     },
     /// Writes a hint on the status bar.
     Hint(String),

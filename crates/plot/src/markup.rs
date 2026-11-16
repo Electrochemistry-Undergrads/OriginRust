@@ -1,7 +1,7 @@
 //! Text markup of labels (spec section 5): `\b(..)` bold, `\i(..)` italic,
 //! `\+(..)` superscript, `\-(..)` subscript, `\g(..)` Greek, `\pN(..)` size in percent,
 //! `\f:Name(..)` font switch, `\x(hhhh)` a character by its code, `\v(..)` literal text; the
-//! `\u(..)` underline, `\s(..)` strikethrough and `\cN(..)` indexed text color.
+//! `\u(..)` underline, `\s(..)` strikethrough and `\cN(..)` indexed or RGB text color.
 //! Escapes nest. A backslash that does not start one of these escapes is literal.
 
 use sheaf_core::Color;
@@ -26,7 +26,7 @@ pub struct Run {
     pub underline: bool,
     /// Draw a line through this run.
     pub strikeout: bool,
-    /// An explicit classic palette colour, or the label's own colour when absent.
+    /// An explicit palette or RGB colour, or the label's own colour when absent.
     pub color: Option<Color>,
     /// Size relative to the label's font size (1 for normal text).
     pub scale: f64,
@@ -189,15 +189,20 @@ fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
                 }
             } else {
                 let index = chars[pos + 2..open].iter().collect::<String>().parse::<u32>().ok()?;
-                // Tagged RGB/special-colour values use a different encoding. This slice
-                // handles untagged palette indices; retain other escapes literally.
-                if index >= 0x0100_0000 {
-                    return None;
-                }
                 // Preserve the existing text and inherited style for zero codes. Origin's
                 // invalid zero escape discards its contents; supported indices are positive.
                 if index > 0 {
-                    inner.color = Some(text_palette_color(index));
+                    inner.color = Some(match index {
+                        1..=0x0100_0000 => text_palette_color(index),
+                        0x0100_0001..=0x0200_0000 => {
+                            // Text escapes are one-based, including RGB-tagged values.
+                            // Color(r,g,b) returns 0x01BBGGRR; add one for the same RGB
+                            // in a text escape (Origin 2016 vector controls, graphing 7.3).
+                            let [r, g, b, _] = (index - 1).to_le_bytes();
+                            Color::rgb(r, g, b)
+                        }
+                        _ => return None,
+                    });
                 }
             }
             Some((Escape::Styled(inner), open + 1))

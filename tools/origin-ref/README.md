@@ -129,3 +129,10 @@ Show Axes Frame, aspect ratio, portrait, a double-Y source, keep:=0), `merge-gra
 factor for many grids, gaps and margins), `merge-graph-source-size` (sources resized to 50 x 50, 30 x 30 and 80 x 40
 percent) and `merge-graph-threshold` (where the factor stops being 1). `fit-page-to-layers.lines.txt` runs `pfit2l`
 with its options. Run them with `run-labtalk-lines.ps1`; the findings are in `docs/spec/graphing.md` 15.7c and 15.7d.
+
+## Add Straight Line (T67)
+
+`addline-objects.lines.txt` runs `addline` on a stock Line graph (vertical, horizontal, a named dashed red line,
+a second vertical one) and prints the objects it makes and their ends, attachment, colour, style, width and the
+label's text, place and size; `addline-labels.lines.txt` adds lines with each label location and a fixed format,
+then rescales Y to see whether the ends follow. Findings: `docs/tasks/T67-add-straight-line.md` and graphing.

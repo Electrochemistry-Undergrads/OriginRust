@@ -40,6 +40,7 @@ use std::sync::OnceLock;
 /// Tooltip of an item that Sheaf does not have.
 pub const NOT_YET: &str = "Not available in Sheaf yet";
 const NEED_BOOK: &str = "Activate a workbook window first";
+pub const NO_COLOR_SCALE: &str = "New Color Scale needs a plot whose symbols take their colour from a Z column";
 pub const NO_CUMULATIVE: &str = "Cumulative needs a line, scatter or line + symbol plot in the layer";
 const NEED_GRAPH: &str = "Activate a graph window first";
 const NEED_SHAPE: &str = "Select a drawn object first";
@@ -280,6 +281,8 @@ pub enum Cmd {
     SlopeTool,
     /// Graph > Add Straight Line...
     AddStraightLine,
+    /// Graph > New Color Scale: a colour scale of the active layer.
+    NewColorScale,
     /// Properties of a straight line.
     EditStraightLine {
         layer: usize,
@@ -466,6 +469,8 @@ pub struct MenuContext<'a> {
     pub stack: Option<sheaf_core::graph::Stack>,
     /// True when the active layer has a plot that Cumulative stacking applies to (line, scatter, line + symbol).
     pub can_cumulate: bool,
+    /// The active layer has a plot whose symbols take their colour from a Z column (New Color Scale).
+    pub can_color_scale: bool,
     /// The selected drawn shape of the active graph as (layer, shape index, shapes in that layer).
     pub selected_shape: Option<(usize, usize, usize)>,
     /// The view mode of the active graph (the tick of View > Print View, Page View, Window View, Draft View).
@@ -1484,7 +1489,7 @@ fn graph_menu() -> Vec<Entry> {
             ],
         ),
         grey("New Table"),
-        grey("New Color Scale"),
+        item("New Color Scale", Cmd::NewColorScale),
         sep(),
         grey("Fit Layer to Graph"),
         item("Fit Page to Layers...", Cmd::FitPageToLayers),
@@ -2035,8 +2040,19 @@ pub fn graph_straight_line_menu(layer: usize, line: usize) -> Vec<Entry> {
     ]
 }
 
+/// The menu of a colour scale or bubble scale.
+pub fn graph_scale_menu(layer: usize, scale: usize) -> Vec<Entry> {
+    vec![keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteScale { layer, scale }))]
+}
+
 /// The menu of the legend.
-pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
+///
+/// Add Color Scale and Add Bubble Scale are enabled when the layer has a plot of that mapping.
+pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool) -> Vec<Entry> {
+    use sheaf_core::layer_scale::LayerScaleKind;
+    let add = |label: &str, can: bool, kind| {
+        if can { item(label, Cmd::GraphEdit(GraphOp::AddScale { layer, kind })) } else { grey(label) }
+    };
     vec![
         item("Plot Details...", Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: None }),
         sub(
@@ -2047,8 +2063,8 @@ pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
                 grey("Add Legend Title"),
             ],
         ),
-        grey("Add Color Scale"),
-        grey("Add Bubble Scale"),
+        add("Add Color Scale", can_color, LayerScaleKind::Color),
+        add("Add Bubble Scale", can_bubble, LayerScaleKind::Bubble),
         sep(),
         grey_keyed("Cut", ctrl(Key::X)),
         grey_keyed("Copy", ctrl(Key::C)),
@@ -2615,6 +2631,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ZoomAll => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::ZoomAll },
         Cmd::ScaleIn => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ScaleIn },
         Cmd::ScaleOut => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ScaleOut },
+        Cmd::NewColorScale if !c.can_color_scale => return Err(NO_COLOR_SCALE),
+        Cmd::NewColorScale => Action::GraphEdit {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            op: GraphOp::AddScale { layer: c.layer, kind: sheaf_core::layer_scale::LayerScaleKind::Color },
+        },
         Cmd::AddStraightLine => Action::AddStraightLine { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::EditStraightLine { layer, line } => {
             Action::EditStraightLine { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, line: *line }
@@ -3208,6 +3229,7 @@ mod tests {
             layer_curves: Vec::new(),
             stack: None,
             can_cumulate: false,
+            can_color_scale: false,
             selected_shape: None,
             view_mode: Default::default(),
             layer_icons: true,

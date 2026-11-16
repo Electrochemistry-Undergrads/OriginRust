@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **368 greyed items: 266 in the menu bar, 19 on the toolbars, 83 in context menus.**
+original inventory baseline. This is not a new runtime audit. **365 greyed items: 265 in the menu bar, 19 on the toolbars, 81 in context menus.**
 
 ## How to read and keep this file
 
@@ -51,8 +51,9 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T75` | 0 |
 | `T76` | 0 |
 | `T78` | 0 |
+| `T80` | 0 |
 | `B2` | 51 |
-| `B3` | 22 |
+| `B3` | 19 |
 | `B4` | 23 |
 | `B5` | 33 |
 | `B6` | 31 |
@@ -68,7 +69,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 42 items, backlog packages (`B`) 306, not planned (`N`) 20.
+Briefs (`T`) hold 42 items, backlog packages (`B`) 303, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -161,7 +162,7 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Graph
 - `N` Fit Layer to Graph
-- `B3` Add Function Graph... · New Table · New Color Scale · Convert to Standard Font Size
+- `B3` Add Function Graph... · New Table · Convert to Standard Font Size
 - `T61` New Layer(Axes): Open Dialog...
 - `B3` Legend: Add Legend Title
 
@@ -238,7 +239,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B2` Graph axis title: Cut · Copy · Bring to the front · Push to the back
 - `B2` Graph text label: Cut · Copy · Bring to the front · Push to the back
 - `B2` Graph drawn shape: Cut · Copy
-- `B3` Graph legend: Add Color Scale · Add Bubble Scale
 - `B2` Graph legend: Cut · Copy · Bring to the front · Push to the back · Bring to front of data · Push to back of data
 - `B16` Graph legend: Programming Control...
 - `B11` Graph legend: Save Format as Theme...

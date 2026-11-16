@@ -13,6 +13,7 @@ mod autosave;
 mod axis_center;
 mod cell_format;
 mod cell_notes;
+mod color_scale;
 mod comparison_plot;
 mod cond_format;
 mod duplicate_entries;

@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **368 listed item locations** at the planning
-  baseline (266 menu bar, 19 toolbar, 83 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **365 listed item locations** at the planning
+  baseline (265 menu bar, 19 toolbar, 81 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -135,6 +135,10 @@ and the unresolved 2016 whole-object Bold/Italic difference. Formatting, strict 
 all-target Clippy, 3,713 tests (8 ignored), inventory 397 and eight Python tooling
 tests pass; source hashes match. An isolated desktop capture was inspected. The shared dispatch
 is ready for T59's worksheet adapter; remaining T58 controls/editor work retain their scopes.
+
+T80 colour and bubble scales (`color-scale`, B3 slice 4, macOS, no Origin): `Layer::scales` (colour scale = hexbin's bar over a
+colour mapped plot's Z, bubble scale = 14.16's four-circle size legend), Graph > New Color Scale and the legend's Add Color
+Scale / Add Bubble Scale (enabled when the layer has a matching plot), select/Delete, `.opj` warning (graphing 26).
 
 T67 Add Straight Line (`straight-line`, B3 slice 1): Origin 2016's addline measured (names, ends,
 label text and its 5 % placement) and copied: `Layer::straight_lines`, drawing, the Graph menu

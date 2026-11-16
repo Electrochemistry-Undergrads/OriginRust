@@ -117,7 +117,9 @@ fn draw_bubbles(
         let v = if n == 1 { lo } else { lo + (hi - lo) * k as f64 / (BUBBLES - 1) as f64 };
         let mut style = pd.plot.symbol.clone();
         style.size_pt = BUBBLE_MIN_PT + (BUBBLE_MAX_PT - BUBBLE_MIN_PT) * z_fraction((lo, hi), v);
-        let cy = y + style.size_pt / 2.0;
+        // A row is as tall as its circle or its label, so that small circles do not crowd the labels.
+        let row = style.size_pt.max((ASCENT + DESCENT) * size);
+        let cy = y + row / 2.0;
         let cx = x0 + BUBBLE_MAX_PT / 2.0;
         let mut d = String::new();
         symbol_path(&mut d, style.shape, cx, cy, style.size_pt);
@@ -132,6 +134,6 @@ fn draw_bubbles(
             Anchor::Start,
             0.0,
         );
-        y += style.size_pt + BUBBLE_GAP_PT;
+        y += row + BUBBLE_GAP_PT;
     }
 }

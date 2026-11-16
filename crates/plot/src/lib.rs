@@ -21,6 +21,7 @@ mod fill;
 mod fonts;
 mod hexbin;
 pub mod hit;
+mod layer_scale;
 mod layout;
 mod legend;
 mod margin;
@@ -38,7 +39,6 @@ pub mod scene;
 mod shapes;
 mod sheet;
 mod slope;
-mod layer_scale;
 mod straight_line;
 pub use slope::{NOT_USABLE as SLOPE_NOT_USABLE, check_point as slope_check_point};
 mod stack;
@@ -73,6 +73,8 @@ mod label_frame_tests;
 #[cfg(test)]
 mod label_whiteout_tests;
 #[cfg(test)]
+mod layer_scale_tests;
+#[cfg(test)]
 mod layers_tests;
 #[cfg(test)]
 mod legend_tests;
@@ -100,8 +102,6 @@ mod skip_tests;
 mod slope_tests;
 #[cfg(test)]
 mod sort_x_tests;
-#[cfg(test)]
-mod layer_scale_tests;
 #[cfg(test)]
 mod straight_line_tests;
 #[cfg(test)]

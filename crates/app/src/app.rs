@@ -1344,6 +1344,11 @@ impl SheafApp {
             GraphOp::DeleteShape { .. } => "Delete drawn object",
             GraphOp::DeleteSlope { .. } => "Delete slope annotation",
             GraphOp::DeleteStraightLine { .. } => "Delete straight line",
+            GraphOp::AddScale { kind, .. } => match kind {
+                sheaf_core::layer_scale::LayerScaleKind::Color => "Add color scale",
+                sheaf_core::layer_scale::LayerScaleKind::Bubble => "Add bubble scale",
+            },
+            GraphOp::DeleteScale { .. } => "Delete scale",
             GraphOp::OrderShape { front: true, .. } => "Bring drawn object to front",
             GraphOp::OrderShape { front: false, .. } => "Push drawn object to back",
             GraphOp::HideLayer { .. } => "Hide layer",
@@ -3326,6 +3331,12 @@ impl SheafApp {
             }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
+            can_color_scale: graph.is_some_and(|g| {
+                let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
+                project.graph(g).and_then(|gr| gr.layers.get(layer)).is_some_and(|l| {
+                    sheaf_core::layer_scale::LayerScale::applies(l, sheaf_core::layer_scale::LayerScaleKind::Color)
+                })
+            }),
             can_cumulate: graph.is_some_and(|g| {
                 let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
                 project.graph(g).and_then(|gr| gr.layers.get(layer)).is_some_and(sheaf_core::stack::layer_cumulates)

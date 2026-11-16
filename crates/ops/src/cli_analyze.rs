@@ -5,6 +5,7 @@
 use crate::analyze::{Job, OperandSpec, parse_pair};
 use crate::args::*;
 use anyhow::{Result, anyhow, bail};
+use sheaf_core::analysis::Wavelet;
 use sheaf_core::analysis::{self, BaselineSpec, IntegrateSpec, InterpSpec, Tool};
 use std::path::PathBuf;
 
@@ -194,6 +195,32 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             let options = analysis::DecimateOptions { factor, filter, order };
             (target, Job::Tool(Tool::Decimate(analysis::DecimateSpec { options })))
+        }
+        AnalyzeTool::WaveletDecompose { target, wavelet, ext } => {
+            let spec = analysis::WaveletDecomposeSpec { wavelet: wavelet_arg(&wavelet)?, extension: wavelet_ext(ext) };
+            (target, Job::Tool(Tool::WaveletDecompose(spec)))
+        }
+        AnalyzeTool::WaveletReconstruct { target, detail, wavelet, ext } => {
+            (target, Job::WaveletReconstruct { detail, wavelet: wavelet_arg(&wavelet)?, extension: wavelet_ext(ext) })
+        }
+        AnalyzeTool::WaveletDenoise { target, wavelet, ext, threshold, level, percent } => {
+            let threshold = match threshold {
+                WaveletThresholdArg::Custom => analysis::WaveletThresholdKind::Custom,
+                WaveletThresholdArg::Sqtwolog => analysis::WaveletThresholdKind::SqtwoLog,
+            };
+            let spec = analysis::WaveletDenoiseSpec {
+                wavelet: wavelet_arg(&wavelet)?,
+                extension: wavelet_ext(ext),
+                threshold,
+                level,
+                percent,
+            };
+            (target, Job::Tool(Tool::WaveletDenoise(spec)))
+        }
+        AnalyzeTool::WaveletSmooth { target, wavelet, ext, cutoff } => {
+            let spec =
+                analysis::WaveletSmoothSpec { wavelet: wavelet_arg(&wavelet)?, extension: wavelet_ext(ext), cutoff };
+            (target, Job::Tool(Tool::WaveletSmooth(spec)))
         }
         AnalyzeTool::IirFilter {
             target,
@@ -1242,4 +1269,17 @@ pub(crate) fn operand_spec(o: OperandArgs) -> OperandSpec {
 
 pub(crate) fn local_span(span: f64) -> analysis::LocalSpan {
     if span > 0.0 { analysis::LocalSpan::Proportion(span) } else { analysis::LocalSpan::Points }
+}
+
+fn wavelet_ext(ext: WaveletExtArg) -> analysis::WaveletExtension {
+    match ext {
+        WaveletExtArg::Periodic => analysis::WaveletExtension::Periodic,
+        WaveletExtArg::Pad0 => analysis::WaveletExtension::ZeroPadded,
+    }
+}
+
+fn wavelet_arg(text: &str) -> Result<Wavelet> {
+    Wavelet::parse(text).ok_or_else(|| {
+        anyhow!("{text:?} is not a wavelet: haar, db2..db10, b11, b13, b15, b22, b24, b26, b28, b31, b33, b35 or b37")
+    })
 }

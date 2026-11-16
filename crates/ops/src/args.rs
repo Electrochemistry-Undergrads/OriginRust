@@ -1520,6 +1520,21 @@ pub enum DecimateFilterArg {
     Fir,
 }
 
+/// Wavelet extension mode (Origin's `ext`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum WaveletExtArg {
+    Periodic,
+    /// Zero-padded (Origin's `pad0`).
+    Pad0,
+}
+
+/// Wavelet threshold rule of Denoise (Origin's `thrt`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum WaveletThresholdArg {
+    Custom,
+    Sqtwolog,
+}
+
 /// Trace interpolation method (Origin's names).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum TraceMethodArg {
@@ -2003,6 +2018,61 @@ pub enum AnalyzeTool {
         /// FIR filter: half width of the smoothing, 8 to 60.
         #[arg(long, default_value_t = 30)]
         order: usize,
+    },
+    /// One level of the discrete wavelet transform of each column (Origin's Signal Processing >
+    /// Wavelet > Decompose, `dwt`): approximation and detail coefficients in a new sheet.
+    WaveletDecompose {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// haar, db2..db10, b11, b13, b15, b22, b24, b26, b28, b31, b33, b35, b37.
+        #[arg(long, default_value = "haar")]
+        wavelet: String,
+        #[arg(long, value_enum, default_value_t = WaveletExtArg::Periodic)]
+        ext: WaveletExtArg,
+    },
+    /// Rebuild a signal from approximation coefficients (the column) and detail coefficients
+    /// (Origin's Wavelet > Reconstruction, `idwt`).
+    WaveletReconstruct {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The column of detail coefficients.
+        #[arg(long = "with")]
+        detail: String,
+        #[arg(long, default_value = "haar")]
+        wavelet: String,
+        #[arg(long, value_enum, default_value_t = WaveletExtArg::Periodic)]
+        ext: WaveletExtArg,
+    },
+    /// Wavelet denoising (Origin's Wavelet > Denoise, `wtdenoise`): hard threshold of the detail
+    /// coefficients of levels 1 to LEVEL, X and the denoised Y in a new sheet.
+    WaveletDenoise {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, default_value = "haar")]
+        wavelet: String,
+        #[arg(long, value_enum, default_value_t = WaveletExtArg::Periodic)]
+        ext: WaveletExtArg,
+        #[arg(long, value_enum, default_value_t = WaveletThresholdArg::Custom)]
+        threshold: WaveletThresholdArg,
+        /// Levels to threshold, 1 to 7.
+        #[arg(long, default_value_t = 1)]
+        level: usize,
+        /// Threshold of every level in percent of the largest coefficient (custom only).
+        #[arg(long, default_value_t = 50.0)]
+        percent: f64,
+    },
+    /// Wavelet smoothing (Origin's Wavelet > Smooth, `wtsmooth`): the last CUTOFF percent of the
+    /// detail coefficients are dropped; X and the smoothed Y in a new sheet.
+    WaveletSmooth {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, default_value = "haar")]
+        wavelet: String,
+        #[arg(long, value_enum, default_value_t = WaveletExtArg::Periodic)]
+        ext: WaveletExtArg,
+        /// Cutoff in percent.
+        #[arg(long, default_value_t = 20.0)]
+        cutoff: f64,
     },
     /// Resample each curve at evenly spaced points along its path (Origin's Mathematics > Trace
     /// Interpolation), for curves whose X is not monotonic such as a CV loop. The results, with

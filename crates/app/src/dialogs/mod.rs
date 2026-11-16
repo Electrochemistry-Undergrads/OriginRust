@@ -61,4 +61,5 @@ pub mod straight_line;
 pub mod text_object;
 pub mod trendline;
 pub mod user_templates;
+pub mod wavelet;
 pub mod xyz_options;

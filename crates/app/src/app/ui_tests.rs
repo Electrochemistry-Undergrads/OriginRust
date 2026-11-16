@@ -1780,6 +1780,58 @@ fn decimation_opens_from_signal_processing_and_writes_the_kept_points_to_a_new_s
     assert_eq!(h.state().doc.undo_label(), Some("Decimation"));
 }
 
+/// Opens Analysis > Signal Processing > Wavelet > `item` on a fresh sample sheet (4 rows) and presses OK.
+fn run_wavelet_item(item: &str) -> Harness<'static, SheafApp> {
+    let mut h = start(vec![data_file(&format!("wavelet-{}", item.trim_end_matches('.')))]);
+    show_window(&mut h, "Book1 - sample.csv");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "Wavelet", item]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{item} ran and closed its window");
+    h
+}
+
+#[test]
+fn wavelet_decompose_and_reconstruct_open_from_signal_processing_and_write_their_sheets() {
+    let h = run_wavelet_item("Decompose...");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("DWT")).expect("a result sheet");
+    let names: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["DWT_CA1", "DWT_CD1", "DWT_CA2", "DWT_CD2"],
+        "two coefficient columns for each of the two inputs"
+    );
+    assert_eq!(sheet.columns[0].numeric().unwrap().len(), 2, "four rows give two coefficients");
+    assert_eq!(sheet.columns[0].comments, "Approx Coeff of Haar dwt on B");
+    assert_eq!(h.state().doc.undo_label(), Some("Wavelet decomposition"));
+
+    // The first column of the sample sheet, t = 1..4, is the "detail" of the reconstruction of B.
+    let h = run_wavelet_item("Reconstruction...");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("IDWT")).expect("a result sheet");
+    assert_eq!(sheet.columns[0].long_name, "IDWT_Result1");
+    assert_eq!(sheet.columns[0].numeric().unwrap().len(), 8, "four coefficients give eight points");
+    assert_eq!(h.state().doc.undo_label(), Some("Wavelet reconstruction"));
+}
+
+#[test]
+fn wavelet_denoise_and_smooth_open_from_signal_processing_and_write_their_sheets() {
+    let h = run_wavelet_item("Denoise...");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("WTDenoise")).expect("a result sheet");
+    assert_eq!(sheet.columns[1].long_name, "Denoised Y1");
+    assert_eq!(sheet.columns[1].comments, "1 level(s) 50% threshold Haar denoise of B");
+    assert_eq!(sheet.columns[1].numeric().unwrap().len(), 4);
+    assert_eq!(h.state().doc.undo_label(), Some("Wavelet denoising"));
+
+    let h = run_wavelet_item("Smooth...");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("WTSmooth")).expect("a result sheet");
+    assert_eq!(sheet.columns[1].long_name, "WT Smooth Y1");
+    assert_eq!(h.state().doc.undo_label(), Some("Wavelet smoothing"));
+}
+
 #[test]
 fn fft_filters_open_from_signal_processing_and_add_a_column_per_input() {
     let mut h = start(vec![data_file("fftfilter")]);

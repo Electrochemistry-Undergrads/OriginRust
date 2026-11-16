@@ -1,7 +1,11 @@
 # T96: Wavelets (B8 slice): Decompose, Reconstruction, Denoise, Smooth, Continuous Wavelet
 
-**Status:** open; claimed 2026-11-16 (Claude Windows, branch `wavelets`, worktree `.claude/worktrees/wavelets`). Origin 2016 measured
-the same day (step 1 done: `docs/spec/analysis-tools.md` section 19, fixture `tools/origin-ref/t96/t96-origin.json`); nothing is built.
+**Status:** open (4 of 5 items built); claimed 2026-11-16 (Claude Windows, branch `wavelets`, worktree `.claude/worktrees/wavelets`). Origin 2016 measured
+the same day (`docs/spec/analysis-tools.md` section 19, fixture `tools/origin-ref/t96/t96-origin.json`). Built: Decompose, Reconstruction, Denoise and Smooth
+(`crates/calc/src/wavelet.rs`, `crates/core/src/analysis/wavelet.rs`, `crates/app/src/dialogs/wavelet.rs`, `sheaf analyze wavelet-decompose | wavelet-reconstruct |
+wavelet-denoise | wavelet-smooth`, MCP `wavelet_decompose | wavelet_denoise | wavelet_smooth`; tests `crates/calc/tests/origin_wavelet.rs`). Continuous Wavelet
+stays grey (steps 4 and 5). Open corners kept visible in the windows: `sqtwolog` is a fit to Origin's brackets, Denoise's first and last `L - 2` samples can
+differ, Smooth is exact for periodic power-of-two lengths only, odd intermediate lengths of a periodic multi-level run are refused (Origin accepts n = 100).
 **Size:** L. **Spec:** `docs/spec/analysis-tools.md` section 19 (19.1 wavelets, 19.2 `dwt`, 19.3 `idwt`, 19.4 `wtdenoise`,
 19.5 `wtsmooth`, 19.6 `cwt`, 19.7 windows, 19.8 not measured).
 **Inventory:** Analysis > Signal Processing > Wavelet: Decompose... · Reconstruction... · Denoise... · Smooth... · Continuous
@@ -28,7 +32,7 @@ when it matches the spec:
   (length `2N-L+2`); unequal lengths follow `ca`. Output column `IDWT_Result1`.
 - **`wtdenoise`**: levels 1 to `level` of the periodic or zero-padded decomposition, **hard threshold, one common
   `T = thrd/100 * max|d|` (custom, `>=`)**, approximation untouched; `sqtwolog` has a fixed `T` that depends only on `n` (not
-  found: table of brackets in the fixture, fit `0.6595 sqrt(2 ln(n/2))` for `n >= 256`, about 1.88 below). Level limit:
+  found: table of brackets in the fixture, fit `0.6592 sqrt(2 ln(n/2))` for `n >= 256`, about 1.88 below). Level limit:
   periodic `floor(log2 n) - 1`, zero-padded `floor(log2 n)`; Haar with zero-padded refused for power-of-two lengths.
   A boundary effect of `L - 2` samples at each end in some cases is not explained (19.4).
 - **`wtsmooth`**: decomposition to the deepest level, detail coefficients laid out coarsest first, **the last

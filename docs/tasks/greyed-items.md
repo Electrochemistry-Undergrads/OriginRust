@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **330 greyed items: 231 in the menu bar, 19 on the toolbars, 80 in context menus.**
+original inventory baseline. This is not a new runtime audit. **326 greyed items: 227 in the menu bar, 19 on the toolbars, 80 in context menus.**
 
 ## How to read and keep this file
 
@@ -58,7 +58,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T82` | 0 |
 | `T83` | 0 |
 | `T91` | 0 |
-| `T96` | 5 |
+| `T96` | 1 |
 | `B2` | 33 |
 | `B3` | 19 |
 | `B4` | 19 |
@@ -76,7 +76,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 69 items, backlog packages (`B`) 241, not planned (`N`) 20.
+Briefs (`T`) hold 65 items, backlog packages (`B`) 241, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -145,7 +145,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B14` Mathematics: Special Filter... · Inverse...
 - `B14` Signal Processing > FFT: 2D FFT... · 2D IFFT...
 - `T57` Signal Processing: Deconvolution... · STFT...
-- `T96` Signal Processing > Wavelet: Decompose... · Reconstruction... · Denoise... · Smooth... · Continuous Wavelet...
+- `T96` Signal Processing > Wavelet: Continuous Wavelet...
 - `B8` Peaks and Baseline: Multiple Peak Fit · Batch Peak Analysis Using Theme...
 
 ### Image

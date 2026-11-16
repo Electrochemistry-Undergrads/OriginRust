@@ -336,7 +336,7 @@ fn power_puts_its_workbook_into_the_session_project() {
 #[test]
 fn mcp_defaults_equal_the_command_line_defaults() {
     // (subcommand, extra arguments, MCP tool, MCP options)
-    let cases: [(&str, &[&str], &str, serde_json::Value); 16] = [
+    let cases: [(&str, &[&str], &str, serde_json::Value); 19] = [
         ("integrate", &[], "integrate", serde_json::json!({})),
         ("smooth", &[], "smooth", serde_json::json!({})),
         ("differentiate", &[], "differentiate", serde_json::json!({})),
@@ -349,6 +349,14 @@ fn mcp_defaults_equal_the_command_line_defaults() {
         ("median-filter", &[], "median_filter", serde_json::json!({})),
         ("decimate", &[], "decimate", serde_json::json!({})),
         ("decimate", &["--filter", "fir"], "decimate", serde_json::json!({"filter": "fir"})),
+        ("wavelet-decompose", &[], "wavelet_decompose", serde_json::json!({})),
+        (
+            "wavelet-denoise",
+            &["--wavelet", "db4", "--ext", "pad0", "--level", "2"],
+            "wavelet_denoise",
+            serde_json::json!({"wavelet": "db4", "ext": "pad0", "level": 2}),
+        ),
+        ("wavelet-smooth", &["--cutoff", "30"], "wavelet_smooth", serde_json::json!({"cutoff": 30.0})),
         ("translate", &["--by", "5"], "translate", serde_json::json!({"by": 5.0})),
         ("peaks", &[], "find_peaks", serde_json::json!({})),
         ("stats", &[], "statistics", serde_json::json!({})),

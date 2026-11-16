@@ -1433,10 +1433,11 @@ keeps `>=` and accepts that difference.
   scale with the data (the same signal times 0.1, 1 and 10 gives the same `T`) and depends only on `n`. Measured by
   dropped-below and kept-above brackets on designed signals (db2, periodic, level 1; `sqtwolog_threshold_brackets` in the
   fixture): n = 128: 1.861 to 1.908; 256: 2.0526 to 2.0600; 512: 2.1847 to 2.1959; 1024: 2.3269 to 2.3302; 2048: 2.4377 to
-  2.4593; the brackets for n = 24, 32, 48, 64, 96 are wider (1.6 to 2.2) and all contain 1.88. For n >= 256, `T = 0.6595 sqrt(2 ln(n/2))` fits all four brackets; for n <= 128
+  2.4593; the brackets for n = 24, 32, 48, 64, 96 are wider (1.6 to 2.2) and all contain 1.88. For n >= 256, `T = 0.6592 sqrt(2 ln(n/2))` fits all four brackets (the factor must lie in 0.6590 to 0.6594); for n <= 128
   `T` is about 1.88 and flat. **The rule behind `T` is not found** (it is not the universal threshold `sigma sqrt(2 ln n)`: no
   `sigma` from the data enters). Sheaf's choice until it is found: the brackets as a table for the lengths measured, the fit
   above beyond 2048, and a note in the dialog's description line.
+- **Zero-padded denoise** (db4, level 2, `custom` 50, 128 points) equals the model built on the zero-padded `dwt` of 19.2 with each level's reconstruction cut back to the length it came from (67 samples at level 1: the 68 that `idwt` gives lose the last one), to 4e-16.
 - **Boundary samples.** The first and last `L - 2` samples of the output differ from the model in some cases: six designed
   signals (db2, periodic, level 1, `thrd` 50: one coefficient `d[0] = 10` kept; `d[0] = 3` dropped next to a kept 10; with
   approximation `a[0] = 5`) differ at samples 0, 1, 14, 15 of 16 by up to 0.9 (`denoise_boundary` in the fixture), while the same
@@ -1456,6 +1457,7 @@ the approximation only. It is a position rule, not a size rule: large coefficien
 (db2, periodic, n = 128, noisy signal, cutoff 0, 5, 10, 20, 30, 50, 70, 90, 100, equal to 1e-15, except as listed next).
 
 - n = 128 with cutoff 0 and 1 gave `K = 2`, not 0 or 1 (Haar, DB2, DB4, Bior1.3); n = 64 and n = 100 with cutoff 0 return the input.
+- Zero-padded DB2, n = 128, cutoff 0: `K = 3` (found from the fixture by trying `K`; the periodic corner is 2). Sheaf reproduces both for n = 128 and cutoff 0 and 1.
 - Zero-padded: depth `floor(log2 n)`, `N` the sum of the coefficient counts (n = 128, DB2: depth 7, N = 140; cutoff 50 gave
   `K = 70`, cutoff 100 gave 140), but n = 100 zero-padded at 50 zeroed exactly the 51 finest coefficients, not
   `floor(0.5 * 112)`, and periodic n = 100 (odd length 25 at level 2) has no exact fit yet. Open.

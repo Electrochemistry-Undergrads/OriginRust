@@ -55,6 +55,21 @@ fn needed(name: &'static str, ty: &'static str, description: &'static str) -> Op
     OptionDesc { name, ty, default: Value::Null, description, required: true, choices: &[] }
 }
 
+/// Option names of the 21 wavelets.
+const WAVELETS: &[&str] = &[
+    "haar", "db2", "db3", "db4", "db5", "db6", "db7", "db8", "db9", "db10", "b11", "b13", "b15", "b22", "b24", "b26",
+    "b28", "b31", "b33", "b35", "b37",
+];
+
+fn wavelet_options(o: &Opts) -> Result<(analysis::Wavelet, analysis::WaveletExtension)> {
+    let wavelet = analysis::Wavelet::parse(&o.pick("wavelet", "haar", WAVELETS)?).expect("a listed wavelet");
+    let extension = match o.pick("ext", "periodic", &["periodic", "pad0"])?.as_str() {
+        "periodic" => analysis::WaveletExtension::Periodic,
+        _ => analysis::WaveletExtension::ZeroPadded,
+    };
+    Ok((wavelet, extension))
+}
+
 /// The largest value of an integer option such as a window, an order or a polynomial degree.
 const OPTION_CAP: usize = 10_000;
 /// The largest number of rows an option may ask for: points of a result, a decimation factor.
@@ -268,6 +283,37 @@ pub fn registry() -> Vec<ToolDesc> {
             int("factor", 2, "Keep every factor-th point."),
             choice("filter", "none", &["none", "ave", "fir"], "Filter applied first."),
             int("order", 30, "FIR filter order (8 to 60)."),
+        ],
+        None,
+    );
+    add(
+        "wavelet_decompose",
+        "One level of the discrete wavelet transform of each curve: approximation and detail coefficients in a new sheet.",
+        vec![
+            choice("wavelet", "haar", WAVELETS, "Wavelet (Origin's 21: Haar, DB2..DB10, Bior1.1..3.7)."),
+            choice("ext", "periodic", &["periodic", "pad0"], "Extension mode; periodic needs an even length."),
+        ],
+        None,
+    );
+    add(
+        "wavelet_denoise",
+        "Wavelet denoising of each curve: hard threshold of the detail coefficients of levels 1 to level.",
+        vec![
+            choice("wavelet", "haar", WAVELETS, "Wavelet."),
+            choice("ext", "periodic", &["periodic", "pad0"], "Extension mode."),
+            choice("threshold", "custom", &["custom", "sqtwolog"], "custom: percent of the largest coefficient."),
+            int("level", 1, "Levels to threshold (1 to 7; the length limits it)."),
+            num("percent", 50.0, "Threshold of every level in percent of the largest coefficient (custom)."),
+        ],
+        None,
+    );
+    add(
+        "wavelet_smooth",
+        "Wavelet smoothing of each curve: the last cutoff percent of the detail coefficients are dropped.",
+        vec![
+            choice("wavelet", "haar", WAVELETS, "Wavelet."),
+            choice("ext", "periodic", &["periodic", "pad0"], "Extension mode."),
+            num("cutoff", 20.0, "Cutoff in percent."),
         ],
         None,
     );
@@ -862,6 +908,32 @@ pub fn build(name: &str, options: &Map<String, Value>) -> Result<Job> {
                 order: o.usize_up_to("order", 30, ROW_CAP)?,
             };
             Job::Tool(Tool::Decimate(analysis::DecimateSpec { options }))
+        }
+        "wavelet_decompose" => {
+            let (wavelet, extension) = wavelet_options(&o)?;
+            Job::Tool(Tool::WaveletDecompose(analysis::WaveletDecomposeSpec { wavelet, extension }))
+        }
+        "wavelet_denoise" => {
+            let (wavelet, extension) = wavelet_options(&o)?;
+            let threshold = match o.pick("threshold", "custom", &["custom", "sqtwolog"])?.as_str() {
+                "custom" => analysis::WaveletThresholdKind::Custom,
+                _ => analysis::WaveletThresholdKind::SqtwoLog,
+            };
+            Job::Tool(Tool::WaveletDenoise(analysis::WaveletDenoiseSpec {
+                wavelet,
+                extension,
+                threshold,
+                level: o.usize_up_to("level", 1, 64)?,
+                percent: o.num("percent", 50.0)?,
+            }))
+        }
+        "wavelet_smooth" => {
+            let (wavelet, extension) = wavelet_options(&o)?;
+            Job::Tool(Tool::WaveletSmooth(analysis::WaveletSmoothSpec {
+                wavelet,
+                extension,
+                cutoff: o.num("cutoff", 20.0)?,
+            }))
         }
         "translate" => {
             let shift = match (o.opt_num("by")?, o.opt_num("at")?, o.opt_num("to")?) {

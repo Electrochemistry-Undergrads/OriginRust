@@ -59,6 +59,12 @@ pub enum Job {
         other: String,
         options: analysis::CoherenceOptions,
     },
+    /// Wavelet reconstruction; the detail column is looked up once the project is loaded.
+    WaveletReconstruct {
+        detail: String,
+        wavelet: sheaf_core::analysis::Wavelet,
+        extension: sheaf_core::analysis::WaveletExtension,
+    },
     /// Curve math; the reference column is looked up once the project is loaded.
     Math {
         op: analysis::CurveOp,
@@ -253,6 +259,10 @@ pub fn run_job_to(project: &mut Project, target: &Target, job: Job, output: &ana
         Job::Coherence { other, options } => {
             let other = named_columns(project, book, sheet, std::slice::from_ref(&other))?[0];
             Tool::Coherence(analysis::CoherenceSpec { other, options })
+        }
+        Job::WaveletReconstruct { detail, wavelet, extension } => {
+            let detail = named_columns(project, book, sheet, std::slice::from_ref(&detail))?[0];
+            Tool::WaveletReconstruct(analysis::WaveletReconstructSpec { detail, wavelet, extension })
         }
         Job::Ifft { imaginary, options, auto_interval } => {
             let imaginary = match imaginary {

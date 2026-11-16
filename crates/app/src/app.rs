@@ -25,6 +25,7 @@ use crate::dialogs::import_theme::Themed;
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::label_panels::{LabelPanelsDialog, Outcome as LabelPanelsOutcome};
 use crate::dialogs::mask_condition::MaskConditionDialog;
+use crate::dialogs::multi_y::{MultiYDialog, Outcome as MultiYOutcome};
 use crate::dialogs::power::{PowerDialog, PowerOutcome};
 use crate::dialogs::printing::{PageSetupDialog, PageSetupOutcome, PreviewOutcome, PrintPreview};
 use crate::dialogs::recovery::{RecoveryChoice, RecoveryOffer};
@@ -154,6 +155,7 @@ pub struct SheafApp {
     shape_dialog: Option<ShapeDialog>,
     slope_dialog: Option<SlopeDialog>,
     comparison_plot: Option<ComparisonPlotDialog>,
+    multi_y: Option<MultiYDialog>,
     set_values: Option<SetValuesDialog>,
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
@@ -254,6 +256,7 @@ impl SheafApp {
             shape_dialog: None,
             slope_dialog: None,
             comparison_plot: None,
+            multi_y: None,
             set_values: None,
             analysis: None,
             fit: None,
@@ -1752,6 +1755,14 @@ impl SheafApp {
                     self.warn("Select at least one numeric Y column to plot by label.");
                 }
             }
+            Action::MultiYAxes { book, columns } => {
+                let columns = self.plot_y_columns(book, columns, Template::DoubleY);
+                if columns.is_empty() {
+                    self.warn("Nothing to plot: select one or more numeric Y columns");
+                } else {
+                    self.multi_y = Some(MultiYDialog::new(columns));
+                }
+            }
             Action::ComparisonPlot { book, sheet } => {
                 let sheet = sheet.or_else(|| self.doc.project().workbook(book).map(|b| b.active_sheet));
                 match sheet {
@@ -3053,6 +3064,7 @@ impl SheafApp {
             || self.shape_dialog.is_some()
             || self.slope_dialog.is_some()
             || self.comparison_plot.is_some()
+            || self.multi_y.is_some()
             || self.set_values.is_some()
             || self.analysis.is_some()
             || self.fit.is_some()
@@ -3345,6 +3357,17 @@ impl SheafApp {
                     self.label_panels = None;
                     self.focus(graph);
                     self.say("Created panels by label");
+                }
+            }
+        }
+        if let Some(d) = &mut self.multi_y {
+            match d.show(ctx, &mut self.doc) {
+                MultiYOutcome::Open => {}
+                MultiYOutcome::Closed => self.multi_y = None,
+                MultiYOutcome::Created(graph) => {
+                    self.multi_y = None;
+                    self.focus(graph);
+                    self.say("Created multiple Y axes graph");
                 }
             }
         }

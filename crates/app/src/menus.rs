@@ -161,6 +161,7 @@ pub enum Cmd {
     LabelPanels,
     /// Statistics > Multiple Comparisons Plot... (T64).
     ComparisonPlot,
+    MultiYAxes,
     /// Add / Edit Trendline... on a plot of the active layer.
     Trendline {
         layer: usize,
@@ -815,10 +816,14 @@ fn plot_menu() -> Vec<Entry> {
         sep(),
         sub(
             "&Multi-Y",
-            with(
-                vec![item("&Double-Y", Cmd::Plot(Template::DoubleY))],
-                &["3Ys Y-YY", "3Ys Y-Y-Y", "4Ys Y-YYY", "4Ys YY-YY", "Multiple Y Axes..."],
-            ),
+            vec![
+                item("&Double-Y", Cmd::Plot(Template::DoubleY)),
+                item("3Ys Y-YY", Cmd::Plot(Template::Multi3YYy)),
+                item("3Ys Y-Y-Y", Cmd::Plot(Template::Multi3YYY)),
+                item("4Ys Y-YYY", Cmd::Plot(Template::Multi4YYyy)),
+                item("4Ys YY-YY", Cmd::Plot(Template::Multi4YyYy)),
+                item("Multiple Y Axes...", Cmd::MultiYAxes),
+            ],
         ),
         sub(
             "Y-offset/&Waterfall",
@@ -2252,6 +2257,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::PlotPanels { book: book?, columns: c.selected.to_vec(), rows: *rows, cols: *cols }
         }
         Cmd::StackPanels => Action::StackPanels { book: book?, columns: c.selected.to_vec() },
+        Cmd::MultiYAxes => Action::MultiYAxes { book: book?, columns: c.selected.to_vec() },
         Cmd::ComparisonPlot => Action::ComparisonPlot { book: book?, sheet: None },
         Cmd::LabelPanels => Action::LabelPanels { book: book?, columns: c.selected.to_vec() },
         Cmd::Trendline { layer, plot, edit } => {

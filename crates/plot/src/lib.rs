@@ -77,6 +77,8 @@ mod lollipop_tests;
 #[cfg(test)]
 mod margin_tests;
 #[cfg(test)]
+mod multi_y_tests;
+#[cfg(test)]
 mod multipage_tests;
 #[cfg(test)]
 mod offset_axis_tests;

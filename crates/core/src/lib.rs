@@ -27,6 +27,7 @@ pub mod history;
 pub mod ids;
 pub mod layers;
 pub mod localtime;
+pub mod multi_y;
 pub mod notes;
 pub mod page_setup;
 pub mod panels;

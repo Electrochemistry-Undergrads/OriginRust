@@ -837,3 +837,18 @@ fn automatic_legend_opj_rectangle_keeps_the_measured_upper_left_anchor() {
         assert!((y - height / (2.0 * fh) - (1.0 - (12.043_552_036 - 1.0) / 10.0)).abs() < 0.001);
     }
 }
+
+#[test]
+fn multi_y_layers_are_written_as_ordinary_layers_and_the_axis_offsets_are_named() {
+    let mut p = source();
+    let c = ids(&p);
+    let ys = [c[1], c[2], c[3]];
+    let id = p.plot_columns(Template::Multi3YYy, &ys).unwrap();
+    let (imp, out) = round_trip(&p);
+    assert_eq!(imp.graphs[0].layers.len(), 3, "one ordinary layer per Y axis");
+    assert!(out.warnings.iter().any(|w| w.contains("position of a Y axis away from the frame")), "{:?}", out.warnings);
+    // Without a displaced axis nothing is named.
+    p.graph_mut(id).unwrap().layers.iter_mut().for_each(|l| l.y_axis.offset_pct = 0.0);
+    let (_, out) = round_trip(&p);
+    assert!(!out.warnings.iter().any(|w| w.contains("away from the frame")), "{:?}", out.warnings);
+}

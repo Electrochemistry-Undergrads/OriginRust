@@ -26,6 +26,7 @@ mod layers;
 mod legend_position;
 mod live;
 mod lollipop;
+mod multi_y;
 mod offset_multipliers;
 mod parallel;
 mod recent;

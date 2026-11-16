@@ -67,7 +67,7 @@ All six are **open**. The older index below retains implementation history and p
 | [T58](T58-graph-text-formatting.md) | 1, P0 | L | Graph text, escapes, editor and shared Format toolbar dispatch |
 | [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell format model/dialog; toolbar adapter after T58 slice 3 |
 | [T60](T60-merge-graphs-layer-management.md) | 2, P0 | L | Merge finished graphs, arrange/link layers and fit page/layer |
-| [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Add/delete layers, inset and 3/4-Y templates; coordinate with T60; claimed 2026-11-15 (`layers-multi-y`, Claude Windows) |
+| [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Add/delete layers, inset and 3/4-Y templates; coordinate with T60; claimed 2026-11-15 (`layers-multi-y`, Claude Windows); slices 1-3 done, three layer-icon items and Open Dialog... left |
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Remaining offset menu, Cumulative, stacked histograms, waterfall colours |
 | [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring; claim letters A–K independently |
 

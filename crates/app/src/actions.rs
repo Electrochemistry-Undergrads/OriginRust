@@ -393,6 +393,11 @@ pub enum Action {
         book: WindowId,
         columns: Vec<ColumnId>,
     },
+    /// Plot > Multi-Y > Multiple Y Axes... (T61) for the selected columns (none: the sheet's Y columns).
+    MultiYAxes {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     /// Multiple Comparisons Plot... (T64) of a report sheet (`None`: the workbook's active sheet).
     ComparisonPlot {
         book: WindowId,

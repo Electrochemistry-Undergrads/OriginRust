@@ -24,6 +24,7 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Analyze(a) => crate::analyze::analyze(a),
         Command::Fit(a) => crate::fit::fit(*a),
         Command::Simulate(a) => crate::simulate::simulate(a),
+        Command::SimulateSurface(a) => crate::simulate_surface::simulate_surface(a),
         Command::MergeGraphs(a) => crate::merge::merge_graphs(a),
     }
 }

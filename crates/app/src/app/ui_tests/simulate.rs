@@ -29,11 +29,11 @@ fn type_gauss(h: &mut Harness<'static, SheafApp>) {
 }
 
 #[test]
-fn simulate_curve_is_in_the_fitting_menu_and_simulate_surface_stays_grey() {
+fn simulate_curve_and_simulate_surface_are_in_the_fitting_menu() {
     let mut h = start(vec![data_file("simulate-menu")]);
     menu_path(&mut h, &["Analysis", "Fitting"]);
     assert!(entry_enabled(&h, "Simulate Curve..."));
-    assert!(!entry_enabled(&h, "Simulate Surface..."));
+    assert!(entry_enabled(&h, "Simulate Surface..."));
     click(&mut h, "Simulate Curve...");
     assert!(h.state().simulate.is_some());
     assert!(h.state().simulate.as_ref().unwrap().preview_for_test().is_some());
@@ -187,5 +187,64 @@ fn a_range_that_cannot_be_used_is_refused_with_a_message_and_changes_nothing() {
     assert_eq!(project(&h), &before);
     assert_eq!(h.state().doc.revision(), revision);
     click(&mut h, "Cancel");
+    assert_eq!(project(&h), &before);
+}
+
+/// Analysis > Fitting > Simulate Surface...: Origin's window opens on Gauss2D with its own values (fitting.md 16.1);
+/// OK writes the grid to a new workbook as one undo step.
+#[test]
+fn simulate_surface_opens_on_gauss2d_and_writes_a_new_workbook_in_one_undo_step() {
+    let mut h = start(vec![data_file("simsurface")]);
+    let before = project(&h).clone();
+    menu_path(&mut h, &["Analysis", "Fitting", "Simulate Surface..."]);
+    let d = h.state().simulate_surface.as_ref().expect("the window is open");
+    assert_eq!(d.function_for_test(), "Gauss2D");
+    assert_eq!(d.values_for_test(), [0.0, 1.0, 0.0, 0.3, 0.0, 0.3], "z0, A, xc, w1, yc, w2");
+    h.state_mut().simulate_surface.as_mut().unwrap().set_grid_for_test((-1.0, 1.0, 3), (-1.0, 1.0, 2), 0.0);
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().simulate_surface.is_none());
+    let p = project(&h);
+    assert_eq!(p.workbooks().count(), 2);
+    let made = p.workbooks().last().unwrap();
+    assert_eq!(made.sheets.len(), 1, "the empty first sheet is not left behind");
+    let sheet = &made.sheets[0];
+    assert_eq!(sheet.name, "SimulateSurface1");
+    let names: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
+    assert_eq!(names, ["Simulated X1", "Simulated Y1", "Simulated Z1"]);
+    assert_eq!(
+        sheet.columns.iter().map(|c| c.designation).collect::<Vec<_>>(),
+        [Designation::X, Designation::Y, Designation::Z]
+    );
+    assert_eq!(sheet.columns[0].numeric().unwrap(), [-1.0, 0.0, 1.0, -1.0, 0.0, 1.0]);
+    assert_eq!(sheet.columns[1].numeric().unwrap(), [-1.0, -1.0, -1.0, 1.0, 1.0, 1.0]);
+    let z = sheet.columns[2].numeric().unwrap();
+    // Gauss2D at (-1, -1) and (0, -1): the numbers Origin gives at noise 0 (fitting.md 16.2).
+    assert!((z[0] - 1.4945338524781e-05).abs() < 1e-17, "{}", z[0]);
+    assert!((z[1] - 0.0038659201394728).abs() < 1e-15, "{}", z[1]);
+    assert!(h.state().status.starts_with("Simulate surface"), "{}", h.state().status);
+    menu(&mut h, "Edit", "Undo Simulate surface");
+    assert_eq!(project(&h), &before);
+    menu(&mut h, "Edit", "Redo Simulate surface");
+    assert_eq!(project(&h).workbooks().count(), 2);
+}
+
+#[test]
+fn choosing_another_surface_function_brings_its_own_values_and_a_bad_grid_is_refused() {
+    let mut h = start(vec![data_file("simsurface-other")]);
+    let before = project(&h).clone();
+    menu_path(&mut h, &["Analysis", "Fitting", "Simulate Surface..."]);
+    h.state_mut().simulate_surface.as_mut().unwrap().choose_function_named("Rational2D");
+    settle(&mut h);
+    let d = h.state().simulate_surface.as_ref().unwrap();
+    assert_eq!((d.function_for_test().as_str(), d.values_for_test().len()), ("Rational2D", 10));
+    assert_eq!(d.values_for_test()[0], 100.0);
+    h.state_mut().simulate_surface.as_mut().unwrap().set_grid_for_test((1.0, 1.0, 20), (-1.0, 1.0, 20), 0.0);
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().simulate_surface.is_some(), "OK is off while the grid is wrong");
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Cancel");
+    assert!(h.state().simulate_surface.is_none());
     assert_eq!(project(&h), &before);
 }

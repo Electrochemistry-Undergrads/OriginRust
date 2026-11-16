@@ -17,6 +17,7 @@ pub mod read;
 pub mod render;
 pub mod session;
 pub mod simulate;
+pub mod simulate_surface;
 pub mod tabular;
 pub mod themes;
 

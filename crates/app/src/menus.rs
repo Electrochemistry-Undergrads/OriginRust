@@ -248,6 +248,8 @@ pub enum Cmd {
     FitMore(FitMoreKind),
     /// Analysis > Fitting > Simulate Curve...
     SimulateCurve,
+    /// Analysis > Fitting > Simulate Surface...
+    SimulateSurface,
     /// The graph settings of the active layer on a tab.
     GraphProps(PropsTab),
     /// Graph > Layer Contents... (F12): Origin's own window for the plots of a layer; `None` is the
@@ -1366,7 +1368,7 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Nonlinear Surface Fit...", Cmd::Fit(FitKind::Surface)),
                 sep(),
                 item("Simulate Curve...", Cmd::SimulateCurve),
-                grey("Simulate Surface..."),
+                item("Simulate Surface...", Cmd::SimulateSurface),
                 sep(),
                 item("Exponential Fit...", Cmd::Fit(FitKind::Exponential)),
                 item("Single Peak Fit...", Cmd::Fit(FitKind::SinglePeak)),
@@ -2760,6 +2762,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         },
         // The window needs no data: with no workbook it makes a new one.
         Cmd::SimulateCurve => Action::SimulateCurve { book: c.book.or(c.curve.map(|(book, _)| book)) },
+        Cmd::SimulateSurface => Action::SimulateSurface { book: c.book.or(c.curve.map(|(book, _)| book)) },
         Cmd::FitMore(kind) => match (c.book, c.curve) {
             (Some(book), _) => Action::FitMore { book, column: c.selected.first().copied(), kind: *kind },
             (None, Some((book, y))) if c.kind == WindowKind::Graph => {

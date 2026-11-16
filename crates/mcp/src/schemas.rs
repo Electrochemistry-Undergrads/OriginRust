@@ -627,6 +627,41 @@ pub fn defs() -> Vec<Def> {
             ),
             example: json!({"function": "Gauss", "params": {"xc": 5, "w": 2, "A": 4}, "from": 0, "to": 10, "points": 101, "plot": true}),
         },
+        Def {
+            name: "simulate_surface",
+            description: "Simulate Surface: XYZ data of one of Origin's 22 surface functions (Chebyshev2D, Cosine, DoseResp2D, Exponential2D, Extreme2D, ExtremeCum, Fourier2D, Gauss2D, Gaussian2D, GaussCum, LogisticCum, LogNormal2D, Lorentz2D, Parabola2D, Plane, Poly2D, Polynomial2D, Power2D, Rational2D, RationalTaylor, Voigt2D, Voigt2DMod) on a grid, X changing fastest, as X, Y and Z columns of a new sheet (SimulateSurface1, ...). Parameters, ranges (default 20 points each) and noise not given are the values of Origin's window for the function (Gauss2D: -1 to 1, noise 10 %). Noise is a percentage of the mean of Z from a seeded generator.",
+            read_only: false,
+            mutates: true,
+            headless_only: false,
+            schema: obj(
+                vec![
+                    ("function", s("Surface function name, case does not matter. Default Gauss2D.")),
+                    (
+                        "params",
+                        json!({"type": "object", "additionalProperties": {"type": "number"},
+                            "description": "Parameter values by name, for example {\"xc\": 0.5, \"w1\": 0.2}."}),
+                    ),
+                    ("x_min", t("number", "X minimum (default: the function's range in Origin's window).")),
+                    ("x_max", t("number", "X maximum.")),
+                    ("x_points", t("integer", "Number of X points, at least 2 (default 20).")),
+                    ("y_min", t("number", "Y minimum (default: the function's range).")),
+                    ("y_max", t("number", "Y maximum.")),
+                    ("y_points", t("integer", "Number of Y points, at least 2 (default 20).")),
+                    (
+                        "noise",
+                        t(
+                            "number",
+                            "Noise level in percent of the mean of Z (default: the function's, 10 for Gauss2D, Gaussian2D, Voigt2D and Voigt2DMod, else 0).",
+                        ),
+                    ),
+                    ("seed", t("integer", "Seed of the noise (default 1).")),
+                    ("book", s(BOOK)),
+                    ("values", b("Put the X, Y and Z values in the reply (default true up to 1000 points).")),
+                ],
+                &[],
+            ),
+            example: json!({"function": "Gauss2D", "params": {"xc": 0.2}, "x_points": 10, "y_points": 10, "noise": 0}),
+        },
     ]
 }
 

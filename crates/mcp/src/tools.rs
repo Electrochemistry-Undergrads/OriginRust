@@ -190,6 +190,7 @@ pub fn call(server: &mut Ctx, name: &str, a: &Value) -> Res {
         "fit" => fit(server, a),
         "list_simulate_functions" => list_simulate_functions(a),
         "simulate_curve" => simulate_curve(server, a),
+        "simulate_surface" => simulate_surface(server, a),
         other => Err(ToolError::new(format!("unknown tool: {other}"))),
     }
 }
@@ -2019,6 +2020,67 @@ fn simulate_curve(s: &mut Ctx, a_raw: &Value) -> Res {
     if a.values.unwrap_or(points <= SIMULATE_VALUES) {
         out["x"] = json!(x.numeric().unwrap_or(&[]));
         out["y"] = json!(y.numeric().unwrap_or(&[]));
+    }
+    Ok(ToolOut::json(out))
+}
+
+// ----- simulate surface --------------------------------------------------------------
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields, default)]
+struct SimulateSurfaceArgs {
+    function: Option<String>,
+    params: BTreeMap<String, f64>,
+    x_min: Option<f64>,
+    x_max: Option<f64>,
+    x_points: Option<usize>,
+    y_min: Option<f64>,
+    y_max: Option<f64>,
+    y_points: Option<usize>,
+    noise: Option<f64>,
+    seed: Option<u64>,
+    book: Option<String>,
+    values: Option<bool>,
+}
+
+/// The shared simulation of `sheaf simulate-surface` (`sheaf_ops::simulate_surface::run`).
+fn simulate_surface(s: &mut Ctx, a_raw: &Value) -> Res {
+    let a: SimulateSurfaceArgs = args(a_raw)?;
+    check_names(s.project, a.book.as_deref(), None, &[])?;
+    let spec = sheaf_ops::simulate_surface::SimulateSurfaceOps {
+        function: a.function.clone().unwrap_or_default(),
+        params: a.params.iter().map(|(k, v)| format!("{k}={v}")).collect(),
+        x_min: a.x_min,
+        x_max: a.x_max,
+        x_points: a.x_points,
+        y_min: a.y_min,
+        y_max: a.y_max,
+        y_points: a.y_points,
+        noise: a.noise,
+        seed: a.seed,
+        book: book_name(s.project, a.book.as_deref())?,
+    };
+    let run = sheaf_ops::simulate_surface::run(s.project, &spec)?;
+    let project = &*s.project;
+    let ws = &project.workbook(run.book).expect("the run found it").sheets[run.result_sheet];
+    let (x, y, z) = (&ws.columns[0], &ws.columns[1], &ws.columns[2]);
+    let points = ws.row_count();
+    let mut out = json!({
+        "book": book_title(project, run.book),
+        "sheet": ws.name,
+        "x_column": qualified(project, x.id),
+        "y_column": qualified(project, y.id),
+        "z_column": qualified(project, z.id),
+        // The Z column's comment is the function's name (Origin's naming, fitting.md 16.2).
+        "function": z.comments,
+        "points": points,
+        "notes": run.report.notes,
+        "message": run.summary(project),
+    });
+    if a.values.unwrap_or(points <= SIMULATE_VALUES) {
+        out["x"] = json!(x.numeric().unwrap_or(&[]));
+        out["y"] = json!(y.numeric().unwrap_or(&[]));
+        out["z"] = json!(z.numeric().unwrap_or(&[]));
     }
     Ok(ToolOut::json(out))
 }

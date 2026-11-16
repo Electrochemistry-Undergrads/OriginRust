@@ -57,6 +57,7 @@ pub use roc::RocSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
 pub use sheaf_fit::simulate::Spacing as SimulateSpacing;
+pub use simsurface::SimulateSurfaceSpec;
 pub use simulate::{SimulateCurveSpec, SimulateX};
 pub use summary::{GraphArrangement, GraphSummarySpec};
 pub use survival::KaplanMeierSpec;
@@ -1000,6 +1001,9 @@ pub enum Tool {
     /// Analysis > Mathematics > XYZ Surface Area (T91, `docs/spec/analysis-tools.md` section 18): the columns are X, Y
     /// and Z, in this order; one row of results (area, points, triangles).
     XyzArea,
+    /// Analysis > Fitting > Simulate Surface (T91, `docs/spec/fitting.md` section 16): XYZ data of a surface fit function
+    /// on a grid, with noise, as X, Y and Z columns on a new sheet. Reads no data.
+    SimulateSurface(SimulateSurfaceSpec),
 }
 
 impl Tool {
@@ -1095,6 +1099,7 @@ impl Tool {
             Tool::PolygonArea => "Polygon area",
             Tool::SimulateCurve(_) => "Simulate curve",
             Tool::XyzArea => "XYZ surface area",
+            Tool::SimulateSurface(_) => "Simulate surface",
         }
     }
 
@@ -1161,6 +1166,7 @@ impl Tool {
             Tool::PolygonArea => "PolygonArea",
             Tool::SimulateCurve(_) => "Simulate",
             Tool::XyzArea => "XYZArea",
+            Tool::SimulateSurface(_) => "SimulateSurface",
             _ => "Result",
         }
     }
@@ -1834,6 +1840,7 @@ mod partcorr;
 mod power;
 mod rmanova;
 mod roc;
+mod simsurface;
 mod simulate;
 mod statistics;
 mod summary;
@@ -2006,6 +2013,7 @@ impl Project {
                 | Tool::GraphSummary(_)
                 | Tool::SimulateCurve(_)
                 | Tool::XyzArea
+                | Tool::SimulateSurface(_)
         );
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
@@ -2103,6 +2111,11 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 xy_graph = out.graph;
+            }
+            Tool::SimulateSurface(spec) => {
+                let out = simsurface::run(spec)?;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
             }
             Tool::XyzArea => {
                 let out = xyzarea::xyz_area(sheet, &request.columns, request.rows)?;

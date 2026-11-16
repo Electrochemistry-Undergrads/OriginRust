@@ -50,6 +50,7 @@ pub mod row_filter;
 pub mod sampling;
 pub mod set_values;
 pub mod shape_object;
+pub mod simsurface;
 pub mod simulate;
 pub mod slope_object;
 pub mod sort;

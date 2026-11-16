@@ -34,6 +34,9 @@ pub enum Command {
     /// Simulate Curve: the values of a built-in fit function for typed parameters, at X values from a range
     /// or from a column. Writes X and Y as delimited text or an Excel workbook, or adds them to a project.
     Simulate(SimulateArgs),
+    /// Simulate Surface: XYZ data of a surface fit function (the 22 of Origin's window) for typed parameters on a
+    /// grid, with optional noise. Writes X, Y and Z as delimited text or an Excel workbook, or adds them to a project.
+    SimulateSurface(SimulateSurfaceArgs),
     /// Merge Graph Windows: copy graphs of a project into the cells of one new graph (Origin's
     /// merge_graph defaults), then write it as a figure and/or save the project with it.
     MergeGraphs(MergeGraphsArgs),
@@ -323,6 +326,62 @@ pub struct SimulateArgs {
     pub graph: bool,
     /// Write the X and Y columns as delimited text (.tsv or .txt gives tabs, anything else commas) or, for a
     /// .xlsx path, as an Excel workbook. Without --output and --save the curve is printed.
+    #[arg(short, long, visible_alias = "export", value_name = "FILE")]
+    pub output: Option<PathBuf>,
+    /// Save the project with the new sheet to this file: .opj (also when no extension is given, with a
+    /// companion .opj.sheaf if the .opj cannot hold everything) or .sheaf.
+    #[arg(long, visible_alias = "project", value_name = "PROJECT")]
+    pub save: Option<PathBuf>,
+    #[command(flatten)]
+    pub read: ReadOptions,
+}
+
+/// `sheaf simulate-surface`: Analysis > Fitting > Simulate Surface without a window.
+#[derive(Args, Debug)]
+pub struct SimulateSurfaceArgs {
+    /// A data file, a .sheaf project or an Origin .opj or .opju project: the workbook that gets the new sheet.
+    /// Without it the surface is a project of its own.
+    pub input: Option<PathBuf>,
+    /// List the 22 functions with their parameters, ranges and noise levels of Origin's window, and exit.
+    #[arg(long)]
+    pub list: bool,
+    /// The surface function, Origin's name such as Gauss2D, Plane or Cosine (see --list). Case does not matter.
+    #[arg(short, long, default_value = "Gauss2D")]
+    pub function: String,
+    /// A parameter value, for example --param xc=0.5 (repeat the option or separate with commas). The parameters
+    /// left out keep the values of --list.
+    #[arg(short, long, value_delimiter = ',', value_name = "NAME=VALUE", allow_hyphen_values = true)]
+    pub param: Vec<String>,
+    /// X minimum (default: the function's range in Origin's window, Gauss2D -1).
+    #[arg(long, allow_hyphen_values = true)]
+    pub x_min: Option<f64>,
+    /// X maximum (default: the function's, Gauss2D 1).
+    #[arg(long, allow_hyphen_values = true)]
+    pub x_max: Option<f64>,
+    /// Number of X points (default 20).
+    #[arg(long)]
+    pub x_points: Option<usize>,
+    /// Y minimum (default: the function's).
+    #[arg(long, allow_hyphen_values = true)]
+    pub y_min: Option<f64>,
+    /// Y maximum (default: the function's).
+    #[arg(long, allow_hyphen_values = true)]
+    pub y_max: Option<f64>,
+    /// Number of Y points (default 20).
+    #[arg(long)]
+    pub y_points: Option<usize>,
+    /// Noise level in percent of the mean of Z (default: the function's, 10 for Gauss2D, Gaussian2D, Voigt2D and
+    /// Voigt2DMod, 0 for the others). The noise is Sheaf's seeded generator, not Origin's sequence.
+    #[arg(long)]
+    pub noise: Option<f64>,
+    /// Seed of the noise (default 1); the same seed gives the same noise.
+    #[arg(long)]
+    pub seed: Option<u64>,
+    /// For a project input: the workbook (default: the first one).
+    #[arg(long)]
+    pub book: Option<String>,
+    /// Write the X, Y and Z columns as delimited text (.tsv or .txt gives tabs, anything else commas) or, for a
+    /// .xlsx path, as an Excel workbook. Without --output and --save the data is printed.
     #[arg(short, long, visible_alias = "export", value_name = "FILE")]
     pub output: Option<PathBuf>,
     /// Save the project with the new sheet to this file: .opj (also when no extension is given, with a

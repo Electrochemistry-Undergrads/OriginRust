@@ -178,10 +178,20 @@ fn colors(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
     let label = egui::RichText::new("A").strong().color(Color32::from_rgb(color.r, color.g, color.b));
     let response = ui
         .menu_button(label, |ui| {
-            // A compact named palette; custom/persistent Origin palettes remain a separate feature.
+            // Shared named presets; the custom chooser below is worksheet-only.
             for (name, color) in object_format::PALETTE {
                 if ui.button(format!("Font Color: {name}")).clicked() {
                     actions.push(Action::FormatText(captured.request(Change::Color(color))));
+                    ui.close();
+                }
+            }
+            if captured.worksheet.is_some() {
+                ui.separator();
+                if ui.button("Font Color: Custom...").clicked() {
+                    use crate::dialogs::worksheet_color::{Kind, WorksheetColorDialog};
+                    if let Some(dialog) = WorksheetColorDialog::new(captured.clone(), Kind::Text) {
+                        actions.push(Action::WorksheetColorDialog(Box::new(dialog)));
+                    }
                     ui.close();
                 }
             }
@@ -242,6 +252,14 @@ fn worksheet_fill(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
                     actions.push(Action::FormatText(captured.request(Change::Fill(Some(color)))));
                     ui.close();
                 }
+            }
+            ui.separator();
+            if ui.button("Fill Color: Custom...").clicked() {
+                use crate::dialogs::worksheet_color::{Kind, WorksheetColorDialog};
+                if let Some(dialog) = WorksheetColorDialog::new(captured.clone(), Kind::Fill) {
+                    actions.push(Action::WorksheetColorDialog(Box::new(dialog)));
+                }
+                ui.close();
             }
         })
         .response;

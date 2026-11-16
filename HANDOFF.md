@@ -71,6 +71,18 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+T59 worksheet custom RGB colours (`codex/t59-custom-colors`, 2026-11-16): worksheet
+Font Color and Fill Color > Custom... accept opaque RGB bytes, preview a swatch and commit
+on OK/Enter; Cancel/Escape discard the draft. Native Colors/Custom and selected-cell effects
+were measured in Origin 2016 (GUI 3). Starting from the current manual colour is Sheaf policy.
+Existing captured range/revision/generation guards, no-op checks and one-step Undo preserve
+independent data/label styles and compact whole columns; `.sheaf` and `.opj` companion reopen
+retain both colours. Fmt, strict workspace/all-target Clippy, all 4,146 workspace tests (eight
+ignored), all 47 related UI regressions, inventory 330 and eight Python tooling tests pass,
+with unchanged source/goldens and inspected compact choosers from the tested executable.
+Own claim/window released by this push. T59 remains partial: worksheet category defaults,
+vertical alignment, sticky heights, Excel formats and full Classic/palette storage remain open.
+
 T91 (B8 slice, branch `fit-surface-more`, fitting.md 16-18, analysis-tools.md 18, Origin 2016 measured): Analysis >
 Fitting > Simulate Surface (22 surface functions, Origin's defaults and noise rule), Nonlinear Implicit Curve Fit
 (circle/ellipse by orthogonal distance, matches Origin's geometric fit), Compare Datasets (report unmeasured: pooled-fit
@@ -369,7 +381,6 @@ Python tooling tests and four inspected desktop captures pass with source hashes
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t59-custom-colors` | Codex Windows | T59 custom opaque RGB text/fill colours for worksheet Format toolbar; Native chooser measurements and existing range-request/Undo/stale-target/persistence behaviour | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` sequentially reused after shipped e068/all actors terminal; worksheet-only toolbar/format colour branches, new private worksheet colour dialog/helper, bounded ephemeral app state/action/show wiring + dialog registration, own UI tests/registry and GUI 3/workbook 13b/T59 metadata. Existing CellFormat/Change fields only. No graph Format/editor/custom-RGB T58 picker/palette helpers, Classic24 expansion, Core/model/IO/renderer/fonts/parser, T92 corner/display flags or general grid/layout/print (T27), calc/stats/fitting/MCP/formula-parameter labels/sampling/clipboard, reserved T26/T29/T16 item6 or ROOT pending files. Requested PRODUCT integration window 2026-11-16 08:20 through 08:45 Central Standard Time, CONDITIONAL on T61 publication/release first (otherwise defer, no competing hold). Respect T61 07:55-08:20; docs-only claims remain fine. Releases on publication, failure or deadline. |
 | `codex/multi-y-template-legends` | Codex Windows | T61 remainder: Origin-measured legend defaults for three/four-Y templates | claimed/refined 2026-11-16 after native controls; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`. Bounded core multi_y.rs defaults/template.rs + project.rs named-template construction + compatible LegendPosition top-left variant (graph.rs), plot legend placement, existing Legend position fields in app dialogs/graph_details.rs, .opj graph annotation writer/warning, isolated regressions/template goldens and T61/graphing docs. Necessary anchor expansion measured before code edits; no other model fields, layer management/contents, graph-view/shapes/actions, toolbar/menus, worksheet/T59/T90, fitting/stats/MCP, T58 editor/colours, reserved tasks or ROOT pending files. Requested final PRODUCT integration window 2026-11-16 07:55 through 08:20 Central Standard Time, CONDITIONAL on T58 custom RGB and ready T93 publication/release first (otherwise defer, no competing hold). Earlier tentative 07:25 request deferred. Respect T58 07:13-07:33; docs-only claims remain fine. Releases on publication, failure or deadline. |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |

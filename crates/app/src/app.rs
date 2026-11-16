@@ -45,6 +45,7 @@ use crate::dialogs::stack_panels::{Outcome as StackPanelsOutcome, StackPanelsDia
 use crate::dialogs::straight_line::StraightLineDialog;
 use crate::dialogs::text_object::TextDialog;
 use crate::dialogs::trendline::{Outcome as TrendlineOutcome, TrendlineDialog};
+use crate::dialogs::worksheet_color::WorksheetColorDialog;
 use crate::graph_scale::{self, ScaleTool};
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi, Sel};
@@ -188,6 +189,7 @@ pub struct SheafApp {
     cond_format: Option<CondFormatDialog>,
     pub(crate) cell_note: Option<CellNoteDialog>,
     pub(crate) cell_format: Option<CellFormatDialog>,
+    pub(crate) worksheet_color: Option<WorksheetColorDialog>,
     reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
@@ -321,6 +323,7 @@ impl SheafApp {
             cond_format: None,
             cell_note: None,
             cell_format: None,
+            worksheet_color: None,
             reshape: None,
             export: None,
             export_sheet: None,
@@ -855,6 +858,7 @@ impl SheafApp {
         self.cond_format = None;
         self.cell_note = None;
         self.cell_format = None;
+        self.worksheet_color = None;
         self.reshape = None;
         self.sort = None;
         self.sheet_name = None;
@@ -1728,6 +1732,11 @@ impl SheafApp {
                 self.clear_changed_shape_selections(selected, None);
             }
             Action::UndoAiChanges => self.undo_ai_changes(ctx),
+            Action::WorksheetColorDialog(dialog) => {
+                if self.text_format().is_some_and(|state| dialog.matches(&state)) {
+                    self.worksheet_color = Some(*dialog);
+                }
+            }
             Action::FormatText(request) => {
                 if self.text_format().is_some_and(|state| state.target == request.target) {
                     crate::text_format::apply(&mut self.doc, request);
@@ -3928,6 +3937,7 @@ impl SheafApp {
             || self.cond_format.is_some()
             || self.cell_note.is_some()
             || self.cell_format.is_some()
+            || self.worksheet_color.is_some()
             || self.reshape.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
@@ -4477,6 +4487,15 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.cell_format = None;
+        }
+        if let Some(d) = &mut self.worksheet_color {
+            let (open, request) = d.show(ctx);
+            if !open {
+                self.worksheet_color = None;
+            }
+            if let Some(request) = request {
+                self.apply(Action::FormatText(request), ctx);
+            }
         }
         if let Some(d) = &mut self.row_filter
             && !d.show(ctx, &mut self.doc)

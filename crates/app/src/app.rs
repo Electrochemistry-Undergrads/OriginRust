@@ -3183,10 +3183,12 @@ impl SheafApp {
         self.focus(book);
     }
 
-    /// Puts the files an export wrote into Recent Exports, each with the title of its window.
+    /// Puts the files an export wrote into Recent Exports, each with the short name of its window (unique, and unchanged by a
+    /// rename of the long name or title display).
     fn record_exports(&mut self, kind: ExportKind, files: Vec<(WindowId, PathBuf)>) {
         for (id, path) in files.into_iter().rev() {
-            let Some(window) = self.doc.project().windows.iter().find(|w| w.id() == id).map(|w| w.title()) else {
+            let Some(window) = self.doc.project().windows.iter().find(|w| w.id() == id).map(|w| w.name().to_string())
+            else {
                 continue;
             };
             if let Some(why) = self.recent.push_export(&ExportEntry { path, kind, window }) {
@@ -3201,7 +3203,7 @@ impl SheafApp {
     fn open_recent_export(&mut self, entry: &ExportEntry) {
         let title = "Recent Exports".to_string();
         let project = self.doc.project();
-        let Some(id) = project.windows.iter().find(|w| w.title() == entry.window).map(|w| w.id()) else {
+        let Some(id) = project.windows.iter().find(|w| w.name() == entry.window).map(|w| w.id()) else {
             let text = format!("The window '{}' is not in this project, so its export cannot be opened.", entry.window);
             self.message = Some((title, text));
             return;

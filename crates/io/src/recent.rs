@@ -85,7 +85,7 @@ impl ExportKind {
     }
 }
 
-/// One recent export: the file written, what kind of export wrote it and the title of the window
+/// One recent export: the file written, what kind of export wrote it and the short name of the window
 /// that was exported (to find it again).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExportEntry {

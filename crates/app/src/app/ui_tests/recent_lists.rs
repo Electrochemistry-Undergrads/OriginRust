@@ -194,11 +194,8 @@ fn recent_exports_is_empty_and_greyed_at_first_and_clear_empties_it() {
     assert!(!entry_enabled(&h, "(none)"));
     close_menus(&mut h);
     show_window(&mut h, "Graph1 - sample");
-    let entry = sheaf_io::recent::ExportEntry {
-        path: dir.join("a.png"),
-        kind: ExportKind::Graph,
-        window: "Graph1 - sample".into(),
-    };
+    let entry =
+        sheaf_io::recent::ExportEntry { path: dir.join("a.png"), kind: ExportKind::Graph, window: "Graph1".into() };
     h.state_mut().recent.push_export(&entry);
     settle(&mut h);
     menu_path(&mut h, &["File", "Recent Exports"]);

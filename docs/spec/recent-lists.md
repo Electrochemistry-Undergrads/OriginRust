@@ -43,7 +43,7 @@ Clear Recent Exports below a separator. All **UNMEASURED**.
 | Point | Sheaf |
 |---|---|
 | What is listed | the files written by a successful export: Export Graphs (every file of an Apply or OK), Worksheet as ASCII and Worksheet as Excel. A failed or cancelled export lists nothing |
-| Stored | `exports` in `recent.json`: the canonical path, the kind (`graph`, `sheet`, `excel`) and the title of the exported window. At most 15, newest first, the same file listed once |
+| Stored | `exports` in `recent.json`: the canonical path, the kind (`graph`, `sheet`, `excel`) and the short name of the exported window (unique, so a changed long name or title display still finds it). Choosing an entry only reopens the export dialog on that window and folder; it does not restore the file name, format or dpi. At most 15, newest first, the same file listed once |
 | Entry text | numbered like the recent files, the path shortened to 80 characters with the extension kept (the type matters here), the full path and window as the tooltip |
 | Choosing | opens the same export dialog again on the window the file was made from, in the file's folder (T05's last used settings apply). It does not write anything by itself |
 | Window gone | a message "The window ... is not in this project" and nothing opens; the entry stays (it may belong to another project) |

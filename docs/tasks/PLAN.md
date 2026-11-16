@@ -157,7 +157,7 @@ Backlog packages: write the brief first (step 3 above).
 - **B9.** The Integrate gadget exists (`crates/app/src/gadget.rs`): the region of interest, its
   menu and its live result. Turn it into a shared gadget frame, then add one gadget per commit;
   most reuse an existing analysis tool.
-- **B10.** Reuse `crates/app/src/recent.rs` (T38).
+- **B10.** Done as T78.
 
 ## Wave 7: project, templates and settings
 

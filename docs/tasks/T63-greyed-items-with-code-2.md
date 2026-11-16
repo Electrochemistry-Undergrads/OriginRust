@@ -1,6 +1,6 @@
 # T63: Existing-feature menu and toolbar wire-ups, round two
 
-**Status:** open; F wired (2026-11-15), C reviewed and deferred to B8/T14; claim remaining groups separately. Groups A, B, D, E, H, I, K claimed 2026-11-15 (session "mac-multipdf", macOS, branch `greyed-2-abdehik`). Recovered and refined 2026-11-15.
+**Status:** open; F wired (2026-11-15), C reviewed and deferred to B8/T14; claim remaining groups separately. Group G claimed 2026-11-15 (session "continue all tasks", Windows, branch `t63-g`). Groups A, B, D, E, H, I, K claimed 2026-11-15 (session "mac-multipdf", macOS, branch `greyed-2-abdehik`). Recovered and refined 2026-11-15.
 **Size:** M overall; each group S. **Branch:** `greyed-2-<group>`.
 **Priority:** wave 3, parallel lane when files do not overlap wave 1/2 claims.
 **Spec:** [command map](../spec/ui-command-map.md), [GUI](../spec/gui-look.md); T01's method.

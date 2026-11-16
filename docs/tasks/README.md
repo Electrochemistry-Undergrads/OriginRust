@@ -78,11 +78,13 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T73](T73-change-xy-ungroup.md) | 4 (B3), P1 | S | Done 2026-11-15: plot right-click Change X, Change Y, Ungroup as Origin 2016 |
 | [T75](T75-scatter-central.md) | 4 (B4), P1 | S | Done 2026-11-16: Scatter Central (axes crossing in the middle, X axis offset) |
 | [T79](T79-column-scatter.md) | 4 (B4), P1 | S | Done 2026-11-16: Column Scatter |
+| [T82](T82-line-series.md) | 4 (B4), P1 | S | Done 2026-11-16: Line Series (one plot, k-point segments, helper sheet) |
 | [T76](T76-grouped-indexed-plots.md) | Plot > Column/Bar/Pie > Grouped Columns (indexed data), Plot > Statistics > Grouped Box Charts (B4 slice) | M | Done 2026-11-16 (`grouped-indexed`, graphing 14.28, Origin docs only, unmeasured); left: dialog, raw-data statistics, stacking, table tick labels, more than two groups |
 | [T83](T83-interval-and-pareto.md) | Plot > Statistics > Interval Plot and Pareto (B4 slice) | M | Done 2026-11-16 (`interval-pareto`, graphing 14.29, Origin docs only, unmeasured); left: dialogs, binned Pareto, groups, drop lines, count table |
 | [T80](T80-color-and-bubble-scale.md) | 4 (B3), P2 | M | Done 2026-11-16: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (layer scale objects, graphing 27); left: dragging, properties dialog, Map link |
 | [T78](T78-recent-lists.md) | 4 (B10), P1 | S | Done 2026-11-16: Most Recently Used lists in Plot, Worksheet, Analysis, Statistics menus and Recent Exports (File > Export and graph window) |
-| [T74](T74-fill-column-patterns.md) | Fill Column With: A set of Numbers, Date/Time values, Text & Numeric values (Origin patternN/D/T) | M | claimed 2026-11-15 (`b5-fill`, Claude Windows) |
+| [T74](T74-fill-column-patterns.md) | Fill Column With: A set of Numbers, Date/Time values, Text & Numeric values (Origin patternN/D/T) | M | done 2026-11-16 (workbook-model 13c); left: Origin's window layout, text quoting |
+| [T84](T84-sampling-interval.md) | Set Sampling Interval and Show X Column (Origin colint/colshowx) | M | claimed 2026-11-16 (`sampling-interval`, Claude Windows) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: Origin measured (graphing 24); Copy Format and Paste Format on graph, axis and legend, Apply Formats window; left: object cut/copy/paste, align, group, order (rest of B2) |

@@ -233,6 +233,11 @@ pub enum Action {
     SaveTemplateAs(WindowId),
     /// Plot > User Templates > Manage...: rename and delete the saved templates.
     ManageTemplates,
+    /// Column > Fill Column With > a pattern: open its window for these columns.
+    FillPattern {
+        kind: crate::dialogs::fill_pattern::FillKind,
+        columns: Vec<ColumnId>,
+    },
     /// Plot > User Templates > a saved one: plot the columns in its look.
     PlotUserTemplate {
         book: WindowId,
@@ -427,6 +432,11 @@ pub enum Action {
         book: WindowId,
         columns: Vec<ColumnId>,
         template: Template,
+    },
+    /// Plot > Line + Symbol > Line Series: one plot of the rows of the selected Y columns, k-point segments.
+    PlotLineSeries {
+        book: WindowId,
+        columns: Vec<ColumnId>,
     },
     /// Plot > Symbol > Y Error: a scatter plot of the Y columns that shows the error bars of
     /// their Y error columns; with `x` (XY Error) also those of their X error columns.

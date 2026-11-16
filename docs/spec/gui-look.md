@@ -551,6 +551,8 @@ intervals and draws only visible rows. **Difference:** Sheaf recomputes and can 
 when the font shrinks; it has no saved row-height field, so Origin's sticky enlarged heights
 are left for later work. Printed sheets and worksheet images use the same resolved styles,
 font metrics and enlarged rows; their existing 8 pt default scales explicit sizes by 8/9.
+Printing retains its existing omission of label rows with no text, including empty styled labels;
+native printed-layout and range rules remain T27 work.
 
 The **Format Cells** window (cell/column/row menus, Format > Cell...) retains its existing
 unmeasured choices: Font, Size (0 = Default), Bold/Italic/Underline, text/fill colour, horizontal

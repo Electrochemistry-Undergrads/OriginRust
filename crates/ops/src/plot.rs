@@ -1038,14 +1038,14 @@ fn panel_graph(project: &mut Project, template: Template, p: &PanelsSpec, a: &Pl
     let shape = parse_panels(&p.shape)?;
     if template.multi_y().is_some()
         || matches!(
-        template,
-        Template::DoubleY
-            | Template::Waterfall
-            | Template::WaterfallY
-            | Template::WaterfallZ
-            | Template::Lollipop
-            | Template::StackedHistograms
-    )
+            template,
+            Template::DoubleY
+                | Template::Waterfall
+                | Template::WaterfallY
+                | Template::WaterfallZ
+                | Template::Lollipop
+                | Template::StackedHistograms
+        )
     {
         bail!("the {} template cannot be used with --panels; choose another template", template.name());
     }

@@ -1,6 +1,6 @@
 # T112: Plot > Specialized > Zoom
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `zoom-plot`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 34): measured (layers and frames, region size and start, colours, grid) and built: `Layer::zoom` resolved in the layout, `Project::plot_zoom`, `sheaf_plot::place_zoom_regions`. Left: drawing the curve over the region, Origin's axis ranges.
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Specialized > Zoom).
 **Spec:** `docs/spec/graphing.md` (a new section).
 

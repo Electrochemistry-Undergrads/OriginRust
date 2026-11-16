@@ -1200,7 +1200,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("Vector XYAM", Cmd::Plot(Template::VectorXyam)),
                     item("Vector XYXY", Cmd::Plot(Template::VectorXyxy)),
                 ],
-                greys(&["Zoom"]),
+                vec![item("Zoom", Cmd::Plot(Template::Zoom))],
             ]
             .concat(),
         ),

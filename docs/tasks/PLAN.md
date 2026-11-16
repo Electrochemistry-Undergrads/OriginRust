@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 294 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 293 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -110,7 +110,7 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T76](T76-grouped-indexed-plots.md) | Grouped Columns (indexed data), Grouped Box Charts (B4 slice) | M | 0 |
 | [x] | [T82](T82-line-series.md) | Line Series (B4 slice) | S | 0 |
 | [x] | [T83](T83-interval-and-pareto.md) | Interval Plot, Pareto (B4 slice) | M | 0 |
-| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label; Grouped Columns (indexed data) and Grouped Box Charts done as [T76](T76-grouped-indexed-plots.md); Interval Plot and Pareto done as [T83](T83-interval-and-pareto.md)): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 7 |
+| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label; Grouped Columns (indexed data) and Grouped Box Charts done as [T76](T76-grouped-indexed-plots.md); Interval Plot and Pareto done as [T83](T83-interval-and-pareto.md)): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 6 |
 
 - **B1.** The graph view draws the page to fit the window. Add a view transform (zoom factor and
   scroll offset) in `crates/app/src/graph_view.rs` so hit-testing (`sheaf_plot::hit`) still works,

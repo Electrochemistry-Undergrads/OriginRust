@@ -3227,7 +3227,7 @@ impl SheafApp {
             None if matches!(template, Template::Treemap | Template::Sunburst) => {
                 p.plot_columns(template, &[categories.as_slice(), &ys].concat())
             }
-            None => p.plot_columns(template, &ys),
+            None => p.plot_columns(template, &ys).inspect(|g| sheaf_plot::place_zoom_regions(p, *g)),
         });
         match made {
             Ok(_) => self.say(format!("Plotted {} column(s)", ys.len())),

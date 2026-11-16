@@ -314,6 +314,8 @@ pub enum Action {
     },
     /// Tools > Theme Organizer...: list the graph themes and apply one to the active graph.
     ThemeOrganizer,
+    /// Tools > Fitting Function Organizer...: browse the built-in fit functions.
+    FitOrganizer,
     /// Plot > System Templates...: the window of the built-in templates, for these columns.
     SystemTemplates {
         book: WindowId,

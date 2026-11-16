@@ -129,6 +129,8 @@ pub enum Cmd {
     NewFromTemplateFile,
     /// Plot > System Templates... (T104).
     SystemTemplates,
+    /// Tools > Fitting Function Organizer... (F9, T105).
+    FitOrganizer,
     /// Edit > Replace... (Ctrl+H) in a workbook.
     ReplaceInSheets,
     ExportGraph,
@@ -1690,7 +1692,7 @@ fn tools_menu() -> Vec<Entry> {
         grey("Apps on File Exchange..."),
         sep(),
         grey_keyed("Fitting Function Builder...", plain_key(Key::F8)),
-        grey_keyed("Fitting Function Organizer...", plain_key(Key::F9)),
+        keyed("Fitting Function Organizer...", plain_key(Key::F9), Cmd::FitOrganizer),
         keyed("Theme Organizer...", plain_key(Key::F7), Cmd::ThemeOrganizer),
         grey("Import Filters Manager..."),
         grey("Package Manager..."),
@@ -2643,6 +2645,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::ThemeOrganizer => Action::ThemeOrganizer,
         Cmd::NewFromTemplateFile => Action::NewFromTemplate(None),
+        Cmd::FitOrganizer => Action::FitOrganizer,
         Cmd::SystemTemplates => Action::SystemTemplates { book: book?, columns: c.selected.to_vec() },
         Cmd::BatchPlot(columns) => Action::BatchPlot { graph: c.graph.ok_or(NEED_GRAPH)?, columns: *columns },
         Cmd::Reimport(choose) => {

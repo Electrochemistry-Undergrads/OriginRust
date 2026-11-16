@@ -1,6 +1,6 @@
 # T105: Fitting Function Organizer
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `fit-organizer`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", fitting.md "Fitting Function Organizer"): Origin's organizer measured; Sheaf's browses the built-in library by category with each function's definition, read-only. Left: user functions (Builder, New/Save), typeset equation, sample curve.
 **Size:** S. **Source:** greyed inventory package B13 (Tools > Fitting Function Organizer... (F9)).
 **Spec:** `docs/spec/fitting.md` (a new section).
 

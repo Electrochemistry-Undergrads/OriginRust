@@ -502,3 +502,24 @@ Analysis > Fitting > Nonlinear Implicit Curve Fit... fits `f(x, y, params) = 0` 
 - **What it computes** (checked against numpy and scipy, not Origin's code): the parameters are those of the **geometric** circle fit (minimising the sum of squared orthogonal distances `(sqrt((x-xc)^2+(y-yc)^2) - r)^2`): `scipy.optimize.least_squares` on the distances gives xc 2.00133163, yc 2.97115343, r 5.00359228, within 6e-8 of Origin; the algebraic fit of `f` itself (a plain least-squares fit of `f = 0`) gives 2.00176, 2.97179, 5.00406 and is not what Origin reports. `scipy.odr` (ODRPACK, implicit model) gives 2.00133163, 2.97115345, 5.00359134, sum of squared deltas 0.1130241 and errors 0.021140, 0.021217, 0.014976; Origin 0.1131083 and 0.021155, 0.021231, 0.014986; the exact distance sum is 0.1132499. So Origin's solver is an ODRPACK-type orthogonal distance fit; its residual sum of squares and errors differ from scipy's by about 0.1 %. **Sheaf's choice**: the exact geometric sum of squares and errors `sqrt(s^2 diag((J^T J)^-1))` with the Jacobian of the distances and `s^2 = RSS/(n - p)` (0.021161, 0.021238, 0.014990, 0.03 % above Origin's); test tolerances 1e-6 on parameters and 2e-3 relative on statistics, labelled "scipy-checked, Origin within 0.2 %".
 **Built (T91).** `sheaf_fit::implicit` (Circle and Ellipse by Levenberg-Marquardt on the signed orthogonal distances; the ellipse's nearest point by a bracketed angle search), `Project::fit_implicit` (sheets `FitImplicit<n>` with Parameter, Value, Standard Error, t-Value, Prob>|t|, LCL, UCL, Dependency; `FitImplicit<n>Stats`; `FitImplicitCurve<n>` with 360 segments of the closed fitted curve; a `Distance of Y` column next to the Y column), the window (a mode of the fit-more window: X and Y column, Circle or Ellipse, confidence level; starting values estimated by the Kasa circle or the half ranges), `sheaf fit-implicit` (with `--init`, `--rows`, `--x-range`). **Measured vs not**: the circle is checked against Origin's report (`crates/fit/tests/origin_implicit.rs`: parameters 1e-6, errors, reduced chi-square and RSS 2e-3, R-square and adjusted R-square 2e-6); **R-square uses the total sum of squares of the X and Y values stacked about their common mean** (612.7385286 for the measured data, to 1e-9; found by comparing Origin's R-square with the data) and the adjusted value `1 - (n-1)/dof (1 - R2)`; the ANOVA table is not written (Origin's rows hold 0). The ellipse is **scipy-checked, not Origin** (parameters 1e-6, errors 1e-4). Not built: PlaneMod, the Levenberg Marquardt algorithm choice, weights, fixed parameters, the residual plots, Origin's 3859-row `FitNLCurve1` (Sheaf writes the 360-segment curve instead).
 - Not measured: Ellipse and PlaneMod runs, weights, the Levenberg Marquardt choice, iteration counts, fixed parameters, what the 3859 rows of `FitNLCurve1` are (the implicit curve f = 0 on a grid of the range is the natural reading) and the window's other pages.
+
+## Fitting Function Organizer (T105, measured 2026-11-16, Origin 2016)
+
+Tools > Fitting Function Organizer... (F9) in Origin 2016 (screenshots `re-workspace/scratch/t105`, local
+only): a tree of categories (Origin Basic Functions, Implicit, Convolution, Exponential, Growth/Sigmoidal,
+Hyperbola, Logarithm, Peak Functions, Piecewise, Polynomial, Power, Rational, Waveform, Surface Fitting,
+PFW, Baseline, Chromatography, Electrophysiology, Enzyme Kinetics, Pharmacology, Rheology, Spectroscopy,
+Statistics, ...) holding the functions (Peak Functions: Asym2Sig, Beta, Bigaussian, CCE, ECS, Extreme,
+Gauss, Gaussian, GaussAmp, GaussMod, GCAS, Giddings, InvsPoly, Laplace, LogNormal, ...). Picking Gauss
+showed Function Name Gauss, File Name (.FDF), Brief Description "Area version of Gaussian Function",
+References, Function Type Built-in, Function Model Explicit, Independent Variables x, Dependent Variables
+y, Parameter Names y0,xc,w,A, Function Form Expression, Function `y=y0 + (A/(w*sqrt(PI/2)))*exp(-2*((x-xc)/w)^2)`,
+Peak Function ticked, Parameter Settings; below, Equation (the typeset formula), Sample Curve and Hints tabs.
+
+Sheaf's organizer (`dialogs/fit_organizer.rs`) is read-only over the built-in library
+(`sheaf_core::fitting::builtin_functions`): the library's categories and functions in a tree; for a function
+Function Name, Category, Function Type Built-in, Function Model Explicit, Independent and Dependent
+Variables, Parameter Names, Function Form Expression, Function (the formula, or "computed by Sheaf" for the
+two the library computes in code), Peak Function (its category is Peak Functions) and Derived Parameters.
+Not done: File Name, Brief Description, References, the typeset Equation, Sample Curve, Hints, Parameter
+Settings, and Origin's New / Save of user functions (the Fitting Function Builder stays grey).

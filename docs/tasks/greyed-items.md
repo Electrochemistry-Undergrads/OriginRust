@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **308 greyed items: 212 in the menu bar, 19 on the toolbars, 77 in context menus.**
+original inventory baseline. This is not a new runtime audit. **307 greyed items: 211 in the menu bar, 19 on the toolbars, 77 in context menus.**
 
 ## How to read and keep this file
 
@@ -69,14 +69,14 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B9` | 13 |
 | `B11` | 3 |
 | `B12` | 4 |
-| `B13` | 7 |
+| `B13` | 6 |
 | `B14` | 44 |
 | `B15` | 21 |
 | `B16` | 15 |
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 64 items, backlog packages (`B`) 224, not planned (`N`) 20.
+Briefs (`T`) hold 64 items, backlog packages (`B`) 223, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -167,7 +167,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B15` 3D OpenGL Settings...
 - `N` Apps on File Exchange...
 - `B13` Protection: Protect Project... · Audit Log
-- `B13` Fitting Function Builder... · Fitting Function Organizer... · Import Filters Manager...
+- `B13` Fitting Function Builder... · Import Filters Manager...
 - `B14` Virtual Matrix Manager...
 - `B16` Package Manager... · Custom Menu Organizer... · X-Function Builder... · X-Function Script Samples...
 - `B16` R Console... · Rserve Console... · Python Console...

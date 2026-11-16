@@ -630,7 +630,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(sep());
         v.push(item("Save &Window As...", Cmd::SaveWindowAs));
         if kind == WindowKind::Graph {
-            v.push(item("Save &Template As...", Cmd::SaveTemplateAs));
+            v.push(item("Save Temp&late As...", Cmd::SaveTemplateAs));
         } else {
             v.push(grey("Save Template As..."));
         }

@@ -2906,6 +2906,7 @@ mod tests {
             y: ColumnId(y),
             y_error: None,
             rows: None,
+            indexed: None,
             kind: PlotKind::Line,
             line: LineStyle::solid(color, 0.5),
             symbol: layer.default_symbol.clone(),

@@ -2,7 +2,8 @@
 //! `\+(..)` superscript, `\-(..)` subscript, `\g(..)` Greek, `\pN(..)` size in percent,
 //! `\f:Name(..)` font switch, `\x(hhhh)` a character by its code, `\v(..)` literal text; the
 //! `\u(..)` underline, `\s(..)` strikethrough and `\cN(..)` indexed or RGB text color.
-//! Escapes nest. A backslash that does not start one of these escapes is literal.
+//! `\=(sub,sup)` places paired scripts in one shared column. Escapes nest. A backslash
+//! that does not start one of these escapes is literal.
 
 use sheaf_core::Color;
 
@@ -28,19 +29,22 @@ pub struct Run {
     pub strikeout: bool,
     /// An explicit palette or RGB colour, or the label's own colour when absent.
     pub color: Option<Color>,
+    /// An inline font family, or the label's own family when absent.
+    pub family: Option<String>,
     /// Size relative to the label's font size (1 for normal text).
     pub scale: f64,
     /// Baseline shift in units of the label's font size; positive is up.
     pub rise: f64,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct Style {
     bold: bool,
     italic: bool,
     underline: bool,
     strikeout: bool,
     color: Option<Color>,
+    family: Option<String>,
     greek: bool,
     scale: f64,
     rise: f64,
@@ -50,8 +54,33 @@ struct Style {
 /// so hostile input cannot overflow the stack.
 const MAX_DEPTH: usize = 24;
 
-/// Splits label text into styled runs. Empty text gives no runs.
+/// A layout segment. Script branches have absolute run styles but share one horizontal column.
+#[derive(Clone, Debug)]
+pub(crate) enum Segment {
+    Text(Run),
+    Pair { sub: Vec<Segment>, sup: Vec<Segment> },
+}
+
+/// Splits label text into styled runs, with paired scripts in logical sub/sup order.
+/// Use the internal layout tree when measuring or placing shared script columns.
 pub fn parse(text: &str) -> Vec<Run> {
+    fn flatten(segments: Vec<Segment>, out: &mut Vec<Run>) {
+        for segment in segments {
+            match segment {
+                Segment::Text(run) => out.push(run),
+                Segment::Pair { sub, sup } => {
+                    flatten(sub, out);
+                    flatten(sup, out);
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    flatten(segments(text), &mut out);
+    out
+}
+
+pub(crate) fn segments(text: &str) -> Vec<Segment> {
     let chars: Vec<char> = text.chars().collect();
     let mut pos = 0;
     let mut out = Vec::new();
@@ -61,6 +90,7 @@ pub fn parse(text: &str) -> Vec<Run> {
         underline: false,
         strikeout: false,
         color: None,
+        family: None,
         greek: false,
         scale: 1.0,
         rise: 0.0,
@@ -74,36 +104,40 @@ pub fn plain(text: &str) -> String {
     parse(text).into_iter().map(|r| r.text).collect()
 }
 
-fn push(out: &mut Vec<Run>, c: char, st: Style) {
+fn push(out: &mut Vec<Segment>, c: char, st: &Style) {
     let c = if st.greek { greek(c) } else { c };
-    if let Some(last) = out.last_mut()
+    if let Some(Segment::Text(last)) = out.last_mut()
         && last.bold == st.bold
         && last.italic == st.italic
         && last.underline == st.underline
         && last.strikeout == st.strikeout
         && last.color == st.color
+        && last.family == st.family
         && last.scale == st.scale
         && last.rise == st.rise
     {
         last.text.push(c);
         return;
     }
-    out.push(Run {
+    out.push(Segment::Text(Run {
         text: c.to_string(),
         bold: st.bold,
         italic: st.italic,
         underline: st.underline,
         strikeout: st.strikeout,
         color: st.color,
+        family: st.family.clone(),
         scale: st.scale,
         rise: st.rise,
-    });
+    }));
 }
 
 /// What a recognised escape does with the text in its parentheses.
 enum Escape {
     /// The text is parsed further with this style.
     Styled(Style),
+    /// A shared column containing subscript, then superscript, separated by the first outer comma.
+    Pair,
     /// `\v(..)`: the text is taken as it is, without escapes.
     Literal,
     /// `\x(hhhh)`: one character given by its hexadecimal code.
@@ -117,8 +151,8 @@ const MAX_FONT_NAME: usize = 64;
 
 /// Recognises an escape starting at the backslash at `pos`. Returns what it does and the index of
 /// the first character inside its parentheses.
-fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
-    let mut inner = st;
+fn escape_at(chars: &[char], pos: usize, st: &Style) -> Option<(Escape, usize)> {
+    let mut inner = st.clone();
     let code = *chars.get(pos + 1)?;
     if code == '(' {
         return Some((Escape::Decimal, pos + 2));
@@ -155,6 +189,7 @@ fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
                 inner.strikeout = true;
                 Escape::Styled(inner)
             }
+            '=' => Escape::Pair,
             'v' => Escape::Literal,
             'x' => Escape::Unicode,
             _ => return None,
@@ -162,7 +197,7 @@ fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
         return Some((esc, pos + 3));
     }
     match code {
-        // `\f:Name(..)`: the font itself is not switched (labels keep their own font), but a
+        // `\f:Name(..)`: select this family for the span. A
         // switch away from the Symbol font ends Greek mapping, and a switch to it starts it.
         'f' if chars.get(pos + 2) == Some(&':') => {
             let start = pos + 3;
@@ -172,6 +207,9 @@ fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
                 return None;
             }
             inner.greek = name.trim().eq_ignore_ascii_case("symbol");
+            if !name.is_empty() && name.trim() == name {
+                inner.family = Some(name);
+            }
             Some((Escape::Styled(inner), open + 1))
         }
         // Size percentages retain their four-digit limit; colour codes use a bounded u32.
@@ -262,36 +300,67 @@ fn take_enclosed(chars: &[char], pos: &mut usize) -> String {
     text
 }
 
-fn parse_seq(chars: &[char], pos: &mut usize, st: Style, in_escape: bool, depth: usize, out: &mut Vec<Run>) {
+fn parse_seq(chars: &[char], pos: &mut usize, st: Style, in_escape: bool, depth: usize, out: &mut Vec<Segment>) {
     let mut parens = 0usize;
     while *pos < chars.len() {
         let c = chars[*pos];
         if c == '\\'
             && depth < MAX_DEPTH
-            && let Some((esc, start)) = escape_at(chars, *pos, st)
+            && let Some((esc, start)) = escape_at(chars, *pos, &st)
         {
             *pos = start;
             match esc {
                 Escape::Styled(inner) => parse_seq(chars, pos, inner, true, depth + 1, out),
+                Escape::Pair => {
+                    let body: Vec<char> = take_enclosed(chars, pos).chars().collect();
+                    let mut nesting = 0usize;
+                    let comma = body.iter().position(|&c| match c {
+                        '(' => {
+                            nesting += 1;
+                            false
+                        }
+                        ')' => {
+                            nesting = nesting.saturating_sub(1);
+                            false
+                        }
+                        ',' => nesting == 0,
+                        _ => false,
+                    });
+                    let (lower, upper) =
+                        comma.map_or((&body[..], &body[body.len()..]), |at| (&body[..at], &body[at + 1..]));
+                    // Origin 2016 Arial vector controls: 60% size, baseline -49%/+35%.
+                    // Keep these pair measurements separate from the older standalone scripts.
+                    let branch = |chars: &[char], rise: f64| {
+                        let inner = Style { scale: st.scale * 0.6, rise: st.rise + rise * st.scale, ..st.clone() };
+                        let mut out = Vec::new();
+                        parse_seq(chars, &mut 0, inner, false, depth + 1, &mut out);
+                        out
+                    };
+                    let sub = branch(lower, -0.35);
+                    let sup = branch(upper, 0.49);
+                    if !sub.is_empty() || !sup.is_empty() {
+                        out.push(Segment::Pair { sub, sup });
+                    }
+                }
                 Escape::Literal => {
-                    let plain = Style { greek: false, ..st };
-                    take_enclosed(chars, pos).chars().for_each(|c| push(out, c, plain));
+                    let plain = Style { greek: false, ..st.clone() };
+                    take_enclosed(chars, pos).chars().for_each(|c| push(out, c, &plain));
                 }
                 Escape::Unicode => {
                     let code = take_enclosed(chars, pos);
                     let ch =
                         u32::from_str_radix(code.trim(), 16).ok().and_then(char::from_u32).filter(|c| !c.is_control());
                     match ch {
-                        Some(ch) => push(out, ch, Style { greek: false, ..st }),
-                        None => format!("\\x({code})").chars().for_each(|c| push(out, c, st)),
+                        Some(ch) => push(out, ch, &Style { greek: false, ..st.clone() }),
+                        None => format!("\\x({code})").chars().for_each(|c| push(out, c, &st)),
                     }
                 }
                 Escape::Decimal => {
                     let code = take_enclosed(chars, pos);
                     let ch = code.trim().parse::<u32>().ok().and_then(char::from_u32).filter(|c| !c.is_control());
                     match ch {
-                        Some(ch) => push(out, ch, Style { greek: false, ..st }),
-                        None => format!("\\({code})").chars().for_each(|c| push(out, c, st)),
+                        Some(ch) => push(out, ch, &Style { greek: false, ..st.clone() }),
+                        None => format!("\\({code})").chars().for_each(|c| push(out, c, &st)),
                     }
                 }
             }
@@ -308,7 +377,7 @@ fn parse_seq(chars: &[char], pos: &mut usize, st: Style, in_escape: bool, depth:
                 parens -= 1;
             }
         }
-        push(out, c, st);
+        push(out, c, &st);
         *pos += 1;
     }
 }

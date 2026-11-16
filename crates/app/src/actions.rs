@@ -77,6 +77,10 @@ pub enum SheetOp {
     Insert,
     Delete,
     Duplicate,
+    /// Duplicate Without Data: the columns and labels of the sheet in a new last sheet (T90).
+    DuplicateWithoutData,
+    /// Sheet Name to Show: what the sheet's tab shows (T90).
+    ShowName(sheaf_core::sheet_tab::SheetLabel),
     /// Open the window that asks for a new name.
     RenameDialog,
 }

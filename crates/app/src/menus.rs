@@ -1923,7 +1923,14 @@ pub fn row_menu() -> Vec<Entry> {
 
 /// The menu of a sheet tab (it acts on the sheet whose tab was clicked, which becomes the
 /// active one first).
-pub fn sheet_tab_menu() -> Vec<Entry> {
+pub fn sheet_tab_menu(shown: sheaf_core::sheet_tab::SheetLabel) -> Vec<Entry> {
+    let names = sheaf_core::sheet_tab::SheetLabel::ALL
+        .iter()
+        .map(|l| {
+            let tick = if *l == shown { "\u{2713} " } else { "" };
+            item(&format!("{tick}{}", l.name()), Cmd::Sheet(SheetOp::ShowName(*l)))
+        })
+        .collect();
     vec![
         item("Insert", Cmd::Sheet(SheetOp::Insert)),
         item("Delete", Cmd::Sheet(SheetOp::Delete)),
@@ -1931,10 +1938,10 @@ pub fn sheet_tab_menu() -> Vec<Entry> {
         grey("Add Graph as Sheet..."),
         grey("Add Notes as Sheet"),
         sep(),
-        grey("Duplicate Without Data"),
+        item("Duplicate Without Data", Cmd::Sheet(SheetOp::DuplicateWithoutData)),
         item("Duplicate", Cmd::Sheet(SheetOp::Duplicate)),
         sep(),
-        grey_sub("Sheet Name to Show", &["Short Name", "Long Name", "Both"]),
+        sub("Sheet Name to Show", names),
         item("Name and Comments...", Cmd::Sheet(SheetOp::RenameDialog)),
         sep(),
         grey("Navigate..."),

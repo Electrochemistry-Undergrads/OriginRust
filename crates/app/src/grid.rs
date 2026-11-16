@@ -1342,13 +1342,15 @@ fn sheet_tabs(
         for (i, sheet) in book.sheets.iter().enumerate() {
             let is_active = i == active;
             let backdrop = ui.painter().add(Shape::Noop);
-            let text = if is_active { RichText::new(&sheet.name).strong() } else { RichText::new(&sheet.name) };
+            // Sheet Name to Show (T90): the short name, the long name or the long name if there is one.
+            let shown = sheet.tab_text();
+            let text = if is_active { RichText::new(shown).strong() } else { RichText::new(shown) };
             ui.add_space(8.0);
             let response = ui.add(egui::Label::new(text).sense(Sense::CLICK));
             ui.add_space(12.0);
             // For screen readers (and tests): a tab is a selectable item with the sheet's name.
             response.widget_info(|| {
-                egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, is_active, sheet.name.clone())
+                egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, is_active, shown.to_string())
             });
             let rect = Rect::from_min_max(
                 Pos2::new(response.rect.left() - 8.0, bar.top()),
@@ -1375,7 +1377,7 @@ fn sheet_tabs(
                 actions.push(Action::SelectSheet { book: book_id, sheet: i });
             }
             response.context_menu(|ui| {
-                menus::show_context(ui, &menus::sheet_tab_menu(), &book_ctx(book_id, state), actions)
+                menus::show_context(ui, &menus::sheet_tab_menu(sheet.tab_label), &book_ctx(book_id, state), actions)
             });
         }
         ui.add_space(6.0);

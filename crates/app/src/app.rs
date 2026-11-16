@@ -140,6 +140,7 @@ struct SheetNameDialog {
     book: WindowId,
     sheet: usize,
     name: String,
+    long_name: String,
 }
 
 pub struct SheafApp {
@@ -2951,9 +2952,29 @@ impl SheafApp {
                     state.clear_selection();
                 }
             }
+            SheetOp::DuplicateWithoutData => {
+                match self.doc.edit("Duplicate sheet without data", |p| p.duplicate_sheet_without_data(book, active)) {
+                    Ok(_) => {
+                        if let Some(state) = self.books.get_mut(&book) {
+                            state.clear_selection();
+                        }
+                    }
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
+            SheetOp::ShowName(label) => {
+                if b.sheets[active].tab_label != label {
+                    self.doc.apply("Sheet name to show", |p| {
+                        if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(active)) {
+                            s.tab_label = label;
+                        }
+                    });
+                }
+            }
             SheetOp::RenameDialog => {
                 let name = b.sheets[active].name.clone();
-                self.sheet_name = Some(SheetNameDialog { book, sheet: active, name });
+                let long_name = b.sheets[active].long_name.clone();
+                self.sheet_name = Some(SheetNameDialog { book, sheet: active, name, long_name });
             }
         }
     }
@@ -4658,13 +4679,18 @@ impl SheafApp {
             let mut open = true;
             let mut done = false;
             egui::Window::new("Sheet name").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
-                ui.horizontal(|ui| {
+                egui::Grid::new("sheet_name_grid").num_columns(2).show(ui, |ui| {
                     ui.label("Name");
                     ui.add(egui::TextEdit::singleline(&mut d.name).desired_width(200.0));
+                    ui.end_row();
+                    ui.label("Long Name");
+                    ui.add(egui::TextEdit::singleline(&mut d.long_name).desired_width(200.0));
+                    ui.end_row();
                 });
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {
-                        let (book, sheet, name) = (d.book, d.sheet, d.name.clone());
+                        let (book, sheet, name, long) =
+                            (d.book, d.sheet, d.name.clone(), d.long_name.trim().to_string());
                         let name = name.trim().to_string();
                         let taken = self.doc.project().workbook(book).is_none_or(|b| {
                             b.sheets.iter().enumerate().any(|(i, s)| i != sheet && s.name.eq_ignore_ascii_case(&name))
@@ -4678,6 +4704,7 @@ impl SheafApp {
                             self.doc.apply("Rename sheet", |p| {
                                 if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet)) {
                                     s.name = name;
+                                    s.long_name = long;
                                 }
                             });
                         }

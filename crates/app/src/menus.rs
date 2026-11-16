@@ -163,6 +163,8 @@ pub enum Cmd {
     /// A command of a sheet tab's menu, on the active sheet.
     Sheet(SheetOp),
     Plot(Template),
+    /// Plot > Line + Symbol > Line Series (T82).
+    PlotLineSeries,
     /// Plot > Symbol > Y Error.
     PlotYError,
     /// Plot > Symbol > XY Error: a scatter plot with the X and Y error columns of each Y column.
@@ -927,14 +929,12 @@ fn plot_menu() -> Vec<Entry> {
         ),
         sub(
             "Line + S&ymbol",
-            with(
-                vec![
-                    item("Line + &Symbol", Cmd::Plot(Template::LineSymbol)),
-                    item("2 Point Segment", Cmd::Plot(Template::Segment2)),
-                    item("3 Point Segment", Cmd::Plot(Template::Segment3)),
-                ],
-                &["Line Series"],
-            ),
+            vec![
+                item("Line + &Symbol", Cmd::Plot(Template::LineSymbol)),
+                item("2 Point Segment", Cmd::Plot(Template::Segment2)),
+                item("3 Point Segment", Cmd::Plot(Template::Segment3)),
+                item("Line Series", Cmd::PlotLineSeries),
+            ],
         ),
         sub(
             "Column/Bar/&Pie",
@@ -2584,6 +2584,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             book?;
             Action::ReverseColumns(some()?)
         }
+        Cmd::PlotLineSeries => Action::PlotLineSeries { book: book?, columns: c.selected.to_vec() },
         Cmd::PlotYError => Action::PlotYError { book: book?, columns: c.selected.to_vec(), x: false },
         Cmd::PlotXYError => Action::PlotYError { book: book?, columns: c.selected.to_vec(), x: true },
         Cmd::PlotPanels { rows, cols } => {

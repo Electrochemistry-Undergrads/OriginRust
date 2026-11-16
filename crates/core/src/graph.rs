@@ -1394,6 +1394,9 @@ pub enum Connect {
     Segment2,
     /// Origin's "3 Point Segment": points 1-2-3, 4-5-6, ... are joined (line connection 3).
     Segment3,
+    /// k-point segments for k >= 4 (what Line Series makes with more than three columns); not offered in the
+    /// pickers. A plain tuple variant, so the unit variants keep their string form in saved files.
+    Segments(u16),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -2658,6 +2661,19 @@ mod tests {
         let bars: BarSpacing = serde_json::from_str(r#"{"overlap_pct":-50.0}"#).unwrap();
         assert_eq!(bars, BarSpacing { gap_pct: 20.0, overlap_pct: -50.0, width_pct: None });
         assert_eq!(serde_json::from_str::<TickLabelSource>(r#"{"kind":"auto"}"#).unwrap(), TickLabelSource::Auto);
+    }
+
+    #[test]
+    fn connect_keeps_its_old_representation_and_round_trips_segments() {
+        for (c, json) in [
+            (Connect::Straight, r#""straight""#),
+            (Connect::Segment2, r#""segment2""#),
+            (Connect::Segment3, r#""segment3""#),
+            (Connect::Segments(5), r#"{"segments":5}"#),
+        ] {
+            assert_eq!(serde_json::to_string(&c).unwrap(), json);
+            assert_eq!(serde_json::from_str::<Connect>(json).unwrap(), c);
+        }
     }
 
     #[test]

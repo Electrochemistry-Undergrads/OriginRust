@@ -819,6 +819,10 @@ impl Writer {
                 Connect::StepVertical => 12,
                 Connect::Segment2 => 2,
                 Connect::Segment3 => 3,
+                Connect::Segments(_) => {
+                    notes.push("a k-point segment line connection (k > 3) was written as a straight line".into());
+                    1
+                }
             };
             let line_color = if kind == CurveKind::Scatter { p.symbol.color } else { p.line.color };
             let spec = CurveSpec {

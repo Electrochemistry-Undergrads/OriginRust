@@ -825,10 +825,14 @@ fn polyline_path(d: &mut String, pts: &[(f64, f64)], connect: Connect) {
                 line_to(d, w[1].0, w[1].1);
             }
         }
-        Connect::Segment2 | Connect::Segment3 => {
+        Connect::Segment2 | Connect::Segment3 | Connect::Segments(_) => {
             // groups of 2 (3) points counted from the first point of the piece; a last group with a
             // single point draws no line
-            let n = if connect == Connect::Segment2 { 2 } else { 3 };
+            let n = match connect {
+                Connect::Segment2 => 2,
+                Connect::Segments(k) => usize::from(k).max(2),
+                _ => 3,
+            };
             for (k, group) in pts.chunks(n).enumerate() {
                 if k > 0 {
                     move_to(d, group[0].0, group[0].1);

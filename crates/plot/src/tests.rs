@@ -4675,6 +4675,10 @@ fn segment_connections_join_points_in_pairs_and_threes() {
     set(&mut p, Connect::Segment3);
     let three = path_of(&p);
     assert_eq!((three.matches('M').count(), three.matches('L').count()), (3, 6), "{three}");
+    set(&mut p, Connect::Segments(4));
+    let four = path_of(&p);
+    // 9 points: groups of 4, 4 and 1: 3 moves, 3 + 3 lines
+    assert_eq!((four.matches('M').count(), four.matches('L').count()), (3, 6), "{four}");
     let g2 = p.plot_columns(Template::Segment2, &[p.graph(g).unwrap().layers[0].plots[0].y]).unwrap();
     assert_eq!(p.graph(g2).unwrap().layers[0].plots[0].line.connect, Connect::Segment2);
     assert_eq!(Template::from_name("segment3"), Some(Template::Segment3));

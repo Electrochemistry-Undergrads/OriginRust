@@ -130,7 +130,8 @@ Origin 2016 numeric measurement was made by this entry-point review.
 
 For a selected title, label or legend, the bar shows its installed font family and point size,
 pressed Bold/Italic state, size increase/decrease and a Font Color menu with all 24 Classic
-colours (eight basic choices plus More Classic colors; graphing 7.4). Without a text target,
+colours (eight basic choices plus More Classic colors) and Custom RGB... with validated
+0 to 255 fields and a preview (graphing 7.4). Without a text target,
 or while a dialog/cell editor owns editing, these controls are disabled; the size reads 0.
 Enter commits a size draft; Escape or loss of focus cancels it. Text and worksheet numbers are
 unchanged. Graphing 7.4 records the Origin 2016 size/font/colour controls and the unresolved

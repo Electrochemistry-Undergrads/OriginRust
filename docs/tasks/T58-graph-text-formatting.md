@@ -154,6 +154,21 @@ related formatting UI/helper/preview tests, inventory 304 and eight Python tooli
 with unchanged source/goldens on integrated T107 source. Fresh desktop script fields
 and shared-column draft preview from the tested executable were inspected.
 
+Custom RGB graph-font toolbar (`codex/t58-graph-font-rgb`): Font Color > Custom RGB... offers
+0 to 255 channel fields, a live swatch and Apply/Cancel; valid Enter also accepts. It changes
+only the captured selected label/title/legend base-font colour through existing requests.
+Invalid/dismissed/stale/no-op choices retain the existing safety/history rules. Worksheet
+custom controls, graph Fill/Line and inline editor colours are separate. Seven UI regressions
+cover all four targets/rendered colours, boundaries, invalid text, reseeding/no-op, Enter/Cancel,
+stale requests, inline-colour precedence, styles and native/companion persistence. Fresh owned
+Origin RGB/black/white property and pixel controls are recorded in graphing 7.4; the malformed
+first pilot is excluded and the numeric submenu is explicit Sheaf layout. Other colour lists,
+Auto, palette storage, special escape aliases and native dialog measurements remain open.
+Fmt, strict workspace/all-target Clippy, all 4,274 workspace tests (eight ignored), all 127
+related formatting UI/helper/preview tests, inventory 299 and eight Python tooling tests pass
+with unchanged source/goldens on integrated T108 source. Fresh desktop seeded RGB,
+invalid-input and closed-menu captures from the tested executable were inspected.
+
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

@@ -1,5 +1,7 @@
 //! The Format bar uses the same change contract for every supported target.
 
+mod rgb;
+
 use super::*;
 use crate::object_format::{self, Markup, Snapshot as ObjectSnapshot};
 use crate::text_format::{Change, Snapshot};
@@ -216,33 +218,70 @@ fn classic_colors(ui: &mut Ui, captured: &Snapshot, fill: bool, actions: &mut Ve
 
 fn colors(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
     let capture_id = ui.id().with("format_color_capture");
+    let rgb_id = ui.id().with("graph_font_rgb_draft");
     let captured = ui.data_mut(|d| d.get_temp::<Snapshot>(capture_id)).unwrap_or_else(|| state.clone());
     let color = &state.font.color;
     let label = egui::RichText::new("A").strong().color(Color32::from_rgb(color.r, color.g, color.b));
-    let response = ui
-        .menu_button(label, |ui| {
-            // Shared named presets; the custom chooser below is worksheet-only.
-            for (name, color) in object_format::PALETTE {
-                if ui.button(format!("Font Color: {name}")).clicked() {
-                    actions.push(Action::FormatText(captured.request(Change::Color(color))));
-                    ui.close();
-                }
+    let contents = |ui: &mut Ui| {
+        // Shared presets; worksheet and graph-font custom choosers retain their own controls.
+        for (name, color) in object_format::PALETTE {
+            if ui.button(format!("Font Color: {name}")).clicked() {
+                actions.push(Action::FormatText(captured.request(Change::Color(color))));
+                ui.close();
             }
-            classic_colors(ui, &captured, false, actions);
-            if captured.worksheet.is_some() {
-                ui.separator();
-                if ui.button("Font Color: Custom...").clicked() {
-                    use crate::dialogs::worksheet_color::{Kind, WorksheetColorDialog};
-                    if let Some(dialog) = WorksheetColorDialog::new(captured.clone(), Kind::Text) {
-                        actions.push(Action::WorksheetColorDialog(Box::new(dialog)));
+        }
+        classic_colors(ui, &captured, false, actions);
+        if captured.worksheet.is_some() {
+            ui.separator();
+            if ui.button("Font Color: Custom...").clicked() {
+                use crate::dialogs::worksheet_color::{Kind, WorksheetColorDialog};
+                if let Some(dialog) = WorksheetColorDialog::new(captured.clone(), Kind::Text) {
+                    actions.push(Action::WorksheetColorDialog(Box::new(dialog)));
+                }
+                ui.close();
+            }
+        } else {
+            ui.separator();
+            let mut picker = ui
+                .data_mut(|d| d.get_temp::<rgb::Picker>(rgb_id))
+                .unwrap_or_else(|| rgb::Picker::new(captured.font.color));
+            let mut chosen = None;
+            let response = egui::containers::menu::SubMenuButton::new("Font Color: Custom RGB...")
+                .config(
+                    egui::containers::menu::MenuConfig::new()
+                        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+                )
+                .ui(ui, |ui| {
+                    if let Some(choice) = picker.show(ui) {
+                        chosen = Some(choice);
+                        ui.close();
                     }
-                    ui.close();
+                })
+                .0;
+            response
+                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Font Color: Custom RGB..."));
+            ui.data_mut(|d| d.insert_temp(rgb_id, picker));
+            if let Some(choice) = chosen {
+                if let rgb::Choice::Apply(color) = choice {
+                    actions.push(Action::FormatText(captured.request(Change::Color(color))));
                 }
+                ui.close();
             }
-        })
-        .response;
+        }
+    };
+    let response = if state.worksheet.is_some() {
+        ui.menu_button(label, contents).response
+    } else {
+        egui::containers::menu::MenuButton::new(label)
+            .config(
+                egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+            )
+            .ui(ui, contents)
+            .0
+    };
     if response.clicked() {
         ui.data_mut(|d| d.insert_temp(capture_id, state.clone()));
+        ui.data_mut(|d| d.remove::<rgb::Picker>(rgb_id));
     }
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Format toolbar: Font Color"));
     response.on_hover_text("Font Color");

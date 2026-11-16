@@ -71,6 +71,23 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+**T58 custom RGB graph-font toolbar colours (2026-11-16, Windows):** Font Color >
+Custom RGB... provides 0 to 255 fields, a preview, Apply/Cancel and valid Enter for selected
+labels/titles/legends. The existing captured requests preserve target/revision/generation,
+no-op/history and save rules; raw text/styles and inline-colour precedence remain intact.
+Worksheet custom colours and graph Fill/Line retain their own controls. Fresh private Origin
+RGB/black/white property controls and 2,198 exact 17/131/213 pixels are recorded in graphing7.4;
+the malformed first pilot is excluded, and no label-position/picker-geometry parity is claimed.
+Seven new UI regressions cover all four targets/rendered RGB, boundaries, invalid input,
+Enter/Cancel, reseeding/no-op, stale requests, styles/SVG/native-companion saves and inline
+precedence. Fmt, strict workspace/all-target Clippy, all 4,274 workspace tests (eight ignored),
+all 127 related formatting UI/helper/preview tests, inventory299 and eight Python tests pass
+on integrated T108 source, with frozen source/goldens. Fresh seeded RGB/invalid256/menu-close
+captures were inspected from the tested executable; all own Native/App/helper actors closed.
+Only own claim/window released. Other colour lists, Auto, palette storage, special escape aliases
+and further native dialog measurements remain open. No editor, model, renderer, IO or App request
+production changes.
+
 **T58 paired-script editor insertion (2026-11-16, Windows):** Paired scripts opens
 lower/upper fields in the shared label/title/legend editor and inserts the existing measured
 paired-column syntax. Raw selection seeds the lower branch; literal commas, Unicode, other
@@ -500,7 +517,6 @@ T59 remains partial; category defaults and sticky heights are separate work.
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t58-graph-font-rgb` | Codex Windows | T58 selected graph label/title/legend Font Color custom RGB submenu in existing Format toolbar | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` reused after1327af26/FULL4262/all own actors and CI terminal. Only toolbar/format.rs graph-font adapter +new private RGB helper, own UI/helper tests+registry, GUI1/graphing7.4/T58/index/roadmap/parity. RGB0..255 validation/preview/choice through existing captured font requests; target/revision/generation/no-op/history/save rules reused. No worksheet/palette or graph Fill/Line production changes, private text editor/font-family/paired helpers, Core/model/IO/renderer/font loading/App request types, worksheet defaults/T59, graph_view/shapes/gadgets/T60/T61/stockT108, stats/fitting/MCP/import/clipboard, reserved tasks/formula-parameter labels or ROOT pending files. No product window. |
 | `codex/t59-worksheet-default-fonts` | Codex Windows | T59 worksheet category font defaults for Data and Column Labels/specific label rows; Native inheritance/manual override/new-column measurement first | claimed 2026-11-16; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` reused after23e89f2c/FULL4205/all actors terminal. Bounded compatible worksheet font-default model/new module +cellformat-index fallback, existing worksheet font-derived metrics/text rendering, new private category-font dialog +existing Worksheet Format/F4 dispatch/state/menu branch/registrations, XLSX effective styles and existing worksheet-format save warning as required, own regressions and GUI3/workbook13b/T59 metadata. Font family/size only; unsupported Standard/header mutators remain disabled. No colour defaults/text controls/vertical alignment/sticky heights, print dialog/layout/extents/T27, graph editor/palette/renderer/fonts/T61, T102 theme storage/T101 gadgets, stats/fitting/MCP/import/clipboard, reserved tasks/formula-parameter labels or ROOT pending files. Measure before implementation. No product window; respect T61 FIXED10:45-11:15 and all other claims. |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |

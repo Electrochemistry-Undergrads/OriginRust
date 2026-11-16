@@ -722,6 +722,28 @@ rendered RGB, unchanged raw markup/styles, no-op/stale requests, one-step Undo a
 roundtrips are covered by graph-toolbar regressions; explicit inline colour escapes retain their
 existing precedence over the base font. No renderer, model or persistence fields change.
 
+Custom graph-font RGB follow-up (2026-11-16): Font Color > Custom RGB... adds three opaque
+RGB channel fields, a colour preview, Apply font color and Cancel font color. The current base
+font colour seeds the fields each time the root menu opens. Only whole numbers from 0 to 255
+are accepted; invalid text disables Apply and Enter. A valid Enter or Apply uses the existing
+captured font request and closes both menu levels. Cancel or dismissal changes no document
+state. Unchanged acceptance adds no history; stale target/revision/generation requests retain
+the existing rejection rules. Worksheet custom colours keep their separate dialog; graph
+object Fill/Line and inline text-editor palettes retain their controls. Explicit inline colour
+escapes still override the base font. No model, renderer, request type or IO code changes.
+
+Origin's [Color function](https://docs.originlab.com/labtalk/ref/color-func/) documents RGB
+components from 0 to 255, and the Format toolbar reference above covers selected graph text.
+A fresh private Origin 2016 control (`scratch/t58-graph-font-rgb/native-clean/`) sets both
+`legend.color` and a named label's colour through `color(r,g,b)`: 17/131/213 reads 30769937,
+black reads 16777216, and white reads 33554431. The legend's raw substitution text and 22 pt
+size stay unchanged; the label's raw text also stays unchanged. Its setup flag text was literal,
+so no positioning/layout claim is inferred. The inspected RGB screenshot contains 2,198 exact
+17/131/213 pixels in the measured text region. Every clean LabTalk step was checked; the first
+pilot used a malformed wait delimiter and is excluded. Both owned instances/helpers closed.
+These property/pixel controls establish RGB application, not the native custom-picker geometry;
+the compact numeric submenu is Sheaf UI. Other colour lists, Auto and palette storage remain open.
+
 `text_format::{Snapshot, Target, Change, Request}` separates widget changes from target application.
 T59 can add its cell target behind the same toolbar. Requests capture graph/layer/object plus
 document generation and revision. Dispatch rechecks active selection and dialog/cell editing state;

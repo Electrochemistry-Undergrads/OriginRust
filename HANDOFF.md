@@ -77,7 +77,9 @@ SVG and font-independent stroke PNG goldens cover glyph anchors, title/legend/la
 placement and EPS/EMF/PDF/raster output. Origin scalar/PNG observations and layout limits are
 recorded in graphing 7.1. Per-run colour/font switches, combined scripts and editor/toolbar
 formatting remain open; the 15 UI inventory locations remain disabled. The separately claimed
-T64 significance plot is unaffected.
+T64 significance plot is unaffected. Formatting, strict workspace all-target Clippy and
+3,624 tests pass (eight existing ignored), with the 421-item inventory and eight Python
+tooling tests passing on the current T59/T60/T61/T62/T63 integration tree.
 
 T63 J (`t63-add-plot`): Graph > Add Plot to Layer > Line/Scatter/Line + Symbol/Column/Area open
 Layer Contents with that plot type chosen, as measured in Origin 2016; Area joined the type list.

@@ -702,6 +702,16 @@ pub enum Action {
     ImportRecent(std::path::PathBuf),
     /// Clear Recent Projects / Imports / Books / Graphs.
     ClearRecent(crate::recent::RecentKind),
+    /// A command ran from the Plot, Worksheet, Analysis or Statistics menu (or its Most Recently
+    /// Used list): it goes to the top of that menu's list.
+    UsedCommand {
+        menu: crate::mru::MruMenu,
+        cmd: crate::menus::Cmd,
+    },
+    /// File > Export > Recent Exports: open the export of that file again on its window.
+    OpenRecentExport(sheaf_io::recent::ExportEntry),
+    /// Clear Recent Exports.
+    ClearRecentExports,
     /// Remove a window from the project.
     DeleteWindow(WindowId),
     /// Put a window into a folder of the project explorer (the path of indices; empty is the root).

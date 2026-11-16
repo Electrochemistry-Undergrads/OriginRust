@@ -78,7 +78,7 @@ The ids 507, 510, 511, 532 are assigned by guess from their contents (INFER).
 - Recent Books, Recent Graphs, Recent Projects; Exit. Recent Projects and Recent Imports work (T38,
   `docs/spec/recent-files.md`; 15 entries per list (Origin measured, T38), the numbering and the path display are Sheaf's
   choices, not measured in Origin). Recent Books and Recent Graphs work too (T54, `docs/spec/window-files.md`):
-  they list the window files saved with Save Window As or opened. Recent Exports stays greyed.
+  they list the window files saved with Save Window As or opened. Recent Exports lists the files exports wrote (T78, recent-lists.md).
 - Graph windows additionally have Export Page... in the Layout version and the graph File menu
   carries Batch Processing but no "Re-Import".
 

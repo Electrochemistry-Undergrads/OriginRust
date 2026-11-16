@@ -1090,6 +1090,8 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         recent_projects: &[],
         recent_books: &[],
         recent_graphs: &[],
+        recent_commands: &crate::menus::NO_COMMANDS,
+        recent_exports: &[],
         user_templates: &[],
         templates: false,
         recent_imports: &[],

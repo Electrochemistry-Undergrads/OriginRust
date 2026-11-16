@@ -70,7 +70,7 @@ fn graph_legends_follow_their_owner_and_keep_entries_for_a_hidden_sibling() {
         assert_eq!(hit::hit_test(&scene, at, 0.), hit::Hit::Page);
     }
     let raster = render_raster(&p, g, 0.25).unwrap();
-    assert!(raster.rgba.chunks_exact(4).all(|px| px == [255, 255, 255, 255]));
+    assert!(raster.rgba.as_chunks::<4>().0.iter().all(|px| *px == [255, 255, 255, 255]));
     // The zero-size clip used by a hidden layer also remains valid export input.
     assert!(render_pdf(&p, g).unwrap().starts_with(b"%PDF"));
     assert!(render_eps(&p, g).unwrap().starts_with(b"%!PS"));

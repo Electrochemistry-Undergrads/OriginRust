@@ -733,6 +733,15 @@ pub struct StyleArgs {
     /// option for more slopes; they all apply to the first plot.
     #[arg(long, value_name = "ROW_A,ROW_B")]
     pub slope: Vec<String>,
+    /// Draw a vertical straight line at an X value on the first layer, with a label that shows the value:
+    /// "VALUE" or "VALUE,LOCATION" with LOCATION top (the default), bottom, left or right (for example
+    /// --vline 0.5 or --vline 0.5,bottom). The line runs across the whole frame in black, 0.5 pt. Repeat
+    /// the option for more lines. A value outside the axis range draws nothing.
+    #[arg(long, value_name = "VALUE[,LOCATION]")]
+    pub vline: Vec<String>,
+    /// Draw a horizontal straight line at a Y value on the first layer: like --vline.
+    #[arg(long, value_name = "VALUE[,LOCATION]")]
+    pub hline: Vec<String>,
 }
 
 /// Which part of the page a figure shows (Origin's export margin settings).

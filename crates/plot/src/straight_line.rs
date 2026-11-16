@@ -35,7 +35,17 @@ pub(crate) fn value_text(line: &StraightLine, axis: &Axis, r: &ResolvedAxis) -> 
             _ => sig_str(v, 6),
         },
         _ => {
-            let step = if r.step.is_finite() && r.step != 0.0 { r.step.abs() } else { 1.0 };
+            let mut step = if r.step.is_finite() && r.step != 0.0 { r.step.abs() } else { 1.0 };
+            // The automatic format follows the tick step, but must not round the value itself away:
+            // 1.5 on an axis with a step of 1 still reads 1.5.
+            if axis.tick_format == TickFormat::Auto
+                && let Some(d) = (0..=6).find(|d| {
+                    let f = 10f64.powi(*d);
+                    ((v * f).round() / f - v).abs() <= 1e-9 * v.abs().max(1e-300)
+                })
+            {
+                step = step.min(10f64.powi(-d));
+            }
             linear_labels(axis, &[v], step).into_iter().next().unwrap_or_default()
         }
     }

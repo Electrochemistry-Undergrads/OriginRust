@@ -52,6 +52,8 @@ pub fn style_spec(s: &StyleArgs) -> Style {
         label: s.label.clone(),
         draw: s.draw.clone(),
         slope: s.slope.clone(),
+        vline: s.vline.clone(),
+        hline: s.hline.clone(),
     }
 }
 

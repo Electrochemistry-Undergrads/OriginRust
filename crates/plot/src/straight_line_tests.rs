@@ -184,6 +184,10 @@ fn the_format_is_the_tick_format_or_fixed_decimals() {
     let (mut p, g) = graph();
     line(&mut p, g, true, 2.0, StraightLineLabel::Top);
     assert_eq!(texts(&p, g)[0].text, "2");
+    // The value is not rounded to the tick step (2 here).
+    p.graph_mut(g).unwrap().layers[0].straight_lines[0].value = 2.5;
+    assert_eq!(texts(&p, g)[0].text, "2.5");
+    p.graph_mut(g).unwrap().layers[0].straight_lines[0].value = 2.0;
     p.graph_mut(g).unwrap().layers[0].straight_lines[0].format = Some(".2".into());
     assert_eq!(texts(&p, g)[0].text, "2.00");
     p.graph_mut(g).unwrap().layers[0].straight_lines[0].value = 2.345;

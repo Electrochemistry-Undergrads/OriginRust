@@ -2664,6 +2664,27 @@ docs.originlab.com/x-function/ref/plot_paretoraw, .../plot_paretobin]:
   cumulative line starts at (0, 0), the left edge of the first bar at 0 %. Sheaf copies both (placed from the drawn bar
   width, so they follow the layer's gap); the first and the last point carry no data labels.
 
+**Measured 2026-11-16 in Origin 2016** (Plot > Statistics > Interval Plot and Pareto Chart - Raw Data through the
+menu, PNG exports `re-workspace/scratch/t83-origin/interval.png`, `pareto.png`):
+
+- Interval Plot of A = 1..10, B = 2, 4, ..., 16, C = {3, 5, 4, 8, 10}: one filled circle per column at the mean
+  (5.5, 9, 6) with a capped bar of the Student-t 95 % confidence interval (3.33..7.67, 4.90..13.10, 2.38..9.62),
+  so Sheaf's default statistic and level match. Colours black, red, blue (the column order through Origin's
+  list), bars in the symbol's colour; X at 1, 2, 3 labelled with the column names, range 0.5..3.5, no X title; Y
+  title "Range"; Y axis -2..20 (wider than the intervals); **one legend with two entries**, an error-bar sample
+  "Mean ± 95% CI" and a circle "Mean", not one entry per column.
+- Pareto Chart - Raw Data of one text column (b ×5, a ×4, c ×2, d, e, f ×1; 14 cells): two layers. Bars red with a
+  black outline, most frequent first, ties in order of first occurrence (d, e, f) as Sheaf; X tick labels the
+  categories, no X title. Left Y "Count" from 0 to **1.1 × the total** (15.4); right Y "Cumulative Frequency"
+  from 0 to 110 with ticks every 20 labelled **0% ... 100%**, so 100 % stands level with the total count.
+  The cumulative percent is a thin blue line with blue squares at the **bar centres** (no (0, 0) point), each
+  labelled with its value to 7 significant digits (35.71429, 64.28571, ..., 100) above it. No legend.
+
+**Differences from what Sheaf does below (for a code slice):** interval plot legend (two summary entries) and Y
+title "Range"; Pareto cumulative points at the bar centres without the (0, 0) start (Origin 2016; the `symr`
+right-edge default documented for later versions does not hold here), point labels, left axis to 1.1 × total
+with the right axis 0..110 in percent labels, title "Cumulative Frequency", blue line and squares.
+
 **What Sheaf does** (unmeasured unless listed above):
 
 - Pareto counts every cell of the column: row filters and Hide Masked Points are not applied to it (Sheaf's choice; the

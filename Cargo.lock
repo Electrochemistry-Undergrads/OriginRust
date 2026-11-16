@@ -3304,7 +3304,6 @@ name = "sheaf-expr"
 version = "0.1.0"
 dependencies = [
  "stacker",
- "thiserror 2.0.21",
 ]
 
 [[package]]

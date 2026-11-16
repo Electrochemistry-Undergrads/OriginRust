@@ -105,6 +105,7 @@ fn style_schema() -> Value {
             ),
             ("treemap_depth", n("Treemaps: the number of levels shown, 1 or more (default: all).")),
             ("treemap_gap", n("Treemaps: gap between rectangles in pt, 0 to 20 (default 1.5).")),
+            ("group_error", t("string", "Grouped columns: error bars on the group means, none (default), sd or se.")),
             (
                 "sunburst_start",
                 n(
@@ -342,7 +343,7 @@ pub fn defs() -> Vec<Def> {
                     (
                         "template",
                         s(
-                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), scatter-rug (scatter with rug marks beside the bottom and left axes), 3ys-y-yy, 3ys-y-y-y, 4ys-y-yyy, 4ys-yy-yy (three or four Y axes over one X axis, one layer each, the y columns dealt out one to a layer in turn; y2 is refused), violin (also violin-box, violin-point, violin-quartile, violin-stick, half-violin), ridgeline (one density curve per y column, stacked up the page), hexbin (x against the first y column, binned into hexagons coloured by count, with a colour scale; no right axis), parallel (one vertical axis per y column, one line per row coloured by the last column or by group, with a colour scale; two or more y columns, no right axis), parallel-index (like parallel, lines coloured by a text group column with a legend; three or more y columns plus group), treemap (nested rectangles, one level per category column given in group, default the text columns, with areas proportional to the last numeric y column; options treemap_layout, treemap_order, treemap_depth, treemap_gap; no right axis), sunburst (the same hierarchy as concentric rings, first category innermost, angles proportional to the last numeric y column, coloured by value with a colour scale; options sunburst_start, sunburst_hole, sunburst_gap, sunburst_labels, sunburst_order; no right axis), ... (the names of sheaf plot --template). Default: what the data suggests.",
+                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), scatter-rug (scatter with rug marks beside the bottom and left axes), 3ys-y-yy, 3ys-y-y-y, 4ys-y-yyy, 4ys-yy-yy (three or four Y axes over one X axis, one layer each, the y columns dealt out one to a layer in turn; y2 is refused), violin (also violin-box, violin-point, violin-quartile, violin-stick, half-violin), ridgeline (one density curve per y column, stacked up the page), hexbin (x against the first y column, binned into hexagons coloured by count, with a colour scale; no right axis), parallel (one vertical axis per y column, one line per row coloured by the last column or by group, with a colour scale; two or more y columns, no right axis), parallel-index (like parallel, lines coloured by a text group column with a legend; three or more y columns plus group), treemap (nested rectangles, one level per category column given in group, default the text columns, with areas proportional to the last numeric y column; options treemap_layout, treemap_order, treemap_depth, treemap_gap; no right axis), sunburst (the same hierarchy as concentric rings, first category innermost, angles proportional to the last numeric y column, coloured by value with a colour scale; options sunburst_start, sunburst_hole, sunburst_gap, sunburst_labels, sunburst_order; no right axis), grouped-columns and grouped-box (indexed data: one numeric y column split by one or two group columns given in group, required; the first group along the X axis, the second one plot per level; the mean of each group as columns, see group_error, or a box per group; no right axis), ... (the names of sheaf plot --template). Default: what the data suggests.",
                         ),
                     ),
                     ("book", s(BOOK)),
@@ -353,7 +354,7 @@ pub fn defs() -> Vec<Def> {
                     (
                         "group",
                         s(
-                            "Parallel plots: the group column of parallel-index (default: the first text column), or the numeric colour column of parallel (default: the last y column; none = one colour); for treemap and sunburst the category columns, comma-separated, first = top level or innermost ring (default: the text columns of the sheet).",
+                            "Parallel plots: the group column of parallel-index (default: the first text column), or the numeric colour column of parallel (default: the last y column; none = one colour); for treemap and sunburst the category columns, comma-separated, first = top level or innermost ring (default: the text columns of the sheet); for grouped-columns and grouped-box one or two group columns (required), the first on the X axis.",
                         ),
                     ),
                     ("panels", panels),

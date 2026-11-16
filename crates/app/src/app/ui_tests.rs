@@ -20,11 +20,13 @@ mod excel;
 mod export_themes;
 mod fill_inclusive;
 mod fill_sidelines;
+mod format_bar_rest;
 mod format_clip;
 mod frozen_panes;
 mod graph_data_tools;
 mod graph_scale;
 mod graph_zoom;
+mod grouped_indexed;
 mod hexbin;
 mod import_themes;
 mod label_frames;
@@ -34,6 +36,7 @@ mod legend_position;
 mod live;
 mod lollipop;
 mod multi_y;
+mod new_graph;
 mod offset_multipliers;
 mod parallel;
 mod recent;
@@ -2536,6 +2539,9 @@ fn every_command_of_a_workbook_is_reachable_from_its_origin_menu() {
     let paths: &[&[&str]] = &[
         &["File", "New", "Project"],
         &["File", "New", "Worksheet..."],
+        &["File", "New", "Graph"],
+        &["File", "Save Project without Data..."],
+        &["File", "Duplicate Project without Data"],
         &["File", "Open..."],
         &["File", "Save Project"],
         &["File", "Save Project As..."],
@@ -2632,14 +2638,14 @@ fn menu_items_sheaf_lacks_are_greyed_with_origins_name_and_a_tooltip() {
     assert!(entry_enabled(&h, "3D Color Pie") && entry_enabled(&h, "2D B&W Pie"), "the pies exist now");
     assert!(h.query_by_label("2D Color Pie").is_none(), "Origin has no 2D Color Pie");
     assert!(entry_enabled(&h, "Column + Label"), "Column + Label exists now");
-    assert!(!entry_enabled(&h, "Grouped Columns (indexed data)"), "an item Sheaf lacks is greyed");
-    menu_entry(&h, "Grouped Columns (indexed data)").hover();
-    h.run_steps(30);
-    assert!(h.query_by_label_contains("Not available in Sheaf yet").is_some(), "the tooltip says why");
+    assert!(entry_enabled(&h, "Grouped Columns (indexed data)"), "grouped columns exist now (T76)");
     close_menus(&mut h);
     // A greyed item with a shortcut still shows the key.
     click(&mut h, "View");
-    assert!(!entry_enabled(&h, "Command Window Alt+3"));
+    assert!(!entry_enabled(&h, "Command Window Alt+3"), "an item Sheaf lacks is greyed");
+    menu_entry(&h, "Command Window Alt+3").hover();
+    h.run_steps(30);
+    assert!(h.query_by_label_contains("Not available in Sheaf yet").is_some(), "the tooltip says why");
     close_menus(&mut h);
     // Print is live with a workbook active (it prints the sheet).
     click(&mut h, "File");
@@ -6344,6 +6350,7 @@ mod clipboard_origin;
 mod clipboard_formats;
 
 mod add_plot_to_layer;
+mod change_xy;
 mod find_replace;
 mod find_selection;
 mod fit_page;
@@ -6354,6 +6361,7 @@ mod label_panels;
 mod layer_management;
 #[path = "ui_tests/merge_graphs.rs"]
 mod merge_graphs;
+mod segments;
 #[path = "ui_tests/stack_panels.rs"]
 mod stack_panels;
 
@@ -8866,3 +8874,4 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
 
 #[path = "ui_tests/trendline.rs"]
 mod trendline;
+mod user_templates;

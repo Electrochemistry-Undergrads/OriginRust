@@ -34,6 +34,9 @@ struct Manifest {
     /// Set on a window file (File > Save Window As): `workbook` or `graph`. See `crate::window_file`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     window: Option<String>,
+    /// Set on a user graph template (File > Save Template As): `graph`. See `crate::user_templates`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    template: Option<String>,
 }
 
 /// What a file says it is, besides a project.
@@ -42,6 +45,15 @@ enum Marker<'a> {
     Project,
     Companion,
     Window(&'a str),
+    Template(&'a str),
+}
+
+/// What a reader wants a file to be; anything else is refused before data is read.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Want {
+    Project,
+    Window,
+    Template,
 }
 
 fn numeric_member(id: u64) -> String {
@@ -77,14 +89,31 @@ pub(crate) fn save_window_file(project: &Project, path: &Path, window: &str) -> 
     save_marked(project, path, Marker::Window(window))
 }
 
-/// The `window` marker of the manifest of `path`: `None` for a project, a companion, a file that is
-/// not a Sheaf archive and a file that cannot be read.
-pub(crate) fn window_marker(path: &Path) -> Option<String> {
+/// Writes a user template file: the same archive as a project, with `template` (`graph`) in the
+/// manifest so that it is never taken for a project or a window file.
+pub(crate) fn save_template_file(project: &Project, path: &Path, template: &str) -> Result<(), IoError> {
+    save_marked(project, path, Marker::Template(template))
+}
+
+/// The manifest of `path`; `None` for a file that is not a Sheaf archive and a file that cannot be read.
+fn sheaf_manifest(path: &Path) -> Option<Manifest> {
     let file = File::open(path).ok()?;
     let mut archive = ZipArchive::new(BufReader::new(file)).ok()?;
     let bytes = read_member(&mut archive, path, MANIFEST).ok()??;
     let manifest = serde_json::from_slice::<Manifest>(&bytes).ok()?;
-    (manifest.format == FORMAT_NAME).then_some(manifest.window).flatten()
+    (manifest.format == FORMAT_NAME).then_some(manifest)
+}
+
+/// The `window` marker of the manifest of `path`: `None` for a project, a companion, a file that is
+/// not a Sheaf archive and a file that cannot be read.
+pub(crate) fn window_marker(path: &Path) -> Option<String> {
+    sheaf_manifest(path)?.window
+}
+
+/// The `template` marker of the manifest of `path`: `None` for a project, a window file, a file that
+/// is not a Sheaf archive and a file that cannot be read.
+pub(crate) fn template_marker(path: &Path) -> Option<String> {
+    sheaf_manifest(path)?.template
 }
 
 /// True when `path` is a project file that Sheaf wrote as a companion of an `.opj`. False for any
@@ -147,6 +176,10 @@ fn write_archive(project: &Project, path: &Path, tmp: &Path, marker: Marker<'_>)
             Marker::Window(w) => Some(w.to_string()),
             _ => None,
         },
+        template: match marker {
+            Marker::Template(t) => Some(t.to_string()),
+            _ => None,
+        },
     };
     put(&mut zip, MANIFEST, &serde_json::to_vec_pretty(&manifest).map_err(|e| json_err(MANIFEST, e))?)?;
     put(&mut zip, PROJECT, &serde_json::to_vec_pretty(project).map_err(|e| json_err(PROJECT, e))?)?;
@@ -187,22 +220,30 @@ fn write_archive(project: &Project, path: &Path, tmp: &Path, marker: Marker<'_>)
 }
 
 /// Loads a project and makes sure its identifier counter is ahead of every
-/// identifier in the file. A window file (File > Save Window As) is refused: it is never opened as
-/// a project, so it cannot replace one (see [`crate::window_file`]).
+/// identifier in the file. A window file (File > Save Window As) and a user template file (File >
+/// Save Template As) are refused: they are never opened as a project, so they cannot replace one
+/// (see [`crate::window_file`] and [`crate::user_templates`]).
 pub fn load(path: &Path) -> Result<Project, IoError> {
-    load_any(path, false).map(|(project, _)| project)
+    load_any(path, Want::Project).map(|(project, _)| project)
 }
 
 /// Loads a window file: the project it holds and the kind in its manifest. A project, or a file
 /// without the marker, is refused.
 pub(crate) fn load_window_file(path: &Path) -> Result<(Project, String), IoError> {
-    let (project, kind) = load_any(path, true)?;
+    let (project, kind) = load_any(path, Want::Window)?;
     Ok((project, kind.unwrap_or_default()))
 }
 
-/// Reads the archive. The manifest is checked before any data is read: a window file is refused
-/// when `want_window` is false, a file without the marker when it is true. Returns the marker.
-fn load_any(path: &Path, want_window: bool) -> Result<(Project, Option<String>), IoError> {
+/// Loads a user template file: the project it holds and the kind in its manifest. Anything without
+/// the template marker is refused.
+pub(crate) fn load_template_file(path: &Path) -> Result<(Project, String), IoError> {
+    let (project, kind) = load_any(path, Want::Template)?;
+    Ok((project, kind.unwrap_or_default()))
+}
+
+/// Reads the archive. The manifest is checked before any data is read: a window or template file is
+/// refused when a project is wanted, a file without the wanted marker otherwise. Returns the marker.
+fn load_any(path: &Path, want: Want) -> Result<(Project, Option<String>), IoError> {
     let file = File::open(path).map_err(|e| IoError::io(path, e))?;
     let mut archive =
         ZipArchive::new(BufReader::new(file)).map_err(|source| IoError::Zip { path: path.to_path_buf(), source })?;
@@ -217,11 +258,13 @@ fn load_any(path: &Path, want_window: bool) -> Result<(Project, Option<String>),
     if manifest.format != FORMAT_NAME {
         return Err(IoError::NotAProject { path: path.to_path_buf() });
     }
-    if manifest.window.is_some() && !want_window {
-        return Err(IoError::IsAWindowFile { path: path.to_path_buf() });
-    }
-    if manifest.window.is_none() && want_window {
-        return Err(IoError::NotAWindowFile { path: path.to_path_buf() });
+    let here = path.to_path_buf();
+    match want {
+        Want::Project if manifest.window.is_some() => return Err(IoError::IsAWindowFile { path: here }),
+        Want::Project if manifest.template.is_some() => return Err(IoError::IsATemplateFile { path: here }),
+        Want::Window if manifest.window.is_none() => return Err(IoError::NotAWindowFile { path: here }),
+        Want::Template if manifest.template.is_none() => return Err(IoError::NotATemplateFile { path: here }),
+        _ => {}
     }
     if manifest.version > FORMAT_VERSION {
         return Err(IoError::UnsupportedVersion {
@@ -296,7 +339,7 @@ fn load_any(path: &Path, want_window: bool) -> Result<(Project, Option<String>),
         }
     }
     project.repair_ids();
-    Ok((project, manifest.window))
+    Ok((project, if want == Want::Template { manifest.template } else { manifest.window }))
 }
 
 /// Reads one archive member; `None` when the archive has no such member.

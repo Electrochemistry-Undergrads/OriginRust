@@ -714,6 +714,15 @@ fn line_and_ticks_tab(ui: &mut egui::Ui, axis: &mut Axis, vertical: bool, id: &s
                             "Outward from the frame, in percent of its width; negative moves the axis inside",
                         );
                     ui.end_row();
+                } else {
+                    // The same for a horizontal axis: "% From Bottom" / "% From Top", a share of the
+                    // frame's height (a Scatter Central X axis stands inside the frame, at -50).
+                    ui.label(if axis.side == AxisSide::Opposite { "% From Top" } else { "% From Bottom" });
+                    ui.add(DragValue::new(&mut axis.offset_pct).range(-100.0..=100.0).speed(0.5).suffix(" %"))
+                        .on_hover_text(
+                            "Outward from the frame, in percent of its height; negative moves the axis inside",
+                        );
+                    ui.end_row();
                 }
                 ui.label("Opposite side");
                 ui.horizontal(|ui| {

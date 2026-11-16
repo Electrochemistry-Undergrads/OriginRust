@@ -44,6 +44,7 @@ pub fn style_spec(s: &StyleArgs) -> Style {
         treemap_order: s.treemap_order.clone(),
         treemap_depth: s.treemap_depth,
         treemap_gap: s.treemap_gap,
+        group_error: s.group_error.clone(),
         sunburst_start: s.sunburst_start,
         sunburst_hole: s.sunburst_hole,
         sunburst_gap: s.sunburst_gap,
@@ -86,5 +87,11 @@ pub fn plot_spec(a: &PlotArgs) -> PlotSpec {
         overlay_books: Vec::new(),
         group: a.group.clone(),
         style: style_spec(&a.style),
+        templates_dir: user_templates_dir(a),
     }
+}
+
+/// The user template folder of a command-line request (never of an MCP one: see `PlotSpec::templates_dir`).
+fn user_templates_dir(a: &PlotArgs) -> Option<std::path::PathBuf> {
+    crate::plot::templates_dir(a.templates_dir.as_deref())
 }

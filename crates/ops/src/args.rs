@@ -700,6 +700,10 @@ pub struct StyleArgs {
     /// Treemaps: the gap between rectangles in pt, from 0 to 20 (default 1.5).
     #[arg(long, value_name = "PT")]
     pub treemap_gap: Option<f64>,
+    /// Grouped columns (-t grouped-columns): the error bars on the bars (the mean of each group's rows): none
+    /// (default), sd (standard deviation, n-1) or se (standard error).
+    #[arg(long, value_name = "ERROR")]
+    pub group_error: Option<String>,
     /// Sunburst plots (-t sunburst): where the first wedge starts, in degrees counter-clockwise from 3 o'clock
     /// (default 90: 12 o'clock; the wedges go clockwise).
     #[arg(long, value_name = "DEGREES", allow_hyphen_values = true)]
@@ -798,9 +802,17 @@ pub struct PlotArgs {
     /// colours the lines by group, with a legend; treemap nests rectangles by the category columns (--group; default:
     /// the text columns) with areas proportional to the last numeric Y column (see the --treemap-* options); sunburst
     /// draws the same hierarchy as concentric rings, the first category innermost, angles proportional to the last
-    /// numeric Y column, coloured by value (see the --sunburst-* options).
+    /// numeric Y column, coloured by value (see the --sunburst-* options); grouped-columns and grouped-box split the one
+    /// numeric Y column by one or two group columns (--group; the first on the X axis, the second one plot per level,
+    /// shown in the legend): the mean of each group as columns (see --group-error) or a box per group.
+    /// A name that is none of these plots with the user template of that name (File > Save Template As in
+    /// the desktop app; see --templates-dir).
     #[arg(short, long)]
     pub template: Option<String>,
+    /// The folder of the user graph templates (default: `$SHEAF_TEMPLATES_DIR`, else `templates` in the
+    /// settings folder). Only read when -t names no built-in template.
+    #[arg(long, value_name = "DIR")]
+    pub templates_dir: Option<std::path::PathBuf>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).
     #[arg(short, long, value_delimiter = ',')]
     pub y: Vec<String>,
@@ -825,7 +837,9 @@ pub struct PlotArgs {
     /// group column (text; default: the first text column of the sheet), one colour and legend entry per distinct
     /// text. For a parallel plot a numeric column (default: the last Y column) shown with a colour scale; `none`
     /// draws every line in the plot colour. For a treemap or sunburst the category columns, comma-separated, the first the top level or innermost ring
-    /// (default: the text columns among --y, else every text column of the sheet).
+    /// (default: the text columns among --y, else every text column of the sheet). For grouped-columns and grouped-box
+    /// one or two group columns, comma-separated (required): the first the groups along the X axis, the second the
+    /// subgroups side by side.
     #[arg(long, value_name = "COLUMN", conflicts_with_all = ["graph", "panels"])]
     pub group: Option<String>,
     /// Make a graph of several panels: stack (one column of panels that share the X axis, the

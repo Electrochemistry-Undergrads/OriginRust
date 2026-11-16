@@ -825,6 +825,19 @@ fn polyline_path(d: &mut String, pts: &[(f64, f64)], connect: Connect) {
                 line_to(d, w[1].0, w[1].1);
             }
         }
+        Connect::Segment2 | Connect::Segment3 => {
+            // groups of 2 (3) points counted from the first point of the piece; a last group with a
+            // single point draws no line
+            let n = if connect == Connect::Segment2 { 2 } else { 3 };
+            for (k, group) in pts.chunks(n).enumerate() {
+                if k > 0 {
+                    move_to(d, group[0].0, group[0].1);
+                }
+                for &(x, y) in &group[1..] {
+                    line_to(d, x, y);
+                }
+            }
+        }
         Connect::Spline => {
             let mono = pts.windows(2).all(|w| w[1].0 > w[0].0) || pts.windows(2).all(|w| w[1].0 < w[0].0);
             if pts.len() < 3 || !mono {
@@ -1138,11 +1151,16 @@ fn draw_pie(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
 /// whiskers with caps and a cross at their ends, the mean as a small open square and the outliers
 /// as crosses, all in the plot's colour (measured in Origin).
 fn draw_box(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
-    let Some(b) = &pd.boxed else { return };
+    for b in pd.boxed.iter().chain(&pd.gboxes) {
+        draw_one_box(out, pd, geom, b);
+    }
+}
+
+fn draw_one_box(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, b: &crate::data::BoxStats) {
     let color = pd.plot.symbol.color;
     let width = pd.plot.line.width_pt.max(0.5);
     let at = |x: f64, y: f64| geom.checked_data_to_page(pd.display_x(x), pd.display_y(y));
-    let (l, r) = (b.pos - crate::data::BOX_WIDTH / 2.0, b.pos + crate::data::BOX_WIDTH / 2.0);
+    let (l, r) = (b.pos - b.width / 2.0, b.pos + b.width / 2.0);
     if let (Some(a), Some(c)) = (at(l, b.q1), at(r, b.q3)) {
         out.push(Item::Rect {
             rect: Rect { x: a.0.min(c.0), y: a.1.min(c.1), w: (c.0 - a.0).abs(), h: (c.1 - a.1).abs() },

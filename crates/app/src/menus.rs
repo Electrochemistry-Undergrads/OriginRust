@@ -49,6 +49,7 @@ const NEED_CELLS: &str = "Select cells, columns or rows first";
 const NEED_TWO_COLUMNS: &str = "Select two or more columns first";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
+const NO_TEMPLATE_FOLDER: &str = "There is no folder for user templates (the settings folder is missing)";
 const NO_UNDO: &str = "Nothing to undo";
 const NO_REDO: &str = "Nothing to redo";
 const NO_AI_UNDO: &str = "The latest change must be an AI change, with no edit or dialog open";
@@ -68,12 +69,19 @@ pub enum WindowKind {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Cmd {
     NewProject,
+    NewGraph,
+    SaveProjectNoData,
+    DuplicateProjectNoData,
     NewWorkbook,
     OpenProject,
     SaveProject,
     SaveProjectAs,
     /// File > Save Window As...: the active workbook or graph to a window file of its own (T54).
     SaveWindowAs,
+    /// File > Save Template As... on a graph (T56).
+    SaveTemplateAs,
+    /// Plot > User Templates > Manage... (T56).
+    ManageTemplates,
     /// File > Import > Single ASCII (Ctrl+K).
     Import,
     ImportMultiple,
@@ -384,6 +392,8 @@ pub enum Entry {
     /// The entries of File > Recent Projects, Recent Books, Recent Graphs or File > Import > Recent
     /// Imports, from the context.
     Recent(RecentKind),
+    /// The saved user graph templates of Plot > User Templates (T56), from the context.
+    UserTemplates,
 }
 
 #[derive(Clone)]
@@ -442,6 +452,10 @@ pub struct MenuContext<'a> {
     pub recent_imports: &'a [PathBuf],
     pub recent_books: &'a [PathBuf],
     pub recent_graphs: &'a [PathBuf],
+    /// The saved user graph templates (Plot > User Templates), and whether there is a template
+    /// folder at all (File > Save Template As and Manage are greyed without one).
+    pub user_templates: &'a [String],
+    pub templates: bool,
     /// Which side panels are shown, in the order of `PanelId::ALL` (the ticks of the View menu).
     pub panels: [bool; 4],
     /// The AI link is on (the tick of Tools > AI Assistants (MCP)).
@@ -614,8 +628,13 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         sub(
             "&New",
             [
-                vec![keyed("&Project", ctrl(Key::N), Cmd::NewProject), item("&Worksheet...", Cmd::NewWorkbook)],
-                greys(&["Matrix...", "Graph", "Image", "From Template", "Excel", "Layout", "Notes", "Function Plot"]),
+                vec![
+                    keyed("&Project", ctrl(Key::N), Cmd::NewProject),
+                    item("&Worksheet...", Cmd::NewWorkbook),
+                    grey("Matrix..."),
+                    item("&Graph", Cmd::NewGraph),
+                ],
+                greys(&["Image", "From Template", "Excel", "Layout", "Notes", "Function Plot"]),
             ]
             .concat(),
         ),
@@ -639,7 +658,11 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     if kind != WindowKind::None {
         v.push(sep());
         v.push(item("Save &Window As...", Cmd::SaveWindowAs));
-        v.push(grey("Save Template As..."));
+        if kind == WindowKind::Graph {
+            v.push(item("Save Temp&late As...", Cmd::SaveTemplateAs));
+        } else {
+            v.push(grey("Save Template As..."));
+        }
         if kind == WindowKind::Workbook {
             v.push(grey("Save Workbook As Analysis Template..."));
             v.push(grey("Add Word Bookmarks to Analysis Template..."));
@@ -648,8 +671,8 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     }
     v.extend([
         sep(),
-        grey("Save Project without Data..."),
-        grey("Duplicate Project without Data"),
+        item("Save Project without Data...", Cmd::SaveProjectNoData),
+        item("Duplicate Project without Data", Cmd::DuplicateProjectNoData),
         sep(),
         keyed("&Print...", ctrl(Key::P), Cmd::Print),
         item("Print Pre&view", Cmd::PrintPreview),
@@ -858,7 +881,7 @@ fn plot_menu() -> Vec<Entry> {
                 vec![
                     item("&Scatter", Cmd::Plot(Template::Scatter)),
                     item("Scatter + Rug", Cmd::Plot(Template::ScatterRug)),
-                    grey("Scatter Central"),
+                    item("Scatter Central", Cmd::Plot(Template::ScatterCentral)),
                     grey("Column Scatter"),
                 ],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
@@ -875,8 +898,12 @@ fn plot_menu() -> Vec<Entry> {
         sub(
             "Line + S&ymbol",
             with(
-                vec![item("Line + &Symbol", Cmd::Plot(Template::LineSymbol))],
-                &["Line Series", "2 Point Segment", "3 Point Segment"],
+                vec![
+                    item("Line + &Symbol", Cmd::Plot(Template::LineSymbol)),
+                    item("2 Point Segment", Cmd::Plot(Template::Segment2)),
+                    item("3 Point Segment", Cmd::Plot(Template::Segment3)),
+                ],
+                &["Line Series"],
             ),
         ),
         sub(
@@ -884,7 +911,7 @@ fn plot_menu() -> Vec<Entry> {
             [
                 vec![item("&Column", Cmd::Plot(Template::Column))],
                 vec![item("Column + Label", Cmd::Plot(Template::ColumnLabel))],
-                greys(&["Grouped Columns (indexed data)"]),
+                vec![item("Grouped Columns (indexed data)", Cmd::Plot(Template::GroupedColumns))],
                 vec![
                     item("Bar", Cmd::Plot(Template::Bar)),
                     item("Stacked Column", Cmd::Plot(Template::StackedColumn)),
@@ -966,7 +993,7 @@ fn plot_menu() -> Vec<Entry> {
             "S&tatistics",
             [
                 vec![item("Box Chart", Cmd::Plot(Template::BoxChart))],
-                greys(&["Grouped Box Charts", "Interval Plot"]),
+                vec![item("Grouped Box Charts", Cmd::Plot(Template::GroupedBox)), grey("Interval Plot")],
                 vec![
                     item("Violin Plot", Cmd::Plot(Template::Violin)),
                     item("Violin with Box", Cmd::Plot(Template::ViolinBox)),
@@ -1050,7 +1077,16 @@ fn plot_menu() -> Vec<Entry> {
         sep(),
         grey("System Templates..."),
         // Sheaf's own graph style is the one template that has no Origin counterpart.
-        sub("&User Templates", vec![item("Cyclic voltammetry overlay", Cmd::Plot(Template::CyclicVoltammetry))]),
+        sub(
+            "&User Templates",
+            vec![
+                item("Cyclic voltammetry overlay", Cmd::Plot(Template::CyclicVoltammetry)),
+                sep(),
+                Entry::UserTemplates,
+                sep(),
+                item("&Manage...", Cmd::ManageTemplates),
+            ],
+        ),
         sep(),
         grey("Most Recently Used"),
     ]
@@ -1813,6 +1849,16 @@ pub fn sheet_tab_menu() -> Vec<Entry> {
 
 // ----- graph window menus (gui-look.md section 4) ----------------------------------------------
 
+/// What Change X, Change Y and Ungroup of a plot's menu need: the columns of the plot's sheet
+/// (id and the label `[Book1]Sheet1!A(X)`), the plot's own columns and whether it is in a group.
+#[derive(Clone, Default)]
+pub struct PlotColumns {
+    pub list: Vec<(ColumnId, String)>,
+    pub x: Option<ColumnId>,
+    pub y: Option<ColumnId>,
+    pub grouped: bool,
+}
+
 /// The menu of a plot: what was picked, so the commands act on it. `book` is the workbook the
 /// plot's data is in, with its title.
 pub fn graph_plot_menu(
@@ -1823,7 +1869,30 @@ pub fn graph_plot_menu(
     book: Option<(WindowId, String)>,
     trendlines: usize,
     layers: usize,
+    cols: &PlotColumns,
 ) -> Vec<Entry> {
+    // Change X / Change Y: the sheet's columns, the plot's own ticked, the one it uses on the other
+    // axis greyed; a plot of a group offers none.
+    let change_col = |label: &str, y: bool| {
+        if cols.grouped || cols.list.is_empty() {
+            return grey(label);
+        }
+        let (own, other) = if y { (cols.y, cols.x) } else { (cols.x, cols.y) };
+        let entries = cols
+            .list
+            .iter()
+            .map(|(id, name)| {
+                let tick = if own == Some(*id) { "\u{2713} " } else { "" };
+                let text = format!("{tick}{name}");
+                if other == Some(*id) {
+                    grey(&text)
+                } else {
+                    item(&text, Cmd::GraphEdit(GraphOp::SetPlotColumn { layer, plot, y, column: *id }))
+                }
+            })
+            .collect();
+        sub(label, entries)
+    };
     let change = |label: &str, to: PlotKind| {
         if to == kind {
             grey(label)
@@ -1843,8 +1912,8 @@ pub fn graph_plot_menu(
                 change("Stacked Area", PlotKind::StackedArea),
             ],
         ),
-        grey("Change X"),
-        grey("Change Y"),
+        change_col("Change X", false),
+        change_col("Change Y", true),
         sep(),
         item(
             if on_right { "Move to Left Y Axis" } else { "Move to Right Y Axis" },
@@ -1872,7 +1941,7 @@ pub fn graph_plot_menu(
     }
     v.extend([
         sep(),
-        grey("Ungroup"),
+        if cols.grouped { item("Ungroup", Cmd::GraphEdit(GraphOp::Ungroup { layer, plot })) } else { grey("Ungroup") },
         sep(),
         item("Plot Details...", Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: Some(plot) }),
     ]);
@@ -2187,7 +2256,7 @@ fn walk<'a>(entries: &'a [Entry], f: &mut dyn FnMut(&'a Item)) {
         match e {
             Entry::Item(i) => f(i),
             Entry::Submenu(s) => walk(&s.entries, f),
-            Entry::Separator | Entry::Windows | Entry::Recent(_) => {}
+            Entry::Separator | Entry::Windows | Entry::Recent(_) | Entry::UserTemplates => {}
         }
     }
 }
@@ -2331,11 +2400,26 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
     let sorting = || if c.sorting_columns.is_empty() { Err(NEED_COLUMNS) } else { Ok(c.sorting_columns.clone()) };
     Ok(match cmd {
         Cmd::NewProject => Action::NewProject,
+        Cmd::NewGraph => Action::NewGraph,
+        Cmd::SaveProjectNoData => Action::SaveProjectWithoutData,
+        Cmd::DuplicateProjectNoData => Action::DuplicateProjectWithoutData,
         Cmd::NewWorkbook => Action::NewWorkbook,
         Cmd::OpenProject => Action::OpenProject,
         Cmd::SaveProject => Action::SaveProject,
         Cmd::SaveProjectAs => Action::SaveProjectAs,
         Cmd::SaveWindowAs => Action::SaveWindowAs(c.active.ok_or(NEED_WINDOW)?),
+        Cmd::SaveTemplateAs => {
+            if !c.templates {
+                return Err(NO_TEMPLATE_FOLDER);
+            }
+            Action::SaveTemplateAs(c.graph.ok_or(NEED_GRAPH)?)
+        }
+        Cmd::ManageTemplates => {
+            if !c.templates {
+                return Err(NO_TEMPLATE_FOLDER);
+            }
+            Action::ManageTemplates
+        }
         Cmd::Import => Action::ImportPick(ImportPick::Single),
         Cmd::ImportMultiple => Action::ImportPick(ImportPick::Multiple),
         Cmd::ImportCsv => Action::ImportPick(ImportPick::Csv),
@@ -2788,6 +2872,7 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                 }
             }
             Entry::Recent(kind) => show_recent(ui, *kind, c, actions),
+            Entry::UserTemplates => show_user_templates(ui, c, actions),
             Entry::Windows => {
                 for (n, (id, title)) in c.windows.iter().enumerate() {
                     let label = format!("&{} {title}", n + 1);
@@ -2888,6 +2973,25 @@ fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &m
                 RecentKind::Projects | RecentKind::Books | RecentKind::Graphs => Action::OpenRecent(path.clone(), kind),
                 RecentKind::Imports => Action::ImportRecent(path.clone()),
             });
+            ui.close();
+        }
+    }
+}
+
+/// The saved user templates: plotting the selected columns of the active workbook with one.
+fn show_user_templates(ui: &mut egui::Ui, c: &MenuContext, actions: &mut Vec<Action>) {
+    if c.user_templates.is_empty() {
+        ui.add_enabled(false, egui::Button::new(label_job(ui, "(no saved templates)", true)));
+        return;
+    }
+    for name in c.user_templates {
+        let can = c.book.is_some() && !c.selected.is_empty();
+        let response = ui.add_enabled(can, egui::Button::new(label_job(ui, name, true)));
+        let response = if can { response } else { response.on_disabled_hover_text(NEED_COLUMNS) };
+        if response.clicked()
+            && let Some(book) = c.book
+        {
+            actions.push(Action::PlotUserTemplate { book, columns: c.selected.to_vec(), name: name.clone() });
             ui.close();
         }
     }
@@ -3105,6 +3209,8 @@ mod tests {
             recent_imports: &[],
             recent_books: &[],
             recent_graphs: &[],
+            user_templates: &[],
+            templates: false,
             panels: [true; 4],
             ai_link: false,
             layer: 0,

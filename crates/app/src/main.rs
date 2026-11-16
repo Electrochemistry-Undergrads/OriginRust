@@ -41,6 +41,7 @@ mod live;
 #[cfg(target_os = "macos")]
 mod macprint;
 mod menus;
+mod object_format;
 mod panels;
 mod reader;
 mod recent;
@@ -70,6 +71,7 @@ fn main() -> eframe::Result {
         settings_path: sheaf_io::recovery::default_settings_path(),
         recent_path: sheaf_io::recent::default_path(),
         themes_dir: sheaf_io::themes::default_dir(),
+        templates_dir: sheaf_io::user_templates::default_dir(),
         mcp_dirs: Some(sheaf_io::recovery::run_dir_candidates()),
         ..Default::default()
     };
@@ -82,6 +84,8 @@ fn main() -> eframe::Result {
             "--show" => startup.show.extend(args.next()),
             "--themes-dir" => startup.themes_dir = args.next().map(PathBuf::from),
             "--no-themes" => startup.themes_dir = None,
+            "--templates-dir" => startup.templates_dir = args.next().map(PathBuf::from),
+            "--no-templates" => startup.templates_dir = None,
             "--mcp" => startup.mcp = true,
             _ => startup.paths.push(PathBuf::from(arg)),
         }

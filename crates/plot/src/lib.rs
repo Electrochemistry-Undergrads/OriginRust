@@ -64,6 +64,8 @@ mod fill_inclusive_tests;
 #[cfg(test)]
 mod fill_sideline_tests;
 #[cfg(test)]
+mod grouped_tests;
+#[cfg(test)]
 mod hexbin_tests;
 #[cfg(test)]
 mod label_frame_tests;
@@ -117,6 +119,8 @@ mod text_rgb_tests;
 mod treemap_tests;
 #[cfg(test)]
 mod trend_tests;
+#[cfg(test)]
+mod user_template_tests;
 #[cfg(test)]
 mod violin_tests;
 

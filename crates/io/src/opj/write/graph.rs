@@ -741,6 +741,12 @@ impl Writer {
                     .into(),
             );
         }
+        if plots.iter().any(|r| r.plot.indexed.is_some()) {
+            notes.push(
+                "grouped columns and grouped box charts of indexed data were written as plain plots of their data column; the group columns and the grouping were not written"
+                    .into(),
+            );
+        }
         if has(&|k| k.is_ridgeline()) {
             notes.push("ridgeline charts were written as plain columns of their data".into());
         }
@@ -805,6 +811,8 @@ impl Writer {
                 Connect::Bezier => 15,
                 Connect::StepHorizontal => 11,
                 Connect::StepVertical => 12,
+                Connect::Segment2 => 2,
+                Connect::Segment3 => 3,
             };
             let line_color = if kind == CurveKind::Scatter { p.symbol.color } else { p.line.color };
             let spec = CurveSpec {
@@ -1172,6 +1180,12 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
     if layer.y_axis.offset_pct != 0.0 {
         notes.push(
             "the position of a Y axis away from the frame (3Ys/4Ys, Multiple Y Axes) was not written; the axis              reopens at the frame (the .opj.sheaf companion keeps the offset)"
+                .into(),
+        );
+    }
+    if layer.x_axis.offset_pct != 0.0 {
+        notes.push(
+            "the position of an X axis away from the frame (Scatter Central) was not written; the axis reopens at the frame (the .opj.sheaf companion keeps the offset)"
                 .into(),
         );
     }

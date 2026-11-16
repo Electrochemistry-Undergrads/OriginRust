@@ -1,5 +1,5 @@
 //! The format clipboard of the application and the Apply Formats window (brief T72, graphing spec
-//! section 24). Copy Format puts a [`FormatClip`] here; Paste Format and Paste Format To apply it
+//! section 26). Copy Format puts a [`FormatClip`] here; Paste Format and Paste Format To apply it
 //! to a graph or an axis as one undo step named "Apply Theme" (Origin's own word).
 //!
 //! The clipboard is inside the program: Origin does not use the system clipboard for formats.

@@ -715,6 +715,9 @@ fn connect_kind(code: u8, notes: &mut Vec<String>) -> Connect {
         5..=10 => Connect::Spline,
         11 => Connect::StepHorizontal,
         12 => Connect::StepVertical,
+        // LabTalk's line connection codes 2 and 3 (measured); the file field uses the same codes
+        2 => Connect::Segment2,
+        3 => Connect::Segment3,
         0 | 1 => Connect::Straight,
         _ => {
             notes.push("some line connections (segments, other steps) are not supported and are drawn straight".into());
@@ -873,6 +876,7 @@ fn read_curve(
         hexbin: Default::default(),
         parallel: Default::default(),
         treemap: Default::default(),
+        indexed: None,
         sunburst: Default::default(),
         size_from: None,
         color_from: None,

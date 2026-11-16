@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="771.84pt" height="590.76pt" viewBox="0 0 771.84 590.76">
+<rect x="0" y="0" width="771.84" height="590.76" fill="#FFFFFF"/>
+<g id="layer0">
+<clipPath id="clip0"><rect x="138.237" y="68.41" width="526.086" height="424.343"/></clipPath>
+<g class="plots" clip-path="url(#clip0)">
+<rect x="155.773" y="413.542" width="70.145" height="5.658" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<path d="M155.773 416.371L225.918 416.371M190.845 413.542L190.845 413.542M190.845 419.2L190.845 419.2M182.077 419.2L199.613 419.2M182.077 413.542L199.613 413.542" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<path d="M187.345 415.7L194.345 422.7M187.345 422.7L194.345 415.7M187.345 410.042L194.345 417.042M187.345 417.042L194.345 410.042" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<path d="M188.345 413.871L193.345 413.871L193.345 418.871L188.345 418.871Z" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<rect x="331.135" y="405.055" width="70.145" height="11.316" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<path d="M331.135 410.713L401.28 410.713M366.207 405.055L366.207 405.055M366.207 416.371L366.207 416.371M357.439 416.371L374.975 416.371M357.439 405.055L374.975 405.055" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<path d="M362.707 412.871L369.707 419.871M362.707 419.871L369.707 412.871M362.707 401.555L369.707 408.555M362.707 408.555L369.707 401.555" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<path d="M363.707 408.213L368.707 408.213L368.707 413.213L363.707 413.213Z" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<rect x="225.918" y="393.74" width="70.145" height="0" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<path d="M225.918 393.74L296.062 393.74M260.99 393.74L260.99 393.74M260.99 393.74L260.99 393.74M252.222 393.74L269.758 393.74M252.222 393.74L269.758 393.74" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<path d="M257.49 390.24L264.49 397.24M257.49 397.24L264.49 390.24M257.49 390.24L264.49 397.24M257.49 397.24L264.49 390.24" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<path d="M258.49 391.24L263.49 391.24L263.49 396.24L258.49 396.24Z" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<rect x="576.642" y="238.147" width="70.145" height="120.23" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<path d="M576.642 344.233L646.786 344.233M611.714 238.147L611.714 139.134M611.714 358.378L611.714 365.45M602.946 365.45L620.482 365.45M602.946 139.134L620.482 139.134" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<path d="M608.214 361.95L615.214 368.95M608.214 368.95L615.214 361.95M608.214 135.634L615.214 142.634M608.214 142.634L615.214 135.634" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<path d="M609.214 295.762L614.214 295.762L614.214 300.762L609.214 300.762Z" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+</g>
+<g class="overlay">
+<path d="M138.237 492.753L664.323 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M138.237 68.41L138.237 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M225.918 492.753L225.918 501.753M401.28 492.753L401.28 501.753M576.642 492.753L576.642 501.753M138.237 492.753L138.237 497.253M313.599 492.753L313.599 497.253M488.961 492.753L488.961 497.253M664.323 492.753L664.323 497.253" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M138.237 422.029L129.237 422.029M138.237 280.581L129.237 280.581M138.237 139.134L129.237 139.134M138.237 492.753L133.737 492.753M138.237 351.305L133.737 351.305M138.237 209.858L133.737 209.858M138.237 68.41L133.737 68.41" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="225.918" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">a</text>
+<text x="401.28" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">b</text>
+<text x="576.642" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">c</text>
+<text x="122.937" y="426.619" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">0</text>
+<text x="122.937" y="285.171" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">50</text>
+<text x="122.937" y="143.724" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">100</text>
+<text x="401.28" y="553.833" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">A</text>
+<text x="75.417" y="280.581" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 75.417 280.581)">C</text>
+<rect x="557.623" y="86.01" width="89.1" height="74.8" fill="none" stroke="#000000" stroke-width="0.75"/>
+<rect x="566.423" y="98.11" width="48.4" height="22" fill="none" stroke="#FF0000" stroke-width="0.5"/>
+<text x="625.823" y="114.72" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">u</text>
+<rect x="566.423" y="126.71" width="48.4" height="22" fill="none" stroke="#00FF00" stroke-width="0.5"/>
+<text x="625.823" y="143.32" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">v</text>
+</g>
+</g>
+</svg>

@@ -201,8 +201,8 @@ fn linking_follows_the_first_layer_in_position_and_share_x_adds_the_scale() {
     let (mut p, gs, _) = project(3);
     let id = p.merge_graphs(&MergeOptions { rows: Some(3), cols: Some(1), link: true, ..opts(&gs) }).unwrap();
     let m = p.graph(id).unwrap().clone();
-    for i in 1..3 {
-        let link = m.layers[i].link.unwrap();
+    for layer in &m.layers[1..3] {
+        let link = layer.link.unwrap();
         assert_eq!((link.parent, link.x, link.y), (0, ScaleLink::None, ScaleLink::None));
     }
     // Origin: layer 2 at (0, 123, 100, 100) percent of layer 1

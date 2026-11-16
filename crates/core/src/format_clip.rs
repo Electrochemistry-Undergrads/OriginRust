@@ -1,4 +1,4 @@
-//! Copy Format and Paste Format on graphs (brief T72, graphing spec section 24).
+//! Copy Format and Paste Format on graphs (brief T72, graphing spec section 26).
 //!
 //! Copy Format takes one value per format group from a whole graph (every layer: page and layer
 //! size, scales, colours, fonts, layer background, axis thickness, symbols and lines, text) or from

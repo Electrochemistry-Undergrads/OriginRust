@@ -112,6 +112,7 @@ fn fresh_axis(from: &crate::graph::Axis, side: AxisSide) -> crate::graph::Axis {
     a.opposite_ticks = false;
     a.major_grid = None;
     a.minor_grid = None;
+    a.offset_pct = 0.0;
     a
 }
 
@@ -281,6 +282,15 @@ mod tests {
             None => true,
             Some(k) => k.parent < i && g.layers[k.parent].link.is_none(),
         })
+    }
+
+    #[test]
+    fn a_new_layer_of_a_scatter_central_graph_starts_with_axes_at_offset_zero() {
+        let mut g = Template::ScatterCentral.new_graph(WindowId(1), "G");
+        assert_eq!((g.layers[0].x_axis.offset_pct, g.layers[0].y_axis.offset_pct), (-50.0, -50.0));
+        g.add_layer(NewLayerKind::RightY, 0).unwrap();
+        let l = &g.layers[1];
+        assert_eq!((l.x_axis.offset_pct, l.y_axis.offset_pct), (0.0, 0.0));
     }
 
     #[test]

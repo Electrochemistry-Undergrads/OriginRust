@@ -458,6 +458,13 @@ Line (200), scatter (201), line+symbol (202) are one plot object differing in co
 - **B-spline (8)** is a uniform cubic B-spline over the points with the first and last point repeated three times, so it starts and ends at the end points and winds around the others: rms 0.4 px. It is parametric, so any X order works (loops appear when X goes back).
 - **Bezier (15)** is a cubic Bezier over points 0-3, then 3-6, 6-9 and so on (groups share their end point); leftover points are not drawn (5 and 6 points draw only the first group, 8 points end at the 7th point, 10 points at the 10th). Standard cubic Bezier formula, rms 1.5 px, largest error 3.8 px at the cusp where two groups meet (Origin draws fewer chords). Fewer than 4 points: not measured, Sheaf draws straight.
 - Raw probes and images: `re-workspace/scratch/spline-connect/` (local). Not measured: SplineStep resolution dependence, 900 limit for B-spline and Bezier (Sheaf applies none), the `.opj` file codes of 8/9/15 (Sheaf reads 8 as B-spline, 15 as Bezier, 5 to 10 else as Spline, writes 5, 8, 15).
+- **2 and 3 Point Segment (2, 3)** (measured 2026-11-15, T71): Plot > Line + Symbol > 2 Point Segment and
+  3 Point Segment make a line + symbol graph whose plot has line connection 2 (3): points 1-2, 3-4, ...
+  (1-2-3, 4-5-6, ...) are joined and the groups are not; with 9 points the 9th stands alone (2) and the
+  three groups fill exactly (3). Sheaf: `Connect::Segment2`/`Segment3`, templates `segment2`/`segment3`,
+  the Plot Details and plot-settings connect lists, groups counted from the first point of each piece of
+  line (missing data starts a new piece); `.opj` codes 2 and 3 (LabTalk's codes; the file field is
+  taken to use the same codes, not checked in a file).
 Also: connect begin and end (closes; off), connect within subset (on for line plots), Akima/modified Bezier (later versions).
 
 ### 5.3 Line options
@@ -698,15 +705,31 @@ Sheaf choices: the size box accepts finite 1 to 1000 pt values and commits on En
 leaving the box cancels the draft. Font Color offers eight named basic RGB colours (black, red,
 green, blue, cyan, magenta, yellow, white). Origin's Auto, full system/custom palettes and palette
 management remain open. Family selection is restricted to installed families; fallback rendering
-retains its existing behaviour. Underline, scripts, Greek and Fill/Line Color remain disabled
-in this toolbar until their own whole-object semantics/model support are implemented. Text-window
-selection controls and the T59 worksheet adapter are separate slices.
+retains its existing behaviour. Text-window selection controls and the T59 worksheet adapter
+are separate slices.
 
 `text_format::{Snapshot, Target, Change, Request}` separates widget changes from target application.
 T59 can add its cell target behind the same toolbar. Requests capture graph/layer/object plus
 document generation and revision. Dispatch rechecks active selection and dialog/cell editing state;
 invalid, unchanged or stale requests add no history. Open family/colour lists retain their original
 target rather than following a later selection. No model or file-format fields were added.
+
+Underline, Superscript, Subscript, Greek, Fill Color and Line Color (`object_format`, same
+request/staleness rules, own `Action::FormatObject`). Origin's online
+[Format toolbar help](https://docs.originlab.com/origin-help/format-toolbar/) [W] describes the first
+four as acting on selected characters and does not document whole-object behaviour. Fill and
+line/border colour are described on Origin's
+[Style toolbar](https://docs.originlab.com/origin-help/style-toolbar) as setting the fill or line
+colour of the selected object; Sheaf shows them in the Format row (gui-look.md, Format and Style toolbar description). Sheaf choices,
+all **unmeasured** (Origin 2016 measurement remains open): the four text buttons wrap the whole
+text in one `\u(`, `\+(`, `\-(` or `\g(` group, or remove that group when the text is exactly one
+such group (nesting counted as the parser does; `\u(a)b` is wrapped, not unwrapped; a group may
+span lines, so multi-line text is one group) and show pressed when wrapped; they apply to free
+labels and to X/Y titles with their own non-empty text, not to the legend or automatic titles.
+Fill Color (palette: None plus the eight basic colours) sets a rectangle's or circle's fill and a
+visible legend's background; Line Color sets a drawn object's or straight line's colour. Both are
+disabled with a hover reason elsewhere (the legend frame has no colour field). The selection
+survives; undo labels are "Format graph text" and "Format graph object". No model fields added.
 
 
 ---
@@ -2439,6 +2462,58 @@ Origin's documented facts (Origin 2022 help, not measured; no Origin was at hand
   the Radius/Center settings, tangential labels for thin rings, a colour-by-category-palette option, a label font setting, reading
   Origin's sunburst from .opj.
 
+### 14.28 Grouped Columns (indexed data) and Grouped Box Charts (T76)
+
+Origin's documented facts (documentation only, **not measured**; no Origin was at hand; paraphrased;
+[W:docs.originlab.com/x-function/ref/plot_gindexed], [W:docs.originlab.com/origin-help/grouped-column-index-data],
+[W:docs.originlab.com/x-function/ref/plot_gboxindexed], [W:docs.originlab.com/origin-help/groupedboxcharts-indexeddata],
+[W:docs.originlab.com/tutorials/grouped-box-plot]):
+
+- The two items run the X-Functions `plot_gindexed` and `plot_gboxindexed`, available since Origin 9.1 SR0 (so in 2016). Both
+  open a dialog: the data form (summarized or raw), the bar and error-bar statistics, stacking, themes, panels or pages
+  split by a group column. Plot > Column/Bar/Pie > Grouped Columns (indexed data) is the greyed name in Sheaf's menu; in
+  newer help the same function sits under Plot > Categorical.
+- Indexed data: one or more group columns label the rows of the data column. The order of the group columns is the
+  hierarchy: the first is the main group on the axis, the next one nested inside. Groups sort alphabetically by default.
+- The result is one grouped plot (not one plot per group). With two or more group columns the X tick labels are a table
+  of rows, one per level. The fill colour is indexed by the subgroup by default.
+- Not documented on the pages read: the default bar statistic and error bar, the spacing and gap numbers, the legend,
+  the maximum number of group levels.
+
+**What Sheaf does** (everything below that is not in the list above is Sheaf's choice, **unmeasured**):
+
+- Items: Plot > Column/Bar/Pie > Grouped Columns (indexed data) (`Template::GroupedColumns`, CLI `grouped-columns`) and
+  Plot > Statistics > Grouped Box Charts (`Template::GroupedBox`, `grouped-box`). They plot straight from the selection
+  with no dialog (Origin's dialog is a leftover).
+- Selection: the data is the one selected numeric column designated Y; every other selected column is a group column, in
+  selection order, one or two (a numeric group column such as a scan number must be designated X or Group first). Anything else
+  is a status-bar warning, "Select one or two group columns and one data column (a numeric group column must be designated X or Group)", and no graph. More than two group
+  columns and a right Y axis are refused with a message. CLI: `sheaf plot -t grouped-columns|grouped-box -y DATA --group
+  G1[,G2]` (`--group` required; the data is the last numeric `--y` column, designation is not checked) and `--group-error none|sd|se` for the columns; panels, overlay, graph styling and
+  `--y2` are refused. MCP's `plot` takes the same names and `group_error`.
+- Model: the plots stay `PlotKind::Column` and `PlotKind::Box`; the new per-plot field `Plot.indexed` holds the group column,
+  for two group columns the second column and this plot's level, and the error bar. One group column gives one plot; two
+  give one plot per level of the second column, labelled with the level, so the legend names the subgroups and the colours
+  follow the layer's palette. The X axis shows the levels of the main group only (single-row labels) and takes the group
+  column's title. `.sheaf` round-trips the field; `.opj` export writes plain plots of the data column with a save warning;
+  user templates refuse these graphs.
+- Levels: the sorted distinct values of a group column (numbers numerically when every level is a number, otherwise plain
+  case-sensitive text order). Rows with a missing data value or an empty group cell are dropped. The main-group levels are
+  those of all rows with data, so every subgroup plot shares the positions 1..K.
+- Columns: the bar is the mean of the rows of the category (and subgroup); a category with no rows in a subgroup has no
+  bar. The error bar is None by default, or the SD (n-1) or the SE of those rows (a single row has none); Plot Details >
+  Error Bar sets it for every plot of the layer, one undo step. Bars side by side come from the layer's gap and overlap.
+- Boxes: the existing box statistics (Hazen quartiles, 1.5 IQR whiskers, outliers, mean) of the rows of the category and
+  subgroup. S subgroups share the 0.8 box band, each box 0.8/S wide; one subgroup keeps the plain box width. The Y range
+  covers whiskers, outliers and error bar ends. No significance brackets on grouped boxes.
+- Tests: `crates/core/src/template.rs`, `crates/core/src/indexed.rs`, `crates/plot/src/grouped_tests.rs` (goldens
+  `grouped-box.svg`, `grouped-columns.svg`), `crates/app/src/app/ui_tests/grouped_indexed.rs`,
+  `crates/cli/tests/grouped_indexed.rs`, `crates/io/src/opj/write/graph_feature_tests.rs`.
+
+**Leftovers:** Origin's dialog and data forms, raw-data bar statistics and the other error-bar statistics (CI, percentile
+ranges, MAD), stacking, two-row table tick labels, more than two group levels, Grouped Scatter, panels or pages split by a
+group, themes (half box, violin, ...), colour indexed by the main group, and a measurement of all of it in Origin 2016.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.
@@ -2818,6 +2893,14 @@ default printer's printable area for the Page Setup paper in the page's orientat
 8.205 in page became 10.667 x 8.0 in on landscape Letter: 1/6 in less on the left and right, 1/4 in on
 top and bottom); the layers keep their frames in percent of the page. Sheaf asks the default printer
 (Windows) and otherwise uses the paper less those measured edges (12 pt, 18 pt). One undo step.
+
+**Change X, Change Y, Ungroup** (plot right-click menu, T73, measured 2026-11-15): Change X and Change Y
+list the plot's sheet's columns (`[Book1]Sheet1!A(X)`, ...) in column order, the current one ticked and
+the one the plot uses on the other axis greyed; choosing one replaces that column, the legend and axis
+title follow, and the axis keeps the range it was drawn with (Sheaf fixes an automatic range at its
+drawn values). On a plot of a group Change X/Y are greyed and Ungroup ends the group with every plot
+keeping its drawn colour (Sheaf makes those colours explicit); on a plot in no group Ungroup is greyed.
+One undo step each.
 
 **Axis Center** (axis right-click menu, after Axis Zoom In/Out; T70, measured): the axis keeps its span
 and its range moves so that the value under the right-click becomes the middle (X 0..11 at 5.42 gave
@@ -3879,6 +3962,17 @@ grouped. Sheaf: `Template::VerticalDropLine` (scatter, `decor.drop.vertical` on,
 data labels of grouped columns and bars are now centred on their own bar. CLI `-t vertical-drop-line`, `-t
 column-label`.
 
+### 18.13 Scatter Central (T75, measured 2026-11-15)
+
+Origin 2016's Plot > Symbol > Scatter Central is the scatter graph with both axes crossing in the middle
+of a boxed frame: `layer.x.position` and `layer.y.position` -50 with `posType` 1 (percent), against 0
+for Scatter. The Y title stands horizontally above the frame at the Y axis' x, the X title rotated left
+of the frame at the X axis' height. Sheaf: template `scatter-central` (menu, `sheaf plot -t
+scatter-central`) with `Axis::offset_pct` -50 on both axes (the X offset is new here: percent of the
+frame height, "% From Bottom/Top" in the axis window), the frame drawn as a box, and the titles of any
+axis moved into the frame placed at its end as above; offsets 0 and outward (T61) are unchanged. New
+layers start at offset 0. `.opj` notes a lost X offset as it does a Y one.
+
 ### 20.1 Sheaf's rules
 
 **Superseded in part by 20.4 and 20.6** (Origin measured, Sheaf changed to follow it): the click in Mask mode,
@@ -4442,28 +4536,73 @@ gui-look 4.x and T65 recorded "Zoom All = a presentation of all graphs with a re
 - Scale In: a one-shot tool on the Tools bar that maps the dragged rectangle (screen to page to axis units, linear or log10 like the axis) to the active layer's x and y ends, linked layers following in the linked axis only; one undo step named "Zoom In/Out"; the tool ends after the drag; a click or a tiny drag does nothing. Scale Out: a one-shot tool whose click or drag pops the last Scale In of the active layer from a per-window stack (nothing when empty). Ctrl+drag (the "Enlarged" graph) and the double-click restore stay unbuilt.
 - Built in `crates/app/src/graph_scale.rs` (pure `rect_to_ends`, `zoom_all`; the stack steps check that the axes still hold the ends the step wrote, so a step undone with Ctrl+Z is dropped, not replayed). Choices that were not measured: a tiny drag (under 4 px on a side) ends Scale In without a change, as a click does in Origin (measured, 23.3); Scale Out ends after one click even with an empty stack; layers with axis breaks, polar and ternary layers are refused (a status hint); Ctrl+drag with Scale In does nothing but a hint; Zoom All centres the page (T65's layout; Origin puts it at the top-left, a known departure) with a 10 px margin and the factor never above 1, and what lies outside the page is not drawn (the raster is the page), so only the fitting is built, not the view of the outside objects.
 
-## 24. Copy Format and Paste Format (T72, measured 2026-11-15/16, Origin 2016)
+## 24. User templates: Save Template As and Plot > User Templates (T56)
+
+Sheaf's own file kind and rules; Origin's `.otp`/`.otpu` templates are never read or written, and nothing
+here is measured in Origin (to measure on Windows: what an Origin template keeps, how extra or fewer
+datasets are styled, the default folder and name).
+
+- **Saving** (File > Save Template As..., graphs only; greyed without a template folder): a name prompt
+  filled with the graph's short name; OK saves the graph's look as `<name>.sheaftemplate` in the folder
+  `templates` of the settings folder (`sheaf_io::user_templates::default_dir`; `--templates-dir DIR` and
+  `--no-templates` at start). A template of the same name (letter case ignored) is replaced, and the prompt
+  says so before OK. Names are cleaned for the file system (`clean_name`: control characters dropped, white
+  space collapsed, `/ \ : * ? " < > |` to `_`, device names such as `CON` get `_`, at most 60 characters).
+- **What is kept** (`UserTemplate::from_graph`): the whole graph without data: page, layers and their
+  placement and links, axes (fixed ranges stay fixed, automatic ones rescale to the new data), each plot's
+  style in order, legend and text objects (with `%(...)` substitutions, re-evaluated on the new data), drawn
+  objects and straight lines. Each plot becomes a numbered slot; columns, row ranges, data-label and
+  tick-label columns are dropped. Refused: treemaps, sunbursts, parallel plots, floating bars and fills
+  between two curves, whose look is made of their data. The file is a `.sheaf` archive with the marker
+  `"template": "graph"` and no workbook.
+- **Plotting** (Plot > User Templates > a saved name, on a workbook with Y columns selected; `sheaf plot -t
+  NAME`): column `i` takes slot `i mod n`; columns beyond the slots repeat the styles and take colours from
+  the layer's palette in plot order, and the layer's group increments apply; with fewer columns the extra
+  slots are left out, and a linked layer left without plots (the right Y of a double-Y template given one
+  column) is removed. The new graph's long name is that of the first column's workbook. One undo step.
+- **Managing** (Plot > User Templates > Manage...): the saved names with Rename (refused onto another
+  template's name) and Delete, and the folder shown. The list is read from the folder at start and after
+  every change, so templates survive a restart and two running copies agree.
+- **Command line**: `sheaf plot -t NAME` looks a name that is no built-in template up among the user
+  templates in `--templates-dir`, else `$SHEAF_TEMPLATES_DIR`, else the settings folder; an unknown name
+  lists the built-in templates and points to Save Template As. A user template plots one sheet's Y columns
+  (not with `--panels`, `--y2`, `--group` or several input files). MCP's `plot` never reads user templates
+  (the folder is outside its allowed roots).
+- Tests: `crates/core/src/user_template/tests.rs`, `crates/io/src/user_templates/tests.rs`,
+  `crates/plot/src/user_template_tests.rs`, `crates/app/src/app/ui_tests/user_templates.rs`,
+  `crates/cli/tests/user_templates.rs`.
+
+## 25. File > New > Graph and the Standard toolbar's New Graph (T77)
+
+Origin's documentation (not measured, Origin 2016 is on Windows only) says both open an empty graph
+built from the default graph template, named Graph1, Graph2, ..., with no shortcut. [W]
+(https://www.originlab.com/doc/origin-help/standard-toolbar, https://www.originlab.com/doc/origin-help/create-childwindow)
+Sheaf: `Project::add_graph(Template::default())` (the Line template, which carries the owner defaults), no plots;
+axes with nothing to plot run 0 to 1. The graph is one undo step ("New graph") and is shown in front.
+UNMEASURED Sheaf choices: the axis ranges and the look of an empty layer.
+
+## 26. Copy Format and Paste Format (T72, measured 2026-11-15/16, Origin 2016)
 
 Measured in OriginPro 2016 on our own synthetic data (X = 1 to 10, Y = 2X+1 and 20-X, Line + Symbol graphs). One styled source graph ("Src": axis colours, tick-label sizes and colours, layer background yellow, x scale 2 to 8, layer width 40 % and top 5 %, page width 5200, a text label of size 40 in red, plot colours, symbol size and shape) and untouched targets of the same data; clicks, right-clicks and menu choices sent by `tools/origin-ref/origin-dialog.ps1 -NoDialog` (`@CLICK`, `@RCLICK`, `@MOVE`, `@KEY`, `@SHOT`), the layer, axis, page and text-object properties read back with `?layer.x.color`, `?layer.x.label.pt`, `?layer.color`, `?layer.x.from`, `?layer.width`, `?txName.fsize` and so on (raw outputs and pictures are local: `re-workspace/scratch/t72/`). Anything not listed is **unmeasured**.
 
-### 24.1 Method notes (for repeating this)
+### 26.1 Method notes (for repeating this)
 
 - Origin's collapsible menus hide items and re-order the short form by use. Unticking Tools > Options > Miscellaneous > Enable Collapsible Menus and pressing OK did not stick (the box read ticked again in the next instance), so each run used the keyboard: Up then Enter on an open menu expands it (the last item is the chevron). A submenu opens on a click on its parent item (a plain mouse move does not open it); an item inside it reacts to a click only after the pointer was moved onto it first.
 - **The format clipboard survives a restart of Origin** (a copy made in an earlier instance was pasted in a later one), so a run that pastes without copying uses a stale clipboard. Fonts once pasted the Colors of the run before for this reason.
 - The Apply Formats window appears about 4 s after the menu click; a screenshot at 1.5 s showed nothing and looked as if the command had done nothing.
 - `get <dataset> -c/-z/-k`, `range ... .symbol.size` and `page.color` did not read plot or page formats back in this build (zero or False); plot formats were judged from pictures only.
 
-### 24.2 Where the commands are
+### 26.2 Where the commands are
 
-- **Edit menu** (a graph window): Undo, Copy, Copy Page, **Copy Format** ▸, **Paste Format...**, Find in Project... in the short form; the full form adds Cut, Paste, Paste Link, Paste Link Transpose, Paste Special, Clear, Insert New Object, Links, Button Edit Mode, Update Client. Copy Format ▸, full: **All** | **All Style Formats**, **Colors**, **Fonts**, **Background**, **Symbol, Line and Fill** | **Dimensions**, **Scales** | **Text**. With an axis selected, Edit > Copy Format > All copied an *axis* format (Paste Format... then showed the axis check boxes, 24.5).
+- **Edit menu** (a graph window): Undo, Copy, Copy Page, **Copy Format** ▸, **Paste Format...**, Find in Project... in the short form; the full form adds Cut, Paste, Paste Link, Paste Link Transpose, Paste Special, Clear, Insert New Object, Links, Button Edit Mode, Update Client. Copy Format ▸, full: **All** | **All Style Formats**, **Colors**, **Fonts**, **Background**, **Symbol, Line and Fill** | **Dimensions**, **Scales** | **Text**. With an axis selected, Edit > Copy Format > All copied an *axis* format (Paste Format... then showed the axis check boxes, 26.5).
 - **Graph page context menu** (right-click on the page outside the layer), full form: Paste, Paste Link, Paste Link Transpose, Add Text..., Add/Modify Layer Title, Insert Images From Files..., Insert OLE Object ▸, Layer Management..., Add Axis Scrollbar ▸, New Layer(Axes) ▸, Extract to Graphs..., Copy Sparkline, Fit Page To Layers..., Fit Page To Printer, Show Active Layer Only, Set Active Layer By Layer Icon Only, Print View, Rotate Page, Add Shortcut to Favorites, Go to Original Folder, Copy Page, Export Graphs..., Send Graphs to PowerPoint..., View Full Screen, Print..., Mask ▸, **Copy Format** ▸, **Paste Format**, Save Format as Theme..., Paste Operation. Its Copy Format ▸: **Page Background**, **Legend Translation Mode**, **Dimensions**, **Scales** | **Colors**, **Fonts**, **Background**, **All Style Formats** | **All** (no Symbol, Line and Fill and no Text here; the order in the short form follows use).
-- The item after Copy Format is **Paste Format** (no dots, acts at once) when the clipboard holds a graph format, and **Paste Format To** ▸ when it holds an axis format; its first level on the page menu is Bottom Axes ▸, All X Axes ▸, All Axes ▸, All ▸ (second level not opened). In the Edit menu it is always **Paste Format...** with dots (24.5).
+- The item after Copy Format is **Paste Format** (no dots, acts at once) when the clipboard holds a graph format, and **Paste Format To** ▸ when it holds an axis format; its first level on the page menu is Bottom Axes ▸, All X Axes ▸, All Axes ▸, All ▸ (second level not opened). In the Edit menu it is always **Paste Format...** with dots (26.5).
 - **Layer area context menu** (right-click inside the layer frame, no object under the pointer) has Copy Format ▸, Paste Format and Save Format as Theme... as well, among Plot Setup... items; its Copy Format list was not opened.
 - **Axis context menu** (click the axis line first, then right-click it): Hide Axis, Hide Grids (ticked when grids are hidden), Rescale To Show All (Ctrl+R), Axis Zoom In, Axis Zoom Out, Center | **Copy Format** ▸, **Paste Format To** ▸ (only with an axis format on the clipboard), Save Format as Theme... | Scale..., Tick Labels..., Properties.... Copy Format ▸: **Styles**, **Scales**, **Dimensions** | **All**. Paste Format To ▸: **Tick Direction**, **Ticks**, **Line**, **Tick Labels**, **Title Styles**, **Colors**, **Thickness**, **Styles** | **Scales** | **Title Dimensions**, **Title Text** | **All** (the same twelve names as the Apply Formats check boxes).
 - **Legend context menu** (select the legend, right-click its frame edge; a right-click on an entry gives only Hide Data Plot and Hide Others): Plot Details..., Legend ▸, Add Color Scale, Add Bubble Scale, Cut, Copy, Delete, Bring to the front, Push to the back, Bring to front of data, Push to back of data, Programming Control..., Properties... | **Copy Format** ▸, Save Format as Theme.... Copy Format ▸: **Styles**, **Dimensions** | **All**. No Paste Format appeared with an empty or axis clipboard; what a legend format does when pasted is unmeasured.
 - **Save Format as Theme...** (B11, not this slice) lists "Formats to Save": All, Colormap, All Styles, Fonts, Colors, Symbol, Line and Fill, Dimension, Scale, Background, Text: the category names behind the Copy Format choices.
 
-### 24.3 Graph: what each Copy Format choice copies (page menu or Edit menu to another graph's Paste Format)
+### 26.3 Graph: what each Copy Format choice copies (page menu or Edit menu to another graph's Paste Format)
 
 Pasted into an untouched graph of the same data and read back (changed properties only):
 
@@ -4477,27 +4616,27 @@ Pasted into an untouched graph of the same data and read back (changed propertie
 - Not measured: Symbol, Line and Fill and Text (Edit menu only), Page Background and Legend Translation Mode (no readable change; the page colour cannot be set by LabTalk here), Copy Format with objects selected on the page (a text label, a drawn shape).
 - **Undo text: "Undo Apply Theme"** (Edit menu, Ctrl+Z) after a graph paste.
 
-### 24.4 Axis
+### 26.4 Axis
 
 - With the Src X axis selected, Copy Format > All and, in the target with its X axis selected, Paste Format To > All: **only that axis changed**: line colour (2), tick-label size (30) and colour (4) and the scale (2 to 8). The Y axis (colour, label size, thickness, ends), the layer width and background and the text size stayed. The picture shows the axis, its ticks and numbers recoloured. Undo text again "Undo Apply Theme".
 - Styles, Scales and Dimensions of the axis menu were not pasted one by one: unmeasured (the twelve Paste Format To names are the Apply Formats check boxes).
 
-### 24.5 Edit > Paste Format... (the Apply Formats window)
+### 26.5 Edit > Paste Format... (the Apply Formats window)
 
 - Opens a modeless window titled **Apply Formats**, slowly (about 4 s). **Apply From**: Clipboard (default) or Theme File (a list and a "..." button), and a Description line. With an **axis** format on the clipboard: **Formats to Apply**: All (ticked, the rest greyed while All is ticked), Line, Colors, Scales, Tick Direction, Tick Labels, Thickness, Title Dimensions, Ticks, Title Styles, Styles, Title Text; **Apply Scope** ("Selection" with an axis selected, "Active Graph" when the page is active), and then **Apply To** ("Bottom Axes"). Buttons: a pencil tool button with a chevron (its menu was not opened), Save, Save As..., **Undo Apply**, **Apply**, **Close**.
 - With a **graph** format on the clipboard (seen once, the grid still empty then): a Property / Value grid, List View and Collections check boxes, **Apply Selected Properties Only**, **Apply Scope** "Active Graph", Undo Apply, Apply, Close. The grid contents, the scope list and what Apply does there were not measured.
 
-### 24.6 Mismatches (Copy Format All of a two-plot, one-layer graph)
+### 26.6 Mismatches (Copy Format All of a two-plot, one-layer graph)
 
 - No message appeared. A target with **one plot** took the first plot's colours and symbol size (its symbol shape and line colour did not visibly follow: reason unmeasured); a target with **three plots** got the two source styles on plots 1 and 2 and a third, blue dashed, large-triangle style on plot 3 (not derived from anything we set); a target with **two layers**: the active layer read back with the source's values (the other layer was not read).
 - Graph clipboard onto an axis, and legend clipboards: not measured. An axis clipboard with the page active offers Paste Format To (Bottom Axes first); nothing was pasted that way.
 
-### 24.7 What Sheaf takes from this (T72)
+### 26.7 What Sheaf takes from this (T72)
 
 - The format clipboard has a type: Page, Axis or Legend; the paste command offered follows the type (Paste Format for a page format, Paste Format To for an axis format; Edit > Paste Format... opens Apply Formats).
-- Build the measured lists as they are (24.2) and the property groups of 24.3 and 24.4; undo text "Apply Theme". Choices that were not measured (Symbol, Line and Fill, Text, Page Background, Legend Translation Mode, legend paste, mismatched plots and layers) are Sheaf's own: plot formats go to plots by index with surplus plots left alone; the target layer is the active one; say so in the item's status.
+- Build the measured lists as they are (26.2) and the property groups of 26.3 and 26.4; undo text "Apply Theme". Choices that were not measured (Symbol, Line and Fill, Text, Page Background, Legend Translation Mode, legend paste, mismatched plots and layers) are Sheaf's own: plot formats go to plots by index with surplus plots left alone; the target layer is the active one; say so in the item's status.
 
-### 24.8 As built (T72 step 2)
+### 26.8 As built (T72 step 2)
 
 - Core `crates/core/src/format_clip.rs`: a copy holds the formatted values of every layer (or of one axis) and the groups the choice copies; a paste applies the groups it asks for that the copy holds. Groups: Dimensions (layer left, top, width; page width, not heights), Scales (scale type, limits, steps, reverse, first tick, minor ticks, rescale margin, both axes), Colors, Fonts (family, size, bold, italic; colours stay), Background (layer colour, gradient, border), Thickness (axis line and tick width), Symbol/Line/Fill (the plots' whole line and symbol style), Text (the words of the text labels). All = all eight; All Style Formats = Colors, Fonts, Background, Thickness, Symbol/Line/Fill (no Dimensions, Scales, Text); Colors also takes the layer background colour and the plots' line and symbol colours; Fonts takes tick-label, title, legend and text fonts.
 - Sheaf's own choices where Origin was not measured: layers and plots are paired by position, surplus target layers and plots are left as they are, surplus source ones are dropped; text labels are paired by position and are never created; a paste that changes nothing makes no undo step; the y axis follows Scales; the fill under a curve is not part of Symbol/Line/Fill. The clipboard is inside the program (a second Sheaf window does not see it, and it does not survive a restart, which Origin's does).

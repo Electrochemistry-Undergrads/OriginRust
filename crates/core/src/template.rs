@@ -38,6 +38,8 @@ pub enum Template {
     MarginalBoxCharts,
     /// Plot > Statistics > QC (X bar R) Chart (T111): the range chart and, linked above it, the mean chart.
     QcXbarR,
+    /// Plot > Statistics > Scatter Matrix (T114): every pair of the selected columns in an n x n grid of layers.
+    ScatterMatrix,
     /// Line plot with a symbol on every point.
     LineSymbol,
     /// Cyclic voltammetry overlay: smooth lines without markers, no grid,
@@ -185,7 +187,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 72] = [
+    pub const ALL: [Template; 73] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -258,6 +260,7 @@ impl Template {
         Template::MarginalHistograms,
         Template::MarginalBoxCharts,
         Template::QcXbarR,
+        Template::ScatterMatrix,
     ];
 
     /// The name used on the command line and in menus.
@@ -277,6 +280,7 @@ impl Template {
             Template::MarginalHistograms => "marginal-histograms",
             Template::MarginalBoxCharts => "marginal-box-charts",
             Template::QcXbarR => "qc-xbar-r",
+            Template::ScatterMatrix => "scatter-matrix",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
@@ -354,6 +358,7 @@ impl Template {
             Template::MarginalHistograms => "Marginal Histograms",
             Template::MarginalBoxCharts => "Marginal Box Charts",
             Template::QcXbarR => "QC (X bar R) Chart",
+            Template::ScatterMatrix => "Scatter Matrix",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
@@ -474,6 +479,11 @@ impl Template {
             Template::MarginalHistograms => marginal(id, name, PlotKind::MarginalHistogram),
             Template::MarginalBoxCharts => marginal(id, name, PlotKind::MarginalBox),
             Template::QcXbarR => qc_xbar_r(id, name),
+            Template::ScatterMatrix => {
+                let mut g = general(id, name, PlotKind::Scatter);
+                crate::scatter_matrix::template_layer(&mut g);
+                g
+            }
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
             Template::Multi3YYy | Template::Multi3YYY | Template::Multi4YYyy | Template::Multi4YyYy => {
@@ -1283,8 +1293,9 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 72);
+        assert_eq!(Template::ALL.len(), 73);
         assert_eq!(Template::from_name("qc-xbar-r"), Some(Template::QcXbarR));
+        assert_eq!(Template::from_name("scatter-matrix"), Some(Template::ScatterMatrix));
         assert_eq!(Template::from_name("marginal-histograms"), Some(Template::MarginalHistograms));
         assert_eq!(Template::from_name("marginal-box-charts"), Some(Template::MarginalBoxCharts));
         assert_eq!(Template::from_name("ohlc-volume"), Some(Template::OhlcVolume));

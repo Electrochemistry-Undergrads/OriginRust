@@ -112,6 +112,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T111](T111-qc-chart.md) | Plot > Statistics: QC (X bar R) Chart | M | done 2026-11-16 (graphing 33); left: hatched band, statistics table, Num Sigma |
 | [T112](T112-zoom-plot.md) | Plot > Specialized > Zoom | M | claimed 2026-11-16 (`zoom-plot`, Claude Windows) |
 | [T113](T113-wind-rose.md) | Plot > Specialized > Wind Rose (Binned Data, Raw Data) | M | claimed 2026-11-16 (`wind-rose`, Claude Windows) |
+| [T114](T114-scatter-matrix.md) | Plot > Statistics > Scatter Matrix (B4 slice) | M | done 2026-11-16 (`scatter-matrix`, graphing 34, Origin docs only, unmeasured); left: Mixed display, box/distribution diagonals, tick modes, ellipse, linear fit, grouping, listwise missing |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: Origin measured (graphing 24); Copy Format and Paste Format on graph, axis and legend, Apply Formats window; left: object cut/copy/paste, align, group, order (rest of B2) |

@@ -220,6 +220,8 @@ pub struct SheafApp {
     /// Window > Duplicate (Batch Plotting).
     batch_plot: Option<crate::dialogs::batch_plot::BatchPlotDialog>,
     qc_chart: Option<crate::dialogs::qc_chart::QcDialog>,
+    /// Plot > Statistics > Scatter Matrix's options (T114).
+    scatter_matrix: Option<crate::dialogs::scatter_matrix::ScatterMatrixDialog>,
     /// The explorer folder's Properties....
     folder_props: Option<crate::dialogs::folder_props::FolderPropsDialog>,
     /// Save Format as Theme (with the copied axis format) and the Theme Organizer (T102).
@@ -364,6 +366,7 @@ impl SheafApp {
             find_spec: Default::default(),
             batch_plot: None,
             qc_chart: None,
+            scatter_matrix: None,
             folder_props: None,
             save_theme: None,
             theme_organizer: None,
@@ -3188,6 +3191,24 @@ impl SheafApp {
             }
             return;
         }
+        // A scatter matrix takes every selected column, whatever its designation (else the sheet's numeric Y
+        // columns), refuses columns of text, and asks for its options first (T114).
+        if template == Template::ScatterMatrix {
+            let project = self.doc.project();
+            if columns.iter().any(|id| project.column(*id).is_some_and(|c| !c.data.is_numeric())) {
+                self.warn("A scatter matrix plots numbers: leave the text columns out of the selection".to_string());
+                return;
+            }
+            let numeric: Vec<ColumnId> =
+                if columns.is_empty() { self.plot_y_columns(book, columns, template) } else { columns };
+            let max = sheaf_core::scatter_matrix::MAX_VARIABLES;
+            if (2..=max).contains(&numeric.len()) {
+                self.scatter_matrix = Some(crate::dialogs::scatter_matrix::ScatterMatrixDialog::new(project, numeric));
+            } else {
+                self.warn(format!("Select 2 to {max} numeric columns for the scatter matrix"));
+            }
+            return;
+        }
         // A Pareto chart counts the cells of the one selected column, text or numbers.
         if template == Template::Pareto {
             let [column] = columns[..] else {
@@ -3410,6 +3431,28 @@ impl SheafApp {
                 self.say(format!("Made an X bar R chart in subgroups of {size}"));
             }
             Err(e) => self.warn(e.to_string()),
+        }
+    }
+
+    /// Plot > Statistics > Scatter Matrix's options (T114): OK makes the graph, one undo step.
+    fn show_scatter_matrix(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::scatter_matrix::ScatterMatrixOutcome;
+        let Some(d) = &mut self.scatter_matrix else { return };
+        let (columns, options) = match d.show(ctx) {
+            ScatterMatrixOutcome::Open => return,
+            ScatterMatrixOutcome::Closed => {
+                self.scatter_matrix = None;
+                return;
+            }
+            ScatterMatrixOutcome::Make { columns, options } => (columns, options),
+        };
+        self.scatter_matrix = None;
+        match self.doc.edit("Scatter Matrix", |p| p.plot_scatter_matrix(&columns, &options)) {
+            Ok(graph) => {
+                self.focus(graph);
+                self.say(format!("Plotted a scatter matrix of {} columns", columns.len()));
+            }
+            Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
         }
     }
 
@@ -5006,6 +5049,7 @@ impl SheafApp {
         self.show_find_project(ctx);
         self.show_batch_plot(ctx);
         self.show_qc_chart(ctx);
+        self.show_scatter_matrix(ctx);
         self.show_folder_props(ctx);
         self.show_graph_themes(ctx);
         if let Some(o) = &mut self.fit_organizer

@@ -51,6 +51,7 @@ pub mod reshape;
 pub mod rowfilter;
 pub mod sampling;
 pub mod scales;
+pub mod scatter_matrix;
 pub mod shape;
 pub mod sheet_fonts;
 pub mod sheet_print;

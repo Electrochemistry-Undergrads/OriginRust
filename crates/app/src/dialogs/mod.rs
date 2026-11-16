@@ -55,6 +55,7 @@ pub mod reshape;
 pub mod rm_options;
 pub mod row_filter;
 pub mod sampling;
+pub mod scatter_matrix;
 pub mod set_values;
 pub mod shape_object;
 pub mod sheet_navigate;

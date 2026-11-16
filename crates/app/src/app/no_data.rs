@@ -25,7 +25,7 @@ impl SheafApp {
         let named = self.path.as_ref().or(self.recovered_from.as_ref());
         let suggested = named
             .and_then(|p| p.file_stem())
-            .map(|n| format!("{}.opj", n.to_string_lossy()))
+            .map(|n| format!("{} (no data).opj", n.to_string_lossy()))
             .unwrap_or_else(|| "Untitled.opj".to_string());
         let mut chooser = rfd::FileDialog::new()
             .set_title("Save project without data")
@@ -60,7 +60,20 @@ impl SheafApp {
             ));
             return false;
         }
-        let copy = self.doc.project().without_data();
+        // Nor over the open project's own file: that would swap its data for the empty copy.
+        let open_files = self.path.iter().chain(self.recovered_from.iter());
+        let clash = open_files
+            .into_iter()
+            .any(|open| super::same_file(open, &path) || super::same_file(&open.with_extension("opj"), &path));
+        if clash {
+            self.message = Some((
+                "Could not save the project".to_string(),
+                "That is the file of the open project. Choose another name.".to_string(),
+            ));
+            return false;
+        }
+        let mut copy = self.doc.project().without_data();
+        copy.window_places = self.workspace.places();
         match sheaf_io::save::save_project(&copy, &path) {
             Ok(outcome) => {
                 self.say(format!("Saved without data: {}", outcome.status()));

@@ -35,6 +35,8 @@ impl Project {
                     };
                     c.mask.clear();
                     c.analysis = None;
+                    c.fit_result = false;
+                    c.params.clear();
                     c.formula_rows = None;
                     if c.formula_state == FormulaState::Pending {
                         c.formula_state = FormulaState::Current;

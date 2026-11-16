@@ -72,6 +72,8 @@ use sheaf_io::window_file::{self, WindowFileKind};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+mod no_data;
+
 pub const APP_NAME: &str = "Sheaf";
 
 /// What to do at start-up, from the command line.
@@ -5004,7 +5006,6 @@ fn panel_data<'a>(
     PanelData { project: doc.project(), active, project_name, props_plot, logs }
 }
 
-mod no_data;
 #[cfg(test)]
 mod ui_tests;
 

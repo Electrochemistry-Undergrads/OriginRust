@@ -165,7 +165,7 @@ Backlog packages: write the brief first (step 3 above).
 |---|---|---|---|---|
 | [ ] | [T56](T56-user-graph-templates.md) | Save Template As and user graph templates (open; unverified start on branch `user-templates`) | M | 1 |
 | [ ] | B11 | Templates and themes: template library, From Template, analysis templates, Batch Processing, batch-plotting Duplicate, Theme Organizer, Save Format as Theme | L | 10 |
-| [ ] | B12 | Project and window management: Re-Import (New Graph, save/duplicate project without data: T77, done), worksheet as image, View Windows, Folders List, folder Properties, sample projects | M | 12 |
+| [ ] | B12 | Project and window management: Re-Import, worksheet as image, View Windows, Folders List, folder Properties, sample projects (New Graph and save/duplicate project without data done as T77) | M | 12 |
 | [ ] | B13 | Tools: Options window, System Variables, Fitting Function Builder and Organizer, Import Filters Manager, project protection, audit log | L | 7 |
 
 - **B11** depends on T56. Analysis templates depend on recalculating analysis results (T03).

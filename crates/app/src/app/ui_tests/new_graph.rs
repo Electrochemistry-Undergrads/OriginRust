@@ -87,6 +87,22 @@ fn saving_without_data_writes_a_copy_and_leaves_the_open_project_alone() {
 }
 
 #[test]
+fn saving_without_data_refuses_the_open_projects_own_file() {
+    let dir = scratch("clash");
+    let mut h = start_with(vec![csv_in(&dir)], dir.join("recent.json"));
+    let file = dir.join("own.sheaf");
+    h.state_mut().path = Some(file.clone());
+    std::fs::write(&file, b"keep").unwrap();
+    assert!(!h.state_mut().save_project_without_data_to(file.clone()));
+    assert_eq!(std::fs::read(&file).unwrap(), b"keep");
+    let companion = dir.join("own.opj");
+    std::fs::write(&companion, b"keep").unwrap();
+    assert!(!h.state_mut().save_project_without_data_to(companion.clone()));
+    assert_eq!(std::fs::read(&companion).unwrap(), b"keep");
+    assert!(h.state().message.is_some());
+}
+
+#[test]
 fn duplicating_without_data_opens_an_unsaved_copy_with_the_windows_and_no_values() {
     let dir = scratch("dup");
     let mut h = start_with(vec![csv_in(&dir)], dir.join("recent.json"));

@@ -4513,6 +4513,7 @@ datasets are styled, the default folder and name).
 
 Origin's documentation (not measured, Origin 2016 is on Windows only) says both open an empty graph
 built from the default graph template, named Graph1, Graph2, ..., with no shortcut. [W]
+(https://www.originlab.com/doc/origin-help/standard-toolbar, https://www.originlab.com/doc/origin-help/create-childwindow)
 Sheaf: `Project::add_graph(Template::default())` (the Line template, which carries the owner defaults), no plots;
 axes with nothing to plot run 0 to 1. The graph is one undo step ("New graph") and is shown in front.
 UNMEASURED Sheaf choices: the axis ranges and the look of an empty layer.

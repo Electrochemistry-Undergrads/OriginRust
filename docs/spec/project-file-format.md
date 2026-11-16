@@ -68,7 +68,8 @@ readable and diffs are small.
 
 File > Save Project without Data... and File > Duplicate Project without Data use `Project::without_data()`.
 Origin 2016 does not document the two items; the nearest documented feature is Clone Project
-(`clrAllData`, mode 0: clear all data, keep windows and operations). [W] The rest is an UNMEASURED
+(`clrAllData`, mode 0: clear all data, keep windows and operations). [W]
+(Origin help, X-Function `clrAllData`: https://www.originlab.com/doc/X-Function/ref/clrAllData) The rest is an UNMEASURED
 Sheaf choice. Kept: windows and places, names, column labels, units, designations, number formats,
 formulas, graphs. Removed: every value (a column keeps its storage kind), masks, cell notes, cell and
 conditional formats, row filters, analysis marks and links, report comparison sources.

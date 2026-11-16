@@ -3303,6 +3303,40 @@ existing Sheaf layer drawing order are not changed by this slice. Supporting cur
 [Display tab](https://docs.originlab.com/origin-help/laymanage-displaytab/) and
 [Layer properties](https://docs.originlab.com/labtalk/ref/layer-obj/).
 
+**Display > Color > Border Fill Color and Border Color** (T60 follow-up, Origin 2016,
+2026-11-16): these use a rectangle outside the plot frame. A fresh standard Origin-template
+three-point Line graph starts with Background Color, Border Fill Color and Border Color at
+None. Its frame is left 17.91, top 11.58, width 68.16, height 71.83 percent of the page.
+Border Dimensions shows left 16.6, top 10, right 12.4, bottom 15.2 percent of the layer.
+These are measured fixture values, not defaults established for every template.
+
+Separate fresh graphs were used for a red outline and a red fill, chosen through the settled
+Display palette, Apply and OK. Both checked PNG exports are 800 x 612 pixels. In each,
+the red rectangle's inclusive bounds are (53, 27) to (756, 577), matching the rounded bounds
+from expanding the layer frame by those four percentages of its width/height. The plot frame
+itself is approximately (143, 71) to (689, 510). The outline surrounds the plot and its margins;
+the fill colors both the plot interior and the expanded margins. In the fill export, pixels
+(80, 300), (400, 300) and (400, 50) are red while (10, 10) stays white; those four samples
+are white in the outline control. `layer.color` stays 0 (None), `layer.border` stays 0 and
+the frame percentages do not change. `layer.border` is the separate legacy ornament setting
+(off/shadow/marble/whiteout/blackout); it is not either of these colour controls.
+
+Accepted settled control captures, property readbacks, exports and hashes are recorded in
+ignored scratch `t60-layer-border-display/native-border-proof.json`. Export calls returning
+False and the interrupted first fill run are excluded; the accepted replacement fill completed
+with its own Origin instance and helpers closed. Other sessions' instances were preserved.
+These controls establish the geometry and independence from Background Color; multi-layer
+mixed/selection behavior, overlap drawing order and changes to Border Dimensions remain open.
+
+**Backend prerequisite:** Sheaf's existing `Layer.background` fills the plot frame, and
+`BackgroundStyle.border` strokes that same frame (`plot/fill.rs`, called from `plot/layout.rs`).
+There is no separately stored border fill or four border outsets. Reusing those fields would
+change the wrong rectangle or the independent background colour. Keep both Display colour
+controls disabled until a separately represented layer-relative rectangle, independent fill
+and outline, rendering and persistence are implemented with preview/history/roundtrip tests.
+Preserve the existing plot-frame border semantics and the published Background Color control.
+This measurement slice changes no Rust code, model, renderer, file format or enabled inventory.
+
 **Fit Page to Layers** (`pfit2l`; Margin Control Border (default) or Tight, Border Width 5, Adjust
 Direction Height and Width (default), Height Only, Width Only), measured on the stock page: the
 layers keep their size and distance from each other in dots; the page becomes the box round the

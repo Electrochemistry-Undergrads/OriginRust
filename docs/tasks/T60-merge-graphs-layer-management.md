@@ -17,6 +17,14 @@ pass (eight ignored), including six new semantic regressions and all 17 Layer Ma
 Inventory 308 and eight Python tooling tests pass; source and goldens stayed frozen, using four
 test threads. The desktop Display/RGB preview and independent PNG export were inspected.
 
+Border-colour measurement follow-up (`codex/t60-layer-border-display`, 2026-11-16):
+Origin's Border Fill Color and Border Color use a separate rectangle expanded beyond the
+plot frame by four layer-relative margins. Independent accepted red fill/outline exports
+and property controls are recorded in graphing 15.7d. Existing Sheaf background/frame-border
+fields cannot represent this geometry or independent fill, so both controls remain disabled.
+A separate rectangle/fill/outline model, renderer and persistence are prerequisites; no Rust
+or enabled inventory changes are made by this measurement slice.
+
 **Branch:** `merge-graphs`. **Priority:** P0, wave 2, owner's stacked-figure priority.
 **Spec:** [graphing](../spec/graphing.md) 15 (add Merge Graph Windows and Layer Management
 subsections); ADR 0009. **Inventory:** 0 locations tagged `T60`.

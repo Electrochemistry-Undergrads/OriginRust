@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 459 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 453 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -74,7 +74,7 @@ T58 goes first (it builds the toolbar's dispatch); T59 can start on its model an
 
 | ✓ | Package | What | Size | Origin needed | Greyed items | Main files |
 |---|---|---|---|---|---|---|
-| [ ] | [T60](T60-merge-graphs-layer-management.md) | Merge Graph Windows, Layer Management (arrange, size, link), Fit Layer to Graph, Fit Page to Layers | L | for both windows | 7 | `core/panels.rs`, new `core/merge.rs`, new dialogs |
+| [x] | [T60](T60-merge-graphs-layer-management.md) | Merge Graph Windows, Layer Management (arrange, size, link), Fit Layer to Graph, Fit Page to Layers | L | for both windows | 0 | `core/panels.rs`, new `core/merge.rs`, new dialogs |
 | [ ] | [T61](T61-layers-and-multi-y.md) | Add Layer buttons, inset, layer icon menu, Layer Properties, 3Ys/4Ys templates, Multiple Y Axes | L | for templates' placement | 20 | `core/graph.rs` (layers), `core/template.rs`, `app/graph_view.rs` |
 | [ ] | [T62](T62-stack-offset-leftovers.md) | Offset Grouped Data in Layer menu (with Cumulative), Stacked Histograms, waterfall colour mapping | M | for Stacked Histograms and waterfall colours | 8 | `core/stack.rs`, `plot/stack.rs`, `core/template.rs` |
 
@@ -193,13 +193,15 @@ Backlog packages: write the brief first (step 3 above).
 - **B16** needs an ADR first (which language, how it reaches the document; T18 "embedded language").
   Sheaf already exposes its commands through the CLI and the MCP server (ADR 0011, 0013).
 
-## Not planned (`N`, 19 items)
+## Not planned (`N`, 20 items)
 
 These stay grey until the owner asks for them: OLE and Office links (Insert New Object, Links,
 Update Client, Add Word Bookmarks to Analysis Template), OriginLab's online services and help
 (Apps on File Exchange, Use Online Help, Check for Updates, the Origin and Programming help items,
 Web Links), Quick Help, Smart Hint Log, and the View > Menu and Format > Menu choices of menu sets.
 Sheaf has no help files of its own yet; when it gets them, Help > Origin > Help can open them.
+Graph > Fit Layer to Graph is here too (T60, 2026-11-15): in Origin 2016 it changed nothing measurable
+on one- and two-layer graphs (graphing 15.7d); it waits for a case where Origin's item does something.
 
 ## Other open work and where it ranks
 

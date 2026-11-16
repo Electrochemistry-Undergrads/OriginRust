@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **459 greyed items: 318 in the menu bar, 47 on the toolbars, 94 in context menus.**
+original inventory baseline. This is not a new runtime audit. **453 greyed items: 314 in the menu bar, 47 on the toolbars, 92 in context menus.**
 
 ## How to read and keep this file
 
@@ -37,7 +37,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T57` | 2 |
 | `T58` | 15 |
 | `T59` | 2 |
-| `T60` | 7 |
+| `T60` | 0 |
 | `T61` | 20 |
 | `T62` | 8 |
 | `T63` | 31 |
@@ -57,10 +57,10 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B14` | 44 |
 | `B15` | 21 |
 | `B16` | 15 |
-| `N` | 19 |
+| `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 86 items, backlog packages (`B`) 354, not planned (`N`) 19.
+Briefs (`T`) hold 79 items, backlog packages (`B`) 354, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -168,7 +168,7 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Graph
 - `T63` Add Plot to Layer: Line... · Scatter... · Line + Symbol... · Column... · Area...
-- `T60` Layer Management... · Merge Graph Windows... · Fit Layer to Graph · Fit Page to Layers...
+- `N` Fit Layer to Graph
 - `B3` Add Function Graph... · Add Straight Line... · New Table · New Color Scale · Convert to Standard Font Size
 - `T61` New Layer(Axes): Horizontal Axis Layer... · Vertical Axis Layer...
 - `B3` Legend: Add Legend Title
@@ -200,7 +200,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B2` Object Properties...
 - `T61` Layer Properties... [Graph]
 - `B2` Snap Layers to Grid · Snap Objects to Grid [Graph]
-- `T60` Fit Page To Layers [Graph]
 - `B3` Fit Page To Printer [Graph]
 - `B15` Axes: Z Axis... [Graph]
 - `T63` Axis Tick Labels: X Axis Tick Labels... · Y Axis Tick Labels... [Graph]
@@ -265,14 +264,12 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B11` Graph legend: Save Format as Theme...
 - `B3` Graph legend > Legend: Add Legend Title
 - `B2` Graph legend > Copy Format: All · All Style Formats · Text
-- `T60` Graph page: Layer Management...
 - `B12` Graph page: Add Shortcut to Favorites
 - `B1` Graph page: View Full Screen
 - `T61` Graph page > New Layer(Axes): Horizontal Axis Layer... · Vertical Axis Layer...
 - `B2` Graph page > Copy Format: All · All Style Formats
 - `B11` Graph page > Duplicate (Batch Plotting): Duplicate
 - `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Delete Layer · Double click to open Plot Setup · Layer Properties...
-- `T60` Graph layer icon: Layer Management...
 - `B12` Explorer folder: Properties...
 - `T63` Explorer window: Duplicate
 

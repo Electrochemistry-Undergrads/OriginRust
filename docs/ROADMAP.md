@@ -19,7 +19,7 @@ open until implemented and verified. The underlying milestones were not globally
   escapes, editor and live Format toolbar; [T59](tasks/T59-worksheet-cell-formatting.md), worksheet
   font/style/colour/alignment and Format Cells (toolbar adapter depends on T58).
 - [ ] **P0 stacked figures, wave 2:** [T60](tasks/T60-merge-graphs-layer-management.md), merge
-  existing graphs/Layer Management; [T61](tasks/T61-layers-and-multi-y.md), layers/insets/multi-Y;
+  existing graphs/Layer Management (done 2026-11-15); [T61](tasks/T61-layers-and-multi-y.md), layers/insets/multi-Y;
   [T62](tasks/T62-stack-offset-leftovers.md), remaining offsets/Cumulative/stacked histograms/
   waterfall colour mapping. Reuse working column-built panels, Double-Y and stacked bars/areas.
 - [ ] **Wave 3, independent groups:** [T63](tasks/T63-greyed-items-with-code-2.md), verify and wire

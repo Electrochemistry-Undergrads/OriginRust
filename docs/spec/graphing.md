@@ -2430,9 +2430,10 @@ Line graphs and its dialog; probes and outputs in the ignored `re-workspace/scra
   "Rearrange Layout" off leaves every layer at its source frame (they overlap) with factor 1.
 - **Link Source Graphs:** layers 2 and up get `layer.link` 1 in "% of Linked Layer" units (layer 2
   of a 3 x 1 at (0, 123, 100, 100)) with `x.link` and `y.link` 0: position only.
-- **Show Axes Frame** (with ygap 0): the panels with a panel below them get no X tick labels
-  (`x.showlabels` 0) and no ticks (`x.ticks` 0); the bottom panel keeps both. The dialog notes
-  "Overlapping axes/ticks are hidden".
+- **Show Axes Frame** (with a gap of 0): the panels with a panel below them get no X tick labels
+  (`x.showlabels` 0), no ticks (`x.ticks` 0) and no X title (`xb.show` 0); the bottom panel keeps
+  all three. In a row (xgap 0) the panels with one on their left lose their Y title, tick labels and
+  ticks. The dialog notes "Overlapping axes/ticks are hidden".
 - **Keep Layer Aspect Ratio:** the layer keeps its width-to-height ratio in percent of each page,
   as large as fits, at the top left of its cell (3 x 1: 20.57 x 21.68 for a 68.16 x 71.83 source).
 - **Text factor** (`layer.factor`; Scale Mode Auto and "Scale with Layer Frame" gave the same in
@@ -2459,8 +2460,12 @@ layers of one source was not measured); validly linked layers keep their frames,
 stacked sources stay intact. With Link Source Graphs, an unlinked layer that other layers follow (the
 left layer of a double-Y source) stays unlinked, because a linked layer cannot be a parent. Sheaf
 adds **Share X** (`share_x`, `--share-x`): the linked layers also follow the first one's X scale one
-to one, the vertical shared-X figure of the brief. "Show Axes Frame" also hides the Y axis of a cell
-with a filled cell on its left when the horizontal gap is 0 (Origin measured for rows only).
+to one, the vertical shared-X figure of the brief. Linking needs Rearrange Layout (the dialog greys
+it with Arrange Settings). A typed page size is used as given. The text factor also scales the
+plots' data labels (unmeasured) and a Fixed Factor applies without rearranging (unmeasured; Auto then
+gives 1 as measured). The app's Merge choice is "All in Project" (default) or "Specified" (a
+checklist with Up and Down): Sheaf has no active folder, so Origin's folder choices and its default
+are not offered.
 Duplicate, missing or non-graph sources, fewer than two graphs, too few cells, a factor outside 0.05
 to 20 and a page side outside 0.5 to 200 in are refused without changing the project. Not built:
 Add Extra Layer(s) for Grid, Set Layer Width/Height by Common Scale, panel labels, the folder
@@ -2492,13 +2497,41 @@ the OK button to apply the changes in preview graph to source graph."; Undo, OK 
   (Drawing Order; Color, Border Dimensions (% of Layer: 16.6, 10, 12.4, 15.2), Scale Elements:
   Scale with Layer Frame or Fixed Factor).
 
+**Sheaf's Layer Management** (`sheaf_core::layer_manage`, `dialogs/layer_management.rs`; Graph menu,
+page right-click and layer icon menu, the icon's layer selected): the layer list allows several
+layers; Arrange, Size/Position and Link are built and work on a copy shown as numbered frames on a
+page-shaped preview; Undo takes back the last Apply; OK writes the copy in one undo step; Cancel and
+Escape discard it. Add (T61), Axes and Display are shown disabled, as are Add Extra Layer(s) for Grid
+(Sheaf leaves surplus cells empty), the Common Scale ticks, the Align/Custom links, the Units combo of
+Link and the reposition-parent tick. Arrange with no selection takes every layer; "Treat Linked
+Layers as a group" places a layer with the layers linked to it as one unit; Link Layers links the
+later units to the first in position only. Sheaf choices (not measured): Move in "% of Reference
+Layer" counts from the reference layer's top left corner, a pixel is 1/96 in, the reference layer
+starts at layer 1, and a reference layer that follows a selected layer is refused (it would move
+with it). The Link tab shows the first selected layer's link; Swap with Reorder refuses an order that
+puts a parent after its child.
+
 **Fit Page to Layers** (`pfit2l`; Margin Control Border (default) or Tight, Border Width 5, Adjust
 Direction Height and Width (default), Height Only, Width Only), measured on the stock page: the
 layers keep their size and distance from each other in dots; the page becomes the box round the
 content plus, with Border, the border width in percent of the **old** page on each side (5: 321 of
 6432 and 246 of 4923 dots; 10 twice that); Tight adds about 13 dots. Height Only keeps the page width
-and every left; Width Only the reverse. An empty stock layer counted as its frame plus 370 dots
-above it (what this space is was not settled).
+and every left; Width Only the reverse. The content box is the layer frames and the page's
+objects, **not** the tick labels or axis titles: with a border of 0 the layer's left edge became the
+page's (its Y tick labels and title fall off the page) while the box reached 370 dots above the
+frame, where the stock legend stands. A graph with data and an empty one gave the same numbers.
+
+**Fit Layer to Graph** did nothing measurable in Origin 2016: on a one-layer graph (layer moved to
+30, 20, 40, 40 percent, or 130 x 120 at -10, -10) and a two-layer graph, the page size, every layer
+position and the picture were the same before and after, from the menu and by its accelerator, with
+no dialog. What it acts on (a selected object, perhaps) is unknown, so Sheaf leaves it grey (tag `N`).
+
+**Sheaf's Fit Page to Layers** (`Graph::fit_page_to_content`, `sheaf_plot::fit_content_bounds`): Graph
+> Fit Page to Layers... opens Margin Control (Border, Tight), Border Width (5) and Adjust Direction
+(Height and Width, Height Only, Width Only); Format > Fit Page To Layers applies the defaults at once
+(Sheaf choice; whether Origin's Format item asks was not measured). The content box is the layer
+frames and the boxes of legends, text labels, drawn shapes and slope annotations; Tight leaves
+1.56 pt (13 dots at 600 dpi). One undo step.
 
 ### 15.8 Origin project files
 

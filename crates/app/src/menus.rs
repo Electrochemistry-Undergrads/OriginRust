@@ -125,6 +125,8 @@ pub enum Cmd {
     },
     /// Tools > Theme Organizer... (F7, T102).
     ThemeOrganizer,
+    /// File > New > From Template > More...: pick a template file (T103).
+    NewFromTemplateFile,
     /// Edit > Replace... (Ctrl+H) in a workbook.
     ReplaceInSheets,
     ExportGraph,
@@ -448,6 +450,8 @@ pub enum Entry {
     Windows,
     /// Window > Folders: the project's folders, the active one ticked (T100).
     Folders,
+    /// File > New > From Template: the saved user templates, each making an empty graph (T103).
+    NewFromTemplates,
     /// The entries of File > Recent Projects, Recent Books, Recent Graphs or File > Import > Recent
     /// Imports, from the context.
     Recent(RecentKind),
@@ -725,7 +729,12 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                     grey("Matrix..."),
                     item("&Graph", Cmd::NewGraph),
                 ],
-                greys(&["Image", "From Template", "Excel", "Layout", "Notes", "Function Plot"]),
+                greys(&["Image"]),
+                vec![sub(
+                    "From Template",
+                    vec![Entry::NewFromTemplates, sep(), item("More...", Cmd::NewFromTemplateFile)],
+                )],
+                greys(&["Excel", "Layout", "Notes", "Function Plot"]),
             ]
             .concat(),
         ),
@@ -2439,7 +2448,12 @@ fn walk<'a>(entries: &'a [Entry], f: &mut dyn FnMut(&'a Item)) {
         match e {
             Entry::Item(i) => f(i),
             Entry::Submenu(s) => walk(&s.entries, f),
-            Entry::Separator | Entry::Windows | Entry::Folders | Entry::Recent(_) | Entry::UserTemplates => {}
+            Entry::Separator
+            | Entry::Windows
+            | Entry::Folders
+            | Entry::NewFromTemplates
+            | Entry::Recent(_)
+            | Entry::UserTemplates => {}
             Entry::Mru(_) | Entry::Exports => {}
         }
     }
@@ -2626,6 +2640,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SaveAxisTheme { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y }
         }
         Cmd::ThemeOrganizer => Action::ThemeOrganizer,
+        Cmd::NewFromTemplateFile => Action::NewFromTemplate(None),
         Cmd::BatchPlot(columns) => Action::BatchPlot { graph: c.graph.ok_or(NEED_GRAPH)?, columns: *columns },
         Cmd::Reimport(choose) => {
             let book = book?;
@@ -3128,6 +3143,17 @@ fn show_entries(
             }
             Entry::Recent(kind) => show_recent(ui, *kind, c, actions),
             Entry::UserTemplates => show_user_templates(ui, c, actions),
+            Entry::NewFromTemplates => {
+                if c.user_templates.is_empty() {
+                    ui.add_enabled(false, egui::Button::new(label_job(ui, "(no saved templates)", true)));
+                }
+                for name in c.user_templates {
+                    if ui.add(egui::Button::new(label_job(ui, name, true))).clicked() {
+                        actions.push(Action::NewFromTemplate(Some(name.clone())));
+                        ui.close();
+                    }
+                }
+            }
             Entry::Mru(menu) => show_mru(ui, *menu, c, actions),
             Entry::Exports => show_exports(ui, c, actions),
             Entry::Folders => {

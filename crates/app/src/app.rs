@@ -1835,6 +1835,7 @@ impl SheafApp {
                     self.save_theme = Some((crate::dialogs::graph_themes::SaveThemeDialog::new(name, existing), clip));
                 }
             }
+            Action::NewFromTemplate(name) => self.new_from_template(name),
             Action::ThemeOrganizer => {
                 let entries =
                     self.startup.graph_themes_dir.as_deref().map(sheaf_io::graph_themes::list).unwrap_or_default();
@@ -3205,6 +3206,40 @@ impl SheafApp {
 
     /// Plot > User Templates > a saved template: the selected Y columns in its look (T56,
     /// graphing.md 24). The template is read from its file at the time of the click.
+    /// File > New > From Template (T103): an empty graph in a user template's look, one undo step.
+    fn new_from_template(&mut self, name: Option<String>) {
+        let template = match name {
+            Some(name) => {
+                let Some(dir) = self.startup.templates_dir.clone() else { return };
+                sheaf_io::user_templates::load(&dir, &name).map_err(|e| e.to_string())
+            }
+            None => {
+                let mut chooser = rfd::FileDialog::new()
+                    .set_title("New from template")
+                    .add_filter("Sheaf graph template", &["sheaftemplate"]);
+                if let Some(dir) = self.startup.templates_dir.as_deref().filter(|d| d.is_dir()) {
+                    chooser = chooser.set_directory(dir);
+                }
+                let Some(path) = chooser.pick_file() else { return };
+                sheaf_io::user_templates::load_file(&path).map_err(|e| e.to_string())
+            }
+        };
+        let template = match template {
+            Ok(t) => t,
+            Err(e) => {
+                self.message = Some(("Could not read the template".to_string(), e));
+                return;
+            }
+        };
+        match self.doc.edit("New graph from template", |p| p.plot_with_user_template(&template, &[])) {
+            Ok(id) => {
+                self.focus(id);
+                self.say(format!("New graph from the template {}", template.name));
+            }
+            Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+        }
+    }
+
     fn plot_user_template(&mut self, book: WindowId, columns: Vec<ColumnId>, name: &str) {
         let Some(dir) = self.startup.templates_dir.clone() else { return };
         let template = match sheaf_io::user_templates::load(&dir, name) {

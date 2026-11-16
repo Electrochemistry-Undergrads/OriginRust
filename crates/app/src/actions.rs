@@ -314,6 +314,9 @@ pub enum Action {
     },
     /// Tools > Theme Organizer...: list the graph themes and apply one to the active graph.
     ThemeOrganizer,
+    /// File > New > From Template: an empty graph from the saved template of this name, or (None,
+    /// More...) from a template file picked with the system dialog.
+    NewFromTemplate(Option<String>),
     /// Window > Folders: make this folder the Project Explorer's active one.
     GoToFolder(Vec<usize>),
     /// The explorer folder's Properties...: its name, comments and information.

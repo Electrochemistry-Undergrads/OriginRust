@@ -4861,6 +4861,11 @@ datasets are styled, the default folder and name).
   lists the built-in templates and points to Save Template As. A user template plots one sheet's Y columns
   (not with `--panels`, `--y2`, `--group` or several input files). MCP's `plot` never reads user templates
   (the folder is outside its allowed roots).
+- **File > New > From Template** (T103, measured 2026-11-16 in Origin 2016, `re-workspace/scratch/t103`):
+  Origin's item is a submenu listing templates by file name (workbook templates such as `Assays.ogw`), a
+  separator and More... (a file picker). Sheaf lists the saved user templates, then More... (a file picker
+  for `.sheaftemplate` files starting in the templates folder); either makes a new graph in the template's
+  look without data (no plots; axes, text and page as saved), one undo step ("New graph from template").
 - Tests: `crates/core/src/user_template/tests.rs`, `crates/io/src/user_templates/tests.rs`,
   `crates/plot/src/user_template_tests.rs`, `crates/app/src/app/ui_tests/user_templates.rs`,
   `crates/cli/tests/user_templates.rs`.

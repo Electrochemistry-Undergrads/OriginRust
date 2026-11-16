@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **310 greyed items: 214 in the menu bar, 19 on the toolbars, 77 in context menus.**
+original inventory baseline. This is not a new runtime audit. **309 greyed items: 213 in the menu bar, 19 on the toolbars, 77 in context menus.**
 
 ## How to read and keep this file
 
@@ -67,7 +67,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B7` | 6 |
 | `B8` | 4 |
 | `B9` | 13 |
-| `B11` | 5 |
+| `B11` | 4 |
 | `B12` | 4 |
 | `B13` | 7 |
 | `B14` | 44 |
@@ -76,7 +76,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 64 items, backlog packages (`B`) 226, not planned (`N`) 20.
+Briefs (`T`) hold 64 items, backlog packages (`B`) 225, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -86,7 +86,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### File
 - `B14` New: Matrix... · Image · Excel · Layout · Notes · Function Plot
-- `B11` New: From Template
 - `T63` Open Excel...
 - `B12` Open Sample Projects
 - `T56` Save Template As... [Workbook, Graph]

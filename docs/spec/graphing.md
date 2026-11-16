@@ -849,25 +849,30 @@ layer of the first graph, alongside the existing `text:N` label hook.
 
 ### 7.8 Selected-text colour palette (T58)
 
-The shared label, axis-title and legend editor has a Text color menu beside its formatting
-buttons. Black, Red, Green, Blue, Cyan, Magenta, Yellow and White use the existing Classic
-text colours from 7.2: entries 1–7 and 18. Classic Green is bright green and White is entry 18,
-not entry 8 (olive). No parser, glyph, export or base-font rules change.
+The shared label, axis-title and legend editor has Text color beside its formatting buttons.
+Black, Red, Green, Blue, Cyan, Magenta, Yellow and White remain the basic choices (indices
+1-7 and 18). More Classic colors adds the other 16, completing the measured list in 7.2.
+Dark Yellow is index 8 (128,128,0), Olive index 12 (0,128,0), Royal index 14 (0,0,160) and
+White index 18; Green remains bright green. The existing renderer and base font apply.
 
 Origin's [Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/) documents
-font-colour selection alongside its raw text editor, selection formatting and preview.
-This compact eight-name menu and the following rewrite policy are Sheaf choices, not a newly
-measured Origin palette or command algorithm. A choice colours the selected characters, or
-inserts a colour group at the caret for typing. Existing colour groups within that selection
-are replaced while scripts, font/style groups, literal blocks and raw substitutions remain.
-Choosing the same colour again is idempotent. Normal removes inline colour with other inline
-formatting. Legend samples and row boundaries stay outside text-format groups as in 7.7.
+font-colour selection, raw text, selection formatting and preview. The basic-eight/extra-sixteen
+menu grouping and rewrite policy are Sheaf choices, not a newly measured Origin dialog layout
+or command algorithm. Numeric Classic colours are measured by the EMF controls in 7.2; both
+worksheet swatch lists independently agree (GUI 3).
 
-Opening and dismissing the palette does not choose custom automatic text. A changed colour
-is a draft until Apply/OK, shares the existing Undo step and preview, and preserves the base
-font. Native and Origin-companion saves retain the raw colour markup. The menu offers this
-bounded subset; broader/custom colour controls, inline family selection and combined-script
-insertion remain separate work.
+A choice colours the selected characters or inserts a colour group at the caret for typing.
+It replaces existing colour groups in that selection while preserving scripts, font/style
+groups, literal blocks and raw substitutions. Repeating a choice is idempotent; Normal removes
+inline colour together with other inline formatting. Legend samples and row boundaries stay
+outside text-format groups, as in 7.7. All 24 choices use their one-based Classic index escapes.
+Both menus close after a choice, restore typing focus to the original selection/caret and seed
+the custom RGB fields in 7.9.
+
+Opening/dismissing the palette keeps automatic text automatic. A changed colour remains a
+draft until Apply/OK, shares the existing Undo step and preview, and preserves the base font.
+Native and Origin-companion saves retain the raw markup. Other native colour lists, palette
+storage, inline family selection and combined-script insertion remain separate work.
 
 ### 7.9 Custom RGB text colours (T58 editor)
 
@@ -890,8 +895,8 @@ and White at the existing tag boundaries. The renderer/parser and base font are 
 Origin's [Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/) documents
 font-colour selection, formatting and preview; this compact numeric submenu, validation
 policy and explicit draft choice are Sheaf UI choices, not a newly measured Origin layout.
-The eight named colours from 7.8 remain available; a full named Classic palette and other
-editor insertion controls remain separate work.
+The 24 named Classic colours from 7.8 remain available. Other editor insertion controls and
+persistent native palette lists remain separate work.
 
 ### 7.10 Paired subscript and superscript columns (T58 renderer)
 

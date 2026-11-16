@@ -12,12 +12,47 @@ pub(super) enum TextColor {
     Magenta,
     Yellow,
     White,
+    DarkYellow,
+    Navy,
+    Purple,
+    Wine,
+    Olive,
+    DarkCyan,
+    Royal,
+    Orange,
+    Violet,
+    Pink,
+    LtGray,
+    Gray,
+    LtYellow,
+    LtCyan,
+    LtMagenta,
+    DarkGray,
     Rgb([u8; 3]),
 }
 
 impl TextColor {
-    pub const ALL: [Self; 8] =
+    pub const BASIC: [Self; 8] =
         [Self::Black, Self::Red, Self::Green, Self::Blue, Self::Cyan, Self::Magenta, Self::Yellow, Self::White];
+
+    pub const EXTRA: [Self; 16] = [
+        Self::DarkYellow,
+        Self::Navy,
+        Self::Purple,
+        Self::Wine,
+        Self::Olive,
+        Self::DarkCyan,
+        Self::Royal,
+        Self::Orange,
+        Self::Violet,
+        Self::Pink,
+        Self::LtGray,
+        Self::Gray,
+        Self::LtYellow,
+        Self::LtCyan,
+        Self::LtMagenta,
+        Self::DarkGray,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -29,6 +64,22 @@ impl TextColor {
             Self::Magenta => "Magenta",
             Self::Yellow => "Yellow",
             Self::White => "White",
+            Self::DarkYellow => "Dark Yellow",
+            Self::Navy => "Navy",
+            Self::Purple => "Purple",
+            Self::Wine => "Wine",
+            Self::Olive => "Olive",
+            Self::DarkCyan => "Dark Cyan",
+            Self::Royal => "Royal",
+            Self::Orange => "Orange",
+            Self::Violet => "Violet",
+            Self::Pink => "Pink",
+            Self::LtGray => "LT Gray",
+            Self::Gray => "Gray",
+            Self::LtYellow => "LT Yellow",
+            Self::LtCyan => "LT Cyan",
+            Self::LtMagenta => "LT Magenta",
+            Self::DarkGray => "Dark Gray",
             Self::Rgb(_) => "Custom RGB...",
         }
     }
@@ -43,6 +94,22 @@ impl TextColor {
             Self::Magenta => r"\c6(",
             Self::Yellow => r"\c7(",
             Self::White => r"\c18(",
+            Self::DarkYellow => r"\c8(",
+            Self::Navy => r"\c9(",
+            Self::Purple => r"\c10(",
+            Self::Wine => r"\c11(",
+            Self::Olive => r"\c12(",
+            Self::DarkCyan => r"\c13(",
+            Self::Royal => r"\c14(",
+            Self::Orange => r"\c15(",
+            Self::Violet => r"\c16(",
+            Self::Pink => r"\c17(",
+            Self::LtGray => r"\c19(",
+            Self::Gray => r"\c20(",
+            Self::LtYellow => r"\c21(",
+            Self::LtCyan => r"\c22(",
+            Self::LtMagenta => r"\c23(",
+            Self::DarkGray => r"\c24(",
             Self::Rgb([r, g, b]) => {
                 let code = 0x0100_0001_u32 + u32::from_le_bytes([r, g, b, 0]);
                 return format!(r"\c{code}(");
@@ -61,6 +128,22 @@ impl TextColor {
             Self::Magenta => [255, 0, 255],
             Self::Yellow => [255, 255, 0],
             Self::White => [255, 255, 255],
+            Self::DarkYellow => [128, 128, 0],
+            Self::Navy => [0, 0, 128],
+            Self::Purple => [128, 0, 128],
+            Self::Wine => [128, 0, 0],
+            Self::Olive => [0, 128, 0],
+            Self::DarkCyan => [0, 128, 128],
+            Self::Royal => [0, 0, 160],
+            Self::Orange => [255, 128, 0],
+            Self::Violet => [128, 0, 255],
+            Self::Pink => [255, 0, 128],
+            Self::LtGray => [192, 192, 192],
+            Self::Gray => [128, 128, 128],
+            Self::LtYellow => [255, 255, 128],
+            Self::LtCyan => [128, 255, 255],
+            Self::LtMagenta => [255, 128, 255],
+            Self::DarkGray => [64, 64, 64],
             Self::Rgb(rgb) => rgb,
         }
     }
@@ -85,12 +168,21 @@ impl Picker {
 
     pub fn show(&mut self, ui: &mut egui::Ui) -> Option<TextColor> {
         let mut selected = None;
-        for color in TextColor::ALL {
+        for color in TextColor::BASIC {
             if ui.button(color.label()).clicked() {
                 self.channels = color.channels().map(|c| c.to_string());
                 selected = Some(color);
             }
         }
+        egui::containers::menu::SubMenuButton::new("More Classic colors").ui(ui, |ui| {
+            for color in TextColor::EXTRA {
+                if ui.button(color.label()).clicked() {
+                    self.channels = color.channels().map(|c| c.to_string());
+                    selected = Some(color);
+                    ui.close();
+                }
+            }
+        });
         ui.separator();
         egui::containers::menu::SubMenuButton::new("Custom RGB...")
             .config(

@@ -99,6 +99,19 @@ Formatting, strict workspace all-target Clippy and 4,062 combined tests pass
 Inventory, eight Python tooling tests and four inspected desktop captures pass, including
 the real RGB popup with verified channel values; editor/test source hashes are unchanged.
 
+Full named Classic editor palette (`codex/t58-classic-editor-colors`): the shared
+label/title/legend Text color menu keeps its eight basic choices and adds the other 16 in
+More Classic colors, using all 24 measured index/RGB values from graphing 7.2/7.8. The compact
+menu grouping is Sheaf policy. Existing draft, typing focus, automatic text, Apply/OK/Cancel,
+history, style/reference/base-font and project/companion rules are reused; a named choice
+also seeds the custom RGB picker. Six UI regressions cover every index and rendered RGB,
+Unicode/script selection, idempotence, automatic-text dismissal, titles/legend persistence
+and RGB compatibility. Fmt, strict workspace/all-target Clippy, all 4,221 workspace tests
+(eight existing ignored), all 95 related formatting UI/helper/preview tests, inventory 309,
+eight Python tooling tests, unchanged source/goldens and inspected desktop controls pass on
+the combined T61/T103 source. Other colour lists/palette storage and remaining editor
+insertion controls stay open.
+
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

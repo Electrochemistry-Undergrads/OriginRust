@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **294 listed item locations** at the planning
-  baseline (199 menu bar, 18 toolbar, 77 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **293 listed item locations** at the planning
+  baseline (198 menu bar, 18 toolbar, 77 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -513,12 +513,24 @@ were inspected and hashed. Formatting, strict workspace all-target Clippy, 4,205
 (8 existing ignored), inventory, eight Python tooling tests and frozen source/goldens pass.
 T59 remains partial; category defaults and sticky heights are separate work.
 
+**T59 worksheet Data font defaults (`codex/t59-worksheet-default-fonts`):** Format > Worksheet
+(F4) opens separate worksheet-wide Data family/point-size controls with installed-font search.
+One optional setting reaches current/future data cells below manual range fonts; labels retain
+their own styles. Grid caching, print/images, native project saves, OPJ companion loss reporting
+and bounded Excel snapshot styles share the same effective fonts. Native measurements establish
+future-column behavior, manual12 over Data20 and the Font checkbox's apply-mask behavior.
+Sheaf retains its existing derived row heights; Native fixed/sticky heights and other categories
+remain open (GUI3/workbook13b/T59). Fmt, strict workspace all-target Clippy and 4,293 tests pass
+(8 existing ignored), including all11 new regressions. Inventory/tooling, independent
+openpyxl output review, frozen source/goldens and inspected fresh desktop captures pass. All
+own builders, Native instances, desktop helpers and guards are terminal. Only this claim/window
+is released; other sessions' claims are preserved.
+
 ## In flight (check for recent edits before claiming)
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
 | `codex/t60-layer-border-display` | Codex Windows | T60 Layer Management Display Border Fill/Border Color: measure first, wire only existing supported layer fields | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` reused afteraae34725/FULL4274/all own actors and CI terminal. Bounded dialogs/layer_management.rs +new private border helper if supported, own tests/registry, graphing15.7/T60/index/roadmap/parity; existing preview/selected-layer/history/stale paths. Preserve published Background Color; unsupported border settings remain disabled with measured constraints. No Core/model/renderer/IO production changes, Drawing Order/Dimensions/Add/Axes/merge/layer lifecycle, graph_view/shapes/gadgets, T58 editor/toolbar/palette, worksheet defaults/T59, stockT109, stats/fitting/MCP/import/clipboard, reserved tasks/formula-parameter labels or ROOT pending files. Respect T10913:56-14:15; no own product hold. |
-| `codex/t59-worksheet-default-fonts` | Codex Windows | T59 worksheet category font defaults; first product slice Data family/size; other label categories measured separately | claimed 2026-11-16; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` after23e89f2c. Native Data18/newC18, manual12 over Data20, actual Times New Roman/newC serif and Font-checkbox apply-mask measured; all own Native actors/guards/helpers closed, ignored proof retained. Compatible optional model/new sheet_fonts module +cellformat fallback, grid format-cache condition, NEW private Data-font dialog and only own F4/state/dispatch/menu/registry deltas, effective XLSX blank styles/snapshot warning, OPJ existing loss condition and one explicit batch initializer field using its existing reset policy. Own regressions/GUI3/workbook13b/T59/inventory metadata only. No color defaults/text controls, label/Standard/header mutators, vertical alignment/sticky heights/T27 layout, graph editor/palette/renderer/fonts/T61/T102/T101, stats/fitting/MCP/clipboard/import algorithms, reserved tasks/formula labels or ROOT pending files. FINAL FIXED PRODUCT integration window 2026-11-16 15:00 through 15:20 Central Standard Time, after actual T111 publication7c573199 and RELEASED14:56. Earlier window released early for T111 and remains withdrawn. Bounded352x192 dialog desktop pilot APPROVED, all4 current focused UI tests PASS; now combine public QC source before final fmt/strict ALL-TARGET Clippy/FULL and fresh desktop build/capture. No more layout changes planned. Release on publication/failure/deadline; docs-only claims fine, other claims preserved. |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |

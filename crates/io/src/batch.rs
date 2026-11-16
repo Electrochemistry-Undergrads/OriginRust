@@ -158,6 +158,7 @@ pub fn place_workbook_with(
                     cond_formats: Vec::new(),
                     notes: Vec::new(),
                     cell_formats: Vec::new(),
+                    font_defaults: Default::default(),
                     comparison_source: None,
                 };
             }

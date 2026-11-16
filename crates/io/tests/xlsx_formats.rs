@@ -77,6 +77,38 @@ fn plain() -> ExcelExportOptions {
 }
 
 #[test]
+fn worksheet_default_fonts_reach_values_and_blanks_below_manual_formats() {
+    use sheaf_core::sheet_fonts::WorksheetFont;
+    let mut a = column(1, vec![1.234, f64::NAN, 3.0]);
+    a.format = NumberFormat::Decimal(3);
+    a.long_name = "Potential".into();
+    let mut s = Worksheet { columns: vec![a, column(2, vec![2.0])], ..Worksheet::new("Default fonts") };
+    s.set_data_font(WorksheetFont { family: "Times New Roman".into(), size_pt: 18.0 });
+    s.apply_cell_format(
+        FormatTarget::cells(vec![ColumnId(1)], 0, Some(0)),
+        CellFormat { size_pt: Some(12.0), bold: Some(true), ..Default::default() },
+    );
+    let before = s.clone();
+    let (xml, styles, warnings) =
+        Output::new("worksheet-defaults").export(&s, &ExcelExportOptions { long_names: true, ..plain() });
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("future cells use Excel defaults"));
+    assert_eq!(s, before);
+    let manual = font(style(&xml, &styles, "A2"), &styles);
+    assert!(manual.contains("val=\"Times New Roman\"") && manual.contains("val=\"12\"") && manual.contains("<b/>"));
+    for address in ["A3", "A4", "B2", "B3", "B4"] {
+        let f = font(style(&xml, &styles, address), &styles);
+        assert!(f.contains("val=\"Times New Roman\"") && f.contains("val=\"18\""), "{address}: {f}");
+        assert!(!f.contains("<b/>"));
+    }
+    let label = font(style(&xml, &styles, "A1"), &styles);
+    assert!(label.contains("val=\"Arial\"") && label.contains("val=\"9\""));
+    assert!(styles.contains("formatCode=\"0.000\""));
+    assert!(cell(&xml, "A2").contains("<v>1.234</v>"));
+    assert!(nodes(&xml, "row").iter().all(|r| attr(r, "r").unwrap().parse::<usize>().unwrap() <= 4));
+}
+
+#[test]
 fn xlsx_formats_combine_number_codes_fonts_and_rgb_without_mutating_the_sheet() {
     let mut decimal = column(7, vec![1.23456789012345, -2.5]);
     decimal.format = NumberFormat::Decimal(3);

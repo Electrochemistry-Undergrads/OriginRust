@@ -495,6 +495,8 @@ pub enum Action {
     /// Format Cells... (cell, column and row menus; Format > Cell...): the window for the
     /// formats of the selection.
     FormatCellsDialog(WindowId),
+    /// Format > Worksheet (F4): worksheet-wide Data font defaults.
+    WorksheetFontsDialog(WindowId),
     /// Cell menu > Add Note... / Edit Note...: the note editor for the single selected cell.
     NoteDialog(WindowId),
     /// Cell menu > Delete Note: removes the note of the single selected cell.

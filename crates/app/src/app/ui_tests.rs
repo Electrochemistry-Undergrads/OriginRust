@@ -74,6 +74,7 @@ mod violin;
 mod worksheet_classic_colors;
 mod worksheet_controls;
 mod worksheet_custom_colors;
+mod worksheet_fonts;
 mod worksheet_format_toolbar;
 mod worksheet_style_menu;
 

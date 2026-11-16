@@ -9,6 +9,7 @@ pub mod cell_note;
 pub mod column_props;
 pub mod comparison_plot;
 pub mod cond_format;
+pub mod copy_columns;
 pub mod details_look;
 pub mod dist_options;
 pub mod error_bars;

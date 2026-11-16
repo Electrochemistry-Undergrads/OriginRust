@@ -291,6 +291,8 @@ pub enum Action {
     },
     /// The column header's Swap Columns...: the two columns exchange places.
     SwapColumns(ColumnId, ColumnId),
+    /// The column header's Copy Columns to...: open its window for these columns.
+    CopyColumnsTo(Vec<ColumnId>),
     /// Edit > Reset to Full Range: every column of the workbook's active sheet uses all its rows.
     ResetFullRange(WindowId),
     /// Column > Hide/Unhide Columns > Hide Selected.

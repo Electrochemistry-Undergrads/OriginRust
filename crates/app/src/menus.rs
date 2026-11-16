@@ -128,6 +128,8 @@ pub enum Cmd {
     MoveColumns(MoveTo),
     /// The column header's Swap Columns... (T86): the two selected columns exchange places.
     SwapColumns,
+    /// The column header's Copy Columns to... (T89).
+    CopyColumnsTo,
     /// Edit > Paste Transpose and the data cell's Paste Transpose (T86).
     PasteTranspose,
     /// Edit > Set As Begin / Set As End and the data cell's items (T87).
@@ -1782,7 +1784,7 @@ pub fn column_header_menu() -> Vec<Entry> {
     .collect();
     let plots: Vec<Entry> = Template::ALL.iter().map(|t| item(t.label(), Cmd::Plot(*t))).collect();
     let mut v = vec![sub("Plot", plots), sep(), keyed("Cut", ctrl(Key::X), Cmd::Cut), sub("Copy", copy_entries())];
-    v.push(grey("Copy Columns to..."));
+    v.push(item("Copy Columns to...", Cmd::CopyColumnsTo));
     v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
     v.push(sep());
     v.push(item("Insert", Cmd::InsertCells));
@@ -2565,6 +2567,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::MoveColumns { columns: some()?, to: *to }
         }
         Cmd::ResetFullRange => Action::ResetFullRange(book?),
+        Cmd::CopyColumnsTo => {
+            book?;
+            Action::CopyColumnsTo(some()?)
+        }
         Cmd::SwapColumns => {
             book?;
             match c.selected {

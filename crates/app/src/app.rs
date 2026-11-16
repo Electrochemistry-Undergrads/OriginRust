@@ -201,6 +201,8 @@ pub struct SheafApp {
     fill_pattern: Option<crate::dialogs::fill_pattern::FillPatternDialog>,
     /// Column > Set Sampling Interval... and Show X Column....
     sampling: Option<crate::dialogs::sampling::SamplingDialog>,
+    /// The column header's Copy Columns to....
+    copy_columns: Option<crate::dialogs::copy_columns::CopyColumnsDialog>,
     show_x: Option<crate::dialogs::sampling::ShowXDialog>,
     /// The saved user templates as last read from the folder (at start and after a change).
     user_templates: Vec<String>,
@@ -322,6 +324,7 @@ impl SheafApp {
             template_manager: None,
             fill_pattern: None,
             sampling: None,
+            copy_columns: None,
             show_x: None,
             user_templates: startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default(),
             power: None,
@@ -1777,6 +1780,10 @@ impl SheafApp {
                     self.say("Every column already uses all its rows");
                 }
             }
+            Action::CopyColumnsTo(columns) => {
+                self.copy_columns =
+                    Some(crate::dialogs::copy_columns::CopyColumnsDialog::new(columns, self.doc.project()));
+            }
             Action::SwapColumns(a, b) => {
                 let swapped = self.doc.edit("Swap columns", |p| {
                     let (book, sheet_index) = p
@@ -3096,6 +3103,26 @@ impl SheafApp {
         }
     }
 
+    /// Copy Columns to: OK copies the columns, one undo step.
+    fn show_copy_columns(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::copy_columns::CopyColumnsOutcome;
+        let Some(d) = &mut self.copy_columns else { return };
+        match d.show(ctx, self.doc.project()) {
+            CopyColumnsOutcome::Open => {}
+            CopyColumnsOutcome::Closed => self.copy_columns = None,
+            CopyColumnsOutcome::Copy { columns, dest, parts } => {
+                match self.doc.edit("Copy columns", |p| p.copy_columns_to(&columns, dest, parts)) {
+                    Ok((book, ids)) => {
+                        self.copy_columns = None;
+                        let name = self.doc.project().workbook(book).map(|b| b.name.clone()).unwrap_or_default();
+                        self.say(format!("Copied {} column(s) to {name}", ids.len()));
+                    }
+                    Err(e) => d.set_problem(e.to_string()),
+                }
+            }
+        }
+    }
+
     /// Set Sampling Interval and Show X Column: OK changes every chosen column, one undo step.
     fn show_sampling(&mut self, ctx: &egui::Context) {
         use crate::dialogs::sampling::{SamplingOutcome, ShowXOutcome};
@@ -3820,6 +3847,7 @@ impl SheafApp {
             || self.template_manager.is_some()
             || self.fill_pattern.is_some()
             || self.sampling.is_some()
+            || self.copy_columns.is_some()
             || self.show_x.is_some()
             || self.power.is_some()
             || self.find.is_some()
@@ -4471,6 +4499,7 @@ impl SheafApp {
         self.show_template_windows(ctx);
         self.show_fill_pattern(ctx);
         self.show_sampling(ctx);
+        self.show_copy_columns(ctx);
         if let Some(d) = &mut self.find {
             let book = d.book;
             match d.show(ctx) {

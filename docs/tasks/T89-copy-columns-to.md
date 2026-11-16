@@ -1,6 +1,6 @@
 # T89: Copy Columns to...
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `copy-columns`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13g): `colcopy` measured (new book renamed from A with labels, format and designation but no formula; into a column overwrites rightward; `<new>` appends; `<new>!<new>` adds a sheet), window with destination and check boxes, one undo step. Left: Ignore Hidden Rows, system Parameters rows, Origin's window layout.
 **Size:** S. **Source:** greyed inventory package B5 (the column header's Copy Columns to...).
 **Spec:** `docs/spec/workbook-model.md` (a new section).
 

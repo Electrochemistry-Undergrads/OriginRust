@@ -79,7 +79,7 @@ fn style_schema() -> Value {
             ("colors", strs("Plot colors in legend order: names or #RRGGBB.")),
             ("labels", strs("Legend text of the plots, in legend order.")),
             ("no_legend", t("boolean", "Hide the legend.")),
-            ("stack", t("string", "none, auto, auto:GAP or step:STEP.")),
+            ("stack", t("string", "none, cumulative, auto, auto:GAP or step:STEP.")),
             ("offsets", json!({"type": "array", "items": {"type": "number"}, "description": "Y offset of each plot."})),
             ("waterfall", json!({"type": "array", "items": {"type": "number"}, "description": "Waterfall offsets."})),
             ("no_y_tick_labels", t("boolean", "Hide the Y tick labels.")),
@@ -128,6 +128,11 @@ fn style_schema() -> Value {
                            ("x1", n("First corner X.")), ("y1", n("First corner Y.")),
                            ("x2", n("Second corner X.")), ("y2", n("Second corner Y.")),
                        ], &["kind", "x1", "y1", "x2", "y2"])}),
+            ),
+            (
+                "slope",
+                json!({"type": "array", "description": "Slope annotations on the first plot of the first layer: two worksheet row numbers counted from 1 (a string \"A,B\" or an object). The label reads slope = <value> in the axes' own units (per decade on a log10 axis).",
+                       "items": {"anyOf": [{"type": "string"}, obj(vec![("row_a", n("First row, from 1.")), ("row_b", n("Second row, from 1."))], &["row_a", "row_b"])]}}),
             ),
         ],
         &[],
@@ -337,7 +342,7 @@ pub fn defs() -> Vec<Def> {
                     (
                         "template",
                         s(
-                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), scatter-rug (scatter with rug marks beside the bottom and left axes), violin (also violin-box, violin-point, violin-quartile, violin-stick, half-violin), ridgeline (one density curve per y column, stacked up the page), hexbin (x against the first y column, binned into hexagons coloured by count, with a colour scale; no right axis), parallel (one vertical axis per y column, one line per row coloured by the last column or by group, with a colour scale; two or more y columns, no right axis), parallel-index (like parallel, lines coloured by a text group column with a legend; three or more y columns plus group), treemap (nested rectangles, one level per category column given in group, default the text columns, with areas proportional to the last numeric y column; options treemap_layout, treemap_order, treemap_depth, treemap_gap; no right axis), sunburst (the same hierarchy as concentric rings, first category innermost, angles proportional to the last numeric y column, coloured by value with a colour scale; options sunburst_start, sunburst_hole, sunburst_gap, sunburst_labels, sunburst_order; no right axis), ... (the names of sheaf plot --template). Default: what the data suggests.",
+                            "line, scatter, line+symbol, column, lollipop (needs two or more y columns), scatter-rug (scatter with rug marks beside the bottom and left axes), 3ys-y-yy, 3ys-y-y-y, 4ys-y-yyy, 4ys-yy-yy (three or four Y axes over one X axis, one layer each, the y columns dealt out one to a layer in turn; y2 is refused), violin (also violin-box, violin-point, violin-quartile, violin-stick, half-violin), ridgeline (one density curve per y column, stacked up the page), hexbin (x against the first y column, binned into hexagons coloured by count, with a colour scale; no right axis), parallel (one vertical axis per y column, one line per row coloured by the last column or by group, with a colour scale; two or more y columns, no right axis), parallel-index (like parallel, lines coloured by a text group column with a legend; three or more y columns plus group), treemap (nested rectangles, one level per category column given in group, default the text columns, with areas proportional to the last numeric y column; options treemap_layout, treemap_order, treemap_depth, treemap_gap; no right axis), sunburst (the same hierarchy as concentric rings, first category innermost, angles proportional to the last numeric y column, coloured by value with a colour scale; options sunburst_start, sunburst_hole, sunburst_gap, sunburst_labels, sunburst_order; no right axis), ... (the names of sheaf plot --template). Default: what the data suggests.",
                         ),
                     ),
                     ("book", s(BOOK)),

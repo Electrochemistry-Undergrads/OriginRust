@@ -100,7 +100,7 @@ impl MultiOptions {
                 });
                 ui.checkbox(&mut s.curve, "ROC curve (new graph, with the diagonal)");
                 ui.weak(
-                    "The area under the curve with its standard error (DeLong's method) and confidence interval, the                      curve points with their cut-offs, and the cut-off with the largest sensitivity + specificity - 1.",
+                    "The area under the curve with Origin's standard error and confidence interval, the                      curve points with their cut-offs, and the cut-off with the largest sensitivity + specificity - 1.",
                 );
             }
             AnalysisKind::Kmeans => {

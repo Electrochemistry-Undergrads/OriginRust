@@ -119,3 +119,20 @@ membership sheet. `t29-report-setup.labtalk.txt` makes one report of each of the
 of the report sheet windows (maximized with `win -z`, sections opened by clicking their boxes) from which the table
 layouts in `docs/spec/statistics.md`, sections 17 to 20, were read. Within a line script `$(x)` turns a number into text and
 `%(s$)` a string; a `for` loop with a nested `doc -e` did not run, so the scripts are unrolled.
+
+## Merge Graph Windows and Fit Page to Layers (T60)
+
+`merge-graph-*.lines.txt` make three stock Line graphs (GA, GB, GC) and run `merge_graph option:=project` with one
+setting changed at a time, printing the merged page size and every layer's position, `layer.factor`, links and axis
+label switches, then deleting the merged graph (`win -cd %H`): `merge-graph-options` (rows/columns, scale modes, links,
+Show Axes Frame, aspect ratio, portrait, a double-Y source, keep:=0), `merge-graph-factor1` and `-factor2` (the text
+factor for many grids, gaps and margins), `merge-graph-source-size` (sources resized to 50 x 50, 30 x 30 and 80 x 40
+percent) and `merge-graph-threshold` (where the factor stops being 1). `fit-page-to-layers.lines.txt` runs `pfit2l`
+with its options. Run them with `run-labtalk-lines.ps1`; the findings are in `docs/spec/graphing.md` 15.7c and 15.7d.
+
+## Add Straight Line (T67)
+
+`addline-objects.lines.txt` runs `addline` on a stock Line graph (vertical, horizontal, a named dashed red line,
+a second vertical one) and prints the objects it makes and their ends, attachment, colour, style, width and the
+label's text, place and size; `addline-labels.lines.txt` adds lines with each label location and a fixed format,
+then rescales Y to see whether the ends follow. Findings: `docs/tasks/T67-add-straight-line.md` and graphing.

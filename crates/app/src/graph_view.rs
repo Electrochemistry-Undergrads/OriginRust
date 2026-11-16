@@ -17,9 +17,12 @@
 use crate::actions::{Action, DataTool, GraphOp, GraphTool};
 use crate::dialogs::graph_props::PropsTab;
 use crate::gadget::Integrator;
+use crate::graph_scale::{self, ScaleState};
+use crate::graph_zoom::{self, Zoom};
 use crate::menus::{self, MenuContext, WindowKind};
-use crate::{data_tools, reader};
-use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, TextureHandle, TextureOptions, Vec2};
+use crate::{data_tools, reader, view_modes};
+use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, TextureHandle, TextureOptions, Vec2, vec2};
+use sheaf_core::project::ViewMode;
 use sheaf_core::shape::{self, Shape, ShapeKind};
 use sheaf_core::{Document, Project, WindowId};
 use sheaf_plot::LayerGeometry;
@@ -75,6 +78,8 @@ pub struct GraphTexture {
     texture: TextureHandle,
     geometry: Vec<LayerGeometry>,
     scene: Scene,
+    /// The view mode and the page size the picture was drawn for (Window and Draft View follow the window).
+    view_key: (ViewMode, i32, i32),
 }
 
 #[derive(Default)]
@@ -87,6 +92,8 @@ pub struct GraphUi {
     pub selected: Option<(usize, ObjectKind)>,
     /// What the open right-click menu is about.
     menu_on: Option<MenuTarget>,
+    /// The page point (in points) that opened the right-click menu: Axis Center needs it.
+    menu_page: (f64, f64),
     /// Where the page was drawn in the last frame (screen rectangle) and UI points per page point.
     view: Option<(Rect, f32)>,
     /// The open Integrate gadget, if any.
@@ -99,12 +106,26 @@ pub struct GraphUi {
     pub reader_point: Option<reader::Point>,
     /// The Text tool is on: the next click on the page places a label.
     pub text_tool: bool,
+    /// The Slope tool is on: two clicks on data points of one plot add a slope annotation.
+    pub slope_tool: bool,
+    /// The first point the Slope tool picked.
+    pub slope_first: Option<reader::Point>,
     /// The drawing tool in use (Line, Arrow, Rectangle, Circle): a drag on the page draws one.
     pub shape_tool: Option<ShapeKind>,
     /// The Data menu tool in use (Mask, Move, Remove Bad Data Points).
     pub data_tool: Option<DataTool>,
+    /// The Zoom In mode is on: the next click on the page zooms in there, then the mode ends.
+    pub zoom_in_tool: bool,
+    /// The Pan tool is on: a drag on the page moves the view.
+    pub pan_tool: bool,
+    /// The Scale In / Scale Out tools and the Scale Out stack (T69).
+    pub scale: ScaleState,
+    /// The zoom and scroll of this window (view state only; not saved with the project).
+    pub zoom: Zoom,
+    /// The window rectangle and the page size (points) of the last frame, for the view commands.
+    frame: Option<(Rect, Vec2)>,
     /// What the Data menu tool is dragging.
-    data_drag: Option<data_tools::Drag>,
+    data: data_tools::State,
     /// An object being drawn.
     drawing: Option<Drawing>,
     /// A drawn object being moved.
@@ -155,22 +176,64 @@ impl GraphUi {
     /// Whether a Data menu tool has a drag in progress.
     #[cfg(test)]
     pub fn data_dragging(&self) -> bool {
-        self.data_drag.is_some()
+        self.data.drag.is_some()
     }
 
     /// The tool in use.
     pub fn tool(&self) -> GraphTool {
         if self.reader {
             GraphTool::Reader
+        } else if self.slope_tool {
+            GraphTool::Slope
         } else if self.text_tool {
             GraphTool::Text
         } else if let Some(kind) = self.shape_tool {
             GraphTool::Draw(kind)
         } else if let Some(tool) = self.data_tool {
             GraphTool::Data(tool)
+        } else if self.zoom_in_tool {
+            GraphTool::ZoomIn
+        } else if self.pan_tool {
+            GraphTool::Pan
+        } else if let Some(tool) = self.scale.tool {
+            match tool {
+                graph_scale::ScaleTool::In => GraphTool::ScaleIn,
+                graph_scale::ScaleTool::Out => GraphTool::ScaleOut,
+            }
         } else {
             GraphTool::Pointer
         }
+    }
+
+    /// Zoom Out: half the zoom, down to 25 % (Origin: 200 to 100 to 50 to 25 %, then no change); the
+    /// window centre's page point stays centred.
+    pub fn zoom_out(&mut self) {
+        if let Some((window, page)) = self.frame {
+            self.zoom = graph_zoom::zoom_about(window, page, self.zoom, self.zoom.factor / 2.0, window.center());
+        } else {
+            self.zoom = Zoom::default();
+        }
+    }
+
+    /// Zoom All: the page and all objects fit the window (T69).
+    pub fn zoom_all(&mut self) {
+        if let Some((window, page)) = self.frame {
+            let bounds = self.texture.as_ref().map(|t| graph_scale::scene_bounds(&t.scene)).unwrap_or_default();
+            self.zoom = graph_scale::zoom_all(window, page, &bounds);
+        }
+    }
+
+    /// Whole Page: zoom 1, scroll 0.
+    pub fn whole_page(&mut self) {
+        self.zoom = Zoom::default();
+    }
+
+    /// Drops the open menu and the drags, which name layers by index, after layers were renumbered.
+    pub fn reset_layer_interactions(&mut self) {
+        self.menu_on = None;
+        self.shape_drag = None;
+        self.label_drag = None;
+        self.legend_drag = None;
     }
 
     /// Layers with an index-based shape selection, context menu or drag.
@@ -216,6 +279,8 @@ impl GraphUi {
             ObjectKind::YTitle => GraphOp::HideTitle { layer, y: true },
             ObjectKind::Label(label) => GraphOp::DeleteLabel { layer, label },
             ObjectKind::Shape(shape) => GraphOp::DeleteShape { layer, shape },
+            ObjectKind::Slope(slope) => GraphOp::DeleteSlope { layer, slope },
+            ObjectKind::StraightLine(line) => GraphOp::DeleteStraightLine { layer, line },
             _ => return None,
         };
         self.selected = None;
@@ -245,6 +310,18 @@ impl GraphUi {
         Some(screen((o.bounds.x + o.bounds.w / 2.0, o.bounds.y + o.bounds.h / 2.0)))
     }
 
+    /// The page on screen and the window's content area, as of the last frame.
+    #[cfg(test)]
+    pub fn page_and_content(&self) -> Option<(Rect, Rect)> {
+        Some((self.view?.0, graph_zoom::content(self.frame?.0)))
+    }
+
+    /// The middle of the part of the window the page is drawn in, in the last frame.
+    #[cfg(test)]
+    pub fn view_centre(&self) -> Option<Pos2> {
+        self.frame.map(|(window, _)| graph_zoom::content(window).center())
+    }
+
     /// The screen point of a page point (points from the page's top left) in the last frame.
     #[cfg(test)]
     pub fn page_point(&self, x: f64, y: f64) -> Option<Pos2> {
@@ -271,26 +348,54 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
 
     let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
     ui.painter().rect_filled(rect, 0.0, GROUND);
-    let margin = 12.0;
-    let page_w = graph.page.width_pt as f32;
-    let page_h = graph.page.height_pt as f32;
+    let margin = graph_zoom::MARGIN;
+    // View mode (T66): Window and Draft View stretch the page over the window.
+    let mode = doc.project().view_mode(graph_id);
+    let visible = rect;
+    let rect = view_modes::view_rect(mode, rect);
+    let page_size = view_modes::page_for(mode, vec2(graph.page.width_pt as f32, graph.page.height_pt as f32), rect);
+    let (page_w, page_h) = (page_size.x, page_size.y);
     if page_w <= 0.0 || page_h <= 0.0 || rect.width() <= 2.0 * margin || rect.height() <= 2.0 * margin {
         return;
     }
-    // UI points per page point, so that the whole page fits in the window ("fit page to window").
-    let fit = ((rect.width() - 2.0 * margin) / page_w).min((rect.height() - 2.0 * margin) / page_h).max(0.05);
-    let image_rect = Rect::from_center_size(rect.center(), egui::vec2(page_w * fit, page_h * fit));
+    // Nothing outside the window is drawn or clicked (the page is larger than it when zoomed).
+    ui.set_clip_rect(ui.clip_rect().intersect(rect));
+    state.frame = Some((rect, page_size));
+
+    // The view input: Zoom In mode, Pan, the wheel and the scroll bars. They change the zoom
+    // before the page is placed, from the layout the user saw in the last frame.
+    // Zoom In mode and Origin's Zoom-Panning tool take the clicks: a click with the hand changes nothing.
+    let zoom_took_input = state.zoom_in_tool || state.pan_tool || state.scale.tool.is_some();
+    view_input(ui, &response, rect, page_size, state);
+
+    // UI points per page point (zoom 1: the whole page fits in the window, "fit page to window"),
+    // and the page rectangle; every conversion below, and the hit-testing, go through these two.
+    let lay = graph_zoom::layout(rect, page_size, state.zoom);
+    state.zoom.scroll = lay.scroll;
+    let (image_rect, fit) = (lay.image, lay.scale);
     state.view = Some((image_rect, fit));
 
-    // Raster pixels per page point.
-    let pixel_scale = fit * ui.ctx().pixels_per_point();
-    let scale_key = (pixel_scale * 50.0).round() as u32;
-    let stale = state.texture.as_ref().is_none_or(|t| t.revision != doc.revision() || t.scale_key != scale_key);
+    // Raster pixels per page point, capped (the texture is then stretched over the page).
+    let max_side = ui.input(|i| i.max_texture_side);
+    let pixel_scale = graph_zoom::raster_scale(fit, ui.ctx().pixels_per_point(), page_size, max_side);
+    let mut key = (pixel_scale * 50.0).round();
+    // Rounding up must not push a side over the limit.
+    if key / 50.0 * page_w.max(page_h) > graph_zoom::max_raster(max_side) {
+        key = (pixel_scale * 50.0).floor();
+    }
+    let scale_key = key.max(1.0) as u32;
+    let view_key = view_modes::view_key(mode, page_size);
+    let stale = state
+        .texture
+        .as_ref()
+        .is_none_or(|t| t.revision != doc.revision() || t.scale_key != scale_key || t.view_key != view_key);
     if stale {
         let scale = f64::from(scale_key) / 50.0;
-        let drawn = sheaf_plot::graph_scene(doc.project(), graph_id).and_then(|scene| {
-            let raster = sheaf_plot::render_scene_raster(&scene, scale)?;
-            Ok((scene, raster, sheaf_plot::layout_geometry(doc.project(), graph_id)?))
+        let stretched = mode.fills_window().then(|| view_modes::resized(doc.project(), graph_id, page_size));
+        let project = stretched.as_ref().unwrap_or(doc.project());
+        let drawn = sheaf_plot::graph_scene(project, graph_id).and_then(|scene| {
+            let raster = view_modes::raster(mode, &scene, scale)?;
+            Ok((scene, raster, sheaf_plot::layout_geometry(project, graph_id)?))
         });
         match drawn {
             Ok((scene, raster, geometry)) => {
@@ -299,7 +404,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                     &raster.rgba,
                 );
                 let texture = ui.ctx().load_texture(format!("graph-{}", graph_id.0), image, TextureOptions::LINEAR);
-                state.texture = Some(GraphTexture { revision: doc.revision(), scale_key, texture, geometry, scene });
+                state.texture =
+                    Some(GraphTexture { revision: doc.revision(), scale_key, texture, geometry, scene, view_key });
                 state.error = None;
             }
             Err(e) => state.error = Some(e.to_string()),
@@ -314,6 +420,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         painter.image(t.texture.id(), image_rect, uv, Color32::WHITE);
     }
     painter.rect_stroke(image_rect, 0.0, Stroke::new(1.0_f32, Color32::from_gray(120)), egui::StrokeKind::Outside);
+    paint_scroll_bars(&painter, rect, page_size, state.zoom);
     if let Some(e) = &state.error {
         painter.text(
             rect.center(),
@@ -328,6 +435,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     };
     let to_page = |p: Pos2| (f64::from((p.x - image_rect.left()) / fit), f64::from((p.y - image_rect.top()) / fit));
     let to_screen = |(x, y): (f64, f64)| image_rect.min + egui::vec2(x as f32 * fit, y as f32 * fit);
+    // (a straight line that is not Selectable has no hit object, so clicks pass through it)
     let pick = |p: Pos2| hit_test(&t.scene, to_page(p), f64::from(PICK_TOLERANCE / fit));
 
     // The selection, drawn over the picture.
@@ -352,7 +460,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }) {
             let (x, y) = g.page_to_data(px, py);
             painter.text(
-                rect.left_bottom() + egui::vec2(8.0, -6.0),
+                visible.left_bottom() + egui::vec2(8.0, -6.0),
                 egui::Align2::LEFT_BOTTOM,
                 format!("x = {}   y = {}", short(x), short(y)),
                 egui::FontId::monospace(12.0),
@@ -391,6 +499,72 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     }
 
+    // Whether the Slope tool took this frame's click (it switches itself off when the annotation is added).
+    let slope_took_input = state.slope_tool;
+    // The Slope tool: a click on a data point picks the first point, a click on another point of the
+    // same plot adds the annotation.
+    if state.slope_tool {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        let only = state.slope_first.map(|p| (p.layer, p.plot));
+        let hover = response
+            .hover_pos()
+            .and_then(|p| reader::nearest_in(doc.project(), graph_id, &t.geometry, &to_screen, p, only));
+        let marker = |at: Pos2, color: Color32| {
+            let r = Rect::from_center_size(at, egui::vec2(9.0, 9.0));
+            painter.rect_stroke(r, 0.0, Stroke::new(1.5_f32, color), egui::StrokeKind::Middle);
+        };
+        let blue = Color32::from_rgb(0, 90, 200);
+        let first_at =
+            state.slope_first.and_then(|p| reader::screen_point(doc.project(), graph_id, &t.geometry, &to_screen, p));
+        if let Some(a) = first_at {
+            marker(a, blue);
+        }
+        if let Some(h) = hover
+            && let Some(b) = reader::screen_point(doc.project(), graph_id, &t.geometry, &to_screen, h)
+        {
+            marker(b, Color32::from_rgba_unmultiplied(0, 90, 200, 130));
+            if let Some(a) = first_at {
+                painter.line_segment([a, b], Stroke::new(1.0_f32, blue));
+            }
+        }
+        if response.clicked() {
+            // A plot without one point per row, or a masked or missing row, cannot take a slope.
+            let refused = hover.and_then(|h| {
+                sheaf_plot::slope_check_point(doc.project(), graph_id, h.layer, h.plot, Some(h.row)).err()
+            });
+            match (state.slope_first, hover) {
+                (_, Some(_)) if refused.is_some() => {
+                    actions.push(Action::Hint(refused.unwrap_or_default()));
+                }
+                (None, Some(h)) => {
+                    state.slope_first = Some(h);
+                    actions.push(Action::Hint("Slope: click a second point of the same plot; Esc cancels".to_string()));
+                }
+                (Some(first), Some(h)) if h.row != first.row => {
+                    let plot = graph.layers.get(first.layer).and_then(|l| l.plots.get(first.plot));
+                    if let Some(plot) = plot {
+                        let slope = sheaf_core::graph::SlopeAnnotation::for_plot(plot, first.row, h.row);
+                        let index = graph.layers[first.layer].slopes.len();
+                        state.slope_tool = false;
+                        state.slope_first = None;
+                        state.selected = Some((first.layer, ObjectKind::Slope(index)));
+                        actions.push(Action::ActivateLayer { graph: graph_id, layer: first.layer });
+                        actions.push(Action::AddSlope { graph: graph_id, layer: first.layer, slope });
+                    }
+                }
+                (Some(_), _) => actions.push(Action::Hint(
+                    "Slope: click a different data point of the same plot; Esc cancels".to_string(),
+                )),
+                (None, None) => actions.push(Action::Hint("Slope: click near a data point; Esc cancels".to_string())),
+            }
+        }
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            state.slope_tool = false;
+            state.slope_first = None;
+            actions.push(Action::Hint("Slope cancelled".to_string()));
+        }
+    }
+
     // The Data menu tools: Mask, Move and Remove Bad Data Points.
     if let Some(tool) = state.data_tool {
         let view = data_tools::View {
@@ -400,12 +574,26 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             to_screen: &to_screen,
             to_page: &to_page,
         };
-        data_tools::show(ui, &painter, &response, &view, tool, &mut state.data_drag, actions);
-        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        data_tools::show(ui, &painter, &response, &view, tool, &mut state.data, actions);
+        // Esc and a right-click (which also opens the context menu) end the mode.
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) || response.secondary_clicked() {
             state.data_tool = None;
-            state.data_drag = None;
+            state.data = data_tools::State::default();
         }
     }
+
+    // Scale In / Scale Out (T69).
+    graph_scale::show(
+        ui,
+        &painter,
+        &response,
+        &t.geometry,
+        &to_page,
+        graph_id,
+        state.active_layer,
+        &mut state.scale,
+        actions,
+    );
 
     // The Text tool: a click places a label there, in the layer under the click.
     if state.text_tool {
@@ -420,7 +608,10 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && !state.reader
         && !state.text_tool
         && state.shape_tool.is_none()
+        && !state.slope_tool
         && state.data_tool.is_none()
+        && !state.pan_tool
+        && !zoom_took_input
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Label(label) } = pick(pos)
         && let Some(l) = graph.layers.get(layer).and_then(|l| l.labels.get(label))
@@ -496,7 +687,10 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && !state.reader
         && !state.text_tool
         && state.shape_tool.is_none()
+        && !state.slope_tool
         && state.data_tool.is_none()
+        && !state.pan_tool
+        && !zoom_took_input
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Shape(shape) } = pick(pos)
     {
@@ -529,7 +723,10 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && !state.reader
         && !state.text_tool
         && state.shape_tool.is_none()
+        && !state.slope_tool
         && state.data_tool.is_none()
+        && !state.pan_tool
+        && !zoom_took_input
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Legend } = pick(pos)
         && let Some(f) = t.geometry.get(layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0)
@@ -584,6 +781,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     } else if response.clicked()
         && !state.reader
+        && !slope_took_input
+        && !zoom_took_input
         && state.data_tool.is_none()
         && let Some(pos) = response.interact_pointer_pos()
     {
@@ -598,6 +797,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     }
     if response.double_clicked()
         && !state.reader
+        && !slope_took_input
+        && !zoom_took_input
         && state.data_tool.is_none()
         && let Some(pos) = response.interact_pointer_pos()
     {
@@ -611,6 +812,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                 ObjectKind::Plot(p) => Some(open(layer, PropsTab::Plots, Some(p))),
                 ObjectKind::Label(label) => Some(Action::EditText { graph: graph_id, layer, label }),
                 ObjectKind::Shape(shape) => Some(Action::EditShape { graph: graph_id, layer, shape }),
+                ObjectKind::Slope(slope) => Some(Action::EditSlope { graph: graph_id, layer, slope }),
+                ObjectKind::StraightLine(line) => Some(Action::EditStraightLine { graph: graph_id, layer, line }),
             },
             Hit::Layer(layer) => Some(open(layer, PropsTab::Plots, None)),
             Hit::Page => Some(open(state.active_layer, PropsTab::Page, None)),
@@ -622,6 +825,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     {
         let hit = pick(pos);
         state.menu_on = Some(MenuTarget::Hit(hit));
+        state.menu_page = to_page(pos);
         if let Some(layer) = layer_of(hit) {
             state.active_layer = layer;
             actions.push(Action::ActivateLayer { graph: graph_id, layer });
@@ -682,7 +886,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
 
     // The right-click menus.
     let c = graph_context(graph_id, state.active_layer, state.tool());
-    let entries = |target: MenuTarget| menu_for(doc.project(), graph_id, target, state.selected);
+    let entries = |target: MenuTarget| menu_for(doc.project(), graph_id, target, state.selected, state.menu_page);
     let target = state.menu_on;
     let mut shown = response.context_menu(|ui| {
         if let Some(t @ MenuTarget::Hit(_)) = target {
@@ -699,6 +903,172 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     }
     if shown.is_none() && !response.secondary_clicked() {
         state.menu_on = None;
+    }
+}
+
+/// The width of a scroll bar, in UI points.
+const BAR: f32 = 10.0;
+/// Sheaf's choice (not measured in Origin): Ctrl+wheel zooms by egui's zoom delta, about 1.2 per
+/// wheel notch, about the pointer.
+///
+/// The view input of a graph window: Esc ends Zoom In and Pan; a click in the Zoom In mode zooms
+/// by [`graph_zoom::CLICK_FACTOR`] about the click and ends the mode (Origin's measured behaviour
+/// is a mode; ending it after one click is Sheaf's choice); a drag with the Pan tool moves the
+/// view; the wheel scrolls (Shift+wheel sideways, a Sheaf choice); the scroll bars drag.
+fn view_input(ui: &mut egui::Ui, response: &egui::Response, rect: Rect, page: Vec2, state: &mut GraphUi) {
+    let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
+    if escape {
+        state.zoom_in_tool = false;
+        state.pan_tool = false;
+    }
+    if state.zoom_in_tool {
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ZoomIn);
+        }
+        if response.clicked()
+            && let Some(pos) = response.interact_pointer_pos()
+        {
+            // Origin re-centres the view on the clicked point.
+            let factor = state.zoom.factor * graph_zoom::CLICK_FACTOR;
+            state.zoom = graph_zoom::centre_on(rect, page, state.zoom, factor, pos);
+            state.zoom_in_tool = false;
+        }
+    }
+    if state.pan_tool {
+        if response.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            state.zoom = graph_zoom::pan(rect, page, state.zoom, response.drag_delta());
+        } else if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+        }
+        // Origin's Zoom-Panning tool: "+" and "-" zoom by 1.25 and 0.85 about the middle of the view,
+        // the arrow keys move it by a small step, the wheel zooms (measured except the wheel).
+        let (plus, minus, keys, wheel, pointer) = ui.input(|i| {
+            let plus = i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals);
+            let minus = i.key_pressed(egui::Key::Minus);
+            let step = graph_zoom::ARROW_STEP_PT;
+            let mut d = Vec2::ZERO;
+            for (key, v) in [
+                (egui::Key::ArrowLeft, egui::vec2(-step, 0.0)),
+                (egui::Key::ArrowRight, egui::vec2(step, 0.0)),
+                (egui::Key::ArrowUp, egui::vec2(0.0, -step)),
+                (egui::Key::ArrowDown, egui::vec2(0.0, step)),
+            ] {
+                if i.key_pressed(key) {
+                    d += v;
+                }
+            }
+            (plus, minus, d, i.raw_scroll_delta.y, i.pointer.hover_pos())
+        });
+        let centre = graph_zoom::content(rect).center();
+        if plus {
+            let f = state.zoom.factor * graph_zoom::PAN_ZOOM_IN;
+            state.zoom = graph_zoom::zoom_about(rect, page, state.zoom, f, centre);
+        }
+        if minus {
+            let f = state.zoom.factor * graph_zoom::PAN_ZOOM_OUT;
+            state.zoom = graph_zoom::zoom_about(rect, page, state.zoom, f, centre);
+        }
+        if keys != Vec2::ZERO {
+            // the view moves over the page: the page moves the other way on screen
+            let scale = graph_zoom::layout(rect, page, state.zoom).scale;
+            state.zoom = graph_zoom::pan(rect, page, state.zoom, -keys * scale);
+        }
+        if response.hovered() && wheel != 0.0 {
+            let f = state.zoom.factor * if wheel > 0.0 { graph_zoom::PAN_ZOOM_IN } else { graph_zoom::PAN_ZOOM_OUT };
+            state.zoom = graph_zoom::zoom_about(rect, page, state.zoom, f, pointer.unwrap_or(centre));
+            ui.input_mut(|i| {
+                i.smooth_scroll_delta = Vec2::ZERO;
+                i.raw_scroll_delta = Vec2::ZERO;
+            });
+        }
+    }
+    if response.hovered() && !state.pan_tool {
+        let (scroll, zoom_delta, pointer) =
+            ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.pointer.hover_pos()));
+        if (zoom_delta - 1.0).abs() > f32::EPSILON
+            && let Some(at) = pointer
+        {
+            let factor = state.zoom.factor * zoom_delta;
+            state.zoom = graph_zoom::zoom_about(rect, page, state.zoom, factor, at);
+        }
+        if scroll != Vec2::ZERO && state.zoom.factor > 1.0 {
+            state.zoom = graph_zoom::pan(rect, page, state.zoom, scroll);
+            ui.input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
+        }
+    }
+    // The scroll bars.
+    let lay = graph_zoom::layout(rect, page, state.zoom);
+    let content = graph_zoom::content(rect);
+    let (show_x, show_y) = bars_shown(rect, &lay);
+    for vertical in [false, true] {
+        if !(if vertical { show_y } else { show_x }) {
+            continue;
+        }
+        let track = bar_track(rect, vertical, show_x && show_y);
+        let id = ui.id().with(("graph_scroll_bar", vertical));
+        let resp = ui.interact(track, id, Sense::click_and_drag());
+        if let Some(pos) = resp.interact_pointer_pos().filter(|_| resp.dragged() || resp.clicked()) {
+            let (len, total, view, from) = if vertical {
+                (track.height(), lay.image.height(), content.height(), track.top())
+            } else {
+                (track.width(), lay.image.width(), content.width(), track.left())
+            };
+            let at = if vertical { pos.y } else { pos.x } - from;
+            let scroll = graph_zoom::scroll_for_thumb(len, total, view, at) / lay.scale;
+            if vertical {
+                state.zoom.scroll.y = scroll;
+            } else {
+                state.zoom.scroll.x = scroll;
+            }
+        }
+    }
+}
+
+/// Whether the horizontal and the vertical scroll bar show: the page is larger than the content
+/// area on that axis.
+fn bars_shown(rect: Rect, lay: &graph_zoom::Layout) -> (bool, bool) {
+    let content = graph_zoom::content(rect);
+    (lay.image.width() > content.width() + 0.01, lay.image.height() > content.height() + 0.01)
+}
+
+/// The track of a scroll bar along the right (vertical) or bottom edge of the window.
+fn bar_track(rect: Rect, vertical: bool, both: bool) -> Rect {
+    let corner = if both { BAR } else { 0.0 };
+    if vertical {
+        Rect::from_min_max(egui::pos2(rect.right() - BAR, rect.top()), egui::pos2(rect.right(), rect.bottom() - corner))
+    } else {
+        Rect::from_min_max(
+            egui::pos2(rect.left(), rect.bottom() - BAR),
+            egui::pos2(rect.right() - corner, rect.bottom()),
+        )
+    }
+}
+
+/// The scroll bars, drawn over the window's right and bottom edges while the page is larger than
+/// the window.
+fn paint_scroll_bars(painter: &egui::Painter, rect: Rect, page: Vec2, zoom: Zoom) {
+    let lay = graph_zoom::layout(rect, page, zoom);
+    let content = graph_zoom::content(rect);
+    let (show_x, show_y) = bars_shown(rect, &lay);
+    for vertical in [false, true] {
+        if !(if vertical { show_y } else { show_x }) {
+            continue;
+        }
+        let track = bar_track(rect, vertical, show_x && show_y);
+        painter.rect_filled(track, 0.0, Color32::from_gray(225));
+        let (len, total, view, scroll) = if vertical {
+            (track.height(), lay.image.height(), content.height(), lay.scroll.y * lay.scale)
+        } else {
+            (track.width(), lay.image.width(), content.width(), lay.scroll.x * lay.scale)
+        };
+        let (start, size) = graph_zoom::thumb(len, total, view, scroll);
+        let thumb = if vertical {
+            Rect::from_min_size(egui::pos2(track.left(), track.top() + start), egui::vec2(BAR, size))
+        } else {
+            Rect::from_min_size(egui::pos2(track.left() + start, track.top()), egui::vec2(size, BAR))
+        };
+        painter.rect_filled(thumb.shrink(1.5), 2.0, Color32::from_gray(130));
     }
 }
 
@@ -727,6 +1097,11 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         tool,
         curve: None,
         layer_curves: Vec::new(),
+        stack: None,
+        can_cumulate: false,
+        selected_shape: None,
+        view_mode: Default::default(),
+        layer_icons: true,
     }
 }
 
@@ -752,6 +1127,7 @@ fn menu_for(
     graph_id: WindowId,
     target: MenuTarget,
     selected: Option<(usize, ObjectKind)>,
+    page: (f64, f64),
 ) -> Vec<menus::Entry> {
     let Some(graph) = project.graph(graph_id) else {
         return Vec::new();
@@ -776,7 +1152,15 @@ fn menu_for(
                 };
                 let book = project.locate(plot.y).map(|(b, _, _)| (b.id, b.name.clone()));
                 let on_right = graph.right_y_member(layer) == Some(layer);
-                menus::graph_plot_menu(layer, p, plot.kind, on_right, book, plot.decor.trendlines.len())
+                menus::graph_plot_menu(
+                    layer,
+                    p,
+                    plot.kind,
+                    on_right,
+                    book,
+                    plot.decor.trendlines.len(),
+                    graph.layers.len(),
+                )
             }
             ObjectKind::XAxis | ObjectKind::YAxis => {
                 let y = kind == ObjectKind::YAxis;
@@ -784,13 +1168,15 @@ fn menu_for(
                     let a = if y { &l.y_axis } else { &l.x_axis };
                     a.major_grid.is_some() || a.minor_grid.is_some()
                 });
-                menus::graph_axis_menu(layer, y, grids)
+                menus::graph_axis_menu(layer, y, grids, page)
             }
             ObjectKind::XTitle => menus::graph_title_menu(layer, false),
             ObjectKind::YTitle => menus::graph_title_menu(layer, true),
             ObjectKind::Legend => menus::graph_legend_menu(layer),
             ObjectKind::Label(k) => menus::graph_label_menu(layer, k),
             ObjectKind::Shape(k) => menus::graph_shape_menu(layer, k),
+            ObjectKind::Slope(k) => menus::graph_slope_menu(layer, k),
+            ObjectKind::StraightLine(k) => menus::graph_straight_line_menu(layer, k),
         },
         MenuTarget::Hit(Hit::Layer(layer)) => menus::graph_page_menu(layer),
         MenuTarget::Hit(Hit::Page) => menus::graph_page_menu(0),
@@ -857,6 +1243,14 @@ fn draw_selection(
     }
 }
 
+/// The range an axis gets from Axis Center: the span is kept, in the axis' own scale (decades on a
+/// log axis), and the value at unit position `u` (0 at the axis' low end, 1 at its high end, as
+/// drawn) becomes the middle. `None` when the position or the result is not a number.
+fn centered_range(axis: &sheaf_plot::ticks::ResolvedAxis, u: f64) -> Option<(f64, f64)> {
+    let (a, b) = (axis.from_unit(u - 0.5), axis.from_unit(u + 0.5));
+    (u.is_finite() && a.is_finite() && b.is_finite() && a != b).then(|| (a.min(b), a.max(b)))
+}
+
 /// Applies a change made from the graph window to the project. `resolved` is the present layout
 /// of the graph (its axes' ranges), used by the axis zoom.
 pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: Option<&[LayerGeometry]>) {
@@ -877,20 +1271,27 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::HidePlot { layer, .. }
         | GraphOp::RemoveTrendline { layer, .. }
         | GraphOp::MovePlotToAxis { layer, .. }
+        | GraphOp::MovePlotToLayer { layer, .. }
         | GraphOp::HideAxis { layer, .. }
         | GraphOp::ToggleGrids { layer, .. }
         | GraphOp::Rescale { layer }
         | GraphOp::ExchangeAxes { layer }
+        | GraphOp::SetStack { layer, .. }
         | GraphOp::AxisZoom { layer, .. }
+        | GraphOp::AxisCenter { layer, .. }
         | GraphOp::HideLegend { layer }
         | GraphOp::ReconstructLegend { layer }
         | GraphOp::UpdateLegend { layer }
         | GraphOp::HideTitle { layer, .. }
         | GraphOp::DeleteLabel { layer, .. }
         | GraphOp::DeleteShape { layer, .. }
+        | GraphOp::DeleteSlope { layer, .. }
+        | GraphOp::DeleteStraightLine { layer, .. }
         | GraphOp::OrderShape { layer, .. }
         | GraphOp::HideLayer { layer }
-        | GraphOp::HideOtherLayers { layer } => layer,
+        | GraphOp::HideOtherLayers { layer }
+        | GraphOp::AddLayer { layer, .. }
+        | GraphOp::DeleteLayer { layer } => layer,
     };
     if layer_index >= layers {
         return;
@@ -898,6 +1299,23 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
     if let GraphOp::MovePlotToAxis { layer, plot, right } = op {
         // An empty layer left behind is kept; a request that cannot be met changes nothing.
         let _ = g.set_plot_y_axis(layer, plot, right);
+        return;
+    }
+    if let GraphOp::MovePlotToLayer { layer, plot, to } = op {
+        let _ = g.move_plot_to_layer(layer, plot, to);
+        return;
+    }
+    if let GraphOp::AddLayer { layer, kind } = op {
+        let _ = g.add_layer(kind, layer);
+        return;
+    }
+    if let GraphOp::DeleteLayer { layer } = op {
+        if let Some(r) = resolved {
+            let ranges: Vec<_> =
+                r.iter().map(|l| ((l.x.min, l.x.max, l.x.step), (l.y.min, l.y.max, l.y.step))).collect();
+            g.freeze_linked_ranges(layer, &ranges);
+        }
+        let _ = g.delete_layer(layer);
         return;
     }
     if let GraphOp::HideOtherLayers { layer } = op {
@@ -944,6 +1362,11 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
                 a.max = None;
             }
         }
+        GraphOp::SetStack { stack, .. } => {
+            if std::mem::discriminant(&l.stack) != std::mem::discriminant(&stack) {
+                l.stack = stack;
+            }
+        }
         GraphOp::ExchangeAxes { .. } => {
             if l.plots.iter().all(|p| p.x.is_some()) {
                 std::mem::swap(&mut l.x_axis, &mut l.y_axis);
@@ -963,9 +1386,22 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             let (u0, u1) = if zoom_in { (0.25, 0.75) } else { (-0.5, 1.5) };
             let (lo, hi) = (ra.from_unit(u0), ra.from_unit(u1));
             if lo.is_finite() && hi.is_finite() && lo != hi {
+                let by_limits = ra.reversed;
                 let a = if y { &mut l.y_axis } else { &mut l.x_axis };
-                a.min = Some(lo.min(hi));
-                a.max = Some(lo.max(hi));
+                set_limits(a, lo.min(hi), lo.max(hi), by_limits);
+            }
+        }
+        GraphOp::AxisCenter { y, page, .. } => {
+            let Some(r) = resolved.and_then(|r| r.get(layer_index)) else { return };
+            let f = r.frame;
+            if !(f.w > 0.0 && f.h > 0.0) {
+                return;
+            }
+            let (ra, u) = if y { (&r.y, 1.0 - (page.1 - f.y) / f.h) } else { (&r.x, (page.0 - f.x) / f.w) };
+            if let Some((lo, hi)) = centered_range(ra, u) {
+                let by_limits = ra.reversed;
+                let a = if y { &mut l.y_axis } else { &mut l.x_axis };
+                set_limits(a, lo, hi, by_limits);
             }
         }
         GraphOp::HideLegend { .. } => l.legend.visible = false,
@@ -984,6 +1420,16 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
                 l.shapes.remove(shape);
             }
         }
+        GraphOp::DeleteSlope { slope, .. } => {
+            if slope < l.slopes.len() {
+                l.slopes.remove(slope);
+            }
+        }
+        GraphOp::DeleteStraightLine { line, .. } => {
+            if line < l.straight_lines.len() {
+                l.straight_lines.remove(line);
+            }
+        }
         GraphOp::OrderShape { shape, front, .. } => {
             let len = l.shapes.len();
             if shape < len && ((front && shape + 1 < len) || (!front && shape > 0)) {
@@ -996,7 +1442,12 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             }
         }
         GraphOp::HideLayer { .. } => l.plots.iter_mut().for_each(|p| p.visible = false),
-        GraphOp::HideOtherLayers { .. } | GraphOp::MovePlotToAxis { .. } | GraphOp::UpdateLegend { .. } => {
+        GraphOp::HideOtherLayers { .. }
+        | GraphOp::AddLayer { .. }
+        | GraphOp::DeleteLayer { .. }
+        | GraphOp::MovePlotToAxis { .. }
+        | GraphOp::MovePlotToLayer { .. }
+        | GraphOp::UpdateLegend { .. } => {
             unreachable!("handled above")
         }
     }
@@ -1049,6 +1500,19 @@ const GRID_COLOR: sheaf_core::Color = sheaf_core::Color { r: 204, g: 204, b: 204
 
 fn short(v: f64) -> String {
     sheaf_core::format::format_general(v, 5)
+}
+
+/// Writes a new range (`lo` below `hi`) as fixed limits, keeping the axis' direction: an axis drawn
+/// reversed (`drawn_reversed`) without its Reverse switch is reversed by its limits (min above max),
+/// so they are written that way round again.
+fn set_limits(a: &mut sheaf_core::graph::Axis, lo: f64, hi: f64, drawn_reversed: bool) {
+    if drawn_reversed && !a.reverse {
+        a.min = Some(hi);
+        a.max = Some(lo);
+    } else {
+        a.min = Some(lo);
+        a.max = Some(hi);
+    }
 }
 
 #[cfg(test)]

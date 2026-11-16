@@ -871,9 +871,9 @@ result sheet in `multivariate.rs`.
   Origin draws (`plot`, `iy`: not run, the call needs a range of plot variables), the Input Data and Notes tables
   (not written by Sheaf), and the behaviour for more clusters than distinct rows.
 
-## 19 ROC curve (scipy-checked, not Origin)
+## 19 ROC curve (measured against Origin 2016, 19.5)
 
-**Source of the numbers: scipy, not Origin.** Statistics > ROC Curve is an Origin X-Function (`ROCCurve`) that is
+**Source of the numbers: Origin 2016 since 2026-11-15 (19.5); before that scipy.** Statistics > ROC Curve is an Origin X-Function (`ROCCurve`) that is
 only for the menu: `ROCCurve;` from LabTalk returns false, and its definition file lists no usable LabTalk context.
 Its dialog was opened through the menu with `tools/origin-ref/origin-dialog.ps1 -MenuClicks "300,300;K:^a;K:%s;K:R"`
 (Alt+S, then R, on a selected worksheet; one run, 2026-11-14, picture in `re-workspace/scratch/t29/rocdlg`, local).
@@ -904,12 +904,13 @@ are left out; "Positive v.s. High" (default) or "Positive v.s. Low" sets which e
 
 - Curve: one point per distinct test value (a case is called positive at or above the cut-off, at or below it for
   "Low"), from (0, 0) at an infinite cut-off to (1, 1). Sensitivity is the fraction of positives called positive,
-  specificity that of negatives called negative. Origin's "Interpolation of data points" is taken as one point per data
-  value; "Speed Mode" is not built.
+  specificity that of negatives called negative. Origin's "Interpolation of data points" is one point per data value
+  with the cut-offs between values (19.5); "Speed Mode" is not built.
 - Area: the trapezoid area, which equals the Mann-Whitney statistic U / (m n) with ties counting one half.
-- Standard error: DeLong's (DeLong, DeLong and Clarke-Pearce 1988), variance `S10 / m + S01 / n` from the placements of
-  the positives and of the negatives. Interval: area -/+ z SE (z from the confidence level, default 95 %), kept within
-  0 and 1; Z = (area - 0.5) / SE and its two-sided p-value (0 when SE = 0 and the area is not 0.5).
+- Standard error, interval, Z and p-value: Origin's (19.5): the curve-integrated Hanley-McNeil form, area -/+ z SE not
+  limited to [0, 1] (z from the confidence level, default 95 %), Z = (area - 0.5) / SE0 with SE0 the standard error of
+  an area of 0.5, and its two-sided p-value. (Until 2026-11-15: DeLong's standard error, a clipped interval and Z from
+  the observed SE.)
 - Best cut-off: the largest sensitivity + specificity - 1 (Youden), the highest cut-off among equal ones.
 
 Result sheet `ROC1`: Data, Positive, Negative, Area, Standard error, Lower limit, Upper limit, Z, Prob>|Z|, Best
@@ -920,19 +921,60 @@ value, one column or a confidence level outside 0 to 100 are refused.
 
 ### 19.3 Checked against scipy, tolerances
 
-Area, standard error, lower limit, curve points: 1e-12 relative; p-value 1e-8 (the normal tail of `statrs` differs from
-scipy's in the 11th digit); best cut-off exact. Three data sets (ties inside and across the states, a perfect
-separation, an overlap). Hand-worked tests in `roc.rs`.
+Area and curve points against scipy: 1e-12 relative, three data sets (ties inside and across the states, a perfect
+separation, an overlap; `scipy_roc.rs`). The standard error, interval, p-value and cut-offs are checked against Origin
+(19.5, `origin_roc.rs`). Hand-worked tests in `roc.rs`.
 
 ### 19.4 Not measured (Origin)
 
-- Everything numeric: whether Origin's standard error is DeLong's or Hanley-McNeil's, whether its interval is
+- Settled by 19.5: the standard error, interval, p-value and curve cut-offs. Before that this read: whether Origin's
+  standard error is DeLong's or Hanley-McNeil's, whether its interval is
   asymptotic normal and clipped, its p-value (and its null hypothesis), its curve points (interpolated thresholds), and
   its choice of the best cut-off. To measure: run the dialog on the data of `scipy_roc.rs` (the dialog is the only way)
   and read the report sheet.
 - The positive state when the state column holds text, the report sheet and graph layout, the sheet and graph names,
   and the default confidence level.
 - Not built: Speed Mode, several state ranges, comparing curves, partial area.
+
+### 19.5 Measured in Origin 2016 (2026-11-15)
+
+Run through the window (Statistics > ROC Curve > Open Dialog..., the columns selected by dragging over their
+heads, Data set to the test column, the positive value picked from its list with a click, OK) with
+`tools/origin-ref/origin-dialog.ps1` (`re-workspace/scratch/t29roc`, local only). The report numbers were
+read at full precision by copying the report sheet's cells into a dataset (`wcol(c)[r]`). Four data sets:
+the three of `scipy_roc.rs` and one with 4 against 5 cases; in two of them Origin's list offered the state
+column's first value first, so 0 was the positive value. Fixtures: `crates/calc/tests/origin_roc.rs`; every
+number matches (the p-value to 1e-9 relative, the normal tail of `statrs`).
+
+- **Report** "ROC Curve1": Notes, Input Data, Case Processing Summary (Positive and Negative counts, "Larger
+  test measurement values indicates more positive test", "The positive actual state is 1"), Area Under the
+  Curve (Area, Std. Error, Asymptotic Prob, 95% LCL, 95% UCL) and the ROC Curve graph; no best cut-off
+  (Sheaf's best cut-off is its own). A second sheet "ROCValues1" holds the curve.
+- **Area**: the trapezoid area (the Mann-Whitney statistic, ties one half), as Sheaf already had.
+- **Standard error**: neither DeLong's nor Hanley and McNeil's exponential approximation. It is
+  `sqrt((A (1 - A) + (n_neg - 1) (Q1 - A^2) + (n_pos - 1) (Q2 - A^2)) / (n_pos n_neg))` with
+  `Q1 = integral of sensitivity^2 d(1 - specificity)` and `Q2 = integral of specificity^2 d(sensitivity)` along
+  the straight segments of the curve, so a segment of tied values counts `dx (y0^2 + y0 y1 + y1^2) / 3`. It
+  reproduces all four to the last digit (0.077493787947229317 with ties, 0.10327314252246217,
+  0.18708286933869706 and 0 without). Sheaf now uses it.
+- **Interval**: `A -/+ 1.96 SE`, **not limited to [0, 1]** (UCL 1.0503 and 1.0419, LCL -0.0667). Copied.
+- **Asymptotic Prob**: two-sided normal p-value of `(A - 0.5) / SE0` with `SE0 = sqrt((n_pos + n_neg + 1) /
+  (12 n_pos n_neg))`, the standard error when the area is 0.5 (0.0074055 where the observed SE would give
+  2e-7). Copied; Sheaf's `Z` is that statistic.
+- **Curve** ("Interpolation of data points"): one row per distinct value plus one, from (1, 1) to (0, 0),
+  columns cut-off, 1 - specificity, sensitivity. The cut-offs are the midpoints between neighbouring
+  distinct values (0.15 between 0.1 and 0.2) and, at the ends, the smallest value - 1 and the largest + 1
+  (-0.3 and 5.8 for data from 0.7 to 4.8), or 0 and 1 when every value lies in [0, 1]. Copied (Sheaf keeps
+  its order from (0, 0) to (1, 1)).
+- **"Positive v.s. Low"** (2026-11-15, `r-lowA`, `r-lowB`): the area is 1 - A of the same data, the standard error,
+  p-value and interval half-width are unchanged, and the cut-offs are the same midpoints and ends; the rows still run by
+  rising cut-off, which is now from (0, 0) (nobody positive below the smallest value - 1) to (1, 1). As Sheaf.
+- **Text states** (`r-txt`): a column of "no"/"yes" offers the values in order of appearance; with "yes" positive the
+  numbers are those of the numeric case (area 0.9375, SE 0.0897587913521567). As Sheaf.
+- **Speed Mode**: chosen by a message to the Threshold Method list it gave exactly the interpolated result on the
+  overlap set; that this setting took is not confirmed (a message did not set the positive value either), so Speed
+  Mode is still not measured and not built.
+- Not measured: several data columns, other confidence levels.
 
 ## 20 Kaplan-Meier estimator (measured against Origin 2016)
 
@@ -1315,6 +1357,100 @@ a method; Sheaf's comes from the existing implementation, section 4).
 Per Variable, Per Group and All in One arrangements; Origin's exact table layout, table row names and order, the
 panel layout and styling, and its median/SD interval formulas (none was measured: the documentation does not give
 them); the box chart of the other arrangements; Origin's default level.
+
+## 23 Multiple comparisons plot (T64)
+
+Origin 2027 makes a "Multiple Comparisons Plot" directly from the report of a one-way ANOVA, a two-way ANOVA and the
+two-sample and paired t-tests (an icon in the report sheet), and a "Significance Plot" from a one-sample t-test. Plot
+types are bar, box, violin and scatter; error bars are SD, SEM or 95 % CI; the brackets and annotations can be
+customized and can sit outside the plot area; an option shows only the p-values that meet a threshold. [W:Origin 2027
+product page] The older free "Paired Comparison Plot" app offers "Letters on Top", "Asterisk with Bracket" and "P-Value
+with Bracket" and "Exclude n.s. in Group". [W:app/paired-comparison-plot] None of this was measured; everything below
+that the documents do not say is Sheaf's choice, **unmeasured**.
+
+**Made from.** The report sheet of a one-way ANOVA with a means comparison (any method, Dunnett included) and of a
+two-sample t-test (equal or unequal variances). Two-way ANOVA, the paired t-test and the one-sample "Significance
+Plot" are left. The report sheet keeps a copy of the groups as the test used them (`Worksheet::comparison_source`,
+saved with the project). The report sheet also stores the groups `(i, j)` of each row of the means comparison **by
+group index**, the analysis' alpha and, for the Holm methods, the step-down kind (only stored data; the report and the
+ANOVA are unchanged). The p-value of a pair is read from the report sheet: the "Prob" column of the means comparison or
+the t-test's "Prob"; the pair's groups come from the stored indices, so two groups with the same name, or a name with
+" - " in it, map correctly. A report without stored pairs (an older project) is read by the names in its row labels
+`"{name_j} - {name_i}"` and is **refused** with an error when a label fits more than one pair of groups (duplicate
+names, or names that make the text ambiguous).
+
+**Agreement with the report (Holm).** Holm-Bonferroni and Holm-Sidak list the plain pairwise p in "Prob" but judge each
+pair by the step-down (`alpha / (m - rank)`), so the raw p is not the decision. Holm: adjusted p derived from the
+report's raw p, matching its step-down decisions: with the raw p sorted ascending, `adj_(r) = max over k <= r of
+min(1, (m - k + 1) p_(k))` (Bonferroni) or `max over k <= r of 1 - (1 - p_(k))^(m - k + 1)` (Sidak), `holm_adjust`;
+a pair is significant at alpha exactly when its adjusted p is below alpha. Stars and p-value labels use the adjusted p.
+For every method the decision follows the report's "Significant" column at the analysis' alpha: with Asterisks a pair
+the report marks not significant reads `ns` (a significant one has at least one `*`), and when the threshold equals the
+analysis' alpha (a threshold of another value filters by p < threshold of the shown p) "Significant only" shows exactly
+the pairs the report marks. Example: three groups with raw p 0.04, 0.2, 0.3 give adjusted 0.12, 0.4, 0.4: no bracket,
+`ns`.
+
+**The graph** (`Project::comparison_plot`, one undo step): a new sheet `MultCompN` in the workbook holds the data; the
+graph has one X category per group, in report order, named by the group, at X = 1, 2, 3, ...
+- Bar: columns of the means with error bars (the error column of the sheet).
+- Box and Violin: one box or violin per group (the plots' own statistics; no error bars).
+- Scatter: the raw points, each shifted sideways by a fixed amount up to 0.18 either way (golden-ratio sequence, the same
+  every time), over a black diamond at the mean with its error bar.
+- Error bar (bar and scatter): SD; SEM; 95 % CI as the half-width `t(0.975, n - 1) * SEM` (Student's t).
+- Y axis title "Mean +- SD" (or SEM, 95% CI) with the unit, or "Value" for box and violin; no X title, no legend.
+
+**Brackets.** `Layer::brackets` is a list of `SignificanceBracket { group_a, group_b, p, label }` (groups from 0); the
+layer's `comparison` keeps the settings (plot type, error bar, label style, significant only, threshold, alpha) and every
+compared pair (with the shown p and the report's decision), so labels can be restyled (`ComparisonPlotOptions::brackets`) without the report. Old projects load
+without them (serde defaults).
+- Labels, Asterisks: `*` p < 0.05, `**` p < 0.01, `***` p < 0.001, `****` p < 0.0001, `ns` otherwise (strict, so p = 0.05
+  is `ns`). P-values: `p = 0.0123` (four decimals, trailing zeros dropped down to two decimals, `p = 0.50`) and
+  `p < 0.0001`.
+- Significant only (default on) with a threshold (default 0.05): a pair is shown when p < threshold (p adjusted for
+  Holm), or, when the threshold is the analysis' alpha, when the report marks it significant (see above).
+- Drawing (`crates/plot/src/brackets.rs`): a horizontal line over the two group centres with a 5 pt vertical end down
+  at each, black, 1 pt, the label centred above it in the legend font. Pairs are sorted by span (shortest first, then
+  report order). The levels are found in the **axis-transformed space** (data units on a linear axis, logarithms on a
+  log axis, so brackets stack multiplicatively there). One level step is 6 % of the data range (of the data with error
+  bars, whiskers, outliers and violin tips, including 0 for bars) at least, and never less than the label step: the
+  label's baseline gap (2.5 pt, or more for a big font whose descenders would reach the line), its height above the
+  baseline (ascent) and the 5 pt end of the bracket above it, plus 1 pt, converted to axis units **at the final axis
+  scale**. The layout resolves the axes, converts the label step with the frame it got, and resolves again until the step
+  stops growing (up to 30 times, 0.01 % tolerance; like hexbin's re-resolve). A stack taller than 60 % of the axis keeps
+  the step at that limit (the labels then crowd each other) instead of growing without end. Each bracket is placed one
+  step above the highest of the elements of the groups it spans and of the earlier brackets whose span touches its own
+  (closed intervals, so brackets that share a group stack). Brackets whose spans do not touch share the lowest level.
+- **On the axis** (linear or log Y axis with an automatic upper limit): the Y axis **grows** to hold the highest bracket
+  plus one step for its label (in log space on a log axis). Other plot kinds are drawn exactly as before (test).
+- **In a band** (the Y axis' upper limit is fixed, or a scale that is neither linear nor logarithmic): the axis is not
+  changed and the brackets stand in a band above the frame. The stack is made of the spans alone (no data to clear:
+  everything is inside the frame), the level step is the label step in points, and the lowest line stands 6 pt over the
+  frame. The layout **reserves the band's height** in its top label edge (`label_edges`), so the frame moves down just as
+  for a tall tick label; with the X axis on the top the band starts above that axis' tick labels and title, so
+  nothing overlaps them. A bracket whose label would still leave the page (the frame cannot give more than half its
+  height) is not drawn (clipped to the page). A free text label or a legend that the user placed over the band is not
+  moved.
+- Brackets are not pickable or draggable and have no properties window yet. They are not written to `.opj`: the save
+  warning names them ("layer N has K significance brackets that an Origin project file written here cannot hold") and
+  the `.opj.sheaf` companion keeps them.
+
+**Where.** The report sheet of such a test shows a "Multiple Comparisons Plot..." button at the right of the sheet tab
+strip, and Statistics > Multiple Comparisons Plot... works on the active sheet (a message when it is not such a report).
+The dialog has Plot Type, Error Bar (greyed for box and violin), Label (Asterisks or P-values), Significant only and
+its Threshold. `sheaf analyze anova ... --comparison-plot OUT.(png|svg|pdf)` and the same on `analyze ttest` (two-sample
+only) with `--plot-type bar|box|violin|scatter`, `--error-bar sd|sem|ci95`, `--labels asterisks|p-values`,
+`--all-pairs`, `--threshold`; the graph also stays in a project saved with `--save`. MCP: the same option names in
+`analyze` for `anova` and `ttest` (`comparison_plot` is a path inside the allowed folders); the reply has
+`comparison_plot: {graph, file}`.
+
+Tests: `crates/core/tests/comparison_plot.rs` (labels at the boundaries, p-values equal to the report rows for Tukey
+and Bonferroni, significant-only and threshold, SD/SEM/CI95 against hand values, the t-test's single bracket, settings
+round trip, Holm adjusted p against hand values, the three-group Holm example, decisions equal to the "Significant"
+column for Tukey, Bonferroni, Sidak, Fisher LSD, Scheffe, Holm-Bonferroni, Holm-Sidak and Dunnett at two alphas,
+groups named alike or with " - " by index, the refused ambiguous fallback), `crates/plot/src/brackets.rs` (stacking, axis,
+log axis inside the extended range, fixed maximum band and title, 15 pairs with p-value labels clear of every line,
+unchanged drawing), `crates/cli/tests/analyze.rs` (SVG,
+refusals), `crates/mcp` (bridge), the `.opj` warning, and the app test `comparison_plot`.
 
 ## 5 Where results go (ADR 0005)
 

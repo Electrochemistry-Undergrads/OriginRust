@@ -42,6 +42,72 @@ fn comparison_of(comparison: ComparisonArg) -> Option<analysis::MeansComparison>
     }
 }
 
+fn filter_response(kind: FilterTypeArg) -> analysis::FilterResponse {
+    match kind {
+        FilterTypeArg::LowPass => analysis::FilterResponse::LowPass,
+        FilterTypeArg::HighPass => analysis::FilterResponse::HighPass,
+        FilterTypeArg::BandPass => analysis::FilterResponse::BandPass,
+        FilterTypeArg::BandStop => analysis::FilterResponse::BandStop,
+    }
+}
+
+fn freq_unit(unit: FreqUnitArg) -> analysis::FreqUnit {
+    match unit {
+        FreqUnitArg::Hz => analysis::FreqUnit::Hz,
+        FreqUnitArg::Normalized => analysis::FreqUnit::Normalized,
+    }
+}
+
+/// The multiple comparisons plot a `sheaf analyze anova` or `ttest` call asked for (`--comparison-plot`), checked.
+pub fn comparison_plot_request(tool: &AnalyzeTool) -> Result<Option<crate::analyze::ComparisonPlotRequest>> {
+    use sheaf_core::compplot::{BracketLabels, ComparisonErrorBar, ComparisonPlotOptions, ComparisonPlotType};
+    let (plot, what) = match tool {
+        AnalyzeTool::Anova { plot, comparison, .. } => {
+            if plot.comparison_plot.is_some() && comparison_of(*comparison).is_none() {
+                bail!("--comparison-plot needs a means comparison: choose --comparison other than none");
+            }
+            (plot, "anova")
+        }
+        AnalyzeTool::Ttest { plot, test, .. } => {
+            if plot.comparison_plot.is_some() && *test != TTestKindArg::TwoSample {
+                bail!("--comparison-plot is made for the two-sample t-test (--test two-sample)");
+            }
+            (plot, "t-test")
+        }
+        _ => return Ok(None),
+    };
+    let Some(path) = &plot.comparison_plot else { return Ok(None) };
+    if !(plot.threshold > 0.0 && plot.threshold <= 1.0) {
+        bail!("--threshold must lie between 0 and 1, not {}", plot.threshold);
+    }
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    if !matches!(ext.as_str(), "png" | "svg" | "pdf") {
+        bail!("--comparison-plot writes .png, .svg or .pdf, not '{}' (for the {what} plot)", path.display());
+    }
+    let options = ComparisonPlotOptions {
+        plot_type: match plot.plot_type {
+            ComparisonPlotTypeArg::Bar => ComparisonPlotType::Bar,
+            ComparisonPlotTypeArg::Box => ComparisonPlotType::Box,
+            ComparisonPlotTypeArg::Violin => ComparisonPlotType::Violin,
+            ComparisonPlotTypeArg::Scatter => ComparisonPlotType::Scatter,
+        },
+        error_bar: match plot.error_bar {
+            ErrorBarArg::Sd => ComparisonErrorBar::Sd,
+            ErrorBarArg::Sem => ComparisonErrorBar::Sem,
+            ErrorBarArg::Ci95 => ComparisonErrorBar::Ci95,
+        },
+        labels: match plot.labels {
+            BracketLabelsArg::Asterisks => BracketLabels::Asterisks,
+            BracketLabelsArg::PValues => BracketLabels::PValues,
+        },
+        significant_only: !plot.all_pairs,
+        threshold: plot.threshold,
+        alpha: 0.05,
+        pairs: Vec::new(),
+    };
+    Ok(Some(crate::analyze::ComparisonPlotRequest { path: path.clone(), options }))
+}
+
 pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
     Ok(match tool {
         AnalyzeTool::Integrate { target, baseline, absolute, no_cumulative, ranges, row_ranges } => {
@@ -128,6 +194,121 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             let options = analysis::DecimateOptions { factor, filter, order };
             (target, Job::Tool(Tool::Decimate(analysis::DecimateSpec { options })))
+        }
+        AnalyzeTool::IirFilter {
+            target,
+            kind,
+            method,
+            order,
+            minimum,
+            unit,
+            fs,
+            cutoff,
+            cutoff2,
+            pass,
+            pass2,
+            stop,
+            stop2,
+            ripple,
+            attenuation,
+            forward_backward,
+        } => {
+            let spec = analysis::IirSpec {
+                response: filter_response(kind),
+                method: match method {
+                    IirMethodArg::Butterworth => analysis::IirMethod::Butterworth,
+                    IirMethodArg::Chebyshev1 => analysis::IirMethod::Chebyshev1,
+                    IirMethodArg::Chebyshev2 => analysis::IirMethod::Chebyshev2,
+                    IirMethodArg::Elliptic => analysis::IirMethod::Elliptic,
+                },
+                order: if minimum { None } else { Some(order) },
+                unit: freq_unit(unit),
+                sample_frequency: fs,
+                cutoff,
+                cutoff2,
+                pass,
+                pass2,
+                stop,
+                stop2,
+                passband_ripple: ripple,
+                stopband_attenuation: attenuation,
+                forward_backward,
+            };
+            (target, Job::Tool(Tool::IirFilter(spec)))
+        }
+        AnalyzeTool::FirFilter {
+            target,
+            kind,
+            method,
+            order,
+            minimum,
+            window,
+            window_param,
+            no_scale,
+            unit,
+            fs,
+            cutoff,
+            cutoff2,
+            pass,
+            pass2,
+            stop,
+            stop2,
+            pass_weight,
+            stop_weight,
+            magnitude_unit,
+            ripple,
+            attenuation,
+            forward_backward,
+        } => {
+            use analysis::FirWindow as W;
+            let window = match window {
+                FirWindowArg::Bartlett => W::Bartlett,
+                FirWindowArg::BartlettHanning => W::BartlettHanning,
+                FirWindowArg::Blackman => W::Blackman,
+                FirWindowArg::BlackmanHarris => W::BlackmanHarris,
+                FirWindowArg::Bohman => W::Bohman,
+                FirWindowArg::Chebyshev => W::Chebyshev,
+                FirWindowArg::FlatTop => W::FlatTop,
+                FirWindowArg::Gaussian => W::Gaussian,
+                FirWindowArg::Hamming => W::Hamming,
+                FirWindowArg::Hanning => W::Hanning,
+                FirWindowArg::Kaiser => W::Kaiser,
+                FirWindowArg::Nuttall => W::Nuttall,
+                FirWindowArg::Parzen => W::Parzen,
+                FirWindowArg::Rectangle => W::Rectangle,
+                FirWindowArg::Taylor => W::Taylor,
+                FirWindowArg::Triangular => W::Triangular,
+                FirWindowArg::Tukey => W::Tukey,
+            };
+            let spec = analysis::FirSpec {
+                response: filter_response(kind),
+                method: match method {
+                    FirMethodArg::LeastSquares => analysis::FirMethod::LeastSquares,
+                    FirMethodArg::Window => analysis::FirMethod::Window,
+                },
+                order: if minimum { None } else { Some(order) },
+                window,
+                window_param,
+                scale_passband: !no_scale,
+                unit: freq_unit(unit),
+                sample_frequency: fs,
+                cutoff,
+                cutoff2,
+                pass,
+                pass2,
+                stop,
+                stop2,
+                pass_weight,
+                stop_weight,
+                magnitude_unit: match magnitude_unit {
+                    MagnitudeUnitArg::Db => analysis::MagnitudeUnit::Db,
+                    MagnitudeUnitArg::Linear => analysis::MagnitudeUnit::Linear,
+                },
+                passband_ripple: ripple,
+                stopband_attenuation: attenuation,
+                forward_backward,
+            };
+            (target, Job::Tool(Tool::FirFilter(spec)))
         }
         AnalyzeTool::FftFilter { target, kind, cutoff, freq1, freq2, threshold, pass, stop, no_offset, interval } => {
             let kind = match kind {
@@ -522,7 +703,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             spec.level = level;
             (target, Job::Tool(Tool::Statistics(spec)))
         }
-        AnalyzeTool::Ttest { target, test, mean, difference, unequal, tail, alpha } => {
+        AnalyzeTool::Ttest { target, test, mean, difference, unequal, tail, alpha, .. } => {
             let kind = match test {
                 TTestKindArg::OneSample => analysis::TTestKind::OneSample { mean },
                 TTestKindArg::TwoSample => analysis::TTestKind::TwoSample { equal_variance: !unequal, difference },
@@ -589,7 +770,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::PropTest(spec)))
         }
-        AnalyzeTool::Anova { target, comparison, control, alpha } => {
+        AnalyzeTool::Anova { target, comparison, control, alpha, .. } => {
             if control == 0 {
                 bail!("--control counts the groups from 1");
             }

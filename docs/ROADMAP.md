@@ -9,6 +9,30 @@ A box is ticked only after the task was verified (tests pass, or the output was 
 Priorities: P0 is the owner's daily workflow (CH Instruments files, CSV, overlay plots, integration,
 publication figures), P1 is common Origin use, P2 is later.
 
+## Current execution order (2026-11-15)
+
+The owner's immediate priorities override the historical milestone order below. Follow
+[PLAN](tasks/PLAN.md) for agent ownership, dependencies and later waves; all entries here remain
+open until implemented and verified. The underlying milestones were not globally re-audited.
+
+- [ ] **P0 formatting, wave 1:** [T58](tasks/T58-graph-text-formatting.md), graph text styling,
+  escapes, editor and live Format toolbar; [T59](tasks/T59-worksheet-cell-formatting.md), worksheet
+  font/style/colour/alignment and Format Cells (toolbar adapter depends on T58).
+  T58 whole-object graph font/size/Bold/Italic/basic colour controls and shared dispatch are implemented;
+  remaining toolbar controls/editor and T59 cell adapter are separate (graphing 7.4).
+- [ ] **P0 stacked figures, wave 2:** [T60](tasks/T60-merge-graphs-layer-management.md), merge
+  existing graphs/Layer Management (done 2026-11-15); [T61](tasks/T61-layers-and-multi-y.md), layers/insets/multi-Y;
+  [T62](tasks/T62-stack-offset-leftovers.md), remaining offsets/Cumulative/stacked histograms/
+  waterfall colour mapping. Reuse working column-built panels, Double-Y and stacked bars/areas.
+- [ ] **Wave 3, independent groups:** [T63](tasks/T63-greyed-items-with-code-2.md), verify and wire
+  existing features through disabled entry points; defer items whose semantics are still missing.
+- [ ] **Waves 4–9:** graph editing, worksheet operations, analysis breadth, project/templates,
+  new windows, then 3D and scripting, as assigned in PLAN.
+
+The [tagged inventory](tasks/greyed-items.md) and `python3 tools/greyed-count.py --check` track
+listed disabled locations separately from parity rows. Claims live only in HANDOFF; existing
+owners finish their claimed work without waiting for these waves.
+
 ## Milestone 1: inventory and foundations
 
 - [x] Repository with ignore rules; local git history
@@ -145,7 +169,8 @@ the default project format.
   - [x] NLFit tabs and lower panel, iteration controls and Fit/Done/Cancel (`nlfit-origin`);
         Set Column Values layout and controls (T09); Column Properties formats and ASCII import
         options in Origin's layout (T19 items 1 and 3)
-  - [x] Export Graphs layout, preview, filename substitution, Apply and image settings (T05);
+  - [x] Export Graphs layout, preview, filename substitution, Apply, image settings and saved
+        Dialog Themes/defaults (T05);
         worksheet export dialog (T07); several graphs in one multi-page PDF (T32)
   - [x] Window/worksheet commands and shortcuts (T01/T02): multi-panel and Y-error plotting,
         Add Error Bars, legend update, Refresh/recalculation, Go to and Explorer rename/delete

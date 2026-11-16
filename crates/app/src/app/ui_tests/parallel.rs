@@ -18,7 +18,7 @@ fn parallel_file(tag: &str) -> PathBuf {
 }
 
 fn make_parallel(h: &mut Harness<'static, SheafApp>, item: &str) -> sheaf_core::WindowId {
-    show_window(h, "Book1 - sample");
+    show_window(h, "Book1 - sample.csv");
     let before = project(h).graphs().count();
     select_b_and_c(h);
     menu_path(h, &["Plot"]);
@@ -39,7 +39,7 @@ fn the_categorical_submenu_makes_a_parallel_plot_and_refuses_a_parallel_index_wi
     assert_eq!(layer.plots[0].parallel.color, Some(layer.plots[1].y));
     // A parallel index of two columns (and no text column) is refused with a message, and makes no graph.
     let mut h = start(vec![data_file("parallel-menu-index")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let before = project(&h).graphs().count();
     select_b_and_c(&mut h);
     menu_path(&mut h, &["Plot"]);
@@ -53,7 +53,7 @@ fn the_categorical_submenu_makes_a_parallel_plot_and_refuses_a_parallel_index_wi
 #[test]
 fn a_parallel_index_takes_its_group_from_the_text_column() {
     let mut h = start(vec![parallel_file("parallel-index")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let cols: Vec<_> = ["B", "C", "D", "E"].iter().map(|n| column_id(&h, n)).collect();
     let book = project(&h).workbooks().next().unwrap().id;
     let ctx = h.ctx.clone();

@@ -923,8 +923,9 @@ fn style_from(raw: Option<Map<String, Value>>, size: Option<&SizeArgs>) -> Resul
     let mut map = raw.unwrap_or_default();
     let text_labels = map.remove("text_labels");
     let draw = map.remove("draw");
+    let slope = map.remove("slope");
     let allowed: Vec<String> = match serde_json::to_value(Style::default()) {
-        Ok(Value::Object(o)) => o.keys().filter(|k| *k != "label" && *k != "draw").cloned().collect(),
+        Ok(Value::Object(o)) => o.keys().filter(|k| *k != "label" && *k != "draw" && *k != "slope").cloned().collect(),
         _ => Vec::new(),
     };
     if let Some(bad) = map.keys().find(|k| !allowed.contains(k)) {
@@ -955,6 +956,26 @@ fn style_from(raw: Option<Map<String, Value>>, size: Option<&SizeArgs>) -> Resul
             }
         }
         Some(_) => return Err(ToolError::new("draw must be a list of shapes")),
+        None => {}
+    }
+    match slope {
+        Some(Value::Array(items)) => {
+            for item in items {
+                style.slope.push(match item {
+                    Value::String(t) => t,
+                    Value::Object(o) => {
+                        let n = |k: &str| {
+                            o.get(k).and_then(Value::as_u64).ok_or_else(|| {
+                                ToolError::new(format!("a slope needs the whole number \"{k}\" (a row from 1)"))
+                            })
+                        };
+                        format!("{},{}", n("row_a")?, n("row_b")?)
+                    }
+                    _ => return Err(ToolError::new("a slope is \"A,B\" or an object with row_a and row_b")),
+                });
+            }
+        }
+        Some(_) => return Err(ToolError::new("slope must be a list of row pairs")),
         None => {}
     }
     if let Some(sz) = size {
@@ -1594,6 +1615,7 @@ fn analyze_bridged(
         }
         return Ok(ToolOut::json(report_json(s.project, &report)));
     }
+    let plot = sheaf_ops::cli_analyze::comparison_plot_request(&parsed.tool)?;
     let (target_args, job) = job_from(parsed.tool)?;
     let target = Target {
         y: target_args.y,
@@ -1619,6 +1641,11 @@ fn analyze_bridged(
     };
     if !run.load_warnings.is_empty() {
         out["warnings"] = json!(run.load_warnings);
+    }
+    if let Some(request) = &plot {
+        let graph = sheaf_ops::analyze::write_comparison_plot(s.project, &run, request)?;
+        let name = s.project.graph(graph).map_or_else(String::new, |g| g.name.clone());
+        out["comparison_plot"] = json!({"graph": name, "file": request.path.display().to_string()});
     }
     Ok(ToolOut::json(out))
 }
@@ -2161,6 +2188,39 @@ mod tests {
         // Without create, a missing column is an error naming the columns.
         let e = set_column_values(&mut s.ctx(), &json!({"column": "Z", "formula": "1"})).err().unwrap();
         assert!(e.message.contains("was not found"), "{}", e.message);
+    }
+
+    #[test]
+    fn anova_draws_the_multiple_comparisons_plot_through_the_bridge() {
+        let mut s = sheet_with(8, &["A", "B", "C"]);
+        let wb = s.project.workbooks().next().unwrap();
+        let ids: Vec<_> = wb.sheets[0].columns.iter().map(|c| c.id).collect();
+        for (k, id) in ids.iter().enumerate() {
+            *s.project.column_mut(*id).unwrap().numeric_mut().unwrap() =
+                (0..8).map(|i| 10.0 * k as f64 + f64::from(i % 3)).collect();
+        }
+        let dir = std::env::temp_dir().join(format!("sheaf-mcp-comparison-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let dir = dir.canonicalize().unwrap();
+        s.policy = crate::exec::Policy::headless(crate::roots::Roots::new(std::slice::from_ref(&dir)).unwrap());
+        let path = dir.join("plot.svg");
+        let out = analyze(
+            &mut s.ctx(),
+            &json!({"tool": "anova", "columns": ["B", "C"], "options": {
+                "comparison_plot": path.display().to_string(), "all_pairs": true, "labels": "p-values"}}),
+        );
+        let out = match out {
+            Ok(o) => o.value,
+            Err(e) => panic!("{}", e.message),
+        };
+        // Windows' canonical form carries a `\\?\` prefix that the reported path may not; compare without it.
+        let plain = |p: &str| p.trim_start_matches(r"\\?\").to_string();
+        assert_eq!(
+            plain(out["comparison_plot"]["file"].as_str().unwrap_or_default()),
+            plain(&path.display().to_string())
+        );
+        assert!(std::fs::read_to_string(&path).unwrap().contains("p &lt; 0.0001"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -507,6 +507,53 @@ fn drawn_objects_are_named_in_a_warning_and_not_written() {
 }
 
 #[test]
+fn significance_brackets_are_named_in_a_warning_and_not_written() {
+    use sheaf_core::compplot::SignificanceBracket;
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        let b = SignificanceBracket { group_a: 0, group_b: 1, p: 0.01, label: "**".into() };
+        g.layers[0].brackets = vec![b];
+    });
+    let (imp, warnings) = round_trip(&p);
+    let w = warnings.iter().find(|w| w.contains("significance bracket")).unwrap_or_else(|| panic!("{warnings:?}"));
+    assert!(w.contains("layer 1 has 1 significance bracket ") && w.contains(".opj.sheaf"), "{w}");
+    assert!(imp.graphs[0].layers[0].brackets.is_empty());
+    let (_, quiet) = round_trip(&source());
+    assert!(!quiet.iter().any(|w| w.contains("significance bracket")));
+}
+
+#[test]
+fn slope_annotations_are_named_in_a_warning_and_not_written() {
+    use sheaf_core::graph::SlopeAnnotation;
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        let y = g.layers[0].plots[0].y;
+        g.layers[0].slopes = vec![SlopeAnnotation::new(y, 0, 1), SlopeAnnotation::new(y, 1, 2)];
+    });
+    let (imp, warnings) = round_trip(&p);
+    let w = warnings.iter().find(|w| w.contains("slope annotation")).unwrap_or_else(|| panic!("{warnings:?}"));
+    assert!(w.contains("layer 1 has 2 slope annotations") && w.contains(".opj.sheaf"), "{w}");
+    assert!(imp.graphs[0].layers[0].slopes.is_empty());
+    let (_, quiet) = round_trip(&source());
+    assert!(!quiet.iter().any(|w| w.contains("slope annotation")));
+}
+
+#[test]
+fn straight_lines_are_named_in_a_warning_and_not_written() {
+    use sheaf_core::straight_line::StraightLine;
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.layers[0].straight_lines = vec![StraightLine::new(true, 1.0), StraightLine::new(false, 2.0)];
+    });
+    let (imp, warnings) = round_trip(&p);
+    let w = warnings.iter().find(|w| w.contains("straight line")).unwrap_or_else(|| panic!("{warnings:?}"));
+    assert!(w.contains("layer 1 has 2 straight lines") && w.contains(".opj.sheaf"), "{w}");
+    assert!(imp.graphs[0].layers[0].straight_lines.is_empty());
+    let (_, quiet) = round_trip(&source());
+    assert!(!quiet.iter().any(|w| w.contains("straight line")));
+}
+
+#[test]
 fn other_scale_types_survive_a_round_trip() {
     let mut p = source();
     graph_with(&mut p, Template::Scatter, &[(0, 3)], |g| {

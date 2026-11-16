@@ -9,7 +9,7 @@ use sheaf_core::template::Template;
 use sheaf_core::{Color, ColumnData, Designation};
 
 /// A project with one workbook: X "Potential (V)" and the given Y columns.
-fn project(template: Template, x: Vec<f64>, ys: Vec<Vec<f64>>) -> (Project, WindowId) {
+pub(crate) fn project(template: Template, x: Vec<f64>, ys: Vec<Vec<f64>>) -> (Project, WindowId) {
     let mut p = Project::new();
     let book = p.add_workbook("data");
     let xc = p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
@@ -521,6 +521,21 @@ fn raster_has_a_red_line_on_white() {
 }
 
 #[test]
+fn draft_raster_has_the_same_size_and_no_smoothed_edges() {
+    let (p, g) = red_line_project();
+    let scene = graph_scene(&p, g).unwrap();
+    let normal = render_scene_raster(&scene, 1.0).unwrap();
+    let draft = render_scene_raster_draft(&scene, 1.0).unwrap();
+    assert_eq!((normal.width, normal.height), (draft.width, draft.height));
+    let grey = |r: &Raster| {
+        r.rgba.chunks(4).filter(|px| px[0] == px[1] && px[1] == px[2] && px[0] > 20 && px[0] < 235).count()
+    };
+    // Only the text loses its smoothing (the lines and symbols stay as they were), so the grey edge pixels drop a lot but not to none.
+    assert!(grey(&normal) > 100, "normal has {} grey pixels", grey(&normal));
+    assert!(grey(&draft) < grey(&normal) * 7 / 10, "normal {} draft {}", grey(&normal), grey(&draft));
+}
+
+#[test]
 fn data_on_top_changes_overlap_pixels_and_picking_without_changing_clipping() {
     let (mut p, g) = red_line_project();
     let layer = &mut p.graph_mut(g).unwrap().layers[0];
@@ -695,7 +710,7 @@ fn thinning_leaves_sparse_and_reversing_curves_alone() {
 // ----- golden images -------------------------------------------------------
 
 /// The X values and the curve shape used by the golden images.
-fn golden_data() -> (Vec<f64>, impl Fn(f64) -> Vec<f64>) {
+pub(crate) fn golden_data() -> (Vec<f64>, impl Fn(f64) -> Vec<f64>) {
     let n = 41;
     let x: Vec<f64> = (0..n).map(|i| -0.2 + 0.03 * i as f64).collect();
     let xs = x.clone();
@@ -4204,4 +4219,440 @@ fn connect_line_across_missing_data_joins_the_points_around_missing_rows() {
         pr.graph_mut(g).unwrap().layers[0].y_axis.scale = sheaf_core::graph::ScaleKind::Log10;
     }
     assert_eq!(pieces(&p), 2);
+}
+
+/// Fit Page to Layers counts the layer frames and the legend, not the tick labels or titles (Origin
+/// 2016, graphing spec 15.7d).
+#[test]
+fn the_fit_page_content_box_is_the_frames_and_the_objects_not_the_tick_labels() {
+    let (mut p, g) = line_project_for_ratio();
+    let graph = p.graph(g).unwrap().clone();
+    let f = graph.layers[0].frame;
+    let (pw, ph) = (graph.page.width_pt, graph.page.height_pt);
+    let (x, y, w, h) = crate::fit_content_bounds(&p, g).unwrap().unwrap();
+    // the Y tick labels and title stand left of the frame and the X ones below it: not counted
+    assert!((x - f.left * pw).abs() < 1e-6, "{x} vs {}", f.left * pw);
+    assert!((y + h - (f.top + f.height) * ph).abs() < 1e-6);
+    assert!(w >= f.width * pw - 1e-6);
+    // without the legend the box is the frame exactly
+    p.graph_mut(g).unwrap().layers[0].legend.visible = false;
+    let (x2, y2, w2, h2) = crate::fit_content_bounds(&p, g).unwrap().unwrap();
+    let frame = (f.left * pw, f.top * ph, f.width * pw, f.height * ph);
+    for (a, b) in [(x2, frame.0), (y2, frame.1), (w2, frame.2), (h2, frame.3)] {
+        assert!((a - b).abs() < 1e-6, "{:?} vs {frame:?}", (x2, y2, w2, h2));
+    }
+}
+
+// ----- cumulative stacking (graphing spec 13.15) -----------------------------
+
+/// The drawn Y values of the visible plots of the first layer, one vector per plot.
+fn drawn_ys(p: &Project, g: WindowId) -> Vec<Vec<f64>> {
+    let layer = &p.graph(g).unwrap().layers[0];
+    data::collect(p, layer).plots.iter().map(|pd| (0..pd.y.len()).map(|i| pd.y_at(i)).collect()).collect()
+}
+
+const THREE: [Of; 3] = [&|x| x, &|x| 2.0 * x, &|x| 3.0 * x];
+
+#[test]
+fn cumulative_lines_add_the_plots_before_them_row_by_row() {
+    let (p, g) = stacked(Stack::Cumulative, &THREE);
+    let ys = drawn_ys(&p, g);
+    for (i, x) in x0_20().iter().enumerate() {
+        assert!(near(ys[0][i], *x) && near(ys[1][i], 3.0 * x) && near(ys[2][i], 6.0 * x), "row {i}: {ys:?}");
+    }
+    // Only the drawing changes: no place has an offset and the data are as they were.
+    assert_offsets(&p, g, &[0.0, 0.0, 0.0]);
+    let c = plot_column(&p, g, 2);
+    assert_eq!(p.numeric(c).unwrap()[20], 60.0);
+    // The automatic range covers the top curve: 0 to 120.
+    assert_eq!(y_range(&p, g), Some((0.0, 120.0)));
+}
+
+#[test]
+fn cumulative_hidden_plots_still_count_and_none_removes_the_sum() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    p.graph_mut(g).unwrap().layers[0].plots[1].visible = false;
+    let ys = drawn_ys(&p, g);
+    assert_eq!(ys.len(), 2);
+    assert!(near(ys[1][20], 120.0), "the hidden curve keeps its share: {ys:?}");
+    p.graph_mut(g).unwrap().layers[0].stack = Stack::None;
+    assert!(near(drawn_ys(&p, g)[1][20], 60.0));
+}
+
+#[test]
+fn cumulative_rows_missing_in_a_previous_plot_add_nothing() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    let (b, c) = (plot_column(&p, g, 1), plot_column(&p, g, 2));
+    let mut values = p.numeric(b).unwrap().to_vec();
+    values[5] = f64::NAN;
+    values.truncate(10);
+    set_values(&mut p, b, values);
+    let ys = drawn_ys(&p, g);
+    assert!(ys[1][5].is_nan(), "the missing value stays a gap");
+    assert!(near(ys[2][5], 3.0 * 5.0 + 5.0), "row 5 of the top curve: 15 + 5 (the missing 10 counts 0)");
+    assert!(near(ys[2][4], 12.0 + 8.0 + 4.0), "{:?}", ys[2]);
+    // Beyond the short plot's rows it adds nothing either: row 15 is 45 + 15.
+    assert!(near(ys[2][15], 45.0 + 15.0), "{:?}", ys[2]);
+    assert_eq!(p.numeric(c).unwrap().len(), 21);
+}
+
+#[test]
+fn cumulative_sums_by_row_index_even_when_the_x_values_differ() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    let book = p.workbooks().next().unwrap().id;
+    let x2 =
+        p.add_column(book, 0, Designation::X, ColumnData::numeric((0..=20).map(|v| 100.0 + f64::from(v)).collect()));
+    let x2 = x2.unwrap();
+    p.graph_mut(g).unwrap().layers[0].plots[1].x = Some(x2);
+    let layer = &p.graph(g).unwrap().layers[0];
+    let d = data::collect(&p, layer);
+    // Row 3 of the second plot is drawn at its own X (103) and at Y 6 + 3.
+    assert!(near(d.plots[1].x_at(3), 103.0) && near(d.plots[1].y_at(3), 9.0));
+}
+
+#[test]
+fn cumulative_skips_filtered_rows_and_the_range_follows_what_is_shown() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    let book = p.workbooks().next().unwrap().id;
+    let keep: Vec<bool> = (0..21).map(|r| r >= 10).collect();
+    p.workbook_mut(book).unwrap().sheets[0].filter =
+        Some(sheaf_core::rowfilter::RowFilter { condition: "x>=10".into(), enabled: true, keep });
+    let layer = &p.graph(g).unwrap().layers[0];
+    let add = sheaf_core::stack::cumulative_add(&p, layer);
+    assert_eq!(add[2].as_ref().unwrap()[3], 0.0, "filtered rows add nothing");
+    assert_eq!(add[2].as_ref().unwrap()[12], 12.0 + 24.0);
+    // Shown rows 10..=20: the lowest drawn Y is the bottom curve at X = 10 and the highest 120.
+    assert_eq!(y_range(&p, g), Some((10.0, 120.0)));
+}
+
+#[test]
+fn a_fitted_curve_of_a_cumulative_member_rides_on_the_sum_below_it() {
+    // Curves: A, B, the fit of B (a line through B), C.
+    let fs: [Of; 4] = [&|x| x, &|x| 2.0 * x, &|x| 2.0 * x, &|x| 3.0 * x];
+    let (mut p, g) = stacked(Stack::Cumulative, &fs);
+    let (b, fit) = (plot_column(&p, g, 1), plot_column(&p, g, 2));
+    p.graph_mut(g).unwrap().layers[0].plot_offset_mut(fit).follows = Some(b);
+    let ys = drawn_ys(&p, g);
+    // A is below B by A, so the fit is moved by A(x) = x too, and C stacks on A and B only.
+    assert!(near(ys[2][7], 14.0 + 7.0) && near(ys[1][7], 14.0 + 7.0), "{:?}", ys[2]);
+    assert!(near(ys[3][7], 21.0 + 7.0 + 14.0), "{:?}", ys[3]);
+}
+
+// ----- stacked histograms (graphing spec 13.16) -------------------------------
+
+/// Three numeric columns with different ranges in one sheet.
+fn stacked_hist_project() -> (Project, Vec<sheaf_core::ColumnId>) {
+    let mut p = Project::new();
+    let book = p.add_workbook("data");
+    let cols = [
+        (0..30).map(|i| 10.0 + f64::from(i % 10) * 1.5).collect::<Vec<f64>>(),
+        (0..24).map(|i| 20.0 + f64::from(i % 7) * 2.0).collect(),
+        (0..18).map(|i| 5.0 + f64::from(i * i % 13)).collect(),
+    ];
+    let ids = cols
+        .into_iter()
+        .map(|v| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap())
+        .collect::<Vec<_>>();
+    (p, ids)
+}
+
+#[test]
+fn stacked_histograms_make_one_panel_per_column_from_the_top_with_shared_bins_and_x() {
+    let (mut p, ys) = stacked_hist_project();
+    let g = p.plot_columns(Template::StackedHistograms, &ys).unwrap();
+    let graph = p.graph(g).unwrap();
+    assert_eq!(graph.layers.len(), 3);
+    // Top to bottom in selection order.
+    let tops: Vec<f64> = graph
+        .layers
+        .iter()
+        .map(|l| graph.page_frame(graph.layers.iter().position(|m| std::ptr::eq(m, l)).unwrap()).top)
+        .collect();
+    assert!(tops[0] < tops[1] && tops[1] < tops[2], "{tops:?}");
+    for (k, l) in graph.layers.iter().enumerate() {
+        assert_eq!(l.plots.len(), 1);
+        assert_eq!(l.plots[0].y, ys[k]);
+        assert_eq!(l.plots[0].kind, sheaf_core::graph::PlotKind::Histogram);
+        assert_eq!(l.plots[0].hist, graph.layers[0].plots[0].hist, "the same bins in every panel");
+    }
+    let hist = graph.layers[0].plots[0].hist;
+    assert!(hist.begin.is_some() && hist.end.is_some() && hist.bin_size.is_some());
+    // One shared X scale: the panels after the first are linked to it.
+    assert!(graph.layers[1..].iter().all(|l| l.link.is_some_and(|k| k.parent == 0)));
+    // The bins cover all three columns (5 to 28), and the counts of a panel add up to its rows.
+    assert!(hist.begin.unwrap() <= 5.0 && hist.end.unwrap() >= 29.0, "{hist:?}");
+    let data: Vec<_> = graph.layers.iter().map(|l| data::collect(&p, l).plots).collect();
+    let centres: Vec<Vec<f64>> = data.iter().map(|d| d[0].x.as_ref().unwrap().to_vec()).collect();
+    assert_eq!(centres[0], centres[1]);
+    assert_eq!(centres[1], centres[2]);
+    for (d, n) in data.iter().zip([30.0, 24.0, 18.0]) {
+        assert_eq!(d[0].y.iter().sum::<f64>(), n);
+    }
+    let geoms = fixed_geometry(&p, g);
+    assert!(geoms.iter().all(|m| (m.x.min, m.x.max) == (geoms[0].x.min, geoms[0].x.max)));
+    assert!(svg_of(&p, g).contains("<svg"));
+}
+
+#[test]
+fn stacked_histograms_leave_out_text_columns_and_refuse_data_without_numbers() {
+    let (mut p, ys) = stacked_hist_project();
+    let book = p.workbooks().next().unwrap().id;
+    let text = p.add_column(book, 0, Designation::Y, ColumnData::text(vec!["a".into(); 5])).unwrap();
+    let g = p.plot_columns(Template::StackedHistograms, &[ys[0], text, ys[2]]).unwrap();
+    assert_eq!(p.graph(g).unwrap().layers.len(), 2);
+    assert!(p.plot_columns(Template::StackedHistograms, &[text]).is_err());
+    let empty = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![f64::NAN; 4])).unwrap();
+    let err = p.plot_columns(Template::StackedHistograms, &[empty]).unwrap_err();
+    assert!(err.to_string().contains("numbers"), "{err}");
+    assert!(p.plot_columns(Template::StackedHistograms, &[]).is_err());
+}
+
+#[test]
+fn golden_stacked_histograms() {
+    let (x, curve) = golden_data();
+    let mut p = Project::new();
+    let book = p.add_workbook("data");
+    let _ = x;
+    let ids: Vec<_> = [30.0, 21.5, 12.25]
+        .iter()
+        .map(|a| p.add_column(book, 0, Designation::Y, ColumnData::numeric(curve(*a))).unwrap())
+        .collect();
+    let g = p.plot_columns(Template::StackedHistograms, &ids).unwrap();
+    compare_golden("stacked-histograms", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_cumulative_lines() {
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0), curve(21.5), curve(12.25)]);
+    p.graph_mut(g).unwrap().layers[0].stack = Stack::Cumulative;
+    compare_golden("cumulative-lines", &svg_of(&p, g));
+}
+
+// ----- waterfall colour mapping (graphing spec 13.17) ---------------------------
+
+fn mapped_waterfall(mode: sheaf_core::graph::WaterfallColor) -> (Project, WindowId) {
+    let fs: [Of; 3] = [&|x| x, &|x| 2.0 * x, &|x| 4.0 * x];
+    let (mut p, g) = stacked(Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 }, &fs);
+    p.graph_mut(g).unwrap().layers[0].waterfall_color = mode;
+    (p, g)
+}
+
+/// The stroke colours of the paths of the first layer's plots.
+fn plot_stroke_colors(p: &Project, g: WindowId) -> Vec<sheaf_core::Color> {
+    let scene = layout::build_scene(p, g, &FixedMetrics).unwrap();
+    let mut out = Vec::new();
+    for l in &scene.layers {
+        for item in &l.plots {
+            if let scene::Item::Path { stroke: Some(s), .. } = item {
+                out.push(s.color);
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn z_mapping_colours_each_curve_as_a_whole_by_its_z_and_draws_a_colour_scale() {
+    use sheaf_core::graph::WaterfallColor;
+    let (mut p, g) = mapped_waterfall(WaterfallColor::Z);
+    // Z from a numeric long name; the other curves use their place in the stack (1 and 3).
+    let c = plot_column(&p, g, 1);
+    p.column_mut(c).unwrap().long_name = "10".into();
+    let layer = &p.graph(g).unwrap().layers[0];
+    let d = data::collect(&p, layer);
+    let zs: Vec<f64> = d.plots.iter().map(|pd| pd.wf.unwrap().z).collect();
+    assert_eq!(zs, vec![1.0, 10.0, 3.0]);
+    assert_eq!((d.plots[0].wf.unwrap().lo, d.plots[0].wf.unwrap().hi), (1.0, 10.0));
+    let colors = plot_stroke_colors(&p, g);
+    let lowest = plots::map_color(0.0);
+    let top = plots::map_color(1.0);
+    assert!(colors.contains(&lowest) && colors.contains(&top), "{colors:?}");
+    let svg = svg_of(&p, g);
+    assert!(texts(&doc(&svg)).iter().any(|t| t == "Z"), "the scale is titled Z");
+    // Without mapping, no scale and the plot colours.
+    let (q, h) = mapped_waterfall(WaterfallColor::None);
+    assert!(!texts(&doc(&svg_of(&q, h))).iter().any(|t| t == "Z"));
+}
+
+#[test]
+fn y_mapping_colours_segments_by_the_mean_y_of_their_ends_over_one_scale() {
+    use sheaf_core::graph::WaterfallColor;
+    let (p, g) = mapped_waterfall(WaterfallColor::Y);
+    let layer = &p.graph(g).unwrap().layers[0];
+    let d = data::collect(&p, layer);
+    let wf = d.plots[0].wf.unwrap();
+    // Y runs from 0 to 80 over every curve.
+    assert_eq!((wf.lo, wf.hi), (0.0, 80.0));
+    assert!(near(wf.fraction(40.0), 0.5));
+    let colors = plot_stroke_colors(&p, g);
+    let distinct: std::collections::BTreeSet<_> = colors.iter().map(|c| (c.r, c.g, c.b)).collect();
+    assert!(distinct.len() > 10, "a gradient of many colours, got {}", distinct.len());
+    assert!(texts(&doc(&svg_of(&p, g))).iter().any(|t| t == "Y"));
+}
+
+// ----- waterfall Y mapping follows the plain line's geometry (graphing spec 13.17) -----------
+
+/// The stroked line pieces of the first layer, with pieces that continue each other (as the colour runs of a
+/// mapped line do) merged into one.
+fn merged_line_pieces(p: &Project, g: WindowId) -> Vec<Vec<(f64, f64)>> {
+    let scene = layout::build_scene(p, g, &FixedMetrics).unwrap();
+    let mut out: Vec<Vec<(f64, f64)>> = Vec::new();
+    for item in &scene.layers[0].plots {
+        let scene::Item::Path { d, fill: None, stroke: Some(_) } = item else { continue };
+        for sub in hit::subpaths(d) {
+            match out.last_mut() {
+                Some(last) if last.last() == sub.first() => last.extend(sub.into_iter().skip(1)),
+                _ => out.push(sub),
+            }
+        }
+    }
+    out
+}
+
+fn same_pieces(a: &[Vec<(f64, f64)>], b: &[Vec<(f64, f64)>]) {
+    assert_eq!(a.len(), b.len(), "piece count");
+    for (x, y) in a.iter().zip(b) {
+        assert_eq!(x.len(), y.len());
+        assert!(x.iter().zip(y).all(|(p, q)| (p.0 - q.0).abs() < 1e-6 && (p.1 - q.1).abs() < 1e-6), "{x:?} vs {y:?}");
+    }
+}
+
+/// The geometry of the Y mapped waterfall equals that of the uncoloured one after `setup`.
+fn y_mapped_geometry_matches_plain(setup: impl Fn(&mut Project, WindowId)) -> Vec<Vec<(f64, f64)>> {
+    use sheaf_core::graph::WaterfallColor;
+    let (mut p, g) = mapped_waterfall(WaterfallColor::None);
+    setup(&mut p, g);
+    let plain = merged_line_pieces(&p, g);
+    p.graph_mut(g).unwrap().layers[0].waterfall_color = WaterfallColor::Y;
+    let mapped = merged_line_pieces(&p, g);
+    same_pieces(&plain, &mapped);
+    let colors = plot_stroke_colors(&p, g);
+    assert!(
+        colors.iter().map(|c| (c.r, c.g, c.b)).collect::<std::collections::BTreeSet<_>>().len() > 3,
+        "still coloured"
+    );
+    mapped
+}
+
+#[test]
+fn y_mapping_keeps_the_step_connect_geometry() {
+    let pieces = y_mapped_geometry_matches_plain(|p, g| {
+        p.graph_mut(g).unwrap().layers[0].plots.iter_mut().for_each(|pl| pl.line.connect = Connect::StepHorizontal);
+    });
+    // Steps have twice the corners of a straight line.
+    assert!(pieces[0].len() > 30, "{}", pieces[0].len());
+}
+
+#[test]
+fn y_mapping_keeps_the_spline_connect_geometry() {
+    let straight = y_mapped_geometry_matches_plain(|_, _| {});
+    let spline = y_mapped_geometry_matches_plain(|p, g| {
+        p.graph_mut(g).unwrap().layers[0].plots.iter_mut().for_each(|pl| pl.line.connect = Connect::Spline);
+    });
+    assert!(spline[0].len() > straight[0].len(), "the spline is sampled finer");
+}
+
+#[test]
+fn y_mapping_honours_missing_data_and_connect_across_missing() {
+    use sheaf_core::graph::WaterfallColor;
+    let setup = |p: &mut Project, g: WindowId| {
+        let c = plot_column(p, g, 0);
+        let mut v = p.numeric(c).unwrap().to_vec();
+        v[5] = f64::NAN;
+        v[6] = f64::NAN;
+        set_values(p, c, v);
+    };
+    let broken = y_mapped_geometry_matches_plain(setup);
+    let pieces_of_first = |p: &Project, g| merged_line_pieces(p, g).len();
+    let (mut p, g) = mapped_waterfall(WaterfallColor::Y);
+    setup(&mut p, g);
+    let before = pieces_of_first(&p, g);
+    p.graph_mut(g).unwrap().page.style.connect_across_missing = true;
+    assert_eq!(before, broken.len());
+    assert_eq!(pieces_of_first(&p, g), before - 1, "the first curve is joined across the gap");
+    // And equal to the uncoloured line with the option on.
+    let mapped = merged_line_pieces(&p, g);
+    p.graph_mut(g).unwrap().layers[0].waterfall_color = WaterfallColor::None;
+    same_pieces(&merged_line_pieces(&p, g), &mapped);
+}
+
+#[test]
+fn y_mapping_cuts_lines_at_axis_breaks() {
+    use sheaf_core::graph::AxisBreak;
+    let without = y_mapped_geometry_matches_plain(|_, _| {}).len();
+    let cut = y_mapped_geometry_matches_plain(|p, g| {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        l.y_axis.axis_breaks = vec![AxisBreak::new(30.0, 60.0)];
+    });
+    assert!(cut.len() > without, "{} pieces after the break, {without} before", cut.len());
+}
+
+#[test]
+fn cumulative_skips_masked_rows_while_hide_masked_points_is_on() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    let c = plot_column(&p, g, 0);
+    p.column_mut(c).unwrap().mask.insert(4);
+    // Masked points are drawn (red) by default and still add up.
+    assert!(near(drawn_ys(&p, g)[1][4], 12.0), "{:?}", drawn_ys(&p, g)[1]);
+    p.hide_masked = true;
+    let ys = drawn_ys(&p, g);
+    assert!(ys[0][4].is_nan(), "the masked point is not drawn");
+    assert!(near(ys[1][4], 8.0), "the plot above gets nothing from it: {}", ys[1][4]);
+    assert!(near(ys[2][4], 20.0) && near(ys[1][5], 15.0), "other rows are unchanged");
+}
+
+#[test]
+fn stacked_histogram_bins_ignore_masked_and_filtered_outliers() {
+    let (mut p, ys) = stacked_hist_project();
+    let book = p.workbooks().next().unwrap().id;
+    let set_last = |p: &mut Project, c, v: f64| {
+        let mut values = p.numeric(c).unwrap().to_vec();
+        *values.last_mut().unwrap() = v;
+        set_values(p, c, values);
+    };
+    let end_of = |p: &mut Project| {
+        let g = p.plot_columns(Template::StackedHistograms, &ys).unwrap();
+        p.graph(g).unwrap().layers[0].plots[0].hist.end.unwrap()
+    };
+    let normal = end_of(&mut p);
+    set_last(&mut p, ys[0], 1000.0);
+    set_last(&mut p, ys[1], 900.0);
+    assert!(end_of(&mut p) > 500.0, "shown outliers widen the bins");
+    // A filtered row (the sheet's rows pass `col(A) < 500`) and a masked one (with Hide Masked Points).
+    p.set_row_filter(book, 0, "col(A) < 500").unwrap();
+    p.column_mut(ys[1]).unwrap().mask.insert(23);
+    assert!(end_of(&mut p) > 500.0, "a masked point is shown by default");
+    p.hide_masked = true;
+    assert_eq!(end_of(&mut p), normal);
+}
+
+/// Origin's Column + Label writes each value centred above its own column, also when two columns share a
+/// category (graphing 18.12).
+#[test]
+fn column_labels_are_centred_on_their_own_bar_in_a_group() {
+    use sheaf_core::{ColumnData, Designation};
+    let mut p = Project::new();
+    let book = p.add_workbook("C");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+    let y1 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 5.0, 2.0])).unwrap();
+    let y2 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 1.0, 4.0])).unwrap();
+    let g = p.plot_columns(Template::ColumnLabel, &[y1, y2]).unwrap();
+    let bars = bars_of(&p, g);
+    assert_eq!(bars.len(), 6);
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let labels: Vec<&scene::TextItem> = scene.layers[0]
+        .plots
+        .iter()
+        .filter_map(|it| match it {
+            scene::Item::Text(t) => Some(t),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(labels.len(), 6, "a value over every column");
+    for (rect, _, _) in &bars {
+        let centre = rect.x + rect.w / 2.0;
+        let over = labels.iter().filter(|t| (t.x - centre).abs() < 1e-6 && t.y < rect.y).count();
+        assert_eq!(over, 1, "one label centred over the bar at {centre}");
+    }
 }

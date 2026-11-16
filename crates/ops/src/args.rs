@@ -34,6 +34,73 @@ pub enum Command {
     /// Simulate Curve: the values of a built-in fit function for typed parameters, at X values from a range
     /// or from a column. Writes X and Y as delimited text or an Excel workbook, or adds them to a project.
     Simulate(SimulateArgs),
+    /// Merge Graph Windows: copy graphs of a project into the cells of one new graph (Origin's
+    /// merge_graph defaults), then write it as a figure and/or save the project with it.
+    MergeGraphs(MergeGraphsArgs),
+}
+
+/// `sheaf merge-graphs`: Graph > Merge Graph Windows without a window (graphing spec 15.11).
+#[derive(Args, Debug)]
+pub struct MergeGraphsArgs {
+    /// A .sheaf project or an Origin .opj project with the graphs.
+    pub project: PathBuf,
+    /// A graph to merge, by name; repeat it for each graph, in the order the cells are filled (row by
+    /// row from the top left). At least two.
+    #[arg(long, value_name = "NAME", conflicts_with = "all_graphs")]
+    pub graph: Vec<String>,
+    /// Merge every graph of the project, in project order (Origin's "All in Project").
+    #[arg(long)]
+    pub all_graphs: bool,
+    /// Number of rows (default: as Origin, ceil(sqrt(n)) for n graphs, or as few as the columns allow).
+    #[arg(long)]
+    pub rows: Option<usize>,
+    /// Number of columns (default: as Origin, ceil(n / rows)).
+    #[arg(long)]
+    pub cols: Option<usize>,
+    /// Horizontal and vertical gap between cells, percent of the page (default 5,5 as Origin).
+    #[arg(long, value_delimiter = ',', value_name = "H,V", allow_hyphen_values = true)]
+    pub gap: Vec<f64>,
+    /// Left, right, top and bottom margins, percent of the page (default 15,10,10,15 as Origin).
+    #[arg(long, value_delimiter = ',', value_name = "L,R,T,B", allow_hyphen_values = true)]
+    pub margins: Vec<f64>,
+    /// A portrait page (the page's longer side upright).
+    #[arg(long)]
+    pub portrait: bool,
+    /// The page size in inches, WIDTH,HEIGHT (default Origin's 11.41,7.973; --portrait turns it).
+    #[arg(long, value_delimiter = ',', value_name = "W,H")]
+    pub page_size: Vec<f64>,
+    /// Keep each graph's layer aspect ratio, at the top left of its cell.
+    #[arg(long)]
+    pub keep_aspect: bool,
+    /// Link the layers of the later graphs to the first merged layer in position (Origin's "Link
+    /// Source Graphs").
+    #[arg(long)]
+    pub link: bool,
+    /// Also share the first layer's X scale (implies --link): a vertical stack with one X axis.
+    #[arg(long)]
+    pub share_x: bool,
+    /// Hide the X tick labels, title and ticks of a cell that touches the cell below it (with a
+    /// vertical gap of 0), and the Y ones of a cell touching one on its left (Origin's "Show Axes
+    /// Frame").
+    #[arg(long)]
+    pub hide_inner: bool,
+    /// Text size: auto (Origin's factor for smaller cells), keep (every point size as it is) or a
+    /// fixed factor such as 0.5.
+    #[arg(long, default_value = "auto", value_name = "auto|keep|FACTOR")]
+    pub text_scale: String,
+    /// Delete the merged graphs from the saved project (Origin's "Keep Source Graphs" off).
+    #[arg(long)]
+    pub remove_sources: bool,
+    /// Write the merged graph as a figure (.png, .tif, .jpg, .bmp, .gif, .tga, .pcx, .psd, .svg, .pdf,
+    /// .eps or .emf).
+    #[arg(short, long)]
+    pub output: Option<PathBuf>,
+    /// Resolution of raster output in dots per inch.
+    #[arg(long, default_value_t = 300.0)]
+    pub dpi: f64,
+    /// Save the project with the merged graph (.sheaf, or .opj with a companion for what it cannot hold).
+    #[arg(long, value_name = "FILE")]
+    pub save: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -570,7 +637,8 @@ pub struct StyleArgs {
     /// Hide the legend.
     #[arg(long)]
     pub no_legend: bool,
-    /// Move the curves apart: none; auto (each curve above the one before it with a gap of 10 %
+    /// Move the curves apart: none; cumulative (each curve is drawn at its Y plus the Y of the
+    /// curves before it at the same row); auto (each curve above the one before it with a gap of 10 %
     /// of the tallest curve); auto:GAP (gap in percent); step:STEP (curve k moved up by k * STEP
     /// axis units; write a negative step as --stack=step:-500).
     #[arg(long, value_name = "MODE", conflicts_with_all = ["offsets", "waterfall"])]
@@ -659,6 +727,21 @@ pub struct StyleArgs {
     /// example --draw "arrow@0.2,0.2,0.5,0.4". Repeat the option for more objects.
     #[arg(long, value_name = "KIND@X1,Y1,X2,Y2")]
     pub draw: Vec<String>,
+    /// Mark a slope between two data points of the first plot of the first layer: "ROW_A,ROW_B", the
+    /// worksheet row numbers counted from 1 (for example --slope 3,8). The segment, dashed legs and the
+    /// label "slope = ..." are computed in the axes' own units (per decade on a log10 axis). Repeat the
+    /// option for more slopes; they all apply to the first plot.
+    #[arg(long, value_name = "ROW_A,ROW_B")]
+    pub slope: Vec<String>,
+    /// Draw a vertical straight line at an X value on the first layer, with a label that shows the value:
+    /// "VALUE" or "VALUE,LOCATION" with LOCATION top (the default), bottom, left or right (for example
+    /// --vline 0.5 or --vline 0.5,bottom). The line runs across the whole frame in black, 0.5 pt. Repeat
+    /// the option for more lines. A value outside the axis range draws nothing.
+    #[arg(long, value_name = "VALUE[,LOCATION]", allow_hyphen_values = true)]
+    pub vline: Vec<String>,
+    /// Draw a horizontal straight line at a Y value on the first layer: like --vline.
+    #[arg(long, value_name = "VALUE[,LOCATION]", allow_hyphen_values = true)]
+    pub hline: Vec<String>,
 }
 
 /// Which part of the page a figure shows (Origin's export margin settings).
@@ -700,7 +783,9 @@ pub struct PlotArgs {
     /// Figure template: line, scatter, line-symbol, column, cv, double-y, stacked or waterfall
     /// (default: what the importer suggests). column draws one group of bars per row, the Y columns
     /// side by side, with sample names from a text X column under the bars; double-y puts the 1st,
-    /// 3rd, ... Y column on the left axis and the 2nd, 4th, ... on a right axis; stacked moves each
+    /// 3rd, ... Y column on the left axis and the 2nd, 4th, ... on a right axis; 3ys-y-yy, 3ys-y-y-y, 4ys-y-yyy and
+    /// 4ys-yy-yy make three or four layers, each with its own Y axis (colours and offsets as Origin's
+    /// templates of these names) and deal the Y columns out one to a layer, round and round; stacked moves each
     /// curve above the one before it; lollipop (two or more Y columns) joins each Y column's points
     /// to the next column's at the same row with drop lines, X and Y exchanged; scatter-rug is a scatter
     /// with a rug (one short line per point) beside the bottom and left axes; violin draws each
@@ -933,6 +1018,61 @@ pub struct TargetArgs {
     pub read: ReadOptions,
 }
 
+/// What the groups of a multiple comparisons plot are drawn as.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ComparisonPlotTypeArg {
+    /// Columns of the group means.
+    Bar,
+    Box,
+    Violin,
+    /// The raw points with the mean and its error bar.
+    Scatter,
+}
+
+/// The error bar of a bar or scatter multiple comparisons plot.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ErrorBarArg {
+    /// One standard deviation.
+    Sd,
+    /// One standard error of the mean.
+    Sem,
+    /// Half the 95 % confidence interval of the mean.
+    Ci95,
+}
+
+/// How the brackets of a multiple comparisons plot are labelled.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum BracketLabelsArg {
+    /// `*` p < 0.05, `**` < 0.01, `***` < 0.001, `****` < 0.0001, `ns` otherwise.
+    Asterisks,
+    /// `p = 0.0123`, `p < 0.0001`.
+    PValues,
+}
+
+/// The multiple comparisons plot (T64) that a one-way ANOVA with a means comparison or a two-sample t-test can draw.
+#[derive(Args, Debug, Clone)]
+pub struct ComparisonPlotArgs {
+    /// Also draw the multiple comparisons plot of the report to this figure file (.png, .svg or .pdf): the groups
+    /// with significance brackets between the compared pairs. The graph stays in the project (--save).
+    #[arg(long, value_name = "OUT")]
+    pub comparison_plot: Option<PathBuf>,
+    /// The plot's groups: bar (means), box, violin or scatter (raw points).
+    #[arg(long, value_enum, default_value_t = ComparisonPlotTypeArg::Bar)]
+    pub plot_type: ComparisonPlotTypeArg,
+    /// Error bars of the bar and scatter plots.
+    #[arg(long, value_enum, default_value_t = ErrorBarArg::Sd)]
+    pub error_bar: ErrorBarArg,
+    /// Bracket labels.
+    #[arg(long, value_enum, default_value_t = BracketLabelsArg::Asterisks)]
+    pub labels: BracketLabelsArg,
+    /// Bracket every compared pair, not only those with p below --threshold.
+    #[arg(long)]
+    pub all_pairs: bool,
+    /// The p-value below which a pair counts as significant.
+    #[arg(long, default_value_t = 0.05)]
+    pub threshold: f64,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum TTestKindArg {
     /// Each column against --mean.
@@ -1115,6 +1255,69 @@ pub enum FftFilterArg {
     BandBlock,
     Threshold,
     Parabolic,
+}
+
+/// Filter response type (Origin's Response Type of the IIR and FIR filters).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FilterTypeArg {
+    LowPass,
+    HighPass,
+    BandPass,
+    BandStop,
+}
+
+/// IIR design method (Origin's Method).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum IirMethodArg {
+    Butterworth,
+    Chebyshev1,
+    Chebyshev2,
+    Elliptic,
+}
+
+/// Unit of the frequency specification.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FreqUnitArg {
+    /// Hz; the sample frequency comes from the X column unless `--fs` is given.
+    Hz,
+    /// 1 is the Nyquist frequency.
+    Normalized,
+}
+
+/// FIR design method (Origin's Method).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FirMethodArg {
+    LeastSquares,
+    Window,
+}
+
+/// FIR window (Origin's list).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FirWindowArg {
+    Bartlett,
+    BartlettHanning,
+    Blackman,
+    BlackmanHarris,
+    Bohman,
+    Chebyshev,
+    FlatTop,
+    Gaussian,
+    Hamming,
+    Hanning,
+    Kaiser,
+    Nuttall,
+    Parzen,
+    Rectangle,
+    Taylor,
+    Triangular,
+    Tukey,
+}
+
+/// Unit of the FIR magnitude specification.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum MagnitudeUnitArg {
+    Db,
+    Linear,
 }
 
 /// Envelope type (Origin's names).
@@ -1456,6 +1659,114 @@ pub enum AnalyzeTool {
         /// Sampling interval; by default the X step of the column.
         #[arg(long)]
         interval: Option<f64>,
+    },
+    /// Design an IIR filter and apply it (Origin's Signal Processing > IIR Filter, OriginPro), the
+    /// result beside each column. Frequencies left out take Sheaf's defaults (a quarter of the Nyquist
+    /// frequency; documented, not measured). `--minimum` takes the order from the pass and stop
+    /// frequencies and the ripple and attenuation.
+    #[command(alias = "iir")]
+    IirFilter {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long = "type", value_enum, default_value_t = FilterTypeArg::LowPass)]
+        kind: FilterTypeArg,
+        #[arg(long, value_enum, default_value_t = IirMethodArg::Butterworth)]
+        method: IirMethodArg,
+        /// Filter order.
+        #[arg(long, default_value_t = 10)]
+        order: usize,
+        /// The smallest order that meets the pass and stop frequencies (`--order` is ignored).
+        #[arg(long)]
+        minimum: bool,
+        #[arg(long, value_enum, default_value_t = FreqUnitArg::Hz)]
+        unit: FreqUnitArg,
+        /// Sample frequency in Hz; by default 1 / the X step of the column.
+        #[arg(long)]
+        fs: Option<f64>,
+        /// Cutoff frequency (low and high pass) or the first cutoff (band pass and band stop). Butterworth: the
+        /// -3 dB point; Chebyshev I and elliptic: the passband edge (gain down by --ripple); Chebyshev II: the
+        /// stopband edge (gain down by --attenuation).
+        #[arg(long)]
+        cutoff: Option<f64>,
+        /// The second cutoff of band pass and band stop.
+        #[arg(long)]
+        cutoff2: Option<f64>,
+        /// Minimum order: pass and stop frequencies (the first of two for the band responses).
+        #[arg(long)]
+        pass: Option<f64>,
+        #[arg(long)]
+        pass2: Option<f64>,
+        #[arg(long)]
+        stop: Option<f64>,
+        #[arg(long)]
+        stop2: Option<f64>,
+        /// Passband ripple in dB (Chebyshev I, elliptic, minimum order).
+        #[arg(long, default_value_t = 1.0)]
+        ripple: f64,
+        /// Stopband attenuation in dB (Chebyshev II, elliptic, minimum order).
+        #[arg(long, default_value_t = 80.0)]
+        attenuation: f64,
+        /// Filter forward and backward: zero phase.
+        #[arg(long)]
+        forward_backward: bool,
+    },
+    /// Design an FIR filter and apply it (Origin 2027's FIR Filter app), the result beside each column,
+    /// aligned with the input. The Window method takes `--cutoff` (or the pass and stop frequencies
+    /// with `--minimum`), Least Squares the pass and stop frequencies.
+    #[command(alias = "fir")]
+    FirFilter {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long = "type", value_enum, default_value_t = FilterTypeArg::LowPass)]
+        kind: FilterTypeArg,
+        #[arg(long, value_enum, default_value_t = FirMethodArg::Window)]
+        method: FirMethodArg,
+        /// Filter order (one less than the number of coefficients); high pass and band stop need an even one.
+        #[arg(long, default_value_t = 20)]
+        order: usize,
+        /// Window method: the order from the Kaiser formula for the pass and stop frequencies.
+        #[arg(long)]
+        minimum: bool,
+        #[arg(long, value_enum, default_value_t = FirWindowArg::Hamming)]
+        window: FirWindowArg,
+        /// Parameter of the Chebyshev, Gaussian, Kaiser, Taylor and Tukey windows.
+        #[arg(long)]
+        window_param: Option<f64>,
+        /// Do not scale the passband centre to gain 1.
+        #[arg(long)]
+        no_scale: bool,
+        #[arg(long, value_enum, default_value_t = FreqUnitArg::Hz)]
+        unit: FreqUnitArg,
+        /// Sample frequency in Hz; by default 1 / the X step of the column.
+        #[arg(long)]
+        fs: Option<f64>,
+        #[arg(long)]
+        cutoff: Option<f64>,
+        #[arg(long)]
+        cutoff2: Option<f64>,
+        #[arg(long)]
+        pass: Option<f64>,
+        #[arg(long)]
+        pass2: Option<f64>,
+        #[arg(long)]
+        stop: Option<f64>,
+        #[arg(long)]
+        stop2: Option<f64>,
+        /// Least Squares weights of the passbands and the stopbands.
+        #[arg(long, default_value_t = 1.0)]
+        pass_weight: f64,
+        #[arg(long, default_value_t = 1.0)]
+        stop_weight: f64,
+        /// Unit of `--ripple` and `--attenuation` (minimum order).
+        #[arg(long, value_enum, default_value_t = MagnitudeUnitArg::Db)]
+        magnitude_unit: MagnitudeUnitArg,
+        #[arg(long, default_value_t = 1.0)]
+        ripple: f64,
+        #[arg(long, default_value_t = 60.0)]
+        attenuation: f64,
+        /// Filter forward and backward: zero phase.
+        #[arg(long)]
+        forward_backward: bool,
     },
     /// The upper and/or lower envelope of each column (Origin's Signal Processing > Envelope): the
     /// natural cubic spline through the extreme points, each envelope with its X in a new sheet.
@@ -1865,6 +2176,8 @@ pub enum AnalyzeTool {
         /// Significance level.
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
+        #[command(flatten)]
+        plot: ComparisonPlotArgs,
     },
     /// Test of variance: each column against a hypothesized variance (chi-square, --variance) or two columns
     /// as a ratio of variances (F test, --ratio, first over second). Two --y columns, or --ratio, make the
@@ -1947,6 +2260,8 @@ pub enum AnalyzeTool {
         /// Significance level.
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
+        #[command(flatten)]
+        plot: ComparisonPlotArgs,
     },
     /// Power or sample size of a t test or the one-way ANOVA (Origin's Power and Sample Size tools). Needs no
     /// data file: give --sizes to get the power of those sample sizes, or --powers to get the smallest sample
@@ -2344,7 +2659,7 @@ pub enum AnalyzeTool {
         y_component: usize,
     },
     /// ROC curve: the --y columns are the test variables followed, last, by the state column. Area under the
-    /// curve with standard error (DeLong) and confidence interval, the curve and the best cut-off; makes a graph.
+    /// curve with standard error and confidence interval (as Origin's), the curve and the best cut-off; makes a graph.
     Roc {
         #[command(flatten)]
         target: TargetArgs,

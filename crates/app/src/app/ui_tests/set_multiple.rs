@@ -22,7 +22,7 @@ fn ctrl_shift_q(h: &mut Harness<'static, SheafApp>) {
 
 fn open_book(tag: &str) -> Harness<'static, SheafApp> {
     let mut h = start(vec![five_columns(tag)]);
-    show_window(&mut h, "Book1 - multi");
+    show_window(&mut h, "Book1 - multi.csv");
     h
 }
 
@@ -38,7 +38,9 @@ fn ctrl_shift_q_with_b_to_d_selected_sets_all_three_columns_in_one_undo_step() {
     select(&mut h, &["B(Y1)", "C(Y1)", "D(Y1)"]);
     ctrl_shift_q(&mut h);
     assert!(h.state().set_values.is_some(), "the window opened");
-    assert!(has_label(&h, "Col(B:D)="), "the label names the columns");
+    // Origin's window (expression-language 7.1): "wcol(j) =" and the columns as positions 2 to 4.
+    assert!(has_label(&h, "wcol(j) ="), "the label is Origin's");
+    assert!(has_label(&h, "Col (j):  From"), "the range of j is shown");
     type_formula(&mut h, "col(A)*j");
     click(&mut h, "OK");
     assert!(h.state().set_values.is_none(), "OK closes the window");
@@ -89,7 +91,7 @@ fn both_menus_list_set_multiple_columns_values_enabled_for_two_or_more_columns()
     assert!(!menu_entry(&h, item).accesskit_node().is_disabled(), "two columns: enabled in the context menu");
     click_containing(&mut h, item);
     assert!(h.state().set_values.is_some());
-    assert!(has_label(&h, "Col(B, D)="), "columns that are not side by side are listed");
+    assert!(has_label(&h, "wcol(j) ="), "columns that are not side by side open the same window");
 }
 
 #[test]
@@ -121,7 +123,10 @@ fn the_multiple_window_has_no_column_navigation_and_offers_j() {
     let mut h = open_book("multi-window");
     select(&mut h, &["B(Y1)", "C(Y1)"]);
     ctrl_shift_q(&mut h);
-    assert!(!has_label(&h, "|<") && !has_label(&h, ">|") && !has_label(&h, ">"));
+    // As in Origin, the column buttons are there but greyed.
+    for b in ["|<", "<", ">", ">|"] {
+        assert!(h.get_by_label(b).accesskit_node().is_disabled(), "{b} is greyed");
+    }
     // The Variables menu lists j, with the sheet position as its hint.
     h.get_by_label("Variables").click();
     settle(&mut h);
@@ -197,4 +202,25 @@ fn reopening_on_columns_that_share_a_formula_shows_it_and_a_mixed_selection_star
     select(&mut h, &["C(Y1)", "D(Y1)"]);
     ctrl_shift_q(&mut h);
     assert_eq!(h.state().set_values.as_ref().unwrap().formula(), "");
+}
+
+/// Origin's "Col (j): From .. To" row: widening the range sets the columns at those sheet positions.
+#[test]
+fn the_range_of_j_can_be_widened_to_columns_that_were_not_selected() {
+    let mut h = open_book("multi-range");
+    select(&mut h, &["B(Y1)", "C(Y1)"]);
+    ctrl_shift_q(&mut h);
+    type_formula(&mut h, "j");
+    // The text fields: Row From, Row To, Col (j) From, Col (j) To.
+    h.query_all_by_role(egui::accesskit::Role::TextInput).nth(3).expect("the To field of j").focus();
+    settle(&mut h);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text("4".into()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().set_values.is_none(), "OK closes the window");
+    for (name, j) in [("B", 2.0), ("C", 3.0), ("D", 4.0)] {
+        assert_eq!(column(&h, name), [j; 4], "column {name} holds its position");
+    }
+    assert_eq!(column(&h, "E"), [40.0, 41.0, 42.0, 43.0], "E is outside the range");
 }

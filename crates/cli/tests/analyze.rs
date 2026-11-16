@@ -1332,7 +1332,10 @@ fn roc_curve_runs_from_the_command_line() {
     let file = path.to_str().unwrap();
     let (ok, out, err) = sheaf(&["analyze", "roc", file, "--y", "score,state", "--positive", "yes"]);
     assert!(ok, "{err}");
-    assert!(out.contains("Area") && out.contains("0.8333") && out.contains("ROC1") && out.contains("DeLong"), "{out}");
+    assert!(
+        out.contains("Area") && out.contains("0.8333") && out.contains("ROC1") && out.contains("as Origin's"),
+        "{out}"
+    );
     let (ok, out, err) = sheaf(&[
         "analyze",
         "roc",
@@ -1432,4 +1435,104 @@ fn kmeans_runs_from_the_command_line() {
     assert!(out.contains("Cluster 3: 4 cases"), "{out}");
     let (ok, _, err) = sheaf(&["analyze", "kmeans", file, "--y", "a,b", "--clusters", "20"]);
     assert!(!ok && err.contains("cannot be made"), "{err}");
+}
+
+/// Four groups in columns, the third and fourth clearly apart from the first two.
+fn four_groups_file(dir: &Path) -> PathBuf {
+    let path = dir.join("groups.csv");
+    std::fs::write(
+        &path,
+        "A,B,C,D\n9.1,10.0,13.2,17.9\n10.2,11.1,14.1,18.8\n9.7,10.4,13.8,19.4\n10.9,11.6,15.0,18.1\n9.4,10.3,14.4,17.2\n",
+    )
+    .unwrap();
+    path
+}
+
+#[test]
+fn anova_comparison_plot_writes_an_svg_with_brackets_and_labels() {
+    let dir = scratch("comparison-plot");
+    let data = four_groups_file(&dir);
+    let out = dir.join("plot.svg");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "anova",
+        data.to_str().unwrap(),
+        "--y",
+        "A,B,C,D",
+        "--comparison-plot",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("multiple comparisons plot"), "{stdout}");
+    let svg = std::fs::read_to_string(&out).unwrap();
+    // Four category labels and asterisk labels of the significant pairs (Tukey: 5 of 6 are below 0.05).
+    for name in ["A", "B", "C", "D"] {
+        assert!(svg.contains(&format!(">{name}<")), "{name}");
+    }
+    assert!(svg.matches(">****<").count() >= 3, "{svg}");
+    // P-value labels and all pairs, as a box plot.
+    let all = dir.join("all.svg");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "anova",
+        data.to_str().unwrap(),
+        "--y",
+        "A,B,C,D",
+        "--comparison-plot",
+        all.to_str().unwrap(),
+        "--plot-type",
+        "box",
+        "--labels",
+        "p-values",
+        "--all-pairs",
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let svg = std::fs::read_to_string(&all).unwrap();
+    assert!(svg.matches(">p ").count() + svg.matches("p = ").count() + svg.matches("p &lt; ").count() >= 6, "{svg}");
+}
+
+#[test]
+fn ttest_comparison_plot_and_the_refusals() {
+    let dir = scratch("comparison-ttest");
+    let data = four_groups_file(&dir);
+    let out = dir.join("t.svg");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "ttest",
+        data.to_str().unwrap(),
+        "--y",
+        "A,D",
+        "--comparison-plot",
+        out.to_str().unwrap(),
+        "--error-bar",
+        "ci95",
+        "--plot-type",
+        "scatter",
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(std::fs::read_to_string(&out).unwrap().contains(">****<"));
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "ttest",
+        data.to_str().unwrap(),
+        "--y",
+        "A",
+        "--test",
+        "one-sample",
+        "--comparison-plot",
+        out.to_str().unwrap(),
+    ]);
+    assert!(!ok && stderr.contains("two-sample"), "{stderr}");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "anova",
+        data.to_str().unwrap(),
+        "--y",
+        "A,B",
+        "--comparison",
+        "none",
+        "--comparison-plot",
+        out.to_str().unwrap(),
+    ]);
+    assert!(!ok && stderr.contains("means comparison"), "{stderr}");
 }

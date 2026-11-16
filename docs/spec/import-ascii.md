@@ -262,13 +262,14 @@ Name derivation from file name (group `Names`):
 | FNameToUDL | write file name to a user parameter row named `SourceFile` | 0 | [W] |
 | FPathToComm | include path and extension in appended names | 0 | [W] |
 
-Sheaf's naming options (`rename_sheet`, `rename_book` in `AsciiOptions`, both default on like Origin's "Rename Sheet with (Partial) Filename" and "Rename Book with (Partial) Filename"; CLI `--no-rename-sheet`, `--no-rename-book`): off gives the sheet the name `Sheet1` (`Sheet<n>` for a new sheet or a later block; a replaced sheet keeps its own name) and the book an empty long name. **File name trimming, measured 2026-11-15** (Origin 2016, `impasc` on `abcdefgh.csv` with `AutoNames:=0`,
+Sheaf's naming options (`rename_sheet`, `rename_book` in `AsciiOptions`, both default on like Origin's "Rename Sheet with (Partial) Filename" and "Rename Book with (Partial) Filename"; CLI `--no-rename-sheet`, `--no-rename-book`): off gives the sheet the name `Sheet1` (`Sheet<n>` for a new sheet or a later block; a replaced sheet keeps its own name) and the book an empty long name. On, the book long name is the whole file name **with its extension**, as Origin (owner's decision 2026-11-15: an imported `data.csv` is titled `data.csv`; CH Instruments text and binary files too, `run1.txt`), and the sheet the name without it. `sheet_name_range` and `book_name_range` (`(from, to)`, default `(1, 0)`) cut them by Origin's Trim Filename rule below (`ascii::trim_file_name`, `ascii::parse_ascii_named`); the import window shows "Trim Filename From / To" under each tick. A graph made from an imported book whose title is its file name is titled without the extension (`Workbook::title_for_graph`), so graph titles and `<long name>` export file names stay `data` (Origin's graph titles here were not measured). The overlay legend of several files (CLI `plot` with several files) also uses the title without extension. Not yet offered: CLI flags for the ranges, so CLI import themes (`sheaf import --theme`) do not carry them.
+
+**File name trimming, measured 2026-11-15** (Origin 2016, `impasc` on `abcdefgh.csv` with `AutoNames:=0`,
 `FNameToSht:=1`, `FNameToBk:=1` and the same From/To for both; `re-workspace/scratch/fntrim`):
 
 - The sheet name is cut from the file name **without** its extension (`abcdefgh`, 8 characters); the book long name
   from the file name **with** it (`abcdefgh.csv`, 12 characters). With From 1, To 0 the long name is `abcdefgh.csv`
-  (Sheaf's long name has no extension today: a difference, left for a decision because it changes every imported
-  book's title).
+  (Sheaf copies this since 2026-11-15, owner's decision).
 - From and To are 1-based character positions, both included: (2, 5) gives `bcde` for both names; (3, 3) gives `c`.
 - A negative number counts from the end, `len + n`: To -4 gives the sheet `abcd` (8 - 4) and the long name
   `abcdefgh` (12 - 4, which drops `.csv`); From -6 gives the sheet `bcdefgh` (from 8 - 6 = 2) and the long name
@@ -280,7 +281,7 @@ Sheaf's naming options (`rename_sheet`, `rename_book` in `AsciiOptions`, both de
 - The book short name follows the sheet's text (the range applied to the name without extension), numbered when the
   name is taken (`abcdefgh1`, `abcdefgh2`).
 
-File name trimming (`Trim Filename From/To`; not offered yet, rules above), "Rename Long Name for Book only", "Include File Path when Renaming Book", "Auto Rename Using Filename" and the three "Append Filename to ... Comment" options are not offered.
+"Rename Long Name for Book only", "Include File Path when Renaming Book", "Auto Rename Using Filename" and the three "Append Filename to ... Comment" options are not offered.
 
 ### The impASC window, measured in Origin (2026-11-13)
 

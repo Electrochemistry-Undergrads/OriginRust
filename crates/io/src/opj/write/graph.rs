@@ -1091,6 +1091,36 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
             names.join(", ")
         ));
     }
+    if !layer.slopes.is_empty() {
+        notes.push(format!(
+            "layer {} has {} slope annotation{} that an Origin project file written here cannot hold; {} not written (the .opj.sheaf companion keeps {})",
+            index + 1,
+            layer.slopes.len(),
+            if layer.slopes.len() == 1 { "" } else { "s" },
+            if layer.slopes.len() == 1 { "it was" } else { "they were" },
+            if layer.slopes.len() == 1 { "it" } else { "them" },
+        ));
+    }
+    if !layer.straight_lines.is_empty() {
+        let n = layer.straight_lines.len();
+        notes.push(format!(
+            "layer {} has {n} straight line{} that an Origin project file written here cannot hold; {} not written (the .opj.sheaf companion keeps {})",
+            index + 1,
+            if n == 1 { "" } else { "s" },
+            if n == 1 { "it was" } else { "they were" },
+            if n == 1 { "it" } else { "them" },
+        ));
+    }
+    if !layer.brackets.is_empty() {
+        let n = layer.brackets.len();
+        notes.push(format!(
+            "layer {} has {n} significance bracket{} that an Origin project file written here cannot hold; {} not written (the .opj.sheaf companion keeps {})",
+            index + 1,
+            if n == 1 { "" } else { "s" },
+            if n == 1 { "it was" } else { "they were" },
+            if n == 1 { "it" } else { "them" },
+        ));
+    }
     if matches!(roles[index], Role::RightY { x_straight: false, .. }) {
         notes.push(
             "the X scale of a right Y layer that is not linked to its parent's was written with the link only".into(),
@@ -1099,6 +1129,18 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
     if matches!(layer.stack, Stack::Waterfall { .. }) {
         notes.push(
             "a waterfall was written as curves moved by X and Y offsets on axes that cover them (Origin's own waterfall plot, with its Z axis, was not written)"
+                .into(),
+        );
+    }
+    if layer.waterfall_color != sheaf_core::graph::WaterfallColor::None {
+        notes.push(
+            "the waterfall colour mapping (Y or Z) was not written: the curves went out in their plot colours without a colour scale (the .opj.sheaf companion keeps the mapping)"
+                .into(),
+        );
+    }
+    if layer.stack == Stack::Cumulative {
+        notes.push(
+            "a cumulative stack was written as plain curves (the cumulative offset mode is not written; the .opj.sheaf companion keeps it)"
                 .into(),
         );
     }
@@ -1126,6 +1168,12 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
     }
     if layer.bars.width_pct.is_some() {
         notes.push("the width of column bars (in percent) was not written; the bars reopen with the layer's gap setting instead".into());
+    }
+    if layer.y_axis.offset_pct != 0.0 {
+        notes.push(
+            "the position of a Y axis away from the frame (3Ys/4Ys, Multiple Y Axes) was not written; the axis              reopens at the frame (the .opj.sheaf companion keeps the offset)"
+                .into(),
+        );
     }
     if layer.legend.visible && layer.legend.columns > 1 {
         notes.push("the number of columns of the legend was not written; its entries stand in one column".into());

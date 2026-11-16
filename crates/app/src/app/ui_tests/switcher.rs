@@ -229,7 +229,7 @@ fn the_window_menu_opens_it_and_it_stays_until_a_choice() {
 #[test]
 fn plain_tab_in_the_grid_moves_the_cell_and_ctrl_tab_still_opens_the_switcher() {
     let mut h = start(vec![data_file("switcher")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let ctx = h.ctx.clone();
     h.state_mut().apply(Action::NewWorkbook, &ctx);
     settle(&mut h);
@@ -297,7 +297,7 @@ fn the_first_selection_skips_the_active_window_only_when_it_is_listed() {
 #[test]
 fn other_keys_are_swallowed_while_the_switcher_is_open() {
     let mut h = start(vec![data_file("switcher-modal")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let ctx = h.ctx.clone();
     h.state_mut().apply(Action::NewWorkbook, &ctx);
     settle(&mut h);

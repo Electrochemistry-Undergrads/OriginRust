@@ -74,13 +74,15 @@ pub enum SheetOp {
 }
 
 /// An edit of one object of a graph, from the graph window (Origin's right-click menus).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GraphOp {
     /// Change Plot to: line, scatter, line + symbol, column.
     SetPlotKind { layer: usize, plot: usize, kind: PlotKind },
     /// Move to Right Y Axis / Move to Left Y Axis: the plot goes to the right Y layer of its
     /// panel (made when there is none) or back to the panel's own layer.
     MovePlotToAxis { layer: usize, plot: usize, right: bool },
+    /// Move to Layer N: the plot goes to another layer of the graph, with that layer's axes (T61).
+    MovePlotToLayer { layer: usize, plot: usize, to: usize },
     /// Hide Data Plot.
     HidePlot { layer: usize, plot: usize },
     /// Remove Trendline: the plot's last trendline goes.
@@ -94,8 +96,14 @@ pub enum GraphOp {
     /// Exchange X-Y Axes: the settings of the two axes and the X and Y columns of every plot trade places.
     /// A layer with a plot against the row number (no X column) is left as it is.
     ExchangeAxes { layer: usize },
+    /// Graph > Offset Grouped Data in Layer: the layer's stack mode. Choosing the mode the layer
+    /// already has changes nothing and makes no undo step.
+    SetStack { layer: usize, stack: sheaf_core::graph::Stack },
     /// Axis Zoom In and Axis Zoom Out: the axis range shrinks or grows about its middle.
     AxisZoom { layer: usize, y: bool, zoom_in: bool },
+    /// Axis Center: the axis keeps its span and moves so that the value at `page` (the right-clicked
+    /// page point, in points) becomes the middle of its range. The range becomes fixed.
+    AxisCenter { layer: usize, y: bool, page: (f64, f64) },
     /// Delete on the legend: it is hidden.
     HideLegend { layer: usize },
     /// Reconstruct Legend: the legend text is made again from the plots (the automatic text).
@@ -109,12 +117,20 @@ pub enum GraphOp {
     DeleteLabel { layer: usize, label: usize },
     /// Delete on a drawn line, arrow, rectangle or ellipse.
     DeleteShape { layer: usize, shape: usize },
+    /// Delete on a slope annotation.
+    DeleteSlope { layer: usize, slope: usize },
+    /// Delete on a straight line.
+    DeleteStraightLine { layer: usize, line: usize },
     /// Move a drawn object to the top or bottom of its own layer's shape stack.
     OrderShape { layer: usize, shape: usize, front: bool },
     /// Hide Layer (every plot of the layer is hidden).
     HideLayer { layer: usize },
     /// Hide Other Layers.
     HideOtherLayers { layer: usize },
+    /// Graph > New Layer(Axes) and the Graph toolbar: a layer of `kind` next to the active layer `layer`.
+    AddLayer { layer: usize, kind: sheaf_core::layers::NewLayerKind },
+    /// Delete Layer of the layer icon: the layer goes, its children become independent.
+    DeleteLayer { layer: usize },
 }
 
 /// The tool of a graph window (the Tools toolbar).
@@ -128,8 +144,29 @@ pub enum GraphTool {
     Text,
     /// A drawing tool (Line, Arrow, Rectangle, Circle): a drag on the graph draws one object.
     Draw(sheaf_core::shape::ShapeKind),
+    /// The Slope tool: two clicks on data points of one plot mark the slope between them.
+    Slope,
     /// One of the Data menu's tools (Mask, Move, Remove Bad Data Points).
     Data(DataTool),
+    /// Zoom In (a mode): the next click on the page zooms in at that point.
+    ZoomIn,
+    /// The Pan tool: a drag on the page moves the view.
+    Pan,
+    /// The Tools-bar Scale In: a rectangle drag rescales the active layer's axes (T69).
+    ScaleIn,
+    /// The Tools-bar Scale Out: a click or drag steps back to the previous scale (T69).
+    ScaleOut,
+}
+
+/// A change of a graph window's view (screen-only; the graph is not changed).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewOp {
+    /// Zoom Out: half the zoom, never below the whole page.
+    ZoomOut,
+    /// Whole Page: the page fits the window.
+    WholePage,
+    /// Zoom All: the page and all objects fit the window (T69).
+    ZoomAll,
 }
 
 /// The tools of a graph's Data menu that act on the points of a plot.
@@ -195,6 +232,8 @@ pub enum Action {
     Redo,
     /// Owner-only: undo consecutive completed AI calls, stopping at a manual history entry.
     UndoAiChanges,
+    /// A change captured by the shared Format toolbar.
+    FormatText(crate::text_format::Request),
     NewWorkbook,
     AddColumn(WindowId),
     DeleteColumns(Vec<ColumnId>),
@@ -347,6 +386,9 @@ pub enum Action {
     /// Worksheet > Conditional Formatting > Remove Conditional Format: removes the rules that
     /// touch the selection.
     RemoveCondFormat(WindowId),
+    /// Format Cells... (cell, column and row menus; Format > Cell...): the window for the
+    /// formats of the selection.
+    FormatCellsDialog(WindowId),
     /// Cell menu > Add Note... / Edit Note...: the note editor for the single selected cell.
     NoteDialog(WindowId),
     /// Cell menu > Delete Note: removes the note of the single selected cell.
@@ -379,9 +421,21 @@ pub enum Action {
         book: WindowId,
         columns: Vec<ColumnId>,
     },
+    /// Graph > Merge Graph Windows...
+    MergeGraphs,
     LabelPanels {
         book: WindowId,
         columns: Vec<ColumnId>,
+    },
+    /// Plot > Multi-Y > Multiple Y Axes... (T61) for the selected columns (none: the sheet's Y columns).
+    MultiYAxes {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    /// Multiple Comparisons Plot... (T64) of a report sheet (`None`: the workbook's active sheet).
+    ComparisonPlot {
+        book: WindowId,
+        sheet: Option<usize>,
     },
     /// A plot's menu: Add Trendline... or Edit Trendline... (the plot's last one).
     Trendline {
@@ -403,10 +457,29 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
     },
+    /// Opens Layer Contents for one layer with this plot type chosen (Graph > Add Plot to Layer).
+    AddPlotToLayer {
+        graph: WindowId,
+        layer: usize,
+        kind: sheaf_core::graph::PlotKind,
+    },
     /// Opens Layer Contents (Origin's add, remove, group and order window) for one layer.
     LayerContents {
         graph: WindowId,
         layer: usize,
+    },
+    /// Fit Page to Layers...: opens its window.
+    FitPageToLayers {
+        graph: WindowId,
+    },
+    /// Format > Fit Page To Printer: the page takes the default printer's printable size at once.
+    FitPageToPrinter {
+        graph: WindowId,
+    },
+    /// Opens Layer Management (arrange, size/position and link the layers) for a graph, with a layer selected when given.
+    LayerManagement {
+        graph: WindowId,
+        layer: Option<usize>,
     },
     /// Opens the graph settings on a tab, for one layer, with a plot chosen in the Plots tab.
     GraphProperties {
@@ -424,6 +497,35 @@ pub enum Action {
     GraphTool {
         graph: WindowId,
         tool: GraphTool,
+    },
+    /// View > Print View, Page View, Window View, Draft View: the graph window's mode (view state, no undo step).
+    SetViewMode {
+        graph: WindowId,
+        mode: sheaf_core::project::ViewMode,
+    },
+    /// View > Show > Layer Icons.
+    SetLayerIcons {
+        graph: WindowId,
+        on: bool,
+    },
+    /// View > Full Screen: the graph's page over the whole screen until Esc.
+    FullScreen(WindowId),
+    /// Zoom Out or Whole Page of a graph window.
+    GraphView {
+        graph: WindowId,
+        op: ViewOp,
+    },
+    /// Scale In finished: the new ends of the active layer's axes.
+    ScaleIn {
+        graph: WindowId,
+        layer: usize,
+        x: (f64, f64),
+        y: (f64, f64),
+    },
+    /// Scale Out: back to the previous scale of the active layer.
+    ScaleOut {
+        graph: WindowId,
+        layer: usize,
     },
     /// A change that a Data menu tool made to the cells of a plot's worksheet.
     DataEdit(DataEdit),
@@ -462,6 +564,31 @@ pub enum Action {
         dx: f64,
         dy: f64,
     },
+    /// Adds a slope annotation to a layer: one undo step.
+    AddSlope {
+        graph: WindowId,
+        layer: usize,
+        slope: sheaf_core::graph::SlopeAnnotation,
+    },
+    /// Opens the properties window of a slope annotation (double click, Properties).
+    EditSlope {
+        graph: WindowId,
+        layer: usize,
+        slope: usize,
+    },
+    /// Graph > Add Straight Line...: opens the window for a new line in `layer`.
+    AddStraightLine {
+        graph: WindowId,
+        layer: usize,
+    },
+    /// Opens the window of a straight line (double click, Properties).
+    EditStraightLine {
+        graph: WindowId,
+        layer: usize,
+        line: usize,
+    },
+    /// Writes a hint on the status bar.
+    Hint(String),
     /// Opens the properties window of a drawn object (double click, Properties).
     EditShape {
         graph: WindowId,

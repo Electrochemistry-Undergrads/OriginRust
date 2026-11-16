@@ -15,7 +15,7 @@ fn prepared(name: &str) -> (Harness<'static, SheafApp>, WindowId, Vec<ColumnId>)
         }
     });
     settle(&mut h);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let corner = egui::pos2(text_pos(&h, "Long Name").x, text_pos(&h, "A(X1)").y);
     click_at(&mut h, corner);
     assert_eq!(book_ui(&h).selected.len(), 6);
@@ -75,7 +75,7 @@ fn label_panels_units_column_plot_manual_rows_and_selected_data_range() {
         columns[2].units = "uA".into();
     });
     settle(&mut h);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     select_block(&mut h, "4.5", "10.5");
     menu_path(&mut h, &["Plot", "Multi-Panel", "Multiple Panels by Label..."]);
     click(&mut h, "Group Identifier");

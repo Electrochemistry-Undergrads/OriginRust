@@ -6,7 +6,7 @@
 use crate::analysis::AnalysisError;
 use crate::column::Column;
 use crate::graph::Plot;
-use crate::ids::WindowId;
+use crate::ids::{ColumnId, WindowId};
 use crate::project::Project;
 use crate::worksheet::Worksheet;
 use serde::{Deserialize, Serialize};
@@ -78,6 +78,23 @@ impl Project {
             }
         }
         filters
+    }
+
+    /// The numbers of a Y column that a plot of it shows (before any row range of the plot): rows passing the
+    /// sheet's active filter, and not masked while Hide Masked Points is on. Empty for a column without numbers.
+    pub fn shown_values(&self, y: ColumnId) -> Vec<f64> {
+        let Some(values) = self.numeric(y) else { return Vec::new() };
+        let filter = self
+            .locate(y)
+            .and_then(|(_, s, _)| s.filter.as_ref())
+            .filter(|f| f.enabled && f.keep.iter().any(|keep| !keep));
+        let mask = self.column(y).and_then(|c| c.active_mask()).filter(|_| self.hide_masked);
+        values
+            .iter()
+            .enumerate()
+            .filter(|(r, _)| filter.is_none_or(|f| f.passes(*r)) && !mask.is_some_and(|m| m.contains(r)))
+            .map(|(_, v)| *v)
+            .collect()
     }
 
     /// Sets the filter of a sheet to a condition and applies it. Returns the number of rows that

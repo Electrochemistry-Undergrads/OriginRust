@@ -1,6 +1,6 @@
 # T56: Save Template As and user graph templates
 
-**Status:** claimed 2026-11-15 (branch `user-templates`, Claude macOS "mac-templates"). Brief written from parity
+**Status:** open. Started 2026-11-15 by Claude macOS "mac-templates" and stopped at the owner's request mid-build: remote branch `user-templates` (`449ef7b`, based on `96adffa`) holds an unverified start of the core and io parts (`crates/core/src/user_template.rs`, `crates/io/src/user_templates.rs`, tests not yet run); no app or CLI work. Continue from it (run fmt/clippy/tests first) or restart; the claim is released. Brief written from parity
 row "Save Window As, Save Template As, analysis template" (Save Template As still grey after T54), T18's
 "Templates (save/load)" row and the owner's wish that figures keep their own style (HANDOFF "Needs from the
 owner" 2).

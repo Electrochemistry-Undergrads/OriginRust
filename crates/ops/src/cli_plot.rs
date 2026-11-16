@@ -51,6 +51,9 @@ pub fn style_spec(s: &StyleArgs) -> Style {
         sunburst_order: s.sunburst_order.clone(),
         label: s.label.clone(),
         draw: s.draw.clone(),
+        slope: s.slope.clone(),
+        vline: s.vline.clone(),
+        hline: s.hline.clone(),
     }
 }
 

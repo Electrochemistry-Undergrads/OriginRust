@@ -6,13 +6,13 @@
 //! edit) and a Manual link is marked pending until [`Project::recalculate_analysis`] is called. The
 //! results are replaced in place, so graphs and formulas that refer to the result columns keep working.
 //! Smooth, Integrate, Find Peaks, Average Multiple Curves, Intersect, Polygon Area, the data
-//! manipulation tools (T23) and Simulate Curve (T47, which follows the column its X values come from)
-//! can be linked; the other tools run once.
+//! manipulation tools (T23), Simulate Curve (T47, which follows the column its X values come from) and
+//! the IIR and FIR filters (T55) can be linked; the other tools run once.
 
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
-use sheaf_calc::{PeakOptions, ReduceOptions, SmoothOptions};
+use sheaf_calc::{FirSpec, IirSpec, PeakOptions, ReduceOptions, SmoothOptions};
 
 use crate::analysis::{
     AnalysisError, AverageSpec, IntegrateSpec, IntersectSpec, MedianFilterSpec, OutputTarget, ReduceDupSpec, Report,
@@ -36,6 +36,8 @@ pub enum LinkTool {
     Translate(TranslateSpec),
     MedianFilter(MedianFilterSpec),
     SimulateCurve(SimulateCurveSpec),
+    IirFilter(IirSpec),
+    FirFilter(FirSpec),
 }
 
 impl LinkTool {
@@ -54,6 +56,8 @@ impl LinkTool {
             Tool::MedianFilter(s) => Some(LinkTool::MedianFilter(*s)),
             // The graph of the first run stays; a repeated run does not draw another.
             Tool::SimulateCurve(s) => Some(LinkTool::SimulateCurve(SimulateCurveSpec { plot: false, ..s.clone() })),
+            Tool::IirFilter(s) => Some(LinkTool::IirFilter(*s)),
+            Tool::FirFilter(s) => Some(LinkTool::FirFilter(*s)),
             _ => None,
         }
     }
@@ -72,6 +76,8 @@ impl LinkTool {
             LinkTool::Translate(s) => Tool::Translate(*s),
             LinkTool::MedianFilter(s) => Tool::MedianFilter(*s),
             LinkTool::SimulateCurve(s) => Tool::SimulateCurve(s.clone()),
+            LinkTool::IirFilter(s) => Tool::IirFilter(*s),
+            LinkTool::FirFilter(s) => Tool::FirFilter(*s),
         }
     }
 }
@@ -261,6 +267,7 @@ impl Project {
             if sheet.columns.len() != had {
                 sheet.remap_cond_format_columns(&|c| (!stale.contains(&c)).then_some(c));
                 sheet.remap_note_columns(&|c| (!stale.contains(&c)).then_some(c));
+                sheet.remap_format_columns(&|c| (!stale.contains(&c)).then_some(c));
             }
             // A sheet that held only old results is gone; the indices in the report move with it.
             keep.push(sheet.columns.len() == had || !sheet.columns.is_empty() || i == report.sheet);
@@ -546,6 +553,27 @@ mod tests {
         assert_eq!(s.notes.len(), 1);
         assert_eq!(s.cond_formats.len(), 1);
         let _ = (keep, second);
+    }
+
+    #[test]
+    fn retiring_result_columns_drops_their_cell_formats() {
+        use crate::cellformat::{CellFormat, FormatTarget};
+        let (mut p, _x, y, book) = setup();
+        let y2 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 20])).unwrap();
+        let two = Request { columns: vec![y, y2], ..smooth_request(y) };
+        let (_, first) = p.analyze_linked_into(None, &two, &OutputTarget::NextToInput, RecalcMode::Manual).unwrap();
+        let (keep, gone) = (first[0], first[1]);
+        let bold = CellFormat { bold: Some(true), ..Default::default() };
+        let s = p.workbook_mut(book).unwrap().sheet_mut();
+        s.apply_cell_format(FormatTarget::whole_columns(vec![y, keep, gone]), bold);
+        let _ = p
+            .analyze_linked_into(Some(&first), &smooth_request(y), &OutputTarget::NextToInput, RecalcMode::Manual)
+            .unwrap();
+        let s = p.workbook(book).unwrap().sheet();
+        assert!(
+            s.cell_formats.iter().all(|r| !r.target.columns().contains(&gone) && !r.target.columns().contains(&keep))
+        );
+        assert!(s.cell_format_at(y, 0).bold, "the input column keeps its format");
     }
 
     #[test]

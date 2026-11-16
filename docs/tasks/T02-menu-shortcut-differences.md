@@ -1,6 +1,6 @@
 # T02: Menu labels, shortcuts and context menus that differ from Origin
 
-**Status:** done, merged (`bbdb60a`) (items 1-7, 9, 10 done; 8 kept; see Result); Go To and Find/Replace follow-ups measured and updated (2026-11-14/15), gui-look section 5. Wider search scopes and advanced Column Browser controls remain. **Size:** M. **Branch:** `menu-diffs`. **Model:** Sonnet.
+**Status:** done, merged (`bbdb60a`) (items 1-7, 9, 10 done; 8 kept; see Result); Go To and Find/Replace follow-ups measured and updated (2026-11-14/15), gui-look section 5. Wider search scopes and saved Column Browser preferences remain. **Size:** M. **Branch:** `menu-diffs`. **Model:** Sonnet.
 **Detail:** audit section A, bullet "Different" (`docs/audit/origin-differences-2026-11-12.md`).
 **Spec:** `docs/spec/gui-look.md` sections 1 and 3, `docs/spec/ui-command-map.md`.
 
@@ -124,5 +124,14 @@ regressions and a folder-scope fixture cover it. A second follow-up adds top-tab
 Shift and keyboard selection plus Add as One Block, enabled only for consecutive columns in one
 sheet. Nine valid native cases establish individual versus grouped Add, disabled noncontiguous/
 mixed-book blocks, whole-block Remove and the original-sheet last-column navigation rule.
-Five more UI regressions cover those workflows and grouped reference transfer. Exclude,
-lower row-range editing and saved preferences remain (gui-look section 5).
+Five more UI regressions cover those workflows and grouped reference transfer. The lower row-range
+follow-up adds the Range child with Entire Column(s), From and To, per-added-range row subsets,
+reopening/reset and unchanged original-sheet navigation. Eighteen valid Origin cases establish
+sheet bounds, leading-integer conversion, literal reversed/single-row intervals, refusal and
+block endpoint references. Ten UI regressions cover these workflows and unchanged data/history.
+The Exclude follow-up adds temporary upper-list exclusions, nearest-row selection with original
+column ordinals, and scope/reopen reset without removing lower ranges. Ten valid isolated Origin
+cases establish duplicate-name identity, both multi-selection orders, final/all-column removal,
+already-added-range retention and disabled block Add across a hidden column gap. Seven UI
+regressions cover these rules and unchanged data/history. Saved preferences remain (gui-look
+section 5).

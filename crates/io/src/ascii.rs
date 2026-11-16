@@ -166,8 +166,15 @@ pub struct AsciiOptions {
     pub short_name_line: usize,
     /// Name the sheet after the file (without its extension). When false it is `Sheet1`.
     pub rename_sheet: bool,
-    /// Give the book the file name as long name. When false the long name is empty.
+    /// Give the book the file name (with its extension, as Origin) as long name. When false the long
+    /// name is empty.
     pub rename_book: bool,
+    /// The part of the file name (without extension) the sheet is named after: 1-based character
+    /// positions `(from, to)`, both included, negative counting from the end, `to` 0 meaning the end
+    /// (Origin's Trim Filename From/To, [`trim_file_name`]). `(1, 0)` keeps the whole name.
+    pub sheet_name_range: (i32, i32),
+    /// The same for the book long name, taken from the file name with its extension.
+    pub book_name_range: (i32, i32),
     /// Numbers use `,` as decimal separator; `,` then cannot be the delimiter.
     pub decimal_comma: bool,
     /// The digit-grouping character. It is removed from numbers (`1,234.5` is 1234.5); dot and
@@ -211,6 +218,8 @@ impl Default for AsciiOptions {
             short_name_line: 0,
             rename_sheet: true,
             rename_book: true,
+            sheet_name_range: (1, 0),
+            book_name_range: (1, 0),
             decimal_comma: false,
             thousands: Thousands::Auto,
             param_lines: Vec::new(),
@@ -965,10 +974,44 @@ pub fn preview(text: &str, opts: &AsciiOptions, max_rows: usize) -> Vec<Vec<Stri
 
 // ----- parsing -------------------------------------------------------------------
 
+/// The part `range = (from, to)` of a file name, by Origin's Trim Filename rule (measured in Origin
+/// 2016, import-ascii.md "File name trimming"): 1-based character positions, both included; a negative
+/// number counts from the end (`len + n`); a `from` of 0 or before the start is the first character;
+/// a `to` of 0, past the end or before `from` is the last character. Empty for a `from` past the end.
+pub fn trim_file_name(name: &str, range: (i32, i32)) -> String {
+    let chars: Vec<char> = name.chars().collect();
+    let len = chars.len() as i64;
+    let pos = |n: i32| -> i64 { if n < 0 { len + i64::from(n) } else { i64::from(n) } };
+    let from = pos(range.0).max(1);
+    let mut to = if range.1 == 0 { len } else { pos(range.1) };
+    if to > len || to < from {
+        to = len;
+    }
+    if from > len {
+        return String::new();
+    }
+    chars[(from - 1) as usize..to as usize].iter().collect()
+}
+
+/// [`parse_ascii`] for a file named `file_name` (with its extension): the sheet is named after the
+/// name without extension and the book long name is the name with it, as Origin names them, each cut
+/// by its range of the options.
+pub fn parse_ascii_named(text: &str, file_name: &str, opts: &AsciiOptions) -> Result<AsciiImport, IoError> {
+    let stem = std::path::Path::new(file_name)
+        .file_stem()
+        .map_or_else(|| file_name.to_string(), |s| s.to_string_lossy().into_owned());
+    let mut r = parse_ascii(text, &stem, opts)?;
+    if opts.rename_book {
+        r.workbook.long_name = trim_file_name(file_name, opts.book_name_range);
+    }
+    Ok(r)
+}
+
 /// Reads delimited text into a workbook with one sheet.
 ///
 /// Rows that consist only of empty fields are skipped. Quoted fields may span
 /// lines; line numbers in the options then count records, not physical lines.
+/// `file_stem` is the name without extension; [`parse_ascii_named`] takes the whole file name.
 pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<AsciiImport, IoError> {
     for (name, selection) in [("row", &opts.rows), ("column", &opts.columns)] {
         if !selection.valid() {
@@ -1053,10 +1096,12 @@ fn parse_blocks(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Asci
     let mut warnings = Vec::new();
     for (i, chunk) in chunks.iter().enumerate() {
         let mut part = parse_block(chunk, file_stem, &fixed)?;
+        let base = trim_file_name(file_stem, opts.sheet_name_range);
         let name = match (opts.rename_sheet, i) {
             (false, _) => format!("Sheet{}", i + 1),
-            (true, 0) => sheet_name(file_stem),
-            (true, _) => sheet_name(&format!("{file_stem}_{}", i + 1)),
+            (true, 0) => sheet_name(&base),
+            (true, _) if base.is_empty() => format!("Sheet{}", i + 1),
+            (true, _) => sheet_name(&format!("{base}_{}", i + 1)),
         };
         for w in part.warnings.drain(..) {
             warnings.push(format!("block {}: {w}", i + 1));
@@ -1087,7 +1132,11 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
             detail: "no source columns match the import selection".into(),
         });
     }
-    let sheet_name = if opts.rename_sheet { sheet_name(file_stem) } else { "Sheet1".to_string() };
+    let sheet_name = if opts.rename_sheet {
+        sheet_name(&trim_file_name(file_stem, opts.sheet_name_range))
+    } else {
+        "Sheet1".to_string()
+    };
     let (sheet, warnings) = assemble(&a, opts, sheet_name, |j, short, a, warnings| {
         let cells: Vec<&str> = a.rows.iter().map(|r| r.get(j).map_or("", String::as_str)).collect();
         if opts.dates == DateImport::Detect
@@ -1124,7 +1173,8 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
     });
     let mut workbook = Workbook::new(WindowId(0), "Book1");
     if opts.rename_book {
-        workbook.long_name = file_stem.to_string();
+        // without an extension here; parse_ascii_named puts the whole file name in
+        workbook.long_name = trim_file_name(file_stem, opts.book_name_range);
     }
     workbook.sheets = vec![sheet];
     Ok(AsciiImport { workbook, detected: a.detected, warnings })
@@ -1364,6 +1414,36 @@ mod tests {
 
     fn col(imp: &AsciiImport, j: usize) -> &Column {
         &imp.workbook.sheets[0].columns[j]
+    }
+
+    #[test]
+    fn file_names_are_trimmed_by_origins_rule() {
+        // Origin 2016 on abcdefgh.csv: the sheet from "abcdefgh", the book long name from "abcdefgh.csv"
+        let (stem, full) = ("abcdefgh", "abcdefgh.csv");
+        let t = trim_file_name;
+        assert_eq!((t(stem, (1, 0)), t(full, (1, 0))), ("abcdefgh".into(), "abcdefgh.csv".into()));
+        assert_eq!((t(stem, (2, 5)), t(full, (2, 5))), ("bcde".into(), "bcde".into()));
+        assert_eq!((t(stem, (1, -4)), t(full, (1, -4))), ("abcd".into(), "abcdefgh".into()));
+        assert_eq!((t(stem, (-6, 0)), t(full, (-6, 0))), ("bcdefgh".into(), "fgh.csv".into()));
+        assert_eq!((t(stem, (-6, -4)), t(full, (-6, -4))), ("bcd".into(), "fgh".into()));
+        assert_eq!((t(stem, (3, 3)), t(full, (3, 3))), ("c".into(), "c".into()));
+        assert_eq!((t(stem, (5, 2)), t(full, (5, 2))), ("efgh".into(), "efgh.csv".into()));
+        assert_eq!((t(stem, (0, 0)), t(stem, (1, 20)), t(stem, (-20, 0))), (stem.into(), stem.into(), stem.into()));
+        assert_eq!((t(stem, (9, 0)), t(full, (9, 0))), (String::new(), ".csv".into()));
+    }
+
+    #[test]
+    fn a_named_import_keeps_the_extension_in_the_book_title_and_trims_by_the_ranges() {
+        let text = "x,y\n1,2\n3,4\n";
+        let plain = parse_ascii_named(text, "abcdefgh.csv", &AsciiOptions::default()).unwrap();
+        assert_eq!(plain.workbook.long_name, "abcdefgh.csv", "the extension stays, as in Origin");
+        assert_eq!(plain.workbook.sheets[0].name, "abcdefgh");
+        let opts = AsciiOptions { sheet_name_range: (2, 5), book_name_range: (1, -4), ..AsciiOptions::default() };
+        let cut = parse_ascii_named(text, "abcdefgh.csv", &opts).unwrap();
+        assert_eq!((cut.workbook.sheets[0].name.as_str(), cut.workbook.long_name.as_str()), ("bcde", "abcdefgh"));
+        // nothing left: the default sheet name
+        let empty = AsciiOptions { sheet_name_range: (9, 0), ..AsciiOptions::default() };
+        assert_eq!(parse_ascii_named(text, "abcdefgh.csv", &empty).unwrap().workbook.sheets[0].name, "Sheet1");
     }
 
     #[test]

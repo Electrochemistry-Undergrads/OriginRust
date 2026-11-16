@@ -26,6 +26,14 @@ pub enum Template {
     /// on the right (Origin's "Double-Y"). Selected columns alternate between the left and the
     /// right axis, and each Y axis is drawn in the color of its first curve.
     DoubleY,
+    /// Origin's "3Ys Y-YY": three layers, a left axis and two right ones (graphing spec 21.5).
+    Multi3YYy,
+    /// Origin's "3Ys Y-Y-Y": a left axis, a left axis in the middle of the plot and a right axis.
+    Multi3YYY,
+    /// Origin's "4Ys Y-YYY": a left axis and three right ones.
+    Multi4YYyy,
+    /// Origin's "4Ys YY-YY": two left axes and two right ones.
+    Multi4YyYy,
     /// Curves stacked above each other with a gap (Origin's "Stacked Lines by Y Offsets"): the
     /// line template with automatic offsets and a 10 % gap, no Y tick labels and no Y ticks, and
     /// a closed box, as in the owner's XRD figures.
@@ -60,6 +68,14 @@ pub enum Template {
     FillArea,
     /// Histogram (Origin's "Histogram"): the bin counts of each Y column as touching bars.
     Histogram,
+    /// Stacked Histograms (Origin's Plot > Statistics > Stacked Histograms): one histogram panel per Y column,
+    /// stacked vertically from the top in selection order, all on one X scale and one set of bins (graphing 13.16).
+    /// An empty graph of this template is one histogram layer; [`crate::Project::plot_columns`] builds the panels.
+    StackedHistograms,
+    /// Waterfall Y:Color Mapping: a waterfall whose curves are coloured along their points by Y, with a colour scale.
+    WaterfallY,
+    /// Waterfall Z:Color Mapping: a waterfall whose curves are coloured one by one by a Z value, with a colour scale.
+    WaterfallZ,
     /// Box chart (Origin's "Box Chart"): one box per Y column.
     BoxChart,
     /// Bubble plot (Origin's "Bubble"): open circles whose size follows the Z column.
@@ -86,6 +102,13 @@ pub enum Template {
     /// exchanged and vertical drop lines that go from each plot to the next data plot. Needs two
     /// or more Y columns ([`Project::plot_columns`] refuses fewer).
     Lollipop,
+    /// Origin's Plot > Symbol > Vertical Drop Line (template `DROPLINE`): the scatter template with a
+    /// vertical drop line from every point down to the bottom axis, in the plot's colour, 0.5 pt (measured,
+    /// graphing 18.12).
+    VerticalDropLine,
+    /// Origin's Plot > Column/Bar/Pie > Column + Label (template `ColumnLabel`): the column template with
+    /// each column's value written above it in Arial 22 (measured, graphing 18.12).
+    ColumnLabel,
     /// Scatter plot with a rug on the bottom and left axes (Origin's "Scatter + Rug", 2019b): one short
     /// line per point beside each axis, all plots overlapping in one strip (graphing spec 18.10).
     ScatterRug,
@@ -123,7 +146,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 45] = [
+    pub const ALL: [Template; 54] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -140,6 +163,9 @@ impl Template {
         Template::Stacked100Area,
         Template::FillArea,
         Template::Histogram,
+        Template::StackedHistograms,
+        Template::WaterfallY,
+        Template::WaterfallZ,
         Template::BoxChart,
         Template::Violin,
         Template::ViolinBox,
@@ -165,9 +191,15 @@ impl Template {
         Template::Ternary,
         Template::CyclicVoltammetry,
         Template::DoubleY,
+        Template::Multi3YYy,
+        Template::Multi3YYY,
+        Template::Multi4YYyy,
+        Template::Multi4YyYy,
         Template::StackedLines,
         Template::Waterfall,
         Template::Lollipop,
+        Template::VerticalDropLine,
+        Template::ColumnLabel,
         Template::ScatterRug,
     ];
 
@@ -179,6 +211,10 @@ impl Template {
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
+            Template::Multi3YYy => "3ys-y-yy",
+            Template::Multi3YYY => "3ys-y-y-y",
+            Template::Multi4YYyy => "4ys-y-yyy",
+            Template::Multi4YyYy => "4ys-yy-yy",
             Template::StackedLines => "stacked",
             Template::Waterfall => "waterfall",
             Template::Column => "column",
@@ -194,6 +230,9 @@ impl Template {
             Template::Stacked100Area => "stacked-area-100",
             Template::FillArea => "fill-area",
             Template::Histogram => "histogram",
+            Template::StackedHistograms => "stacked-histograms",
+            Template::WaterfallY => "waterfall-y",
+            Template::WaterfallZ => "waterfall-z",
             Template::BoxChart => "box",
             Template::Bubble => "bubble",
             Template::ColorMapped => "color-mapped",
@@ -206,6 +245,8 @@ impl Template {
             Template::Radar => "radar",
             Template::Ternary => "ternary",
             Template::Lollipop => "lollipop",
+            Template::VerticalDropLine => "vertical-drop-line",
+            Template::ColumnLabel => "column-label",
             Template::ScatterRug => "scatter-rug",
             Template::Violin => "violin",
             Template::ViolinBox => "violin-box",
@@ -229,6 +270,10 @@ impl Template {
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
+            Template::Multi3YYy => "3Ys Y-YY",
+            Template::Multi3YYY => "3Ys Y-Y-Y",
+            Template::Multi4YYyy => "4Ys Y-YYY",
+            Template::Multi4YyYy => "4Ys YY-YY",
             Template::StackedLines => "Stacked lines (Y offsets)",
             Template::Waterfall => "Waterfall",
             Template::Column => "Column",
@@ -244,6 +289,9 @@ impl Template {
             Template::Stacked100Area => "100% Stacked Area",
             Template::FillArea => "Fill Area",
             Template::Histogram => "Histogram",
+            Template::StackedHistograms => "Stacked Histograms",
+            Template::WaterfallY => "Waterfall Y:Color Mapping",
+            Template::WaterfallZ => "Waterfall Z:Color Mapping",
             Template::BoxChart => "Box Chart",
             Template::Bubble => "Bubble",
             Template::ColorMapped => "Color Mapped",
@@ -256,6 +304,8 @@ impl Template {
             Template::Radar => "Radar",
             Template::Ternary => "Ternary",
             Template::Lollipop => "Lollipop Plot",
+            Template::VerticalDropLine => "Vertical Drop Line",
+            Template::ColumnLabel => "Column + Label",
             Template::ScatterRug => "Scatter + Rug",
             Template::Violin => "Violin Plot",
             Template::ViolinBox => "Violin with Box",
@@ -269,6 +319,18 @@ impl Template {
             Template::ParallelIndex => "Parallel Index",
             Template::Treemap => "Treemap",
             Template::Sunburst => "Sunburst Plot",
+        }
+    }
+
+    /// The template of Plot > Multi-Y with more than two Y axes, if this is one.
+    pub fn multi_y(&self) -> Option<crate::multi_y::MultiYKind> {
+        use crate::multi_y::MultiYKind;
+        match self {
+            Template::Multi3YYy => Some(MultiYKind::ThreeYYy),
+            Template::Multi3YYY => Some(MultiYKind::ThreeYYY),
+            Template::Multi4YYyy => Some(MultiYKind::FourYYyy),
+            Template::Multi4YyYy => Some(MultiYKind::FourYyYy),
+            _ => None,
         }
     }
 
@@ -303,8 +365,21 @@ impl Template {
             Template::LineSymbol => general(id, name, PlotKind::LineSymbol),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
+            Template::Multi3YYy | Template::Multi3YYY | Template::Multi4YYyy | Template::Multi4YyYy => {
+                self.multi_y().expect("multi-Y template").plan().graph(Template::Line, id, name)
+            }
             Template::StackedLines => stacked_lines(id, name),
             Template::Waterfall => waterfall(id, name),
+            Template::WaterfallY | Template::WaterfallZ => {
+                // The colour scale beside the layer names the colours: no legend.
+                let mut g = waterfall(id, name);
+                for l in &mut g.layers {
+                    l.waterfall_color =
+                        if *self == Template::WaterfallY { WaterfallColor::Y } else { WaterfallColor::Z };
+                    l.legend.visible = false;
+                }
+                g
+            }
             Template::Column => from_red(column(id, name, PlotKind::Column)),
             Template::StackedColumn => themed(column(id, name, PlotKind::StackedColumn)),
             Template::Stacked100Column => themed(column(id, name, PlotKind::Stacked100Column)),
@@ -317,7 +392,7 @@ impl Template {
             Template::StackedArea => themed(general(id, name, PlotKind::StackedArea)),
             Template::Stacked100Area => themed(general(id, name, PlotKind::Stacked100Area)),
             Template::FillArea => themed(general(id, name, PlotKind::Area)),
-            Template::Histogram => from_red(general(id, name, PlotKind::Histogram)),
+            Template::Histogram | Template::StackedHistograms => from_red(general(id, name, PlotKind::Histogram)),
             Template::BoxChart => from_red(general(id, name, PlotKind::Box)),
             Template::Bubble => bubble(id, name, false, true),
             Template::ColorMapped => bubble(id, name, true, false),
@@ -330,6 +405,8 @@ impl Template {
             Template::Radar => radar(id, name),
             Template::Ternary => ternary(id, name),
             Template::Lollipop => general(id, name, PlotKind::Scatter),
+            Template::VerticalDropLine => general(id, name, PlotKind::Scatter),
+            Template::ColumnLabel => from_red(column(id, name, PlotKind::Column)),
             Template::ScatterRug => scatter_rug(id, name),
             Template::Violin => from_red(general(id, name, PlotKind::Violin)),
             Template::ViolinBox => from_red(general(id, name, PlotKind::ViolinBox)),
@@ -520,6 +597,7 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         major_grid: None,
         minor_grid: None,
         side: AxisSide::Normal,
+        offset_pct: 0.0,
         color_follows_plot: false,
         title_color_follows_plot: false,
         tick_label_source: TickLabelSource::Auto,
@@ -579,6 +657,10 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             },
             labels: Vec::new(),
             shapes: Vec::new(),
+            slopes: Vec::new(),
+            straight_lines: Vec::new(),
+            brackets: Vec::new(),
+            comparison: None,
             palette,
             default_line: LineStyle::solid(Color::BLACK, 0.5),
             default_symbol: SymbolStyle {
@@ -592,6 +674,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             default_kind: kind,
             link: None,
             stack: Stack::None,
+            waterfall_color: WaterfallColor::None,
             plot_offsets: Vec::new(),
             bars: BarSpacing::default(),
             coords: Coords::Cartesian,
@@ -842,6 +925,10 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
     l.plots.clear();
     l.labels.clear();
     l.shapes.clear();
+    l.slopes.clear();
+    l.straight_lines.clear();
+    l.brackets.clear();
+    l.comparison = None;
     l.plot_offsets.clear();
     // The right axis has curves of its own: they are not stacked, and its values are shown even
     // when the stacked parent hides its own (offset) Y values.
@@ -919,7 +1006,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 45);
+        assert_eq!(Template::ALL.len(), 54);
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
         assert_eq!(Template::from_name("violin"), Some(Template::Violin));
         assert_eq!(Template::from_name("violin-box"), Some(Template::ViolinBox));
@@ -1026,6 +1113,13 @@ mod tests {
         assert_eq!(left.palette.colors[0], Color::rgb(0, 0, 0));
         assert_eq!(right.palette.colors[0], Color::rgb(0, 255, 0));
         assert_eq!(left.x_axis.major_tick, TickDirection::Out);
+    }
+
+    #[test]
+    fn right_y_layer_has_no_slope_annotations() {
+        let mut g = Template::Scatter.new_graph(WindowId(1), "g");
+        g.layers[0].slopes.push(crate::graph::SlopeAnnotation::new(crate::ColumnId(1), 0, 1));
+        assert!(right_y_layer(&g.layers[0], 0).slopes.is_empty());
     }
 
     #[test]
@@ -1138,6 +1232,36 @@ mod tests {
         }
         assert_eq!(p.plot_label(&l.plots[0]), p.column(y1).unwrap().display_name());
         assert_eq!(Template::Lollipop.label(), "Lollipop Plot");
+    }
+
+    /// Origin 2016's DROPLINE and ColumnLabel templates (graphing 18.12).
+    #[test]
+    fn vertical_drop_line_and_column_label_templates() {
+        use crate::{ColumnData, Designation, Project};
+        let mut p = Project::new();
+        let book = p.add_workbook("T");
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        let y1 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 5.0, 2.0])).unwrap();
+        let y2 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 1.0, 4.0])).unwrap();
+        let g = p.plot_columns(Template::VerticalDropLine, &[y1, y2]).unwrap();
+        let layer = &p.graph(g).unwrap().layers[0];
+        assert!(layer.plots.iter().all(|q| q.kind == PlotKind::Scatter && q.decor.drop.vertical.on));
+        let drop = &layer.plots[0].decor.drop.vertical;
+        assert_eq!(
+            (drop.width_pt, drop.color, drop.target),
+            (0.5, None, DropTarget::Axis),
+            "0.5 pt in the plot's colour"
+        );
+        assert!(!layer.plots[0].decor.drop.horizontal.on);
+        assert_ne!(layer.plots[0].symbol.shape, layer.plots[1].symbol.shape, "square, then circle");
+        let g = p.plot_columns(Template::ColumnLabel, &[y1, y2]).unwrap();
+        let layer = &p.graph(g).unwrap().layers[0];
+        assert!(layer.plots.iter().all(|q| q.kind == PlotKind::Column && q.decor.labels.enable));
+        assert_eq!(layer.plots[0].decor.labels.position, LabelPosition::Above);
+        assert_eq!(layer.plots[0].decor.labels.font.size_pt, 22.0);
+        assert_eq!(Template::from_name("vertical-drop-line"), Some(Template::VerticalDropLine));
+        assert_eq!(Template::from_name("column-label"), Some(Template::ColumnLabel));
+        assert_eq!(Template::ColumnLabel.label(), "Column + Label");
     }
 
     #[test]

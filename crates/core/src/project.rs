@@ -4,6 +4,7 @@
 use crate::column::{Column, ColumnData, Designation};
 use crate::graph::{ErrorStyle, Graph, LegendScope, Plot};
 use crate::ids::{ColumnId, WindowId};
+use crate::multi_y::{MultiYError, MultiYKind, MultiYOptions, MultiYPlan};
 use crate::panels::{PanelError, PanelLayout, PanelPage, panel_layers};
 use crate::template::{Template, right_y_layer};
 use crate::worksheet::{Workbook, Worksheet};
@@ -84,6 +85,11 @@ pub struct Project {
     /// gaps like missing values, instead of drawing them in the mask colour. Analysis is unchanged.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hide_masked: bool,
+    /// The view mode of graph windows that are not in Page View (View > Print View, Window View,
+    /// Draft View); a graph that is not listed is in Page View. View state: it is saved with the
+    /// project but setting it is never an undo step (see [`Project::set_view_mode`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub view_modes: Vec<(WindowId, ViewMode)>,
     /// The next unused identifier (shared by windows and columns).
     next_id: u64,
 }
@@ -182,6 +188,46 @@ pub enum WindowState {
     Hidden,
 }
 
+/// How a graph window shows its page (View > Print View, Page View, Window View, Draft View; measured
+/// in Origin 2016, graphing spec 22). The numbers are LabTalk's `page.viewmode`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewMode {
+    /// 1: the page at its own size (looked the same as Page View).
+    Print,
+    /// 2: the page at its own size on a grey ground; the default.
+    #[default]
+    Page,
+    /// 3: the page stretched over the whole window.
+    Window,
+    /// 4: as Window View, with plain text.
+    Draft,
+}
+
+impl ViewMode {
+    pub const ALL: [ViewMode; 4] = [ViewMode::Print, ViewMode::Page, ViewMode::Window, ViewMode::Draft];
+
+    /// LabTalk's `page.viewmode`.
+    pub fn number(self) -> u8 {
+        match self {
+            ViewMode::Print => 1,
+            ViewMode::Page => 2,
+            ViewMode::Window => 3,
+            ViewMode::Draft => 4,
+        }
+    }
+
+    /// The mode of a `page.viewmode` value (other values are ignored by Origin).
+    pub fn from_number(n: u8) -> Option<ViewMode> {
+        ViewMode::ALL.into_iter().find(|m| m.number() == n)
+    }
+
+    /// Window and Draft View stretch the page over the whole window.
+    pub fn fills_window(self) -> bool {
+        matches!(self, ViewMode::Window | ViewMode::Draft)
+    }
+}
+
 impl Default for Project {
     fn default() -> Self {
         Self::new()
@@ -200,6 +246,8 @@ pub enum ProjectError {
     NotAGraph(String),
     #[error("there is no column with id {0:?}")]
     NoSuchColumn(ColumnId),
+    #[error("stacked histograms need at least one Y column that holds numbers")]
+    StackedHistogramsNeedNumbers,
     #[error("column '{0}' was not found")]
     NoSuchColumnName(String),
     #[error("the graph has no layer {0}")]
@@ -208,6 +256,10 @@ pub enum ProjectError {
     NoSuchPlot(usize),
     #[error("{0}")]
     Panels(#[from] PanelError),
+    #[error("{0}")]
+    MultiY(#[from] MultiYError),
+    #[error("the {0} template puts one Y column on each axis by itself; leave out --y2 and the left/right split")]
+    MultiYNoRightAxis(&'static str),
     #[error("a lollipop plot needs two or more Y columns (got {0}); select at least two Y columns")]
     LollipopNeedsTwoColumns(usize),
     #[error("a lollipop plot cannot have a right Y axis; use one Y axis or another template")]
@@ -242,6 +294,8 @@ pub enum ProjectError {
     SunburstNeedsValue,
     #[error("a sunburst plot cannot have a right Y axis; use one Y axis or another template")]
     SunburstNoRightAxis,
+    #[error("a stacked histograms graph cannot have a right Y axis; use one Y axis or another template")]
+    StackedHistogramsNoRightAxis,
 }
 
 impl Project {
@@ -293,7 +347,21 @@ impl Project {
             mask_color: default_mask_color(),
             masking_off: false,
             hide_masked: false,
+            view_modes: Vec::new(),
             next_id: 1,
+        }
+    }
+
+    /// The view mode of a graph window (Page View unless set).
+    pub fn view_mode(&self, graph: WindowId) -> ViewMode {
+        self.view_modes.iter().find(|(w, _)| *w == graph).map_or(ViewMode::Page, |(_, m)| *m)
+    }
+
+    /// Sets the view mode of a graph window; Page View, the default, is not stored.
+    pub fn set_view_mode(&mut self, graph: WindowId, mode: ViewMode) {
+        self.view_modes.retain(|(w, _)| *w != graph);
+        if mode != ViewMode::Page {
+            self.view_modes.push((graph, mode));
         }
     }
 
@@ -444,6 +512,7 @@ impl Project {
             }
             sheet.remap_cond_format_columns(&|c| renamed.get(&c).copied());
             sheet.remap_note_columns(&|c| renamed.get(&c).copied());
+            sheet.remap_format_columns(&|c| renamed.get(&c).copied());
         }
         self.windows.push(Window::Workbook(book));
         id
@@ -511,6 +580,7 @@ impl Project {
                         }
                         sheet.remap_cond_format_columns(&|id| Some(c(id)));
                         sheet.remap_note_columns(&|id| Some(c(id)));
+                        sheet.remap_format_columns(&|id| Some(c(id)));
                     }
                 }
                 Window::Graph(graph) => {
@@ -784,7 +854,7 @@ impl Project {
         };
         let ys: Vec<&Column> =
             ws.columns.iter().filter(|c| c.designation == Designation::Y && c.data.is_numeric()).collect();
-        if template == Template::DoubleY {
+        if template == Template::DoubleY || template.multi_y().is_some() {
             return ys.iter().map(|c| c.id).collect();
         }
         if template == Template::Ternary {
@@ -829,6 +899,9 @@ impl Project {
     /// Origin's Double-Y command: the 1st, 3rd, 5th ... go on the left axis and
     /// the 2nd, 4th ... on the right axis.
     pub fn plot_columns(&mut self, template: Template, ys: &[ColumnId]) -> Result<WindowId, ProjectError> {
+        if let Some(kind) = template.multi_y() {
+            return self.plot_multi_y_template(kind, ys);
+        }
         if template == Template::DoubleY {
             let left: Vec<ColumnId> = ys.iter().step_by(2).copied().collect();
             let right: Vec<ColumnId> = ys.iter().skip(1).step_by(2).copied().collect();
@@ -836,6 +909,9 @@ impl Project {
         }
         for y in ys {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
+        }
+        if template == Template::StackedHistograms {
+            return self.plot_stacked_histograms(ys);
         }
         if template == Template::Lollipop && ys.len() < 2 {
             return Err(ProjectError::LollipopNeedsTwoColumns(ys.len()));
@@ -884,7 +960,7 @@ impl Project {
         }
         // One hexbin plot per layer: the colour scale and the hexagons of a second plot would cover the first's.
         let ys = if template == Template::Hexbin { &ys[..ys.len().min(1)] } else { ys };
-        let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
+        let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(template);
         if matches!(template, Template::FloatingColumn | Template::FloatingBar) {
             // Origin chains the columns: each plot is a bar from the column before it to its own
@@ -933,6 +1009,28 @@ impl Project {
         if template == Template::Lollipop {
             self.make_lollipop(graph, ys);
         }
+        // Origin's DROPLINE and ColumnLabel templates (graphing 18.12): the scatter with vertical drop lines,
+        // the column plot with its values written above.
+        if matches!(template, Template::VerticalDropLine | Template::ColumnLabel)
+            && let Some(g) = self.graph_mut(graph)
+        {
+            if template == Template::VerticalDropLine {
+                // DROPLINE steps the symbol shape through the group (square, circle, ...), the plain
+                // scatter does not (both measured).
+                for l in &mut g.layers {
+                    l.group_style.symbol_type = crate::graph::Increment::ByOne;
+                    l.apply_group_increments();
+                }
+            }
+            for p in g.layers.iter_mut().flat_map(|l| l.plots.iter_mut()) {
+                if template == Template::VerticalDropLine {
+                    p.decor.drop.vertical.on = true;
+                } else {
+                    p.decor.labels.enable = true;
+                    p.decor.labels.position = crate::graph::LabelPosition::Above;
+                }
+            }
+        }
         if let Some(g) = self.graph_mut(graph) {
             // A new graph has no colors chosen by the user, so spread the palette over all plots.
             if let Some(l) = g.layers.first_mut() {
@@ -970,7 +1068,7 @@ impl Project {
         if cats.is_empty() {
             return Err(ProjectError::TreemapNeedsCategory);
         }
-        let long_name = self.locate(value).map(|(b, _, _)| b.long_name.clone());
+        let long_name = self.locate(value).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(Template::Treemap);
         self.add_plot(graph, 0, value)?;
         if let Some(g) = self.graph_mut(graph) {
@@ -1005,7 +1103,7 @@ impl Project {
         if cats.is_empty() {
             return Err(ProjectError::SunburstNeedsCategory);
         }
-        let long_name = self.locate(value).map(|(b, _, _)| b.long_name.clone());
+        let long_name = self.locate(value).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(Template::Sunburst);
         self.add_plot(graph, 0, value)?;
         if let Some(g) = self.graph_mut(graph) {
@@ -1053,7 +1151,7 @@ impl Project {
             Template::Parallel | Template::ParallelIndex => {}
             _ => return self.plot_columns(template, axes),
         }
-        let long_name = axes.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
+        let long_name = axes.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(template);
         for y in axes {
             self.add_plot(graph, 0, *y)?;
@@ -1107,6 +1205,9 @@ impl Project {
         left: &[ColumnId],
         right: &[ColumnId],
     ) -> Result<WindowId, ProjectError> {
+        if template.multi_y().is_some() {
+            return Err(ProjectError::MultiYNoRightAxis(template.name()));
+        }
         if template == Template::Lollipop {
             return Err(ProjectError::LollipopNoRightAxis);
         }
@@ -1128,11 +1229,14 @@ impl Project {
         if template == Template::Sunburst {
             return Err(ProjectError::SunburstNoRightAxis);
         }
+        if template == Template::StackedHistograms {
+            return Err(ProjectError::StackedHistogramsNoRightAxis);
+        }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
         }
         let first = left.first().or(right.first());
-        let long_name = first.and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
+        let long_name = first.and_then(|y| self.locate(*y)).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(template);
         let right_layer = self.add_right_y_layer(graph, 0)?;
         for y in left {
@@ -1150,6 +1254,56 @@ impl Project {
             }
         }
         Ok(graph)
+    }
+
+    /// Creates one of the 3Ys / 4Ys graphs (graphing spec 21.5): Y column *i* (from 0) goes into layer
+    /// *i* mod the number of layers, so that with fewer columns than layers the last layers stay empty,
+    /// as in Origin. At least one column is needed.
+    pub fn plot_multi_y_template(&mut self, kind: MultiYKind, ys: &[ColumnId]) -> Result<WindowId, ProjectError> {
+        if ys.is_empty() {
+            return Err(MultiYError::NoColumns.into());
+        }
+        let n = kind.layers();
+        let assignment: Vec<usize> = (0..ys.len()).map(|i| i % n).collect();
+        self.plot_multi_y_plan(&kind.plan(), Template::Line, ys, &assignment)
+    }
+
+    /// Creates a graph from Plot > Multi-Y > Multiple Y Axes... : the columns in order fill the layers with
+    /// the numbers of plots of `options` (one each when none are given).
+    pub fn plot_multi_y(&mut self, options: &MultiYOptions, ys: &[ColumnId]) -> Result<WindowId, ProjectError> {
+        let per_layer = options.plots_per_layer(ys.len())?;
+        let plan = options.plan(per_layer.len())?;
+        let assignment: Vec<usize> =
+            per_layer.iter().enumerate().flat_map(|(l, &k)| std::iter::repeat_n(l, k)).collect();
+        self.plot_multi_y_plan(&plan, options.plot_type.template(), ys, &assignment)
+    }
+
+    fn plot_multi_y_plan(
+        &mut self,
+        plan: &MultiYPlan,
+        base: Template,
+        ys: &[ColumnId],
+        assignment: &[usize],
+    ) -> Result<WindowId, ProjectError> {
+        for y in ys {
+            self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
+        }
+        let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
+        let id = WindowId(self.fresh_id());
+        let name = self.unique_name("Graph");
+        self.windows.push(Window::Graph(plan.graph(base, id, &name)));
+        for (y, &layer) in ys.iter().zip(assignment) {
+            self.add_plot(id, layer, *y)?;
+        }
+        if let Some(g) = self.graph_mut(id) {
+            for l in &mut g.layers {
+                l.apply_palette();
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(id)
     }
 
     /// Gives layer `parent` of a graph a right Y axis and returns the index of the layer that
@@ -1193,7 +1347,7 @@ impl Project {
         let base = g.layers[0].clone();
         let count = groups.len().min(cells);
         let first = groups.iter().flatten().next();
-        let long_name = first.and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
+        let long_name = first.and_then(|y| self.locate(*y)).map(|(b, _, _)| b.title_for_graph());
         let (w, h) = (g.page.width_pt, g.page.height_pt);
         match layout.page {
             PanelPage::Keep => {}
@@ -1223,6 +1377,46 @@ impl Project {
             }
             if let Some(name) = long_name {
                 g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
+    /// Stacked Histograms (graphing spec 13.16): one histogram panel for each Y column that holds numbers, from the
+    /// top in the order of `ys`, linked to share one X scale, and drawn with the same bins in every panel: the
+    /// bins the usual rule gives for all the values together (Sheaf's choice, not measured in Origin). Each
+    /// panel has its own count axis. Columns without numbers are left out; with none left it is an error.
+    pub fn plot_stacked_histograms(&mut self, ys: &[ColumnId]) -> Result<WindowId, ProjectError> {
+        use crate::graph::HistogramStyle;
+        use crate::panels::{PanelLayout, PanelOrder};
+        let columns: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_some()).collect();
+        // The bins cover the values each panel's histogram uses: the rows that show (passing the sheet's filter,
+        // and not masked while Hide Masked Points is on).
+        let all: Vec<f64> = columns.iter().flat_map(|y| self.shown_values(*y)).filter(|v| v.is_finite()).collect();
+        let opts = sheaf_calc::freq::FreqOptions {
+            min: None,
+            max: None,
+            size: sheaf_calc::freq::BinSize::Auto,
+            below: false,
+            above: false,
+        };
+        let freq = sheaf_calc::freq::freq_counts(&all, &opts).ok_or(ProjectError::StackedHistogramsNeedNumbers)?;
+        let end = freq.rows.last().map_or(freq.bin_start + freq.bin_size, |r| r.end);
+        let style = HistogramStyle { bin_size: Some(freq.bin_size), begin: Some(freq.bin_start), end: Some(end) };
+        let groups: Vec<Vec<ColumnId>> = columns.iter().map(|y| vec![*y]).collect();
+        let mut layout = PanelLayout::stack(groups.len());
+        layout.order = PanelOrder::TopDown;
+        let graph = self.plot_panels(Template::StackedHistograms, &groups, &layout)?;
+        if let Some(g) = self.graph_mut(graph) {
+            for (k, layer) in g.layers.iter_mut().enumerate() {
+                if !layer.palette.colors.is_empty() {
+                    let n = layer.palette.colors.len();
+                    layer.palette.colors.rotate_left(k % n);
+                    layer.apply_palette();
+                }
+                for plot in &mut layer.plots {
+                    plot.hist = style;
+                }
             }
         }
         Ok(graph)
@@ -1291,6 +1485,12 @@ impl Graph {
             let settings = g.layers[from].plot_offsets.remove(i);
             *g.layers[to].plot_offset_mut(column) = settings;
         }
+        // Its slope annotations go with it, unless another plot left behind is also theirs.
+        let (stay, go): (Vec<_>, Vec<_>) = std::mem::take(&mut g.layers[from].slopes)
+            .into_iter()
+            .partition(|s| !s.matches(&plot) || g.layers[from].plots.iter().any(|p| s.matches(p)));
+        g.layers[from].slopes = stay;
+        g.layers[to].slopes.extend(go);
         g.layers[to].plots.push(plot);
         g.layers[from].recolor_automatic();
         g.layers[to].recolor_automatic();
@@ -1569,6 +1769,66 @@ mod tests {
     }
 
     #[test]
+    fn moving_a_plot_takes_its_slope_annotations_along() {
+        let (mut p, ys) = four_ys();
+        let g = p.plot_columns(Template::Line, &ys[..2]).unwrap();
+        let right = p.add_right_y_layer(g, 0).unwrap();
+        {
+            let l = &mut p.graph_mut(g).unwrap().layers[0];
+            let (a, b) = (l.plots[0].clone(), l.plots[1].clone());
+            l.slopes.push(crate::graph::SlopeAnnotation::for_plot(&a, 0, 2));
+            l.slopes.push(crate::graph::SlopeAnnotation::for_plot(&b, 1, 2));
+        }
+        p.move_plot_to_layer(g, 0, 0, right).unwrap();
+        let graph = p.graph(g).unwrap();
+        assert_eq!(graph.layers[right].slopes.len(), 1);
+        assert_eq!(graph.layers[right].slopes[0].plot, ys[0]);
+        assert_eq!(graph.layers[0].slopes.len(), 1);
+        assert_eq!(graph.layers[0].slopes[0].plot, ys[1]);
+    }
+
+    #[test]
+    fn multi_y_templates_deal_the_columns_out_round_and_round() {
+        let (mut p, mut ys) = four_ys();
+        let book = p.workbooks().next().unwrap().id;
+        ys.push(p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![9.0; 3])).unwrap());
+        let g = p.plot_columns(Template::Multi3YYy, &ys).unwrap();
+        assert_eq!(p.graph(g).unwrap().layers.len(), 3);
+        assert_eq!(plot_ys(&p, g, 0), vec![ys[0], ys[3]]);
+        assert_eq!(plot_ys(&p, g, 1), vec![ys[1], ys[4]]);
+        assert_eq!(plot_ys(&p, g, 2), vec![ys[2]]);
+        // The first plot of a layer has the layer's template colour; the second the next one of its list.
+        let graph = p.graph(g).unwrap();
+        assert_eq!(graph.layers[1].plots[0].line.color, crate::Color::rgb(255, 0, 0));
+        assert_ne!(graph.layers[1].plots[1].line.color, crate::Color::rgb(255, 0, 0));
+        let g = p.plot_columns(Template::Multi4YyYy, &ys[..2]).unwrap();
+        let graph = p.graph(g).unwrap();
+        assert_eq!(graph.layers.len(), 4, "all layers are made whatever the number of columns");
+        assert!(graph.layers[2].plots.is_empty() && graph.layers[3].plots.is_empty());
+    }
+
+    #[test]
+    fn multi_y_needs_a_column_and_no_right_axis_split() {
+        let (mut p, ys) = four_ys();
+        assert_eq!(p.plot_columns(Template::Multi4YYyy, &[]), Err(MultiYError::NoColumns.into()));
+        assert_eq!(
+            p.plot_columns_double_y(Template::Multi3YYY, &ys[..1], &ys[1..2]),
+            Err(ProjectError::MultiYNoRightAxis("3ys-y-y-y"))
+        );
+    }
+
+    #[test]
+    fn multiple_y_axes_fills_the_layers_with_the_given_numbers() {
+        let (mut p, ys) = four_ys();
+        let o = MultiYOptions { per_layer: vec![2, 1, 1], ..MultiYOptions::default() };
+        let g = p.plot_multi_y(&o, &ys).unwrap();
+        assert_eq!(plot_ys(&p, g, 0), vec![ys[0], ys[1]]);
+        assert_eq!(plot_ys(&p, g, 2), vec![ys[3]]);
+        let bad = MultiYOptions { per_layer: vec![2, 1], ..MultiYOptions::default() };
+        assert_eq!(p.plot_multi_y(&bad, &ys), Err(MultiYError::PlotsPerLayer { sum: 3, columns: 4 }.into()));
+    }
+
+    #[test]
     fn moving_a_plot_recolors_both_layers() {
         let (mut p, ys) = four_ys();
         let g = p.plot_columns(Template::Line, &ys[..3]).unwrap();
@@ -1636,6 +1896,10 @@ mod tests {
         }
         let missing = ColumnId(999);
         assert_eq!(p.plot_columns_double_y(Template::Line, &[missing], &[]), Err(ProjectError::NoSuchColumn(missing)));
+        assert_eq!(
+            p.plot_columns_double_y(Template::StackedHistograms, &[missing], &[missing]),
+            Err(ProjectError::StackedHistogramsNoRightAxis)
+        );
     }
 
     /// A sheet with X and the Y columns B to G.
@@ -1924,6 +2188,33 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_window_and_append_remap_the_cell_formats() {
+        use crate::cellformat::{CellFormat, FormatTarget, LabelKind};
+        let bold = CellFormat { bold: Some(true), ..Default::default() };
+        let mut p = Project::new();
+        let b = p.add_workbook("");
+        let c = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        let s = &mut p.workbook_mut(b).unwrap().sheets[0];
+        s.apply_cell_format(FormatTarget::cells(vec![c], 1, None), bold.clone());
+        s.apply_cell_format(FormatTarget::label_rows(vec![c], vec![LabelKind::Units]), bold.clone());
+        let copy = p.duplicate_window(b).unwrap();
+        let sheet = &p.workbook(copy).unwrap().sheets[0];
+        let col = sheet.columns[0].id;
+        assert_ne!(col, c);
+        assert!(sheet.cell_format_at(col, 1).bold && !sheet.cell_format_at(col, 0).bold);
+        assert!(sheet.format_index().resolve_label(sheet, col, &LabelKind::Units).bold);
+        assert!(p.workbook(b).unwrap().sheets[0].cell_format_at(c, 1).bold, "the original keeps its own ids");
+
+        let mut other = Project::new();
+        let ob = other.add_workbook("");
+        let oc = other.add_column(ob, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+        other.workbook_mut(ob).unwrap().sheets[0].apply_cell_format(FormatTarget::whole_columns(vec![oc]), bold);
+        let (new, _) = p.append(other, "f");
+        let sheet = &p.workbook(new[0]).unwrap().sheets[0];
+        assert!(sheet.cell_format_at(sheet.columns[0].id, 0).bold);
+    }
+
+    #[test]
     fn append_remaps_the_column_ids_inside_plot_styles() {
         use crate::graph::PlotKind;
         let mut here = Project::new();
@@ -1952,6 +2243,9 @@ mod tests {
             let l = &mut other.graph_mut(g).unwrap().layers[0];
             l.x_axis.rug.plot = Some(cols[0]);
             l.y_axis.rug_opposite.plot = Some(cols[0]);
+            let mut sl = crate::graph::SlopeAnnotation::new(cols[0], 0, 2);
+            sl.x = Some(cols[1]);
+            l.slopes.push(sl);
         }
         let (new, _) = here.append(other, "f");
         let graph = here.graph(new[1]).unwrap();
@@ -1967,5 +2261,7 @@ mod tests {
         assert_eq!(data(l.x_axis.rug.plot.unwrap()), want(0));
         assert_eq!(data(l.y_axis.rug_opposite.plot.unwrap()), want(0));
         assert_eq!(l.x_axis.rug_opposite.plot, None, "an unset rug choice stays unset");
+        assert_eq!(data(l.slopes[0].plot), want(0), "a slope annotation follows its plot's column");
+        assert_eq!(data(l.slopes[0].x.unwrap()), want(1), "and its plot's X column");
     }
 }

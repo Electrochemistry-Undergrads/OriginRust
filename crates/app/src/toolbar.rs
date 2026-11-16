@@ -9,11 +9,14 @@
 //! command the menu entry of that name sends: a click is resolved with [`menus::resolve`], so it
 //! does exactly what the menu does, and is greyed for the same reasons (wrong window type, nothing
 //! selected). A button without a command is a feature Sheaf lacks; it is drawn greyed and does
-//! nothing. The one exception is the Pointer of the Tools bar, which is always the tool in use.
+//! nothing. The Pointer of the Tools bar is always the tool in use. The Format bar uses
+//! its own selected-target dispatch (`text_format`) for supported whole-object font controls.
 //!
 //! The icons are our own: simple shapes drawn with egui's painter in a 16 by 16 pixel box and two
 //! colours. They are recognisable by meaning (a grid for a workbook, a polyline for Line, dots
 //! for Scatter) and are not copies of Origin's pictures.
+
+mod format;
 
 use crate::actions::{Action, GraphTool};
 use crate::dialogs::analysis::AnalysisKind;
@@ -22,6 +25,7 @@ use crate::panels::PanelId;
 use crate::theme;
 use eframe::egui::{self, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Shape, Stroke, Ui, vec2};
 use sheaf_core::Designation;
+use sheaf_core::layers::NewLayerKind;
 use sheaf_core::shape::ShapeKind;
 use sheaf_core::template::Template;
 use std::collections::HashSet;
@@ -160,12 +164,14 @@ pub enum Icon {
     LayerRight,
     LayerBoth,
     Inset,
+    InsetData,
     DataReader,
     Text,
     Arrow,
     Line,
     Rectangle,
     Circle,
+    Slope,
     Hand,
     // 2D graphs
     PlotLine,
@@ -215,7 +221,7 @@ pub enum Item {
     Button(Button),
     /// A thin gap between groups.
     Gap,
-    /// The font name box of the Format bar (Sheaf cannot apply fonts to objects yet).
+    /// The font name box of the Format bar.
     FontBox,
     /// The font size box.
     SizeBox,
@@ -234,7 +240,40 @@ fn tool(icon: Icon, tip: &'static str, cmd: Cmd) -> Item {
 /// True for the commands of tools (no menu entry; pressed while on).
 #[cfg(test)]
 fn is_tool(cmd: &Cmd) -> bool {
-    matches!(cmd, Cmd::Pointer | Cmd::DataReader | Cmd::TextTool | Cmd::ShapeTool(_))
+    matches!(
+        cmd,
+        Cmd::Pointer
+            | Cmd::DataReader
+            | Cmd::TextTool
+            | Cmd::SlopeTool
+            | Cmd::PanTool
+            | Cmd::ScaleIn
+            | Cmd::ScaleOut
+            | Cmd::ShapeTool(_)
+    )
+}
+
+#[cfg(test)]
+fn is_order(cmd: &Cmd) -> bool {
+    matches!(cmd, Cmd::OrderSelectedShape { .. })
+}
+
+/// A Graph toolbar button that adds a layer of `kind` (the same command as Graph > New Layer(Axes)).
+fn layer_button(icon: Icon, kind: NewLayerKind) -> Item {
+    let tip = match kind {
+        NewLayerKind::Normal => "Add Bottom-X Left-Y Layer",
+        NewLayerKind::TopX => "Add Top-X Layer",
+        NewLayerKind::RightY => "Add Right-Y Layer",
+        NewLayerKind::TopXRightY => "Add Top-X Right-Y Layer",
+        NewLayerKind::Inset => "Add Inset Graph",
+        _ => "Add Inset Graph With Data",
+    };
+    b(icon, tip, Cmd::AddLayer(kind), kind.menu_label())
+}
+
+/// An Object Edit button that reorders the selected drawn shape (no menu entry; state-disabled).
+fn b_order(icon: Icon, tip: &'static str, front: bool) -> Item {
+    Item::Button(Button { icon, tip, cmd: Some(Cmd::OrderSelectedShape { front }), menu: "", on: false })
 }
 
 /// A button for a feature Sheaf lacks.
@@ -269,7 +308,7 @@ fn build(bar: Bar) -> Vec<Item> {
             b(ImportMany, "Import Multiple ASCII", Cmd::ImportMultiple, "Multiple ASCII"),
             gap(),
             b(Print, "Print the active window", Cmd::Print, "Print"),
-            g(Duplicate, "Duplicate"),
+            b(Duplicate, "Duplicate", Cmd::DuplicateWindow, "Duplicate"),
             gap(),
             b(PanelLeft, "Project Explorer", Cmd::Panel(PanelId::Explorer), "Project Explorer"),
             b(PanelRight, "Object Manager", Cmd::Panel(PanelId::Objects), "Object Manager"),
@@ -319,18 +358,19 @@ fn build(bar: Bar) -> Vec<Item> {
             g(LineColor, "Line Color"),
         ],
         Bar::Graph => vec![
-            g(ZoomIn, "Zoom In"),
-            g(ZoomOut, "Zoom Out"),
-            g(WholePage, "Whole Page"),
+            b(ZoomIn, "Zoom In", Cmd::ZoomIn, "Zoom In"),
+            b(ZoomOut, "Zoom Out", Cmd::ZoomOut, "Zoom Out"),
+            b(WholePage, "Whole Page", Cmd::WholePage, "Whole Page"),
             b(Rescale, "Rescale to Show All", Cmd::Rescale, "Rescale to Show All"),
             b(Exchange, "Exchange X-Y Axes", Cmd::ExchangeAxes, "Exchange X-Y Axes"),
             gap(),
-            g(Layer, "Add Layer (Bottom-X Left-Y)"),
-            g(LayerTop, "Add Layer (Top-X Left-Y)"),
-            g(LayerRight, "Add Layer (Bottom-X Right-Y)"),
-            g(LayerBoth, "Add Layer (Top-X Right-Y)"),
+            layer_button(Layer, NewLayerKind::Normal),
+            layer_button(LayerTop, NewLayerKind::TopX),
+            layer_button(LayerRight, NewLayerKind::RightY),
+            layer_button(LayerBoth, NewLayerKind::TopXRightY),
             gap(),
-            g(Inset, "Add Inset Graph"),
+            layer_button(Inset, NewLayerKind::Inset),
+            layer_button(InsetData, NewLayerKind::InsetWithData),
         ],
         Bar::Graphs2D => vec![
             b(PlotLine, "Line", Cmd::Plot(Template::Line), "Line"),
@@ -351,8 +391,10 @@ fn build(bar: Bar) -> Vec<Item> {
         ],
         Bar::Tools => vec![
             tool(Pointer, "Pointer", Cmd::Pointer),
-            g(ZoomIn, "Zoom In"),
-            g(ZoomOut, "Zoom Out"),
+            // Origin's Tools-bar magnifiers are "Scale In" and "Scale Out" (axis magnification, measured
+            // 2026-11-15), not the page zoom of the View menu (T69).
+            tool(ZoomIn, "Scale In", Cmd::ScaleIn),
+            tool(ZoomOut, "Scale Out", Cmd::ScaleOut),
             b(Rescale, "Rescale", Cmd::Rescale, "Rescale to Show All"),
             tool(DataReader, "Data Reader", Cmd::DataReader),
             gap(),
@@ -361,7 +403,8 @@ fn build(bar: Bar) -> Vec<Item> {
             tool(Icon::Line, "Line", Cmd::ShapeTool(ShapeKind::Line)),
             tool(Rectangle, "Rectangle", Cmd::ShapeTool(ShapeKind::Rectangle)),
             tool(Circle, "Circle", Cmd::ShapeTool(ShapeKind::Ellipse)),
-            g(Hand, "Pan"),
+            tool(Slope, "Slope", Cmd::SlopeTool),
+            tool(Hand, "Pan", Cmd::PanTool),
         ],
         Bar::ObjectEdit => vec![
             g(AlignLeft, "Align Left"),
@@ -374,8 +417,8 @@ fn build(bar: Bar) -> Vec<Item> {
             g(SameWidth, "Make Same Width"),
             g(SameHeight, "Make Same Height"),
             gap(),
-            g(Front, "Bring to Front"),
-            g(Back, "Send to Back"),
+            b_order(Front, "Bring to Front", true),
+            b_order(Back, "Send to Back", false),
             g(Group, "Group"),
             g(Ungroup, "Ungroup"),
         ],
@@ -388,6 +431,17 @@ const CELL: f32 = 22.0;
 
 /// A row of bars side by side, each with a grip at its left end.
 pub fn show_row(ui: &mut Ui, bars: &[Bar], tb: &Toolbars, c: &MenuContext, actions: &mut Vec<Action>) {
+    show_row_with_format(ui, bars, tb, c, None, actions);
+}
+
+pub fn show_row_with_format(
+    ui: &mut Ui,
+    bars: &[Bar],
+    tb: &Toolbars,
+    c: &MenuContext,
+    format: Option<&crate::text_format::Snapshot>,
+    actions: &mut Vec<Action>,
+) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
         let mut first = true;
@@ -396,7 +450,11 @@ pub fn show_row(ui: &mut Ui, bars: &[Bar], tb: &Toolbars, c: &MenuContext, actio
                 ui.add_space(8.0);
             }
             first = false;
-            show_bar(ui, *bar, c, actions);
+            if *bar == Bar::Format {
+                format::show(ui, c, format, actions);
+            } else {
+                show_bar(ui, *bar, c, actions);
+            }
         }
     });
 }
@@ -447,8 +505,12 @@ fn gap(ui: &mut Ui) {
     }
 }
 
-/// A box like the font name and size lists, greyed: Sheaf cannot format objects yet.
+/// A disabled font/size placeholder for a bar without a formatting target.
 fn text_box(ui: &mut Ui, text: &str, width: f32, name: &str) {
+    disabled_text_box(ui, text, width, name, NOT_YET);
+}
+
+fn disabled_text_box(ui: &mut Ui, text: &str, width: f32, name: &str, reason: &str) {
     let (rect, response) = ui.allocate_exact_size(vec2(width, 20.0), Sense::hover());
     let rect = rect.shrink2(vec2(1.0, 0.0));
     let grey = Color32::from_rgb(170, 172, 178);
@@ -468,7 +530,7 @@ fn text_box(ui: &mut Ui, text: &str, width: f32, name: &str) {
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, false, name));
     response.on_hover_ui(|ui| {
         ui.label(name);
-        ui.weak(NOT_YET);
+        ui.weak(reason);
     });
 }
 
@@ -478,6 +540,11 @@ fn draw_button(ui: &mut Ui, bar: Bar, button: &Button, c: &MenuContext, actions:
         Some(Cmd::Pointer) => c.tool == GraphTool::Pointer,
         Some(Cmd::DataReader) => c.tool == GraphTool::Reader,
         Some(Cmd::TextTool) => c.tool == GraphTool::Text,
+        Some(Cmd::SlopeTool) => c.tool == GraphTool::Slope,
+        Some(Cmd::PanTool) => c.tool == GraphTool::Pan,
+        Some(Cmd::ZoomIn) => c.tool == GraphTool::ZoomIn,
+        Some(Cmd::ScaleIn) => c.tool == GraphTool::ScaleIn,
+        Some(Cmd::ScaleOut) => c.tool == GraphTool::ScaleOut,
         Some(Cmd::ShapeTool(kind)) => c.tool == GraphTool::Draw(kind),
         _ => button.on,
     };
@@ -895,9 +962,12 @@ impl Pen<'_> {
                     self.line(&[(5.0, 11.0), (8.0, 7.0), (12.0, 9.0)], true);
                 }
             }
-            Inset => {
+            Inset | InsetData => {
                 self.rect(1.5, 1.5, 14.5, 14.5, false);
                 self.rect(7.5, 2.5, 13.5, 8.5, true);
+                if icon == InsetData {
+                    self.line(&[(9.0, 7.0), (10.5, 4.5), (12.0, 6.0)], true);
+                }
             }
             DataReader => {
                 self.circle((8.0, 8.0), 4.0, false);
@@ -932,6 +1002,12 @@ impl Pen<'_> {
                 for p in [(2.5, 8.0), (13.5, 8.0), (8.0, 2.5), (8.0, 13.5)] {
                     self.dot(p, 1.3, true);
                 }
+            }
+            Slope => {
+                self.line(&[(2.5, 13.5), (13.5, 4.5)], false);
+                self.line(&[(2.5, 13.5), (13.5, 13.5), (13.5, 4.5)], true);
+                self.dot((2.5, 13.5), 1.5, true);
+                self.dot((13.5, 4.5), 1.5, true);
             }
             Hand => {
                 self.closed(
@@ -1138,7 +1214,7 @@ mod tests {
     fn every_button_with_a_command_sends_the_command_of_the_menu_entry_it_is_named_after() {
         for (bar, button) in buttons() {
             let Some(cmd) = &button.cmd else { continue };
-            if is_tool(cmd) {
+            if is_tool(cmd) || is_order(cmd) {
                 assert!(button.menu.is_empty(), "{}: tools have no menu entry", button.tip);
                 continue;
             }
@@ -1164,6 +1240,7 @@ mod tests {
             assert!(!button.on, "{}: {}", bar.name(), button.tip);
             match &button.cmd {
                 Some(cmd) if is_tool(cmd) => assert_eq!(bar, Bar::Tools, "{}", button.tip),
+                Some(cmd) if is_order(cmd) => assert_eq!(bar, Bar::ObjectEdit, "{}", button.tip),
                 Some(_) => assert!(!button.menu.is_empty(), "{}: {} has no menu name", bar.name(), button.tip),
                 None => {}
             }
@@ -1182,8 +1259,11 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(&tips(Bar::Graphs2D)[..5], ["Line", "Scatter", "Line + Symbol", "Column", "Bar"]);
-        assert_eq!(&tips(Bar::Tools)[..4], ["Pointer", "Zoom In", "Zoom Out", "Rescale"]);
-        assert_eq!(&tips(Bar::Tools)[4..], ["Data Reader", "Text", "Arrow", "Line", "Rectangle", "Circle", "Pan"]);
+        assert_eq!(&tips(Bar::Tools)[..4], ["Pointer", "Scale In", "Scale Out", "Rescale"]);
+        assert_eq!(
+            &tips(Bar::Tools)[4..],
+            ["Data Reader", "Text", "Arrow", "Line", "Rectangle", "Circle", "Slope", "Pan"]
+        );
         assert_eq!(&tips(Bar::Edit)[..3], ["Cut", "Copy", "Paste"]);
         assert_eq!(&tips(Bar::Standard)[..2], ["New Project", "New Workbook"]);
     }

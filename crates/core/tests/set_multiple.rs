@@ -315,3 +315,14 @@ fn a_formula_that_does_not_read_j_ignores_a_shift_in_position() {
     });
     assert_eq!(d.project().column(c[2]).unwrap().formula_state, FormulaState::Current);
 }
+
+/// `wcol(j+1)` from the last column reads past the sheet: Origin writes nothing and logs an error
+/// (expression-language 7.1); Sheaf refuses the whole call and changes nothing.
+#[test]
+fn a_column_read_past_the_last_column_is_refused_and_nothing_changes() {
+    let (mut d, _, c) = book(2);
+    let before = d.project().clone();
+    let r = d.set_columns_values(&c[1..], "wcol(j+1)+1", None, RecalcMode::None);
+    assert!(r.is_err(), "column 4 does not exist: {r:?}");
+    assert_eq!(d.project(), &before);
+}

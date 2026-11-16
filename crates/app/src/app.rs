@@ -2,12 +2,16 @@
 //! workbook and graph child windows, dialogs, and the one place where user actions change the
 //! project.
 
-use crate::actions::{Action, CellOp, CopyKind, DataEdit, DataTool, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp};
+use crate::actions::{
+    Action, CellOp, CopyKind, DataEdit, DataTool, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp, ViewOp,
+};
 use crate::autosave::{Autosave, Due};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
+use crate::dialogs::cell_format::CellFormatDialog;
 use crate::dialogs::cell_note::CellNoteDialog;
 use crate::dialogs::column_props::ColumnPropsDialog;
+use crate::dialogs::comparison_plot::{ComparisonPlotDialog, Outcome as ComparisonPlotOutcome};
 use crate::dialogs::cond_format::CondFormatDialog;
 use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
@@ -24,6 +28,8 @@ use crate::dialogs::import_theme::Themed;
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::label_panels::{LabelPanelsDialog, Outcome as LabelPanelsOutcome};
 use crate::dialogs::mask_condition::MaskConditionDialog;
+use crate::dialogs::merge_graphs::{MergeGraphsDialog, Outcome as MergeGraphsOutcome};
+use crate::dialogs::multi_y::{MultiYDialog, Outcome as MultiYOutcome};
 use crate::dialogs::power::{PowerDialog, PowerOutcome};
 use crate::dialogs::printing::{PageSetupDialog, PageSetupOutcome, PreviewOutcome, PrintPreview};
 use crate::dialogs::recovery::{RecoveryChoice, RecoveryOffer};
@@ -32,10 +38,13 @@ use crate::dialogs::row_filter::RowFilterDialog;
 use crate::dialogs::set_values::SetValuesDialog;
 use crate::dialogs::shape_object::ShapeDialog;
 use crate::dialogs::simulate::{Outcome as SimulateOutcome, SimulateDialog};
+use crate::dialogs::slope_object::SlopeDialog;
 use crate::dialogs::sort::{SortDialog, SortOutcome};
 use crate::dialogs::stack_panels::{Outcome as StackPanelsOutcome, StackPanelsDialog};
+use crate::dialogs::straight_line::StraightLineDialog;
 use crate::dialogs::text_object::TextDialog;
 use crate::dialogs::trendline::{Outcome as TrendlineOutcome, TrendlineDialog};
+use crate::graph_scale::{self, ScaleTool};
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi, Sel};
 use crate::live::{self, Live, Note};
@@ -83,8 +92,8 @@ pub struct Startup {
     /// The file of the recent projects and imports (`recent.json`); `None` keeps no lists and writes
     /// nothing (the tests pass a temporary file).
     pub recent_path: Option<PathBuf>,
-    /// The folder of the saved import settings (`import-themes`: the Dialog Theme row of the import
-    /// windows); `None` hides the row and writes nothing (the tests pass a temporary folder).
+    /// The folder of saved dialog settings (`import-themes`: importer files and separate graph-export
+    /// files); `None` hides the theme rows and writes nothing (tests pass a temporary folder).
     pub themes_dir: Option<PathBuf>,
     /// Turn the AI link on at start (`--mcp`). It is never saved: a run starts with it off.
     pub mcp: bool,
@@ -141,15 +150,22 @@ pub struct SheafApp {
     import_wizard: Option<ImportWizard>,
     graph_props: Option<GraphPropsDialog>,
     layer_contents: Option<crate::dialogs::layer_contents::LayerContentsDialog>,
+    layer_management: Option<crate::dialogs::layer_management::LayerManagementDialog>,
+    fit_page: Option<crate::dialogs::fit_page::FitPageDialog>,
     plot_setup: Option<crate::dialogs::plot_setup::PlotSetupDialog>,
     error_bars: Option<ErrorBarsDialog>,
     trendline: Option<TrendlineDialog>,
     stack_panels: Option<StackPanelsDialog>,
+    merge_graphs: Option<MergeGraphsDialog>,
     label_panels: Option<LabelPanelsDialog>,
     simulate: Option<SimulateDialog>,
     column_props: Option<ColumnPropsDialog>,
     text_dialog: Option<TextDialog>,
     shape_dialog: Option<ShapeDialog>,
+    slope_dialog: Option<SlopeDialog>,
+    straight_line_dialog: Option<StraightLineDialog>,
+    comparison_plot: Option<ComparisonPlotDialog>,
+    multi_y: Option<MultiYDialog>,
     set_values: Option<SetValuesDialog>,
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
@@ -159,6 +175,7 @@ pub struct SheafApp {
     mask_condition: Option<MaskConditionDialog>,
     cond_format: Option<CondFormatDialog>,
     pub(crate) cell_note: Option<CellNoteDialog>,
+    pub(crate) cell_format: Option<CellFormatDialog>,
     reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
@@ -181,6 +198,10 @@ pub struct SheafApp {
     toolbars: Toolbars,
     /// View > Status Bar turned the status bar off.
     status_bar_hidden: bool,
+    /// View > Full Screen is on (T66): one graph's page over the whole screen until Esc.
+    full_screen: Option<crate::view_modes::FullScreen>,
+    /// The Full Screen reminder was switched off with its tick (kept for this run only).
+    full_screen_reminder_off: bool,
     /// The side panels: Project Explorer, Object Manager and the logs.
     panels: Panels,
     /// What the status bar and the message boxes said, and the reports of the tools.
@@ -239,15 +260,22 @@ impl SheafApp {
             import_wizard: None,
             graph_props: None,
             layer_contents: None,
+            layer_management: None,
+            fit_page: None,
             plot_setup: None,
             error_bars: None,
             trendline: None,
             stack_panels: None,
+            merge_graphs: None,
             label_panels: None,
             simulate: None,
             column_props: None,
             text_dialog: None,
             shape_dialog: None,
+            slope_dialog: None,
+            straight_line_dialog: None,
+            comparison_plot: None,
+            multi_y: None,
             set_values: None,
             analysis: None,
             fit: None,
@@ -257,6 +285,7 @@ impl SheafApp {
             mask_condition: None,
             cond_format: None,
             cell_note: None,
+            cell_format: None,
             reshape: None,
             export: None,
             export_sheet: None,
@@ -275,6 +304,8 @@ impl SheafApp {
             about: false,
             toolbars: Toolbars::default(),
             status_bar_hidden: false,
+            full_screen: None,
+            full_screen_reminder_off: false,
             panels: Panels::default(),
             logs: Logs::default(),
             logged_message: None,
@@ -756,6 +787,9 @@ impl SheafApp {
         self.error_bars = None;
         self.trendline = None;
         self.stack_panels = None;
+        self.merge_graphs = None;
+        self.layer_management = None;
+        self.fit_page = None;
         self.label_panels = None;
         self.simulate = None;
         self.column_props = None;
@@ -772,6 +806,7 @@ impl SheafApp {
         self.mask_condition = None;
         self.cond_format = None;
         self.cell_note = None;
+        self.cell_format = None;
         self.reshape = None;
         self.sort = None;
         self.sheet_name = None;
@@ -1046,6 +1081,26 @@ impl SheafApp {
         }
     }
 
+    /// Format > Fit Page To Printer: the page gets the printable size of the default printer for
+    /// Page Setup's paper in the page's orientation (the Page Setup paper less the measured edges
+    /// when no printer answers, and always under test); the layers keep their frames, which are
+    /// fractions of the page. One undo step.
+    fn fit_page_to_printer(&mut self, graph: WindowId) {
+        let setup = self.doc.project().page_setup;
+        let Some(page) = self.doc.project().graph(graph).map(|g| (g.page.width_pt, g.page.height_pt)) else { return };
+        #[cfg(windows)]
+        let asked = if cfg!(test) { None } else { crate::winprint::printable_size_pt(&setup, page) };
+        #[cfg(not(windows))]
+        let asked: Option<(f64, f64)> = None;
+        let (w, h) = asked.unwrap_or_else(|| setup.fallback_printable_pt(page.0, page.1));
+        self.doc.apply("Fit Page to Printer", |p| {
+            if let Some(g) = p.graph_mut(graph) {
+                g.resize_page(w, h, false);
+            }
+        });
+        self.say("Fitted the page to the printer");
+    }
+
     /// File > Print... (Ctrl+P): the active window printed as a vector drawing through the
     /// system's print dialog. A graph page is scaled into the paper of Page Setup as File > Print
     /// Preview shows; a workbook's active sheet prints as a table, split over as many pages as it
@@ -1187,11 +1242,72 @@ impl SheafApp {
         }
     }
 
+    /// Graph > New Layer(Axes): one undo step; the new layer becomes the active layer.
+    fn add_layer(&mut self, graph: WindowId, active: usize, kind: sheaf_core::layers::NewLayerKind) {
+        let Some(g) = self.doc.project().graph(graph) else { return };
+        if active >= g.layers.len() {
+            return;
+        }
+        self.doc.apply(sheaf_core::layers::ADD_LAYER_UNDO, |p| {
+            graph_view::apply_op(p, graph, GraphOp::AddLayer { layer: active, kind }, None)
+        });
+        let count = self.doc.project().graph(graph).map_or(0, |g| g.layers.len());
+        let state = self.graphs.entry(graph).or_default();
+        state.active_layer = count.saturating_sub(1);
+        state.selected = None;
+    }
+
+    /// Delete Layer: one undo step. The active layer, the selection and the windows that name a
+    /// layer by its index are repaired for the layers that moved up.
+    fn delete_layer(&mut self, graph: WindowId, layer: usize) {
+        let Some(g) = self.doc.project().graph(graph) else { return };
+        if layer >= g.layers.len() || g.layers.len() < 2 {
+            return;
+        }
+        let resolved = sheaf_plot::layout_geometry(self.doc.project(), graph).ok();
+        self.doc.apply(sheaf_core::layers::DELETE_LAYER_UNDO, |p| {
+            graph_view::apply_op(p, graph, GraphOp::DeleteLayer { layer }, resolved.as_deref())
+        });
+        let remaining = self.doc.project().graph(graph).map_or(1, |g| g.layers.len());
+        let state = self.graphs.entry(graph).or_default();
+        state.active_layer = if state.active_layer == layer {
+            sheaf_core::layers::active_after_delete(layer, remaining)
+        } else {
+            sheaf_core::layers::index_after_delete(state.active_layer, layer).unwrap_or(0)
+        };
+        state.selected =
+            state.selected.and_then(|(l, kind)| sheaf_core::layers::index_after_delete(l, layer).map(|l| (l, kind)));
+        state.reset_layer_interactions();
+        // Windows that edit a layer by its index close rather than edit the wrong layer.
+        if self.graph_props.as_ref().is_some_and(|d| d.graph == graph) {
+            self.graph_props = None;
+        }
+        if self.layer_contents.as_ref().is_some_and(|d| d.graph == graph) {
+            self.layer_contents = None;
+        }
+        if self.plot_setup.as_ref().is_some_and(|d| d.graph == graph) {
+            self.plot_setup = None;
+        }
+        self.shape_dialog = None;
+    }
+
     /// Applies a change made from a graph window (right-click menus, Delete, Ctrl+R) as one undo
     /// step.
     fn edit_graph(&mut self, graph: WindowId, op: GraphOp) {
         if let GraphOp::HidePlot { layer, plot } = op {
             self.doc.apply("Hide data plot", |p| objects::set_plot_visible(p, graph, layer, plot, false));
+            return;
+        }
+        if let GraphOp::SetStack { layer, stack } = op {
+            let same = self
+                .doc
+                .project()
+                .graph(graph)
+                .and_then(|g| g.layers.get(layer))
+                .is_none_or(|l| std::mem::discriminant(&l.stack) == std::mem::discriminant(&stack));
+            if !same {
+                self.doc.apply("Offset grouped data in layer", |p| graph_view::apply_op(p, graph, op, None));
+            }
             return;
         }
         let label = match op {
@@ -1202,21 +1318,35 @@ impl SheafApp {
             GraphOp::ExchangeAxes { .. } => "Exchange X-Y axes",
             GraphOp::AxisZoom { zoom_in: true, .. } => "Axis zoom in",
             GraphOp::AxisZoom { .. } => "Axis zoom out",
+            GraphOp::AxisCenter { .. } => "Axis center",
             GraphOp::HideLegend { .. } => "Delete legend",
             GraphOp::ReconstructLegend { .. } => "Reconstruct legend",
             GraphOp::UpdateLegend { .. } => "Update legend",
             GraphOp::HideTitle { .. } => "Delete axis title",
             GraphOp::DeleteLabel { .. } => "Delete text",
             GraphOp::DeleteShape { .. } => "Delete drawn object",
+            GraphOp::DeleteSlope { .. } => "Delete slope annotation",
+            GraphOp::DeleteStraightLine { .. } => "Delete straight line",
             GraphOp::OrderShape { front: true, .. } => "Bring drawn object to front",
             GraphOp::OrderShape { front: false, .. } => "Push drawn object to back",
             GraphOp::HideLayer { .. } => "Hide layer",
             GraphOp::HideOtherLayers { .. } => "Hide other layers",
+            GraphOp::AddLayer { .. } => sheaf_core::layers::ADD_LAYER_UNDO,
+            GraphOp::DeleteLayer { .. } => sheaf_core::layers::DELETE_LAYER_UNDO,
             GraphOp::MovePlotToAxis { right: true, .. } => "Move plot to right Y axis",
             GraphOp::MovePlotToAxis { .. } => "Move plot to left Y axis",
+            GraphOp::MovePlotToLayer { .. } => "Move plot to layer",
             GraphOp::RemoveTrendline { .. } => "Remove trendline",
-            GraphOp::HidePlot { .. } => unreachable!("handled above"),
+            GraphOp::HidePlot { .. } | GraphOp::SetStack { .. } => unreachable!("handled above"),
         };
+        if let GraphOp::AddLayer { layer, kind } = op {
+            self.add_layer(graph, layer, kind);
+            return;
+        }
+        if let GraphOp::DeleteLayer { layer } = op {
+            self.delete_layer(graph, layer);
+            return;
+        }
         // The present axis ranges, for the zoom (an automatic axis has no stored limits).
         let resolved = sheaf_plot::layout_geometry(self.doc.project(), graph).ok();
         let shapes = self.shape_dialog_shapes();
@@ -1448,6 +1578,16 @@ impl SheafApp {
         self.say(format!("Undone {count} AI change{}", if count == 1 { "" } else { "s" }));
     }
 
+    /// A snapshot of the selected whole text object. Dialog editors own their own selection.
+    fn text_format(&self) -> Option<crate::text_format::Snapshot> {
+        if self.dialog_open() || self.books.values().any(|b| b.editing.is_some() || b.editing_label.is_some()) {
+            return None;
+        }
+        let graph = self.active?;
+        let (layer, object) = self.graphs.get(&graph)?.selected?;
+        crate::text_format::Snapshot::graph(&self.doc, graph, layer, object)
+    }
+
     // ----- actions -------------------------------------------------------
 
     fn apply(&mut self, action: Action, ctx: &egui::Context) {
@@ -1507,6 +1647,11 @@ impl SheafApp {
                 self.clear_changed_shape_selections(selected, None);
             }
             Action::UndoAiChanges => self.undo_ai_changes(ctx),
+            Action::FormatText(request) => {
+                if self.text_format().is_some_and(|state| state.target == request.target) {
+                    crate::text_format::apply(&mut self.doc, request);
+                }
+            }
             Action::NewWorkbook => {
                 self.doc.apply("New workbook", |p| {
                     let book = p.add_workbook("");
@@ -1678,12 +1823,38 @@ impl SheafApp {
                     self.warn("Select at least one numeric Y column to stack.");
                 }
             }
+            Action::MergeGraphs => {
+                if self.doc.project().graphs().count() < 2 {
+                    self.warn("Merge Graph Windows needs at least two graphs");
+                } else {
+                    self.merge_graphs = Some(MergeGraphsDialog::new(self.doc.project()));
+                }
+            }
             Action::LabelPanels { book, columns } => {
                 let columns = self.plot_y_columns(book, columns, Template::Line);
                 let rows = self.selected_sort_rows(book).map(|r| (r.start, r.end));
                 self.label_panels = LabelPanelsDialog::new(self.doc.project(), book, columns, rows);
                 if self.label_panels.is_none() {
                     self.warn("Select at least one numeric Y column to plot by label.");
+                }
+            }
+            Action::MultiYAxes { book, columns } => {
+                let columns = self.plot_y_columns(book, columns, Template::DoubleY);
+                if columns.is_empty() {
+                    self.warn("Nothing to plot: select one or more numeric Y columns");
+                } else {
+                    self.multi_y = Some(MultiYDialog::new(columns));
+                }
+            }
+            Action::ComparisonPlot { book, sheet } => {
+                let sheet = sheet.or_else(|| self.doc.project().workbook(book).map(|b| b.active_sheet));
+                match sheet {
+                    Some(sheet) if self.doc.project().can_comparison_plot(book, sheet) => {
+                        self.comparison_plot = Some(ComparisonPlotDialog::new(book, sheet));
+                    }
+                    _ => self.warn(
+                        "Open the report sheet of a one-way ANOVA with a means comparison or of a two-sample t-test first.",
+                    ),
                 }
             }
             Action::Analyze { book, columns, kind } => self.open_analysis(book, columns, kind),
@@ -1782,6 +1953,10 @@ impl SheafApp {
                     Err(why) => self.warn(why),
                 }
             }
+            Action::FormatCellsDialog(book) => match self.format_target(book) {
+                Ok(target) => self.cell_format = CellFormatDialog::new(&self.doc, book, target),
+                Err(why) => self.warn(why),
+            },
             Action::NoteDialog(book) => match self.note_cell(book) {
                 Ok((column, row)) => self.cell_note = CellNoteDialog::new(&self.doc, book, column, row),
                 Err(why) => self.warn(why),
@@ -1856,12 +2031,33 @@ impl SheafApp {
                     Some(crate::dialogs::plot_setup::PlotSetupDialog::new(graph, layer, token, self.doc.project()));
                 self.focus(graph);
             }
+            Action::AddPlotToLayer { graph, layer, kind } => {
+                let token = self.token();
+                self.layer_contents =
+                    Some(crate::dialogs::layer_contents::LayerContentsDialog::new(graph, layer, token).with_kind(kind));
+                self.focus(graph);
+                self.graphs.entry(graph).or_default().active_layer = layer;
+            }
             Action::LayerContents { graph, layer } => {
                 let token = self.token();
                 self.layer_contents =
                     Some(crate::dialogs::layer_contents::LayerContentsDialog::new(graph, layer, token));
                 self.focus(graph);
                 self.graphs.entry(graph).or_default().active_layer = layer;
+            }
+            Action::FitPageToPrinter { graph } => self.fit_page_to_printer(graph),
+            Action::FitPageToLayers { graph } => {
+                self.fit_page = Some(crate::dialogs::fit_page::FitPageDialog::new(graph));
+                self.focus(graph);
+            }
+            Action::LayerManagement { graph, layer } => {
+                self.layer_management =
+                    crate::dialogs::layer_management::LayerManagementDialog::new(self.doc.project(), graph, layer);
+                if self.layer_management.is_some() {
+                    self.focus(graph);
+                } else {
+                    self.warn("Layer Management needs a graph with layers");
+                }
             }
             Action::GraphProperties { graph, layer, tab, plot } => {
                 let token = self.token();
@@ -1881,6 +2077,15 @@ impl SheafApp {
                 let state = self.graphs.entry(graph).or_default();
                 state.reader = tool == GraphTool::Reader;
                 state.text_tool = tool == GraphTool::Text;
+                state.slope_tool = tool == GraphTool::Slope;
+                state.slope_first = None;
+                state.zoom_in_tool = tool == GraphTool::ZoomIn;
+                state.pan_tool = tool == GraphTool::Pan;
+                state.scale.tool = match tool {
+                    GraphTool::ScaleIn => Some(ScaleTool::In),
+                    GraphTool::ScaleOut => Some(ScaleTool::Out),
+                    _ => None,
+                };
                 state.shape_tool = match tool {
                     GraphTool::Draw(kind) => Some(kind),
                     _ => None,
@@ -1895,13 +2100,59 @@ impl SheafApp {
                         self.say("Data Reader: click a data point; Left and Right step through the rows; Esc ends")
                     }
                     GraphTool::Text => self.say("Text: click where the text goes; Esc ends"),
+                    GraphTool::Slope => self.say("Slope: click near a data point; Esc cancels"),
                     GraphTool::Draw(kind) => {
                         self.say(format!("{}: drag on the graph (Shift constrains); Esc ends", kind.name()))
                     }
                     GraphTool::Data(tool) => self.say(crate::data_tools::hint(tool)),
+                    GraphTool::ZoomIn => self.say("Zoom In: click the page where to zoom; Esc ends"),
+                    GraphTool::Pan => self.say("Pan: drag the page to move the view; Esc ends"),
+                    GraphTool::ScaleIn => self.say("Scale In: drag a rectangle to magnify the axes; Esc ends"),
+                    GraphTool::ScaleOut => self.say("Scale Out: click to step back to the previous axes; Esc ends"),
                     GraphTool::Pointer => {}
                 }
             }
+            Action::GraphView { graph, op } => {
+                let state = self.graphs.entry(graph).or_default();
+                match op {
+                    ViewOp::ZoomOut => state.zoom_out(),
+                    ViewOp::WholePage => state.whole_page(),
+                    ViewOp::ZoomAll => state.zoom_all(),
+                }
+                let percent = (state.zoom.factor * 100.0).round();
+                self.say(format!("Zoom {percent}%"));
+            }
+            Action::ScaleIn { graph, layer, x, y } => {
+                let state = &mut self.graphs.entry(graph).or_default().scale;
+                if graph_scale::scale_in(&mut self.doc, state, graph, layer, x, y) {
+                    self.say("Scale In");
+                }
+            }
+            Action::ScaleOut { graph, layer } => {
+                let state = &mut self.graphs.entry(graph).or_default().scale;
+                if graph_scale::scale_out(&mut self.doc, state, graph, layer) {
+                    self.say("Scale Out");
+                } else {
+                    self.say("Scale Out: no earlier scale to go back to");
+                }
+            }
+            Action::SetViewMode { graph, mode } => {
+                if self.doc.project().graph(graph).is_some() && self.doc.project().view_mode(graph) != mode {
+                    self.doc.adjust_view(|p| p.set_view_mode(graph, mode));
+                }
+            }
+            Action::SetLayerIcons { graph, on } => {
+                self.doc.apply("Show Layer Icons", |p| {
+                    if let Some(g) = p.graph_mut(graph) {
+                        g.page.style.layer_icons = on;
+                    }
+                });
+            }
+            Action::FullScreen(graph) if self.full_screen.is_none() => {
+                self.full_screen = Some(crate::view_modes::FullScreen::new(graph, !self.full_screen_reminder_off));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+            }
+            Action::FullScreen(_) => {}
             Action::DataEdit(edit) => self.data_edit(edit),
             Action::AddText { graph, layer, at } => {
                 let state = self.graphs.entry(graph).or_default();
@@ -1928,6 +2179,24 @@ impl SheafApp {
                     }
                 });
             }
+            Action::AddSlope { graph, layer, slope } => {
+                self.doc.apply("Add slope annotation", |p| {
+                    if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
+                        l.slopes.push(slope);
+                    }
+                });
+                self.say("Slope annotation added");
+            }
+            Action::EditSlope { graph, layer, slope } => {
+                self.slope_dialog = SlopeDialog::edit(&self.doc, graph, layer, slope);
+            }
+            Action::AddStraightLine { graph, layer } => {
+                self.straight_line_dialog = StraightLineDialog::new_line(&self.doc, graph, layer);
+            }
+            Action::EditStraightLine { graph, layer, line } => {
+                self.straight_line_dialog = StraightLineDialog::edit(&self.doc, graph, layer, line);
+            }
+            Action::Hint(text) => self.say(text),
             Action::EditShape { graph, layer, shape } => {
                 self.shape_dialog = ShapeDialog::edit(&self.doc, graph, layer, shape);
             }
@@ -1952,7 +2221,8 @@ impl SheafApp {
             Action::StartIntegrate { graph } => self.start_integrate(graph),
             Action::Gadget { graph, op } => self.gadget(graph, op),
             Action::ExportGraph(graph) => {
-                self.export = Some(ExportDialog::new(graph, self.folder()));
+                self.export =
+                    Some(ExportDialog::new(graph, self.folder()).with_themes(self.startup.themes_dir.clone()));
             }
             Action::ExportData(book) => self.export_data(book),
             Action::ExportExcel(book) => {
@@ -2433,6 +2703,7 @@ impl SheafApp {
                     }
                     copy.remap_cond_format_columns(&|c| renamed.get(&c).copied());
                     copy.remap_note_columns(&|c| renamed.get(&c).copied());
+                    copy.remap_format_columns(&|c| renamed.get(&c).copied());
                     if let Some(b) = p.workbook_mut(book) {
                         b.sheets.insert(active + 1, copy);
                         b.active_sheet = active + 1;
@@ -2742,6 +3013,12 @@ impl SheafApp {
         grid::cond_range(state, sheet)
     }
 
+    fn format_target(&self, book: WindowId) -> Result<sheaf_core::cellformat::FormatTarget, &'static str> {
+        let sheet = self.doc.project().workbook(book).map(|b| b.sheet()).ok_or("This workbook no longer exists")?;
+        let state = self.books.get(&book).ok_or("Select cells first")?;
+        grid::format_target(state, sheet)
+    }
+
     fn note_cell(&self, book: WindowId) -> Result<(ColumnId, usize), &'static str> {
         let sheet = self.doc.project().workbook(book).map(|b| b.sheet()).ok_or("This workbook no longer exists")?;
         let state = self.books.get(&book).ok_or("Select a cell first")?;
@@ -2808,6 +3085,22 @@ impl SheafApp {
             tool: graph.and_then(|g| self.graphs.get(&g)).map_or(GraphTool::Pointer, |s| s.tool()),
             curve: graph.and_then(|g| self.graph_curve(g)),
             layer_curves: graph.map(|g| self.graph_layer_curves(g)).unwrap_or_default(),
+            stack: graph.and_then(|g| {
+                let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
+                project.graph(g)?.layers.get(layer).map(|l| l.stack)
+            }),
+            selected_shape: graph.and_then(|g| {
+                let (layer, sheaf_plot::scene::ObjectKind::Shape(shape)) = self.graphs.get(&g)?.selected? else {
+                    return None;
+                };
+                Some((layer, shape, project.graph(g)?.layers.get(layer)?.shapes.len()))
+            }),
+            view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
+            layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
+            can_cumulate: graph.is_some_and(|g| {
+                let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
+                project.graph(g).and_then(|gr| gr.layers.get(layer)).is_some_and(sheaf_core::stack::layer_cumulates)
+            }),
         }
     }
 
@@ -2950,15 +3243,22 @@ impl SheafApp {
             || self.import_wizard.is_some()
             || self.graph_props.is_some()
             || self.layer_contents.is_some()
+            || self.layer_management.is_some()
+            || self.fit_page.is_some()
             || self.plot_setup.is_some()
             || self.error_bars.is_some()
             || self.trendline.is_some()
             || self.stack_panels.is_some()
+            || self.merge_graphs.is_some()
             || self.label_panels.is_some()
             || self.simulate.is_some()
             || self.column_props.is_some()
             || self.text_dialog.is_some()
             || self.shape_dialog.is_some()
+            || self.slope_dialog.is_some()
+            || self.straight_line_dialog.is_some()
+            || self.comparison_plot.is_some()
+            || self.multi_y.is_some()
             || self.set_values.is_some()
             || self.analysis.is_some()
             || self.fit.is_some()
@@ -2968,6 +3268,7 @@ impl SheafApp {
             || self.mask_condition.is_some()
             || self.cond_format.is_some()
             || self.cell_note.is_some()
+            || self.cell_format.is_some()
             || self.reshape.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
@@ -3243,6 +3544,39 @@ impl SheafApp {
                 }
             }
         }
+        if let Some(d) = &mut self.fit_page {
+            use crate::dialogs::fit_page::Outcome;
+            match d.show(ctx, &mut self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed => self.fit_page = None,
+                Outcome::Done => {
+                    self.fit_page = None;
+                    self.say("Fitted the page to the layers");
+                }
+            }
+        }
+        if let Some(d) = &mut self.layer_management {
+            use crate::dialogs::layer_management::Outcome;
+            match d.show(ctx, &mut self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed => self.layer_management = None,
+                Outcome::Applied => {
+                    self.layer_management = None;
+                    self.say("Updated the layers");
+                }
+            }
+        }
+        if let Some(d) = &mut self.merge_graphs {
+            match d.show(ctx, &mut self.doc) {
+                MergeGraphsOutcome::Open => {}
+                MergeGraphsOutcome::Closed => self.merge_graphs = None,
+                MergeGraphsOutcome::Created(graph) => {
+                    self.merge_graphs = None;
+                    self.focus(graph);
+                    self.say("Merged the graph windows");
+                }
+            }
+        }
         if let Some(d) = &mut self.label_panels {
             match d.show(ctx, &mut self.doc) {
                 LabelPanelsOutcome::Open => {}
@@ -3251,6 +3585,28 @@ impl SheafApp {
                     self.label_panels = None;
                     self.focus(graph);
                     self.say("Created panels by label");
+                }
+            }
+        }
+        if let Some(d) = &mut self.multi_y {
+            match d.show(ctx, &mut self.doc) {
+                MultiYOutcome::Open => {}
+                MultiYOutcome::Closed => self.multi_y = None,
+                MultiYOutcome::Created(graph) => {
+                    self.multi_y = None;
+                    self.focus(graph);
+                    self.say("Created multiple Y axes graph");
+                }
+            }
+        }
+        if let Some(d) = &mut self.comparison_plot {
+            match d.show(ctx, &mut self.doc) {
+                ComparisonPlotOutcome::Open => {}
+                ComparisonPlotOutcome::Closed => self.comparison_plot = None,
+                ComparisonPlotOutcome::Created(graph) => {
+                    self.comparison_plot = None;
+                    self.focus(graph);
+                    self.say("Created multiple comparisons plot");
                 }
             }
         }
@@ -3288,6 +3644,16 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.shape_dialog = None;
+        }
+        if let Some(d) = &mut self.slope_dialog
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.slope_dialog = None;
+        }
+        if let Some(d) = &mut self.straight_line_dialog
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.straight_line_dialog = None;
         }
         if let Some(d) = &mut self.set_values
             && !d.show(ctx, &mut self.doc)
@@ -3407,6 +3773,11 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.cell_note = None;
+        }
+        if let Some(d) = &mut self.cell_format
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.cell_format = None;
         }
         if let Some(d) = &mut self.row_filter
             && !d.show(ctx, &mut self.doc)
@@ -3876,6 +4247,35 @@ impl SheafApp {
                             .apply("Hide plot", |p| objects::set_plot_visible(p, graph, 0, n.saturating_sub(1), false));
                     }
                 }
+                "zoom" => {
+                    // the first graph's window zoomed by the factor, its view scrolled to the page's centre
+                    if let (Some(graph), Ok(f)) = (first_graph, arg.parse::<f32>()) {
+                        let page = self.doc.project().graph(graph).map(|g| (g.page.width_pt, g.page.height_pt));
+                        let factor = f.clamp(1.0, 32.0);
+                        let (w, h) = page.unwrap_or((0.0, 0.0));
+                        // the view shows 1/factor of the page; this top left centres it
+                        let k = (1.0 - 1.0 / factor) / 2.0;
+                        let scroll = egui::vec2(w as f32 * k, h as f32 * k);
+                        self.graphs.entry(graph).or_default().zoom = crate::graph_zoom::Zoom { factor, scroll };
+                    }
+                }
+                "merge-graphs" if self.doc.project().graphs().count() >= 2 => {
+                    self.merge_graphs = Some(MergeGraphsDialog::new(self.doc.project()));
+                }
+                "layer-management" => {
+                    if let Some(graph) = first_graph {
+                        self.layer_management = crate::dialogs::layer_management::LayerManagementDialog::new(
+                            self.doc.project(),
+                            graph,
+                            None,
+                        );
+                    }
+                }
+                "fit-page" => {
+                    if let Some(graph) = first_graph {
+                        self.fit_page = Some(crate::dialogs::fit_page::FitPageDialog::new(graph));
+                    }
+                }
                 "autosave" => {
                     self.autosave_dialog =
                         Some(AutosaveDialog::new(self.autosave.settings, self.autosave.has_session()));
@@ -4088,7 +4488,7 @@ impl SheafApp {
                 }
                 "export" => {
                     if let Some(id) = first_graph {
-                        self.export = Some(ExportDialog::new(id, None));
+                        self.export = Some(ExportDialog::new(id, None).with_themes(self.startup.themes_dir.clone()));
                     }
                 }
                 "import-wizard" => {
@@ -4217,6 +4617,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
                     s.columns.retain(|c| !columns.contains(&c.id));
                     s.remap_cond_format_columns(&|c| (!columns.contains(&c)).then_some(c));
                     s.remap_note_columns(&|c| (!columns.contains(&c)).then_some(c));
+                    s.remap_format_columns(&|c| (!columns.contains(&c)).then_some(c));
                 }
             }
             Window::Graph(g) => {
@@ -4278,11 +4679,18 @@ impl eframe::App for SheafApp {
             self.pending = Some(Pending::Quit);
         }
         self.active = self.workspace.active();
-        self.shortcuts(ctx, &mut actions);
+        let full = self.full_screen.is_some();
+        // Full Screen shows only the page: the editing shortcuts stay off while it is up.
+        if !full {
+            self.shortcuts(ctx, &mut actions);
+        }
 
-        egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| self.menu_bar(ui, &mut actions));
-        {
+        if !full {
+            egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| self.menu_bar(ui, &mut actions));
+        }
+        if !full {
             let c = self.menu_context();
+            let format = self.text_format();
             let tb = &self.toolbars;
             let bar_frame = || egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(3, 1));
             if tb.shown(Bar::Standard) {
@@ -4294,7 +4702,7 @@ impl eframe::App for SheafApp {
             if tb.any(&second) {
                 egui::TopBottomPanel::top("toolbar_second")
                     .frame(bar_frame())
-                    .show(ctx, |ui| toolbar::show_row(ui, &second, tb, &c, &mut actions));
+                    .show(ctx, |ui| toolbar::show_row_with_format(ui, &second, tb, &c, format.as_ref(), &mut actions));
             }
             if !self.status_bar_hidden {
                 egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| self.status_bar(ui));
@@ -4305,11 +4713,11 @@ impl eframe::App for SheafApp {
                     .show(ctx, |ui| toolbar::show_row(ui, &[Bar::Graphs2D], tb, &c, &mut actions));
             }
         }
-        {
+        if !full {
             let data = panel_data(&self.doc, &self.logs, self.active, &self.path, &self.graph_props);
             self.panels.strips_and_docks(ctx, &data, &mut actions);
         }
-        {
+        if !full {
             let c = self.menu_context();
             let tb = &self.toolbars;
             let side_frame = || egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(1, 3));
@@ -4333,33 +4741,41 @@ impl eframe::App for SheafApp {
                     });
             }
         }
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::WORKSPACE_GREY)).show(ctx, |ui| {
-            if self.doc.project().windows.is_empty() {
-                self.welcome(ui, &mut actions);
-            } else {
-                let doc = &self.doc;
-                let books = &mut self.books;
-                let graphs = &mut self.graphs;
-                let actions = &mut actions;
-                let info = |id: WindowId| {
-                    doc.project()
-                        .window(id)
-                        .map(|w| WindowInfo { title: w.title(), graph: matches!(w, Window::Graph(_)) })
-                };
-                let mut content = |id: WindowId, ui: &mut egui::Ui| match doc.project().window(id) {
-                    Some(Window::Workbook(_)) => {
-                        grid::show(ui, doc, id, books.entry(id).or_default(), actions);
-                    }
-                    Some(Window::Graph(_)) => {
-                        graph_view::show(ui, doc, id, graphs.entry(id).or_default(), actions);
-                    }
-                    None => {}
-                };
-                self.workspace.show(ui, doc.dirty, &info, &mut content);
+        if let Some(fs) = &mut self.full_screen {
+            if fs.show(ctx, self.doc.project(), self.doc.revision()) == crate::view_modes::Event::End {
+                self.full_screen_reminder_off |= fs.never_remind;
+                self.full_screen = None;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
             }
-        });
+        } else {
+            egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::WORKSPACE_GREY)).show(ctx, |ui| {
+                if self.doc.project().windows.is_empty() {
+                    self.welcome(ui, &mut actions);
+                } else {
+                    let doc = &self.doc;
+                    let books = &mut self.books;
+                    let graphs = &mut self.graphs;
+                    let actions = &mut actions;
+                    let info = |id: WindowId| {
+                        doc.project()
+                            .window(id)
+                            .map(|w| WindowInfo { title: w.title(), graph: matches!(w, Window::Graph(_)) })
+                    };
+                    let mut content = |id: WindowId, ui: &mut egui::Ui| match doc.project().window(id) {
+                        Some(Window::Workbook(_)) => {
+                            grid::show(ui, doc, id, books.entry(id).or_default(), actions);
+                        }
+                        Some(Window::Graph(_)) => {
+                            graph_view::show(ui, doc, id, graphs.entry(id).or_default(), actions);
+                        }
+                        None => {}
+                    };
+                    self.workspace.show(ui, doc.dirty, &info, &mut content);
+                }
+            });
+        }
 
-        {
+        if !full {
             let data = panel_data(&self.doc, &self.logs, self.active, &self.path, &self.graph_props);
             self.panels.flyouts(ctx, &data, &mut actions);
         }

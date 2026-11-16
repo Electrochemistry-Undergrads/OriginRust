@@ -2,7 +2,7 @@ use super::*;
 use sheaf_core::graph::{HexbinBy, HexbinStyle, PlotKind};
 
 fn make_hexbin(h: &mut Harness<'static, SheafApp>) -> sheaf_core::WindowId {
-    show_window(h, "Book1 - sample");
+    show_window(h, "Book1 - sample.csv");
     let before = project(h).graphs().count();
     select_b_and_c(h);
     menu_path(h, &["Plot"]);
@@ -22,7 +22,7 @@ fn the_contour_heat_map_menu_has_a_live_hexbin_item_and_the_rest_stay_grey() {
     make_hexbin(&mut h);
     // The other items of the submenu are still there, greyed.
     let mut h = start(vec![data_file("hexbin-menu-grey")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     select_b_and_c(&mut h);
     menu_path(&mut h, &["Plot"]);
     not_toolbar(&h, "Contour/Heat Map").into_iter().next().unwrap().click();

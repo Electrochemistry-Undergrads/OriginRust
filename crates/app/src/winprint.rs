@@ -87,7 +87,7 @@ pub fn print_pdf(pdf: &[u8], setup: &PageSetup, page_pt: (f64, f64), title: &str
 #[cfg_attr(not(test), allow(unused_imports))]
 pub use imp::print_to_printer;
 #[cfg(windows)]
-pub use imp::print_with_dialog;
+pub use imp::{print_with_dialog, printable_size_pt};
 
 #[cfg(windows)]
 mod imp {
@@ -102,7 +102,9 @@ mod imp {
         LOGPIXELSX, LOGPIXELSY, PHYSICALHEIGHT, PHYSICALOFFSETX, PHYSICALOFFSETY, PHYSICALWIDTH, PlayEnhMetaFile,
         SetEnhMetaFileBits, VERTRES,
     };
-    use windows_sys::Win32::Graphics::Printing::{ClosePrinter, DocumentPropertiesW, OpenPrinterW, PRINTER_HANDLE};
+    use windows_sys::Win32::Graphics::Printing::{
+        ClosePrinter, DocumentPropertiesW, GetDefaultPrinterW, OpenPrinterW, PRINTER_HANDLE,
+    };
     use windows_sys::Win32::Storage::Xps::{AbortDoc, DOCINFOW, EndDoc, EndPage, StartDocW, StartPage};
     use windows_sys::Win32::System::Memory::{GlobalLock, GlobalUnlock};
     use windows_sys::Win32::UI::Controls::Dialogs::{
@@ -300,6 +302,17 @@ mod imp {
         title: &str,
         output: Option<&Path>,
     ) -> Result<(), String> {
+        with_printer_dc(printer, setup, page_pt, |hdc| print_on_dc(hdc, pages, None, page_pt, setup, title, output))
+    }
+
+    /// Opens a device context on the named printer with the Page Setup's paper and orientation and
+    /// runs `f` on it.
+    fn with_printer_dc<R>(
+        printer: &str,
+        setup: &PageSetup,
+        page_pt: (f64, f64),
+        f: impl FnOnce(HDC) -> Result<R, String>,
+    ) -> Result<R, String> {
         let name = wide(printer);
         let mut handle = PRINTER_HANDLE { Value: null_mut::<c_void>() };
         // SAFETY: `name` is NUL-terminated and outlives the call.
@@ -329,7 +342,7 @@ mod imp {
             if hdc.is_null() {
                 Err("the printer could not be opened for printing".to_string())
             } else {
-                let r = print_on_dc(hdc, pages, None, page_pt, setup, title, output);
+                let r = f(hdc);
                 // SAFETY: the context was created above.
                 unsafe { DeleteDC(hdc) };
                 r
@@ -338,6 +351,41 @@ mod imp {
         // SAFETY: opened above.
         unsafe { ClosePrinter(handle) };
         result
+    }
+
+    /// The name of the default printer.
+    fn default_printer() -> Option<String> {
+        let mut len = 0u32;
+        // SAFETY: the sizing call with no buffer sets `len` to the characters needed.
+        unsafe { GetDefaultPrinterW(null_mut(), &mut len) };
+        if len == 0 {
+            return None;
+        }
+        let mut buf = vec![0u16; len as usize];
+        // SAFETY: `buf` holds `len` characters.
+        if unsafe { GetDefaultPrinterW(buf.as_mut_ptr(), &mut len) } == 0 {
+            return None;
+        }
+        let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        Some(String::from_utf16_lossy(&buf[..end]))
+    }
+
+    /// The printable area of the default printer on the Page Setup's paper and orientation, in
+    /// points (`HORZRES` x `VERTRES`). `None` when there is no printer or it cannot be queried.
+    pub fn printable_size_pt(setup: &PageSetup, page_pt: (f64, f64)) -> Option<(f64, f64)> {
+        let printer = default_printer()?;
+        with_printer_dc(&printer, setup, page_pt, |hdc| {
+            // SAFETY: `hdc` is a live device context.
+            let caps = |i: u32| f64::from(unsafe { GetDeviceCaps(hdc, i as i32) });
+            let (dx, dy) = (caps(LOGPIXELSX), caps(LOGPIXELSY));
+            let (w, h) = (caps(HORZRES), caps(VERTRES));
+            if dx > 0.0 && dy > 0.0 && w > 0.0 && h > 0.0 {
+                Ok((w * 72.0 / dx, h * 72.0 / dy))
+            } else {
+                Err("the printer reports no printable area".to_string())
+            }
+        })
+        .ok()
     }
 }
 

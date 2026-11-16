@@ -43,6 +43,10 @@ pub use sheaf_calc::{
     FftWindow, IfftOptions, PowerNorm, TraceMethod, WindowCorrection,
 };
 pub use sheaf_calc::{EnvelopeOptions, EnvelopeType};
+pub use sheaf_calc::{
+    FilterError, FilterResponse, FirMethod, FirSpec, FirWindow, FreqUnit, IIR_MAX_ORDER, IirMethod, IirSpec,
+    MAX_FIR_ORDER as FIR_MAX_ORDER, MagnitudeUnit,
+};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
@@ -820,6 +824,10 @@ pub enum Tool {
     Fft(FftSpec),
     Ifft(IfftSpec),
     FftFilter(FftFilterSpec),
+    /// Signal Processing > IIR Filter (Origin's `dfilter`, OriginPro; documented, not measured; analysis-tools.md 17).
+    IirFilter(IirSpec),
+    /// Signal Processing > FIR Filter (Origin 2027's FIR Filter app; documented, not measured; analysis-tools.md 17).
+    FirFilter(FirSpec),
     Envelope(EnvelopeSpec),
     Coherence(CoherenceSpec),
     Decimate(DecimateSpec),
@@ -909,6 +917,8 @@ impl Tool {
             Tool::Fft(_) => "FFT",
             Tool::Ifft(_) => "IFFT",
             Tool::FftFilter(_) => "FFT filter",
+            Tool::IirFilter(_) => "IIR filter",
+            Tool::FirFilter(_) => "FIR filter",
             Tool::Envelope(_) => "Envelope",
             Tool::Coherence(_) => "Coherence",
             Tool::Decimate(_) => "Decimation",
@@ -991,6 +1001,8 @@ impl Tool {
             Tool::Fft(_) => "FFT",
             Tool::Ifft(_) => "IFFT",
             Tool::FftFilter(_) => "FFTFilter",
+            Tool::IirFilter(_) => "IIRFilter",
+            Tool::FirFilter(_) => "FIRFilter",
             Tool::Envelope(_) => "Envelope",
             Tool::Coherence(_) => "Coherence",
             Tool::Decimate(_) => "Decimate",
@@ -1405,6 +1417,42 @@ pub(crate) fn resolve_rows(rows: RowRange, short: &str, x: &[f64], n: usize) -> 
     }
 }
 
+/// The groups behind the report of a one-way ANOVA with a means comparison and of a two-sample t-test, kept on the
+/// report sheet for the Multiple Comparisons Plot (T64).
+fn comparison_source(
+    tool: &Tool,
+    inputs: &[Input<'_>],
+    pairs: Vec<(usize, usize)>,
+) -> Option<crate::compplot::ComparisonSource> {
+    use crate::compplot::{ComparisonGroup, ComparisonKind, ComparisonSource, StepDown};
+    let (kind, alpha, step_down) = match tool {
+        Tool::Anova(spec) if spec.comparison.is_some() => {
+            let step_down = match spec.comparison {
+                Some(MeansComparison::HolmBonferroni) => Some(StepDown::Bonferroni),
+                Some(MeansComparison::HolmSidak) => Some(StepDown::Sidak),
+                _ => None,
+            };
+            (ComparisonKind::OneWayAnova, spec.alpha, step_down)
+        }
+        Tool::TTest(TTestSpec { kind: TTestKind::TwoSample { .. }, alpha, .. }) => {
+            (ComparisonKind::TwoSampleTTest, *alpha, None)
+        }
+        _ => return None,
+    };
+    let units = match inputs.first() {
+        Some(f) if inputs.iter().all(|i| i.units == f.units) => f.units.clone(),
+        _ => String::new(),
+    };
+    let groups = inputs
+        .iter()
+        .map(|i| ComparisonGroup {
+            name: i.name.clone(),
+            values: i.ys().iter().copied().filter(|v| v.is_finite()).collect(),
+        })
+        .collect();
+    Some(ComparisonSource { kind, groups, units, pairs, alpha, step_down })
+}
+
 /// A sheet name that the workbook does not use yet: `prefix` followed by the smallest free number.
 pub(crate) fn free_sheet_name(sheets: &[Worksheet], prefix: &str) -> String {
     (1..)
@@ -1665,6 +1713,7 @@ fn run_peak_chain(
 mod categorical;
 mod curves;
 mod dist;
+mod filters;
 mod manip;
 mod multivariate;
 mod power;
@@ -1684,7 +1733,7 @@ pub use sheaf_calc::{
 impl Project {
     /// A new graph with a column plot of each (bin centre, count) pair of columns.
     fn histogram_graph(&mut self, ids: &[ColumnId], plots: &[(usize, usize)]) -> WindowId {
-        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.long_name.clone());
+        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(crate::template::Template::Scatter);
         for &(x, y) in plots {
             self.add_plot_xy(graph, 0, Some(ids[x]), ids[y], None).expect("the graph and the new columns exist");
@@ -1710,7 +1759,7 @@ impl Project {
     /// A new graph with the scatter and line plots of a probability plot; the plan names columns of the
     /// new result sheet by position.
     fn xy_graph(&mut self, ids: &[ColumnId], plan: &dist::XyGraph) -> WindowId {
-        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.long_name.clone());
+        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(crate::template::Template::Scatter);
         for p in &plan.plots {
             self.add_plot_xy(graph, 0, Some(ids[p.x]), ids[p.y], None).expect("the graph and the new columns exist");
@@ -1878,6 +1927,7 @@ impl Project {
         let mut notes: Vec<String> = Vec::new();
         // Plots of a new graph: indices into `on_sheet` of the X and the Y column.
         let mut graph_plots: Vec<(usize, usize)> = Vec::new();
+        let mut comparison_pairs: Vec<(usize, usize)> = Vec::new();
         // A graph of scatter and line plots (probability plots).
         let mut xy_graph: Option<dist::XyGraph> = None;
         // Further graphs of the same tool (loading plot, biplot).
@@ -1936,6 +1986,7 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 graph_plots = out.plots;
+                comparison_pairs = out.comparison_pairs;
             }
             Tool::DistFit(_) | Tool::ProbPlot(_) => {
                 let out = dist::run(&request.tool, &inputs)?;
@@ -2296,6 +2347,8 @@ impl Project {
                     });
                 }
             }
+            Tool::IirFilter(spec) => filters::run_iir(spec, &inputs, &mut beside)?,
+            Tool::FirFilter(spec) => filters::run_fir(spec, &inputs, &mut beside)?,
             Tool::Envelope(spec) => {
                 for inp in &inputs {
                     // Rows without an X or a Y value drop out before the extremes are searched.
@@ -2935,6 +2988,7 @@ impl Project {
 
         // Everything was computed; now change the project.
         let count = request.columns.len();
+        let comparison_source = comparison_source(&request.tool, &inputs, comparison_pairs);
         drop(inputs);
         let mut new_columns = Vec::with_capacity(beside.len());
         let mut added_names: Vec<String> = Vec::new();
@@ -2995,6 +3049,7 @@ impl Project {
                 sheet_column_ids.push(id);
             }
             sheet_name = ws.name.clone();
+            ws.comparison_source = comparison_source;
             let b = self.workbook_mut(book_id).expect("workbook exists");
             b.sheets.push(ws);
             new_sheet = Some(b.sheets.len() - 1);
@@ -3109,6 +3164,7 @@ impl Project {
             }
         }
         ws.notes_reorder_rows(&|c| columns.is_empty() || columns.contains(&c), &order, n);
+        ws.formats_reorder_rows(&|c| columns.is_empty() || columns.contains(&c), &order, n);
         // The rows moved, so a filter is applied again to the new order.
         let _ = self.reapply_row_filter(book, sheet);
         Ok(())
@@ -3151,6 +3207,7 @@ impl Project {
         }
         for (id, order) in orders {
             ws.notes_reorder_rows(&|c| c == id, &order, n);
+            ws.formats_reorder_rows(&|c| c == id, &order, n);
         }
         // The rows moved, so a filter is applied again to the new order.
         let _ = self.reapply_row_filter(book, sheet);
@@ -3208,6 +3265,7 @@ impl Project {
                 c.reorder_rows(&keep, n);
             }
             ws.notes_reorder_rows(&|_| true, &keep, n);
+            ws.formats_reorder_rows(&|_| true, &keep, n);
             Ok((kept, sheet))
         }
     }
@@ -4015,6 +4073,77 @@ mod tests {
         let r = p.analyze(&request(&[flat], Tool::FftFilter(FftFilterSpec { options, interval: None }))).unwrap();
         assert!(p.numeric(r.new_columns[0]).unwrap().iter().all(|v| v.abs() < 1e-12));
         assert!(r.message.starts_with("FFT filter"), "{}", r.message);
+    }
+
+    #[test]
+    fn an_iir_filter_goes_beside_its_column() {
+        let (mut p, book, flat, ramp) = sample();
+        // X runs 0 to 10 in steps of 1: Fs = 1 Hz, Nyquist 0.5 Hz. A forward-backward low pass keeps a constant.
+        let spec = IirSpec { order: Some(2), cutoff: Some(0.2), forward_backward: true, ..IirSpec::default() };
+        let r = p.analyze(&request(&[flat, ramp], Tool::IirFilter(spec))).unwrap();
+        assert_eq!(r.new_columns.len(), 2);
+        let out = p.numeric(r.new_columns[0]).unwrap();
+        assert!(out.iter().all(|v| (v - 2.0).abs() < 1e-9), "{out:?}");
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!(
+            ws.columns[2].comments,
+            "Butterworth low pass IIR filter of B (order 2, Fc 0.2 Hz, forward-backward)"
+        );
+        assert_eq!(ws.columns[2].units, "A");
+        assert!(ws.columns[2].long_name.ends_with("IIR filtered"), "{}", ws.columns[2].long_name);
+        assert!(r.message.starts_with("IIR filter"), "{}", r.message);
+        // a ramp is a straight line for a zero-phase low pass with odd extension
+        let ramp_out = p.numeric(r.new_columns[1]).unwrap();
+        let ramp_in = p.numeric(ramp).unwrap();
+        for (a, b) in ramp_out.iter().zip(ramp_in.iter()) {
+            assert!((a - b).abs() < 1e-3, "{a} vs {b}");
+        }
+    }
+
+    #[test]
+    fn iir_and_fir_filters_refuse_what_cannot_be_designed_or_applied() {
+        let (mut p, _, flat, _) = sample();
+        // 0.7 Hz is above the Nyquist frequency of 0.5 Hz
+        let bad = IirSpec { cutoff: Some(0.7), ..IirSpec::default() };
+        let e = p.analyze(&request(&[flat], Tool::IirFilter(bad))).unwrap_err();
+        assert!(e.to_string().contains("Nyquist"), "{e}");
+        // 11 points are too few for forward-backward filtering at order 10
+        let short = IirSpec { forward_backward: true, cutoff: Some(0.1), ..IirSpec::default() };
+        let e = p.analyze(&request(&[flat], Tool::IirFilter(short))).unwrap_err();
+        assert!(e.to_string().contains("more than"), "{e}");
+        let odd =
+            FirSpec { response: FilterResponse::HighPass, order: Some(5), cutoff: Some(0.2), ..FirSpec::default() };
+        let e = p.analyze(&request(&[flat], Tool::FirFilter(odd))).unwrap_err();
+        assert!(e.to_string().contains("even order"), "{e}");
+    }
+
+    #[test]
+    fn a_fir_filter_goes_beside_its_column_and_keeps_a_constant() {
+        let (mut p, book, flat, _) = sample();
+        let spec = FirSpec { order: Some(4), cutoff: Some(0.2), ..FirSpec::default() };
+        let r = p.analyze(&request(&[flat], Tool::FirFilter(spec))).unwrap();
+        let out = p.numeric(r.new_columns[0]).unwrap();
+        assert!(out.iter().all(|v| (v - 2.0).abs() < 1e-9), "{out:?}");
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!(ws.columns[2].comments, "Hamming window low pass FIR filter of B (order 4, Fc 0.2 Hz)");
+        let ls = FirSpec {
+            method: FirMethod::LeastSquares,
+            order: Some(4),
+            pass: Some(0.1),
+            stop: Some(0.3),
+            ..FirSpec::default()
+        };
+        let r = p.analyze(&request(&[flat], Tool::FirFilter(ls))).unwrap();
+        let out = p.numeric(r.new_columns[0]).unwrap();
+        assert!(out.iter().all(|v| (v - 2.0).abs() < 1e-9), "{out:?}");
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert!(
+            ws.columns[2]
+                .comments
+                .starts_with("least squares low pass FIR filter of B (order 4, pass 0.1 Hz, stop 0.3 Hz"),
+            "{}",
+            ws.columns[2].comments
+        );
     }
 
     #[test]

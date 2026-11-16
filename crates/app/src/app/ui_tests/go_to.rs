@@ -28,7 +28,7 @@ fn destination(h: &mut Harness<'static, SheafApp>, row: &str, column: &str, exte
 #[test]
 fn go_to_an_omitted_coordinate_keeps_that_axis_of_the_current_cell() {
     let mut h = start(vec![data_file("goto-optional-cell")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "10.5");
     let before = project(&h).clone();
     let revision = h.state().doc.revision();
@@ -56,7 +56,7 @@ fn go_to_extend_matches_origins_forward_backward_inside_and_single_axis_cases() 
             p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 4])).unwrap();
         });
         settle(&mut h);
-        show_window(&mut h, "Book1 - sample");
+        show_window(&mut h, "Book1 - sample.csv");
         let source_sheet = sheet(&h).clone();
         h.state_mut().books.get_mut(&book).unwrap().select_cells(&source_sheet, (1, 1), end);
         settle(&mut h);
@@ -77,7 +77,7 @@ fn go_to_omitted_axis_retains_the_selected_range_on_that_axis() {
         [("10", "", vec![1, 2], 9..10), ("", "1", vec![0], 1..4)].into_iter().enumerate()
     {
         let mut h = start(vec![data_file(&format!("goto-optional-range-{i}"))]);
-        show_window(&mut h, "Book1 - sample");
+        show_window(&mut h, "Book1 - sample.csv");
         select_block(&mut h, "4.5", "0.5");
         destination(&mut h, row, column, false);
         let target = book_ui(&h).target(sheet(&h)).unwrap();
@@ -89,7 +89,7 @@ fn go_to_omitted_axis_retains_the_selected_range_on_that_axis() {
 #[test]
 fn go_to_clamps_to_row_capacity_and_reveals_empty_rows_without_growing_data() {
     let mut h = start(vec![data_file("goto-distant-row")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let before = project(&h).clone();
     let revision = h.state().doc.revision();
     destination(&mut h, "1000", "2", false);
@@ -115,7 +115,7 @@ fn go_to_reveals_a_column_more_than_four_viewports_away_and_returns_to_the_first
         }
     });
     settle(&mut h);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let name = grid::head_name(sheet(&h), 82);
     let before = project(&h).clone();
     let revision = h.state().doc.revision();
@@ -133,7 +133,7 @@ fn go_to_reveals_a_column_more_than_four_viewports_away_and_returns_to_the_first
 #[test]
 fn go_to_invalid_entries_empty_ok_cancel_and_escape_preserve_selection_and_history() {
     let mut h = start(vec![data_file("goto-cancel")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "4.5");
     let selection = book_ui(&h).sel.clone();
     let before = project(&h).clone();

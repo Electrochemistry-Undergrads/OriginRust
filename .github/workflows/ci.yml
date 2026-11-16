@@ -31,6 +31,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           prefix-key: debug0-v1-rust
+      - run: python3 tools/greyed-count.py --check
+      - run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/tests -v
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --exclude sheaf-app --all-targets -- -D warnings
       - run: cargo test --workspace --exclude sheaf-app

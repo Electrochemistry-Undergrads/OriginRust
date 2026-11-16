@@ -461,7 +461,7 @@ fn row(
         item(ui, "Hide", Some(Action::HideWindow(id)));
         item(ui, "Rename...", Some(Action::RenameWindow(id)));
         item(ui, "Delete", Some(Action::DeleteWindow(id)));
-        item(ui, "Duplicate", None);
+        item(ui, "Duplicate", Some(Action::DuplicateWindow(id)));
         ui.separator();
         item(ui, "Export...", Some(if graph { Action::ExportGraph(id) } else { Action::ExportData(id) }));
         ui.separator();

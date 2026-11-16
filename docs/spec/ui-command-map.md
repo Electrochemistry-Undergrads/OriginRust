@@ -194,7 +194,9 @@ Origin help names a "Violin with Box" button on the 2D Graphs toolbar, but its i
 - Layer Contents... [F12]: choose which datasets are plotted in the active layer (C-list "Layer
   Plot Contents": available data, layer contents, add/remove arrows, Edit Range, Plot Setup).
 - Plot Setup...: choose X/Y/error columns and the plot type per dataset.
-- Add Plot to Layer: Line..., Scatter..., Line + Symbol..., Column..., Area...
+- Add Plot to Layer: Line..., Scatter..., Line + Symbol..., Column..., Area... (each opens Layer Contents
+  for the active layer with that type chosen on the plot type button, measured in Origin 2016 on
+  2026-11-15; Sheaf does the same, T63 J)
 - Add Error Bars...; Add Function Graph....
 - Rescale to Show All [Ctrl+R].
 - Legend: Add Legend Title, Box Chart Components, Categorical Values, Point by Point, Data
@@ -259,7 +261,7 @@ Labels by folder (paraphrased lists of the English labels, P-tags in brackets):
   unmeasured); the others of this folder not named in their own task stay grey.
 - **Signal Processing**: Smooth [P0], FFT Filters, FFT (submenu FFT: FFT, IFFT, 2D FFT, 2D IFFT),
   Convolution, Deconvolution, Correlation, 2D Correlation, Coherence, Decimation, Envelope,
-  Hilbert Transform, IIR Filter, STFT, Wavelet submenu (Decompose, Reconstruction, Denoise,
+  Hilbert Transform, IIR Filter (live, T55; Sheaf adds FIR Filter after it, the FIR app's own menu place unknown), STFT, Wavelet submenu (Decompose, Reconstruction, Denoise,
   Smooth, Continuous Wavelet, Multi-Scale DWT, 2D Decompose/Reconstruction, Wavelet
   Functions). [Smooth P0, rest P1/P2]
 - **Fitting**: Linear Fit, Polynomial Fit, Multiple Linear Regression, Exponential Fit,

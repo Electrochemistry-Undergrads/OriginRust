@@ -109,6 +109,32 @@ bold [seen]. The horizontal divider can be dragged. Context menus [spec F].
   size of 22 for the default text [seen 2, `ax-title.png`, `opts-numfmt.png`]; the older note of 18
   pt in graphing.md is not what this installation shows. Tick label size was not read.
 
+### Existing command entry points (T63)
+
+Sheaf's Standard Duplicate button uses the active workbook or graph, even when a different
+Explorer row is selected, and is state-disabled without an active window. Explorer's window
+context Duplicate uses that clicked window, including a hidden one. Both call the existing
+Window > Duplicate operation, show and activate the copy, and create one undo step. Four UI
+regressions cover target identity, copies of empty/populated books and graphs, hidden windows,
+context cancellation and Undo/Redo; the existing Explorer and Window-menu tests also pass.
+
+The Plot > Statistics Probability Plot and Q-Q Plot entries remain unavailable, assigned to
+B8/T14 after the T63 C review. The published [plot_prob defaults](https://docs.originlab.com/x-function/ref/plot_prob/)
+include Blom scores and a 95% confidence band; Sheaf's existing descriptive-statistics tools
+use Filliben positions and lack that band control. Their dispatch cannot establish equivalent
+Plot-menu behavior. The existing tools remain documented in statistics section 16; no new
+Origin 2016 numeric measurement was made by this entry-point review.
+
+
+### Format bar: selected graph text (Sheaf, T58 slice 3)
+
+For a selected title, label or legend, the bar shows its installed font family and point size,
+pressed Bold/Italic state, size increase/decrease and a Font Color menu. Without a text target,
+or while a dialog/cell editor owns editing, these controls are disabled; the size reads 0.
+Enter commits a size draft; Escape or loss of focus cancels it. Text and worksheet numbers are
+unchanged. Graphing 7.4 records the Origin 2016 size/font/colour controls and the unresolved
+native whole-object Bold/Italic difference. Other Format controls remain disabled in this slice.
+
 ## 2. Child windows
 
 Pictures: `gr-plain.png`, `grc-page.png`, `rc-titlebar.png`; second study `graph2-plain.png`,
@@ -489,6 +515,28 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
 - **Left out.** Notes window, rich text, `@NCP`, Mini Toolbar button, hovering only on the tab, notes
   on labels/headers.
 
+### Cell formatting (T59)
+
+Origin facts known: Format Cells is on the cell, column-header and row-number context menus,
+Format > Cell... and Format > Worksheet... (F4) exist, Set Data Style > Default is on the cell
+menu, Ctrl+U underlines a selected column, the X-Function is `wcellformat`. Not measured: the
+Format Cells controls and defaults, Apply-to choices, Format > Worksheet's scope, Set Data Style,
+manual versus conditional precedence, sort behaviour and `.opj` storage.
+
+Sheaf (all unmeasured choices): the **Format Cells** window (cell/column/row menus, Format > Cell...)
+shows Font (Default or an installed family), Size (0 = Default), Bold/Italic/Underline, Use color
+with a Text Color button, Use fill with a Fill Color button, Horizontal Default/Left/Center/Right,
+Clear Formats, OK, Cancel, Apply (Apply enabled once something changed). It starts from the first
+selected cell and applies only what the user changed; OK and Apply are one undo step each ("Format
+cells"), Cancel and the close box are inert, Clear Formats is one step ("Clear formats"). With a
+label cell selected it formats that label row of the column. Format > Worksheet... and Set Data
+Style > Default stay grey: the worksheet-wide scope and the style are not measured. The row height
+stays 16 px whatever the size; the grid draws bold by painting the text twice (egui has no bold
+face) and maps fonts to egui's monospace family when the name says so, else proportional (installed
+fonts in the grid are a leftover). Print, worksheet images and PDF use the real family, size
+scaled by printed font / 12, italic, underline (a line under the text), colours, fills and
+alignment; they also show conditional colours. Model and rules: workbook-model.md 13b.
+
 ## 4. Graph window
 
 Pictures: `gr-plain.png`, `gr-graph.png`, `grc-*.png`, `gdlg-*.png`; second study
@@ -575,6 +623,33 @@ Pictures: `gr-plain.png`, `gr-graph.png`, `grc-*.png`, `gdlg-*.png`; second stud
     editor [spec D1, D3]. On the layer icon: Plot Setup (see its menu above) [seen 2].
 - Colour list of the default palette ("By One"): black, red, green, blue... [spec graphing.md]; in
   the Group tab of Plot Details the strip behind "By One" shows a long list of colours.
+
+### 4.x Zoom and pan (T65, measured 2026-11-15)
+
+Origin 2016 (scripted clicks and pictures, scratch `re-workspace/scratch/t60/zoom`, `zoom2`):
+- View > Zoom In (Ctrl+I) is a mode: nothing changes until a click on the page, which doubles the
+  zoom (100, 200, 400, 800, 1600 % seen) and **re-centres the view on the clicked point**; the mode
+  ends after the click. Scroll bars appear above 100 %.
+- View > Zoom Out (Ctrl+M) acts at once and halves: 800, 400, 200, 100, 50, 25 %, then nothing.
+- View > Whole Page (Ctrl+W) returns to 100 %: the page fitted to the window, no scroll bars.
+- The Standard toolbar's zoom combo lists 25, 50, 75, 100 and 200 % and takes a typed value
+  (300 gave 300 %); it shows the zoom rounded to whole percent.
+- The Tools toolbar's magnifiers are **Scale In** and **Scale Out** (axis magnification: "double-click
+  to restore, ctrl-drag to create zoom graph"), not the page zoom. The hand is the **Zoom-Panning
+  Tool**: drag the page (or arrow keys) to pan, mouse wheel (or + and -) to zoom; "+" zooms by 1.25
+  and "-" by 0.85 about the middle of the view, an arrow key moves about 2 points; a click with it
+  changes nothing.
+- View > Zoom All: corrected in graphing 23.1 (a zoom of the active graph so that all objects, also those outside the page, fit; the "Hit ESC" reminder belongs to Full Screen).
+
+Sheaf (`crates/app/src/graph_zoom.rs`, `graph_view.rs`): the same Zoom In mode (one click, x2,
+re-centred, up to 3200 %), Zoom Out by halves to 25 %, Whole Page, the Zoom-Panning tool (drag, +/-
+x1.25/x0.85 about the middle, arrows 2 pt, wheel x1.25/x0.85 a notch about the pointer: the wheel's
+factor and anchor are Sheaf's choice) on the Tools bar, manual scroll bars, and, without the tool,
+the wheel scrolling a zoomed page (Shift+wheel sideways) and Ctrl+wheel zooming about the pointer
+(Sheaf's choices: Origin's wheel without the tool was not measured). Zoom is per window, screen-only
+and not saved; every click, drag and hit-test goes through the zoomed transform. The page raster is
+capped at 4096 px a side (the texture is stretched beyond that). Not built: the zoom combo and the margin Origin lets the view scroll past the page. Zoom All and the Tools-bar
+Scale In/Scale Out are T69 (graphing 23, built).
 
 ## 5. Dialogs, as seen
 
@@ -969,8 +1044,7 @@ unlisted windows belong to root. Added ranges survive scope changes. The browser
 Current Sheet each time; preferences are not saved. The parent remains open on browser Cancel
 or Escape. Five UI regressions cover return/apply, cross-book position mapping, Cancel/Escape,
 multiple ranges/Remove and edited/reset references. A fixture covers sheet/book/folder/recursive
-scopes, including unlisted root books. Exclude and editing the lower row ranges remain
-unimplemented; Exclude stays disabled.
+scopes, including unlisted root books. Exclude is covered by the later follow-up below.
 
 The top-table selection follow-up (`re-workspace/scratch/t02-browser-selection/origin/` and
 `verified/`) has nine valid isolated Origin cases, including a final Current Sheet restore.
@@ -993,6 +1067,68 @@ and reference transfer. Scope changes clear the top selection and preserve added
 Five additional UI regressions cover contiguous and noncontiguous selection, adjacent Ctrl
 selection, disabled block controls, select-all/group removal, mixed-workbook ranges, scope
 changes and block/list transfer. Navigation still waits for the parent, preserving data/history.
+
+The lower row-range follow-up (`re-workspace/scratch/t02-browser-rows/`) opens the ellipsis
+in a lower Rows cell. Origin 2016 shows a separate Range dialog, with Entire Column(s)
+checked and From/To disabled. In the synthetic sheet whose A/B/C/D columns end at 4/2/6/3,
+the defaults are 1 and 6, and the displayed bound is 1 through 6, including when B is selected.
+The upper bound follows the sheet's data end, rather than the selected column's end or its
+100 allocated view rows. The published [input-data guide](https://docs.originlab.com/origin-help/analydialog-specifyinput/)
+also describes row subsets; the installed-version captures establish the details here.
+
+| Native row-editor case | Observed result |
+|---|---|
+| C From 2, To 4 | lower rows `[2:4]`, qualified C reference with `[2:4]` suffix; parent Row 0 still C6 |
+| B From 3, To 6, although B has two values | accepted `[3:6]`; parent Row 0 still B2 |
+| C From 4, To 2 | accepted literal `[4:2]`, without sorting or an ordering error |
+| Enter 2/4, then Cancel | original entire-column range remains |
+| Save 2/4, reopen, select Entire Column(s), reopen | suffix removed, `[1:end]` restored, disabled From/To reset to 1/6 |
+| From or To 0, To 7, or nonnumeric `abc` | refused; Range remains open with the existing lower range unchanged |
+| Numeric edits `1.5`, `2.9`, `6.9`, `2+1`, `2abc`, `2e1` | leading integers 1, 2, 6, 2, 2, 2; bounds checked after conversion, no arithmetic/exponent evaluation |
+| B:D block, From 2, To 4 | endpoint reference `B"Shared current"[2]:D"Shared current"[4]`; parent Row 0 still D3 |
+| C From 2, To 2 | explicit `[2:2]` interval retained |
+| Empty four-column sheet | disabled From 1/To 0; Enter accepts Entire Column(s), with no row suffix |
+
+Row bounds belong to each added range. The child editor leaves the browser and Go To open,
+and accepting it changes only the browser's range; navigation still waits for the parent OK.
+Cancel and Escape discard the child's pending bounds, preserving the saved range. Selecting
+Entire Column(s) removes the suffix rather than storing an explicit full-length subset.
+The measurements comprise five isolated instances and two sweeps with a fresh synthetic project
+per case: 18 valid cases. The first empty-sheet attempt used two columns, which shortened the
+parent flyout and caused the fixed menu click to miss the browser; that case is excluded and
+replaced by the four-column capture. Scope is explicitly restored to Current Sheet.
+
+Sheaf uses the measured sheet bound and leading-integer conversion, retains reversed and
+single-row intervals, and refuses invalid bounds without closing the child. A block's row subset
+stays attached to its added range when another lower row is removed. Enter accepts the default
+without toggling Entire Column(s), and respects a focused Cancel button. Ten additional UI
+regressions cover row transfer/end mapping, sheet bounds, reversed and numeric inputs, refusal,
+Cancel/Escape/reopening, whole-column reset, empty columns, keyboard focus and block association.
+Saved preferences remain open; these row choices stay local
+to the open dialog and create no document edit or undo entry.
+
+The Exclude follow-up (`re-workspace/scratch/t02-browser-exclude/`, `verified/`) records ten
+valid isolated Origin 2016 cases on the same four-column fixture. Exclude starts disabled with
+no upper selection. It removes only selected entries from the upper list: excluding B retains
+the distinct D with the same long name and selects C, whose displayed index remains 3. Excluding
+the final D also selects C. For Ctrl-selected A and C, both click orders remove A/C and select B.
+Selection therefore follows the first removed list position, clamped to the final remaining row.
+Excluding every column leaves the table empty and Add/Exclude disabled. Changing scope restores
+all columns and clears the selection; cancelling and reopening the browser also restores them.
+
+An already-added B remains in the lower table after excluding upper B; browser OK transfers B,
+and parent Row 0 still reaches original B2. With B excluded, selecting visible A/C/D keeps Add as
+One Block disabled because the original worksheet columns are not consecutive. Ordinary Add
+still adds those three columns individually. All valid cases retain four worksheet columns and
+the original B/C values; Cancel preserves C7, while choosing the nearest C with parent Row 0
+reaches C6. The failed first follow-up batch left the browser open after an Escape sequence and
+ended at its own instance watchdog; it is excluded. The seven repeated cases use fresh instances
+and explicit Cancel buttons, and the final capture restores Current Sheet.
+
+Sheaf now implements these temporary exclusions, nearest-row selection, original column ordinals,
+scope/reopen reset and independent lower ranges. Seven UI regressions cover both single-row
+positions, duplicate names, both multi-selection orders, all-column removal, scope/reopen reset,
+already-added ranges and gapped block refusal, with unchanged project data and history.
 
 Sheaf's Go To now follows the measured input order/focus, right-aligned OK/Cancel and optional-coordinate, zero/end,
 extension and clamping behavior. Its capacity remains data length plus 30 spare view rows;

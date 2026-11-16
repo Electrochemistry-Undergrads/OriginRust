@@ -38,6 +38,13 @@ pub struct Worksheet {
     /// Cell notes (see [`crate::notes`]), sorted by column and row.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<crate::notes::CellNote>,
+    /// Cell formats (see [`crate::cellformat`]): ranges of columns and rows; later ranges win.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_formats: Vec<crate::cellformat::FormatRange>,
+    /// Set on the report sheet of a one-way ANOVA with a means comparison and of a two-sample t-test: the groups
+    /// the report was made from, so that "Multiple Comparisons Plot" (T64) can draw them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comparison_source: Option<crate::compplot::ComparisonSource>,
 }
 
 impl Worksheet {
@@ -49,6 +56,8 @@ impl Worksheet {
             frozen: Frozen::default(),
             cond_formats: Vec::new(),
             notes: Vec::new(),
+            cell_formats: Vec::new(),
+            comparison_source: None,
         }
     }
 
@@ -145,6 +154,21 @@ pub struct ImportSource {
 }
 
 impl Workbook {
+    /// The title a graph made from this book takes: the book's long name, except that an imported
+    /// book titled with its whole file name (`data.csv`, as Origin titles imports) gives the name
+    /// without the extension, so graph titles and exported file names stay `data`.
+    pub fn title_for_graph(&self) -> String {
+        if let Some(src) = &self.source {
+            let path = std::path::Path::new(&src.path);
+            if path.file_name().is_some_and(|n| n.to_string_lossy() == self.long_name)
+                && let Some(stem) = path.file_stem()
+            {
+                return stem.to_string_lossy().into_owned();
+            }
+        }
+        self.long_name.clone()
+    }
+
     pub fn new(id: WindowId, name: impl Into<String>) -> Self {
         Workbook {
             id,
@@ -223,5 +247,24 @@ mod tests {
         let text = serde_json::to_string(&ws).unwrap();
         let back: Worksheet = serde_json::from_str(&text).unwrap();
         assert_eq!(back.frozen, Frozen { rows: 3, columns: 2 });
+    }
+}
+
+#[cfg(test)]
+mod title_tests {
+    use super::*;
+
+    #[test]
+    fn a_graph_of_an_imported_book_is_titled_without_the_extension() {
+        let mut b = Workbook::new(WindowId(1), "Book1");
+        b.long_name = "data.csv".into();
+        b.source = Some(ImportSource { path: "C:/runs/data.csv".into(), importer: "ascii".into() });
+        assert_eq!(b.title_for_graph(), "data");
+        // a title the user changed, or a book that was not imported, is used as it is
+        b.long_name = "My data.csv run".into();
+        assert_eq!(b.title_for_graph(), "My data.csv run");
+        b.source = None;
+        b.long_name = "notes.txt".into();
+        assert_eq!(b.title_for_graph(), "notes.txt");
     }
 }

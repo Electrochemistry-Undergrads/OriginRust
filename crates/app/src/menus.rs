@@ -15,7 +15,7 @@
 //! underlined, and Alt plus the letter of a top-level menu opens that menu. Letters inside the
 //! open menus are not handled (egui has no way to pick an item by letter).
 
-use crate::actions::{Action, CellOp, CopyKind, DataTool, GraphOp, GraphTool, ImportPick, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, DataTool, GraphOp, GraphTool, ImportPick, SheetOp, ViewOp};
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
@@ -29,7 +29,7 @@ use eframe::egui::{
     self, Color32, Key, KeyboardShortcut, Modifiers, Stroke, TextStyle,
     text::{LayoutJob, TextFormat},
 };
-use sheaf_core::graph::PlotKind;
+use sheaf_core::graph::{PlotKind, Stack};
 use sheaf_core::sheetops::{MaskOp, MoveTo};
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
@@ -39,7 +39,9 @@ use std::sync::OnceLock;
 /// Tooltip of an item that Sheaf does not have.
 pub const NOT_YET: &str = "Not available in Sheaf yet";
 const NEED_BOOK: &str = "Activate a workbook window first";
+pub const NO_CUMULATIVE: &str = "Cumulative needs a line, scatter or line + symbol plot in the layer";
 const NEED_GRAPH: &str = "Activate a graph window first";
+const NEED_SHAPE: &str = "Select a drawn object first";
 const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
 const NEED_CELLS: &str = "Select cells, columns or rows first";
@@ -131,6 +133,8 @@ pub enum Cmd {
     CondFormat(crate::dialogs::cond_format::CondKind),
     /// Worksheet > Conditional Formatting > Remove Conditional Format.
     RemoveCondFormat,
+    /// Format Cells... for the selected cells, rows, columns or label cell.
+    FormatCells,
     /// Cell menu > Add Note... / Edit Note...: the note editor for the selected cell.
     EditNote,
     /// Cell menu > Delete Note.
@@ -159,6 +163,11 @@ pub enum Cmd {
     },
     StackPanels,
     LabelPanels,
+    /// Graph > Merge Graph Windows... (T60).
+    MergeGraphs,
+    /// Statistics > Multiple Comparisons Plot... (T64).
+    ComparisonPlot,
+    MultiYAxes,
     /// Add / Edit Trendline... on a plot of the active layer.
     Trendline {
         layer: usize,
@@ -211,6 +220,14 @@ pub enum Cmd {
     /// Graph > Layer Contents... (F12): Origin's own window for the plots of a layer; `None` is the
     /// active layer.
     LayerContents(Option<usize>),
+    /// Graph > Add Plot to Layer > Line... and the others: Layer Contents with this plot type chosen.
+    AddPlotToLayer(PlotKind),
+    /// Graph > Layer Management... (T60); the layer to select, if any.
+    LayerManagement(Option<usize>),
+    /// Graph > Fit Page to Layers... (the window) and Format > Fit Page To Layers... (T60).
+    FitPageToLayers,
+    /// Format > Fit Page To Printer: the page takes the printable size of the default printer (T70).
+    FitPageToPrinter,
     /// Graph > Plot Setup...: Origin's own window for the data of a layer's plots.
     PlotSetup(Option<usize>),
     /// The graph settings of a given layer, with a plot chosen (the graph's right-click menus).
@@ -221,10 +238,16 @@ pub enum Cmd {
     },
     /// A change made from a graph's right-click menus.
     GraphEdit(GraphOp),
+    /// Graph > New Layer(Axes) or a Graph toolbar button: a layer of this kind next to the active layer.
+    AddLayer(sheaf_core::layers::NewLayerKind),
     /// Rescale to Show All on the active layer (Ctrl+R).
     Rescale,
     /// Graph > Exchange X-Y Axes on the active layer.
     ExchangeAxes,
+    /// Graph > Offset Grouped Data in Layer: the active layer's stack mode. A Constant step or an
+    /// Auto gap already stored on the layer is kept; a layer that is not in that mode starts from
+    /// the value Plot Details' Stack tab offers.
+    SetStack(sheaf_core::graph::Stack),
     /// Graph > Legend > Reconstruct Legend on the active layer (Ctrl+L).
     ReconstructLegend,
     /// Graph > Legend > Update Legend on the active layer.
@@ -244,6 +267,44 @@ pub enum Cmd {
     DataTool(DataTool),
     /// The Text tool of the Tools toolbar.
     TextTool,
+    /// The Slope tool of the Tools toolbar.
+    SlopeTool,
+    /// Graph > Add Straight Line...
+    AddStraightLine,
+    /// Properties of a straight line.
+    EditStraightLine {
+        layer: usize,
+        line: usize,
+    },
+    /// View > Zoom In (Ctrl+I): the mode in which the next click on the page zooms in.
+    ZoomIn,
+    /// View > Zoom Out (Ctrl+M).
+    ZoomOut,
+    /// View > Whole Page (Ctrl+W).
+    WholePage,
+    /// View > Zoom All.
+    ZoomAll,
+    /// The Tools-bar Scale In tool.
+    ScaleIn,
+    /// The Tools-bar Scale Out tool.
+    ScaleOut,
+    /// View > Print View, Page View, Window View, Draft View.
+    SetViewMode(sheaf_core::project::ViewMode),
+    /// View > Show > Layer Icons.
+    ToggleLayerIcons,
+    /// View > Full Screen (Ctrl+Shift+J) and the page's "View Full Screen".
+    FullScreen,
+    /// The Pan tool of the Tools toolbar.
+    PanTool,
+    /// Object Edit toolbar Bring to Front / Send to Back: reorders the selected drawn shape.
+    OrderSelectedShape {
+        front: bool,
+    },
+    /// Properties of a slope annotation.
+    EditSlope {
+        layer: usize,
+        slope: usize,
+    },
     /// A drawing tool of the Tools toolbar.
     ShapeTool(sheaf_core::shape::ShapeKind),
     /// Properties of a drawn object.
@@ -376,6 +437,17 @@ pub struct MenuContext<'a> {
     /// worksheet as `curve`, the active plot first, then the others in plot order. The tools that
     /// compare curves (Average Multiple Curves, Intersect) start from these.
     pub layer_curves: Vec<ColumnId>,
+    /// The stack mode of the active layer of the active graph (the tick of Graph > Offset Grouped
+    /// Data in Layer); `None` without a graph.
+    pub stack: Option<sheaf_core::graph::Stack>,
+    /// True when the active layer has a plot that Cumulative stacking applies to (line, scatter, line + symbol).
+    pub can_cumulate: bool,
+    /// The selected drawn shape of the active graph as (layer, shape index, shapes in that layer).
+    pub selected_shape: Option<(usize, usize, usize)>,
+    /// The view mode of the active graph (the tick of View > Print View, Page View, Window View, Draft View).
+    pub view_mode: sheaf_core::project::ViewMode,
+    /// The active graph shows its layer icons (the tick of View > Show > Layer Icons).
+    pub layer_icons: bool,
 }
 
 impl<'a> MenuContext<'a> {
@@ -713,33 +785,35 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
         }
         WindowKind::Graph => {
             v.push(sep());
-            v.push(grey_keyed("Print View", ctrl(Key::Num2)));
-            v.push(grey_keyed("Page View", ctrl(Key::Num1)));
-            v.push(grey("Window View"));
-            v.push(grey_keyed("Draft View", ctrl(Key::Num0)));
+            use sheaf_core::project::ViewMode as VM;
+            v.push(keyed("Print View", ctrl(Key::Num2), Cmd::SetViewMode(VM::Print)));
+            v.push(keyed("Page View", ctrl(Key::Num1), Cmd::SetViewMode(VM::Page)));
+            v.push(item("Window View", Cmd::SetViewMode(VM::Window)));
+            v.push(keyed("Draft View", ctrl(Key::Num0), Cmd::SetViewMode(VM::Draft)));
             v.push(sep());
-            v.push(grey_keyed("Zoom In", ctrl(Key::I)));
-            v.push(grey_keyed("Zoom Out", ctrl(Key::M)));
-            v.push(grey_keyed("Whole Page", ctrl(Key::W)));
-            v.push(grey("Zoom All"));
+            v.push(keyed("Zoom In", ctrl(Key::I), Cmd::ZoomIn));
+            v.push(keyed("Zoom Out", ctrl(Key::M), Cmd::ZoomOut));
+            v.push(keyed("Whole Page", ctrl(Key::W), Cmd::WholePage));
+            v.push(item("Zoom &All", Cmd::ZoomAll));
             v.push(sep());
-            v.push(grey_sub(
-                "Show",
-                &[
-                    "Layer Icons",
-                    "Active Layer Indicator",
-                    "Axis Layer Icons",
-                    "Object Grid",
-                    "Layer Grid",
-                    "Frame",
-                    "Labels",
-                    "Data",
-                    "Active Layer Only",
-                    "Master Items on Screen",
-                ],
-            ));
+            let mut show = vec![item("Layer Icons", Cmd::ToggleLayerIcons)];
+            show.extend(greys(&[
+                "Active Layer Indicator",
+                "Axis Layer Icons",
+                "-",
+                "Object Grid",
+                "Layer Grid",
+                "-",
+                "Frame",
+                "Labels",
+                "Data",
+                "Active Layer Only",
+                "-",
+                "Master Items on Screen",
+            ]));
+            v.push(sub("Show", show));
             v.push(grey("Show Data Info"));
-            v.push(grey_keyed("Full Screen", ctrl_shift(Key::J)));
+            v.push(keyed("Full Screen", ctrl_shift(Key::J), Cmd::FullScreen));
         }
         WindowKind::None => {}
     }
@@ -766,7 +840,7 @@ fn plot_menu() -> Vec<Entry> {
                     grey("Column Scatter"),
                 ],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
-                greys(&["Vertical Drop Line"]),
+                vec![item("Vertical Drop Line", Cmd::Plot(Template::VerticalDropLine))],
                 vec![item("Lollipop Plot", Cmd::Plot(Template::Lollipop))],
                 vec![
                     item("Bubble", Cmd::Plot(Template::Bubble)),
@@ -787,7 +861,8 @@ fn plot_menu() -> Vec<Entry> {
             "Column/Bar/&Pie",
             [
                 vec![item("&Column", Cmd::Plot(Template::Column))],
-                greys(&["Column + Label", "Grouped Columns (indexed data)"]),
+                vec![item("Column + Label", Cmd::Plot(Template::ColumnLabel))],
+                greys(&["Grouped Columns (indexed data)"]),
                 vec![
                     item("Bar", Cmd::Plot(Template::Bar)),
                     item("Stacked Column", Cmd::Plot(Template::StackedColumn)),
@@ -804,10 +879,14 @@ fn plot_menu() -> Vec<Entry> {
         sep(),
         sub(
             "&Multi-Y",
-            with(
-                vec![item("&Double-Y", Cmd::Plot(Template::DoubleY))],
-                &["3Ys Y-YY", "3Ys Y-Y-Y", "4Ys Y-YYY", "4Ys YY-YY", "Multiple Y Axes..."],
-            ),
+            vec![
+                item("&Double-Y", Cmd::Plot(Template::DoubleY)),
+                item("3Ys Y-YY", Cmd::Plot(Template::Multi3YYy)),
+                item("3Ys Y-Y-Y", Cmd::Plot(Template::Multi3YYY)),
+                item("4Ys Y-YYY", Cmd::Plot(Template::Multi4YYyy)),
+                item("4Ys YY-YY", Cmd::Plot(Template::Multi4YyYy)),
+                item("Multiple Y Axes...", Cmd::MultiYAxes),
+            ],
         ),
         sub(
             "Y-offset/&Waterfall",
@@ -815,8 +894,10 @@ fn plot_menu() -> Vec<Entry> {
                 vec![
                     item("&Stacked Lines by Y Offsets", Cmd::Plot(Template::StackedLines)),
                     item("&Waterfall", Cmd::Plot(Template::Waterfall)),
+                    item("Waterfall Y:Color Mapping", Cmd::Plot(Template::WaterfallY)),
+                    item("Waterfall Z:Color Mapping", Cmd::Plot(Template::WaterfallZ)),
                 ],
-                &["Waterfall Y:Color Mapping", "Waterfall Z:Color Mapping", "3D Waterfall"],
+                &["3D Waterfall"],
             ),
         ),
         sub(
@@ -874,9 +955,11 @@ fn plot_menu() -> Vec<Entry> {
                 ],
                 vec![item("Ridgeline Chart", Cmd::Plot(Template::Ridgeline))],
                 vec![item("Histogram", Cmd::Plot(Template::Histogram))],
+                vec![
+                    grey("Histogram + Probabilities"),
+                    item("Stacked Histograms", Cmd::Plot(Template::StackedHistograms)),
+                ],
                 greys(&[
-                    "Histogram + Probabilities",
-                    "Stacked Histograms",
                     "Marginal Histograms",
                     "Marginal Box Charts",
                     "2D Kernel Density",
@@ -1181,7 +1264,8 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Decimation...", Cmd::Analyze(AnalysisKind::Decimate)),
                 item("Envelope...", Cmd::Analyze(AnalysisKind::Envelope)),
                 item("Hilbert Transform...", Cmd::Analyze(AnalysisKind::Hilbert)),
-                grey("IIR Filter..."),
+                item("IIR Filter...", Cmd::Analyze(AnalysisKind::IirFilter)),
+                item("FIR Filter...", Cmd::Analyze(AnalysisKind::FirFilter)),
                 grey("STFT..."),
                 grey_sub(
                     "Wavelet",
@@ -1254,6 +1338,7 @@ fn statistics_menu() -> Vec<Entry> {
                 grey("Repeated Measures ANOVA..."),
             ],
         ),
+        item("Multiple Comparisons Plot...", Cmd::ComparisonPlot),
         sub(
             "&Nonparametric Tests",
             vec![
@@ -1306,15 +1391,25 @@ fn graph_menu() -> Vec<Entry> {
         // Layer Contents is Origin's own window; Plot Setup opens Sheaf's Plots tab (add and remove plots).
         keyed("Layer Contents...", plain_key(Key::F12), Cmd::LayerContents(None)),
         item("Plot Setup...", Cmd::PlotSetup(None)),
-        grey_sub("Add Plot to Layer", &["Line...", "Scatter...", "Line + Symbol...", "Column...", "Area..."]),
+        // Origin opens Layer Contents with the plot type chosen (T63 group J).
+        sub(
+            "Add Plot to Layer",
+            vec![
+                item("Line...", Cmd::AddPlotToLayer(PlotKind::Line)),
+                item("Scatter...", Cmd::AddPlotToLayer(PlotKind::Scatter)),
+                item("Line + Symbol...", Cmd::AddPlotToLayer(PlotKind::LineSymbol)),
+                item("Column...", Cmd::AddPlotToLayer(PlotKind::Column)),
+                item("Area...", Cmd::AddPlotToLayer(PlotKind::Area)),
+            ],
+        ),
         sep(),
-        grey("Layer Management..."),
+        item("Layer Management...", Cmd::LayerManagement(None)),
         item("Add Error Bars...", Cmd::AddErrorBars),
         grey("Add Function Graph..."),
-        grey("Add Straight Line..."),
+        item("Add Straight Line...", Cmd::AddStraightLine),
         item("Add Text...", Cmd::AddText),
-        grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
-        grey("Merge Graph Windows..."),
+        new_layer_menu(),
+        item("Merge Graph Windows...", Cmd::MergeGraphs),
         sep(),
         keyed("Rescale to Show All", ctrl(Key::R), Cmd::Rescale),
         sub(
@@ -1331,9 +1426,18 @@ fn graph_menu() -> Vec<Entry> {
         grey("New Color Scale"),
         sep(),
         grey("Fit Layer to Graph"),
-        grey("Fit Page to Layers..."),
+        item("Fit Page to Layers...", Cmd::FitPageToLayers),
         item("Exchange X-Y Axes", Cmd::ExchangeAxes),
-        grey_sub("Offset Grouped Data in Layer", &["None", "Cumulative", "Constant", "Auto", "Individual"]),
+        sub(
+            "Offset Grouped Data in Layer",
+            vec![
+                item("None", Cmd::SetStack(Stack::None)),
+                item("Cumulative", Cmd::SetStack(Stack::Cumulative)),
+                item("Constant", Cmd::SetStack(Stack::Constant { step: 1.0 })),
+                item("Auto", Cmd::SetStack(Stack::Auto { gap_percent: 8.0 })),
+                item("Individual", Cmd::SetStack(Stack::Individual)),
+            ],
+        ),
         grey("Convert to Standard Font Size"),
     ]
 }
@@ -1415,13 +1519,13 @@ fn format_menu(kind: WindowKind) -> Vec<Entry> {
         WindowKind::Graph => vec![
             grey("Menu"),
             keyed("&Page Properties...", plain_key(Key::F2), Cmd::GraphProps(PropsTab::Page)),
-            grey("&Layer Properties..."),
+            item("&Layer Properties...", Cmd::GraphProps(PropsTab::Layer)),
             item("Plot P&roperties...", Cmd::GraphProps(PropsTab::Plots)),
             sep(),
             grey("Snap Layers to Grid"),
             grey("Snap Objects to Grid"),
-            grey("Fit Page To Layers"),
-            grey("Fit Page To Printer"),
+            item("Fit Page To Layers...", Cmd::FitPageToLayers),
+            item("Fit Page To Printer", Cmd::FitPageToPrinter),
             sep(),
             item("&Axes...", Cmd::GraphProps(PropsTab::XAxis)),
             sub(
@@ -1442,7 +1546,7 @@ fn format_menu(kind: WindowKind) -> Vec<Entry> {
             grey("Menu"),
             grey_keyed("&Worksheet...", plain_key(Key::F4)),
             item("&Column...", Cmd::ColumnProperties),
-            grey("Cell..."),
+            item("Cell...", Cmd::FormatCells),
             sep(),
             grey("Snap to Grid"),
             grey_keyed("Merge cells", ctrl(Key::R)),
@@ -1606,7 +1710,8 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(grey("Swap Columns..."));
     v.push(item("Column Width...", Cmd::ColumnProperties));
     v.extend(greys(&["-", "Slide Show of Dependent Graphs"]));
-    v.extend(greys(&["Add or Update Sparklines...", "-", "Format Cells..."]));
+    v.extend(greys(&["Add or Update Sparklines...", "-"]));
+    v.push(item("Format Cells...", Cmd::FormatCells));
     v.push(item("Properties...", Cmd::ColumnProperties));
     v
 }
@@ -1638,8 +1743,8 @@ pub fn cell_menu_for(noted: bool) -> Vec<Entry> {
         "Insert Sparklines...",
         "Insert Variables...",
         "-",
-        "Format Cells...",
     ]));
+    v.push(item("Format Cells...", Cmd::FormatCells));
     if noted {
         v.push(item("Edit Note...", Cmd::EditNote));
         v.push(item("Delete Note", Cmd::DeleteNote));
@@ -1659,7 +1764,8 @@ pub fn row_menu() -> Vec<Entry> {
     v.push(item("Insert", Cmd::InsertCells));
     v.push(item("Delete", Cmd::DeleteCells));
     v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
-    v.extend(greys(&["Insert Graph...", "Format Cells..."]));
+    v.push(grey("Insert Graph..."));
+    v.push(item("Format Cells...", Cmd::FormatCells));
     v
 }
 
@@ -1694,6 +1800,7 @@ pub fn graph_plot_menu(
     on_right: bool,
     book: Option<(WindowId, String)>,
     trendlines: usize,
+    layers: usize,
 ) -> Vec<Entry> {
     let change = |label: &str, to: PlotKind| {
         if to == kind {
@@ -1725,6 +1832,14 @@ pub fn graph_plot_menu(
         sep(),
         item("Add Trendline...", Cmd::Trendline { layer, plot, edit: false }),
     ];
+    if layers > 1 {
+        // The plot takes the axes of the layer it goes to (the extra Y axes of a multi-Y graph, T61).
+        let to_layer = (0..layers)
+            .filter(|&to| to != layer)
+            .map(|to| item(&format!("Layer {}", to + 1), Cmd::GraphEdit(GraphOp::MovePlotToLayer { layer, plot, to })))
+            .collect();
+        v.insert(5, sub("Move to Layer", to_layer));
+    }
     if trendlines > 0 {
         v.push(item("Edit Trendline...", Cmd::Trendline { layer, plot, edit: true }));
         v.push(item("Remove Trendline", Cmd::GraphEdit(GraphOp::RemoveTrendline { layer, plot })));
@@ -1743,7 +1858,8 @@ pub fn graph_plot_menu(
 }
 
 /// The menu of an axis. `grids` tells whether the axis shows grid lines now.
-pub fn graph_axis_menu(layer: usize, y: bool, grids: bool) -> Vec<Entry> {
+/// `page` is the page point that was right-clicked (Center puts the value there in the middle).
+pub fn graph_axis_menu(layer: usize, y: bool, grids: bool, page: (f64, f64)) -> Vec<Entry> {
     let tab = if y { PropsTab::YAxis } else { PropsTab::XAxis };
     let at = Cmd::GraphPropsAt { layer, tab, plot: None };
     vec![
@@ -1753,7 +1869,7 @@ pub fn graph_axis_menu(layer: usize, y: bool, grids: bool) -> Vec<Entry> {
         keyed("Rescale To Show All", ctrl(Key::R), Cmd::GraphEdit(GraphOp::Rescale { layer })),
         item("Axis Zoom In", Cmd::GraphEdit(GraphOp::AxisZoom { layer, y, zoom_in: true })),
         item("Axis Zoom Out", Cmd::GraphEdit(GraphOp::AxisZoom { layer, y, zoom_in: false })),
-        grey("Center"),
+        item("Center", Cmd::GraphEdit(GraphOp::AxisCenter { layer, y, page })),
         sep(),
         grey_sub("Copy Format", &["All", "All Style Formats", "Axis"]),
         grey("Save Format as Theme..."),
@@ -1807,6 +1923,24 @@ pub fn graph_shape_menu(layer: usize, shape: usize) -> Vec<Entry> {
     ]
 }
 
+/// The menu of a slope annotation.
+pub fn graph_slope_menu(layer: usize, slope: usize) -> Vec<Entry> {
+    vec![
+        keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteSlope { layer, slope })),
+        sep(),
+        item("Properties...", Cmd::EditSlope { layer, slope }),
+    ]
+}
+
+/// The menu of a straight line.
+pub fn graph_straight_line_menu(layer: usize, line: usize) -> Vec<Entry> {
+    vec![
+        keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteStraightLine { layer, line })),
+        sep(),
+        item("Properties...", Cmd::EditStraightLine { layer, line }),
+    ]
+}
+
 /// The menu of the legend.
 pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
     vec![
@@ -1839,16 +1973,26 @@ pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
     ]
 }
 
+/// Graph > New Layer(Axes): the nine kinds of Origin 2016 (Open Dialog... is the `layadd` window, unmeasured).
+fn new_layer_menu() -> Entry {
+    use sheaf_core::layers::NewLayerKind;
+    let mut entries: Vec<Entry> =
+        NewLayerKind::ALL.iter().map(|&kind| item(kind.menu_label(), Cmd::AddLayer(kind))).collect();
+    entries.push(sep());
+    entries.push(grey("Open Dialog..."));
+    sub("New Layer(Axes)", entries)
+}
+
 /// The menu of the page outside the plots and axes, or of the inside of a layer.
 pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
     vec![
         item("Add Text...", Cmd::AddText),
-        grey("Layer Management..."),
-        grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
+        item("Layer Management...", Cmd::LayerManagement(None)),
+        new_layer_menu(),
         grey("Add Shortcut to Favorites"),
         keyed("Copy Page", ctrl(Key::J), Cmd::CopyPage),
         item("Export Graphs...", Cmd::ExportGraph),
-        grey_keyed("View Full Screen", ctrl_shift(Key::J)),
+        keyed("View Full Screen", ctrl_shift(Key::J), Cmd::FullScreen),
         sep(),
         keyed("Rescale To Show All", ctrl(Key::R), Cmd::GraphEdit(GraphOp::Rescale { layer })),
         item("Page Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Page, plot: None }),
@@ -1870,15 +2014,19 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
         others,
         grey("Show Active Layer Only"),
         grey("Set Active Layer By Layer Icon Only"),
-        grey("Delete Layer"),
+        if layers > 1 {
+            item("Delete Layer", Cmd::GraphEdit(GraphOp::DeleteLayer { layer }))
+        } else {
+            grey("Delete Layer")
+        },
         sep(),
         keyed("Layer Contents...", plain_key(Key::F12), Cmd::LayerContents(Some(layer))),
         item("Plot Setup...", Cmd::PlotSetup(Some(layer))),
         grey("Double click to open Plot Setup"),
         sep(),
         item("Axis...", Cmd::GraphPropsAt { layer, tab: PropsTab::XAxis, plot: None }),
-        grey("Layer Properties..."),
-        grey("Layer Management..."),
+        item("Layer Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Layer, plot: None }),
+        item("Layer Management...", Cmd::LayerManagement(Some(layer))),
     ];
     if !plots.is_empty() {
         v.push(sep());
@@ -2206,7 +2354,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::PlotPanels { rows, cols } => {
             Action::PlotPanels { book: book?, columns: c.selected.to_vec(), rows: *rows, cols: *cols }
         }
+        Cmd::MergeGraphs => Action::MergeGraphs,
         Cmd::StackPanels => Action::StackPanels { book: book?, columns: c.selected.to_vec() },
+        Cmd::MultiYAxes => Action::MultiYAxes { book: book?, columns: c.selected.to_vec() },
+        Cmd::ComparisonPlot => Action::ComparisonPlot { book: book?, sheet: None },
         Cmd::LabelPanels => Action::LabelPanels { book: book?, columns: c.selected.to_vec() },
         Cmd::Trendline { layer, plot, edit } => {
             Action::Trendline { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, plot: *plot, edit: *edit }
@@ -2224,6 +2375,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::CondFormat(kind) => {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             Action::CondFormatDialog { book: book?, kind: *kind }
+        }
+        Cmd::FormatCells => {
+            c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            Action::FormatCellsDialog(book?)
         }
         Cmd::EditNote => {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
@@ -2292,19 +2447,34 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::PlotSetup(layer) => {
             Action::PlotSetup { graph: c.graph.ok_or(NEED_GRAPH)?, layer: layer.unwrap_or(c.layer) }
         }
+        Cmd::AddPlotToLayer(kind) => {
+            Action::AddPlotToLayer { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer, kind: *kind }
+        }
         Cmd::LayerContents(layer) => {
             Action::LayerContents { graph: c.graph.ok_or(NEED_GRAPH)?, layer: layer.unwrap_or(c.layer) }
         }
+        Cmd::LayerManagement(layer) => Action::LayerManagement { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer },
+        Cmd::FitPageToPrinter => Action::FitPageToPrinter { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::FitPageToLayers => Action::FitPageToLayers { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::GraphPropsAt { layer, tab, plot } => {
             Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, tab: *tab, plot: *plot }
         }
         Cmd::GraphEdit(op) => Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
+        Cmd::AddLayer(kind) => Action::GraphEdit {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            op: GraphOp::AddLayer { layer: c.layer, kind: *kind },
+        },
         Cmd::Rescale => {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::Rescale { layer: c.layer } }
         }
         Cmd::ExchangeAxes => {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::ExchangeAxes { layer: c.layer } }
         }
+        Cmd::SetStack(Stack::Cumulative) if !c.can_cumulate => return Err(NO_CUMULATIVE),
+        Cmd::SetStack(stack) => Action::GraphEdit {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            op: GraphOp::SetStack { layer: c.layer, stack: *stack },
+        },
         Cmd::ReconstructLegend => {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::ReconstructLegend { layer: c.layer } }
         }
@@ -2317,6 +2487,34 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::DataTool(tool) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Data(*tool) },
         Cmd::TextTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Text },
         Cmd::ShapeTool(kind) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Draw(*kind) },
+        Cmd::OrderSelectedShape { front } => {
+            let (layer, shape, len) = c.selected_shape.ok_or(NEED_SHAPE)?;
+            if (*front && shape + 1 >= len) || (!*front && shape == 0) {
+                return Err(if *front { "Already at the front" } else { "Already at the back" });
+            }
+            Action::GraphEdit {
+                graph: c.graph.ok_or(NEED_GRAPH)?,
+                op: GraphOp::OrderShape { layer, shape, front: *front },
+            }
+        }
+        Cmd::SlopeTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Slope },
+        Cmd::ZoomIn => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ZoomIn },
+        Cmd::PanTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pan },
+        Cmd::ZoomOut => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::ZoomOut },
+        Cmd::WholePage => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::WholePage },
+        Cmd::ZoomAll => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::ZoomAll },
+        Cmd::ScaleIn => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ScaleIn },
+        Cmd::ScaleOut => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ScaleOut },
+        Cmd::AddStraightLine => Action::AddStraightLine { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
+        Cmd::EditStraightLine { layer, line } => {
+            Action::EditStraightLine { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, line: *line }
+        }
+        Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
+        Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
+        Cmd::FullScreen => Action::FullScreen(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::EditSlope { layer, slope } => {
+            Action::EditSlope { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, slope: *slope }
+        }
         Cmd::EditShape { layer, shape } => {
             Action::EditShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape }
         }
@@ -2513,6 +2711,19 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleAiLink)) && c.ai_link {
+                    tick(ui, &response);
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleLayerIcons)) && c.layer_icons {
+                    tick(ui, &response);
+                }
+                if let Some(Cmd::SetViewMode(mode)) = &it.cmd
+                    && *mode == c.view_mode
+                {
+                    tick(ui, &response);
+                }
+                if let (Some(Cmd::SetStack(mode)), Some(current)) = (&it.cmd, c.stack)
+                    && std::mem::discriminant(mode) == std::mem::discriminant(&current)
+                {
                     tick(ui, &response);
                 }
                 if response.contains_pointer() {
@@ -2749,7 +2960,9 @@ mod tests {
         assert_eq!(find(ctrl(Key::N)), Some(Cmd::NewProject));
         assert_eq!(find(ctrl(Key::O)), Some(Cmd::OpenProject));
         assert_eq!(find(ctrl(Key::S)), Some(Cmd::SaveProject));
-        assert_eq!(find(ctrl(Key::I)), None, "Ctrl+I is Zoom In in Origin, no longer Import");
+        assert_eq!(find(ctrl(Key::I)), Some(Cmd::ZoomIn), "Ctrl+I is Zoom In in Origin, no longer Import");
+        assert_eq!(find(ctrl(Key::M)), Some(Cmd::ZoomOut));
+        assert_eq!(find(ctrl(Key::W)), Some(Cmd::WholePage));
         assert_eq!(find(plain_key(Key::F2)), Some(Cmd::GraphProps(PropsTab::Page)));
         assert_eq!(find(alt(Key::Enter)), Some(Cmd::WindowProperties));
     }
@@ -2779,6 +2992,11 @@ mod tests {
             tool: Default::default(),
             curve: None,
             layer_curves: Vec::new(),
+            stack: None,
+            can_cumulate: false,
+            selected_shape: None,
+            view_mode: Default::default(),
+            layer_icons: true,
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);

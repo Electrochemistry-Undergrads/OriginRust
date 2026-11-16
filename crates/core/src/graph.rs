@@ -58,7 +58,7 @@ impl Graph {
     /// Renumbers every column id stored anywhere in this graph through `f`: the plots' X, Y, error,
     /// base, size and colour columns, label columns, treemap and sunburst categories, the treemap order column, the
     /// parallel colour/group column, the plot offsets and their follows, the tick-label columns of
-    /// the axes and the plot choice of the rugs. Every path that renumbers columns (File > Append,
+    /// the axes, the plot choice of the rugs and the plot of the slope annotations. Every path that renumbers columns (File > Append,
     /// ...) goes through this; a new field that holds a [`ColumnId`] is added here.
     pub fn remap_columns(&mut self, f: &dyn Fn(ColumnId) -> ColumnId) {
         for layer in &mut self.layers {
@@ -79,6 +79,10 @@ impl Graph {
                 for c in &mut p.sunburst.categories {
                     *c = f(*c);
                 }
+            }
+            for sl in &mut layer.slopes {
+                sl.plot = f(sl.plot);
+                sl.x = sl.x.map(f);
             }
             for o in &mut layer.plot_offsets {
                 o.column = f(o.column);
@@ -304,6 +308,19 @@ pub struct Layer {
     /// Drawn lines, arrows, rectangles and ellipses (graphing spec section 17), above the data.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shapes: Vec<crate::shape::Shape>,
+    /// Slope annotations (graphing spec 17.6, T52): a slope marked between two rows of a plot.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub slopes: Vec<SlopeAnnotation>,
+    /// Straight lines at an axis value with a value label (T67, graphing spec "Straight lines").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub straight_lines: Vec<crate::straight_line::StraightLine>,
+    /// Significance brackets between groups of a multiple comparisons plot (T64, graphing spec 17.7): the pairs
+    /// that are shown, drawn above the groups at positions 1, 2, 3, ...
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub brackets: Vec<crate::compplot::SignificanceBracket>,
+    /// The settings of a multiple comparisons plot with every compared pair, so that the labels can be re-styled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comparison: Option<crate::compplot::ComparisonPlotOptions>,
     /// The colors given to new plots, in order. See [`Layer::next_color`].
     pub palette: Palette,
     /// Style copied to each new plot added to this layer.
@@ -320,6 +337,9 @@ pub struct Layer {
     /// waterfall). Only the drawing moves; the data stay as they are.
     #[serde(default, skip_serializing_if = "Stack::is_none")]
     pub stack: Stack,
+    /// Colour mapping of the curves of a [`Stack::Waterfall`] layer (graphing spec 13.17).
+    #[serde(default, skip_serializing_if = "WaterfallColor::is_none")]
+    pub waterfall_color: WaterfallColor,
     /// Settings of single curves for [`Layer::stack`], found by the curve's Y column: the offsets
     /// of [`Stack::Individual`] mode and which curve a fitted curve moves with.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -635,10 +655,34 @@ pub enum Stack {
     Constant { step: f64 },
     /// Each member is moved by its own offset from [`Layer::plot_offsets`].
     Individual,
+    /// Each member's drawn Y is its Y plus the sum of the Y values of all members before it at the
+    /// same row (graphing spec 13.15). Pointwise by row index, so it is not a pair of offsets: see
+    /// [`crate::stack::cumulative_add`]. Lines, scatter and line + symbol plots only.
+    Cumulative,
     /// A simple two-dimensional waterfall: member k is drawn moved right by `k * dx_percent` and
     /// up by `k * dy_percent` percent of the front frame, which shrinks to make room. Drawn only
     /// for a layer that is not linked to another and has no linked layers.
     Waterfall { dx_percent: f64, dy_percent: f64 },
+}
+
+/// How the curves of a waterfall layer are coloured (Origin's Waterfall Y:Color Mapping and Waterfall Z:Color
+/// Mapping). Sheaf's rules are in graphing spec 13.17.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WaterfallColor {
+    /// Each curve has the colour of its plot.
+    #[default]
+    None,
+    /// Each curve is coloured along its points by their Y values through the colour ramp.
+    Y,
+    /// Each curve is coloured as a whole by its Z value (see [`crate::stack::waterfall_z`]).
+    Z,
+}
+
+impl WaterfallColor {
+    pub fn is_none(&self) -> bool {
+        *self == WaterfallColor::None
+    }
 }
 
 impl Stack {
@@ -1033,6 +1077,13 @@ pub struct Axis {
     /// `opposite_ticks` refer to the bottom (X) or left (Y) edge.
     #[serde(default, skip_serializing_if = "AxisSide::is_normal")]
     pub side: AxisSide,
+    /// How far the axis line stands outward from its edge of the frame, in percent of the frame's
+    /// width (Origin's axis position "% From Left" / "% From Right", measured in percent of the X axis
+    /// length, graphing spec 21.3). Negative values move it inward: -50 puts a Y axis in the middle.
+    /// Used by the Y axis, whose line, ticks, tick labels and title move together; the frame, grid and
+    /// the line on the opposite edge stay. 0 (the default) is the edge itself.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub offset_pct: f64,
     /// Draw the axis line, its ticks and its tick labels in the color of the layer's first
     /// visible plot instead of `color` and the tick font's color.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -1736,6 +1787,64 @@ pub struct Trendline {
     pub label_offset_pt: (f64, f64),
 }
 
+/// A slope marked between two rows of one plot of a layer (Origin 2026b's Slope Annotation tool;
+/// graphing spec 17.6). It is tied to the plot by its Y column (stable under File > Append) and to
+/// the data by the two row numbers, so it is recomputed whenever the data or the axes change.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SlopeAnnotation {
+    /// The Y column of the plot the two points belong to.
+    pub plot: ColumnId,
+    /// The X column of that plot, which tells apart plots of one layer that share a Y column. `None`
+    /// (annotations saved without it, or a plot without an X column) matches any X. When several plots
+    /// still match, the first one is used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x: Option<ColumnId>,
+    /// The two rows, counted from 0 (the worksheet shows them from 1).
+    pub row_a: usize,
+    pub row_b: usize,
+    /// Draw the horizontal run and the vertical rise as dashed legs.
+    #[serde(default = "yes")]
+    pub show_legs: bool,
+    /// Moves the label from its default place (points; +x right, +y down).
+    #[serde(default, skip_serializing_if = "is_zero_pair")]
+    pub label_offset_pt: (f64, f64),
+    /// `None` is the plot's colour.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Color>,
+    #[serde(default = "SlopeAnnotation::default_width")]
+    pub width_pt: f64,
+}
+
+impl SlopeAnnotation {
+    fn default_width() -> f64 {
+        1.0
+    }
+
+    /// A slope between two rows (from 0) of the plot with Y column `plot`: legs shown, plot colour, 1 pt.
+    pub fn new(plot: ColumnId, row_a: usize, row_b: usize) -> Self {
+        SlopeAnnotation {
+            plot,
+            x: None,
+            row_a,
+            row_b,
+            show_legs: true,
+            label_offset_pt: (0.0, 0.0),
+            color: None,
+            width_pt: 1.0,
+        }
+    }
+
+    /// A slope between two rows of `plot`, tied to both its Y and its X column.
+    pub fn for_plot(plot: &Plot, row_a: usize, row_b: usize) -> Self {
+        SlopeAnnotation { x: plot.x, ..SlopeAnnotation::new(plot.y, row_a, row_b) }
+    }
+
+    /// Whether this annotation belongs to `plot` (same Y column, and the same X column when one is stored).
+    pub fn matches(&self, plot: &Plot) -> bool {
+        self.plot == plot.y && self.x.is_none_or(|x| plot.x == Some(x))
+    }
+}
+
 fn is_zero_pair(v: &(f64, f64)) -> bool {
     *v == (0.0, 0.0)
 }
@@ -2286,6 +2395,31 @@ impl Palette {
 mod tests {
     use super::*;
 
+    #[test]
+    fn slope_annotations_round_trip_and_old_layers_load_without_them() {
+        let mut s = SlopeAnnotation::new(ColumnId(7), 1, 4);
+        s.show_legs = false;
+        s.color = Some(Color::rgb(1, 2, 3));
+        s.width_pt = 2.5;
+        s.label_offset_pt = (3.0, -4.0);
+        let back: SlopeAnnotation = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back, s);
+        // Only the two rows and the column are required; the rest has defaults.
+        let min: SlopeAnnotation = serde_json::from_str(r#"{"plot":3,"row_a":0,"row_b":2}"#).unwrap();
+        assert_eq!(min, SlopeAnnotation::new(ColumnId(3), 0, 2));
+        assert!(min.show_legs && min.width_pt == 1.0 && min.color.is_none());
+        // A layer without slopes writes no key, and a layer written without the key loads.
+        let mut p = crate::Project::new();
+        let g = p.add_graph(crate::template::Template::Scatter);
+        let mut layer = p.graph(g).unwrap().layers[0].clone();
+        let json = serde_json::to_string(&layer).unwrap();
+        assert!(!json.contains("slopes"));
+        assert!(serde_json::from_str::<Layer>(&json).unwrap().slopes.is_empty());
+        layer.slopes.push(s);
+        let back: Layer = serde_json::from_str(&serde_json::to_string(&layer).unwrap()).unwrap();
+        assert_eq!(back.slopes, layer.slopes);
+    }
+
     fn pal(mode: PaletteMode) -> Palette {
         Palette { colors: vec![Color::rgb(0, 0, 0), Color::rgb(100, 100, 100), Color::rgb(200, 200, 200)], mode }
     }
@@ -2393,12 +2527,24 @@ mod tests {
     }
 
     #[test]
+    fn waterfall_colour_mapping_is_saved_with_the_layer_and_defaults_to_none() {
+        let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
+        assert_eq!(layer.waterfall_color, WaterfallColor::None);
+        assert!(!serde_json::to_string(&layer).unwrap().contains("waterfall_color"));
+        layer.waterfall_color = WaterfallColor::Z;
+        let json = serde_json::to_string(&layer).unwrap();
+        assert!(json.contains(r#""waterfall_color":"z""#), "{json}");
+        assert_eq!(serde_json::from_str::<Layer>(&json).unwrap().waterfall_color, WaterfallColor::Z);
+    }
+
+    #[test]
     fn stack_modes_are_written_with_a_kind_and_read_back() {
         let cases = [
             (Stack::None, r#"{"kind":"none"}"#),
             (Stack::Auto { gap_percent: 10.0 }, r#"{"kind":"auto","gap_percent":10.0}"#),
             (Stack::Constant { step: -500.0 }, r#"{"kind":"constant","step":-500.0}"#),
             (Stack::Individual, r#"{"kind":"individual"}"#),
+            (Stack::Cumulative, r#"{"kind":"cumulative"}"#),
             (
                 Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 },
                 r#"{"kind":"waterfall","dx_percent":5.0,"dy_percent":10.0}"#,

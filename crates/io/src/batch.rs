@@ -154,6 +154,8 @@ pub fn place_workbook_with(
                     frozen: Default::default(),
                     cond_formats: Vec::new(),
                     notes: Vec::new(),
+                    cell_formats: Vec::new(),
+                    comparison_source: None,
                 };
             }
             // Further sheets of the file (several data blocks) follow as new sheets.
@@ -642,6 +644,8 @@ mod tests {
             frozen: Default::default(),
             cond_formats: Vec::new(),
             notes: Vec::new(),
+            cell_formats: Vec::new(),
+            comparison_source: None,
         }];
         b
     }

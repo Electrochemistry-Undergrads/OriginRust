@@ -16,7 +16,7 @@ fn field(h: &mut Harness<'static, SheafApp>, label: &str, text: &str) {
 #[test]
 fn find_seeds_the_selected_display_and_numeric_mode_matches_values_not_substrings() {
     let mut h = start(vec![data_file("find-numeric-default")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     click_text(&mut h, "4.5");
     let before = project(&h).clone();
     let revision = h.state().doc.revision();
@@ -41,7 +41,7 @@ fn numeric_replace_absolute_values_keeps_sign_and_is_one_undo_step() {
         p.workbook_mut(book).unwrap().sheets[0].columns[1].data = ColumnData::numeric(vec![-2.0, 2.0, -3.0, 0.0]);
     });
     settle(&mut h);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let before = project(&h).clone();
     ctrl(&mut h, egui::Key::H);
     field(&mut h, QUERY, "2");
@@ -66,7 +66,7 @@ fn find_and_replace_tabs_keep_inputs_and_wildcards_replace_whole_matches() {
             ColumnData::text(["abXXc", "xabc", "abc", "z"].map(str::to_string).to_vec());
     });
     settle(&mut h);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     ctrl(&mut h, egui::Key::H);
     click(&mut h, "String");
     field(&mut h, QUERY, "a*c");
@@ -90,7 +90,7 @@ fn search_up_finds_the_previous_numeric_match_and_invalid_input_preserves_state(
         p.workbook_mut(book).unwrap().sheets[0].columns[1].data = ColumnData::numeric(vec![2.0, 5.0, 2.0, 8.0]);
     });
     settle(&mut h);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     let source = sheet(&h).clone();
     h.state_mut().books.get_mut(&book).unwrap().select_cells(&source, (1, 1), (1, 1));
     settle(&mut h);

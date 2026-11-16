@@ -141,7 +141,7 @@ Note: the analysis agent's own feature-level spec (analysis-features.md) does no
 | GP-LSYM-01 | Line plus symbol | Combined | P0 | GR 5 | |
 | GP-OVER-01 | Overlay of many curves on shared axes | Several Y columns or several books in one layer, with plot grouping | P0 | GR 1.5; XF plotxy | |
 | GP-ERR-01 | Error bars (Y, X, XY) | Error bars from error columns | P0 | GR 5.5 | |
-| GP-DY-01 | Double-Y and multiple Y axes | Two or more Y axes over one X axis (Origin: further layers linked to the first) | P0 | GR 8, GR 12; UI A2 | double Y and right Y axis done (model, renderer, `sheaf plot --y2`, `-t double-y`); 3 and 4 Y axes, app controls and the .opj reader's link not yet |
+| GP-DY-01 | Double-Y and multiple Y axes | Two or more Y axes over one X axis (Origin: further layers linked to the first) | P0 | GR 8, GR 12; UI A2 | double Y and right Y axis done (model, renderer, `sheaf plot --y2`, `-t double-y`); 3Ys/4Ys templates, Multiple Y Axes and axis offsets done (T61); the .opj file does not hold the axis offset (companion) |
 | GP-OFF-01 | Stacked lines by Y offsets and waterfall | Shifted curves | P0 | GR 8, GR 13; UI A2 | stacked lines done (model, renderer, Auto as in Origin, Constant, Individual, `-t stacked`, `--stack`, `--offsets`); a simple 2D waterfall (`-t waterfall`, `--waterfall`); app controls, Cumulative mode and reading offsets from .opj not yet |
 | GP-COL-01 | Column and bar charts | Grouped, stacked, floating, 100 percent | P1 | GR 8, GR 14; UI A2 | column charts done (bars side by side per layer, gap and overlap, bars from zero, `-t column`, `--bar-gap`, `--bar-overlap`, the gap read from .opj); horizontal bars, stacked, floating and 100 percent, plot groups and app controls not yet |
 | GP-SPL-01 | Spline and step connection | Smooth and stair-step lines | P1 | GR 5.2 | |
@@ -234,6 +234,7 @@ Note: the analysis agent's own feature-level spec (analysis-features.md) does no
 | SP-SM-03 | Smooth: FFT filter, Lowess, Loess, binomial | Other smoothing methods | P1 | XF smooth | |
 | SP-FFT-01 | FFT and inverse FFT | Spectrum and window functions | P1 | XF fft1, ifft1 | |
 | SP-FLT-01 | FFT filters | Low pass, high pass, band pass, band block | P1 | XF fft_filters | |
+| SP-FLT-02 | IIR and FIR filters | Butterworth, Chebyshev, elliptic IIR; window and least squares FIR | P2 | XF dfilter, FIR Filter app | |
 | SP-CORR-01 | Correlation and convolution | Signal operations | P2 | XF only | |
 | SP-WAV-01 | Wavelet analysis | Transform and denoise | P2 | XF Signal Processing/Wavelet | |
 | SP-DEC-01 | Decimation, envelope, coherence | Other signal tools | P2 | XF only | |

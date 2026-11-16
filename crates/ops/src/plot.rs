@@ -8,6 +8,7 @@ use anyhow::{Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 use sheaf_core::graph::{Graph, LineStyle, Stack, TextLabel, TickDirection, TickLabelSource, TrendKind, Trendline};
 use sheaf_core::panels::{MAX_PANELS, PanelLayout, PanelOrder};
+use sheaf_core::straight_line::{StraightLine, StraightLineLabel};
 use sheaf_core::template::{STACK_AUTO_DEFAULT, Template};
 use sheaf_core::{Color, ColumnId, Project, WindowId};
 
@@ -105,6 +106,12 @@ pub struct Style {
     pub label: Vec<String>,
     /// Shapes, each "KIND@X1,Y1,X2,Y2".
     pub draw: Vec<String>,
+    /// Slope annotations on the first plot of the first layer, each "ROW_A,ROW_B" (worksheet rows from 1).
+    pub slope: Vec<String>,
+    /// Vertical straight lines on the first layer, each "VALUE" or "VALUE,LOCATION".
+    pub vline: Vec<String>,
+    /// Horizontal straight lines on the first layer, each "VALUE" or "VALUE,LOCATION".
+    pub hline: Vec<String>,
 }
 
 /// A graph with several panels.
@@ -224,8 +231,18 @@ impl PlotSpec {
         if self.group.is_some() && (self.graph.is_some() || self.panels.is_some()) {
             bail!("--group cannot be combined with --graph or --panels");
         }
-        if !self.y2.is_empty() && self.template.as_deref().and_then(Template::from_name) == Some(Template::Waterfall) {
+        if !self.y2.is_empty()
+            && matches!(
+                self.template.as_deref().and_then(Template::from_name),
+                Some(Template::Waterfall | Template::WaterfallY | Template::WaterfallZ)
+            )
+        {
             bail!("a waterfall cannot have a right Y axis; leave out --y2 or choose another template");
+        }
+        if !self.y2.is_empty()
+            && self.template.as_deref().and_then(Template::from_name) == Some(Template::StackedHistograms)
+        {
+            bail!("stacked histograms cannot have a right Y axis; leave out --y2 or choose another template");
         }
         Ok(())
     }
@@ -515,6 +532,28 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
     }
     let labels: Vec<(String, f64, f64)> = s.label.iter().map(|v| parse_label(v)).collect::<Result<_>>()?;
     let shapes: Vec<sheaf_core::shape::Shape> = s.draw.iter().map(|v| parse_draw(v)).collect::<Result<_>>()?;
+    let slopes: Vec<(usize, usize)> = s.slope.iter().map(|v| parse_slope(v)).collect::<Result<_>>()?;
+    let mut straight: Vec<StraightLine> = Vec::new();
+    for (option, vertical, values) in [("--vline", true, &s.vline), ("--hline", false, &s.hline)] {
+        for v in values {
+            straight.push(parse_straight_line(option, v, vertical)?);
+        }
+    }
+    let slope_plot = project.graph(graph).and_then(|g| g.layers.first()).and_then(|l| l.plots.first()).cloned();
+    if !slopes.is_empty() {
+        let Some(plot) = &slope_plot else { bail!("--slope needs a plot in the first layer to mark the slope on") };
+        let rows = project.column(plot.y).map_or(0, |c| c.len());
+        for (v, &(a, b)) in s.slope.iter().zip(&slopes) {
+            if a >= rows || b >= rows {
+                bail!("--slope \"{v}\": the first plot has only {rows} rows");
+            }
+            for row in [a, b] {
+                if let Err(why) = sheaf_plot::slope_check_point(project, graph, 0, 0, Some(row)) {
+                    bail!("--slope \"{v}\": {why}");
+                }
+            }
+        }
+    }
     let x_labels = s.x_labels.as_deref().map(|text| x_label_source(project, graph, text)).transpose()?;
     let g = project.graph_mut(graph).ok_or_else(|| anyhow!("graph not found"))?;
     // The layers the options act on, in legend order, and the panels among them.
@@ -605,6 +644,13 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
     }
     if let Some(layer) = g.layers.first_mut() {
         layer.shapes.extend(shapes);
+        for mut line in straight {
+            line.name = StraightLine::next_name(&layer.straight_lines, line.vertical);
+            layer.straight_lines.push(line);
+        }
+        if let Some(plot) = &slope_plot {
+            layer.slopes.extend(slopes.iter().map(|&(a, b)| sheaf_core::graph::SlopeAnnotation::for_plot(plot, a, b)));
+        }
         for (text, x, y) in labels {
             let font = layer.new_label_font();
             layer.labels.push(TextLabel::new(text, x, y, font));
@@ -632,6 +678,42 @@ pub fn parse_draw(value: &str) -> Result<sheaf_core::shape::Shape> {
         bail!("--draw \"{value}\": \"{at}\" is not four numbers X1,Y1,X2,Y2; {usage}");
     }
     Ok(Shape::new(kind, (n[0], n[1]), (n[2], n[3])))
+}
+
+/// Reads one `--vline` or `--hline` value, "VALUE" or "VALUE,LOCATION" (top, bottom, left or right).
+pub fn parse_straight_line(option: &str, value: &str, vertical: bool) -> Result<StraightLine> {
+    let usage = format!(
+        "{option} must look like \"VALUE\" or \"VALUE,LOCATION\" with LOCATION top, bottom, left or right, for example {option} 0.5,bottom"
+    );
+    let (number, location) = match value.split_once(',') {
+        Some((n, l)) => (n, Some(l)),
+        None => (value, None),
+    };
+    let Some(at) = number.trim().parse::<f64>().ok().filter(|v| v.is_finite()) else {
+        bail!("{option} \"{value}\": \"{}\" is not a number; {usage}", number.trim());
+    };
+    let mut line = StraightLine::new(vertical, at);
+    if let Some(l) = location {
+        let Some(loc) = StraightLineLabel::parse(l) else {
+            bail!("{option} \"{value}\": \"{}\" is not a label location; {usage}", l.trim());
+        };
+        line.location = loc;
+    }
+    Ok(line)
+}
+
+/// Reads one `--slope` value, "ROW_A,ROW_B": two different row numbers as the worksheet shows them (from 1);
+/// the result counts from 0.
+pub fn parse_slope(value: &str) -> Result<(usize, usize)> {
+    let usage = "--slope must look like \"ROW_A,ROW_B\" with two different worksheet row numbers (counted from 1), for example --slope 3,8";
+    let row = |s: &str| s.trim().parse::<usize>().ok().filter(|&r| r >= 1);
+    let Some((a, b)) = value.split_once(',').and_then(|(a, b)| Some((row(a)?, row(b)?))) else {
+        bail!("--slope \"{value}\": not two row numbers; {usage}");
+    };
+    if a == b {
+        bail!("--slope \"{value}\": the two rows are the same; {usage}");
+    }
+    Ok((a - 1, b - 1))
 }
 
 /// Reads one `--label` value, "TEXT@X,Y": the text up to the last `@`, then two fractions of the
@@ -712,12 +794,15 @@ fn stack_option(s: &Style) -> Result<Option<Stack>> {
     Ok(Some(Stack::Waterfall { dx_percent: dx, dy_percent: dy }))
 }
 
-/// Reads the value of `--stack`: `none`, `auto`, `auto:GAP` or `step:STEP`.
+/// Reads the value of `--stack`: `none`, `cumulative`, `auto`, `auto:GAP` or `step:STEP`.
 pub fn parse_stack(text: &str) -> Result<Stack> {
     let t = text.trim().to_ascii_lowercase();
     let number = |v: &str| v.trim().parse::<f64>().ok().filter(|v| v.is_finite());
     if t == "none" {
         return Ok(Stack::None);
+    }
+    if t == "cumulative" {
+        return Ok(Stack::Cumulative);
     }
     if t == "auto" {
         return Ok(STACK_AUTO_DEFAULT);
@@ -734,7 +819,7 @@ pub fn parse_stack(text: &str) -> Result<Stack> {
             None => bail!("--stack step:STEP needs a step that is a number (got '{step}')"),
         };
     }
-    bail!("--stack must be none, auto, auto:GAP or step:STEP (got '{text}')")
+    bail!("--stack must be none, cumulative, auto, auto:GAP or step:STEP (got '{text}')")
 }
 
 /// The Y columns that have a place of their own in a layer's stack, in plot order: every plotted
@@ -988,7 +1073,17 @@ fn panel_layout(shape: PanelShape, panels: usize, template: Template, p: &Panels
 /// One graph with several panels (`--panels`), graphing spec section 15.6.
 fn panel_graph(project: &mut Project, template: Template, p: &PanelsSpec, a: &PlotSpec) -> Result<WindowId> {
     let shape = parse_panels(&p.shape)?;
-    if matches!(template, Template::DoubleY | Template::Waterfall | Template::Lollipop) {
+    if template.multi_y().is_some()
+        || matches!(
+            template,
+            Template::DoubleY
+                | Template::Waterfall
+                | Template::WaterfallY
+                | Template::WaterfallZ
+                | Template::Lollipop
+                | Template::StackedHistograms
+        )
+    {
         bail!("the {} template cannot be used with --panels; choose another template", template.name());
     }
     let (groups, labels) = panel_groups(project, template, p, a)?;
@@ -1063,7 +1158,7 @@ fn require_two_axes(left: &[ColumnId], right: &[ColumnId]) -> Result<()> {
 /// The legend text of each column of one file in an overlay: the file name, plus the column when
 /// the file gives several curves.
 fn overlay_labels(project: &Project, book: WindowId, columns: &[ColumnId]) -> Vec<String> {
-    let file = project.workbook(book).map(|b| b.long_name.clone()).unwrap_or_default();
+    let file = project.workbook(book).map(|b| b.title_for_graph()).unwrap_or_default();
     columns
         .iter()
         .map(|y| {

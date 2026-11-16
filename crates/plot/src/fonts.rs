@@ -8,11 +8,29 @@ use std::sync::{Arc, Mutex, OnceLock};
 /// Families tried after the one the model asks for, in this order.
 pub const FALLBACK_FAMILIES: [&str; 3] = ["Liberation Sans", "Helvetica", "DejaVu Sans"];
 
-/// Measures the width of text. Layout needs widths to right-align and
-/// centre text; the measurer is a parameter so tests can use fixed metrics.
+/// Position and thickness of a text decoration, relative to its font size.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TextLineMetrics {
+    /// Stroke centre relative to the baseline in em units, positive down the page.
+    pub center: f64,
+    /// Stroke thickness in em units.
+    pub thickness: f64,
+}
+
+/// Measures text and its decorations. Tests can provide fixed metrics independently of fonts.
 pub trait TextMeasurer {
     /// Width in points of `text` set in `font` (family, bold, italic) at `size_pt`.
     fn width(&self, text: &str, font: &Font, size_pt: f64) -> f64;
+
+    /// Underline geometry in em units. Defaults are used when no font metrics are available.
+    fn underline_metrics(&self, _font: &Font) -> TextLineMetrics {
+        TextLineMetrics { center: 0.14, thickness: 0.07 }
+    }
+
+    /// Strikethrough geometry in em units, with the same baseline as the glyphs.
+    fn strikeout_metrics(&self, _font: &Font) -> TextLineMetrics {
+        TextLineMetrics { center: -0.23, thickness: 0.05 }
+    }
 }
 
 /// Every character is `0.55 * size` wide. Deterministic and independent of
@@ -57,6 +75,7 @@ struct Cache {
     faces: HashMap<(String, bool, bool), Option<ID>>,
     upem: HashMap<ID, f64>,
     advances: HashMap<(ID, char), Option<f64>>,
+    decorations: HashMap<ID, (Option<TextLineMetrics>, Option<TextLineMetrics>)>,
 }
 
 /// The installed fonts, loaded once, plus a width measurer on top of them.
@@ -146,9 +165,41 @@ impl SystemFonts {
         cache.advances.insert((id, c), adv);
         adv
     }
+
+    fn decoration(&self, font: &Font, strikeout: bool) -> Option<TextLineMetrics> {
+        let mut cache = self.cache.lock().ok()?;
+        let id = self.resolve(&mut cache, font)?;
+        let metrics = *cache.decorations.entry(id).or_insert_with(|| {
+            self.db
+                .with_face_data(id, |data, index| {
+                    let face = ttf_parser::Face::parse(data, index).ok()?;
+                    let em = f64::from(face.units_per_em());
+                    let line = |m: ttf_parser::LineMetrics| {
+                        (m.thickness > 0).then(|| TextLineMetrics {
+                            // OpenType post/OS2 positions specify the top of the stroke; scene
+                            // paths need its centre, in a frame whose positive Y points down.
+                            center: (-f64::from(m.position) + f64::from(m.thickness) / 2.0) / em,
+                            thickness: f64::from(m.thickness) / em,
+                        })
+                    };
+                    Some((face.underline_metrics().and_then(line), face.strikeout_metrics().and_then(line)))
+                })
+                .flatten()
+                .unwrap_or((None, None))
+        });
+        if strikeout { metrics.1 } else { metrics.0 }
+    }
 }
 
 impl TextMeasurer for SystemFonts {
+    fn underline_metrics(&self, font: &Font) -> TextLineMetrics {
+        self.decoration(font, false).unwrap_or_else(|| FixedMetrics.underline_metrics(font))
+    }
+
+    fn strikeout_metrics(&self, font: &Font) -> TextLineMetrics {
+        self.decoration(font, true).unwrap_or_else(|| FixedMetrics.strikeout_metrics(font))
+    }
+
     fn width(&self, text: &str, font: &Font, size_pt: f64) -> f64 {
         let Ok(mut cache) = self.cache.lock() else {
             return FixedMetrics.width(text, font, size_pt);
@@ -189,6 +240,8 @@ mod tests {
         let fonts = SystemFonts::from_database(Database::new());
         let f = Font::new("Arial", 10.0);
         assert!((fonts.width("ab", &f, 10.0) - 11.0).abs() < 1e-12);
+        assert_eq!(fonts.underline_metrics(&f), FixedMetrics.underline_metrics(&f));
+        assert_eq!(fonts.strikeout_metrics(&f), FixedMetrics.strikeout_metrics(&f));
     }
 
     #[test]
@@ -200,5 +253,22 @@ mod tests {
         let mut bold = f.clone();
         bold.bold = true;
         assert!(fonts.width("Potential", &bold, 10.0) >= w - 1e-9);
+    }
+
+    #[test]
+    fn system_decoration_metrics_are_finite_and_cached_without_style_collisions() {
+        let fonts = SystemFonts::shared();
+        for (bold, italic) in [(false, false), (true, false), (false, true), (true, true)] {
+            let mut font = Font::new("Arial", 20.0);
+            font.bold = bold;
+            font.italic = italic;
+            let underline = fonts.underline_metrics(&font);
+            let strike = fonts.strikeout_metrics(&font);
+            assert!(underline.center.is_finite() && strike.center.is_finite());
+            assert!((0.0..1.0).contains(&underline.thickness));
+            assert!((0.0..1.0).contains(&strike.thickness));
+            assert_eq!(fonts.underline_metrics(&font), underline);
+            assert_eq!(fonts.strikeout_metrics(&font), strike);
+        }
     }
 }

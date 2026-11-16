@@ -1154,6 +1154,7 @@ fn menu_for(
                 };
                 let book = project.locate(plot.y).map(|(b, _, _)| (b.id, b.name.clone()));
                 let on_right = graph.right_y_member(layer) == Some(layer);
+                let cols = plot_columns(project, plot);
                 menus::graph_plot_menu(
                     layer,
                     p,
@@ -1162,6 +1163,7 @@ fn menu_for(
                     book,
                     plot.decor.trendlines.len(),
                     graph.layers.len(),
+                    &cols,
                 )
             }
             ObjectKind::XAxis | ObjectKind::YAxis => {
@@ -1183,6 +1185,21 @@ fn menu_for(
         MenuTarget::Hit(Hit::Layer(layer)) => menus::graph_page_menu(layer),
         MenuTarget::Hit(Hit::Page) => menus::graph_page_menu(0),
     }
+}
+
+/// The columns of a plot's sheet as Change X and Change Y list them: `[Book1]Sheet1!A(X)`.
+fn plot_columns(project: &Project, plot: &sheaf_core::graph::Plot) -> menus::PlotColumns {
+    let list = project
+        .locate(plot.y)
+        .map(|(book, sheet, _)| {
+            sheet
+                .columns
+                .iter()
+                .map(|c| (c.id, format!("[{}]{}!{}({})", book.name, sheet.name, c.short_name, c.designation.tag())))
+                .collect()
+        })
+        .unwrap_or_default();
+    menus::PlotColumns { list, x: plot.x, y: Some(plot.y), grouped: plot.group.is_some() }
 }
 
 /// Handles round the selected object: small squares on the data points of a plot (at most about
@@ -1271,6 +1288,8 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
     let layer_index = match op {
         GraphOp::SetPlotKind { layer, .. }
         | GraphOp::HidePlot { layer, .. }
+        | GraphOp::SetPlotColumn { layer, .. }
+        | GraphOp::Ungroup { layer, .. }
         | GraphOp::RemoveTrendline { layer, .. }
         | GraphOp::MovePlotToAxis { layer, .. }
         | GraphOp::MovePlotToLayer { layer, .. }
@@ -1296,6 +1315,25 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::DeleteLayer { layer } => layer,
     };
     if layer_index >= layers {
+        return;
+    }
+    if let GraphOp::SetPlotColumn { layer, plot, y, column } = op {
+        // Origin keeps the axis as drawn (measured: Y stayed -25..125): an automatic range is fixed
+        // at its present values before the column changes.
+        let drawn = resolved.and_then(|r| r.get(layer)).map(|r| if y { r.y.clone() } else { r.x.clone() });
+        let grouped = g.layers.get(layer).and_then(|l| l.plots.get(plot)).is_some_and(|p| p.group.is_some());
+        if let (Some(ra), false, Some(l)) = (drawn, grouped, g.layers.get_mut(layer)) {
+            let a = if y { &mut l.y_axis } else { &mut l.x_axis };
+            let (lo, hi) = (ra.from_unit(0.0), ra.from_unit(1.0));
+            if a.min.is_none() && a.max.is_none() && lo.is_finite() && hi.is_finite() && lo != hi {
+                set_limits(a, lo.min(hi), lo.max(hi), ra.reversed);
+            }
+        }
+        g.set_plot_column(layer, plot, y, column);
+        return;
+    }
+    if let GraphOp::Ungroup { layer, plot } = op {
+        g.ungroup_plots(layer, plot);
         return;
     }
     if let GraphOp::MovePlotToAxis { layer, plot, right } = op {
@@ -1449,6 +1487,8 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::DeleteLayer { .. }
         | GraphOp::MovePlotToAxis { .. }
         | GraphOp::MovePlotToLayer { .. }
+        | GraphOp::SetPlotColumn { .. }
+        | GraphOp::Ungroup { .. }
         | GraphOp::UpdateLegend { .. } => {
             unreachable!("handled above")
         }

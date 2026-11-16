@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 388 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 378 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -65,7 +65,7 @@ their files do not overlap; the "Main files" column shows where each one works.
 
 | ✓ | Package | What | Size | Origin needed | Greyed items | Main files |
 |---|---|---|---|---|---|---|
-| [ ] | [T58](T58-graph-text-formatting.md) | Format toolbar on graph text; underline, strikethrough and colour and font escapes; formatting buttons and preview in the text window; Axis Titles menu items | L | for the toolbar's exact behaviour; build first without | 8 | `plot/markup.rs`, `plot/text.rs`, backends, `app/toolbar.rs`, `dialogs/text_object.rs` |
+| [ ] | [T58](T58-graph-text-formatting.md) | Format toolbar on graph text; underline, strikethrough and colour and font escapes; formatting buttons and preview in the text window; Axis Titles menu items | L | for the toolbar's exact behaviour; build first without | 2 | `plot/markup.rs`, `plot/text.rs`, backends, `app/toolbar.rs`, `dialogs/text_object.rs` |
 | [ ] | [T59](T59-worksheet-cell-formatting.md) | Format Cells: font style, colours and alignment of worksheet cells; Format toolbar on a cell selection | L | for the Format Cells window | 2 | `core/worksheet.rs` (new `cellformat.rs`), `app/grid.rs`, new dialog |
 
 T58 goes first (it builds the toolbar's dispatch); T59 can start on its model and dialog at once.
@@ -100,10 +100,12 @@ Backlog packages: write the brief first (step 3 above).
 | [ ] | B2 | Graph objects: cut/copy/paste, Copy/Paste Format, align, same size, group, order across object kinds, snap to grid | L | 51 |
 | [x] | [T67](T67-add-straight-line.md) | Add Straight Line (B3 slice 1) | M | 0 |
 | [x] | [T70](T70-axis-center-fit-page-to-printer.md) | Axis Center and Fit Page To Printer (B3 slice 2) | S | 0 |
-| [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 25 |
+| [x] | [T73](T73-change-xy-ungroup.md) | Change X, Change Y, Ungroup on a plot (B3 slice 3) | S | 0 |
+| [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 22 |
 | [x] | [T71](T71-point-segments.md) | 2 and 3 Point Segment plots (B4 slice 2) | S | 0 |
+| [x] | [T75](T75-scatter-central.md) | Scatter Central (B4 slice 3) | S | 0 |
 | [x] | [T76](T76-grouped-indexed-plots.md) | Grouped Columns (indexed data), Grouped Box Charts (B4 slice) | M | 0 |
-| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label; Grouped Columns (indexed data) and Grouped Box Charts done as T76): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 24 |
+| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label; Grouped Columns (indexed data) and Grouped Box Charts done as [T76](T76-grouped-indexed-plots.md)): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 23 |
 
 - **B1.** The graph view draws the page to fit the window. Add a view transform (zoom factor and
   scroll offset) in `crates/app/src/graph_view.rs` so hit-testing (`sheaf_plot::hit`) still works,

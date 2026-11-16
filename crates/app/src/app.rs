@@ -1101,11 +1101,10 @@ impl SheafApp {
         let setup = self.doc.project().page_setup;
         let Some(page) = self.doc.project().graph(graph).map(|g| (g.page.width_pt, g.page.height_pt)) else { return };
         #[cfg(windows)]
-        let asked = if cfg!(test) { None } else { crate::winprint::printable_size_pt(&setup, page) };
+        let (w, h) = if cfg!(test) { None } else { crate::winprint::printable_size_pt(&setup, page) }
+            .unwrap_or_else(|| setup.fallback_printable_pt(page.0, page.1));
         #[cfg(not(windows))]
-        let asked: Option<(f64, f64)> = None;
-        #[cfg_attr(not(windows), allow(clippy::unnecessary_literal_unwrap))]
-        let (w, h) = asked.unwrap_or_else(|| setup.fallback_printable_pt(page.0, page.1));
+        let (w, h) = setup.fallback_printable_pt(page.0, page.1);
         self.doc.apply("Fit Page to Printer", |p| {
             if let Some(g) = p.graph_mut(graph) {
                 g.resize_page(w, h, false);
@@ -1350,6 +1349,9 @@ impl SheafApp {
             GraphOp::MovePlotToAxis { .. } => "Move plot to left Y axis",
             GraphOp::MovePlotToLayer { .. } => "Move plot to layer",
             GraphOp::RemoveTrendline { .. } => "Remove trendline",
+            GraphOp::SetPlotColumn { y: false, .. } => "Change X",
+            GraphOp::SetPlotColumn { .. } => "Change Y",
+            GraphOp::Ungroup { .. } => "Ungroup",
             GraphOp::HidePlot { .. } | GraphOp::SetStack { .. } => unreachable!("handled above"),
         };
         if let GraphOp::AddLayer { layer, kind } = op {
@@ -1601,6 +1603,17 @@ impl SheafApp {
         crate::text_format::Snapshot::graph(&self.doc, graph, layer, object)
     }
 
+    /// The selected object's non-font Format-bar controls (markup, Fill and Line Color), gated
+    /// like `text_format`.
+    fn object_format(&self) -> Option<crate::object_format::Snapshot> {
+        if self.dialog_open() || self.books.values().any(|b| b.editing.is_some() || b.editing_label.is_some()) {
+            return None;
+        }
+        let graph = self.active?;
+        let (layer, object) = self.graphs.get(&graph)?.selected?;
+        crate::object_format::Snapshot::graph(&self.doc, graph, layer, object)
+    }
+
     // ----- actions -------------------------------------------------------
 
     fn apply(&mut self, action: Action, ctx: &egui::Context) {
@@ -1663,6 +1676,11 @@ impl SheafApp {
             Action::FormatText(request) => {
                 if self.text_format().is_some_and(|state| state.target == request.target) {
                     crate::text_format::apply(&mut self.doc, request);
+                }
+            }
+            Action::FormatObject(request) => {
+                if self.object_format().is_some_and(|state| state.target == request.target) {
+                    crate::object_format::apply(&mut self.doc, request);
                 }
             }
             Action::NewWorkbook => {
@@ -2815,25 +2833,6 @@ impl SheafApp {
         } else {
             Vec::new()
         };
-        // Grouped columns / grouped box charts of indexed data: the one numeric Y column is the data, the other
-        // selected columns (one or two) are the groups, in selection order.
-        if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
-            let project = self.doc.project();
-            let is_data = |id: &ColumnId| {
-                project.column(*id).is_some_and(|c| c.data.is_numeric() && c.designation == Designation::Y)
-            };
-            let data = columns.iter().filter(|id| is_data(id)).count();
-            let groups = columns.len() - data;
-            if data != 1 || groups == 0 {
-                self.warn("Select one or two group columns and one data column (a numeric group column must be designated X or Group)".to_string());
-                return;
-            }
-            match self.doc.edit("Plot columns", |p| p.plot_columns(template, &columns)) {
-                Ok(_) => self.say(format!("Plotted {} by {} group column(s)", data, groups)),
-                Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
-            }
-            return;
-        }
         let ys = self.plot_y_columns(book, columns, template);
         if ys.is_empty() {
             let what = if matches!(template, Template::Treemap | Template::Sunburst) {
@@ -4828,6 +4827,7 @@ impl eframe::App for SheafApp {
         if !full {
             let c = self.menu_context();
             let format = self.text_format();
+            let object = self.object_format();
             let tb = &self.toolbars;
             let bar_frame = || egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(3, 1));
             if tb.shown(Bar::Standard) {
@@ -4837,9 +4837,9 @@ impl eframe::App for SheafApp {
             }
             let second = [Bar::Edit, Bar::Format, Bar::Graph];
             if tb.any(&second) {
-                egui::TopBottomPanel::top("toolbar_second")
-                    .frame(bar_frame())
-                    .show(ctx, |ui| toolbar::show_row_with_format(ui, &second, tb, &c, format.as_ref(), &mut actions));
+                egui::TopBottomPanel::top("toolbar_second").frame(bar_frame()).show(ctx, |ui| {
+                    toolbar::show_row_with_format(ui, &second, tb, &c, format.as_ref(), object.as_ref(), &mut actions)
+                });
             }
             if !self.status_bar_hidden {
                 egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| self.status_bar(ui));

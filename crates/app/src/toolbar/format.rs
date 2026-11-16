@@ -1,16 +1,23 @@
 //! The Format bar uses the same change contract for every supported target.
 
 use super::*;
+use crate::object_format::{self, Markup, Snapshot as ObjectSnapshot};
 use crate::text_format::{Change, Snapshot};
-use sheaf_core::Color;
 
-pub(super) fn show(ui: &mut Ui, c: &MenuContext, state: Option<&Snapshot>, actions: &mut Vec<Action>) {
+pub(super) fn show(
+    ui: &mut Ui,
+    c: &MenuContext,
+    state: Option<&Snapshot>,
+    object: Option<&ObjectSnapshot>,
+    actions: &mut Vec<Action>,
+) {
     grip(ui);
     for item in items(Bar::Format) {
         match item {
             Item::Gap => gap(ui),
             Item::FontBox => family(ui, state, actions),
             Item::SizeBox => size(ui, state, actions),
+            Item::Button(button) if object_icon(button.icon) => object_button(ui, button, object, actions),
             Item::Button(button) => {
                 let Some(state) = state else {
                     if matches!(button.icon, Icon::Bold | Icon::Italic | Icon::Bigger | Icon::Smaller | Icon::FontColor)
@@ -153,16 +160,7 @@ fn colors(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
     let response = ui
         .menu_button(label, |ui| {
             // A compact named palette; custom/persistent Origin palettes remain a separate feature.
-            for (name, color) in [
-                ("Black", Color::rgb(0, 0, 0)),
-                ("Red", Color::rgb(255, 0, 0)),
-                ("Green", Color::rgb(0, 255, 0)),
-                ("Blue", Color::rgb(0, 0, 255)),
-                ("Cyan", Color::rgb(0, 255, 255)),
-                ("Magenta", Color::rgb(255, 0, 255)),
-                ("Yellow", Color::rgb(255, 255, 0)),
-                ("White", Color::rgb(255, 255, 255)),
-            ] {
+            for (name, color) in object_format::PALETTE {
                 if ui.button(format!("Font Color: {name}")).clicked() {
                     actions.push(Action::FormatText(captured.request(Change::Color(color))));
                     ui.close();
@@ -175,4 +173,100 @@ fn colors(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
     }
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Format toolbar: Font Color"));
     response.on_hover_text("Font Color");
+}
+
+fn object_icon(icon: Icon) -> bool {
+    matches!(
+        icon,
+        Icon::Underline | Icon::Superscript | Icon::Subscript | Icon::Greek | Icon::FillColor | Icon::LineColor
+    )
+}
+
+/// The reason a whole-object control is grey.
+fn reason(icon: Icon) -> &'static str {
+    match icon {
+        Icon::FillColor => "Select a rectangle, circle or legend",
+        Icon::LineColor => "Select a drawn object or straight line",
+        _ => "Select a text label or an axis title with its own text",
+    }
+}
+
+fn paint(ui: &Ui, response: &egui::Response, icon: Icon, enabled: bool) {
+    paint_icon(ui.painter(), Rect::from_center_size(response.rect.center(), vec2(16.0, 16.0)), icon, enabled);
+}
+
+/// Underline, Superscript, Subscript, Greek, Fill Color and Line Color.
+fn object_button(ui: &mut Ui, button: &Button, object: Option<&ObjectSnapshot>, actions: &mut Vec<Action>) {
+    let label = format!("Format toolbar: {}", button.tip);
+    let markup = match button.icon {
+        Icon::Underline => Some(Markup::Underline),
+        Icon::Superscript => Some(Markup::Superscript),
+        Icon::Subscript => Some(Markup::Subscript),
+        Icon::Greek => Some(Markup::Greek),
+        _ => None,
+    };
+    let live = object.filter(|o| match button.icon {
+        Icon::FillColor => o.fill.is_some(),
+        Icon::LineColor => o.line.is_some(),
+        _ => o.markup.is_some(),
+    });
+    let Some(state) = live else {
+        let response = ui.add_enabled(false, egui::Button::new("").min_size(vec2(CELL, CELL)));
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, false, label.clone()));
+        paint(ui, &response, button.icon, false);
+        response.on_disabled_hover_text(reason(button.icon));
+        return;
+    };
+    if let Some(markup) = markup {
+        let on = state.wrapped(markup);
+        let response = ui.add(egui::Button::new("").selected(on).min_size(vec2(CELL, CELL)));
+        response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, label.clone()));
+        paint(ui, &response, button.icon, true);
+        if response.clicked() {
+            actions.push(Action::FormatObject(state.request(object_format::Change::Markup(markup))));
+        }
+        response.on_hover_text(button.tip);
+    } else {
+        colour_menu(ui, button, state, &label, actions);
+    }
+}
+
+/// Fill Color (with a "None" entry) or Line Color; the popup keeps the snapshot it opened with.
+fn colour_menu(ui: &mut Ui, button: &Button, state: &ObjectSnapshot, label: &str, actions: &mut Vec<Action>) {
+    let fill = button.icon == Icon::FillColor;
+    let capture_id = ui.id().with(if fill { "format_fill_capture" } else { "format_line_capture" });
+    let captured = ui.data_mut(|d| d.get_temp::<ObjectSnapshot>(capture_id)).unwrap_or_else(|| state.clone());
+    let current = if fill { state.fill.flatten() } else { state.line };
+    let mut text = egui::RichText::new(if fill { "F" } else { "L" }).strong();
+    if let Some(c) = current {
+        text = if fill {
+            text.background_color(Color32::from_rgb(c.r, c.g, c.b))
+        } else {
+            text.color(Color32::from_rgb(c.r, c.g, c.b))
+        };
+    }
+    let response = ui
+        .menu_button(text, |ui| {
+            if fill && ui.button("Fill Color: None").clicked() {
+                actions.push(Action::FormatObject(captured.request(object_format::Change::Fill(None))));
+                ui.close();
+            }
+            for (name, color) in object_format::PALETTE {
+                if ui.button(format!("{}: {name}", button.tip)).clicked() {
+                    let change = if fill {
+                        object_format::Change::Fill(Some(color))
+                    } else {
+                        object_format::Change::Line(color)
+                    };
+                    actions.push(Action::FormatObject(captured.request(change)));
+                    ui.close();
+                }
+            }
+        })
+        .response;
+    if response.clicked() {
+        ui.data_mut(|d| d.insert_temp(capture_id, state.clone()));
+    }
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label.to_string()));
+    response.on_hover_text(button.tip);
 }

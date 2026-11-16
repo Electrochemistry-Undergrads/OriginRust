@@ -16,6 +16,9 @@ pub enum Template {
     Line,
     /// Scatter plot with the same axes as [`Template::Line`].
     Scatter,
+    /// Scatter plot whose axes cross in the middle of the layer (Origin's "Scatter Central", 2016): both
+    /// axes at -50 %, the frame drawn as a closed box.
+    ScatterCentral,
     /// Line plot with a symbol on every point.
     LineSymbol,
     /// Cyclic voltammetry overlay: smooth lines without markers, no grid,
@@ -157,7 +160,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 58] = [
+    pub const ALL: [Template; 59] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -216,6 +219,7 @@ impl Template {
         Template::Segment2,
         Template::Segment3,
         Template::ScatterRug,
+        Template::ScatterCentral,
     ];
 
     /// The name used on the command line and in menus.
@@ -223,6 +227,7 @@ impl Template {
         match self {
             Template::Line => "line",
             Template::Scatter => "scatter",
+            Template::ScatterCentral => "scatter-central",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
@@ -286,6 +291,7 @@ impl Template {
         match self {
             Template::Line => "Line",
             Template::Scatter => "Scatter",
+            Template::ScatterCentral => "Scatter Central",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
@@ -385,6 +391,7 @@ impl Template {
         let mut graph = match self {
             Template::Line => general(id, name, PlotKind::Line),
             Template::Scatter => general(id, name, PlotKind::Scatter),
+            Template::ScatterCentral => scatter_central(id, name),
             Template::LineSymbol => general(id, name, PlotKind::LineSymbol),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
@@ -495,7 +502,10 @@ impl Template {
         };
         // These four stock templates share the measured anchor. Other templates keep their
         // own placement (including CV, polar/radar and the separately measured Double-Y).
-        if matches!(self, Template::Line | Template::Scatter | Template::LineSymbol | Template::Column) {
+        if matches!(
+            self,
+            Template::Line | Template::Scatter | Template::ScatterCentral | Template::LineSymbol | Template::Column
+        ) {
             graph.layers[0].legend.position = LegendPosition::Automatic;
             // The stock white legend hides the frame/curves under it (Origin exports, spec 2.4).
             graph.layers[0].legend.background = Some(Color::WHITE);
@@ -909,6 +919,19 @@ fn stacked_lines(id: WindowId, name: &str) -> Graph {
     g
 }
 
+/// The scatter template with both axes through the middle of the layer (measured in Origin 2016: axis
+/// position -50 % on X and Y) and the frame drawn as a box round the layer.
+fn scatter_central(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::Scatter);
+    let layer = &mut g.layers[0];
+    for axis in [&mut layer.x_axis, &mut layer.y_axis] {
+        axis.offset_pct = -50.0;
+        axis.show_opposite = true;
+        axis.opposite_ticks = false;
+    }
+    g
+}
+
 fn waterfall(id: WindowId, name: &str) -> Graph {
     let mut g = general(id, name, PlotKind::Line);
     g.layers[0].stack = WATERFALL_DEFAULT;
@@ -1041,7 +1064,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 58);
+        assert_eq!(Template::ALL.len(), 59);
+        assert_eq!(Template::from_name("scatter-central"), Some(Template::ScatterCentral));
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
         assert_eq!(Template::from_name("violin"), Some(Template::Violin));
         assert_eq!(Template::from_name("violin-box"), Some(Template::ViolinBox));

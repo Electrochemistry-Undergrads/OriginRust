@@ -879,7 +879,7 @@ fn layer_scene(
         return scene;
     }
     // The edge each axis line is drawn on, as a box of no height or width.
-    let x_line = Rect { y: if xa.side == AxisSide::Opposite { f.y } else { f.y + f.h }, h: 0.0, ..f };
+    let x_line = Rect { y: crate::axis_offset::x_line_y(xa, f), h: 0.0, ..f };
     let y_line = Rect { x: crate::axis_offset::y_line_x(ya, f), w: 0.0, ..f };
     let spans = |r: &ResolvedAxis| r.gaps.iter().map(|g| g.span(r.reversed)).collect::<Vec<_>>();
     let gaps = (spans(&geom.x), spans(&geom.y));
@@ -903,7 +903,9 @@ fn layer_scene(
     let y_edge = (ya.side != AxisSide::Hidden).then(|| draw_y_labels(out, ya, &geom.y, f, &yp.labels, m));
     rec(objects, out, start, ObjectKind::YAxis, &[]);
     let start = out.len();
-    if let Some(edge) = x_edge {
+    if x_edge.is_some() && xa.offset_pct < 0.0 && xa.offset_pct.is_finite() && x_title == TitlePlace::Own {
+        draw_x_title_inward(out, project, xa, f, pds, crate::axis_offset::x_line_y(xa, f), &xp.title, m);
+    } else if let Some(edge) = x_edge {
         match x_title {
             TitlePlace::Own => draw_x_title(out, project, xa, f, pds, edge, &xp.title, m),
             TitlePlace::Shared => {}
@@ -914,7 +916,9 @@ fn layer_scene(
     }
     rec(objects, out, start, ObjectKind::XTitle, &[]);
     let start = out.len();
-    if let Some(edge) = y_edge {
+    if y_edge.is_some() && ya.offset_pct < 0.0 && ya.offset_pct.is_finite() && y_title == TitlePlace::Own {
+        draw_y_title_inward(out, project, ya, f, pds, crate::axis_offset::y_line_x(ya, f), &yp.title, m);
+    } else if let Some(edge) = y_edge {
         match y_title {
             TitlePlace::Own => draw_y_title(out, project, ya, f, pds, edge, &yp.title, m),
             TitlePlace::Shared => {}
@@ -1069,7 +1073,8 @@ fn draw_axis_lines(
     let shown = |a: &Axis| a.side != AxisSide::Hidden;
     let same = xa.line_width_pt == ya.line_width_pt && xc == yc;
     let y_main_x = crate::axis_offset::y_line_x(ya, f);
-    let displaced = y_main_x != if ya.side == AxisSide::Opposite { r } else { l };
+    let displaced = y_main_x != if ya.side == AxisSide::Opposite { r } else { l }
+        || crate::axis_offset::x_line_y(xa, f) != if xa.side == AxisSide::Opposite { t } else { b };
     if shown(xa)
         && shown(ya)
         && xa.show_opposite
@@ -1134,7 +1139,8 @@ fn draw_axis_lines(
     let gap_y: Vec<(f64, f64)> = gaps.1.iter().map(|&(lo, hi)| (1.0 - hi, 1.0 - lo)).collect();
     let gap_x = &gaps.0;
     // The edge each axis is drawn on, and the edge across from it.
-    let (x_main, x_other) = if xa.side == AxisSide::Opposite { (t, b) } else { (b, t) };
+    let x_other = if xa.side == AxisSide::Opposite { b } else { t };
+    let x_main = crate::axis_offset::x_line_y(xa, f);
     let y_other = if ya.side == AxisSide::Opposite { l } else { r };
     let y_main = y_main_x;
     if shown(xa) {
@@ -1148,6 +1154,16 @@ fn draw_axis_lines(
     }
     if shown(ya) && ya.show_opposite {
         line(out, (y_other, t), (y_other, b), ya, yc, &gap_y);
+    }
+    // An axis moved into the frame (Scatter Central) leaves its own edge bare; with the box shown, that
+    // edge is drawn as part of the frame.
+    let x_home = if xa.side == AxisSide::Opposite { t } else { b };
+    if shown(xa) && xa.show_opposite && xa.offset_pct < 0.0 && x_main != x_home {
+        line(out, (l, x_home), (r, x_home), xa, xc, gap_x);
+    }
+    let y_home = if ya.side == AxisSide::Opposite { r } else { l };
+    if shown(ya) && ya.show_opposite && ya.offset_pct < 0.0 && y_main != y_home {
+        line(out, (y_home, t), (y_home, b), ya, yc, &gap_y);
     }
 }
 
@@ -1212,7 +1228,8 @@ pub(crate) fn outward_extent(axis: &Axis) -> f64 {
 /// Draws the ticks of one axis on its own edge and, with `opposite_ticks`, on the edge across
 /// (mirrored, so an `In` tick still points into the frame). `horizontal` is true for X.
 fn draw_ticks(out: &mut Vec<Item>, axis: &Axis, resolved: &ResolvedAxis, f: Rect, horizontal: bool, color: Color) {
-    let f = if horizontal { f } else { crate::axis_offset::y_axis_frame(axis, f) };
+    let f =
+        if horizontal { crate::axis_offset::x_axis_frame(axis, f) } else { crate::axis_offset::y_axis_frame(axis, f) };
     // (position of the edge, +1 when "into the frame" is the positive page direction).
     let (main, other) = match (horizontal, axis.side) {
         (_, AxisSide::Hidden) => return,
@@ -1295,6 +1312,8 @@ fn draw_x_labels(
     font: &Font,
     m: &dyn TextMeasurer,
 ) -> f64 {
+    // A displaced axis (graphing spec 21.3) carries its labels with it.
+    let f = crate::axis_offset::x_axis_frame(axis, f);
     let size = axis.tick_font.size_pt;
     let top_side = axis.side == AxisSide::Opposite;
     let rug = crate::rug::main_extent(axis, f);
@@ -1467,6 +1486,50 @@ fn draw_y_title(
         labels_edge - 0.6 * size - DESCENT * size
     };
     text::place(out, m, &title, font, size, (x, f.y + f.h / 2.0), Anchor::Middle, 90.0);
+}
+
+/// Title of an X axis moved into the frame (Origin's Scatter Central): rotated 90 degrees like a Y
+/// title, just left of the frame's left edge, centred on the axis line's page y `line_y`.
+#[allow(clippy::too_many_arguments)]
+fn draw_x_title_inward(
+    out: &mut Vec<Item>,
+    project: &Project,
+    axis: &Axis,
+    f: Rect,
+    pds: &[PlotData],
+    line_y: f64,
+    font: &Font,
+    m: &dyn TextMeasurer,
+) {
+    if !axis.show_title {
+        return;
+    }
+    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, false));
+    let size = axis.title_font.size_pt;
+    let x = f.x - 0.6 * size - DESCENT * size;
+    text::place(out, m, &title, font, size, (x, line_y), Anchor::Middle, 90.0);
+}
+
+/// Title of a Y axis moved into the frame (Origin's Scatter Central): horizontal, centred on the axis
+/// line's page x `line_x`, just above the frame's top edge.
+#[allow(clippy::too_many_arguments)]
+fn draw_y_title_inward(
+    out: &mut Vec<Item>,
+    project: &Project,
+    axis: &Axis,
+    f: Rect,
+    pds: &[PlotData],
+    line_x: f64,
+    font: &Font,
+    m: &dyn TextMeasurer,
+) {
+    if !axis.show_title {
+        return;
+    }
+    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, true));
+    let size = axis.title_font.size_pt;
+    let baseline = f.y - 0.6 * size - DESCENT * size;
+    text::place(out, m, &title, font, size, (line_x, baseline), Anchor::Middle, 0.0);
 }
 
 // ----- legend --------------------------------------------------------------------------------

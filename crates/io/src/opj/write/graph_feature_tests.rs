@@ -884,3 +884,15 @@ fn multi_y_layers_are_written_as_ordinary_layers_and_the_axis_offsets_are_named(
     let (_, out) = round_trip(&p);
     assert!(!out.warnings.iter().any(|w| w.contains("away from the frame")), "{:?}", out.warnings);
 }
+
+#[test]
+fn an_x_axis_offset_is_named_in_the_notes() {
+    let mut p = source();
+    let c = ids(&p);
+    let id = p.plot_columns(Template::ScatterCentral, &[c[1]]).unwrap();
+    let (_, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("position of an X axis away from the frame")), "{:?}", out.warnings);
+    p.graph_mut(id).unwrap().layers.iter_mut().for_each(|l| l.x_axis.offset_pct = 0.0);
+    let (_, out) = round_trip(&p);
+    assert!(!out.warnings.iter().any(|w| w.contains("position of an X axis")), "{:?}", out.warnings);
+}

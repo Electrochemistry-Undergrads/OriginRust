@@ -20,6 +20,7 @@ mod excel;
 mod export_themes;
 mod fill_inclusive;
 mod fill_sidelines;
+mod format_bar_rest;
 mod frozen_panes;
 mod graph_data_tools;
 mod graph_scale;
@@ -6344,6 +6345,7 @@ mod clipboard_origin;
 mod clipboard_formats;
 
 mod add_plot_to_layer;
+mod change_xy;
 mod find_replace;
 mod find_selection;
 mod fit_page;

@@ -851,7 +851,7 @@ fn plot_menu() -> Vec<Entry> {
                 vec![
                     item("&Scatter", Cmd::Plot(Template::Scatter)),
                     item("Scatter + Rug", Cmd::Plot(Template::ScatterRug)),
-                    grey("Scatter Central"),
+                    item("Scatter Central", Cmd::Plot(Template::ScatterCentral)),
                     grey("Column Scatter"),
                 ],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
@@ -1819,6 +1819,16 @@ pub fn sheet_tab_menu() -> Vec<Entry> {
 
 // ----- graph window menus (gui-look.md section 4) ----------------------------------------------
 
+/// What Change X, Change Y and Ungroup of a plot's menu need: the columns of the plot's sheet
+/// (id and the label `[Book1]Sheet1!A(X)`), the plot's own columns and whether it is in a group.
+#[derive(Clone, Default)]
+pub struct PlotColumns {
+    pub list: Vec<(ColumnId, String)>,
+    pub x: Option<ColumnId>,
+    pub y: Option<ColumnId>,
+    pub grouped: bool,
+}
+
 /// The menu of a plot: what was picked, so the commands act on it. `book` is the workbook the
 /// plot's data is in, with its title.
 pub fn graph_plot_menu(
@@ -1829,7 +1839,30 @@ pub fn graph_plot_menu(
     book: Option<(WindowId, String)>,
     trendlines: usize,
     layers: usize,
+    cols: &PlotColumns,
 ) -> Vec<Entry> {
+    // Change X / Change Y: the sheet's columns, the plot's own ticked, the one it uses on the other
+    // axis greyed; a plot of a group offers none.
+    let change_col = |label: &str, y: bool| {
+        if cols.grouped || cols.list.is_empty() {
+            return grey(label);
+        }
+        let (own, other) = if y { (cols.y, cols.x) } else { (cols.x, cols.y) };
+        let entries = cols
+            .list
+            .iter()
+            .map(|(id, name)| {
+                let tick = if own == Some(*id) { "\u{2713} " } else { "" };
+                let text = format!("{tick}{name}");
+                if other == Some(*id) {
+                    grey(&text)
+                } else {
+                    item(&text, Cmd::GraphEdit(GraphOp::SetPlotColumn { layer, plot, y, column: *id }))
+                }
+            })
+            .collect();
+        sub(label, entries)
+    };
     let change = |label: &str, to: PlotKind| {
         if to == kind {
             grey(label)
@@ -1849,8 +1882,8 @@ pub fn graph_plot_menu(
                 change("Stacked Area", PlotKind::StackedArea),
             ],
         ),
-        grey("Change X"),
-        grey("Change Y"),
+        change_col("Change X", false),
+        change_col("Change Y", true),
         sep(),
         item(
             if on_right { "Move to Left Y Axis" } else { "Move to Right Y Axis" },
@@ -1878,7 +1911,7 @@ pub fn graph_plot_menu(
     }
     v.extend([
         sep(),
-        grey("Ungroup"),
+        if cols.grouped { item("Ungroup", Cmd::GraphEdit(GraphOp::Ungroup { layer, plot })) } else { grey("Ungroup") },
         sep(),
         item("Plot Details...", Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: Some(plot) }),
     ]);

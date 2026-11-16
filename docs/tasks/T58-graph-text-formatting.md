@@ -53,6 +53,12 @@ the 397-item inventory and eight Python tooling tests; a desktop capture was ins
 **Ownership:** graph text model/rendering/editor; Format toolbar dispatch. T59 owns its worksheet
 adapter. Coordinate shared `graph.rs`, `toolbar.rs`, actions and menus with other claims.
 
+Format-bar remainder slice (format-bar-rest): Underline, Superscript, Subscript, Greek, Fill Color and Line Color
+are enabled for their graph targets (new `object_format` module, graphing 7.4): whole-text markup on labels and
+explicit axis titles, Fill on rectangles/circles and the legend background, Line on drawn objects and straight lines.
+Whole-text wrapping, target limits and palettes are unmeasured Sheaf choices; Origin 2016 measurement, the title
+menu items and the editor remain open.
+
 ## Goal
 
 Select a title, text label or legend and apply bold, italic, underline, font, size and colour in

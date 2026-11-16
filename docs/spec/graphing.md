@@ -705,15 +705,31 @@ Sheaf choices: the size box accepts finite 1 to 1000 pt values and commits on En
 leaving the box cancels the draft. Font Color offers eight named basic RGB colours (black, red,
 green, blue, cyan, magenta, yellow, white). Origin's Auto, full system/custom palettes and palette
 management remain open. Family selection is restricted to installed families; fallback rendering
-retains its existing behaviour. Underline, scripts, Greek and Fill/Line Color remain disabled
-in this toolbar until their own whole-object semantics/model support are implemented. Text-window
-selection controls and the T59 worksheet adapter are separate slices.
+retains its existing behaviour. Text-window selection controls and the T59 worksheet adapter
+are separate slices.
 
 `text_format::{Snapshot, Target, Change, Request}` separates widget changes from target application.
 T59 can add its cell target behind the same toolbar. Requests capture graph/layer/object plus
 document generation and revision. Dispatch rechecks active selection and dialog/cell editing state;
 invalid, unchanged or stale requests add no history. Open family/colour lists retain their original
 target rather than following a later selection. No model or file-format fields were added.
+
+Underline, Superscript, Subscript, Greek, Fill Color and Line Color (`object_format`, same
+request/staleness rules, own `Action::FormatObject`). Origin's online
+[Format toolbar help](https://docs.originlab.com/origin-help/format-toolbar/) [W] describes the first
+four as acting on selected characters and does not document whole-object behaviour. Fill and
+line/border colour are described on Origin's
+[Style toolbar](https://docs.originlab.com/origin-help/style-toolbar) as setting the fill or line
+colour of the selected object; Sheaf shows them in the Format row (gui-look.md, Format and Style toolbar description). Sheaf choices,
+all **unmeasured** (Origin 2016 measurement remains open): the four text buttons wrap the whole
+text in one `\u(`, `\+(`, `\-(` or `\g(` group, or remove that group when the text is exactly one
+such group (nesting counted as the parser does; `\u(a)b` is wrapped, not unwrapped; a group may
+span lines, so multi-line text is one group) and show pressed when wrapped; they apply to free
+labels and to X/Y titles with their own non-empty text, not to the legend or automatic titles.
+Fill Color (palette: None plus the eight basic colours) sets a rectangle's or circle's fill and a
+visible legend's background; Line Color sets a drawn object's or straight line's colour. Both are
+disabled with a hover reason elsewhere (the legend frame has no colour field). The selection
+survives; undo labels are "Format graph text" and "Format graph object". No model fields added.
 
 
 ---
@@ -2878,6 +2894,14 @@ default printer's printable area for the Page Setup paper in the page's orientat
 top and bottom); the layers keep their frames in percent of the page. Sheaf asks the default printer
 (Windows) and otherwise uses the paper less those measured edges (12 pt, 18 pt). One undo step.
 
+**Change X, Change Y, Ungroup** (plot right-click menu, T73, measured 2026-11-15): Change X and Change Y
+list the plot's sheet's columns (`[Book1]Sheet1!A(X)`, ...) in column order, the current one ticked and
+the one the plot uses on the other axis greyed; choosing one replaces that column, the legend and axis
+title follow, and the axis keeps the range it was drawn with (Sheaf fixes an automatic range at its
+drawn values). On a plot of a group Change X/Y are greyed and Ungroup ends the group with every plot
+keeping its drawn colour (Sheaf makes those colours explicit); on a plot in no group Ungroup is greyed.
+One undo step each.
+
 **Axis Center** (axis right-click menu, after Axis Zoom In/Out; T70, measured): the axis keeps its span
 and its range moves so that the value under the right-click becomes the middle (X 0..11 at 5.42 gave
 -0.08..10.92); only that axis changes and its range becomes fixed. Sheaf works in the axis' own scale
@@ -3937,6 +3961,17 @@ grouped. Sheaf: `Template::VerticalDropLine` (scatter, `decor.drop.vertical` on,
 `Template::ColumnLabel` (column, data labels on, position Above, a quarter of the font size, 5.5 pt, above);
 data labels of grouped columns and bars are now centred on their own bar. CLI `-t vertical-drop-line`, `-t
 column-label`.
+
+### 18.13 Scatter Central (T75, measured 2026-11-15)
+
+Origin 2016's Plot > Symbol > Scatter Central is the scatter graph with both axes crossing in the middle
+of a boxed frame: `layer.x.position` and `layer.y.position` -50 with `posType` 1 (percent), against 0
+for Scatter. The Y title stands horizontally above the frame at the Y axis' x, the X title rotated left
+of the frame at the X axis' height. Sheaf: template `scatter-central` (menu, `sheaf plot -t
+scatter-central`) with `Axis::offset_pct` -50 on both axes (the X offset is new here: percent of the
+frame height, "% From Bottom/Top" in the axis window), the frame drawn as a box, and the titles of any
+axis moved into the frame placed at its end as above; offsets 0 and outward (T61) are unchanged. New
+layers start at offset 0. `.opj` notes a lost X offset as it does a Y one.
 
 ### 20.1 Sheaf's rules
 

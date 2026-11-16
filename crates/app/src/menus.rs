@@ -275,6 +275,12 @@ pub enum Cmd {
     ZoomOut,
     /// View > Whole Page (Ctrl+W).
     WholePage,
+    /// View > Zoom All.
+    ZoomAll,
+    /// The Tools-bar Scale In tool.
+    ScaleIn,
+    /// The Tools-bar Scale Out tool.
+    ScaleOut,
     /// View > Print View, Page View, Window View, Draft View.
     SetViewMode(sheaf_core::project::ViewMode),
     /// View > Show > Layer Icons.
@@ -781,7 +787,7 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
             v.push(keyed("Zoom In", ctrl(Key::I), Cmd::ZoomIn));
             v.push(keyed("Zoom Out", ctrl(Key::M), Cmd::ZoomOut));
             v.push(keyed("Whole Page", ctrl(Key::W), Cmd::WholePage));
-            v.push(grey("Zoom All"));
+            v.push(item("Zoom &All", Cmd::ZoomAll));
             v.push(sep());
             let mut show = vec![item("Layer Icons", Cmd::ToggleLayerIcons)];
             show.extend(greys(&[
@@ -2479,6 +2485,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::PanTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pan },
         Cmd::ZoomOut => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::ZoomOut },
         Cmd::WholePage => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::WholePage },
+        Cmd::ZoomAll => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::ZoomAll },
+        Cmd::ScaleIn => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ScaleIn },
+        Cmd::ScaleOut => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ScaleOut },
         Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
         Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
         Cmd::FullScreen => Action::FullScreen(c.graph.ok_or(NEED_GRAPH)?),

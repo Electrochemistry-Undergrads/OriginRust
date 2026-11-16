@@ -237,7 +237,17 @@ fn tool(icon: Icon, tip: &'static str, cmd: Cmd) -> Item {
 /// True for the commands of tools (no menu entry; pressed while on).
 #[cfg(test)]
 fn is_tool(cmd: &Cmd) -> bool {
-    matches!(cmd, Cmd::Pointer | Cmd::DataReader | Cmd::TextTool | Cmd::SlopeTool | Cmd::PanTool | Cmd::ShapeTool(_))
+    matches!(
+        cmd,
+        Cmd::Pointer
+            | Cmd::DataReader
+            | Cmd::TextTool
+            | Cmd::SlopeTool
+            | Cmd::PanTool
+            | Cmd::ScaleIn
+            | Cmd::ScaleOut
+            | Cmd::ShapeTool(_)
+    )
 }
 
 #[cfg(test)]
@@ -379,9 +389,9 @@ fn build(bar: Bar) -> Vec<Item> {
         Bar::Tools => vec![
             tool(Pointer, "Pointer", Cmd::Pointer),
             // Origin's Tools-bar magnifiers are "Scale In" and "Scale Out" (axis magnification, measured
-            // 2026-11-15), not the page zoom of the View menu: they stay grey (B1).
-            g(ZoomIn, "Zoom In"),
-            g(ZoomOut, "Zoom Out"),
+            // 2026-11-15), not the page zoom of the View menu (T69).
+            tool(ZoomIn, "Scale In", Cmd::ScaleIn),
+            tool(ZoomOut, "Scale Out", Cmd::ScaleOut),
             b(Rescale, "Rescale", Cmd::Rescale, "Rescale to Show All"),
             tool(DataReader, "Data Reader", Cmd::DataReader),
             gap(),
@@ -511,6 +521,8 @@ fn draw_button(ui: &mut Ui, bar: Bar, button: &Button, c: &MenuContext, actions:
         Some(Cmd::SlopeTool) => c.tool == GraphTool::Slope,
         Some(Cmd::PanTool) => c.tool == GraphTool::Pan,
         Some(Cmd::ZoomIn) => c.tool == GraphTool::ZoomIn,
+        Some(Cmd::ScaleIn) => c.tool == GraphTool::ScaleIn,
+        Some(Cmd::ScaleOut) => c.tool == GraphTool::ScaleOut,
         Some(Cmd::ShapeTool(kind)) => c.tool == GraphTool::Draw(kind),
         _ => button.on,
     };
@@ -1225,7 +1237,7 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(&tips(Bar::Graphs2D)[..5], ["Line", "Scatter", "Line + Symbol", "Column", "Bar"]);
-        assert_eq!(&tips(Bar::Tools)[..4], ["Pointer", "Zoom In", "Zoom Out", "Rescale"]);
+        assert_eq!(&tips(Bar::Tools)[..4], ["Pointer", "Scale In", "Scale Out", "Rescale"]);
         assert_eq!(
             &tips(Bar::Tools)[4..],
             ["Data Reader", "Text", "Arrow", "Line", "Rectangle", "Circle", "Slope", "Pan"]

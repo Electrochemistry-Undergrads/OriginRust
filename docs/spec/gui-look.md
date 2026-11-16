@@ -638,8 +638,8 @@ factor and anchor are Sheaf's choice) on the Tools bar, manual scroll bars, and,
 the wheel scrolling a zoomed page (Shift+wheel sideways) and Ctrl+wheel zooming about the pointer
 (Sheaf's choices: Origin's wheel without the tool was not measured). Zoom is per window, screen-only
 and not saved; every click, drag and hit-test goes through the zoomed transform. The page raster is
-capped at 4096 px a side (the texture is stretched beyond that). Not built: the zoom combo, Scale
-In/Scale Out and Zoom All (T69, measured in graphing 23; they stay grey), the margin Origin lets the view scroll past the page.
+capped at 4096 px a side (the texture is stretched beyond that). Not built: the zoom combo and the margin Origin lets the view scroll past the page. Zoom All and the Tools-bar
+Scale In/Scale Out are T69 (graphing 23, built).
 
 ## 5. Dialogs, as seen
 

@@ -147,6 +147,10 @@ pub enum GraphTool {
     ZoomIn,
     /// The Pan tool: a drag on the page moves the view.
     Pan,
+    /// The Tools-bar Scale In: a rectangle drag rescales the active layer's axes (T69).
+    ScaleIn,
+    /// The Tools-bar Scale Out: a click or drag steps back to the previous scale (T69).
+    ScaleOut,
 }
 
 /// A change of a graph window's view (screen-only; the graph is not changed).
@@ -156,6 +160,8 @@ pub enum ViewOp {
     ZoomOut,
     /// Whole Page: the page fits the window.
     WholePage,
+    /// Zoom All: the page and all objects fit the window (T69).
+    ZoomAll,
 }
 
 /// The tools of a graph's Data menu that act on the points of a plot.
@@ -498,6 +504,18 @@ pub enum Action {
     GraphView {
         graph: WindowId,
         op: ViewOp,
+    },
+    /// Scale In finished: the new ends of the active layer's axes.
+    ScaleIn {
+        graph: WindowId,
+        layer: usize,
+        x: (f64, f64),
+        y: (f64, f64),
+    },
+    /// Scale Out: back to the previous scale of the active layer.
+    ScaleOut {
+        graph: WindowId,
+        layer: usize,
     },
     /// A change that a Data menu tool made to the cells of a plot's worksheet.
     DataEdit(DataEdit),

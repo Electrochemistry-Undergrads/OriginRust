@@ -21,6 +21,7 @@ mod fill_inclusive;
 mod fill_sidelines;
 mod frozen_panes;
 mod graph_data_tools;
+mod graph_scale;
 mod graph_zoom;
 mod hexbin;
 mod import_themes;
@@ -3701,7 +3702,7 @@ fn greyed_toolbar_buttons_do_nothing_and_enabled_ones_follow_the_selection() {
     // Set as X is enabled only with columns selected; Pointer is on.
     assert!(!bar_button!(h, "Standard", "Set as X").accesskit_node().is_disabled());
     assert!(!bar_button!(h, "Tools", "Pointer").accesskit_node().is_disabled());
-    assert!(bar_button!(h, "Tools", "Zoom In").accesskit_node().is_disabled());
+    assert!(bar_button!(h, "Tools", "Scale In").accesskit_node().is_disabled());
 }
 
 #[test]

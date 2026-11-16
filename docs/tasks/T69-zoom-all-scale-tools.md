@@ -1,6 +1,6 @@
 # T69: View > Zoom All and the Tools-bar Scale In / Scale Out (the rest of B1)
 
-**Status:** open. Step 1 (Origin 2016 measurement) is done and written in [graphing](../spec/graphing.md) section 23; the build (steps 2 to 4) is not started.
+**Status:** done 2026-11-15. Measurement in [graphing](../spec/graphing.md) section 23; built in `crates/app/src/graph_scale.rs` with small hooks in graph_view.rs, app.rs, menus.rs, toolbar.rs; tests in `ui_tests/graph_scale.rs`. Unbuilt: Ctrl+drag "Enlarged" graph, double-click restore, the combo's Zoom All percentage, drawing objects outside the page (Zoom All fits them but the page raster does not show them), axis breaks / polar / ternary layers for Scale In.
 **Size:** S. **Inventory:** 3 locations: View > Zoom All [Graph]; Tools toolbar: the two magnifier buttons (Scale In, Scale Out).
 
 ## Goal

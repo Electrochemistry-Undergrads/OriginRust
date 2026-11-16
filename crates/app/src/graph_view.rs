@@ -17,6 +17,7 @@
 use crate::actions::{Action, DataTool, GraphOp, GraphTool};
 use crate::dialogs::graph_props::PropsTab;
 use crate::gadget::Integrator;
+use crate::graph_scale::{self, ScaleState};
 use crate::graph_zoom::{self, Zoom};
 use crate::menus::{self, MenuContext, WindowKind};
 use crate::{data_tools, reader, view_modes};
@@ -115,6 +116,8 @@ pub struct GraphUi {
     pub zoom_in_tool: bool,
     /// The Pan tool is on: a drag on the page moves the view.
     pub pan_tool: bool,
+    /// The Scale In / Scale Out tools and the Scale Out stack (T69).
+    pub scale: ScaleState,
     /// The zoom and scroll of this window (view state only; not saved with the project).
     pub zoom: Zoom,
     /// The window rectangle and the page size (points) of the last frame, for the view commands.
@@ -190,6 +193,11 @@ impl GraphUi {
             GraphTool::ZoomIn
         } else if self.pan_tool {
             GraphTool::Pan
+        } else if let Some(tool) = self.scale.tool {
+            match tool {
+                graph_scale::ScaleTool::In => GraphTool::ScaleIn,
+                graph_scale::ScaleTool::Out => GraphTool::ScaleOut,
+            }
         } else {
             GraphTool::Pointer
         }
@@ -202,6 +210,14 @@ impl GraphUi {
             self.zoom = graph_zoom::zoom_about(window, page, self.zoom, self.zoom.factor / 2.0, window.center());
         } else {
             self.zoom = Zoom::default();
+        }
+    }
+
+    /// Zoom All: the page and all objects fit the window (T69).
+    pub fn zoom_all(&mut self) {
+        if let Some((window, page)) = self.frame {
+            let bounds = self.texture.as_ref().map(|t| graph_scale::scene_bounds(&t.scene)).unwrap_or_default();
+            self.zoom = graph_scale::zoom_all(window, page, &bounds);
         }
     }
 
@@ -346,7 +362,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     // The view input: Zoom In mode, Pan, the wheel and the scroll bars. They change the zoom
     // before the page is placed, from the layout the user saw in the last frame.
     // Zoom In mode and Origin's Zoom-Panning tool take the clicks: a click with the hand changes nothing.
-    let zoom_took_input = state.zoom_in_tool || state.pan_tool;
+    let zoom_took_input = state.zoom_in_tool || state.pan_tool || state.scale.tool.is_some();
     view_input(ui, &response, rect, page_size, state);
 
     // UI points per page point (zoom 1: the whole page fits in the window, "fit page to window"),
@@ -561,6 +577,19 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             state.data = data_tools::State::default();
         }
     }
+
+    // Scale In / Scale Out (T69).
+    graph_scale::show(
+        ui,
+        &painter,
+        &response,
+        &t.geometry,
+        &to_page,
+        graph_id,
+        state.active_layer,
+        &mut state.scale,
+        actions,
+    );
 
     // The Text tool: a click places a label there, in the layer under the click.
     if state.text_tool {

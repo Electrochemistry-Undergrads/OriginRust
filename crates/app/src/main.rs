@@ -32,6 +32,7 @@ mod autosave;
 mod data_tools;
 mod dialogs;
 mod gadget;
+mod graph_scale;
 mod graph_view;
 mod graph_zoom;
 mod grid;

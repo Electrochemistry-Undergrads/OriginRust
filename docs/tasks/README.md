@@ -72,7 +72,7 @@ All six are **open**. The older index below retains implementation history and p
 | [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring; claim letters A–K independently |
 | [T65](T65-graph-view-zoom-pan.md) | 4 (B1), P1 | M | Done 2026-11-15: Zoom In mode, Zoom Out, Whole Page, Zoom-Panning tool; left: zoom combo, Scale In/Out, Zoom All |
 | [T66](T66-graph-view-modes.md) | 4 (B1), P1 | M | Partly done: the four view modes, Show > Layer Icons and Full Screen; nine Show items and Show Data Info stay grey until measured (graphing 22) |
-| [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Open: View > Zoom All (zoom to all objects, not a presentation) and the Tools-bar Scale In / Scale Out (measured in graphing 23) |
+| [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 
 ## Index
 

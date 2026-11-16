@@ -1,6 +1,6 @@
 # T61: Layers, insets and three/four Y axes
 
-**Status:** open; recovered and refined 2026-11-15. **Size:** L, three slices.
+**Status:** in progress; recovered and refined 2026-11-15. Step 0 (Origin measurements, graphing 21) and slice 1 (add/delete layers, inset, icon Delete and Layer Properties) are done; slices 2 and 3 (per-side axis offsets, multi-Y templates, Multiple Y Axes, CLI/MCP, files) are open. Hide Layer should also hide axes; Open Dialog... and two icon-menu items stay grey (unmeasured). **Size:** L, three slices.
 **Branch:** `layers-multi-y`. **Priority:** P0, wave 2.
 **Spec:** [graphing](../spec/graphing.md) 1.3 and 12; ADR 0009.
 **Inventory:** 20 locations tagged `T61`. **Ownership:** layer creation/deletion, icon actions,

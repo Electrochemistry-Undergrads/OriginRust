@@ -68,6 +68,8 @@ mod label_frame_tests;
 #[cfg(test)]
 mod label_whiteout_tests;
 #[cfg(test)]
+mod layers_tests;
+#[cfg(test)]
 mod legend_tests;
 #[cfg(test)]
 mod lollipop_tests;

@@ -3818,3 +3818,13 @@ A LabTalk variable named `v1` to `v9` is not usable in `double v1 = ...;` (the c
 - The new layer's parent is the active layer; a linked layer is placed over its parent (% of linked layer 0 0 100 100); the inset is 75 / 0 / 25 / 25 of the parent.
 - Delete: children of the deleted layer become unlinked and keep its absolute rectangle; other links are renumbered; Undo text "Undelete frame"; no confirmation.
 - 3Ys / 4Ys: build as in 21.5; Multiple Y Axes with the defaults of 21.6; an axis position is a percentage of the X axis length, outward positive, one value per shown side.
+
+### 21.9 How Sheaf builds layers (slice 1)
+
+Implemented in `crates/core/src/layers.rs` (`Graph::add_layer`, `Graph::delete_layer`), the Graph > New Layer(Axes) menu, the Graph toolbar (six buttons) and the layer icon menu (Delete Layer, Layer Properties...).
+
+- The nine kinds are as in 21.1. The parent is the active layer; Sheaf's model allows a link only to an unlinked earlier layer, so when the active layer is itself linked the new layer follows that layer's root (Origin chains links; **provisional deviation**). A Bottom-X Left-Y layer is unlinked, has the root's width and height and starts 2.3 % of the page width left and 3.05 % of the page height above it (from one measurement; Origin's offset varied, so the value is Sheaf's own). New layers hide their legend (unmeasured in Origin). Inset With Data copies the parent's limits and major step and its first plot, not its link.
+- Delete follows 21.4: children are unlinked and keep their place on the page (the parent's rectangle for a layer that covers it; for an inset the inset's own place, **unmeasured**), later links are renumbered, no confirmation, undo text "Undelete frame". Deleting the **only** layer is refused (Origin's behaviour unmeasured). After a delete the active layer is the one before the deleted layer (or the first), a selection in a later layer moves up, a selection in the deleted layer is cleared, and Plot Details, Layer Contents, Plot Setup and the drawn-object window of that graph close.
+- Add makes the new layer active and clears the selection; one undo step each ("Create", "Undelete frame").
+- Layer Properties... (Format menu and layer icon) opens Plot Details on the layer's node with the Background tab. Sheaf's layer node keeps its Layer Contents and Legend tabs as well.
+- Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer still hides only the plots, not the axes (Origin hides both; a later slice).

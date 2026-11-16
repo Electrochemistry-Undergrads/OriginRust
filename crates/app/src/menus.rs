@@ -223,6 +223,8 @@ pub enum Cmd {
     },
     /// A change made from a graph's right-click menus.
     GraphEdit(GraphOp),
+    /// Graph > New Layer(Axes) or a Graph toolbar button: a layer of this kind next to the active layer.
+    AddLayer(sheaf_core::layers::NewLayerKind),
     /// Rescale to Show All on the active layer (Ctrl+R).
     Rescale,
     /// Graph > Exchange X-Y Axes on the active layer.
@@ -1324,7 +1326,7 @@ fn graph_menu() -> Vec<Entry> {
         grey("Add Function Graph..."),
         grey("Add Straight Line..."),
         item("Add Text...", Cmd::AddText),
-        grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
+        new_layer_menu(),
         grey("Merge Graph Windows..."),
         sep(),
         keyed("Rescale to Show All", ctrl(Key::R), Cmd::Rescale),
@@ -1426,7 +1428,7 @@ fn format_menu(kind: WindowKind) -> Vec<Entry> {
         WindowKind::Graph => vec![
             grey("Menu"),
             keyed("&Page Properties...", plain_key(Key::F2), Cmd::GraphProps(PropsTab::Page)),
-            grey("&Layer Properties..."),
+            item("&Layer Properties...", Cmd::GraphProps(PropsTab::Layer)),
             item("Plot P&roperties...", Cmd::GraphProps(PropsTab::Plots)),
             sep(),
             grey("Snap Layers to Grid"),
@@ -1859,12 +1861,22 @@ pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
     ]
 }
 
+/// Graph > New Layer(Axes): the nine kinds of Origin 2016 (Open Dialog... is the `layadd` window, unmeasured).
+fn new_layer_menu() -> Entry {
+    use sheaf_core::layers::NewLayerKind;
+    let mut entries: Vec<Entry> =
+        NewLayerKind::ALL.iter().map(|&kind| item(kind.menu_label(), Cmd::AddLayer(kind))).collect();
+    entries.push(sep());
+    entries.push(grey("Open Dialog..."));
+    sub("New Layer(Axes)", entries)
+}
+
 /// The menu of the page outside the plots and axes, or of the inside of a layer.
 pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
     vec![
         item("Add Text...", Cmd::AddText),
         grey("Layer Management..."),
-        grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
+        new_layer_menu(),
         grey("Add Shortcut to Favorites"),
         keyed("Copy Page", ctrl(Key::J), Cmd::CopyPage),
         item("Export Graphs...", Cmd::ExportGraph),
@@ -1890,14 +1902,18 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
         others,
         grey("Show Active Layer Only"),
         grey("Set Active Layer By Layer Icon Only"),
-        grey("Delete Layer"),
+        if layers > 1 {
+            item("Delete Layer", Cmd::GraphEdit(GraphOp::DeleteLayer { layer }))
+        } else {
+            grey("Delete Layer")
+        },
         sep(),
         keyed("Layer Contents...", plain_key(Key::F12), Cmd::LayerContents(Some(layer))),
         item("Plot Setup...", Cmd::PlotSetup(Some(layer))),
         grey("Double click to open Plot Setup"),
         sep(),
         item("Axis...", Cmd::GraphPropsAt { layer, tab: PropsTab::XAxis, plot: None }),
-        grey("Layer Properties..."),
+        item("Layer Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Layer, plot: None }),
         grey("Layer Management..."),
     ];
     if !plots.is_empty() {
@@ -2320,6 +2336,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, tab: *tab, plot: *plot }
         }
         Cmd::GraphEdit(op) => Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
+        Cmd::AddLayer(kind) => Action::GraphEdit {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            op: GraphOp::AddLayer { layer: c.layer, kind: *kind },
+        },
         Cmd::Rescale => {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::Rescale { layer: c.layer } }
         }

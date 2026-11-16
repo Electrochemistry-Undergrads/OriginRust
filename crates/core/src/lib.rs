@@ -25,6 +25,7 @@ pub mod graph_data;
 pub mod graph_style;
 pub mod history;
 pub mod ids;
+pub mod layers;
 pub mod localtime;
 pub mod notes;
 pub mod page_setup;

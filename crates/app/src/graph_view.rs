@@ -179,6 +179,14 @@ impl GraphUi {
         }
     }
 
+    /// Drops the open menu and the drags, which name layers by index, after layers were renumbered.
+    pub fn reset_layer_interactions(&mut self) {
+        self.menu_on = None;
+        self.shape_drag = None;
+        self.label_drag = None;
+        self.legend_drag = None;
+    }
+
     /// Layers with an index-based shape selection, context menu or drag.
     pub fn shape_interaction_layers(&self) -> Vec<usize> {
         let mut layers = Vec::new();
@@ -972,7 +980,9 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::DeleteSlope { layer, .. }
         | GraphOp::OrderShape { layer, .. }
         | GraphOp::HideLayer { layer }
-        | GraphOp::HideOtherLayers { layer } => layer,
+        | GraphOp::HideOtherLayers { layer }
+        | GraphOp::AddLayer { layer, .. }
+        | GraphOp::DeleteLayer { layer } => layer,
     };
     if layer_index >= layers {
         return;
@@ -980,6 +990,14 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
     if let GraphOp::MovePlotToAxis { layer, plot, right } = op {
         // An empty layer left behind is kept; a request that cannot be met changes nothing.
         let _ = g.set_plot_y_axis(layer, plot, right);
+        return;
+    }
+    if let GraphOp::AddLayer { layer, kind } = op {
+        let _ = g.add_layer(kind, layer);
+        return;
+    }
+    if let GraphOp::DeleteLayer { layer } = op {
+        let _ = g.delete_layer(layer);
         return;
     }
     if let GraphOp::HideOtherLayers { layer } = op {
@@ -1083,7 +1101,11 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             }
         }
         GraphOp::HideLayer { .. } => l.plots.iter_mut().for_each(|p| p.visible = false),
-        GraphOp::HideOtherLayers { .. } | GraphOp::MovePlotToAxis { .. } | GraphOp::UpdateLegend { .. } => {
+        GraphOp::HideOtherLayers { .. }
+        | GraphOp::AddLayer { .. }
+        | GraphOp::DeleteLayer { .. }
+        | GraphOp::MovePlotToAxis { .. }
+        | GraphOp::UpdateLegend { .. } => {
             unreachable!("handled above")
         }
     }

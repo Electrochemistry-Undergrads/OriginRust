@@ -117,6 +117,10 @@ pub enum GraphOp {
     HideLayer { layer: usize },
     /// Hide Other Layers.
     HideOtherLayers { layer: usize },
+    /// Graph > New Layer(Axes) and the Graph toolbar: a layer of `kind` next to the active layer `layer`.
+    AddLayer { layer: usize, kind: sheaf_core::layers::NewLayerKind },
+    /// Delete Layer of the layer icon: the layer goes, its children become independent.
+    DeleteLayer { layer: usize },
 }
 
 /// The tool of a graph window (the Tools toolbar).

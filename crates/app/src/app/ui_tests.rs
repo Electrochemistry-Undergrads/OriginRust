@@ -22,6 +22,7 @@ mod hexbin;
 mod import_themes;
 mod label_frames;
 mod label_whiteout;
+mod layers;
 mod legend_position;
 mod live;
 mod lollipop;

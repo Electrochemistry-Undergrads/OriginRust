@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **463 greyed items: 319 in the menu bar, 47 on the toolbars, 97 in context menus.**
+original inventory baseline. This is not a new runtime audit. **453 greyed items: 317 in the menu bar, 42 on the toolbars, 94 in context menus.**
 
 ## How to read and keep this file
 
@@ -38,7 +38,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T58` | 15 |
 | `T59` | 6 |
 | `T60` | 7 |
-| `T61` | 20 |
+| `T61` | 10 |
 | `T62` | 8 |
 | `T63` | 31 |
 | `B1` | 27 |
@@ -60,7 +60,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 19 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 90 items, backlog packages (`B`) 354, not planned (`N`) 19.
+Briefs (`T`) hold 80 items, backlog packages (`B`) 354, not planned (`N`) 19.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -170,7 +170,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T63` Add Plot to Layer: Line... · Scatter... · Line + Symbol... · Column... · Area...
 - `T60` Layer Management... · Merge Graph Windows... · Fit Layer to Graph · Fit Page to Layers...
 - `B3` Add Function Graph... · Add Straight Line... · New Table · New Color Scale · Convert to Standard Font Size
-- `T61` New Layer(Axes): Horizontal Axis Layer... · Vertical Axis Layer...
+- `T61` New Layer(Axes): Open Dialog...
 - `B3` Legend: Add Legend Title
 - `T62` Offset Grouped Data in Layer: None · Cumulative · Constant · Auto · Individual
 
@@ -198,7 +198,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Menu
 - `B16` Programming Control...
 - `B2` Object Properties...
-- `T61` Layer Properties... [Graph]
 - `B2` Snap Layers to Grid · Snap Objects to Grid [Graph]
 - `T60` Fit Page To Layers [Graph]
 - `B3` Fit Page To Printer [Graph]
@@ -229,7 +228,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T63` Standard: Duplicate
 - `T58` Format: Font name box · Font size box · Bold · Italic · Underline · Superscript · Subscript · Greek · Increase Font Size · Decrease Font Size · Font Color · Fill Color · Line Color
 - `B1` Graph: Zoom In · Zoom Out · Whole Page
-- `T61` Graph: Add Layer (Bottom-X Left-Y) · Add Layer (Top-X Left-Y) · Add Layer (Bottom-X Right-Y) · Add Layer (Top-X Right-Y) · Add Inset Graph
 - `T63` 2D Graphs: Bar · Stacked Area · Box Chart · Histogram · Bubble
 - `B4` 2D Graphs: High-Low-Close
 - `B1` Tools: Zoom In · Zoom Out · Pan
@@ -271,10 +269,10 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T60` Graph page: Layer Management...
 - `B12` Graph page: Add Shortcut to Favorites
 - `B1` Graph page: View Full Screen
-- `T61` Graph page > New Layer(Axes): Horizontal Axis Layer... · Vertical Axis Layer...
+- `T61` Graph page > New Layer(Axes): Open Dialog...
 - `B2` Graph page > Copy Format: All · All Style Formats
 - `B11` Graph page > Duplicate (Batch Plotting): Duplicate
-- `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Delete Layer · Double click to open Plot Setup · Layer Properties...
+- `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Double click to open Plot Setup
 - `T60` Graph layer icon: Layer Management...
 - `B12` Explorer folder: Properties...
 - `T63` Explorer window: Duplicate

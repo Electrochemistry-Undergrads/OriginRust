@@ -458,6 +458,13 @@ Line (200), scatter (201), line+symbol (202) are one plot object differing in co
 - **B-spline (8)** is a uniform cubic B-spline over the points with the first and last point repeated three times, so it starts and ends at the end points and winds around the others: rms 0.4 px. It is parametric, so any X order works (loops appear when X goes back).
 - **Bezier (15)** is a cubic Bezier over points 0-3, then 3-6, 6-9 and so on (groups share their end point); leftover points are not drawn (5 and 6 points draw only the first group, 8 points end at the 7th point, 10 points at the 10th). Standard cubic Bezier formula, rms 1.5 px, largest error 3.8 px at the cusp where two groups meet (Origin draws fewer chords). Fewer than 4 points: not measured, Sheaf draws straight.
 - Raw probes and images: `re-workspace/scratch/spline-connect/` (local). Not measured: SplineStep resolution dependence, 900 limit for B-spline and Bezier (Sheaf applies none), the `.opj` file codes of 8/9/15 (Sheaf reads 8 as B-spline, 15 as Bezier, 5 to 10 else as Spline, writes 5, 8, 15).
+- **2 and 3 Point Segment (2, 3)** (measured 2026-11-15, T71): Plot > Line + Symbol > 2 Point Segment and
+  3 Point Segment make a line + symbol graph whose plot has line connection 2 (3): points 1-2, 3-4, ...
+  (1-2-3, 4-5-6, ...) are joined and the groups are not; with 9 points the 9th stands alone (2) and the
+  three groups fill exactly (3). Sheaf: `Connect::Segment2`/`Segment3`, templates `segment2`/`segment3`,
+  the Plot Details and plot-settings connect lists, groups counted from the first point of each piece of
+  line (missing data starts a new piece); `.opj` codes 2 and 3 (LabTalk's codes; the file field is
+  taken to use the same codes, not checked in a file).
 Also: connect begin and end (closes; off), connect within subset (on for line plots), Akima/modified Bezier (later versions).
 
 ### 5.3 Line options

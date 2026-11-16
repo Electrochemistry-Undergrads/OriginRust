@@ -505,6 +505,8 @@ pub(super) fn connect_name(c: Connect) -> &'static str {
         Connect::Bezier => "Bezier",
         Connect::StepHorizontal => "Step, horizontal first",
         Connect::StepVertical => "Step, vertical first",
+        Connect::Segment2 => "2 Point Segment",
+        Connect::Segment3 => "3 Point Segment",
     }
 }
 

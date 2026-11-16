@@ -6,7 +6,7 @@
 
 use super::*;
 use sheaf_calc::wavelet as wt;
-use sheaf_calc::{Wavelet, WaveletExtension};
+use sheaf_calc::{CwtWavelet, Wavelet, WaveletExtension};
 
 /// What [`Tool::WaveletDecompose`] does (Origin's `dwt`, measured; 19.2): one level of the transform
 /// of each input, the approximation and the detail coefficients in two new columns.
@@ -72,6 +72,16 @@ impl Default for WaveletSmoothSpec {
     fn default() -> Self {
         WaveletSmoothSpec { wavelet: Wavelet::Haar, extension: WaveletExtension::Periodic, cutoff: 20.0 }
     }
+}
+
+/// What [`Tool::ContinuousWavelet`] does (Origin's `cwt`, measured; 19.6). The inputs are the signals,
+/// `scales` the column of scales (each cut to its integer part, 1 or more).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CwtSpec {
+    pub scales: ColumnId,
+    pub wavelet: CwtWavelet,
+    /// The wave number (Morlet, 5 to 20) or the order (DGauss, 1 to 8); not used by the Mexican hat.
+    pub param: f64,
 }
 
 fn error(name: &str, e: wt::WaveletError) -> AnalysisError {
@@ -216,6 +226,30 @@ pub(super) fn run_smooth(
     Ok(())
 }
 
+/// Continuous wavelet: one sheet column per scale and input, rows = samples, no X column, as Origin's
+/// `CWTResults1` sheet (comment `cwt of <signal>, <scales>`).
+pub(super) fn run_cwt(
+    spec: &CwtSpec,
+    inputs: &[Input],
+    scales: &[f64],
+    scales_short: &str,
+    out: &mut Vec<SheetColumn>,
+) -> Result<(), AnalysisError> {
+    let scales = {
+        let end = scales.iter().rposition(|x| !x.is_nan()).map_or(0, |i| i + 1);
+        signal_values(&scales[..end], scales_short)?
+    };
+    for inp in inputs {
+        let y = signal_values(inp.ys(), &inp.short)?;
+        let coefficients = sheaf_calc::cwt::cwt(&y, &scales, spec.wavelet, spec.param)
+            .map_err(|e| AnalysisError::BadOption(format!("column {}: {e}", inp.short)))?;
+        for c in coefficients {
+            out.push(y_column(String::new(), format!("cwt of {}, {scales_short}", inp.short), c));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -293,5 +327,35 @@ mod tests {
             ("WT Smoothed X1", "WT Smooth Y1")
         );
         assert_eq!(rs.columns[1].comments, "20% cutoff DB2 smooth of B");
+    }
+
+    #[test]
+    fn continuous_wavelet_writes_one_column_per_scale_without_x() {
+        let (mut p, book, y) = project(40);
+        let sc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 4.0])).unwrap();
+        p.column_mut(sc).unwrap().short_name = "S".into();
+        let spec = CwtSpec { scales: sc, wavelet: CwtWavelet::MexHat, param: 5.0 };
+        let r = p.analyze(&request(&[y], Tool::ContinuousWavelet(spec))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(rs.name, "CWTResults1");
+        assert_eq!(rs.columns.len(), 3);
+        assert!(rs.columns.iter().all(|c| c.numeric().unwrap().len() == 40 && c.comments == "cwt of B, S"));
+        assert!(rs.columns.iter().all(|c| c.long_name.is_empty() && c.designation == Designation::Y));
+        let want =
+            sheaf_calc::cwt::cwt(p.column(y).unwrap().numeric().unwrap(), &[1.0, 2.0, 4.0], CwtWavelet::MexHat, 5.0)
+                .unwrap();
+        assert_eq!(rs.columns[1].numeric().unwrap(), want[1].as_slice());
+    }
+
+    #[test]
+    fn continuous_wavelet_refuses_a_scale_below_one_and_a_bad_wave_number() {
+        let (mut p, book, y) = project(40);
+        let sc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.5, 2.0])).unwrap();
+        let spec = CwtSpec { scales: sc, wavelet: CwtWavelet::Morlet, param: 5.0 };
+        let e = p.analyze(&request(&[y], Tool::ContinuousWavelet(spec))).unwrap_err();
+        assert!(e.to_string().contains("at least 1"), "{e}");
+        let sc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0])).unwrap();
+        let spec = CwtSpec { scales: sc, wavelet: CwtWavelet::Morlet, param: 3.0 };
+        assert!(p.analyze(&request(&[y], Tool::ContinuousWavelet(spec))).is_err());
     }
 }

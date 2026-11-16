@@ -28,7 +28,7 @@ View > Zoom All zooms the active graph window so that all its objects, also thos
 ## Steps
 
 1. Done: measure Zoom All and Scale In / Scale Out in Origin (graphing 23).
-2. Zoom All: bounding box of the page and the objects, set zoom and scroll through the T65 transform (page at the top-left, margin about 10 px); idempotent; Whole Page returns. Enable the View item.
+2. Zoom All: bounding box of the page and the objects, set zoom and scroll through the T65 transform (Origin draws the page at the top-left; Sheaf keeps the page centred as T65 lays it out, a known departure, margin about 10 px, factor never above 1); idempotent; Whole Page returns. Enable the View item.
 3. Scale In and Scale Out tools: one-shot tools with the dotted rubber band, mapping through the layer's scale type (linear, log10; check how Sheaf's other scale types such as reciprocal or offset reciprocal behave: unmeasured in Origin), the active layer only, linked axes following, the per-window stack, one undo step "Zoom In/Out" per use. Enable the two Tools-bar buttons (tool tips from our own words: "Scale In: drag a rectangle to magnify the axes" and "Scale Out: step back to the previous axes").
 4. Tests (`crates/app/src/app/ui_tests.rs`): Zoom All with an object outside the page, twice (same result), Whole Page back; Scale In rectangle gives the rectangle's ends; nested steps and Scale Out back to the original; Scale Out on an empty stack does nothing; click and 3 px drag do nothing; log axis; linked right-Y layer; undo per step; the tool ends after one use. Delete the three items from greyed-items.md and run `python tools/greyed-count.py --write`.
 

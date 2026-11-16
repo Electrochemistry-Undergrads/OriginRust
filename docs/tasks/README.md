@@ -70,7 +70,7 @@ All six are **open**. The older index below retains implementation history and p
 | [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Done 2026-11-15 (graphing 21): nine Add Layer kinds, insets, Delete Layer, Layer Properties, displaced Y axes and Move to Layer, 3Ys/4Ys templates and Multiple Y Axes (CLI `-t 3ys-y-yy` etc.); left: Open Dialog..., three layer-icon items, Origin's legend in the templates |
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
 | [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring; claim letters A–K independently |
-| [T65](T65-graph-view-zoom-pan.md) | 4 (B1), P1 | M | Done 2026-11-15: Zoom In mode, Zoom Out, Whole Page, Zoom-Panning tool; left: zoom combo, Scale In/Out, Zoom All |
+| [T65](T65-graph-view-zoom-pan.md) | 4 (B1), P1 | M | Done 2026-11-15: Zoom In mode, Zoom Out, Whole Page, Zoom-Panning tool (Scale In/Out and Zoom All: T69); left: zoom combo |
 | [T66](T66-graph-view-modes.md) | 4 (B1), P1 | M | Partly done: the four view modes, Show > Layer Icons and Full Screen; nine Show items and Show Data Info stay grey until measured (graphing 22) |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 

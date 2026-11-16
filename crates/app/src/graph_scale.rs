@@ -119,6 +119,8 @@ pub fn scale_in(
         for (is_y, (lo, hi)) in [(false, x), (true, y)] {
             let owner = owner(g, layer, is_y);
             if let Some(axis) = axis_mut(g, owner, is_y) {
+                // the Reverse Order check box and a min above max cancel each other: keep it ascending
+                let (lo, hi) = if axis.reverse { (lo.min(hi), lo.max(hi)) } else { (lo, hi) };
                 step.changes.push(Change { layer: owner, y: is_y, before: ends(axis), after: (lo, hi) });
                 axis.min = Some(lo);
                 axis.max = Some(hi);
@@ -240,7 +242,11 @@ pub fn show(
         ScaleTool::In if response.drag_stopped() => {
             let rect = state.start.zip(now).map(|(a, b)| Rect::from_two_pos(a, b));
             state.start = None;
-            let Some(rect) = rect.filter(|r| r.width() >= MIN_DRAG && r.height() >= MIN_DRAG) else { return };
+            let Some(rect) = rect.filter(|r| r.width() >= MIN_DRAG && r.height() >= MIN_DRAG) else {
+                // a tiny drag ends the tool without a change, as a click does in Origin
+                state.tool = None;
+                return;
+            };
             if ctrl {
                 actions.push(Action::Hint("Scale In: the zoom graph of Ctrl+drag is not built".to_string()));
                 return;
@@ -254,6 +260,11 @@ pub fn show(
                 None => actions
                     .push(Action::Hint("Scale In: this layer's axes cannot be rescaled by a rectangle".to_string())),
             }
+        }
+        ScaleTool::In if response.clicked() => {
+            // a plain click changes nothing and ends the tool (graphing 23.3)
+            state.start = None;
+            state.tool = None;
         }
         ScaleTool::Out if response.clicked() || response.drag_stopped() => {
             state.start = None;
@@ -340,6 +351,22 @@ mod tests {
         let g = geometry(x, axis(0.0, 100.0, ScaleKind::Linear));
         let ((x0, x1), _) = rect_to_ends(&g, (100.0, 60.0), (200.0, 140.0)).unwrap();
         assert!(near(x0, 10.0) && near(x1, 5.0), "{x0} {x1}");
+    }
+
+    #[test]
+    fn scale_in_on_a_reverse_checkbox_axis_keeps_it_reversed() {
+        let mut doc = Document::default();
+        let id = doc.apply("g", |p| p.add_graph(sheaf_core::template::Template::Line));
+        doc.apply("rev", |p| {
+            let a = &mut p.graph_mut(id).unwrap().layers[0].x_axis;
+            (a.reverse, a.min, a.max) = (true, Some(0.0), Some(10.0));
+        });
+        let mut state = ScaleState::default();
+        assert!(scale_in(&mut doc, &mut state, id, 0, (10.0, 5.0), (0.0, 1.0)));
+        let a = &doc.project().graph(id).unwrap().layers[0].x_axis;
+        let r = sheaf_plot::ticks::resolve_axis(a, None);
+        assert!(r.reversed, "the check box still reverses the axis");
+        assert!(near(r.min, 5.0) && near(r.max, 10.0), "{} {}", r.min, r.max);
     }
 
     #[test]

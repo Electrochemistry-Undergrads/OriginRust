@@ -83,9 +83,17 @@ fn a_click_or_a_tiny_drag_with_scale_in_changes_nothing() {
     scale_in_tool(&mut h);
     let p = in_frame(&h, 0, 0.5, 0.5);
     click_at(&mut h, p);
+    assert_eq!(graph_ui(&h).tool(), GraphTool::Pointer, "a click ends the tool");
+    scale_in_tool(&mut h);
     drag(&mut h, p, p + egui::vec2(3.0, 2.0));
-    assert_eq!(axes(&h, 0), before);
+    assert_eq!(graph_ui(&h).tool(), GraphTool::Pointer, "a tiny drag ends the tool");
+    scale_in_tool(&mut h);
+    let q = p + egui::vec2(40.0, 30.0);
+    click_at(&mut h, p);
+    drag(&mut h, p, q);
+    assert_eq!(axes(&h, 0), before, "a drag after the click is a Pointer drag");
     assert_eq!(h.state().doc.undo_label(), Some("Fix axes"));
+    scale_in_tool(&mut h);
     key(&mut h, egui::Key::Escape);
     assert_eq!(graph_ui(&h).tool(), GraphTool::Pointer, "Esc ends the tool");
 }

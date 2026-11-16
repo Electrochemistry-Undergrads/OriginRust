@@ -584,8 +584,8 @@ decoration paths: screen/PNG/PDF through SVG, and direct EPS/EMF. Tests cover ne
 anchors, rotation, script scaling, font style/colour, title/legend/label/tick placement and
 export. The SVG golden includes text; the PNG golden isolates stroke geometry so font
 installation differences do not change it. This slice adds no model fields. Per-run font
-switching, combined scripts, editor/toolbar formatting and whole-object underline
-remain open in the graph-text brief.
+switching is covered by 7.6; combined scripts, editor/toolbar formatting and whole-object
+underline remain open in the graph-text brief.
 
 ### 7.2 Indexed text colours (T58 graph text)
 
@@ -667,6 +667,55 @@ underline and strikeout, including nested font/script styles and rotated text. E
 is opaque, while text outside the span retains its parent's alpha. Seven focused regressions
 cover the measured values, boundaries, nesting, glyph placement and EPS/EMF/PDF/SVG output;
 new SVG and font-independent stroke PNG goldens also check the channel values directly.
+
+
+### 7.6 Inline font families (T58 graph text)
+
+`codex/text-run-fonts` (2026-11-15) carries a requested family through each markup run.
+For full font names, `\f:Times New Roman(a\f:Courier New(b)c)d` sets `a` and `c` in
+Times New Roman, `b` in Courier New, and restores the label's own font for `d`. The
+[escape reference](https://docs.originlab.com/origin-help/escape-sequences/) documents the
+family switch. Runs with the same family and other style coalesce; differing families
+remain separate even when their weight, size and colour agree.
+
+OriginPro 2016 controls in `scratch/text-run-fonts/` use `fonts.lines.txt` (eleven cases)
+and `font-names.lines.txt` (eight edge/name cases). Exact selected-font records in EMF,
+associated with text reference coordinates, confirm full Arial, Times New Roman and
+Courier New names, the four nested `a/b/c/d` families above, and a Times span containing
+bold (weight 700), italic and underlined text. At 24 pt these selected faces have height
+-100 in the captured EMF coordinate system. Parent text is confirmed Arial by its selected
+face; the second probe's quoted `label -f` request did not change it, so no Courier-parent
+behaviour is inferred from that request.
+
+The native Symbol controls use the Symbol face and private character U+F06D for `m`.
+Sheaf keeps its established Unicode Greek mapping: `\f:Symbol(m\f:Arial(x)m)y` produces
+mu, Latin x, mu, Latin y, with the requested Symbol/Arial/Symbol/parent families. Switching
+to a non-Symbol family ends Greek mapping inside that span. Unicode or literal wrappers
+continue to suppress Greek remapping. Actual glyph coverage and fallback on a machine can
+differ from Origin's Symbol encoding; this does not add a new Symbol character map.
+
+The same effective family is used for widths, placed glyphs and font-table decoration
+metrics. Mixed-family anchors and rotation therefore use the sum of the measured run
+widths. A single unshifted run retains the existing native text anchor. Bold, italic,
+script size/baseline and colour compose with family changes. Titles, legends, labels and
+tick strings share this placement path. No model, file-format, global font setting or
+backend implementation changes are needed; existing font fallback and export warnings
+still apply. EPS maps the three standard families to Helvetica, Times-Roman and Courier;
+SVG/EMF retain their requested family and PNG/PDF use the existing SVG font resolution.
+
+This slice supports full, nonempty names with no edge whitespace, up to the existing
+64-character bound. Empty or edge-whitespace names keep Sheaf's previous neutral-family
+behaviour and enclosed text. Native `\f:(...)` instead remained literal; a whitespace
+Times name and missing/abbreviated names selected Arial in these controls. Those invalid,
+short-name and alias/default-name behaviours are not claimed as matching Origin. Missing
+fonts retain the existing platform-dependent fallback. Nesting limits and malformed/literal
+text rules remain unchanged.
+
+Eight font regressions cover native family/style restoration, same-family coalescing,
+family-sensitive widths and decoration geometry, rotation, Greek/literal/Unicode behaviour,
+name bounds, an empty font database and EPS/EMF/PDF/SVG output. New SVG and stroke-only PNG
+goldens use deliberately different deterministic test-family metrics; those synthetic
+metrics are not Origin measurements or installed-font rasterization fixtures.
 
 ---
 

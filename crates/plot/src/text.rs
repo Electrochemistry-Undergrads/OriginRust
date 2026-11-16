@@ -16,6 +16,9 @@ fn run_font(font: &Font, run: &Run) -> Font {
     f.bold |= run.bold;
     f.italic |= run.italic;
     f.color = run.color.unwrap_or(font.color);
+    if let Some(family) = &run.family {
+        f.family.clone_from(family);
+    }
     f
 }
 
@@ -50,7 +53,7 @@ pub fn place(
             x,
             y,
             text: run.text.clone(),
-            family: font.family.clone(),
+            family: run.family.as_ref().unwrap_or(&font.family).clone(),
             size: size * run.scale,
             bold: font.bold || run.bold,
             italic: font.italic || run.italic,

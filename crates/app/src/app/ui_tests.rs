@@ -6332,6 +6332,7 @@ mod clipboard_origin;
 #[path = "ui_tests/clipboard_formats.rs"]
 mod clipboard_formats;
 
+mod add_plot_to_layer;
 mod find_replace;
 mod find_selection;
 mod fit_page;

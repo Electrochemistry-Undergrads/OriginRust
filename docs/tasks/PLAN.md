@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 443 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 438 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -86,7 +86,7 @@ Double-Y on linked layers (ADR 0009), stacked columns, bars and areas (graphing 
 
 | ✓ | Package | What | Size | Origin needed | Greyed items | Main files |
 |---|---|---|---|---|---|---|
-| [ ] | [T63](T63-greyed-items-with-code-2.md) | Second round of T01: toolbar plot buttons, step lines, Probability and Q-Q plots in the Plot menu, Open Excel, export from any window, Duplicate, Fill Column With, axis tick label items, Add Plot to Layer | M | no | 27 | `app/menus.rs`, `app/toolbar.rs` |
+| [ ] | [T63](T63-greyed-items-with-code-2.md) | Second round of T01: toolbar plot buttons, step lines, Probability and Q-Q plots in the Plot menu, Open Excel, export from any window, Duplicate, Fill Column With, axis tick label items, Add Plot to Layer | M | no | 22 | `app/menus.rs`, `app/toolbar.rs` |
 
 ## Wave 4: everyday graph editing
 

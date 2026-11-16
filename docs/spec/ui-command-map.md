@@ -194,7 +194,9 @@ Origin help names a "Violin with Box" button on the 2D Graphs toolbar, but its i
 - Layer Contents... [F12]: choose which datasets are plotted in the active layer (C-list "Layer
   Plot Contents": available data, layer contents, add/remove arrows, Edit Range, Plot Setup).
 - Plot Setup...: choose X/Y/error columns and the plot type per dataset.
-- Add Plot to Layer: Line..., Scatter..., Line + Symbol..., Column..., Area...
+- Add Plot to Layer: Line..., Scatter..., Line + Symbol..., Column..., Area... (each opens Layer Contents
+  for the active layer with that type chosen on the plot type button, measured in Origin 2016 on
+  2026-11-15; Sheaf does the same, T63 J)
 - Add Error Bars...; Add Function Graph....
 - Rescale to Show All [Ctrl+R].
 - Legend: Add Legend Title, Box Chart Components, Categorical Values, Point by Point, Data

@@ -420,6 +420,12 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
     },
+    /// Opens Layer Contents for one layer with this plot type chosen (Graph > Add Plot to Layer).
+    AddPlotToLayer {
+        graph: WindowId,
+        layer: usize,
+        kind: sheaf_core::graph::PlotKind,
+    },
     /// Opens Layer Contents (Origin's add, remove, group and order window) for one layer.
     LayerContents {
         graph: WindowId,

@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **413 greyed items: 290 in the menu bar, 35 on the toolbars, 88 in context menus.**
+original inventory baseline. This is not a new runtime audit. **406 greyed items: 284 in the menu bar, 35 on the toolbars, 87 in context menus.**
 
 ## How to read and keep this file
 
@@ -42,8 +42,9 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T62` | 0 |
 | `T63` | 20 |
 | `T65` | 0 |
+| `T66` | 10 |
 | `T67` | 0 |
-| `B1` | 20 |
+| `B1` | 3 |
 | `B2` | 51 |
 | `B3` | 27 |
 | `B4` | 30 |
@@ -62,7 +63,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 45 items, backlog packages (`B`) 348, not planned (`N`) 20.
+Briefs (`T`) hold 55 items, backlog packages (`B`) 331, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -108,10 +109,9 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Quick Help · Smart Hint Log
 - `B12` View Windows: None · Windows in Active Folder · Active Folder and Subfolders
 - `B6` Actively Update Plots · Page Break Preview Lines [Workbook]
-- `B1` Print View · Page View · Window View · Draft View · Zoom All [Graph]
-- `B1` Show: Layer Icons · Active Layer Indicator · Axis Layer Icons · Object Grid · Layer Grid · Frame · Labels · Data · Active Layer Only · Master Items on Screen [Graph]
-- `B1` Show Data Info [Graph]
-- `B1` Full Screen [Graph]
+- `B1` Zoom All [Graph]
+- `T66` Show: Active Layer Indicator · Axis Layer Icons · Object Grid · Layer Grid · Frame · Labels · Data · Active Layer Only · Master Items on Screen [Graph]
+- `T66` Show Data Info [Graph]
 
 ### Plot
 - `T63` Line: Horizontal Step · Vertical Step · Spline Connected
@@ -257,7 +257,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B3` Graph legend > Legend: Add Legend Title
 - `B2` Graph legend > Copy Format: All · All Style Formats · Text
 - `B12` Graph page: Add Shortcut to Favorites
-- `B1` Graph page: View Full Screen
 - `T61` Graph page > New Layer(Axes): Open Dialog...
 - `B2` Graph page > Copy Format: All · All Style Formats
 - `B11` Graph page > Duplicate (Batch Plotting): Duplicate

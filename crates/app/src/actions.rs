@@ -484,6 +484,18 @@ pub enum Action {
         graph: WindowId,
         tool: GraphTool,
     },
+    /// View > Print View, Page View, Window View, Draft View: the graph window's mode (view state, no undo step).
+    SetViewMode {
+        graph: WindowId,
+        mode: sheaf_core::project::ViewMode,
+    },
+    /// View > Show > Layer Icons.
+    SetLayerIcons {
+        graph: WindowId,
+        on: bool,
+    },
+    /// View > Full Screen: the graph's page over the whole screen until Esc.
+    FullScreen(WindowId),
     /// Zoom Out or Whole Page of a graph window.
     GraphView {
         graph: WindowId,

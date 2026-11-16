@@ -521,6 +521,21 @@ fn raster_has_a_red_line_on_white() {
 }
 
 #[test]
+fn draft_raster_has_the_same_size_and_no_smoothed_edges() {
+    let (p, g) = red_line_project();
+    let scene = graph_scene(&p, g).unwrap();
+    let normal = render_scene_raster(&scene, 1.0).unwrap();
+    let draft = render_scene_raster_draft(&scene, 1.0).unwrap();
+    assert_eq!((normal.width, normal.height), (draft.width, draft.height));
+    let grey = |r: &Raster| {
+        r.rgba.chunks(4).filter(|px| px[0] == px[1] && px[1] == px[2] && px[0] > 20 && px[0] < 235).count()
+    };
+    // Only the text loses its smoothing (the lines and symbols stay as they were), so the grey edge pixels drop a lot but not to none.
+    assert!(grey(&normal) > 100, "normal has {} grey pixels", grey(&normal));
+    assert!(grey(&draft) < grey(&normal) * 7 / 10, "normal {} draft {}", grey(&normal), grey(&draft));
+}
+
+#[test]
 fn data_on_top_changes_overlap_pixels_and_picking_without_changing_clipping() {
     let (mut p, g) = red_line_project();
     let layer = &mut p.graph_mut(g).unwrap().layers[0];

@@ -108,6 +108,8 @@ mod symbol_line_order_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod text_color_tests;
+#[cfg(test)]
 mod text_decoration_tests;
 #[cfg(test)]
 mod treemap_tests;
@@ -511,6 +513,13 @@ pub fn fit_content_bounds(project: &Project, graph: WindowId) -> Result<Option<(
 /// picture is the same as [`render_raster`] of the graph the scene was made from.
 pub fn render_scene_raster(scene: &scene::Scene, pixels_per_point: f64) -> Result<Raster, PlotError> {
     raster::rasterise(&svg::write_svg(scene), pixels_per_point, SystemFonts::shared())
+}
+
+/// [`render_scene_raster`] for Draft View: the same drawing with unsmoothed (crisp, not
+/// anti-aliased) edges and text, as Origin's Draft View shows plain text (graphing spec 22.2).
+pub fn render_scene_raster_draft(scene: &scene::Scene, pixels_per_point: f64) -> Result<Raster, PlotError> {
+    let svg = svg::write_svg(scene).replacen("<svg ", "<svg text-rendering=\"optimizeSpeed\" ", 1);
+    raster::rasterise(&svg, pixels_per_point, SystemFonts::shared())
 }
 
 /// Renders a graph to pixels at `pixels_per_point` (1 = 72 dpi), for showing on screen.

@@ -71,6 +71,7 @@ All six are **open**. The older index below retains implementation history and p
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
 | [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring; claim letters A–K independently |
 | [T65](T65-graph-view-zoom-pan.md) | 4 (B1), P1 | M | Done 2026-11-15: Zoom In mode, Zoom Out, Whole Page, Zoom-Panning tool; left: zoom combo, Scale In/Out, Zoom All |
+| [T66](T66-graph-view-modes.md) | 4 (B1), P1 | M | Partly done: the four view modes, Show > Layer Icons and Full Screen; nine Show items and Show Data Info stay grey until measured (graphing 22) |
 | [T67](T67-add-straight-line.md) | 4 (B3), P1 | M | Done 2026-11-15: Add Straight Line (Origin's addline), dialog, CLI --vline/--hline; left: dragging (Moveable) |
 
 ## Index

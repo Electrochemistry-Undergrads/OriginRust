@@ -85,6 +85,11 @@ pub struct Project {
     /// gaps like missing values, instead of drawing them in the mask colour. Analysis is unchanged.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hide_masked: bool,
+    /// The view mode of graph windows that are not in Page View (View > Print View, Window View,
+    /// Draft View); a graph that is not listed is in Page View. View state: it is saved with the
+    /// project but setting it is never an undo step (see [`Project::set_view_mode`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub view_modes: Vec<(WindowId, ViewMode)>,
     /// The next unused identifier (shared by windows and columns).
     next_id: u64,
 }
@@ -181,6 +186,46 @@ pub enum WindowState {
     Maximised,
     /// Closed: listed in the project explorer only.
     Hidden,
+}
+
+/// How a graph window shows its page (View > Print View, Page View, Window View, Draft View; measured
+/// in Origin 2016, graphing spec 22). The numbers are LabTalk's `page.viewmode`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewMode {
+    /// 1: the page at its own size (looked the same as Page View).
+    Print,
+    /// 2: the page at its own size on a grey ground; the default.
+    #[default]
+    Page,
+    /// 3: the page stretched over the whole window.
+    Window,
+    /// 4: as Window View, with plain text.
+    Draft,
+}
+
+impl ViewMode {
+    pub const ALL: [ViewMode; 4] = [ViewMode::Print, ViewMode::Page, ViewMode::Window, ViewMode::Draft];
+
+    /// LabTalk's `page.viewmode`.
+    pub fn number(self) -> u8 {
+        match self {
+            ViewMode::Print => 1,
+            ViewMode::Page => 2,
+            ViewMode::Window => 3,
+            ViewMode::Draft => 4,
+        }
+    }
+
+    /// The mode of a `page.viewmode` value (other values are ignored by Origin).
+    pub fn from_number(n: u8) -> Option<ViewMode> {
+        ViewMode::ALL.into_iter().find(|m| m.number() == n)
+    }
+
+    /// Window and Draft View stretch the page over the whole window.
+    pub fn fills_window(self) -> bool {
+        matches!(self, ViewMode::Window | ViewMode::Draft)
+    }
 }
 
 impl Default for Project {
@@ -302,7 +347,21 @@ impl Project {
             mask_color: default_mask_color(),
             masking_off: false,
             hide_masked: false,
+            view_modes: Vec::new(),
             next_id: 1,
+        }
+    }
+
+    /// The view mode of a graph window (Page View unless set).
+    pub fn view_mode(&self, graph: WindowId) -> ViewMode {
+        self.view_modes.iter().find(|(w, _)| *w == graph).map_or(ViewMode::Page, |(_, m)| *m)
+    }
+
+    /// Sets the view mode of a graph window; Page View, the default, is not stored.
+    pub fn set_view_mode(&mut self, graph: WindowId, mode: ViewMode) {
+        self.view_modes.retain(|(w, _)| *w != graph);
+        if mode != ViewMode::Page {
+            self.view_modes.push((graph, mode));
         }
     }
 

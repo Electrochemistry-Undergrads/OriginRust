@@ -19,8 +19,9 @@ use crate::dialogs::graph_props::PropsTab;
 use crate::gadget::Integrator;
 use crate::graph_zoom::{self, Zoom};
 use crate::menus::{self, MenuContext, WindowKind};
-use crate::{data_tools, reader};
-use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, TextureHandle, TextureOptions, Vec2};
+use crate::{data_tools, reader, view_modes};
+use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, TextureHandle, TextureOptions, Vec2, vec2};
+use sheaf_core::project::ViewMode;
 use sheaf_core::shape::{self, Shape, ShapeKind};
 use sheaf_core::{Document, Project, WindowId};
 use sheaf_plot::LayerGeometry;
@@ -76,6 +77,8 @@ pub struct GraphTexture {
     texture: TextureHandle,
     geometry: Vec<LayerGeometry>,
     scene: Scene,
+    /// The view mode and the page size the picture was drawn for (Window and Draft View follow the window).
+    view_key: (ViewMode, i32, i32),
 }
 
 #[derive(Default)]
@@ -289,6 +292,12 @@ impl GraphUi {
         Some(screen((o.bounds.x + o.bounds.w / 2.0, o.bounds.y + o.bounds.h / 2.0)))
     }
 
+    /// The page on screen and the window's content area, as of the last frame.
+    #[cfg(test)]
+    pub fn page_and_content(&self) -> Option<(Rect, Rect)> {
+        Some((self.view?.0, graph_zoom::content(self.frame?.0)))
+    }
+
     /// The middle of the part of the window the page is drawn in, in the last frame.
     #[cfg(test)]
     pub fn view_centre(&self) -> Option<Pos2> {
@@ -322,14 +331,17 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
     ui.painter().rect_filled(rect, 0.0, GROUND);
     let margin = graph_zoom::MARGIN;
-    let page_w = graph.page.width_pt as f32;
-    let page_h = graph.page.height_pt as f32;
+    // View mode (T66): Window and Draft View stretch the page over the window.
+    let mode = doc.project().view_mode(graph_id);
+    let visible = rect;
+    let rect = view_modes::view_rect(mode, rect);
+    let page_size = view_modes::page_for(mode, vec2(graph.page.width_pt as f32, graph.page.height_pt as f32), rect);
+    let (page_w, page_h) = (page_size.x, page_size.y);
     if page_w <= 0.0 || page_h <= 0.0 || rect.width() <= 2.0 * margin || rect.height() <= 2.0 * margin {
         return;
     }
     // Nothing outside the window is drawn or clicked (the page is larger than it when zoomed).
     ui.set_clip_rect(ui.clip_rect().intersect(rect));
-    let page_size = egui::vec2(page_w, page_h);
     state.frame = Some((rect, page_size));
 
     // The view input: Zoom In mode, Pan, the wheel and the scroll bars. They change the zoom
@@ -354,12 +366,18 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         key = (pixel_scale * 50.0).floor();
     }
     let scale_key = key.max(1.0) as u32;
-    let stale = state.texture.as_ref().is_none_or(|t| t.revision != doc.revision() || t.scale_key != scale_key);
+    let view_key = view_modes::view_key(mode, page_size);
+    let stale = state
+        .texture
+        .as_ref()
+        .is_none_or(|t| t.revision != doc.revision() || t.scale_key != scale_key || t.view_key != view_key);
     if stale {
         let scale = f64::from(scale_key) / 50.0;
-        let drawn = sheaf_plot::graph_scene(doc.project(), graph_id).and_then(|scene| {
-            let raster = sheaf_plot::render_scene_raster(&scene, scale)?;
-            Ok((scene, raster, sheaf_plot::layout_geometry(doc.project(), graph_id)?))
+        let stretched = mode.fills_window().then(|| view_modes::resized(doc.project(), graph_id, page_size));
+        let project = stretched.as_ref().unwrap_or(doc.project());
+        let drawn = sheaf_plot::graph_scene(project, graph_id).and_then(|scene| {
+            let raster = view_modes::raster(mode, &scene, scale)?;
+            Ok((scene, raster, sheaf_plot::layout_geometry(project, graph_id)?))
         });
         match drawn {
             Ok((scene, raster, geometry)) => {
@@ -368,7 +386,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                     &raster.rgba,
                 );
                 let texture = ui.ctx().load_texture(format!("graph-{}", graph_id.0), image, TextureOptions::LINEAR);
-                state.texture = Some(GraphTexture { revision: doc.revision(), scale_key, texture, geometry, scene });
+                state.texture =
+                    Some(GraphTexture { revision: doc.revision(), scale_key, texture, geometry, scene, view_key });
                 state.error = None;
             }
             Err(e) => state.error = Some(e.to_string()),
@@ -423,7 +442,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }) {
             let (x, y) = g.page_to_data(px, py);
             painter.text(
-                rect.left_bottom() + egui::vec2(8.0, -6.0),
+                visible.left_bottom() + egui::vec2(8.0, -6.0),
                 egui::Align2::LEFT_BOTTOM,
                 format!("x = {}   y = {}", short(x), short(y)),
                 egui::FontId::monospace(12.0),
@@ -1049,6 +1068,8 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         stack: None,
         can_cumulate: false,
         selected_shape: None,
+        view_mode: Default::default(),
+        layer_icons: true,
     }
 }
 

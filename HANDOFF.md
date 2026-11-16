@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **414 listed item locations** at the planning
-  baseline (291 menu bar, 35 toolbar, 88 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **412 listed item locations** at the planning
+  baseline (289 menu bar, 35 toolbar, 88 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -70,6 +70,11 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## Latest integration
+
+T68 (B4 slice 1, `plot-types-b4`, Claude Windows): Plot > Symbol > Vertical Drop Line and Plot >
+Column/Bar/Pie > Column + Label as Origin 2016's DROPLINE and ColumnLabel templates (measured,
+graphing 18.12); data labels of grouped columns are now centred on their own bar, as Origin draws
+them. Tests: see the merge note below.
 
 T65 graph view zoom and pan (`graph-zoom`, B1 slice 1): Origin 2016's View Zoom In mode (x2,
 re-centred on the click), Zoom Out by halves to 25 %, Whole Page and the Tools-bar Zoom-Panning tool,
@@ -146,7 +151,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `plot-types-b4` | Claude Windows, "axis-breaks" | B4 slice 1 as new brief T68: Plot > Symbol > Vertical Drop Line and Plot > Column/Bar/Pie > Column + Label, measured in Origin 2016; core templates, plot drawing, Plot menu items, CLI template names, tests | claimed 2026-11-15; worktree .claude/worktrees/axis-range2, build target/wf-autosave; no step/spline/line-series items (T63 B), no other B4 types, text formatting or other sessions' scopes |
 | `codex/text-run-colors` | Codex Windows, text-run-colors | T58 step 1 renderer remainder: palette-index colour escapes `\cN(text)`, Origin default-index controls, nesting/decoration/export regressions | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; plot markup/text + own tests/goldens only; no font-family/combined-script changes, editor/Format toolbar/dispatch, model/global theme/Options, worksheet, layers/shapes/zoom/view or other scopes |
 | `codex/t58-text-editor` | Codex Windows, t58-text-editor | T58 slice 2 ONLY: graph Text window formatting/selection controls and live preview using published renderer capabilities | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` reused sequentially after completed T63 F; dialogs/text_object.rs + private helper, isolated UI tests/registration, existing text startup screenshot hook if needed, T58/graphing7; no markup/fonts/layout/renderers/backends (text-decorations), shared Format bar/dispatch/actions (t58-format-toolbar), core model fields, formula/parameter labels, graph_view/shapes/layers/axis menus, other dialogs, pending root/index/roadmap; unsupported formatting stays disabled until published renderer support |
 | `codex/t58-format-toolbar` | Codex Windows | T58 slice 3: shared Format toolbar dispatch and existing whole-object graph font controls; selected-target/undo/persistence tests and Origin measurement | claimed 2026-11-15; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points`; Format bar only, local actions/app dispatch + new helper/tests; no renderer/fonts/markup (text-decorations), editor slice 2, worksheet adapter/model, Graph/Standard/Explorer bars, layers/stack, graph_view or new model fields without refinement |

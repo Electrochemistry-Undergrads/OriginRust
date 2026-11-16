@@ -712,6 +712,28 @@ and copied in `sheaf_core::copy_columns`:
   An unticked part leaves the destination's own (Sheaf's choice, not measured). One undo step ("Copy
   columns"). Not done: Ignore Hidden Rows and Parameters (Origin's system parameter rows).
 
+## 13h. Sheet tab names: Sheet Name to Show, Duplicate Without Data (T90, measured 2026-11-16, Origin 2016)
+
+Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-dialog.ps1 -NoDialog`,
+`@RCLICK`/`@CLICK`/`@SHOT`, `re-workspace/scratch/t90`, local only) and copied in `sheaf_core::sheet_tab`:
+
+- A sheet has a short name and a **long name** (`wks.longname$`). Sheaf keeps it in `Worksheet::long_name`
+  (saved in `.sheaf`; Name and Comments... has a Long Name field; sheet comments are not kept yet).
+- **Sheet Name to Show** has three items in Origin 2016: Long Name if available, Short Name (ticked for a
+  new sheet) and Long Name (the greyed inventory had listed "Both", which Origin 2016 does not have). The
+  choice is **per sheet**: Long Name on Sheet1 showed "Potential scan" on its tab and left Sheet2's tab
+  "Sheet2" although Sheet2 had a long name. Long Name if available falls back to the short name. Sheaf also
+  shows the short name for Long Name on a sheet without a long name (Origin's empty case not measured).
+  One undo step ("Sheet name to show").
+- **Duplicate Without Data** adds the copy after the last sheet, named as a new sheet (the first free
+  SheetN: Sheet3 next to Sheet1 and Sheet2), with the long name followed by " 1" ("Potential scan 1"; a
+  further copy takes " 2" in Sheaf), and makes it active. It keeps the columns with their short names,
+  designations, long names, units and formulas (`i*2` stayed, the cells were empty). Sheaf also keeps
+  formats, widths, user parameters, conditional and cell formats, and drops values, masks, notes and the
+  filter. One undo step ("Duplicate sheet without data").
+- The `.opj` written here does not hold the long name or the choice: the save warning names the sheets,
+  and the companion keeps them.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

@@ -25,6 +25,13 @@ impl Frozen {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Worksheet {
     pub name: String,
+    /// The sheet's long name (Origin's `wks.longname$`), shown on the tab when [`Worksheet::tab_label`]
+    /// asks for it (T90).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub long_name: String,
+    /// The sheet tab's Sheet Name to Show, per sheet as in Origin 2016.
+    #[serde(default, skip_serializing_if = "crate::sheet_tab::SheetLabel::is_default")]
+    pub tab_label: crate::sheet_tab::SheetLabel,
     pub columns: Vec<Column>,
     /// Column > Filter: hides the rows that fail a condition (see [`crate::rowfilter`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -51,6 +58,8 @@ impl Worksheet {
     pub fn new(name: impl Into<String>) -> Self {
         Worksheet {
             name: name.into(),
+            long_name: String::new(),
+            tab_label: Default::default(),
             columns: Vec::new(),
             filter: None,
             frozen: Frozen::default(),

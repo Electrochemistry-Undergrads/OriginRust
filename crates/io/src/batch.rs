@@ -149,6 +149,8 @@ pub fn place_workbook_with(
                 }
                 dest.sheets[t.sheet] = Worksheet {
                     name,
+                    long_name: dest.sheets[t.sheet].long_name.clone(),
+                    tab_label: dest.sheets[t.sheet].tab_label,
                     columns,
                     filter: None,
                     frozen: Default::default(),
@@ -637,16 +639,7 @@ mod tests {
     fn book(name: &str, cols: Vec<Column>) -> Workbook {
         let mut b = Workbook::new(WindowId(0), "Book1");
         b.long_name = name.to_string();
-        b.sheets = vec![Worksheet {
-            name: name.to_string(),
-            columns: cols,
-            filter: None,
-            frozen: Default::default(),
-            cond_formats: Vec::new(),
-            notes: Vec::new(),
-            cell_formats: Vec::new(),
-            comparison_source: None,
-        }];
+        b.sheets = vec![Worksheet { columns: cols, ..Worksheet::new(name) }];
         b
     }
 

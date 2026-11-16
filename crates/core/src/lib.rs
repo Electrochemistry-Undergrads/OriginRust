@@ -49,6 +49,7 @@ pub mod sampling;
 pub mod scales;
 pub mod shape;
 pub mod sheet_print;
+pub mod sheet_tab;
 pub mod sheetops;
 pub mod stack;
 pub mod straight_line;

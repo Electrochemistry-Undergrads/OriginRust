@@ -281,21 +281,20 @@ fn an_empty_list_shows_a_greyed_none_and_a_greyed_clear() {
 }
 
 #[test]
-fn recent_exports_stay_grey_and_recent_books_and_graphs_are_submenus() {
+fn recent_exports_books_and_graphs_are_submenus() {
     let dir = scratch("grey");
     let mut h = start_with(vec![csv_in(&dir, "g.csv")], Some(dir.join("recent.json")));
     // The graph is active: its File menu lists Recent Graphs and Recent Exports on the top level.
     menu_entry(&h, "File").click();
     settle(&mut h);
-    assert!(!entry_enabled(&h, "Recent Exports"), "Recent Exports stays grey");
-    for label in ["Recent Books", "Recent Graphs", "Recent Projects"] {
+    for label in ["Recent Exports", "Recent Books", "Recent Graphs", "Recent Projects"] {
         assert!(entry_enabled(&h, label), "{label} is a submenu now");
     }
     close_menus(&mut h);
     // The workbook's File menu has Recent Exports inside Export.
     click(&mut h, "Title Book1 - g.csv");
     menu_path(&mut h, &["File", "Export"]);
-    assert!(!entry_enabled(&h, "Recent Exports"));
+    assert!(entry_enabled(&h, "Recent Exports"));
     close_menus(&mut h);
     menu_entry(&h, "File").click();
     settle(&mut h);

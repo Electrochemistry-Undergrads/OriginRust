@@ -23,6 +23,7 @@ use crate::dialogs::fit_more::FitMoreKind;
 use crate::dialogs::graph_props::PropsTab;
 use crate::dialogs::reshape::ReshapeKind;
 use crate::gadget::GadgetOp;
+use crate::mru::{self, MruMenu};
 use crate::panels::PanelId;
 use crate::recent::{self, RecentKind};
 use eframe::egui::{
@@ -349,6 +350,8 @@ pub enum Cmd {
     AppendProject,
     /// Clear Recent Projects / Imports / Books / Graphs.
     ClearRecent(RecentKind),
+    /// Clear Recent Exports.
+    ClearRecentExports,
     /// View > Project Explorer and the other panels.
     Panel(PanelId),
     Cascade,
@@ -370,6 +373,10 @@ pub enum Entry {
     Recent(RecentKind),
     /// The saved user graph templates of Plot > User Templates (T56), from the context.
     UserTemplates,
+    /// The numbered Most Recently Used commands of the menu (T78), from the context.
+    Mru(MruMenu),
+    /// The entries of Recent Exports (T78): files written by exports, from the context.
+    Exports,
 }
 
 #[derive(Clone)]
@@ -428,6 +435,9 @@ pub struct MenuContext<'a> {
     pub recent_imports: &'a [PathBuf],
     pub recent_books: &'a [PathBuf],
     pub recent_graphs: &'a [PathBuf],
+    /// The Most Recently Used command keys per menu (list name to keys) and the recent exports.
+    pub recent_commands: &'a std::collections::BTreeMap<String, Vec<String>>,
+    pub recent_exports: &'a [sheaf_io::recent::ExportEntry],
     /// The saved user graph templates (Plot > User Templates), and whether there is a template
     /// folder at all (File > Save Template As and Manage are greyed without one).
     pub user_templates: &'a [String],
@@ -594,6 +604,20 @@ fn plain_key(key: Key) -> KeyboardShortcut {
     KeyboardShortcut::new(Modifiers::NONE, key)
 }
 
+/// No Most Recently Used commands (for contexts that keep none).
+pub static NO_COMMANDS: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
+
+/// The Most Recently Used item at the end of the Plot, Worksheet, Analysis and Statistics menus
+/// (a submenu in Origin's Plot menu; Sheaf uses one in all four, Sheaf's choice).
+fn mru_submenu(label: &str, menu: MruMenu) -> Entry {
+    sub(label, vec![Entry::Mru(menu)])
+}
+
+/// Recent Exports: a submenu of the files exports wrote, a separator and Clear.
+fn exports_submenu() -> Entry {
+    sub("Recent Exports", vec![Entry::Exports, sep(), item("Clear Recent Exports", Cmd::ClearRecentExports)])
+}
+
 /// A submenu of one recent list: the entries, a separator and Clear.
 fn recent_submenu(label: &str, kind: RecentKind) -> Entry {
     sub(label, vec![Entry::Recent(kind), sep(), item(&format!("Clear {label}"), Cmd::ClearRecent(kind))])
@@ -681,7 +705,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     if kind == WindowKind::Graph {
         // Origin's graph menu has Export Graphs... where the workbook has the Export submenu.
         v.push(keyed("E&xport Graphs...", ctrl(Key::G), Cmd::ExportGraph));
-        v.push(grey("Recent Exports"));
+        v.push(exports_submenu());
     } else {
         v.push(sub(
             "E&xport",
@@ -691,7 +715,8 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                     item("&Worksheet as ASCII...", Cmd::ExportWorksheet),
                     item("Worksheet as E&xcel...", Cmd::ExportExcel),
                 ],
-                greys(&["Graph as Image...", "Worksheet as Image...", "Multi-Page PDF...", "Recent Exports"]),
+                greys(&["Graph as Image...", "Worksheet as Image...", "Multi-Page PDF..."]),
+                vec![exports_submenu()],
             ]
             .concat(),
         ));
@@ -1058,7 +1083,7 @@ fn plot_menu() -> Vec<Entry> {
             ],
         ),
         sep(),
-        grey("Most Recently Used"),
+        mru_submenu("Most Recently Used", MruMenu::Plot),
     ]
 }
 
@@ -1199,7 +1224,7 @@ fn worksheet_menu() -> Vec<Entry> {
         grey("Worksheet Script..."),
         // Sheaf's "keep only the rows matching a condition" is Origin's worksheet query.
         item("Worksheet &Query...", Cmd::FilterRows),
-        grey("Most Recently Used Items"),
+        mru_submenu("Most Recently Used Items", MruMenu::Worksheet),
     ]
 }
 
@@ -1312,7 +1337,7 @@ fn analysis_menu() -> Vec<Entry> {
             ],
         ),
         sep(),
-        grey("Most Recently Used Items"),
+        mru_submenu("Most Recently Used Items", MruMenu::Analysis),
     ]
 }
 
@@ -1400,7 +1425,7 @@ fn statistics_menu() -> Vec<Entry> {
         sep(),
         item("&ROC Curve...", Cmd::Analyze(AnalysisKind::Roc)),
         sep(),
-        grey("Most Recently Used Items"),
+        mru_submenu("Most Recently Used Items", MruMenu::Statistics),
     ]
 }
 
@@ -2126,7 +2151,7 @@ pub fn show_context(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actio
             // Close-set rows: the long lists of Origin's menus are about 17 px per item there too.
             ui.spacing_mut().interact_size.y = 16.0;
             ui.spacing_mut().item_spacing.y = 1.0;
-            show_entries(ui, entries, c, actions);
+            show_entries(ui, entries, c, actions, None);
         },
     );
 }
@@ -2140,6 +2165,7 @@ fn walk<'a>(entries: &'a [Entry], f: &mut dyn FnMut(&'a Item)) {
             Entry::Item(i) => f(i),
             Entry::Submenu(s) => walk(&s.entries, f),
             Entry::Separator | Entry::Windows | Entry::Recent(_) | Entry::UserTemplates => {}
+            Entry::Mru(_) | Entry::Exports => {}
         }
     }
 }
@@ -2612,6 +2638,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             }
             Action::ClearRecent(*kind)
         }
+        Cmd::ClearRecentExports => {
+            if c.recent_exports.is_empty() {
+                return Err("The list is empty");
+            }
+            Action::ClearRecentExports
+        }
         Cmd::Panel(p) => Action::TogglePanel(*p),
         Cmd::Cascade => Action::Cascade,
         Cmd::TileHorizontally => Action::TileHorizontally,
@@ -2695,11 +2727,12 @@ pub fn show_bar(ui: &mut egui::Ui, c: &MenuContext, actions: &mut Vec<Action>) {
         for menu in bar(c.kind) {
             let response = ui.menu_button(label_job(ui, &menu.label, false), |ui| {
                 ui.set_min_width(180.0);
-                show_entries(ui, &menu.entries, c, actions);
+                show_entries(ui, &menu.entries, c, actions, MruMenu::from_name(&menu.name()));
             });
-            if menu.name() == "File" {
+            // The lists of the menus that show recent entries are read again each time one opens.
+            if menu.name() == "File" || MruMenu::from_name(&menu.name()).is_some() {
                 // The recent files are read again each time File opens, not every frame.
-                let key = ui.id().with("file menu was open");
+                let key = ui.id().with(("menu was open", menu.name()));
                 let open = response.inner.is_some();
                 let was = ui.data(|d| d.get_temp::<bool>(key)).unwrap_or(false);
                 if open && !was {
@@ -2721,7 +2754,15 @@ pub fn show_bar(ui: &mut egui::Ui, c: &MenuContext, actions: &mut Vec<Action>) {
     });
 }
 
-fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: &mut Vec<Action>) {
+/// `used` is the menu the entries belong to when it keeps a Most Recently Used list: a command run
+/// from it is recorded there.
+fn show_entries(
+    ui: &mut egui::Ui,
+    entries: &[Entry],
+    c: &MenuContext,
+    actions: &mut Vec<Action>,
+    used: Option<MruMenu>,
+) {
     for entry in entries {
         match entry {
             Entry::Separator => {
@@ -2730,7 +2771,7 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
             Entry::Submenu(s) => {
                 let response = ui.menu_button(label_job(ui, &s.label, true), |ui| {
                     ui.set_min_width(160.0);
-                    show_entries(ui, &s.entries, c, actions);
+                    show_entries(ui, &s.entries, c, actions, used);
                 });
                 // `--show menu:File>Recent Projects` holds the submenu open for a picture.
                 if c.open.is_some_and(|o| o.split('>').skip(1).any(|sub| sub == plain(&s.label))) {
@@ -2743,6 +2784,8 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
             }
             Entry::Recent(kind) => show_recent(ui, *kind, c, actions),
             Entry::UserTemplates => show_user_templates(ui, c, actions),
+            Entry::Mru(menu) => show_mru(ui, *menu, c, actions),
+            Entry::Exports => show_exports(ui, c, actions),
             Entry::Windows => {
                 for (n, (id, title)) in c.windows.iter().enumerate() {
                     let label = format!("&{} {title}", n + 1);
@@ -2806,6 +2849,12 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                 match resolved {
                     Some(Ok(action)) => {
                         if response.clicked() {
+                            if let (Some(menu), Some(cmd)) = (used, &it.cmd)
+                                && mru::recordable(cmd)
+                            {
+                                // First, so that it sees the window the command was run on.
+                                actions.push(Action::UsedCommand { menu, cmd: cmd.clone() });
+                            }
                             actions.push(action);
                             ui.close();
                         }
@@ -2843,6 +2892,63 @@ fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &m
                 RecentKind::Projects | RecentKind::Books | RecentKind::Graphs => Action::OpenRecent(path.clone(), kind),
                 RecentKind::Imports => Action::ImportRecent(path.clone()),
             });
+            ui.close();
+        }
+    }
+}
+
+/// The Most Recently Used commands of a menu: numbered, newest first, each looked up again in the
+/// bar and resolved against the current selection (greyed with the reason when it cannot run now).
+/// An empty list shows a greyed "(none)". Sheaf's choice, docs/spec/recent-lists.md 2.
+fn show_mru(ui: &mut egui::Ui, menu: MruMenu, c: &MenuContext, actions: &mut Vec<Action>) {
+    let keys = c.recent_commands.get(&menu.list_name()).map_or(&[][..], Vec::as_slice);
+    let entries: Vec<(&String, &Item)> =
+        keys.iter().filter_map(|k| mru::find(bar(c.kind), menu, k).map(|i| (k, i))).collect();
+    if entries.is_empty() {
+        ui.add_enabled(false, egui::Button::new(label_job(ui, "(none)", true)));
+        return;
+    }
+    for (n, (key, it)) in entries.into_iter().enumerate() {
+        let Some(cmd) = &it.cmd else { continue };
+        let resolved = resolve(cmd, c);
+        let job = label_job(ui, &recent::numbered(n, &plain(&it.label)), true);
+        let response = ui.add_enabled(resolved.is_ok(), egui::Button::new(job));
+        if response.contains_pointer() {
+            crate::panels::set_hint(ui.ctx(), key);
+        }
+        match resolved {
+            Ok(action) => {
+                if response.on_hover_text(key).clicked() {
+                    actions.push(Action::UsedCommand { menu, cmd: cmd.clone() });
+                    actions.push(action);
+                    ui.close();
+                }
+            }
+            Err(reason) => {
+                response.on_disabled_hover_text(reason);
+            }
+        }
+    }
+}
+
+/// The entries of Recent Exports: the files exports wrote, numbered like the other recent lists,
+/// the full path as the tooltip; a click opens the export again on the same window (Sheaf's choice).
+fn show_exports(ui: &mut egui::Ui, c: &MenuContext, actions: &mut Vec<Action>) {
+    if c.recent_exports.is_empty() {
+        ui.add_enabled(false, egui::Button::new(label_job(ui, "(none)", true)));
+        return;
+    }
+    for (n, e) in c.recent_exports.iter().enumerate() {
+        // `entry_text` drops the extension, which an exported file needs; a dummy one takes its place.
+        let shown = recent::entry_text(&PathBuf::from(format!("{}.x", e.path.display())), RECENT_ENTRY_CHARS);
+        let full = e.path.display().to_string();
+        let response = ui.add(egui::Button::new(label_job(ui, &recent::numbered(n, &shown), true)));
+        let response = response.on_hover_text(format!("{full}\n{}", e.window));
+        if response.contains_pointer() {
+            crate::panels::set_hint(ui.ctx(), &full);
+        }
+        if response.clicked() {
+            actions.push(Action::OpenRecentExport(e.clone()));
             ui.close();
         }
     }
@@ -3079,6 +3185,8 @@ mod tests {
             recent_imports: &[],
             recent_books: &[],
             recent_graphs: &[],
+            recent_commands: &crate::menus::NO_COMMANDS,
+            recent_exports: &[],
             user_templates: &[],
             templates: false,
             panels: [true; 4],

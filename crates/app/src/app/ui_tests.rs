@@ -37,6 +37,7 @@ mod multi_y;
 mod offset_multipliers;
 mod parallel;
 mod recent;
+mod recent_lists;
 mod rug;
 mod save_window;
 mod set_multiple;

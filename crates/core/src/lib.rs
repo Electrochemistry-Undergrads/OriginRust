@@ -30,6 +30,7 @@ pub mod history;
 pub mod ids;
 pub mod indexed;
 pub mod layer_manage;
+pub mod layer_scale;
 pub mod layers;
 pub mod localtime;
 pub mod merge;

@@ -1873,8 +1873,8 @@ Measured through COM (`plot:=219` with the HIST template, `plot:=206` with BOX; 
 Measured through COM: `plotxy iy:=[Book]Sheet1!(1,2) plot:=201 ogl:=[<new template:=BUBBLE>]` with the third column set as Z (`wks.col3.type=5`; X is 4 and Y 1) draws the bubbles (the plot type numbers 245 to 247 gave nothing). Probe: X 1..8, Y 2 4 3 6 5 7 6 8, Z 1 4 2 9 3 6 8 5.
 
 - Bubbles are open circles in the first colour (black rings). Their width is linear in Z from the smallest to the largest value: measured on the 800 px export 2.5, 5, 7, 9, 12, 14, 19 and 22 px (about 2.4 to 21 pt) for Z = 1, 2, 3, 4, 5, 6, 8, 9. Sheaf uses 2 pt to 20 pt (the outline adds the rest).
-- Origin adds a size legend beside the frame (title = the Z column, four circles labelled 1.00, 3.66, 6.32, 8.98: the smallest value and three equal steps to the largest). Not drawn by Sheaf.
-- Colour mapped symbols: Origin's default colour map was not measured (no plot number reached the Color Mapped command); Sheaf maps the smallest to the largest Z over blue, cyan, green, yellow and red. No colour scale is drawn.
+- Origin adds a size legend beside the frame (title = the Z column, four circles labelled 1.00, 3.66, 6.32, 8.98: the smallest value and three equal steps to the largest). Drawn only by Add Bubble Scale (section 27).
+- Colour mapped symbols: Origin's default colour map was not measured (no plot number reached the Color Mapped command); Sheaf maps the smallest to the largest Z over blue, cyan, green, yellow and red. Graph > New Color Scale and the legend's Add Color Scale draw one (section 27).
 - Model: `Plot::size_from` and `Plot::color_from` name the Z column (found from the Z designation after the Y column by `Project::z_column_for`); `Template::Bubble`, `ColorMapped`, `BubbleColorMapped`; CLI `-t bubble` needs a project file with a Z column. `.opj`: written as plain scatter, the save warns.
 
 ### 14.17 Pie; what was seen of polar (T12)
@@ -4655,3 +4655,47 @@ Pasted into an untouched graph of the same data and read back (changed propertie
 - Left greyed (not measured): Symbol/Line/Fill and Text (Edit), Page Background and Legend Translation Mode (page), axis Styles, Scales, Dimensions and the eleven other Paste Format To choices, the page menu's Paste Format To submenus, all of the legend's Copy Format (Styles, Dimensions, All).
 
 - Added after review: Edit > Copy Format with an axis selected copies an axis format (All, All Style Formats and Scales map to the axis parts; Colors, Fonts, Background and Dimensions copy nothing, since an axis format for them is unmeasured); the context menus and Paste Format To follow the clipboard kind. Colors and axis styles also carry the "follows plot colour" flags (Sheaf's reading; unmeasured in Origin). Dimensions pastes a layer frame only between layers of the same kind (root to root, linked to linked) because a linked frame is relative to its parent; mixed pairs are left alone (unmeasured in Origin).
+
+## 27. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
+
+Not measured: Origin 2016 is on Windows only and this slice was built on macOS from Origin's help, so everything
+below that is not a quoted fact is an unmeasured Sheaf choice. The one measured fact is in 14.16 (the bubble size
+legend: four circles at the smallest Z and three equal steps up to the largest, the step truncated to two decimals,
+labelled 1.00, 3.66, 6.32, 8.98 for Z 1..9, titled with the Z column).
+
+Origin's documentation [W] (https://www.originlab.com/doc/origin-help/colorscale,
+https://www.originlab.com/doc/origin-help/bubblescale):
+- A colour scale is an object of the layer reached by Insert > Color Scale, its toolbar button and the legend's Add
+  Color Scale. It can follow a plot's colour map (Fill > Map) or stand alone, and has its own Colour Scale Control
+  dialog (Fill, Levels, Labels, Layout, Title, Line and Ticks). A Bubble + Color Map plot gets a bubble scale by
+  default but no colour scale: the user adds it.
+- A bubble scale is a label-type object, a legend of sample bubbles with numeric labels, for any symbol plot that
+  uses size indexing; Layout is Linear (a row) or Nested; Levels by increment, count or dataset.
+- When the items are enabled, where the objects land by default and what they take as defaults are undocumented.
+
+Sheaf (this slice):
+- Model: `Layer::scales: Vec<LayerScale>` (`sheaf_core::layer_scale`; serde default, skipped while empty,
+  `FORMAT_VERSION` unchanged). `LayerScale { kind: Color | Bubble, title: Option<String> }`. A scale describes the
+  first visible plot of its layer that has `color_from` (colour) or `size_from` (bubble); there is no Map setting.
+  A scale whose layer has no such plot draws nothing and takes no room.
+- Where: right of the frame, side by side in the order they were added, each in a slot of the width the hexbin
+  colour scale takes (`hexbin::scale_reserve`; the bubble scale 6 pt less than that plus its widest circle), the
+  room added to the layer's label edges (`layer_scale::reserve`). Not drawn on polar and ternary layers.
+- Colour scale: the bar of `hexbin::draw_color_bar` (64 strips of `plots::map_color`, title in the Y title font,
+  nice ticks from `sunburst::scale_ticks` over `plots::z_range`, the smallest to the largest finite Z of the
+  plot's rows). Title: the Z column's name.
+- Bubble scale: four circles of the plot's symbol style, sized as the symbols are (`BUBBLE_MIN_PT` to
+  `BUBBLE_MAX_PT`, linear in Z) at Z = lo + k * step, smallest at the top, labels with two decimals in the Y tick font,
+  titled with the Z column; one circle when all values are equal. The step follows the measured 14.16 rule: `(hi -
+  lo) / 3` truncated to two decimals (Z 1..9 gives 2.66 and labels 1.00, 3.66, 6.32, 8.98), and the exact step when
+  that truncation gives zero. The truncation rule is inferred from that one measurement, not confirmed on other ranges.
+- Items: Graph > New Color Scale (active layer) is enabled when the active layer has a colour mapped plot, else
+  grey with a reason; the legend context menu's Add Color Scale / Add Bubble Scale are enabled when the layer has a
+  colour (size) mapped plot. One undo step each ("Add color scale", "Add bubble scale"). Graph > New Bubble Scale
+  (listed in ui-command-map) is not in Sheaf's menu.
+- Selecting: a click picks a scale (`ObjectKind::Scale(i)`, rank of the legend), Delete or its context menu removes
+  it ("Delete scale"), a double click opens Plot Details. Selection JSON: `{"kind": "scale", "index": n}`.
+- Files: `.sheaf` keeps scales; `.opj` writer leaves them out and the save warns (the companion keeps them).
+- Not done: moving by dragging, a properties dialog (orientation, levels, labels, background, nested layout), a
+  Map link to a chosen plot, scales for other plot kinds (hexbin, sunburst, waterfall, parallel keep drawing their
+  own), a CLI flag, the real default colour map.

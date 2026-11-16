@@ -1125,6 +1125,16 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
             if n == 1 { "it" } else { "them" },
         ));
     }
+    if !layer.scales.is_empty() {
+        let n = layer.scales.len();
+        notes.push(format!(
+            "layer {} has {n} colour or bubble scale{} that an Origin project file written here cannot hold; {} not written (the .opj.sheaf companion keeps {})",
+            index + 1,
+            if n == 1 { "" } else { "s" },
+            if n == 1 { "it was" } else { "they were" },
+            if n == 1 { "it" } else { "them" },
+        ));
+    }
     if !layer.brackets.is_empty() {
         let n = layer.brackets.len();
         notes.push(format!(

@@ -717,6 +717,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             shapes: Vec::new(),
             slopes: Vec::new(),
             straight_lines: Vec::new(),
+            scales: Vec::new(),
             brackets: Vec::new(),
             comparison: None,
             palette,
@@ -998,6 +999,7 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
     l.shapes.clear();
     l.slopes.clear();
     l.straight_lines.clear();
+    l.scales.clear();
     l.brackets.clear();
     l.comparison = None;
     l.plot_offsets.clear();

@@ -126,6 +126,10 @@ pub enum GraphOp {
     DeleteSlope { layer: usize, slope: usize },
     /// Delete on a straight line.
     DeleteStraightLine { layer: usize, line: usize },
+    /// Add Color Scale / Add Bubble Scale (T80): a scale of the layer's mapped plot beside the frame.
+    AddScale { layer: usize, kind: sheaf_core::layer_scale::LayerScaleKind },
+    /// Delete on a colour scale or bubble scale.
+    DeleteScale { layer: usize, scale: usize },
     /// Move a drawn object to the top or bottom of its own layer's shape stack.
     OrderShape { layer: usize, shape: usize, front: bool },
     /// Hide Layer (every plot of the layer is hidden).

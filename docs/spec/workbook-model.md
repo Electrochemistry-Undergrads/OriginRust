@@ -841,6 +841,32 @@ added; a column the file no longer has is emptied (not measured). One undo step 
 picks a file (starting at the source) and reads it the same way. A book made in Sheaf or opened from a
 project has no source and the items are refused. Not done: the stored import options, Selected Range Only.
 
+## 13m. Folders: View Windows, Window > Folders, folder Properties (T100, measured 2026-11-16, Origin 2016)
+
+Measured with screenshots (`re-workspace/scratch/t100`, local only; Book1 in the root folder, Book2 in a
+folder Sub made with `pe_mkdir`/`pe_cd`):
+
+- **View Windows** (the explorer folder's menu; Sheaf's View menu too) offered None and **Windows in
+  Active Folder** (ticked, Origin's default) on the root folder's menu. With it, selecting Sub showed only
+  Book2's window (Book1 was hidden), activated Book2 and added " - /Sub/" to the main title; the root
+  showed only Book1. The Window menu's window list then listed only the folder's windows.
+- **Window > Folders** lists every folder by path ("1 /UNTITLED/", "2 /UNTITLED/Sub/"), the active one
+  ticked; picking one makes it the active folder.
+- **Properties...** of a folder opens "Folder Properties - Sub": << Previous / Next >> / Window..., tabs
+  Properties and User Tree; Name, Comments; Page Info: Type Folder, Size, Contains 1 Windows, Created,
+  Modified, Location /UNTITLED/; OK, Cancel, Apply.
+- The root folder's menu: Find... F3, Append Project..., Save Project As..., Show All Windows, Hide All
+  Windows, New Window, New Folder, View Windows, Send Graphs to PowerPoint..., Slide Show of Graphs...,
+  Properties... (Alt+Enter); a subfolder's adds Delete Folder, Rename (F2), Restricted in Viewer.
+
+Sheaf: `Project::view_windows` (saved in `.sheaf`, one undo step to change) with None, Windows in Active
+Folder (default) and Active Folder and Subfolders (the third as the inventory names it; Origin's root
+menu showed two). The workspace draws only the shown windows and the Window menu lists only them; when
+the folder changes and the active window is not shown, the folder's most recent window comes forward.
+Window > Folders lists the folders as Origin. A folder's Properties... edits its Name (not the root's) and
+Comments (`Folder::comments`) and shows Type, Contains and Location, one undo step. Not done: the main
+title's folder path, Size/Created/Modified, Previous/Next, User Tree, Restricted in Viewer.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

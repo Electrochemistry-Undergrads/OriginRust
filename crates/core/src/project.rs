@@ -41,11 +41,45 @@ impl Window {
     }
 }
 
+/// View > View Windows (T100): which windows the workspace shows when the Project Explorer's active
+/// folder changes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ViewWindows {
+    /// Every window, whatever folder is active.
+    None,
+    /// Only the windows of the active folder (Origin's default).
+    #[default]
+    ActiveFolder,
+    /// The windows of the active folder and of the folders inside it.
+    ActiveFolderAndSubfolders,
+}
+
+impl ViewWindows {
+    pub const ALL: [ViewWindows; 3] =
+        [ViewWindows::None, ViewWindows::ActiveFolder, ViewWindows::ActiveFolderAndSubfolders];
+
+    pub fn is_default(&self) -> bool {
+        *self == ViewWindows::default()
+    }
+
+    /// The menu text, as Origin's.
+    pub fn name(self) -> &'static str {
+        match self {
+            ViewWindows::None => "None",
+            ViewWindows::ActiveFolder => "Windows in Active Folder",
+            ViewWindows::ActiveFolderAndSubfolders => "Active Folder and Subfolders",
+        }
+    }
+}
+
 /// A folder of the project explorer. Windows that no folder lists belong to
 /// the root folder.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct Folder {
     pub name: String,
+    /// The folder's Comments (Folder Properties, T100).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub comments: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub folders: Vec<Folder>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -56,6 +90,10 @@ pub struct Folder {
 pub struct Project {
     /// Windows in creation order.
     pub windows: Vec<Window>,
+    /// Which windows the workspace shows for the Project Explorer's active folder (View > View
+    /// Windows, T100; Origin 2016 starts with Windows in Active Folder).
+    #[serde(default, skip_serializing_if = "ViewWindows::is_default")]
+    pub view_windows: ViewWindows,
     #[serde(default)]
     pub root: Folder,
     /// Where the windows were in the workspace when the project was saved, bottom of the stack
@@ -366,6 +404,7 @@ impl Project {
     pub fn new() -> Self {
         Project {
             windows: Vec::new(),
+            view_windows: ViewWindows::default(),
             root: Folder { name: "Project".into(), ..Folder::default() },
             window_places: Vec::new(),
             analysis_links: Vec::new(),

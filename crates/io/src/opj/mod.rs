@@ -132,6 +132,7 @@ impl OpjFolder {
             name: self.name.clone(),
             folders: self.folders.iter().map(|f| f.to_core(by_name)).collect(),
             windows: self.windows.iter().filter_map(|n| by_name.get(n).copied()).collect(),
+            ..Default::default()
         }
     }
 }

@@ -116,6 +116,8 @@ pub enum Cmd {
     Reimport(bool),
     /// Window > Duplicate (Batch Plotting) > with New Sheets/Books (false) or New Columns (true) (T99).
     BatchPlot(bool),
+    /// View > View Windows (T100).
+    ViewWindows(sheaf_core::project::ViewWindows),
     /// Edit > Replace... (Ctrl+H) in a workbook.
     ReplaceInSheets,
     ExportGraph,
@@ -437,6 +439,8 @@ pub enum Entry {
     Submenu(Submenu),
     /// The numbered list of the windows of the project, with a tick on the active one.
     Windows,
+    /// Window > Folders: the project's folders, the active one ticked (T100).
+    Folders,
     /// The entries of File > Recent Projects, Recent Books, Recent Graphs or File > Import > Recent
     /// Imports, from the context.
     Recent(RecentKind),
@@ -499,6 +503,11 @@ pub struct MenuContext<'a> {
     pub undo_ai: bool,
     /// All windows of the project, in order, with their titles.
     pub windows: Vec<(WindowId, String)>,
+    /// Window > Folders: every folder (path, `/Project/Sub/`) and the active one (T100).
+    pub folders: Vec<(Vec<usize>, String)>,
+    pub folder: Vec<usize>,
+    /// View > View Windows: the project's choice, ticked in the menu.
+    pub view_windows: sheaf_core::project::ViewWindows,
     /// A top-level menu to hold open (`--show menu:Plot`, for pictures of the menus); `File>Recent
     /// Projects` holds that submenu of File open too.
     pub open: Option<&'a str>,
@@ -910,7 +919,10 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
     if kind == WindowKind::Graph {
         v.push(keyed("Object Manager", alt(Key::Num8), Cmd::Panel(PanelId::Objects)));
     }
-    v.push(grey_sub("View Windows", &["None", "Windows in Active Folder", "Active Folder and Subfolders"]));
+    v.push(sub(
+        "View Windows",
+        sheaf_core::project::ViewWindows::ALL.iter().map(|m| item(m.name(), Cmd::ViewWindows(*m))).collect(),
+    ));
     v.push(sep());
     v.push(keyed("Results Log", alt(Key::Num2), Cmd::Panel(PanelId::Results)));
     v.push(keyed("Messages Log", alt(Key::Num6), Cmd::Panel(PanelId::Messages)));
@@ -1751,7 +1763,7 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
             cmd: None,
         }),
         sep(),
-        grey_sub("&Folders", &["Folders List"]),
+        sub("&Folders", vec![Entry::Folders]),
         sep(),
         keyed("Window S&witcher", KeyboardShortcut::new(Modifiers::CTRL, Key::Tab), Cmd::WindowSwitcher),
         sep(),
@@ -2414,7 +2426,7 @@ fn walk<'a>(entries: &'a [Entry], f: &mut dyn FnMut(&'a Item)) {
         match e {
             Entry::Item(i) => f(i),
             Entry::Submenu(s) => walk(&s.entries, f),
-            Entry::Separator | Entry::Windows | Entry::Recent(_) | Entry::UserTemplates => {}
+            Entry::Separator | Entry::Windows | Entry::Folders | Entry::Recent(_) | Entry::UserTemplates => {}
             Entry::Mru(_) | Entry::Exports => {}
         }
     }
@@ -2596,6 +2608,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::ExportExcel => Action::ExportExcel(book?),
         Cmd::ExportWorksheetImage => Action::ExportWorksheetImage(book?),
+        Cmd::ViewWindows(m) => Action::ViewWindows(*m),
         Cmd::BatchPlot(columns) => Action::BatchPlot { graph: c.graph.ok_or(NEED_GRAPH)?, columns: *columns },
         Cmd::Reimport(choose) => {
             let book = book?;
@@ -3100,6 +3113,18 @@ fn show_entries(
             Entry::UserTemplates => show_user_templates(ui, c, actions),
             Entry::Mru(menu) => show_mru(ui, *menu, c, actions),
             Entry::Exports => show_exports(ui, c, actions),
+            Entry::Folders => {
+                for (n, (path, name)) in c.folders.iter().enumerate() {
+                    let response = ui.add(egui::Button::new(label_job(ui, &format!("&{} {name}", n + 1), true)));
+                    if *path == c.folder {
+                        tick(ui, &response);
+                    }
+                    if response.clicked() {
+                        actions.push(Action::GoToFolder(path.clone()));
+                        ui.close();
+                    }
+                }
+            }
             Entry::Windows => {
                 for (n, (id, title)) in c.windows.iter().enumerate() {
                     let label = format!("&{} {title}", n + 1);
@@ -3149,6 +3174,11 @@ fn show_entries(
                 }
                 if let Some(Cmd::SetViewMode(mode)) = &it.cmd
                     && *mode == c.view_mode
+                {
+                    tick(ui, &response);
+                }
+                if let Some(Cmd::ViewWindows(mode)) = &it.cmd
+                    && *mode == c.view_windows
                 {
                     tick(ui, &response);
                 }
@@ -3499,6 +3529,9 @@ mod tests {
             redo: None,
             undo_ai: false,
             windows: Vec::new(),
+            folders: Vec::new(),
+            folder: Vec::new(),
+            view_windows: Default::default(),
             open: None,
             recent_projects: &[],
             recent_imports: &[],

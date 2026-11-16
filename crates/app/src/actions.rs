@@ -304,6 +304,12 @@ pub enum Action {
     FindInProject,
     /// File > Export > Worksheet as Image...: save the active sheet as a picture.
     ExportWorksheetImage(WindowId),
+    /// View > View Windows (T100).
+    ViewWindows(sheaf_core::project::ViewWindows),
+    /// Window > Folders: make this folder the Project Explorer's active one.
+    GoToFolder(Vec<usize>),
+    /// The explorer folder's Properties...: its name, comments and information.
+    FolderProperties(Vec<usize>),
     /// Window > Duplicate (Batch Plotting): open the window that picks sheets or columns.
     BatchPlot {
         graph: WindowId,

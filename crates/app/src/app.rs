@@ -215,6 +215,11 @@ pub struct SheafApp {
     find_spec: crate::project_find::FindSpec,
     /// Window > Duplicate (Batch Plotting).
     batch_plot: Option<crate::dialogs::batch_plot::BatchPlotDialog>,
+    /// The explorer folder's Properties....
+    folder_props: Option<crate::dialogs::folder_props::FolderPropsDialog>,
+    /// The Project Explorer's active folder when last checked, so that a change brings a window of the
+    /// new folder forward (View Windows, T100).
+    last_folder: Vec<usize>,
     show_x: Option<crate::dialogs::sampling::ShowXDialog>,
     /// The saved user templates as last read from the folder (at start and after a change).
     user_templates: Vec<String>,
@@ -343,6 +348,8 @@ impl SheafApp {
             find_project: None,
             find_spec: Default::default(),
             batch_plot: None,
+            folder_props: None,
+            last_folder: Vec::new(),
             show_x: None,
             user_templates: startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default(),
             power: None,
@@ -1807,6 +1814,24 @@ impl SheafApp {
             }
             Action::ExportWorksheetImage(book) => self.export_worksheet_image(book),
             Action::Reimport { book, choose } => self.reimport(book, choose),
+            Action::ViewWindows(mode) => {
+                if self.doc.project().view_windows != mode {
+                    self.doc.apply("View windows", |p| p.view_windows = mode);
+                }
+                self.follow_folder();
+            }
+            Action::GoToFolder(path) => {
+                if explorer::folder_at(&self.doc.project().root, &path).is_some() {
+                    self.panels.explorer.folder = path;
+                    self.panels.explorer.selected = None;
+                    self.follow_folder();
+                }
+            }
+            Action::FolderProperties(path) => {
+                if let Some(f) = explorer::folder_at(&self.doc.project().root, &path) {
+                    self.folder_props = Some(crate::dialogs::folder_props::FolderPropsDialog::new(path, f));
+                }
+            }
             Action::BatchPlot { graph, columns } => {
                 match crate::dialogs::batch_plot::BatchPlotDialog::new(self.doc.project(), graph, columns) {
                     Some(d) => self.batch_plot = Some(d),
@@ -3172,6 +3197,40 @@ impl SheafApp {
         }
     }
 
+    /// After the active folder or View Windows changed: when the active window is no longer shown, the
+    /// most recent window of the folder comes forward (as Origin brings the folder's window up).
+    fn follow_folder(&mut self) {
+        let Some(shown) = explorer::shown_windows(self.doc.project(), &self.panels.explorer.folder) else { return };
+        if self.active.is_some_and(|a| shown.contains(&a)) {
+            return;
+        }
+        let recent = self.workspace.recent_order(&shown);
+        if let Some(id) = recent.into_iter().find(|id| self.workspace.contains(*id)) {
+            self.focus(id);
+        }
+    }
+
+    /// Folder Properties: OK renames the folder and keeps its comments, one undo step.
+    fn show_folder_props(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::folder_props::FolderOutcome;
+        let Some(d) = &mut self.folder_props else { return };
+        match d.show(ctx, self.doc.project()) {
+            FolderOutcome::Open => {}
+            FolderOutcome::Closed => self.folder_props = None,
+            FolderOutcome::Set { path, name, comments } => {
+                self.folder_props = None;
+                self.doc.apply("Folder properties", |p| {
+                    if let Some(f) = explorer::folder_at_mut(&mut p.root, &path) {
+                        if !path.is_empty() && !name.trim().is_empty() {
+                            f.name = name.trim().to_string();
+                        }
+                        f.comments = comments;
+                    }
+                });
+            }
+        }
+    }
+
     /// Duplicate (Batch Plotting): OK makes the copies, one undo step, and brings the last forward.
     fn show_batch_plot(&mut self, ctx: &egui::Context) {
         use crate::dialogs::batch_plot::BatchOutcome;
@@ -3787,7 +3846,18 @@ impl SheafApp {
             undo: self.doc.undo_label(),
             redo: self.doc.redo_label(),
             undo_ai: self.can_undo_ai_changes(),
-            windows: project.windows.iter().map(|w| (w.id(), w.title())).collect(),
+            windows: {
+                let shown = explorer::shown_windows(project, &self.panels.explorer.folder);
+                project
+                    .windows
+                    .iter()
+                    .filter(|w| shown.as_ref().is_none_or(|s| s.contains(&w.id())))
+                    .map(|w| (w.id(), w.title()))
+                    .collect()
+            },
+            folders: explorer::folder_list(&project.root),
+            folder: self.panels.explorer.folder.clone(),
+            view_windows: project.view_windows,
             open: self.open_menu.as_deref(),
             recent_projects: self.recent.projects(),
             recent_imports: self.recent.imports(),
@@ -4051,6 +4121,7 @@ impl SheafApp {
             || self.sheet_navigate.is_some()
             || self.find_project.is_some()
             || self.batch_plot.is_some()
+            || self.folder_props.is_some()
             || self.show_x.is_some()
             || self.power.is_some()
             || self.find.is_some()
@@ -4742,6 +4813,11 @@ impl SheafApp {
         self.show_sheet_navigate(ctx);
         self.show_find_project(ctx);
         self.show_batch_plot(ctx);
+        self.show_folder_props(ctx);
+        if self.panels.explorer.folder != self.last_folder {
+            self.last_folder = self.panels.explorer.folder.clone();
+            self.follow_folder();
+        }
         if let Some(d) = &mut self.find {
             let book = d.book;
             match d.show(ctx) {
@@ -5621,7 +5697,12 @@ impl eframe::App for SheafApp {
                     let books = &mut self.books;
                     let graphs = &mut self.graphs;
                     let actions = &mut actions;
+                    // View > View Windows: windows outside the active folder are not drawn (T100).
+                    let shown = explorer::shown_windows(doc.project(), &self.panels.explorer.folder);
                     let info = |id: WindowId| {
+                        if shown.as_ref().is_some_and(|s| !s.contains(&id)) {
+                            return None;
+                        }
                         doc.project()
                             .window(id)
                             .map(|w| WindowInfo { title: w.title(), graph: matches!(w, Window::Graph(_)) })

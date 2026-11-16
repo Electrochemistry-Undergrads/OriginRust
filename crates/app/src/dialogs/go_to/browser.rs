@@ -551,6 +551,7 @@ mod tests {
                 name: "Current folder".into(),
                 windows: vec![current, books[1]],
                 folders: vec![Folder { name: "Child".into(), windows: vec![books[2]], ..Folder::default() }],
+                ..Folder::default()
             },
             Folder { name: "Other folder".into(), windows: vec![books[3]], ..Folder::default() },
         ];

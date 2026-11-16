@@ -1,6 +1,6 @@
 # T100: View Windows, Folders List, folder Properties
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `view-windows`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13m): View Windows (default Windows in Active Folder) hides other folders' windows and follows the folder, Window > Folders lists and goes to folders, folder Properties edits name and comments. Left: title path, folder Size/Created/Modified, Previous/Next, User Tree.
 **Size:** M. **Source:** greyed inventory package B12 (Project Explorer > View Windows: None, Windows in
 Active Folder, Active Folder and Subfolders; Window > Folders > Folders List; the explorer folder's
 Properties...).

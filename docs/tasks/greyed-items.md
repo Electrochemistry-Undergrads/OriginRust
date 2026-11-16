@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **322 greyed items: 224 in the menu bar, 19 on the toolbars, 79 in context menus.**
+original inventory baseline. This is not a new runtime audit. **317 greyed items: 220 in the menu bar, 19 on the toolbars, 78 in context menus.**
 
 ## How to read and keep this file
 
@@ -67,7 +67,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B8` | 9 |
 | `B9` | 13 |
 | `B11` | 7 |
-| `B12` | 9 |
+| `B12` | 4 |
 | `B13` | 7 |
 | `B14` | 44 |
 | `B15` | 21 |
@@ -75,7 +75,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 64 items, backlog packages (`B`) 238, not planned (`N`) 20.
+Briefs (`T`) hold 64 items, backlog packages (`B`) 233, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -108,7 +108,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Menu
 - `B16` Command Window · Code Builder
 - `N` Quick Help · Smart Hint Log
-- `B12` View Windows: None · Windows in Active Folder · Active Folder and Subfolders
 - `B6` Actively Update Plots · Page Break Preview Lines [Workbook]
 - `T66` Show: Active Layer Indicator · Axis Layer Icons · Object Grid · Layer Grid · Frame · Labels · Data · Active Layer Only · Master Items on Screen [Graph]
 - `T66` Show Data Info [Graph]
@@ -190,7 +189,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B12` Arrange Icons
 - `B6` Split [Workbook]
 - `B16` Command Window · Script Window
-- `B12` Folders: Folders List
 
 ### Help
 - `N` Use Online Help · Check for Updates...
@@ -235,6 +233,5 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T72` Graph page > Copy Format: Page Background · Legend Translation Mode
 - `T72` Graph page > Paste Format To: Bottom Axes · All X Axes · All Axes · All
 - `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Double click to open Plot Setup
-- `B12` Explorer folder: Properties...
 
 No greyed item was found in the label-cell menu or the Integrate gadget menu.

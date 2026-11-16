@@ -24,6 +24,7 @@ pub mod find_project;
 pub mod fit;
 pub mod fit_more;
 pub mod fit_page;
+pub mod folder_props;
 pub mod frame;
 pub mod go_to;
 pub mod graph_axis;

@@ -92,6 +92,35 @@ pub fn windows_in(project: &Project, path: &[usize]) -> Vec<WindowId> {
     project.windows.iter().map(Window::id).filter(|id| home(&project.root, *id) == path).collect()
 }
 
+/// The windows the workspace shows for the active folder `path` under View > View Windows (T100);
+/// `None` when every window shows.
+pub fn shown_windows(project: &Project, path: &[usize]) -> Option<Vec<WindowId>> {
+    use sheaf_core::project::ViewWindows;
+    match project.view_windows {
+        ViewWindows::None => None,
+        ViewWindows::ActiveFolder => Some(windows_in(project, path)),
+        ViewWindows::ActiveFolderAndSubfolders => Some(
+            project.windows.iter().map(Window::id).filter(|id| home(&project.root, *id).starts_with(path)).collect(),
+        ),
+    }
+}
+
+/// Every folder of the project with its path and its name as Window > Folders shows it
+/// (`/Project/Sub/`), the root first.
+pub fn folder_list(root: &Folder) -> Vec<(Vec<usize>, String)> {
+    fn walk(f: &Folder, path: &mut Vec<usize>, name: String, out: &mut Vec<(Vec<usize>, String)>) {
+        out.push((path.clone(), name.clone()));
+        for (i, c) in f.folders.iter().enumerate() {
+            path.push(i);
+            walk(c, path, format!("{name}{}/", c.name), out);
+            path.pop();
+        }
+    }
+    let mut out = Vec::new();
+    walk(root, &mut Vec::new(), format!("/{}/", root.name), &mut out);
+    out
+}
+
 /// Every window listed in the folder or below it.
 pub fn subtree_windows(f: &Folder) -> Vec<WindowId> {
     let mut out = f.windows.clone();
@@ -295,7 +324,10 @@ fn tree(
                 actions.push(Action::DeleteFolder(path.clone()));
                 ui.close();
             }
-            ui.add_enabled(false, egui::Button::new("Properties...")).on_disabled_hover_text(NOT_YET);
+            if ui.button("Properties...").clicked() {
+                actions.push(Action::FolderProperties(path.clone()));
+                ui.close();
+            }
         });
     };
     if folder.folders.is_empty() {
@@ -485,7 +517,7 @@ mod tests {
     fn a_window_no_folder_lists_belongs_to_the_root() {
         let (mut p, a, b) = project();
         assert_eq!(windows_in(&p, &[]), [a, b]);
-        p.root.folders.push(Folder { name: "Runs".into(), folders: vec![], windows: vec![b] });
+        p.root.folders.push(Folder { name: "Runs".into(), windows: vec![b], ..Folder::default() });
         assert_eq!(windows_in(&p, &[]), [a]);
         assert_eq!(windows_in(&p, &[0]), [b]);
         assert_eq!(home(&p.root, b), [0]);
@@ -495,8 +527,13 @@ mod tests {
     #[test]
     fn nested_folders_have_their_own_windows() {
         let (mut p, a, b) = project();
-        let inner = Folder { name: "Deep".into(), folders: vec![], windows: vec![a] };
-        p.root.folders.push(Folder { name: "Outer".into(), folders: vec![inner], windows: vec![b] });
+        let inner = Folder { name: "Deep".into(), windows: vec![a], ..Folder::default() };
+        p.root.folders.push(Folder {
+            name: "Outer".into(),
+            folders: vec![inner],
+            windows: vec![b],
+            ..Folder::default()
+        });
         assert_eq!(windows_in(&p, &[0, 0]), [a]);
         assert_eq!(windows_in(&p, &[0]), [b]);
         assert!(folder_at(&p.root, &[0, 0]).is_some());

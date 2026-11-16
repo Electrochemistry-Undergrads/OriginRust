@@ -40,6 +40,8 @@ pub enum Template {
     QcXbarR,
     /// Plot > Statistics > Scatter Matrix (T114): every pair of the selected columns in an n x n grid of layers.
     ScatterMatrix,
+    /// Plot > Specialized > Zoom (T112): the whole curve with a region rectangle, and the region enlarged below.
+    Zoom,
     /// Line plot with a symbol on every point.
     LineSymbol,
     /// Cyclic voltammetry overlay: smooth lines without markers, no grid,
@@ -187,7 +189,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 73] = [
+    pub const ALL: [Template; 74] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -261,6 +263,7 @@ impl Template {
         Template::MarginalBoxCharts,
         Template::QcXbarR,
         Template::ScatterMatrix,
+        Template::Zoom,
     ];
 
     /// The name used on the command line and in menus.
@@ -281,6 +284,7 @@ impl Template {
             Template::MarginalBoxCharts => "marginal-box-charts",
             Template::QcXbarR => "qc-xbar-r",
             Template::ScatterMatrix => "scatter-matrix",
+            Template::Zoom => "zoom",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
@@ -359,6 +363,7 @@ impl Template {
             Template::MarginalBoxCharts => "Marginal Box Charts",
             Template::QcXbarR => "QC (X bar R) Chart",
             Template::ScatterMatrix => "Scatter Matrix",
+            Template::Zoom => "Zoom",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
@@ -484,6 +489,7 @@ impl Template {
                 crate::scatter_matrix::template_layer(&mut g);
                 g
             }
+            Template::Zoom => zoom(id, name),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
             Template::Multi3YYy | Template::Multi3YYY | Template::Multi4YYyy | Template::Multi4YyYy => {
@@ -823,6 +829,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             },
             default_kind: kind,
             link: None,
+            zoom: None,
             stack: Stack::None,
             waterfall_color: WaterfallColor::None,
             plot_offsets: Vec::new(),
@@ -1088,6 +1095,42 @@ fn qc_xbar_r(id: WindowId, name: &str) -> Graph {
     g
 }
 
+/// The fill of a Zoom graph's region rectangle and of its zoomed layer (measured cyan; the rectangle's edge blue).
+pub const ZOOM_FILL: Color = Color::rgb(0, 255, 255);
+
+/// Origin's Zoom graph (T112, measured): the whole curve at 16 %, 8 %, 75 % x 30 % of the page in a closed
+/// box with grey major grid lines, and below it a layer linked to it (left -5.979 %, top 127.1 %, width
+/// 106 %, height 152 % of the first) with a cyan background whose ranges are the region rectangle's
+/// (`Layer::zoom`). No axis titles, no legends. The rectangle is placed when the data are plotted
+/// (`Project::plot_zoom`).
+fn zoom(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::Line);
+    let whole = &mut g.layers[0];
+    whole.frame = Frame { left: 0.16, top: 0.08, width: 0.75, height: 0.30 };
+    whole.legend.visible = false;
+    for axis in [&mut whole.x_axis, &mut whole.y_axis] {
+        axis.show_opposite = true;
+        axis.opposite_ticks = false;
+        axis.show_title = false;
+        axis.major_grid = Some(LineStyle::solid(Color::rgb(128, 128, 128), 0.5));
+    }
+    let mut zoomed = right_y_layer(whole, 0);
+    zoomed.link = Some(LayerLink { parent: 0, x: ScaleLink::None, y: ScaleLink::None });
+    zoomed.frame = Frame { left: -0.05979, top: 1.271, width: 1.06, height: 1.52 };
+    zoomed.background = Some(ZOOM_FILL);
+    zoomed.zoom = Some(0);
+    zoomed.palette = whole.palette.clone();
+    for axis in [&mut zoomed.x_axis, &mut zoomed.y_axis] {
+        axis.side = AxisSide::Normal;
+        axis.show_opposite = false;
+        axis.show_title = false;
+        axis.major_grid = None;
+        axis.show_tick_labels = true;
+    }
+    g.layers.push(zoomed);
+    g
+}
+
 fn double_y(id: WindowId, name: &str) -> Graph {
     let mut g = general(id, name, PlotKind::Line);
     let layer = &mut g.layers[0];
@@ -1293,7 +1336,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 73);
+        assert_eq!(Template::ALL.len(), 74);
+        assert_eq!(Template::from_name("zoom"), Some(Template::Zoom));
         assert_eq!(Template::from_name("qc-xbar-r"), Some(Template::QcXbarR));
         assert_eq!(Template::from_name("scatter-matrix"), Some(Template::ScatterMatrix));
         assert_eq!(Template::from_name("marginal-histograms"), Some(Template::MarginalHistograms));

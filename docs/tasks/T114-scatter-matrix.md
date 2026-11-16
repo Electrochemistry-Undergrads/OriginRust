@@ -1,8 +1,8 @@
 # T114: Scatter Matrix
 
-**Status:** done 2026-11-16 (Claude macOS "mac-scatter-matrix", graphing.md 34; Origin's documentation only, unmeasured). Built: `Project::plot_scatter_matrix`, template `scatter-matrix`, the options window (Matrix Display Square/Upper/Lower, Histogram or nothing on the diagonal, names, gap), CLI `--matrix-*`, MCP `matrix_*`. Left: Origin 2016 measurements (page, frames, symbols, tick label placement, diagonal text), Mixed display, box/distribution diagonals, Show Tick and Label modes, confidence ellipse, linear fit and its statistics labels, significance marks, grouping, listwise missing values, recalculation from the dialog.
+**Status:** done 2026-11-16 (Claude macOS "mac-scatter-matrix", graphing.md 35; Origin's documentation only, unmeasured). Built: `Project::plot_scatter_matrix`, template `scatter-matrix`, the options window (Matrix Display Square/Upper/Lower, Histogram or nothing on the diagonal, names, gap), CLI `--matrix-*`, MCP `matrix_*`. Left: Origin 2016 measurements (page, frames, symbols, tick label placement, diagonal text), Mixed display, box/distribution diagonals, Show Tick and Label modes, confidence ellipse, linear fit and its statistics labels, significance marks, grouping, listwise missing values, recalculation from the dialog.
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Statistics > Scatter Matrix).
-**Spec:** `docs/spec/graphing.md` section 34.
+**Spec:** `docs/spec/graphing.md` section 35.
 
 ## Goal
 

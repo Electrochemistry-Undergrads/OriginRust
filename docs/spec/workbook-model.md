@@ -770,6 +770,30 @@ corner switch hides it again. The column heads also changed: B became "B(Y#)" wi
 and C "C(Y1)" (designation numbers appear once a column has its own X). Building it needs a new label-row
 kind in the worksheet layout and cell formats (T59's area), so it waits for that work.
 
+## 13j. Find in Project (T95, measured 2026-11-16, Origin 2016)
+
+Edit > Find in Project... (F3; "Find in Project" on a graph's Edit menu) opens Origin's **Find** window
+(screenshots `re-workspace/scratch/t95`, local only): Current Path, Find What, Within (Entire Project), Case
+Sensitive, Match Whole Word, Allow Wildcards (* and ?), Types to be Included > Metadata: Folder, Graph,
+Book, Sheet, Column, Notes and Select..., then Data in Cells (1st Matched in Column), Text Objects on
+Graphs, Notes Content; a result list (No., Range, Element, Attribute, Folder) and "Found: N". Defaults
+(Select Metadata): Graph, Book, Sheet and Notes with Long Name, Short Name and Comments; Column with Long
+Name, Short Name, Comments, Parameters and User Parameters, **not** Units, F(x), Categories, Sampling
+Intervals, Filters, Info Variables; Data in Cells off, Text Objects on Graphs on. Origin keeps the settings
+between sessions.
+
+Measured hits (book with B "Current density", mA; a line graph of B): "density" gave
+`[Graph1]Layer1!YL` Graph / Axis Title, `[Graph1]Layer1!Legend` Graph / Legend and
+`[Book1]Sheet1!B"Current density"` Column / Long Name (text objects as drawn); "Graph" gave `[Graph1]`
+Graph / Short Name; "30" with Data in Cells gave column B once, attribute Data Cells.
+
+Sheaf (`crate::project_find` in the app, window `dialogs/find_project.rs`): the same fields except Within
+(always the whole project), Folder and Notes (Sheaf has no notes windows); Select... shows the column's
+Units and F(x) switches; axis titles are searched as drawn (`sheaf_plot::axis_title`), legends with `%(n)`
+replaced by the plots' names, and text labels by their text. Clicking a hit brings its window forward (and
+its sheet, with the column selected); the window stays open and keeps its settings for the session.
+Double-clicking a hit in Origin was not measured.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

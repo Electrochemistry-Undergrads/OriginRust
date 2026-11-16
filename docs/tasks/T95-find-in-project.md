@@ -1,6 +1,6 @@
 # T95: Find in Project
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `find-project`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13j): Origin's Find window, defaults and hits measured; Sheaf searches graph, book, sheet and column names and labels, data cells and graph text with the same switches, and goes to a hit. Left: folders and notes, Within, Origin's double-click.
 **Size:** M. **Source:** greyed inventory package B7 (Edit > Find in Project... on a workbook, Find in
 Project on a graph; F3).
 **Spec:** `docs/spec/gui-look.md` section 5 (Find) or `workbook-model.md`.

@@ -107,6 +107,8 @@ pub enum Cmd {
     Power(sheaf_core::analysis::PowerKind),
     /// Edit > Find in Sheets... (Ctrl+F) in a workbook.
     FindInSheets,
+    /// Edit > Find in Project (F3, T95).
+    FindInProject,
     /// Edit > Replace... (Ctrl+H) in a workbook.
     ReplaceInSheets,
     ExportGraph,
@@ -836,7 +838,7 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(item("&Set As End", Cmd::SetRangeEnd(RangeEnd::End)));
         v.push(item("Reset to Full Range", Cmd::ResetFullRange));
         v.push(sep());
-        v.push(grey_keyed("Find in Project...", plain_key(Key::F3)));
+        v.push(keyed("Find in Project...", plain_key(Key::F3), Cmd::FindInProject));
         v.push(keyed("Find in Sheets...", ctrl(Key::F), Cmd::FindInSheets));
         v.push(keyed("R&eplace...", ctrl(Key::H), Cmd::ReplaceInSheets));
         v.push(keyed("Go to...", ctrl(Key::G), Cmd::GoToCell));
@@ -872,7 +874,7 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         ));
         v.push(item("Paste Format...", Cmd::PasteFormatDialog));
         v.push(sep());
-        v.push(grey_keyed("Find in Project", plain_key(Key::F3)));
+        v.push(keyed("Find in Project", plain_key(Key::F3), Cmd::FindInProject));
     }
     v
 }
@@ -2560,6 +2562,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::GoToCell => Action::GoToCell(book?),
         Cmd::Power(kind) => Action::Power(*kind),
         Cmd::FindInSheets => Action::FindInSheets(book?),
+        Cmd::FindInProject => Action::FindInProject,
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),

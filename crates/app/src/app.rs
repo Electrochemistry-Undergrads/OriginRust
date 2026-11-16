@@ -206,6 +206,9 @@ pub struct SheafApp {
     copy_columns: Option<crate::dialogs::copy_columns::CopyColumnsDialog>,
     /// The sheet tab's Navigate....
     sheet_navigate: Option<crate::dialogs::sheet_navigate::SheetNavigateDialog>,
+    /// Edit > Find in Project, and the settings of the last search (Origin keeps them).
+    find_project: Option<crate::dialogs::find_project::FindProjectDialog>,
+    find_spec: crate::project_find::FindSpec,
     show_x: Option<crate::dialogs::sampling::ShowXDialog>,
     /// The saved user templates as last read from the folder (at start and after a change).
     user_templates: Vec<String>,
@@ -329,6 +332,8 @@ impl SheafApp {
             sampling: None,
             copy_columns: None,
             sheet_navigate: None,
+            find_project: None,
+            find_spec: Default::default(),
             show_x: None,
             user_templates: startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default(),
             power: None,
@@ -1784,6 +1789,9 @@ impl SheafApp {
                     self.say("Every column already uses all its rows");
                 }
             }
+            Action::FindInProject => {
+                self.find_project = Some(crate::dialogs::find_project::FindProjectDialog::new(self.find_spec.clone()));
+            }
             Action::CopyColumnsTo(columns) => {
                 self.copy_columns =
                     Some(crate::dialogs::copy_columns::CopyColumnsDialog::new(columns, self.doc.project()));
@@ -3137,6 +3145,35 @@ impl SheafApp {
         }
     }
 
+    /// Find in Project: a hit brings its window forward (its sheet, and its column selected). The
+    /// window stays open, as Origin's.
+    fn show_find_project(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::find_project::FindProjectOutcome;
+        use crate::project_find::FindTarget;
+        let Some(d) = &mut self.find_project else { return };
+        let outcome = d.show(ctx, self.doc.project());
+        self.find_spec = d.spec.clone();
+        match outcome {
+            FindProjectOutcome::Open => {}
+            FindProjectOutcome::Closed => self.find_project = None,
+            FindProjectOutcome::Go(target) => match target {
+                FindTarget::Window(id) => self.apply(Action::Focus(id), ctx),
+                FindTarget::Sheet { book, sheet } => {
+                    self.apply(Action::Focus(book), ctx);
+                    self.apply(Action::SelectSheet { book, sheet }, ctx);
+                }
+                FindTarget::Column { book, sheet, column } => {
+                    self.apply(Action::Focus(book), ctx);
+                    self.apply(Action::SelectSheet { book, sheet }, ctx);
+                    if let Some(state) = self.books.get_mut(&book) {
+                        state.sel = Sel::Columns;
+                        state.selected = vec![column];
+                    }
+                }
+            },
+        }
+    }
+
     /// Navigate Worksheets: OK (or a double click) goes to the picked sheet.
     fn show_sheet_navigate(&mut self, ctx: &egui::Context) {
         use crate::dialogs::sheet_navigate::NavigateOutcome;
@@ -3897,6 +3934,7 @@ impl SheafApp {
             || self.sampling.is_some()
             || self.copy_columns.is_some()
             || self.sheet_navigate.is_some()
+            || self.find_project.is_some()
             || self.show_x.is_some()
             || self.power.is_some()
             || self.find.is_some()
@@ -4550,6 +4588,7 @@ impl SheafApp {
         self.show_sampling(ctx);
         self.show_copy_columns(ctx);
         self.show_sheet_navigate(ctx);
+        self.show_find_project(ctx);
         if let Some(d) = &mut self.find {
             let book = d.book;
             match d.show(ctx) {

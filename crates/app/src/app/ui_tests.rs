@@ -8889,6 +8889,7 @@ mod copy_variants;
 mod corner_menu;
 mod data_range;
 mod fill_pattern;
+mod find_project;
 mod sampling;
 mod sheet_navigate;
 mod sheet_tab;

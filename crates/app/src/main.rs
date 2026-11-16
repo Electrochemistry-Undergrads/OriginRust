@@ -44,6 +44,7 @@ mod menus;
 mod mru;
 mod object_format;
 mod panels;
+mod project_find;
 mod reader;
 mod recent;
 mod switcher;

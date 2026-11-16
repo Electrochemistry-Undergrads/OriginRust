@@ -2624,8 +2624,9 @@ fn menu_items_sheaf_lacks_are_greyed_with_origins_name_and_a_tooltip() {
     }
     assert!(entry_enabled(&h, "3D Color Pie") && entry_enabled(&h, "2D B&W Pie"), "the pies exist now");
     assert!(h.query_by_label("2D Color Pie").is_none(), "Origin has no 2D Color Pie");
-    assert!(!entry_enabled(&h, "Column + Label"), "an item Sheaf lacks is greyed");
-    menu_entry(&h, "Column + Label").hover();
+    assert!(entry_enabled(&h, "Column + Label"), "Column + Label exists now");
+    assert!(!entry_enabled(&h, "Grouped Columns (indexed data)"), "an item Sheaf lacks is greyed");
+    menu_entry(&h, "Grouped Columns (indexed data)").hover();
     h.run_steps(30);
     assert!(h.query_by_label_contains("Not available in Sheaf yet").is_some(), "the tooltip says why");
     close_menus(&mut h);

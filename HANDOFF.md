@@ -74,7 +74,9 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 T68 (B4 slice 1, `plot-types-b4`, Claude Windows): Plot > Symbol > Vertical Drop Line and Plot >
 Column/Bar/Pie > Column + Label as Origin 2016's DROPLINE and ColumnLabel templates (measured,
 graphing 18.12); data labels of grouped columns are now centred on their own bar, as Origin draws
-them. Tests: see the merge note below.
+them. Formatting, strict all-target Clippy and 3,654 workspace tests pass (8 ignored) on c9c92ce0; two MCP
+link timing tests (crates/mcp/tests/link.rs) failed under full-suite load and passed 3 of 3 runs alone
+(pre-existing, not touched here).
 T58 indexed text colours: `\cN(text)` now uses the original 24-colour list, with measured
 positive-index byte selection and black fallback. Nested spans restore their surrounding
 colour; glyphs and underline/strikeout strokes share the run colour. Exact Origin 2016 EMF

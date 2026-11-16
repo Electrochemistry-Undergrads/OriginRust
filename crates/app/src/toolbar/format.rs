@@ -1,5 +1,6 @@
 //! The Format bar uses the same change contract for every supported target.
 
+mod object_classic;
 mod rgb;
 
 use super::*;
@@ -441,6 +442,7 @@ fn colour_menu(ui: &mut Ui, button: &Button, state: &ObjectSnapshot, label: &str
                     ui.close();
                 }
             }
+            object_classic::show(ui, &captured, fill, actions);
         })
         .response;
     if response.clicked() {

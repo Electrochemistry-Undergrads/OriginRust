@@ -756,16 +756,36 @@ request/staleness rules, own `Action::FormatObject`). Origin's online
 four as acting on selected characters and does not document whole-object behaviour. Fill and
 line/border colour are described on Origin's
 [Style toolbar](https://docs.originlab.com/origin-help/style-toolbar) as setting the fill or line
-colour of the selected object; Sheaf shows them in the Format row (gui-look.md, Format and Style toolbar description). Sheaf choices,
-all **unmeasured** (Origin 2016 measurement remains open): the four text buttons wrap the whole
+colour of the selected object; Sheaf shows them in the Format row (gui-look.md, Format and Style toolbar description). Sheaf whole-text choices,
+**unmeasured** in Origin 2016: the four text buttons wrap the whole
 text in one `\u(`, `\+(`, `\-(` or `\g(` group, or remove that group when the text is exactly one
 such group (nesting counted as the parser does; `\u(a)b` is wrapped, not unwrapped; a group may
 span lines, so multi-line text is one group) and show pressed when wrapped; they apply to free
 labels and to X/Y titles with their own non-empty text, not to the legend or automatic titles.
-Fill Color (palette: None plus the eight basic colours) sets a rectangle's or circle's fill and a
+Fill Color (palette: None plus the 24 Classic colours) sets a rectangle's or circle's fill and a
 visible legend's background; Line Color sets a drawn object's or straight line's colour. Both are
 disabled with a hover reason elsewhere (the legend frame has no colour field). The selection
 survives; undo labels are "Format graph text" and "Format graph object". No model fields added.
+
+Classic object-colour follow-up (2026-11-16): a fresh private Origin 2016 graph contained a
+named rectangle and a named straight line. For each index 1 through 24, the rectangle's
+`fillColor` and `color` and the line's `color` were set to that index. All commands succeeded;
+all three getters returned the assigned index. Each independently exported EMF contains at
+least two matching pen and two matching solid-brush records with the RGB triples in 7.2,
+including Royal 0/0/160, Wine 128/0/0 and Dark Gray 64/64/64. The Royal export was inspected.
+The isolated `Origin.Application` instance and watchdog closed; pre-existing process identities
+were identical before/after. Evidence: ignored `scratch/t58-object-classic-colors` (24 EMFs,
+checked script/log, native-proof.json and native-royal.png). The public properties and creation
+syntax are documented in [Graphic Objects](https://docs.originlab.com/labtalk/ref/graphic-objs/)
+and [Draw](https://docs.originlab.com/labtalk/ref/draw-cmd/).
+
+Sheaf retains the eight basic choices in the root Fill/Line menu and puts the other 16 in
+More Classic colors. This grouping, the visible-legend background mapping and the supported
+target restrictions remain Sheaf UI choices; no native toolbar geometry or legend-background
+measurement is claimed. Extra choices use the original captured target/revision/generation,
+close both menus, preserve the selection, and have the same one-step Undo and unchanged/stale
+no-op rules. The public eight-colour palette constant and font/worksheet controls are unchanged.
+Custom object RGB, Auto, other lists and palette storage remain open.
 
 
 ---

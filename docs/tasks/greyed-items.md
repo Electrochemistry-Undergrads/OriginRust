@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **344 greyed items: 238 in the menu bar, 19 on the toolbars, 87 in context menus.**
+original inventory baseline. This is not a new runtime audit. **343 greyed items: 238 in the menu bar, 19 on the toolbars, 86 in context menus.**
 
 ## How to read and keep this file
 
@@ -59,7 +59,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B2` | 33 |
 | `B3` | 19 |
 | `B4` | 19 |
-| `B5` | 11 |
+| `B5` | 10 |
 | `B6` | 31 |
 | `B7` | 8 |
 | `B8` | 16 |
@@ -73,7 +73,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 65 items, backlog packages (`B`) 259, not planned (`N`) 20.
+Briefs (`T`) hold 65 items, backlog packages (`B`) 258, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -217,7 +217,7 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ## Context menus
 
-- `B5` Worksheet column header: Copy Columns to... · Remove Links · Slide Show of Dependent Graphs
+- `B5` Worksheet column header: Remove Links · Slide Show of Dependent Graphs
 - `T63` Worksheet column header: Frequency Count...
 - `B6` Worksheet column header: Add or Update Sparklines...
 - `T63` Worksheet column header > Fill Column with: Row Numbers · Uniform Random Numbers · Normal Random Numbers

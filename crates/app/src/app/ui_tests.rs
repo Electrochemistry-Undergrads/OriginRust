@@ -3456,9 +3456,7 @@ fn the_column_header_menu_has_origins_items_in_origins_order_and_runs_them() {
     ] {
         assert!(entry_enabled(&h, have), "{have} should be enabled");
     }
-    for lack in ["Copy Columns to...", "Frequency Count..."] {
-        assert!(!entry_enabled(&h, lack), "{lack} should be greyed");
-    }
+    assert!(!entry_enabled(&h, "Frequency Count..."), "Frequency Count... should be greyed");
     // Clear empties the column and one undo brings it back.
     click_containing(&mut h, "Clear");
     assert!(column(&h, "C").is_empty());
@@ -8878,6 +8876,7 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
     assert_eq!(h.state().doc.undo_label(), Some("K-means cluster analysis"));
 }
 
+mod copy_columns;
 mod copy_variants;
 mod data_range;
 mod fill_pattern;

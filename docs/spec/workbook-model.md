@@ -691,6 +691,27 @@ Set as End. Measured in Origin 2016 with the LabTalk commands behind them (`set 
   written here does not hold it: the save warning names it, and the companion keeps it. The graph's own
   Data > Reset to Full Range (display range of a plot) is a different command and stays grey.
 
+## 13g. Copy Columns to (T89, measured 2026-11-16, Origin 2016)
+
+The column header's Copy Columns to... is Origin's `colcopy` (Source Column(s); Destination Column(s),
+default `<new>!<new>`; Copy Data, Copy Format, Ignore Hidden Rows, Long Name, Units, Comments, Parameters,
+User-Defined Parameters, all on). Measured from LabTalk (`re-workspace/scratch/t89/c1`, `c2`, local only)
+and copied in `sheaf_core::copy_columns`:
+
+- **No destination**: a new book; the copies are named A, B, ... from its first column and keep their
+  designation (a Y-error column stays one), long name, units, comments and display format (3 decimals
+  stayed 3). The formula is not copied, the values are.
+- **Into a column** (`orng:=[Dst]Sheet1!col(B)`): two copies overwrote B and filled C (a new column after
+  the last, a Y-error column as its source); B kept its short name and took the copy's long name. The
+  sheet grows to the copies' rows.
+- **`<new>` column**: added after the last column with the next letter (D). **`<new>!<new>`** in a book:
+  a new sheet (Sheet2).
+- Sheaf's window (layout Sheaf's; Origin's not opened): New book / New sheet in a workbook / Columns of a
+  sheet (workbook, sheet, and the first column overwritten or `<new>` after the last), and the check boxes
+  Copy Data, Copy Format (display format and width), Long Name, Units, Comments, User-Defined Parameters.
+  An unticked part leaves the destination's own (Sheaf's choice, not measured). One undo step ("Copy
+  columns"). Not done: Ignore Hidden Rows and Parameters (Origin's system parameter rows).
+
 ## 14. Suggested Rust data model (P0)
 
 ```

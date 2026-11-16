@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **402 greyed items: 281 in the menu bar, 35 on the toolbars, 86 in context menus.**
+original inventory baseline. This is not a new runtime audit. **395 greyed items: 281 in the menu bar, 28 on the toolbars, 86 in context menus.**
 
 ## How to read and keep this file
 
@@ -35,7 +35,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 |---|---|
 | `T56` | 1 |
 | `T57` | 2 |
-| `T58` | 15 |
+| `T58` | 8 |
 | `T59` | 2 |
 | `T60` | 0 |
 | `T61` | 5 |
@@ -64,7 +64,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 55 items, backlog packages (`B`) 327, not planned (`N`) 20.
+Briefs (`T`) hold 48 items, backlog packages (`B`) 327, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -221,7 +221,7 @@ changes. The baseline labels remain open until implementation or a documented re
 
 - `B12` Standard: New Graph
 - `B14` Standard: New Matrix · New Layout · New Notes
-- `T58` Format: Font name box · Font size box · Bold · Italic · Underline · Superscript · Subscript · Greek · Increase Font Size · Decrease Font Size · Font Color · Fill Color · Line Color
+- `T58` Format: Underline · Superscript · Subscript · Greek · Fill Color · Line Color
 - `T63` 2D Graphs: Bar · Stacked Area · Box Chart · Histogram · Bubble
 - `B4` 2D Graphs: High-Low-Close
 - `B1` Tools: Zoom In · Zoom Out

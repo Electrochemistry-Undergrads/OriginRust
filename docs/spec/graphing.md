@@ -668,7 +668,80 @@ is opaque, while text outside the span retains its parent's alpha. Seven focused
 cover the measured values, boundaries, nesting, glyph placement and EPS/EMF/PDF/SVG output;
 new SVG and font-independent stroke PNG goldens also check the channel values directly.
 
+### 7.4 Whole-object Format toolbar (T58 slice 3)
+
+The shared Format bar now targets a selected free label, legend, X title or Y title in the
+active graph, including automatically generated titles. Font family lists installed families;
+size, Bold, Italic, Increase/Decrease Font Size and Font Color change the existing object's
+`Font`. Text, escapes, worksheet values and other objects are preserved. One action is one
+Undo step. Undo/Redo and `.sheaf` / `.opj` with its companion retain all five font fields.
+The same scene carries the chosen face, style and colour into the screen and exports.
+
+OriginPro 2016 whole-object controls (2026-11-15, local `scratch/t58-format-toolbar/`): a
+single-selected legend shows 22 pt and `Default: Arial`. Selecting Times New Roman changes its
+font index to 325 on this installation; clicking the red swatch changes its colour index to 2.
+Neither operation rewrites `legend.text$`. Entering 18 in the size box changes `legend.fsize`
+to 18. Increase/decrease from 10 gives 12/8; from 14, 17/12; from 18, 22/15; from 30, 36/25.
+From 22, Increase gives 26 and Decrease returns 26 to 22. Sheaf uses `round(size * 1.2)` and
+`round(size / 1.2)`, matching these controls. Screenshots with selection handles and property
+reads establish the target; stale export snapshots and attempts obscured by tooltips or missing
+the smaller legend are excluded. The final refreshed Original-theme EMF contains Times New Roman.
+
+The tested native single-selected legend did **not** change style on Bold/Italic clicks;
+its text stayed unchanged. Sheaf deliberately exposes whole-object Bold/Italic through its
+existing font flags to meet this brief's whole-object goal. Their native whole-object parity
+is **unestablished**; this is not evidence of Origin's internal style storage. The current
+[Format toolbar reference](https://docs.originlab.com/origin-help/format-toolbar/) documents
+font controls on graph annotations; it does not settle that 2016 selection-state difference.
+
+Sheaf choices: the size box accepts finite 1 to 1000 pt values and commits on Enter; Escape or
+leaving the box cancels the draft. Font Color offers eight named basic RGB colours (black, red,
+green, blue, cyan, magenta, yellow, white). Origin's Auto, full system/custom palettes and palette
+management remain open. Family selection is restricted to installed families; fallback rendering
+retains its existing behaviour. Underline, scripts, Greek and Fill/Line Color remain disabled
+in this toolbar until their own whole-object semantics/model support are implemented. Text-window
+selection controls and the T59 worksheet adapter are separate slices.
+
+`text_format::{Snapshot, Target, Change, Request}` separates widget changes from target application.
+T59 can add its cell target behind the same toolbar. Requests capture graph/layer/object plus
+document generation and revision. Dispatch rechecks active selection and dialog/cell editing state;
+invalid, unchanged or stale requests add no history. Open family/colour lists retain their original
+target rather than following a later selection. No model or file-format fields were added.
+
+
 ---
+
+### 7.5 Text label selection editor (T58)
+
+Origin's [Text Object Properties, Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/)
+documents selection/caret formatting buttons above a raw text box and a formatted preview below.
+The buttons insert commands around selected text or insert an empty command group at the caret.
+This is a documentation reference, not a fresh measurement of Origin's dialog geometry.
+
+Sheaf's free-label Text window now offers Normal, bold, italic, underline, strikethrough,
+superscript, subscript and Greek. A button keeps the raw characters outside the selected range
+and returns focus to the selected body. With no selection, typing enters the empty group.
+Selecting `-2` in `cm-2` and choosing superscript produces `cm\+(-2)`; Unicode cursor offsets
+are characters, not UTF-8 bytes. Applying the same format to its complete selected body removes
+that wrapper. Normal removes complete inline formatting wrappers from the selection and its
+immediate surrounding wrappers, preserving literal `\v(...)`, substitution and Unicode escapes.
+These toggle/Normal details are Sheaf choices, not measured Origin rules. The existing whole-label
+Bold/Italic checkboxes still change the base font; Normal affects inline markup only.
+
+The preview uses the public graph export renderer with an isolated one-label graph. It therefore
+shares the published parser, glyphs, script layout, colours, decorations and rotation with exports.
+Its cache changes with text, font, rotation or display scale. It fits large text into a bounded
+preview and reports text over 8,192 characters or excessive dimensions without truncating the
+stored text. Size and base styles also update the preview. Buttons and preview do not mutate the
+project: OK/Apply performs the existing single history operation; Cancel discards the draft.
+A new draft containing only empty formatting groups adds no invisible label.
+
+The button labels, compact layout and Ctrl+B/I/U/G and Ctrl+= / Ctrl+Shift+= bindings are
+Sheaf choices based on the published command forms and existing shortcut map; their behaviour
+inside Origin's properties dialog has not been measured. Font/colour selection for an inline
+range, combined-script insertion and reuse for titles/legend remain open. The shared Format
+bar remains a separate target-dispatch implementation. No renderer/model/persistence changes
+are introduced by this editor slice.
 
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
 
@@ -2795,7 +2868,7 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 **Desktop app.**
 - Graph > Add Text... and the page's right-click "Add Text...": open the Text window for a new label in the active layer, placed in the middle of its frame (`0.5, 0.5`).
 - The Text tool of the Tools toolbar: a click on the page places the label at that point in the layer under the click (a click outside every frame uses the active layer) and opens the Text window. The tool ends after one label, or with Esc.
-- The Text window has the text (several lines; escapes allowed), Size, Bold, Italic and Rotation, and OK, Apply and Cancel. A new label is in the project only after OK or Apply; Cancel, or OK with no text, adds none. OK or Apply on an existing label with no text is refused with a message (Delete removes a label).
+- The Text window has inline formatting buttons, text (several lines; escapes allowed), Size, Bold, Italic, Rotation and a rendered preview (7.5), and OK, Apply and Cancel. A new label is in the project only after OK or Apply; Cancel, or OK with no text, adds none. OK or Apply on an existing label with no text is refused with a message (Delete removes a label).
 - Double click on a label, or its right-click "Properties...", opens the window for it. A click selects it; dragging it moves it (the selection handles follow the pointer; the label moves when the button is let go). Delete removes it.
 - Each of Add text, Edit text, Move text and Delete text is one undo step.
 - `sheaf-app --show text:N` opens the Text window of the N-th label of the first graph (for pictures).

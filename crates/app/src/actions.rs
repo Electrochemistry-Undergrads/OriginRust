@@ -226,6 +226,8 @@ pub enum Action {
     Redo,
     /// Owner-only: undo consecutive completed AI calls, stopping at a manual history entry.
     UndoAiChanges,
+    /// A change captured by the shared Format toolbar.
+    FormatText(crate::text_format::Request),
     NewWorkbook,
     AddColumn(WindowId),
     DeleteColumns(Vec<ColumnId>),

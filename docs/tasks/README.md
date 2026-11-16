@@ -64,7 +64,7 @@ All six are **open**. The older index below retains implementation history and p
 
 | Brief | Wave | Size | Scope and dependency |
 |---|---|---|---|
-| [T58](T58-graph-text-formatting.md) | 1, P0 | L | Graph text, escapes, editor and shared Format toolbar dispatch |
+| [T58](T58-graph-text-formatting.md) | 1, P0 | L | Renderer slices published; selected graph text font/size/Bold/Italic/colour toolbar and shared dispatch added (graphing 7.4); editor, remaining toolbar controls and T59 adapter separate |
 | [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell format model, drawing and Format Cells done (unmeasured); toolbar adapter, Format > Worksheet, Set Data Style after T58 slice 3 |
 | [T60](T60-merge-graphs-layer-management.md) | 2, P0 | L | Done 2026-11-15: Merge Graph Windows (dialog, CLI), Layer Management (Arrange, Size/Position, Link), Fit Page to Layers; left: merge folders/labels/preview, Add/Axes/Display tabs, MCP |
 | [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Done 2026-11-15 (graphing 21): nine Add Layer kinds, insets, Delete Layer, Layer Properties, displaced Y axes and Move to Layer, 3Ys/4Ys templates and Multiple Y Axes (CLI `-t 3ys-y-yy` etc.); left: Open Dialog..., three layer-icon items, Origin's legend in the templates |

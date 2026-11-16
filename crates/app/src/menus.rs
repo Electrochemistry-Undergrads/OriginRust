@@ -847,8 +847,12 @@ fn plot_menu() -> Vec<Entry> {
         sub(
             "Line + S&ymbol",
             with(
-                vec![item("Line + &Symbol", Cmd::Plot(Template::LineSymbol))],
-                &["Line Series", "2 Point Segment", "3 Point Segment"],
+                vec![
+                    item("Line + &Symbol", Cmd::Plot(Template::LineSymbol)),
+                    item("2 Point Segment", Cmd::Plot(Template::Segment2)),
+                    item("3 Point Segment", Cmd::Plot(Template::Segment3)),
+                ],
+                &["Line Series"],
             ),
         ),
         sub(

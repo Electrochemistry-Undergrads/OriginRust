@@ -1356,6 +1356,11 @@ pub enum Connect {
     StepHorizontal,
     /// Vertical first, then horizontal.
     StepVertical,
+    /// Origin's "2 Point Segment": points 1-2, 3-4, ... are joined, the pairs are not (LabTalk line
+    /// connection 2, measured 2026-11-15).
+    Segment2,
+    /// Origin's "3 Point Segment": points 1-2-3, 4-5-6, ... are joined (line connection 3).
+    Segment3,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

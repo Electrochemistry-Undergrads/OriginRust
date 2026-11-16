@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **395 listed item locations** at the planning
-  baseline (281 menu bar, 28 toolbar, 86 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **393 listed item locations** at the planning
+  baseline (279 menu bar, 28 toolbar, 86 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -70,6 +70,10 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## Latest integration
+
+T71 (`b4-segments`, B4 slice 2): Plot > Line + Symbol > 2 and 3 Point Segment as Origin 2016's line
+connections 2 and 3 (measured; graphing 5.2), in the plot settings' connect lists and `.opj`. Scatter
+Central needs an X axis inside the frame and stays B4.
 
 T70 (`b3-small`, B3 slice 2): axis right-click Center and Format > Fit Page To Printer as measured in
 Origin 2016; Format > Fit Page To Layers... now opens its window as Origin's does (graphing 15.7d).
@@ -209,7 +213,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
 | `b1-rest` | Claude Windows, "continue all tasks" | rest of B1 as new brief T69: View > Zoom All presentation and Tools-bar Scale In / Scale Out axis tools; app view_modes.rs, new scale tool module, toolbar Tools items | claimed 2026-11-15; no T65 transform changes, shape-resize, T58, T67, T68 |
 | `t54-origin` | Claude Windows, "t30-origin" | T54 leftover ONLY: Origin 2016 measurements of Save Window As window files (window-files.md 2 list: data in graph files, names on reopening, twice-opened files, extension), copied into Sheaf's window files where it differs | claimed 2026-11-15; worktree wf_c03644a9-997-1, build target/wf-excel; no templates, recent files or other sessions' scope |
-| `b4-segments` | Claude Windows, session fe4b37eb | B4 slice 2 as new brief T71: Plot > Line + Symbol > 2 Point Segment and 3 Point Segment (line connection variants), Plot > Symbol > Scatter Central; Origin 2016 measurements (templates, connect modes, axes), core Connect/template, plot drawing, app menu, Plot Details connect list, CLI template names | claimed 2026-11-15; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not Line Series, Column Scatter, statistics/stock/specialized plots (rest of B4), no T58/T59/T69 scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

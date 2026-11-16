@@ -805,6 +805,8 @@ impl Writer {
                 Connect::Bezier => 15,
                 Connect::StepHorizontal => 11,
                 Connect::StepVertical => 12,
+                Connect::Segment2 => 2,
+                Connect::Segment3 => 3,
             };
             let line_color = if kind == CurveKind::Scatter { p.symbol.color } else { p.line.color };
             let spec = CurveSpec {

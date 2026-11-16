@@ -1089,10 +1089,10 @@ impl SheafApp {
         let setup = self.doc.project().page_setup;
         let Some(page) = self.doc.project().graph(graph).map(|g| (g.page.width_pt, g.page.height_pt)) else { return };
         #[cfg(windows)]
-        let asked = if cfg!(test) { None } else { crate::winprint::printable_size_pt(&setup, page) };
+        let (w, h) = if cfg!(test) { None } else { crate::winprint::printable_size_pt(&setup, page) }
+            .unwrap_or_else(|| setup.fallback_printable_pt(page.0, page.1));
         #[cfg(not(windows))]
-        let asked: Option<(f64, f64)> = None;
-        let (w, h) = asked.unwrap_or_else(|| setup.fallback_printable_pt(page.0, page.1));
+        let (w, h) = setup.fallback_printable_pt(page.0, page.1);
         self.doc.apply("Fit Page to Printer", |p| {
             if let Some(g) = p.graph_mut(graph) {
                 g.resize_page(w, h, false);

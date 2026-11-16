@@ -533,7 +533,7 @@ Frame tab (none, line, shadow...), position by anchor corner, size, arrange vert
 | `\=(sub,sup)` | sub and superscript together (`\v(,)` for literal comma) |
 | `\g(text)` | Greek letters (`\g(a)` alpha, `\g(m)` mu) |
 | `\f:Name(text)` | font by name |
-| `\cN(text)` | colour by palette position N (base U12) |
+| `\cN(text)` | indexed or RGB-tagged colour (7.2-7.3) |
 | `\pN(text)` | size as percent of current (200 doubles) |
 | `\xHHHH(...)` | Unicode by hex code, e.g. `\x(03b8)` |
 | `\(code)` | character by ASCII code |
@@ -584,7 +584,7 @@ decoration paths: screen/PNG/PDF through SVG, and direct EPS/EMF. Tests cover ne
 anchors, rotation, script scaling, font style/colour, title/legend/label/tick placement and
 export. The SVG golden includes text; the PNG golden isolates stroke geometry so font
 installation differences do not change it. This slice adds no model fields. Per-run font
-switching, tagged RGB codes, combined scripts, editor/toolbar formatting and whole-object underline
+switching, combined scripts, editor/toolbar formatting and whole-object underline
 remain open in the graph-text brief.
 
 ### 7.2 Indexed text colours (T58 graph text)
@@ -610,8 +610,9 @@ For positive untagged numeric indices, Origin uses the low byte as a one-based p
 position; byte values outside 1-24 give black. Independent vector controls confirm 258 red,
 280 dark gray, 9999 orange, and black for 25, 99, 255, 256, 257, 281, 512, 1000 and 65535.
 Leading zeros work (`\c0002` is red). Sheaf accepts at most ten decimal digits, checks u32
-overflow and handles values below 0x01000000 as palette indices. Tagged RGB/special-colour
-encodings and signed codes remain literal text pending separate support.
+overflow. Untagged values through 0x01000000 use the palette lookup; the boundary itself
+is black. RGB-tagged values follow 7.3; other special-colour encodings and signed codes
+remain literal text pending separate support.
 
 Zero retains Sheaf's previous neutral style and preserves its enclosed text. Origin's `\c0`
 and `\c00` controls instead displayed only a literal `\c` fragment; that invalid-index
@@ -621,6 +622,51 @@ fields are added. The `text_color_tests` cover the native palette and boundary f
 restoration, inherited opacity, style/script combinations, anchors, rotation, decoration
 colours, overflow/literal cases, SVG/PNG goldens and EPS/EMF/PDF output. The PNG golden isolates
 decoration strokes from installed glyph fonts and checks every RGB value directly.
+
+
+### 7.3 RGB text colours (T58 graph text)
+
+`codex/text-run-rgb` (2026-11-15) extends `\cN(text)` to RGB codes without adding
+model fields or changing global palettes. The [Color function reference](https://docs.originlab.com/labtalk/ref/color-func/)
+distinguishes internal colour codes from plain RGB decimals. OriginPro 2016 scalar controls
+confirm `Color(r,g,b) = 0x01000000 + r + 256*g + 65536*b`. Text escapes use a **one-based**
+colour code: add one to that return value to reproduce exactly the requested RGB. Using the
+return value verbatim instead subtracts one from the entire 24-bit colour, including borrows
+between channels; it does not merely clamp the red channel.
+
+The independent native captures in `scratch/text-run-rgb/` (`rgb.lines.txt` and
+`rgb-boundaries.lines.txt`, their scalar outputs and EMF exports) establish these cases:
+
+| Escape N | EMF text RGB |
+|---|---|
+| 16777216 | (0,0,0), palette/tag boundary |
+| 16777471 | (254,0,0) |
+| 16842496 | (255,254,0) |
+| 33488896 | (255,255,254) |
+| 33554431 | (254,255,255) |
+| 25249549 | (12,71,129) |
+| 22426642 | (17,52,86) |
+| 22352368 | (239,17,85) |
+| 16974337 | (0,2,3) |
+| 18890880 | (127,64,32) |
+| 16777217 / 16777218 | (0,0,0) / (1,0,0) |
+| 16842497 / 33488897 | (0,255,0) / (0,0,255) |
+| 33554432 | (255,255,255) |
+| 25249550 / 22426643 / 22352369 | (13,71,129) / (18,52,86) / (240,17,85) |
+
+Thus the supported RGB range is 0x01000001 through 0x02000000 inclusive: subtract one,
+then decode the low three bytes as R, G and B. The preceding 0x01000000 control is black;
+0x02000001 produced black natively but belongs to another tag and stays literal in Sheaf.
+Signed Auto/None and other special tags remain unsupported. Existing decimal-digit/overflow,
+literal-wrapper and nesting limits apply. Native reference coordinates identify each control;
+EMF creation order is reversed and PNG quantization is excluded from these numeric fixtures.
+
+The native `\c25249549(a\c2(b)c)d` control returns to (12,71,129) after red `b`, and to
+the label's (200,100,20) for `d`. Sheaf uses the same existing run-colour path for glyphs,
+underline and strikeout, including nested font/script styles and rotated text. Explicit RGB
+is opaque, while text outside the span retains its parent's alpha. Seven focused regressions
+cover the measured values, boundaries, nesting, glyph placement and EPS/EMF/PDF/SVG output;
+new SVG and font-independent stroke PNG goldens also check the channel values directly.
 
 ---
 

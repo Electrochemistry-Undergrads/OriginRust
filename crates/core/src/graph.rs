@@ -1760,6 +1760,9 @@ pub struct Plot {
     /// The settings of a sunburst plot (graphing spec 14.27).
     #[serde(default, skip_serializing_if = "SunburstStyle::is_default")]
     pub sunburst: SunburstStyle,
+    /// Indexed data of a column or box plot: the rows of `y` split by group columns (T76).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub indexed: Option<Indexed>,
     /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's
     /// Z column of a Bubble plot).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2715,6 +2718,7 @@ mod tests {
             hexbin: Default::default(),
             parallel: Default::default(),
             treemap: Default::default(),
+            indexed: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,
@@ -2760,6 +2764,7 @@ mod tests {
             hexbin: Default::default(),
             parallel: Default::default(),
             treemap: Default::default(),
+            indexed: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,
@@ -2882,6 +2887,7 @@ mod tests {
             hexbin: Default::default(),
             parallel: Default::default(),
             treemap: Default::default(),
+            indexed: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,
@@ -2904,6 +2910,7 @@ mod tests {
             y: ColumnId(y),
             y_error: None,
             rows: None,
+            indexed: None,
             kind: PlotKind::Line,
             line: LineStyle::solid(color, 0.5),
             symbol: layer.default_symbol.clone(),
@@ -3129,6 +3136,7 @@ mod style_tests {
             hexbin: Default::default(),
             parallel: Default::default(),
             treemap: Default::default(),
+            indexed: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,

@@ -66,6 +66,8 @@ mod fill_inclusive_tests;
 #[cfg(test)]
 mod fill_sideline_tests;
 #[cfg(test)]
+mod grouped_tests;
+#[cfg(test)]
 mod hexbin_tests;
 #[cfg(test)]
 mod label_frame_tests;

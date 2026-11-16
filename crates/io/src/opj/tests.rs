@@ -428,6 +428,7 @@ fn into_project_renumbers_the_stack_offsets_with_the_columns() {
             hexbin: Default::default(),
             parallel: Default::default(),
             treemap: Default::default(),
+            indexed: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,

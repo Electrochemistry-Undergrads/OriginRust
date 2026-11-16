@@ -1029,20 +1029,7 @@ fn normality(spec: &NormalitySpec, inputs: &[Input<'_>]) -> Result<Output, Analy
 
 // ----- two-way ANOVA ---------------------------------------------------------------------------------
 
-/// A factor cell as text: the cell itself, or a number written without a trailing ".0". `None` when empty.
-pub(super) fn level_text(col: &Column, row: usize) -> Option<String> {
-    match &col.data {
-        ColumnData::Text(v) => v.get(row).map(|s| s.trim()).filter(|s| !s.is_empty()).map(str::to_string),
-        ColumnData::Mixed { .. } if col.data.text_cell(row).is_some() => {
-            col.data.text_cell(row).map(|s| s.trim().to_string())
-        }
-        ColumnData::Numeric(v) | ColumnData::Mixed { numbers: v, .. } => v
-            .get(row)
-            .copied()
-            .filter(|x| !x.is_nan())
-            .map(|x| if x.fract() == 0.0 && x.abs() < 1e15 { format!("{}", x as i64) } else { format!("{x}") }),
-    }
-}
+pub(super) use crate::indexed::level_text;
 
 /// The number of a level in `levels`, which grows by the levels in the order they first appear.
 fn level_index(levels: &mut Vec<String>, name: &str) -> usize {

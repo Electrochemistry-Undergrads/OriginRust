@@ -47,6 +47,7 @@ fn selected<'a, 'b>(layer: &Layer, rug: &Rug, pds: &'a [PlotData<'b>]) -> Vec<&'
         .filter(|pd| {
             pd.pie.is_none()
                 && pd.boxed.is_none()
+                && pd.gboxes.is_empty()
                 && pd.violin.is_none()
                 && pd.ridge.is_none()
                 && pd.hex.is_none()

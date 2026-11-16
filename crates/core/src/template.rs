@@ -154,10 +154,16 @@ pub enum Template {
     /// Sunburst plot (Origin's "Sunburst Plot", 2022): the hierarchy of the category columns as concentric rings,
     /// the angles proportional to a value column. No axes and no legend; a colour scale beside the layer.
     Sunburst,
+    /// Origin's Plot > Column/Bar/Pie > Grouped Columns (indexed data) (X-Function plot_gindexed, T76): the
+    /// column template; one data column whose rows are split by the values of one or two group columns.
+    GroupedColumns,
+    /// Origin's Plot > Statistics > Grouped Box Charts (X-Function plot_gboxindexed, T76): the box chart
+    /// template; the rows of one data column are split by one or two group columns.
+    GroupedBox,
 }
 
 impl Template {
-    pub const ALL: [Template; 58] = [
+    pub const ALL: [Template; 60] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -178,6 +184,7 @@ impl Template {
         Template::WaterfallY,
         Template::WaterfallZ,
         Template::BoxChart,
+        Template::GroupedBox,
         Template::Violin,
         Template::ViolinBox,
         Template::ViolinPoint,
@@ -211,6 +218,7 @@ impl Template {
         Template::Lollipop,
         Template::VerticalDropLine,
         Template::ColumnLabel,
+        Template::GroupedColumns,
         Template::Segment2,
         Template::Segment3,
         Template::ScatterRug,
@@ -264,6 +272,8 @@ impl Template {
             Template::Lollipop => "lollipop",
             Template::VerticalDropLine => "vertical-drop-line",
             Template::ColumnLabel => "column-label",
+            Template::GroupedColumns => "grouped-columns",
+            Template::GroupedBox => "grouped-box",
             Template::Segment2 => "segment2",
             Template::Segment3 => "segment3",
             Template::ScatterRug => "scatter-rug",
@@ -327,6 +337,8 @@ impl Template {
             Template::Lollipop => "Lollipop Plot",
             Template::VerticalDropLine => "Vertical Drop Line",
             Template::ColumnLabel => "Column + Label",
+            Template::GroupedColumns => "Grouped Columns (indexed data)",
+            Template::GroupedBox => "Grouped Box Charts",
             Template::Segment2 => "2 Point Segment",
             Template::Segment3 => "3 Point Segment",
             Template::ScatterRug => "Scatter + Rug",
@@ -424,7 +436,7 @@ impl Template {
             Template::Stacked100Area => themed(general(id, name, PlotKind::Stacked100Area)),
             Template::FillArea => themed(general(id, name, PlotKind::Area)),
             Template::Histogram | Template::StackedHistograms => from_red(general(id, name, PlotKind::Histogram)),
-            Template::BoxChart => from_red(general(id, name, PlotKind::Box)),
+            Template::BoxChart | Template::GroupedBox => from_red(general(id, name, PlotKind::Box)),
             Template::Bubble => bubble(id, name, false, true),
             Template::ColorMapped => bubble(id, name, true, false),
             Template::BubbleColorMapped => bubble(id, name, true, true),
@@ -437,7 +449,7 @@ impl Template {
             Template::Ternary => ternary(id, name),
             Template::Lollipop => general(id, name, PlotKind::Scatter),
             Template::VerticalDropLine => general(id, name, PlotKind::Scatter),
-            Template::ColumnLabel => from_red(column(id, name, PlotKind::Column)),
+            Template::ColumnLabel | Template::GroupedColumns => from_red(column(id, name, PlotKind::Column)),
             Template::Segment2 | Template::Segment3 => {
                 let mut g = general(id, name, PlotKind::LineSymbol);
                 let connect = if *self == Template::Segment2 {
@@ -1083,7 +1095,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 58);
+        assert_eq!(Template::ALL.len(), 60);
         assert_eq!(Template::from_name("column-scatter"), Some(Template::ColumnScatter));
         assert_eq!(Template::from_name("scatter-central"), Some(Template::ScatterCentral));
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
@@ -1579,6 +1591,76 @@ mod tests {
         let g2 = p.plot_columns(Template::Treemap, &[v]).unwrap();
         assert_eq!(p.graph(g2).unwrap().layers[0].plots[0].treemap.categories, vec![region, name]);
         assert_eq!(l.inherited_treemap().categories, vec![name, region]);
+    }
+
+    #[test]
+    fn indexed_templates_split_one_data_column_by_group_columns() {
+        use crate::graph::{Indexed, IndexedError};
+        use crate::{ColumnData, Designation, Project};
+        assert_eq!(Template::from_name("grouped-columns"), Some(Template::GroupedColumns));
+        assert_eq!(Template::from_name("grouped-box"), Some(Template::GroupedBox));
+        assert_eq!(Template::GroupedColumns.label(), "Grouped Columns (indexed data)");
+        assert_eq!(Template::GroupedBox.label(), "Grouped Box Charts");
+        assert_eq!(Template::GroupedColumns.new_graph(WindowId(1), "G").layers[0].default_kind, PlotKind::Column);
+        assert_eq!(Template::GroupedBox.new_graph(WindowId(1), "G").layers[0].default_kind, PlotKind::Box);
+
+        let text = |v: &[&str]| ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+        let mut p = Project::new();
+        let b = p.add_workbook("d");
+        let a = p.add_column(b, 0, Designation::X, text(&["a", "a", "b", "b"])).unwrap();
+        let s = p.add_column(b, 0, Designation::X, text(&["u", "v", "u", "v"])).unwrap();
+        let t = p.add_column(b, 0, Designation::X, text(&["1", "2", "3", "4"])).unwrap();
+        let v = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0])).unwrap();
+        let w = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![4.0, 5.0, 6.0, 7.0])).unwrap();
+
+        // Errors: no data, no group, too many groups, two data columns, a text data column, a right axis.
+        let err = p.plot_columns(Template::GroupedColumns, &[a, s]).unwrap_err();
+        assert!(err.to_string().contains("one numeric data column"), "{err}");
+        let err = p.plot_columns(Template::GroupedBox, &[v, w]).unwrap_err();
+        assert!(err.to_string().contains("one numeric data column"), "two data columns: {err}");
+        let err = p.plot_columns(Template::GroupedColumns, &[v]).unwrap_err();
+        assert!(err.to_string().contains("group columns"), "{err}");
+        let err = p.plot_indexed(Template::GroupedColumns, &[a, s, t], v).unwrap_err();
+        assert!(err.to_string().contains("at most two"), "{err}");
+        let err = p.plot_indexed(Template::GroupedColumns, &[a], s).unwrap_err();
+        assert!(err.to_string().contains("numeric data column"), "{err}");
+        let blank = p.add_column(b, 0, Designation::X, text(&["", " ", "", ""])).unwrap();
+        let before = p.graphs().count();
+        assert!(p.plot_indexed(Template::GroupedColumns, &[a, blank], v).is_err(), "no levels in the subgroup column");
+        assert!(p.plot_indexed(Template::GroupedColumns, &[blank], v).is_err(), "no levels in the group column");
+        assert_eq!(p.graphs().count(), before, "a refused plot leaves no graph behind");
+        let err = p.plot_columns_double_y(Template::GroupedBox, &[v], &[w]).unwrap_err();
+        assert!(err.to_string().contains("right Y axis"), "{err}");
+        assert_eq!(p.graphs().count(), 0, "a refused plot leaves no graph behind");
+
+        // One group column: one plot.
+        let g = p.plot_columns(Template::GroupedColumns, &[a, v]).unwrap();
+        let l = p.graph(g).unwrap().layers[0].clone();
+        assert_eq!(l.plots.len(), 1);
+        let pl = &l.plots[0];
+        assert_eq!((pl.y, pl.x, pl.kind, pl.label.clone()), (v, None, PlotKind::Column, None));
+        assert_eq!(pl.indexed, Some(Indexed { group: a, subset: None, error: IndexedError::None }));
+
+        // Two group columns: one plot per level of the second, named after the level, with its colour.
+        let g = p.plot_columns(Template::GroupedBox, &[a, s, v]).unwrap();
+        let l = p.graph(g).unwrap().layers[0].clone();
+        assert_eq!(l.plots.len(), 2);
+        let labels: Vec<_> = l.plots.iter().map(|q| q.label.clone().unwrap()).collect();
+        assert_eq!(labels, ["u", "v"]);
+        assert!(l.plots.iter().all(|q| q.kind == PlotKind::Box && q.y == v));
+        assert_eq!(l.plots[1].indexed.as_ref().unwrap().subset, Some((s, "v".to_string())));
+        assert_ne!(l.plots[0].symbol.color, l.plots[1].symbol.color);
+
+        // The .sheaf form keeps the grouping; a plot without it writes no key.
+        let json = serde_json::to_string(&p).unwrap();
+        let back: Project = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.graph(g).unwrap().layers[0].plots[1].indexed, l.plots[1].indexed);
+        let plain = p.plot_columns(Template::Column, &[v]).unwrap();
+        assert!(!serde_json::to_string(p.graph(plain).unwrap()).unwrap().contains("indexed"));
+
+        // A grouped plot is not a template look.
+        let err = crate::user_template::UserTemplate::from_graph("t", p.graph(g).unwrap()).unwrap_err();
+        assert!(err.to_string().contains("indexed"), "{err}");
     }
 
     #[test]

@@ -881,7 +881,7 @@ fn plot_menu() -> Vec<Entry> {
             [
                 vec![item("&Column", Cmd::Plot(Template::Column))],
                 vec![item("Column + Label", Cmd::Plot(Template::ColumnLabel))],
-                greys(&["Grouped Columns (indexed data)"]),
+                vec![item("Grouped Columns (indexed data)", Cmd::Plot(Template::GroupedColumns))],
                 vec![
                     item("Bar", Cmd::Plot(Template::Bar)),
                     item("Stacked Column", Cmd::Plot(Template::StackedColumn)),
@@ -963,7 +963,7 @@ fn plot_menu() -> Vec<Entry> {
             "S&tatistics",
             [
                 vec![item("Box Chart", Cmd::Plot(Template::BoxChart))],
-                greys(&["Grouped Box Charts", "Interval Plot"]),
+                vec![item("Grouped Box Charts", Cmd::Plot(Template::GroupedBox)), grey("Interval Plot")],
                 vec![
                     item("Violin Plot", Cmd::Plot(Template::Violin)),
                     item("Violin with Box", Cmd::Plot(Template::ViolinBox)),

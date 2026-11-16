@@ -77,6 +77,7 @@ fn has_trendlines(pd: &PlotData) -> bool {
     !(pd.plot.decor.trendlines.is_empty()
         || pd.pie.is_some()
         || pd.boxed.is_some()
+        || !pd.gboxes.is_empty()
         || pd.violin.is_some()
         || pd.ridge.is_some()
         || pd.hex.is_some()

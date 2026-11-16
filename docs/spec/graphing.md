@@ -698,15 +698,31 @@ Sheaf choices: the size box accepts finite 1 to 1000 pt values and commits on En
 leaving the box cancels the draft. Font Color offers eight named basic RGB colours (black, red,
 green, blue, cyan, magenta, yellow, white). Origin's Auto, full system/custom palettes and palette
 management remain open. Family selection is restricted to installed families; fallback rendering
-retains its existing behaviour. Underline, scripts, Greek and Fill/Line Color remain disabled
-in this toolbar until their own whole-object semantics/model support are implemented. Text-window
-selection controls and the T59 worksheet adapter are separate slices.
+retains its existing behaviour. Text-window selection controls and the T59 worksheet adapter
+are separate slices.
 
 `text_format::{Snapshot, Target, Change, Request}` separates widget changes from target application.
 T59 can add its cell target behind the same toolbar. Requests capture graph/layer/object plus
 document generation and revision. Dispatch rechecks active selection and dialog/cell editing state;
 invalid, unchanged or stale requests add no history. Open family/colour lists retain their original
 target rather than following a later selection. No model or file-format fields were added.
+
+Underline, Superscript, Subscript, Greek, Fill Color and Line Color (`object_format`, same
+request/staleness rules, own `Action::FormatObject`). Origin's online
+[Format toolbar help](https://docs.originlab.com/origin-help/format-toolbar/) describes the first
+four as acting on selected characters and does not document whole-object behaviour. Fill and
+line/border colour are described on Origin's
+[Style toolbar](https://docs.originlab.com/origin-help/style-toolbar) as setting the fill or line
+colour of the selected object; Sheaf shows them in the Format row (gui-look 50-52). Sheaf choices,
+all **unmeasured** (Origin 2016 measurement remains open): the four text buttons wrap the whole
+text in one `\u(`, `\+(`, `\-(` or `\g(` group, or remove that group when the text is exactly one
+such group (nesting counted as the parser does; `\u(a)b` is wrapped, not unwrapped; a group may
+span lines, so multi-line text is one group) and show pressed when wrapped; they apply to free
+labels and to X/Y titles with their own non-empty text, not to the legend or automatic titles.
+Fill Color (palette: None plus the eight basic colours) sets a rectangle's or circle's fill and a
+visible legend's background; Line Color sets a drawn object's or straight line's colour. Both are
+disabled with a hover reason elsewhere (the legend frame has no colour field). The selection
+survives; undo labels are "Format graph text" and "Format graph object". No model fields added.
 
 
 ---

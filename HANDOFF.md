@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **340 listed item locations** at the planning
-  baseline (235 menu bar, 19 toolbar, 86 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **330 listed item locations** at the planning
+  baseline (231 menu bar, 19 toolbar, 80 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -70,6 +70,47 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## Latest integration
+
+T91 (B8 slice, branch `fit-surface-more`, fitting.md 16-18, analysis-tools.md 18, Origin 2016 measured): Analysis >
+Fitting > Simulate Surface (22 surface functions, Origin's defaults and noise rule), Nonlinear Implicit Curve Fit
+(circle/ellipse by orthogonal distance, matches Origin's geometric fit), Compare Datasets (report unmeasured: pooled-fit
+F-test is Sheaf's own), Mathematics > XYZ Surface Area (Delaunay area as Origin's xyzarea to 1e-12).
+
+T59 worksheet dialog/menu audit (`codex/t59-worksheet-dialog`, 2026-11-16): measured Origin
+2016 Set Data Style > More... now opens the existing selected-range Format Cells window with
+Apply/Cancel/Undo. The fictitious Default placeholder is replaced by the actual disabled Rich
+Text, Wrap Text and Float choices (future B5 text controls). Worksheet Properties/F4 has separate
+category defaults; its nine Apply To targets and visible dialog defaults are recorded in GUI 3,
+and F4 remains grey pending the proper model. Fmt, strict workspace/all-target Clippy, all 4,051
+workspace tests (8 ignored), all 40 related UI regressions and the 338-item inventory pass on
+current fonts/paired-script/T90 source, with unchanged source/goldens and freshly rebuilt,
+inspected submenu/More desktop captures. Only own claim/window released; T59 remains partial.
+
+T58 paired sub/superscript columns: `\=(sub,sup)` now uses Origin-measured shared left
+columns and maximum branch advance, with nested style/font/colour/Greek restoration,
+60% script size and 49% up / 35% down baselines (graphing 7.10). Twenty native controls
+and four size checks, ten regressions, SVG/stroke PNG goldens and actual legend/tick/
+rotated-title layout cover the shared export path. Editor insertion remains separate.
+Formatting, strict workspace/all-target Clippy and 4,047 tests pass (eight existing ignored),
+with four test threads and frozen source/golden hashes. Inventory 340 and eight Python
+tooling tests pass. No editor, model, IO or general backend changes in this slice.
+
+T83 Origin measurements (2026-11-16, Claude Windows, docs only, graphing 14.29): Origin 2016's Interval Plot
+uses the same Student-t 95 % interval as Sheaf but a two-entry legend and the Y title "Range"; its Pareto
+(raw data) puts the cumulative points at the bar centres, labels them, and scales the count axis to 1.1 x
+the total so it lines up with a 0..110 % axis titled "Cumulative Frequency". Differences listed in the T83
+Status for a code slice. No build again this run: every build folder had been used within four hours and
+25 GB were free, too little for another full one.
+
+T58 inline font families: full-name font escapes now reach per-run measurement, glyphs
+and decoration metrics, with nested restoration, scripts, Greek and rotation retained.
+Graphing 7.6 records the native selected-face controls and name/fallback limits; eight
+regressions and SVG/stroke PNG goldens cover standard-family and shared export behaviour.
+Combined scripts and special aliases remain open; editor and Format-toolbar claims remain
+with their owners.
+Formatting, strict workspace all-target Clippy and 4,037 combined tests pass (eight existing ignored).
+The 340-item inventory and eight Python tooling tests pass; all workspace tests ran
+with four test threads, retaining every test and assertion.
 
 T81 (B8 slice, branch `stats-anova3`, statistics.md 24-26, Origin 2016 measured): Statistics > Descriptive
 Statistics > Partial Correlation Coefficient (Origin's pcorrcoef), ANOVA > Three-Way ANOVA (type III, means comparisons,
@@ -314,20 +355,28 @@ Clippy and 3,981 workspace tests pass (eight existing ignored), including all 29
 editor tests; inventory validation, eight Python tooling tests and three inspected desktop
 captures pass with source hashes unchanged.
 
+**T58 custom RGB text colours (2026-11-16, Codex):** Text color > Custom RGB in the shared
+label/title/legend editor validates opaque 0-255 channels and previews a swatch before an
+explicit colour choice (graphing 7.9). Field edits stay separate from the text draft; Apply
+color restores selection/typing focus, then existing Apply/OK/history and project saves
+apply. Existing RGB rendering, font groups, script columns and name references are retained;
+no renderer/model/worksheet changes. Full named Classic expansion and other editor insertion
+controls remain separate. Formatting, strict all-target Clippy and 4,062 workspace tests
+pass (eight existing ignored), including all 37 related editor tests. Inventory, eight
+Python tooling tests and four inspected desktop captures pass with source hashes unchanged.
+
 ## In flight (check for recent edits before claiming)
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t58-custom-text-colors` | Codex Windows | T58 step 2 custom RGB text-colour choice in shared label/title/legend editor | claimed 2026-11-16; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` sequentially reused after shipped b701ca20/all actors terminal; private palette/picker, editor prefix adapter and ephemeral TextDialog RGB state, new own UI/helper tests and registration, graphing 7.9/T58. Existing published RGB markup only; no Core/model/IO/renderer/fonts/parser/backends (text-run-fonts), full Classic24 expansion, worksheet/shared Format controller (T59), general menus/actions/dispatch, graph_view/shapes/layers, legend title, stats/calc/MCP, formula/parameter labels, reserved T26/T27/T29/T16 item6 or pending ROOT files. |
-| `codex/t59-worksheet-dialog` | Codex Windows | T59 slice 3: Origin worksheet-format/category measurements and measured Set Data Style > More... path to existing selected-range Format Cells; correct unsupported text-control placeholders | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` sequentially reused after shipped b79d6e99 and all actors terminal; existing/new private worksheet formatting dialog/helpers, bounded Format/cell-menu entries/actions/dispatch, own UI tests and registration, GUI 3/workbook 13b/T59. Existing cell-format model first. No clipboard/Copy variants (T88), sampling/data range, graph text/editor/toolbar/renderer/fonts/markup, general grid/layout/print (T27) or IO writer, calc/stats/MCP/formula-parameter labels, reserved T26/T29/T16 item6 or ROOT pending files. Requested final main PRODUCT-push integration window 2026-11-16 05:05 through 05:30 Central Standard Time, after T89 release; please batch other product pushes outside it so one combined validation can finish. Docs-only claims are fine. Releases on publication, failure or deadline. |
-| `codex/text-run-fonts` | Codex Windows, text-run-fonts | T58 step 1 renderer remainder: per-run `\f:Name(text)` family switching, nested/restored metrics and glyph/stroke/export tests, preserving Greek/Symbol behaviour | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; markup/text + private tests, fonts only if necessary; graphing 7.6 (Format 7.4/editor 7.5 reserved); no combined scripts, other colour tags, app/editor/toolbar/dispatch, model/core/IO/backends or global font settings  Requested final main PRODUCT-push integration window 2026-11-16 02:18 through 02:43 Central Standard Time; please batch product pushes after this window so one full combined font validation can finish; documentation-only claims are fine; releases on font push or deadline. |
+| `codex/t59-custom-colors` | Codex Windows | T59 custom opaque RGB text/fill colours for worksheet Format toolbar; Native chooser measurements and existing range-request/Undo/stale-target/persistence behaviour | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` sequentially reused after shipped e068/all actors terminal; worksheet-only toolbar/format colour branches, new private worksheet colour dialog/helper, bounded ephemeral app state/action/show wiring + dialog registration, own UI tests/registry and GUI 3/workbook 13b/T59 metadata. Existing CellFormat/Change fields only. No graph Format/editor/custom-RGB T58 picker/palette helpers, Classic24 expansion, Core/model/IO/renderer/fonts/parser, T92 corner/display flags or general grid/layout/print (T27), calc/stats/fitting/MCP/formula-parameter labels/sampling/clipboard, reserved T26/T29/T16 item6 or ROOT pending files. |
+| `codex/multi-y-template-legends` | Codex Windows | T61 remainder: Origin-measured legend defaults for three/four-Y templates | claimed/refined 2026-11-16 after native controls; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`. Bounded core multi_y.rs defaults/template.rs + project.rs named-template construction + compatible LegendPosition top-left variant (graph.rs), plot legend placement, existing Legend position fields in app dialogs/graph_details.rs, .opj graph annotation writer/warning, isolated regressions/template goldens and T61/graphing docs. Necessary anchor expansion measured before code edits; no other model fields, layer management/contents, graph-view/shapes/actions, toolbar/menus, worksheet/T59/T90, fitting/stats/MCP, T58 editor/colours, reserved tasks or ROOT pending files. Requested final PRODUCT integration window 2026-11-16 07:55 through 08:20 Central Standard Time, CONDITIONAL on T58 custom RGB and ready T93 publication/release first (otherwise defer, no competing hold). Earlier tentative 07:25 request deferred. Respect T58 07:13-07:33; docs-only claims remain fine. Releases on publication, failure or deadline. |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
 | `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
 | `hist-prob` | Claude Windows, session fe4b37eb | B4 slice as new brief T85: Plot > Statistics > Histogram + Probabilities (histogram with the cumulative probability curve on a right axis); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no other B4 plots (T83 interval/Pareto is done) or other sessions' scopes |
-| `sheet-tab` | Claude Windows, "t30-origin" | B6 slice as new brief T90: the sheet tab Duplicate Without Data and Sheet Name to Show (Short/Long/Both), a worksheet long name (core Worksheet field, tab drawing, Name and Comments dialog long name), Origin measured | claimed 2026-11-16; worktree swap-transpose, build target/wf-excel; no other B6 items (not corner menu, sparklines, Add Graph/Notes as Sheet, Navigate) |
-| `fit-surface-more` | Claude Windows, "continue all tasks" | B8 slice as new brief T91: Simulate Surface, Compare Datasets, Nonlinear Implicit Curve Fit, XYZ Surface Area; crates/fit + calc, core tools, Fitting/Mathematics windows, ops CLI, fitting.md/analysis-tools.md | claimed 2026-11-16; no wavelets, peaks, Probability/Q-Q, stats tools |
+| `interval-row` | Claude Windows, "t30-origin" | B6 slice as new brief T94: the worksheet corner menu Sampling Interval switch and its label row (Origin measured); core SheetView switch, grid label rows, menu | claimed 2026-11-16; worktree swap-transpose, build target/wf-excel; no other B6 items |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

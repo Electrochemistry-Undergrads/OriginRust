@@ -766,6 +766,54 @@ range, combined-script insertion and reuse for titles/legend remain open. The sh
 bar remains a separate target-dispatch implementation. No renderer/model/persistence changes
 are introduced by this editor slice.
 
+### 7.6 Inline font families (T58 graph text)
+
+`codex/text-run-fonts` (2026-11-15) carries a requested family through each markup run.
+For full font names, `\f:Times New Roman(a\f:Courier New(b)c)d` sets `a` and `c` in
+Times New Roman, `b` in Courier New, and restores the label's own font for `d`. The
+[escape reference](https://docs.originlab.com/origin-help/escape-sequences/) documents the
+family switch. Runs with the same family and other style coalesce; differing families
+remain separate even when their weight, size and colour agree.
+
+OriginPro 2016 controls in `scratch/text-run-fonts/` use `fonts.lines.txt` (eleven cases)
+and `font-names.lines.txt` (eight edge/name cases). Exact selected-font records in EMF,
+associated with text reference coordinates, confirm full Arial, Times New Roman and
+Courier New names, the four nested `a/b/c/d` families above, and a Times span containing
+bold (weight 700), italic and underlined text. At 24 pt these selected faces have height
+-100 in the captured EMF coordinate system. Parent text is confirmed Arial by its selected
+face; the second probe's quoted `label -f` request did not change it, so no Courier-parent
+behaviour is inferred from that request.
+
+The native Symbol controls use the Symbol face and private character U+F06D for `m`.
+Sheaf keeps its established Unicode Greek mapping: `\f:Symbol(m\f:Arial(x)m)y` produces
+mu, Latin x, mu, Latin y, with the requested Symbol/Arial/Symbol/parent families. Switching
+to a non-Symbol family ends Greek mapping inside that span. Unicode or literal wrappers
+continue to suppress Greek remapping. Actual glyph coverage and fallback on a machine can
+differ from Origin's Symbol encoding; this does not add a new Symbol character map.
+
+The same effective family is used for widths, placed glyphs and font-table decoration
+metrics. Mixed-family anchors and rotation therefore use the sum of the measured run
+widths. A single unshifted run retains the existing native text anchor. Bold, italic,
+script size/baseline and colour compose with family changes. Titles, legends, labels and
+tick strings share this placement path. No model, file-format, global font setting or
+backend implementation changes are needed; existing font fallback and export warnings
+still apply. EPS maps the three standard families to Helvetica, Times-Roman and Courier;
+SVG/EMF retain their requested family and PNG/PDF use the existing SVG font resolution.
+
+This slice supports full, nonempty names with no edge whitespace, up to the existing
+64-character bound. Empty or edge-whitespace names keep Sheaf's previous neutral-family
+behaviour and enclosed text. Native `\f:(...)` instead remained literal; a whitespace
+Times name and missing/abbreviated names selected Arial in these controls. Those invalid,
+short-name and alias/default-name behaviours are not claimed as matching Origin. Missing
+fonts retain the existing platform-dependent fallback. Nesting limits and malformed/literal
+text rules remain unchanged.
+
+Eight font regressions cover native family/style restoration, same-family coalescing,
+family-sensitive widths and decoration geometry, rotation, Greek/literal/Unicode behaviour,
+name bounds, an empty font database and EPS/EMF/PDF/SVG output. New SVG and stroke-only PNG
+goldens use deliberately different deterministic test-family metrics; those synthetic
+metrics are not Origin measurements or installed-font rasterization fixtures.
+
 ### 7.7 Axis-title and legend text editors (T58)
 
 The existing X/Y axis titles and legend content now use the selection editor from 7.5.
@@ -820,6 +868,73 @@ is a draft until Apply/OK, shares the existing Undo step and preview, and preser
 font. Native and Origin-companion saves retain the raw colour markup. The menu offers this
 bounded subset; broader/custom colour controls, inline family selection and combined-script
 insertion remain separate work.
+
+### 7.9 Custom RGB text colours (T58 editor)
+
+Text color > Custom RGB... in the shared label/title/legend editor has Red, Green and Blue
+fields, a swatch and Apply color. Each field accepts a whole number from 0 through 255;
+invalid or empty values disable the choice and show the permitted range. The fields start
+from the object's base font colour. A named palette choice also seeds them; subsequent typed
+values stay in the current editor's picker. No alpha or persistent picker preference is added.
+
+Editing the fields or dismissing the menus does not change the text draft, automatic-text
+state or project. Apply color closes both menus, formats the original selection (or inserts
+a group at the caret) and restores typing focus to the text. The result is still a draft
+until the Text window's Apply/OK. Other styles, script columns, font-family groups, literal
+blocks and legend name references keep their existing meaning. Repeating the same RGB
+choice on the selection is idempotent; existing history and project round trips apply.
+
+The command reuses the measured opaque RGB text encoding in 7.3:
+`0x01000001 + r + 256*g + 65536*b`, written as a decimal colour escape. This includes Black
+and White at the existing tag boundaries. The renderer/parser and base font are unchanged.
+Origin's [Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/) documents
+font-colour selection, formatting and preview; this compact numeric submenu, validation
+policy and explicit draft choice are Sheaf UI choices, not a newly measured Origin layout.
+The eight named colours from 7.8 remain available; a full named Classic palette and other
+editor insertion controls remain separate work.
+
+### 7.10 Paired subscript and superscript columns (T58 renderer)
+
+Origin's [escape-sequence reference](https://docs.originlab.com/origin-help/escape-sequences/)
+defines `\=(sub,sup)` and a literal comma via `\v(,)`. On 2026-11-16, Origin 2016 was
+measured with twenty quoted synthetic Arial labels at 24 pt, exported to EMF. Raw commands,
+records and extracted runs are in local `scratch/text-script-pairs/pairs-quoted.*`;
+four additional 12/24/48/72 pt controls are in `pair-sizes.*`. Unquoted commands containing
+`=` were rejected by LabTalk and provide **no paired-script evidence**. The private runner
+held the global reference mutex, refused any existing COM Origin, and closed only its own
+instance; every native run completed before renderer validation.
+
+Measured relative to the baseline and height of the surrounding run:
+
+- Both branches begin immediately after the preceding glyph at the same left edge.
+  The next ordinary glyph advances by the **maximum** of the two branch widths, with no
+  extra gap. For `P\=(1234,5)Q` and `P\=(1,2345)Q`, P advances 67 EMF units, the wider
+  branch 132, and Q begins 199 units after P in both cases. Equal branches advance once.
+- Branches use 60% of the surrounding size. Superscript is raised by 49% and subscript
+  lowered by 35%. At base heights 50, 100, 200 and 300 the upper shifts are -25, -49,
+  -98 and -147; lower shifts +18, +35, +70 and +105 (integer rounding). The renderer
+  retains fractional coordinates. These measurements apply to paired scripts; the
+  existing standalone `\+` / `\-` placement constants are unchanged.
+- The first comma outside balanced parentheses separates branches. `\v(1,2)` stays
+  intact in the lower branch; `\=(1,2,3)` renders lower `1` and upper `2,3`.
+  With no comma, all content is lower text. Either branch may be empty; both empty
+  produce no glyph and consume no width.
+- Each branch inherits its surrounding style and restores it afterwards. Native controls
+  cover bold/italic, red/blue, Symbol Greek, Courier New/Times New Roman and underline/
+  strikeout. The family test has lower width 72 and upper width 60, so Q follows 72.
+- Nested pairs scale again: `P\=(\=(1,2),3)Q` has 36%-size inner scripts, at baseline
+  offsets +56 and +6 against P; the other branch is at -49. Native EMF paints upper
+  before lower; the shared layout does likewise.
+
+The private parsed layout tree retains each paired column for width and placement;
+public `markup::parse` still returns styled runs in logical lower/upper order and
+`plain` returns their text without delimiters. Existing single-run native anchors,
+font fallback, colour and decoration paths remain in use. Nesting is bounded by the
+existing 24-level escape limit; deeper content and malformed unclosed groups keep
+Sheaf's existing tolerant parser convention, which was not measured in Origin.
+SVG glyph/stroke and font-independent stroke PNG goldens, exact scene geometry,
+rotation/anchors, effective-font width, EMF positions, EPS and PDF exercise this path.
+No editor insertion control, new project field, font backend or UI command is added.
 
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
 
@@ -2615,6 +2730,27 @@ docs.originlab.com/x-function/ref/plot_paretoraw, .../plot_paretobin]:
 - Pareto, raw data, option `symr` (default 1): the cumulative-percent symbols sit at the right edge of each bar, and the
   cumulative line starts at (0, 0), the left edge of the first bar at 0 %. Sheaf copies both (placed from the drawn bar
   width, so they follow the layer's gap); the first and the last point carry no data labels.
+
+**Measured 2026-11-16 in Origin 2016** (Plot > Statistics > Interval Plot and Pareto Chart - Raw Data through the
+menu, PNG exports `re-workspace/scratch/t83-origin/interval.png`, `pareto.png`):
+
+- Interval Plot of A = 1..10, B = 2, 4, ..., 16, C = {3, 5, 4, 8, 10}: one filled circle per column at the mean
+  (5.5, 9, 6) with a capped bar of the Student-t 95 % confidence interval (3.33..7.67, 4.90..13.10, 2.38..9.62),
+  so Sheaf's default statistic and level match. Colours black, red, blue (the column order through Origin's
+  list), bars in the symbol's colour; X at 1, 2, 3 labelled with the column names, range 0.5..3.5, no X title; Y
+  title "Range"; Y axis -2..20 (wider than the intervals); **one legend with two entries**, an error-bar sample
+  "Mean ± 95% CI" and a circle "Mean", not one entry per column.
+- Pareto Chart - Raw Data of one text column (b ×5, a ×4, c ×2, d, e, f ×1; 14 cells): two layers. Bars red with a
+  black outline, most frequent first, ties in order of first occurrence (d, e, f) as Sheaf; X tick labels the
+  categories, no X title. Left Y "Count" from 0 to **1.1 × the total** (15.4); right Y "Cumulative Frequency"
+  from 0 to 110 with ticks every 20 labelled **0% ... 100%**, so 100 % stands level with the total count.
+  The cumulative percent is a thin blue line with blue squares at the **bar centres** (no (0, 0) point), each
+  labelled with its value to 7 significant digits (35.71429, 64.28571, ..., 100) above it. No legend.
+
+**Differences from what Sheaf does below (for a code slice):** interval plot legend (two summary entries) and Y
+title "Range"; Pareto cumulative points at the bar centres without the (0, 0) start (Origin 2016; the `symr`
+right-edge default documented for later versions does not hold here), point labels, left axis to 1.1 × total
+with the right axis 0..110 in percent labels, title "Cumulative Frequency", blue line and squares.
 
 **What Sheaf does** (unmeasured unless listed above):
 

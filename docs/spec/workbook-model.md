@@ -564,6 +564,11 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   (GUI 3, 2026-11-16) confirm per-cell U and Ctrl+B/I/U, Fill Color/None, and data-only whole-column
   underline distinct from label underline. Sheaf uses one Undo per key or palette change, leaves
   source columns/formulas alone and rejects stale requests and effective no-ops.
+- **Dialog scope.** Set Data Style > More... reuses the selected-range Format Cells window.
+  Origin 2016 has no Default data-style command; Rich Text/Wrap Text/Float remain separate,
+  unsupported text controls (B5). Its Worksheet Properties Format tab instead has category
+  defaults (Data > Standard, plus headers and label categories); the current range model does
+  not implement that layer, so F4 stays disabled (GUI 3, measurements 2026-11-16).
 - **Conditional formats.** Conditional fill and text colour override manual ones; bold, italic,
   underline, font, size and alignment stay manual.
 - **Maintenance.** Row insert/delete shift, grow, shrink or drop spans of the affected columns
@@ -711,6 +716,52 @@ and copied in `sheaf_core::copy_columns`:
   Copy Data, Copy Format (display format and width), Long Name, Units, Comments, User-Defined Parameters.
   An unticked part leaves the destination's own (Sheaf's choice, not measured). One undo step ("Copy
   columns"). Not done: Ignore Hidden Rows and Parameters (Origin's system parameter rows).
+
+## 13h. Sheet tab names: Sheet Name to Show, Duplicate Without Data (T90, measured 2026-11-16, Origin 2016)
+
+Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-dialog.ps1 -NoDialog`,
+`@RCLICK`/`@CLICK`/`@SHOT`, `re-workspace/scratch/t90`, local only) and copied in `sheaf_core::sheet_tab`:
+
+- A sheet has a short name and a **long name** (`wks.longname$`). Sheaf keeps it in `Worksheet::long_name`
+  (saved in `.sheaf`; Name and Comments... has a Long Name field; sheet comments are not kept yet).
+- **Sheet Name to Show** has three items in Origin 2016: Long Name if available, Short Name (ticked for a
+  new sheet) and Long Name (the greyed inventory had listed "Both", which Origin 2016 does not have). The
+  choice is **per sheet**: Long Name on Sheet1 showed "Potential scan" on its tab and left Sheet2's tab
+  "Sheet2" although Sheet2 had a long name. Long Name if available falls back to the short name. Sheaf also
+  shows the short name for Long Name on a sheet without a long name (Origin's empty case not measured).
+  One undo step ("Sheet name to show").
+- **Duplicate Without Data** adds the copy after the last sheet, named as a new sheet (the first free
+  SheetN: Sheet3 next to Sheet1 and Sheet2), with the long name followed by " 1" ("Potential scan 1"; a
+  further copy takes " 2" in Sheaf), and makes it active. It keeps the columns with their short names,
+  designations, long names, units and formulas (`i*2` stayed, the cells were empty). Sheaf also keeps
+  formats, widths, user parameters, conditional and cell formats, and drops values, masks, notes and the
+  filter. One undo step ("Duplicate sheet without data").
+- The `.opj` written here does not hold the long name or the choice: the save warning names the sheets,
+  and the companion keeps them.
+- **Navigate...** (T93) opens "Navigate Worksheets - Book1" in Origin 2016: a table of the sheets (Index,
+  Creation Index, Name with the short name, Columns, Size(KB), Comments, Type "Flat Sheet", Source), the
+  active sheet selected, an Actions menu and Apply Reorder (greyed), OK and Close. Sheaf's window has Index,
+  Name, Long Name, Columns and Rows; clicking picks a sheet, OK or a double click goes to it, Close or
+  Escape closes. Not done: Actions, Apply Reorder.
+
+## 13i. Worksheet corner menu (T92, measured 2026-11-16, Origin 2016)
+
+Right-clicking the corner above the row numbers in Origin 2016 gives a short menu (Save Template As...,
+View, Add New Sheet, Add Graph..., and more behind the chevron). Its **View** submenu, expanded, lists
+the switches (screenshots `re-workspace/scratch/t92`, local only): Long Name, Units, Comments,
+Parameters, Sampling Interval, Sparklines, Filter, F(x)= (Ctrl+Shift+U), Categories | Row Labels for
+Column Label Rows | Column Header, Row Header | Column Grid, Row Grid, Page Break Preview Lines. On a new
+sheet Long Name, Units, Comments, F(x)=, Row Labels, both headers and both grids are ticked. (The greyed
+inventory had listed Row Labels for Column Label Rows as a submenu of the label rows; in Origin 2016 it is
+one switch, the titles left of the label rows.)
+
+Sheaf's corner menu is that list (`sheaf_core::sheet_view`, saved per sheet in `.sheaf`; Sheaf's choice,
+the per-book or per-sheet scope was not checked): Long Name, Units, Comments and F(x)= hide or show their
+label row; Row Labels hides the row titles; Column Grid and Row Grid the vertical and horizontal lines
+between data cells. One undo step each ("Worksheet view"). Grey: Parameters (Origin's system rows),
+Sampling Interval (the interval of T84 has no label row yet), Sparklines, Filter, Categories, Column Header,
+Row Header and Page Break Preview Lines. User parameter rows show whenever a column has one. The `.opj`
+written here does not hold the switches (the save warning names the sheets).
 
 ## 14. Suggested Rust data model (P0)
 

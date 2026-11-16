@@ -77,6 +77,14 @@ pub enum SheetOp {
     Insert,
     Delete,
     Duplicate,
+    /// Duplicate Without Data: the columns and labels of the sheet in a new last sheet (T90).
+    DuplicateWithoutData,
+    /// Sheet Name to Show: what the sheet's tab shows (T90).
+    ShowName(sheaf_core::sheet_tab::SheetLabel),
+    /// The corner menu's View switches: show or hide a label row, the row labels or grid lines (T92).
+    ToggleView(sheaf_core::sheet_view::ViewSwitch),
+    /// Navigate...: the window that lists the sheets and goes to one (T93).
+    Navigate,
     /// Open the window that asks for a new name.
     RenameDialog,
 }

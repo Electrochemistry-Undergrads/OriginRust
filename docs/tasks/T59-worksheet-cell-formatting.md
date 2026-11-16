@@ -1,9 +1,9 @@
 # T59: Worksheet cell formatting
 
-**Status:** steps 1, 2 and 4 done 2026-11-15 (`cell-format`). Step 3 first toolbar slice adds selected cells/rows/columns/label targets to T58's shared dispatch: installed font, size, Bold/Italic, basic text colours, mixed-state summaries, stale-request protection and one-step Undo. Grid point sizes and derived row geometry are corrected, including print/image geometry. Basic Origin 2016 toolbar/font/row-growth measurements are in GUI 3; `codex/t59-format-toolbar` passes fmt, strict workspace/all-target Clippy, all 3,934 workspace tests (8 ignored), 17 toolbar regressions and the inventory check; the desktop rendering was inspected. Merged to main with the T74/Line Series integration; remaining work is listed below. Slice 2 (`codex/t59-worksheet-controls`) adds worksheet Underline, basic fill/None and contextual Ctrl+B/I/U after Origin measurements; fmt, strict workspace/all-target Clippy, all 3,971 workspace tests (8 ignored), 26 related toolbar regressions, the inventory check and an inspected isolated desktop capture pass. Remaining: Format > Worksheet and Set Data Style, vertical alignment, persistent/sticky row heights, Excel export of formats, full/custom palettes and remaining dialog/precedence measurements. Printing still omits empty label rows, including styled ones, under its existing T27 extent policy.
-**Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry), `codex/t59-worksheet-controls` (underline/fill/keys). **Priority:** P0, wave 1.
+**Status:** steps 1, 2 and 4 done 2026-11-15 (`cell-format`). Step 3 first toolbar slice adds selected cells/rows/columns/label targets to T58's shared dispatch: installed font, size, Bold/Italic, basic text colours, mixed-state summaries, stale-request protection and one-step Undo. Grid point sizes and derived row geometry are corrected, including print/image geometry. Basic Origin 2016 toolbar/font/row-growth measurements are in GUI 3; `codex/t59-format-toolbar` passes fmt, strict workspace/all-target Clippy, all 3,934 workspace tests (8 ignored), 17 toolbar regressions and the inventory check; the desktop rendering was inspected. Merged to main with the T74/Line Series integration; remaining work is listed below. Slice 2 (`codex/t59-worksheet-controls`) adds worksheet Underline, basic fill/None and contextual Ctrl+B/I/U after Origin measurements; fmt, strict workspace/all-target Clippy, all 3,971 workspace tests (8 ignored), 26 related toolbar regressions, the inventory check and an inspected isolated desktop capture pass. Slice 3 (`codex/t59-worksheet-dialog`; fmt, strict workspace/all-target Clippy, 4,051 workspace tests with 8 ignored, all 40 related UI regressions, the 338-item inventory and inspected desktop pass) measures the separate Worksheet Properties/category defaults and enables the measured Set Data Style > More... path to the existing Format Cells dialog. The fictitious Default placeholder is removed; Rich Text/Wrap Text/Float remain disabled under B5. Remaining: Format > Worksheet category-default model, vertical alignment, persistent/sticky row heights, Excel export of formats, full/custom palettes and remaining dialog/precedence measurements. Printing still omits empty label rows, including styled ones, under its existing T27 extent policy.
+**Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry), `codex/t59-worksheet-controls` (underline/fill/keys), `codex/t59-worksheet-dialog` (dialog measurements/More entry). **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;
-[GUI](../spec/gui-look.md) 3. **Inventory:** 2 remaining locations tagged `T59` (worksheet-wide scope and Set Data Style).
+[GUI](../spec/gui-look.md) 3. **Inventory:** 1 remaining location tagged `T59` (worksheet-wide scope); the three unsupported text-control choices are B5.
 **Depends on:** T58's toolbar dispatch (slice 3). Model/dialog work can start independently.
 **Ownership:** worksheet format model, range maintenance, grid and print drawing, Format Cells
 window; worksheet adapter behind T58's dispatch. Coordinate worksheet/sheetops/grid edits with
@@ -17,15 +17,18 @@ appear in printed sheets and worksheet images. Numeric display format remains Co
 
 ## Origin facts
 
-GUI section 3 records Format Cells on cell/column/row menus, Set Data Style on the cell menu,
-and Ctrl+U underlining a selected column. The X-Function index names `wcellformat`.
+GUI section 3 records Format Cells on cell/column/row menus, Set Data Style > More... opening
+the selected-range Format Cells dialog, and Ctrl+U underlining a selected column. Origin 2016
+has no Default data-style entry. F4 opens separate Worksheet Properties with nine Apply To
+categories and Data > Standard priority; visible cell/dialog defaults are recorded in GUI 3.
+The X-Function index names `wcellformat`.
 **Measured 2026-11-16:** worksheet U button, Ctrl+B/I/U, Fill Color red/None, independent label
 underline and data-only whole-column underline; GUI 3 records the synthetic UI runs.
 **Measured 2026-11-15:** selected-cell Arial 9 pt default, Bold/Italic, Times New Roman, red text,
 mixed-size blank field, first-cell mixed Bold state and row growth. Size-step buttons were disabled.
 Reducing font size leaves Origin's enlarged height; Sheaf's current derived height can shrink.
-**Not measured:** Format Cells controls/defaults/Apply-to, Format > Worksheet, Set Data Style
-choices, rich text inside a cell, precedence of manual/conditional colours, sort behaviour and
+**Not measured:** remaining Format Cells controls and mutation rules, worksheet category-default
+mutation/inheritance/future-column rules, rich text inside a cell, precedence of manual/conditional colours, sort behaviour and
 `.opj` storage. Measure on Windows; label interim choices. The cloud draft proposed conditional
 colours overriding manual colours and styles following rows during sort; these are proposals.
 
@@ -51,7 +54,8 @@ colours overriding manual colours and styles following rows during sort; these a
 2. Draw styles and build Format Cells. One commit on OK/Apply; Cancel is inert. Test imported
    and new sheets, filtered selections, frozen panes and a whole-column million-row selection.
 3. Add T58's worksheet adapter once its dispatch lands. Enable Format > Worksheet/Cell, the
-   column/cell/row Format Cells items and Set Data Style > Default only when each is implemented.
+   column/cell/row Format Cells items and Set Data Style > More... only when each is implemented.
+   Rich Text/Wrap Text/Float are separate text controls (B5), not Clear Formats.
    The worksheet entry must implement its measured worksheet-wide scope, not merely alias a
    cell dialog with misleading semantics.
 4. Verify print/image rendering, save/reopen, `.opj` warnings/companion and any Excel export.

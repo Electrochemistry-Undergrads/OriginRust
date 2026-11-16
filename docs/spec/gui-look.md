@@ -517,11 +517,11 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
 
 ### Cell formatting (T59)
 
-Origin facts known: Format Cells is on the cell, column-header and row-number context menus,
-Format > Cell... and Format > Worksheet... (F4) exist, Set Data Style > Default is on the cell
-menu, Ctrl+U underlines a selected column, the X-Function is `wcellformat`. Not measured: the
-Format Cells controls and defaults, Apply-to choices, Format > Worksheet's scope, Set Data Style,
-manual versus conditional precedence, sort behaviour and `.opj` storage.
+Origin 2016 has Format Cells on the cell, column-header and row-number context menus,
+Format > Cell... and a separate Format > Worksheet... (F4). Ctrl+U underlines a selected column;
+the cell-format X-Function is `wcellformat`. The dialog/menu measurements below were taken on
+Windows, 2026-11-16, using only synthetic worksheet values. Effects of the worksheet-wide
+settings, manual versus conditional precedence, sort behaviour and `.opj` storage remain open.
 
 Origin 2016 worksheet-toolbar measurements (Windows, 2026-11-15, synthetic two-column
 worksheet): selecting A1 shows Default: Arial and 9 pt. Bold and Italic change only A1; choosing
@@ -567,12 +567,37 @@ font metrics and enlarged rows; their existing 8 pt default scales explicit size
 Printing retains its existing omission of label rows with no text, including empty styled labels;
 native printed-layout and range rules remain T27 work.
 
-The **Format Cells** window (cell/column/row menus, Format > Cell...) retains its existing
-unmeasured choices: Font, Size (0 = Default), Bold/Italic/Underline, text/fill colour, horizontal
-alignment, Clear Formats, OK, Cancel and Apply. It starts from the first selected cell and applies
-only changed properties. Format > Worksheet... and Set Data Style > Default remain grey until
-their scope is measured. Vertical alignment, full/custom palettes, and the remaining dialog/precedence measurements
-remain open.
+**Origin's dialogs (measured 2026-11-16).** F4 opens Worksheet Properties, with View, Size,
+Format, Miscellaneous, Print/Export and Script tabs (the printing/script tabs were not inspected).
+The Format tab's Apply To list is Standard, Column Labels, Data, Column Header, Row Header,
+Long Name, Units, Comments and F(x)=. Data is initially selected; the dialog displays Data > Standard
+as its application priority. Data initially has Rich Text off, Allow Enter/Wrap Text/Float on,
+Disable Editing/Show Missing as Blank off, and separate unchecked Font and Color override switches.
+These controls address worksheet categories. Their mutation,
+inheritance and future-column rules have not been measured; F4 stays grey until that model exists.
+
+Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
+The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,
+Dynamic Merge, per-cell numeric display/precision selectors and a Font selector. In this new book,
+Rich Text/Float/Disable Editing are off, Allow Enter/Wrap Text are on, Ellipsis is ### and Dynamic
+Merge is None. Other controls and mutation/precedence rules were not measured.
+
+The stock **Set Data Style** submenu contains Rich Text, Wrap Text, Float and More...; there is
+no Default entry. More... opens that same selected-range Format Cells dialog. Sheaf enables More
+through its existing Format Cells command. Rich Text/Wrap Text/Float remain disabled, assigned to
+B5's worksheet text controls; they are not a Clear Formats operation. The earlier Default entry
+was a placeholder, not an Origin measurement. The [Origin 2016 training manual](https://blog.originlab.com/ftp/dist/Origin_2016_Intermediate_Training_Manual.pdf)
+also uses Set Data Style > Rich Text for report cells. Raw captures and control lists stay local in
+`re-workspace/scratch/t59-worksheet-dialog/`; delayed initial dialog captures and the misleadingly
+named default-action follow-up were excluded from behavioural claims.
+
+Sheaf's **Format Cells** window (cell/column/row menus, Format > Cell..., Set Data Style > More...)
+retains its existing manual-style subset: Font, Size (0 = Default), Bold/Italic/Underline,
+text/fill colour, horizontal alignment, Clear Formats, OK, Cancel and Apply. It starts from the
+first selected cell and applies only changed properties. The layout and choices of that subset
+remain Sheaf's policy; Origin's text-control and per-cell numeric-display features are not supplied
+by this window. Vertical alignment, full/custom palettes and remaining dialog/precedence
+measurements remain open.
 Model and persistence rules: workbook-model.md 13b.
 
 ## 4. Graph window

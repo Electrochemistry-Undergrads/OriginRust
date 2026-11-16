@@ -65,6 +65,40 @@ Formatting, strict workspace all-target Clippy and 3,981 combined tests pass
 Inventory validation, eight Python tooling tests and three inspected desktop captures pass;
 the editor/test source hashes remain unchanged through validation and capture.
 
+Fourth renderer slice (`codex/text-run-fonts`): full-name inline font-family switches now
+reach run measurement, glyphs and decoration metrics, including nested restoration,
+styles/scripts/Greek and rotation. Graphing 7.6 records nineteen native family/name controls
+and their limits; eight regressions plus SVG/stroke PNG goldens cover the shared export
+path. Combined scripts and special colour/name aliases remain open. Editor and shared
+Format toolbar work stay with their owners.
+Formatting, strict workspace all-target Clippy and 4,037 combined tests pass (eight existing ignored).
+The 340-item inventory and eight Python tooling tests pass; all workspace tests ran
+with four test threads, retaining every test and assertion.
+
+Fifth renderer slice (`codex/text-script-pairs`): `\=(sub,sup)` uses measured shared
+columns, 60% script size and 49% up / 35% down baselines, with maximum branch advance,
+literal commas, empty branches, nesting and inherited style restoration. Graphing 7.10
+records twenty native controls and four size checks. Independent placement/parser,
+font/decoration/anchor/rotation/export regressions and SVG/stroke PNG goldens cover it.
+Combined-script **editor insertion** remains separate; other unsupported escape codes,
+font aliases and the separately owned custom-colour/editor work remain open.
+Formatting, strict workspace all-target Clippy and 4,047 combined tests pass (eight existing
+ignored), including all ten paired-script regressions and the real legend/tick/rotated-title
+case. The 340-item inventory and eight Python tooling tests pass. All workspace tests ran
+with four test threads, retaining every test and assertion; source/golden hashes stayed fixed.
+
+Custom RGB editor slice (`codex/t58-custom-text-colors`): Text color > Custom RGB... adds
+validated Red/Green/Blue fields and an explicit draft choice using the published RGB renderer
+encoding (graphing 7.9). Menus stay open while editing; invalid values cannot be applied.
+The existing selection/caret, style/literal/reference preservation, history and persistence
+paths are reused, including the newly published font-family and paired-script renderer rules.
+No renderer, base-font, project-model or worksheet formatting behaviour changes. Full named
+Classic palette expansion and other editor insertion controls remain separate work.
+Formatting, strict workspace all-target Clippy and 4,062 combined tests pass
+(eight existing ignored), including all 37 related editor UI/helper/preview tests.
+Inventory, eight Python tooling tests and four inspected desktop captures pass, including
+the real RGB popup with verified channel values; editor/test source hashes are unchanged.
+
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;
@@ -97,11 +131,12 @@ layout. Record unmeasured choices explicitly; do not describe them as measured O
 
 ## Where
 
-- `crates/plot/src/markup.rs`: `Run` carries bold/italic/underline/strikeout/colour/scale/rise.
-  `\u`, `\s` and indexed/RGB `\cN` render through shared text placement. `\f:Name` currently changes Symbol/Greek mapping, **not the
-  font family**. Keep nesting limits and `plain()` while extending runs.
+- `crates/plot/src/markup.rs`: `Run` carries bold/italic/underline/strikeout/colour/family/scale/rise.
+  `\u`, `\s`, indexed/RGB `\cN` and full-name `\f:Name` render through shared text placement.
+  Keep nesting limits, Greek mapping and `plain()` while extending runs.
 - `crates/plot/src/text.rs`, `scene.rs` and backends (`svg.rs`, `eps.rs`, `emf.rs`, raster/PDF):
-  carry run font/colour and decoration geometry, including rotation.
+  carry run font/colour and decoration geometry, including rotation. The private paired-script layout tree shares one column per `\=(sub,sup)`;
+  `text_script_pair_tests.rs` covers actual legend/tick/title layout as well as run geometry.
 - `crates/core/src/graph.rs`: `Font` has family, size, bold, italic and colour; add underline
   compatibly with serde defaults. Avoid changing existing defaults or serialized meaning.
 - `crates/app/src/toolbar.rs`: `Bar::Format` is inert (`FontBox`, `SizeBox`, `g` buttons). Add a

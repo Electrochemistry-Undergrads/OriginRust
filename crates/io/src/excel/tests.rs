@@ -38,16 +38,7 @@ fn labelled(mut c: Column, long: &str, units: &str, comments: &str) -> Column {
 }
 
 fn sheet(name: &str, columns: Vec<Column>) -> Worksheet {
-    Worksheet {
-        name: name.into(),
-        columns,
-        filter: None,
-        frozen: Default::default(),
-        cond_formats: Vec::new(),
-        notes: Vec::new(),
-        cell_formats: Vec::new(),
-        comparison_source: None,
-    }
+    Worksheet { columns, ..Worksheet::new(name) }
 }
 
 fn warned(r: &ExcelImport, needle: &str) -> bool {

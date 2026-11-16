@@ -1904,7 +1904,10 @@ pub fn cell_menu_for(noted: bool) -> Vec<Entry> {
     }
     v.push(mask_menu());
     v.push(cond_format_menu());
-    v.push(grey_sub("Set Data Style", &["Default"]));
+    v.push(sub(
+        "Set Data Style",
+        vec![grey("Rich Text"), grey("Wrap Text"), grey("Float"), item("More...", Cmd::FormatCells)],
+    ));
     v
 }
 
@@ -1922,7 +1925,14 @@ pub fn row_menu() -> Vec<Entry> {
 
 /// The menu of a sheet tab (it acts on the sheet whose tab was clicked, which becomes the
 /// active one first).
-pub fn sheet_tab_menu() -> Vec<Entry> {
+pub fn sheet_tab_menu(shown: sheaf_core::sheet_tab::SheetLabel) -> Vec<Entry> {
+    let names = sheaf_core::sheet_tab::SheetLabel::ALL
+        .iter()
+        .map(|l| {
+            let tick = if *l == shown { "\u{2713} " } else { "" };
+            item(&format!("{tick}{}", l.name()), Cmd::Sheet(SheetOp::ShowName(*l)))
+        })
+        .collect();
     vec![
         item("Insert", Cmd::Sheet(SheetOp::Insert)),
         item("Delete", Cmd::Sheet(SheetOp::Delete)),
@@ -1930,13 +1940,13 @@ pub fn sheet_tab_menu() -> Vec<Entry> {
         grey("Add Graph as Sheet..."),
         grey("Add Notes as Sheet"),
         sep(),
-        grey("Duplicate Without Data"),
+        item("Duplicate Without Data", Cmd::Sheet(SheetOp::DuplicateWithoutData)),
         item("Duplicate", Cmd::Sheet(SheetOp::Duplicate)),
         sep(),
-        grey_sub("Sheet Name to Show", &["Short Name", "Long Name", "Both"]),
+        sub("Sheet Name to Show", names),
         item("Name and Comments...", Cmd::Sheet(SheetOp::RenameDialog)),
         sep(),
-        grey("Navigate..."),
+        item("Navigate...", Cmd::Sheet(SheetOp::Navigate)),
     ]
 }
 
@@ -2322,18 +2332,32 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
     v
 }
 
-/// The menu of the corner above the row numbers: switches for the parts of the grid.
-pub fn corner_menu() -> Vec<Entry> {
+/// The menu of the corner above the row numbers: the switches of Origin 2016's corner View submenu
+/// (T92), ticked when on.
+pub fn corner_menu(view: &sheaf_core::sheet_view::SheetView) -> Vec<Entry> {
+    use sheaf_core::sheet_view::ViewSwitch as V;
+    let switch = |s: V| {
+        let tick = if view.shows(s) { "\u{2713} " } else { "" };
+        item(&format!("{tick}{}", s.name()), Cmd::Sheet(SheetOp::ToggleView(s)))
+    };
     vec![
-        grey_sub(
-            "Row Labels for Column Label Rows",
-            &["Long Name", "Units", "Comments", "F(x)=", "Sparklines", "Parameters"],
-        ),
+        switch(V::LongName),
+        switch(V::Units),
+        switch(V::Comments),
+        grey("Parameters"),
+        grey("Sampling Interval"),
+        grey("Sparklines"),
+        grey("Filter"),
+        switch(V::Formula),
+        grey("Categories"),
+        sep(),
+        switch(V::RowLabels),
         sep(),
         grey("Column Header"),
         grey("Row Header"),
-        grey("Column Grid"),
-        grey("Row Grid"),
+        sep(),
+        switch(V::ColumnGrid),
+        switch(V::RowGrid),
         grey("Page Break Preview Lines"),
     ]
 }

@@ -154,6 +154,10 @@ struct Notes {
     group_roles_dropped: usize,
     /// Sheets with a worksheet filter: the file written here holds no filter.
     filters_dropped: usize,
+    /// Sheets with a long name or a tab showing it (T90), which the file written here does not hold.
+    sheet_names_dropped: usize,
+    /// Sheets with hidden label rows, row labels or grid lines (T92), which the file written here does not hold.
+    sheet_views_dropped: usize,
     /// Sheets with frozen panes: the file written here holds none.
     frozen_dropped: usize,
     /// Sheets with conditional formatting rules: the file written here holds none.
@@ -319,6 +323,8 @@ impl Writer {
             })
             .collect();
         self.notes.filters_dropped += usize::from(sheet.filter.is_some());
+        self.notes.sheet_names_dropped += usize::from(!sheet.long_name.is_empty() || !sheet.tab_label.is_default());
+        self.notes.sheet_views_dropped += usize::from(!sheet.view.is_default());
         self.notes.frozen_dropped += usize::from(!sheet.frozen.is_none());
         self.notes.cond_formats_dropped += usize::from(!sheet.cond_formats.is_empty());
         self.notes.cell_formats_dropped += usize::from(!sheet.cell_formats.is_empty());
@@ -730,6 +736,18 @@ impl Writer {
             warnings.push(format!(
                 "{} column(s) have a data range (Set As Begin or Set As End), which the project file written here does not hold; Origin shows and plots all their rows.",
                 n.ranges_dropped
+            ));
+        }
+        if n.sheet_views_dropped > 0 {
+            warnings.push(format!(
+                "{} sheet(s) hide label rows, row labels or grid lines, which the project file written here does not hold; Origin shows them.",
+                n.sheet_views_dropped
+            ));
+        }
+        if n.sheet_names_dropped > 0 {
+            warnings.push(format!(
+                "{} sheet(s) have a long name or show it on their tab, which the project file written here does not hold; Origin shows their short names.",
+                n.sheet_names_dropped
             ));
         }
         if n.filters_dropped > 0 {

@@ -141,6 +141,7 @@ struct SheetNameDialog {
     book: WindowId,
     sheet: usize,
     name: String,
+    long_name: String,
 }
 
 pub struct SheafApp {
@@ -205,6 +206,8 @@ pub struct SheafApp {
     sampling: Option<crate::dialogs::sampling::SamplingDialog>,
     /// The column header's Copy Columns to....
     copy_columns: Option<crate::dialogs::copy_columns::CopyColumnsDialog>,
+    /// The sheet tab's Navigate....
+    sheet_navigate: Option<crate::dialogs::sheet_navigate::SheetNavigateDialog>,
     show_x: Option<crate::dialogs::sampling::ShowXDialog>,
     /// The saved user templates as last read from the folder (at start and after a change).
     user_templates: Vec<String>,
@@ -328,6 +331,7 @@ impl SheafApp {
             fill_pattern: None,
             sampling: None,
             copy_columns: None,
+            sheet_navigate: None,
             show_x: None,
             user_templates: startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default(),
             power: None,
@@ -2958,9 +2962,39 @@ impl SheafApp {
                     state.clear_selection();
                 }
             }
+            SheetOp::DuplicateWithoutData => {
+                match self.doc.edit("Duplicate sheet without data", |p| p.duplicate_sheet_without_data(book, active)) {
+                    Ok(_) => {
+                        if let Some(state) = self.books.get_mut(&book) {
+                            state.clear_selection();
+                        }
+                    }
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
+            SheetOp::Navigate => {
+                self.sheet_navigate = Some(crate::dialogs::sheet_navigate::SheetNavigateDialog::new(book, active));
+            }
+            SheetOp::ToggleView(switch) => {
+                self.doc.apply("Worksheet view", |p| {
+                    if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(active)) {
+                        s.view.toggle(switch);
+                    }
+                });
+            }
+            SheetOp::ShowName(label) => {
+                if b.sheets[active].tab_label != label {
+                    self.doc.apply("Sheet name to show", |p| {
+                        if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(active)) {
+                            s.tab_label = label;
+                        }
+                    });
+                }
+            }
             SheetOp::RenameDialog => {
                 let name = b.sheets[active].name.clone();
-                self.sheet_name = Some(SheetNameDialog { book, sheet: active, name });
+                let long_name = b.sheets[active].long_name.clone();
+                self.sheet_name = Some(SheetNameDialog { book, sheet: active, name, long_name });
             }
         }
     }
@@ -3107,6 +3141,20 @@ impl SheafApp {
         match self.doc.edit("Plot columns", |p| p.plot_with_user_template(&template, &ys)) {
             Ok(_) => self.say(format!("Plotted {} column(s) with the template {}", ys.len(), template.name)),
             Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+        }
+    }
+
+    /// Navigate Worksheets: OK (or a double click) goes to the picked sheet.
+    fn show_sheet_navigate(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::sheet_navigate::NavigateOutcome;
+        let Some(d) = &mut self.sheet_navigate else { return };
+        match d.show(ctx, self.doc.project()) {
+            NavigateOutcome::Open => {}
+            NavigateOutcome::Closed => self.sheet_navigate = None,
+            NavigateOutcome::Go { book, sheet } => {
+                self.sheet_navigate = None;
+                self.apply(Action::SelectSheet { book, sheet }, ctx);
+            }
         }
     }
 
@@ -3856,6 +3904,7 @@ impl SheafApp {
             || self.fill_pattern.is_some()
             || self.sampling.is_some()
             || self.copy_columns.is_some()
+            || self.sheet_navigate.is_some()
             || self.show_x.is_some()
             || self.power.is_some()
             || self.find.is_some()
@@ -4535,6 +4584,7 @@ impl SheafApp {
         self.show_fill_pattern(ctx);
         self.show_sampling(ctx);
         self.show_copy_columns(ctx);
+        self.show_sheet_navigate(ctx);
         if let Some(d) = &mut self.find {
             let book = d.book;
             match d.show(ctx) {
@@ -4693,13 +4743,18 @@ impl SheafApp {
             let mut open = true;
             let mut done = false;
             egui::Window::new("Sheet name").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
-                ui.horizontal(|ui| {
+                egui::Grid::new("sheet_name_grid").num_columns(2).show(ui, |ui| {
                     ui.label("Name");
                     ui.add(egui::TextEdit::singleline(&mut d.name).desired_width(200.0));
+                    ui.end_row();
+                    ui.label("Long Name");
+                    ui.add(egui::TextEdit::singleline(&mut d.long_name).desired_width(200.0));
+                    ui.end_row();
                 });
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {
-                        let (book, sheet, name) = (d.book, d.sheet, d.name.clone());
+                        let (book, sheet, name, long) =
+                            (d.book, d.sheet, d.name.clone(), d.long_name.trim().to_string());
                         let name = name.trim().to_string();
                         let taken = self.doc.project().workbook(book).is_none_or(|b| {
                             b.sheets.iter().enumerate().any(|(i, s)| i != sheet && s.name.eq_ignore_ascii_case(&name))
@@ -4713,6 +4768,7 @@ impl SheafApp {
                             self.doc.apply("Rename sheet", |p| {
                                 if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet)) {
                                     s.name = name;
+                                    s.long_name = long;
                                 }
                             });
                         }

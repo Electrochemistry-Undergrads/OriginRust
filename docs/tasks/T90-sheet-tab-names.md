@@ -1,6 +1,6 @@
 # T90: Duplicate Without Data and Sheet Name to Show
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `sheet-tab`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13h): measured (Origin 2016's submenu is Long Name if available / Short Name / Long Name, per sheet; Duplicate Without Data appends SheetN with long name + " 1", columns and formulas without values), sheet long name in the model and the Name dialog, saved in `.sheaf`, named in the `.opj` warning. Left: sheet comments, Origin's empty-long-name case.
 **Size:** M. **Source:** greyed inventory package B6 (the sheet tab's Duplicate Without Data and Sheet
 Name to Show > Short Name, Long Name, Both).
 **Spec:** `docs/spec/workbook-model.md` (a new section).

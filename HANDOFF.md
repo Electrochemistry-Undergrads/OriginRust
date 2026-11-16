@@ -77,8 +77,8 @@ frame/background. Placement aligns visible legend bounds, keeping long labels gr
 and entries clear of the axes. Empty and populated template paths agree; the Legend editor,
 Undo, `.sheaf` and `.opj` companions retain the anchor. Bare `.opj` writes a fixed position with
 a loss warning. Graphing 21.12 records 24 native controls/readbacks and remaining spacing and
-extra-column membership limits. Fmt, strict workspace/all-target Clippy, all 4,212 tests (eight
-ignored), seven focused regressions, four SVG goldens, inventory 312 and eight Python tests pass.
+extra-column membership limits. Fmt, strict workspace/all-target Clippy, all 4,214 tests (eight
+ignored), seven focused regressions, four SVG goldens, inventory 310 and eight Python tests pass.
 Four fresh CLI PNGs were inspected with frozen source/golden hashes and four test threads.
 Only this claim is released; the fixed push window expired at 11:15 CST. T61 remains partial.
 

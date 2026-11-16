@@ -42,7 +42,7 @@ pub(crate) struct PlotData<'a> {
     pub mask_color: sheaf_core::Color,
     /// Active filters on the source worksheets. Indices remain original worksheet rows.
     pub filters: Vec<&'a sheaf_core::rowfilter::RowFilter>,
-    pub err: Option<&'a [f64]>,
+    pub err: Option<Cow<'a, [f64]>>,
     /// X error values, drawn as horizontal error bars.
     pub xerr: Option<&'a [f64]>,
     /// The lower ends of the bars of a floating column plot.
@@ -64,6 +64,11 @@ pub(crate) struct PlotData<'a> {
     pub bar: Option<BarSlot>,
     /// The statistics a box chart plot draws; `None` for other kinds.
     pub boxed: Option<BoxStats>,
+    /// The boxes of a grouped box chart plot of indexed data (T76), one per level of the main group present in
+    /// its subset, at dodged positions; empty for other plots.
+    pub gboxes: Vec<BoxStats>,
+    /// The names of the categories at 1, 2, ... of a plot of indexed data (the levels of its main group).
+    pub categories: Option<Vec<String>>,
     /// The density silhouette a violin plot draws (its box statistics are in `boxed`); `None`
     /// for other kinds.
     pub violin: Option<crate::violin::ViolinData>,
@@ -130,6 +135,8 @@ pub(crate) struct BoxStats {
     pub whisker_low: f64,
     pub whisker_high: f64,
     pub outliers: Vec<f64>,
+    /// The width of the box in X axis units ([`BOX_WIDTH`], less in a grouped box chart).
+    pub width: f64,
 }
 
 /// The slices of a pie chart plot.
@@ -163,7 +170,100 @@ pub(crate) fn box_stats(values: &[f64], pos: f64, label: String) -> Option<BoxSt
     let (whisker_low, whisker_high) = inside.fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(x), b.max(x)));
     let outliers = v.iter().copied().filter(|x| *x < lo_fence || *x > hi_fence).collect();
     let mean = v.iter().sum::<f64>() / v.len() as f64;
-    Some(BoxStats { pos, label, q1, median, q3, mean, whisker_low, whisker_high, outliers })
+    Some(BoxStats { pos, label, q1, median, q3, mean, whisker_low, whisker_high, outliers, width: BOX_WIDTH })
+}
+
+/// Reads the rows of an indexed plot (T76) as its bars or boxes: the Y values of the rows are split by the levels
+/// of the main group column (the categories 1, 2, ... of the X axis, in sorted order, over every row with a data
+/// value so that all subgroup plots share the positions) and, when the plot has a subset, by a level of the second
+/// group column. A column plot gets the mean of each category (a category without rows in its subset has no bar)
+/// and error values; a box plot gets the boxes of the categories of its subset, dodged next to those of the other
+/// subgroup plots (`slot` of `slots`). Returns false when nothing can be drawn.
+fn indexed_data(project: &Project, pd: &mut PlotData, slot: usize, slots: usize) -> bool {
+    use sheaf_core::indexed::{level_text, sort_levels};
+    let Some(ix) = pd.plot.indexed.as_ref() else { return false };
+    let Some(group) = project.column(ix.group) else { return false };
+    let subset = ix.subset.as_ref().and_then(|(c, l)| project.column(*c).map(|c| (c, l.as_str())));
+    if ix.subset.is_some() && subset.is_none() {
+        return false;
+    }
+    // Every shown row with a data value and a level, with its level and whether it is in the subset.
+    let rows: Vec<(String, f64, bool)> = pd
+        .rows()
+        .filter_map(|r| {
+            let v = pd.y.get(r).copied().filter(|v| v.is_finite())?;
+            let level = level_text(group, r)?;
+            let inside = subset.is_none_or(|(c, l)| level_text(c, r).as_deref() == Some(l));
+            Some((level, v, inside))
+        })
+        .collect();
+    let mut names: Vec<String> = Vec::new();
+    for (l, _, _) in &rows {
+        if !names.contains(l) {
+            names.push(l.clone());
+        }
+    }
+    sort_levels(&mut names);
+    if names.is_empty() {
+        return false;
+    }
+    let values_of = |k: usize| -> Vec<f64> {
+        rows.iter().filter(|(l, _, inside)| *inside && *l == names[k]).map(|(_, v, _)| *v).collect()
+    };
+    pd.mask = None;
+    pd.filters.clear();
+    pd.xerr = None;
+    pd.base = None;
+    pd.start = 0;
+    pd.x_format = None;
+    if pd.plot.kind == PlotKind::Box {
+        let band = BOX_WIDTH / slots as f64;
+        let mut boxes = Vec::new();
+        for (k, name) in names.iter().enumerate() {
+            let centre = (k + 1) as f64 - BOX_WIDTH / 2.0 + (slot as f64 + 0.5) * band;
+            if let Some(mut b) = box_stats(&values_of(k), centre, name.clone()) {
+                b.width = band;
+                boxes.push(b);
+            }
+        }
+        if boxes.is_empty() {
+            return false;
+        }
+        pd.x = Some(Cow::Owned(boxes.iter().map(|b| b.pos).collect()));
+        pd.y = Cow::Owned(boxes.iter().map(|b| b.median).collect());
+        pd.end = boxes.len();
+        pd.err = None;
+        pd.gboxes = boxes;
+    } else {
+        let mut means = Vec::new();
+        let mut errs = Vec::new();
+        for k in 0..names.len() {
+            let v = values_of(k);
+            let n = v.len() as f64;
+            let mean = v.iter().sum::<f64>() / n;
+            let sd = if v.len() > 1 {
+                (v.iter().map(|x| (x - mean) * (x - mean)).sum::<f64>() / (n - 1.0)).sqrt()
+            } else {
+                f64::NAN
+            };
+            means.push(if v.is_empty() { f64::NAN } else { mean });
+            errs.push(match ix_error(pd.plot) {
+                sheaf_core::graph::IndexedError::None => f64::NAN,
+                sheaf_core::graph::IndexedError::Sd => sd,
+                sheaf_core::graph::IndexedError::Se => sd / n.sqrt(),
+            });
+        }
+        pd.x = Some(Cow::Owned((1..=names.len()).map(|k| k as f64).collect()));
+        pd.end = means.len();
+        pd.y = Cow::Owned(means);
+        pd.err = (ix_error(pd.plot) != sheaf_core::graph::IndexedError::None).then_some(Cow::Owned(errs));
+    }
+    pd.categories = Some(names);
+    true
+}
+
+fn ix_error(plot: &Plot) -> sheaf_core::graph::IndexedError {
+    plot.indexed.as_ref().map_or(sheaf_core::graph::IndexedError::None, |i| i.error)
 }
 
 /// The bins of a histogram plot as the points of a column plot: bin centres and counts. `None`
@@ -320,7 +420,7 @@ impl PlotData<'_> {
     }
 
     pub fn err_at(&self, i: usize) -> f64 {
-        self.err.and_then(|e| e.get(i)).copied().unwrap_or(f64::NAN)
+        self.err.as_deref().and_then(|e| e.get(i)).copied().unwrap_or(f64::NAN)
     }
 }
 
@@ -390,6 +490,14 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
     let mut plots = Vec::new();
     let mut boxes = 0usize;
     let mut ridges = 0usize;
+    // The visible grouped box plots of indexed data share the width of a box; each has its slot.
+    let indexed_boxes: Vec<usize> = layer
+        .plots
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p.visible && p.kind == PlotKind::Box && p.indexed.is_some())
+        .map(|(i, _)| i)
+        .collect();
     for (index, (plot, place)) in layer.plots.iter().zip(places).enumerate().filter(|(_, (p, _))| p.visible) {
         let Some(y) = project.numeric(plot.y) else { continue };
         let x = plot.x.and_then(|id| project.numeric(id));
@@ -423,7 +531,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             mask,
             mask_color: project.mask_color_rgb(),
             filters: project.plot_row_filters(plot),
-            err,
+            err: err.map(Cow::Borrowed),
             xerr,
             base,
             stack: None,
@@ -436,6 +544,8 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             member: place.member,
             bar: None,
             boxed: None,
+            gboxes: Vec::new(),
+            categories: None,
             violin: None,
             ridge: None,
             pie: None,
@@ -455,6 +565,12 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             },
         };
         match plot.kind {
+            PlotKind::Column | PlotKind::Box if plot.indexed.is_some() => {
+                let slot = indexed_boxes.iter().position(|&i| i == index).unwrap_or(0);
+                if !indexed_data(project, &mut pd, slot, indexed_boxes.len().max(1)) {
+                    continue;
+                }
+            }
             PlotKind::Histogram => {
                 // The plot shows the counts of the bins of its Y values: one point per bin.
                 let values = pd.visible_values();
@@ -754,7 +870,8 @@ fn pile(plots: &mut [PlotData], idx: &[usize]) {
 /// empty row between two groups of bars does not count, a row with only its X missing does); 1 when
 /// that is not a number above 0.
 fn bar_spacing(pd: &PlotData) -> f64 {
-    if pd.x.is_none() {
+    // Indexed plots stand at the categories 1, 2, ..., whichever of them this subgroup lacks.
+    if pd.x.is_none() || pd.plot.indexed.is_some() {
         return 1.0;
     }
     let rows = pd.rows().filter(|&i| pd.val_at(i).is_finite()).count();
@@ -874,6 +991,21 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
                     add(pd.display_y(y));
                 }
             }
+            continue;
+        }
+        for b in &pd.gboxes {
+            if dim == Dim::X {
+                add(pd.display_x(b.pos - b.width / 2.0));
+                add(pd.display_x(b.pos + b.width / 2.0));
+            } else {
+                add(pd.display_y(b.whisker_low));
+                add(pd.display_y(b.whisker_high));
+                b.outliers.iter().for_each(|v| add(pd.display_y(*v)));
+                add(pd.display_y(b.q1));
+                add(pd.display_y(b.q3));
+            }
+        }
+        if !pd.gboxes.is_empty() {
             continue;
         }
         if let Some(b) = &pd.boxed {

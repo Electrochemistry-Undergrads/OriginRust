@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **375 greyed items: 272 in the menu bar, 20 on the toolbars, 83 in context menus.**
+original inventory baseline. This is not a new runtime audit. **368 greyed items: 266 in the menu bar, 19 on the toolbars, 83 in context menus.**
 
 ## How to read and keep this file
 
@@ -48,17 +48,19 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T70` | 0 |
 | `T71` | 0 |
 | `T73` | 0 |
+| `T75` | 0 |
+| `T76` | 0 |
 | `T78` | 0 |
 | `B2` | 51 |
 | `B3` | 22 |
-| `B4` | 26 |
+| `B4` | 23 |
 | `B5` | 33 |
 | `B6` | 31 |
 | `B7` | 8 |
 | `B8` | 16 |
 | `B9` | 13 |
 | `B11` | 10 |
-| `B12` | 16 |
+| `B12` | 12 |
 | `B13` | 7 |
 | `B14` | 44 |
 | `B15` | 21 |
@@ -66,7 +68,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 42 items, backlog packages (`B`) 313, not planned (`N`) 20.
+Briefs (`T`) hold 42 items, backlog packages (`B`) 306, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -76,7 +78,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### File
 - `B14` New: Matrix... · Image · Excel · Layout · Notes · Function Plot
-- `B12` New: Graph
 - `B11` New: From Template
 - `T63` Open Excel...
 - `B12` Open Sample Projects
@@ -84,8 +85,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B11` Save Workbook As Analysis Template... [Workbook]
 - `N` Add Word Bookmarks to Analysis Template... [Workbook]
 - `B11` Batch Processing... [Workbook, Graph]
-- `B12` Save Project without Data...
-- `B12` Duplicate Project without Data
 - `B14` Import: Image... · Binary 2D Array... [no window, Workbook]
 - `B12` Import: Re-Import Directly · Re-Import... [no window, Workbook]
 - `T63` Export: Graph as Image... · Multi-Page PDF... [no window, Workbook]
@@ -115,15 +114,14 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Plot
 - `T63` Line: Horizontal Step · Vertical Step · Spline Connected
-- `B4` Symbol: Scatter Central · Column Scatter
+- `B4` Symbol: Column Scatter
 - `B4` Line + Symbol: Line Series
-- `B4` Column/Bar/Pie: Grouped Columns (indexed data)
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
 - `B15` 3D Symbol/Bar/Vector: 3D Bars · 3D Scatter · 3D Trajectory · 3D Scatter + Error Bar · 3D Vector XYZ XYZ · 3D Vector XYZ dXdYdZ
 - `B8` Statistics: Probability Plot · Q-Q Plot
-- `B4` Statistics: Grouped Box Charts · Interval Plot · Histogram + Probabilities · Marginal Histograms · Marginal Box Charts · 2D Kernel Density · QC (X bar R) Chart · Pareto · Scatter Matrix
+- `B4` Statistics: Interval Plot · Histogram + Probabilities · Marginal Histograms · Marginal Box Charts · 2D Kernel Density · QC (X bar R) Chart · Pareto · Scatter Matrix
 - `B14` Contour/Heat Map: Color Fill · B/W Lines + Labels · Gray Scale Map · Heat Map · Polar Contour theta(X) r(Y) · Polar Contour r(X) theta(Y) · Ternary Contour
 - `B14` Profile: Contour Profiles · Image Profiles
 - `B4` Specialized: Wind Rose · Piper · Smith Chart · High-Low-Close · Vector XYAM · Vector XYXY · Zoom
@@ -214,7 +212,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ## Toolbars
 
-- `B12` Standard: New Graph
 - `B14` Standard: New Matrix · New Layout · New Notes
 - `T63` 2D Graphs: Bar · Stacked Area · Box Chart · Histogram · Bubble
 - `B4` 2D Graphs: High-Low-Close

@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 375 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 368 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -103,7 +103,9 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T73](T73-change-xy-ungroup.md) | Change X, Change Y, Ungroup on a plot (B3 slice 3) | S | 0 |
 | [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 22 |
 | [x] | [T71](T71-point-segments.md) | 2 and 3 Point Segment plots (B4 slice 2) | S | 0 |
-| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 26 |
+| [x] | [T75](T75-scatter-central.md) | Scatter Central (B4 slice 3) | S | 0 |
+| [x] | [T76](T76-grouped-indexed-plots.md) | Grouped Columns (indexed data), Grouped Box Charts (B4 slice) | M | 0 |
+| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label; Grouped Columns (indexed data) and Grouped Box Charts done as [T76](T76-grouped-indexed-plots.md)): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 23 |
 
 - **B1.** The graph view draws the page to fit the window. Add a view transform (zoom factor and
   scroll offset) in `crates/app/src/graph_view.rs` so hit-testing (`sheaf_plot::hit`) still works,
@@ -165,7 +167,7 @@ Backlog packages: write the brief first (step 3 above).
 |---|---|---|---|---|
 | [ ] | [T56](T56-user-graph-templates.md) | Save Template As and user graph templates (open; unverified start on branch `user-templates`) | M | 1 |
 | [ ] | B11 | Templates and themes: template library, From Template, analysis templates, Batch Processing, batch-plotting Duplicate, Theme Organizer, Save Format as Theme | L | 10 |
-| [ ] | B12 | Project and window management: New Graph, save/duplicate project without data, Re-Import, worksheet as image, View Windows, Folders List, folder Properties, sample projects | M | 16 |
+| [ ] | B12 | Project and window management: Re-Import, worksheet as image, View Windows, Folders List, folder Properties, sample projects (New Graph and save/duplicate project without data done as T77) | M | 12 |
 | [ ] | B13 | Tools: Options window, System Variables, Fitting Function Builder and Organizer, Import Filters Manager, project protection, audit log | L | 7 |
 
 - **B11** depends on T56. Analysis templates depend on recalculating analysis results (T03).

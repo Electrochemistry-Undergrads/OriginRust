@@ -2,7 +2,7 @@
 //! organizes them.
 
 use crate::column::{Column, ColumnData, Designation};
-use crate::graph::{ErrorStyle, Graph, LegendScope, Plot};
+use crate::graph::{ErrorStyle, Graph, Indexed, IndexedError, LegendScope, Plot};
 use crate::ids::{ColumnId, WindowId};
 use crate::multi_y::{MultiYError, MultiYKind, MultiYOptions, MultiYPlan};
 use crate::panels::{PanelError, PanelLayout, PanelPage, panel_layers};
@@ -294,6 +294,20 @@ pub enum ProjectError {
     SunburstNeedsValue,
     #[error("a sunburst plot cannot have a right Y axis; use one Y axis or another template")]
     SunburstNoRightAxis,
+    #[error(
+        "a grouped plot of indexed data needs exactly one numeric data column (designated Y; a numeric group column must be designated X or Group); select one"
+    )]
+    IndexedNeedsData,
+    #[error(
+        "a grouped plot of indexed data needs one or two group columns with levels besides the data column; select them"
+    )]
+    IndexedNeedsGroup,
+    #[error(
+        "a grouped plot of indexed data takes at most two group columns (got {0}); deeper hierarchies are not made yet"
+    )]
+    IndexedTooManyGroups(usize),
+    #[error("a grouped plot of indexed data cannot have a right Y axis; use one Y axis or another template")]
+    IndexedNoRightAxis,
     #[error("a stacked histograms graph cannot have a right Y axis; use one Y axis or another template")]
     StackedHistogramsNoRightAxis,
 }
@@ -792,6 +806,7 @@ impl Project {
             hexbin: Default::default(),
             parallel: Default::default(),
             treemap: Default::default(),
+            indexed: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,
@@ -943,6 +958,16 @@ impl Project {
             }
             return self.plot_treemap(&categories, value);
         }
+        if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
+            // The data is the one numeric column designated Y; every other given column is a group column.
+            let is_data = |p: &Self, c: ColumnId| {
+                p.numeric(c).is_some() && p.column(c).is_some_and(|c| c.designation == Designation::Y)
+            };
+            let data: Vec<ColumnId> = ys.iter().copied().filter(|c| is_data(self, *c)).collect();
+            let [y] = data[..] else { return Err(ProjectError::IndexedNeedsData) };
+            let groups: Vec<ColumnId> = ys.iter().copied().filter(|c| *c != y).collect();
+            return self.plot_indexed(template, &groups, y);
+        }
         if template == Template::Sunburst {
             // Like the treemap: the columns of text are the rings, in selection order (else those of the value
             // column's sheet); the value is the last numeric column.
@@ -1077,6 +1102,73 @@ impl Project {
                 for p in &mut l.plots {
                     p.treemap.categories = cats.clone();
                 }
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
+    /// Creates a grouped column plot ([`Template::GroupedColumns`]) or grouped box chart ([`Template::GroupedBox`])
+    /// of indexed data (T76): the rows of the numeric column `y` are split by the levels of one or two `groups`
+    /// columns. One group column gives one plot; with two, there is one plot per sorted level of the second, named
+    /// after the level, so the legend lists the subgroups and the first column's levels are on the X axis.
+    pub fn plot_indexed(
+        &mut self,
+        template: Template,
+        groups: &[ColumnId],
+        y: ColumnId,
+    ) -> Result<WindowId, ProjectError> {
+        for c in groups.iter().chain([&y]) {
+            self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
+        }
+        if self.numeric(y).is_none() {
+            return Err(ProjectError::IndexedNeedsData);
+        }
+        let mut cols: Vec<ColumnId> = Vec::new();
+        for c in groups {
+            if *c != y && !cols.contains(c) {
+                cols.push(*c);
+            }
+        }
+        match cols.len() {
+            0 => return Err(ProjectError::IndexedNeedsGroup),
+            1 | 2 => {}
+            n => return Err(ProjectError::IndexedTooManyGroups(n)),
+        }
+        // One plot for the whole data, or one per level of the second group column.
+        let subsets: Vec<Option<(ColumnId, String)>> = match cols.get(1) {
+            None => vec![None],
+            Some(second) => {
+                let levels = self.column(*second).map(crate::indexed::levels).unwrap_or_default();
+                levels.into_iter().map(|l| Some((*second, l))).collect()
+            }
+        };
+        if subsets.is_empty()
+            || cols.first().and_then(|c| self.column(*c)).is_none_or(|c| crate::indexed::levels(c).is_empty())
+        {
+            return Err(ProjectError::IndexedNeedsGroup);
+        }
+        let long_name = self.locate(y).map(|(b, _, _)| b.title_for_graph());
+        let graph = self.add_graph(template);
+        for subset in subsets {
+            if let Err(e) = self.add_plot(graph, 0, y) {
+                let _ = self.remove_window(graph);
+                return Err(e);
+            }
+            if let Some(p) = self.graph_mut(graph).and_then(|g| g.layers[0].plots.last_mut()) {
+                // The categories are the group levels, not an X column; error columns do not apply.
+                p.x = None;
+                p.y_error = None;
+                p.x_error = None;
+                p.label = subset.as_ref().map(|(_, l)| l.clone());
+                p.indexed = Some(Indexed { group: cols[0], subset, error: IndexedError::None });
+            }
+        }
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                l.apply_palette();
             }
             if let Some(name) = long_name {
                 g.long_name = name;
@@ -1228,6 +1320,9 @@ impl Project {
         }
         if template == Template::Sunburst {
             return Err(ProjectError::SunburstNoRightAxis);
+        }
+        if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
+            return Err(ProjectError::IndexedNoRightAxis);
         }
         if template == Template::StackedHistograms {
             return Err(ProjectError::StackedHistogramsNoRightAxis);

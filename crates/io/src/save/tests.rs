@@ -388,3 +388,28 @@ fn automatic_legend_position_survives_native_and_companion_saves() {
     assert!(reopened.companion_used);
     assert_eq!(reopened.project, p);
 }
+
+#[test]
+fn a_project_without_data_reloads_with_its_columns_and_no_values_in_both_formats() {
+    let mut p = project_with_graph();
+    p.add_graph(Template::Line); // a graph without plots as well
+    if let Some(Window::Workbook(b)) = p.windows.first_mut() {
+        b.sheets[0].columns[1].long_name = "Signal".into();
+        b.sheets[0].columns[1].units = "mV".into();
+    }
+    let stripped = p.without_data();
+    let dir = scratch("nodata");
+    for name in ["a.sheaf", "b.opj"] {
+        let path = dir.join(name);
+        save_project(&stripped, &path).unwrap();
+        let back = open_project(&path).unwrap().project;
+        let book = back.workbooks().next().unwrap();
+        assert_eq!(book.sheets[0].columns.len(), 2, "{name}");
+        assert!(book.sheets[0].columns.iter().all(|c| c.is_empty()), "{name}");
+        assert_eq!(book.sheets[0].columns[1].long_name, "Signal", "{name}");
+        assert_eq!(book.sheets[0].columns[1].units, "mV", "{name}");
+        assert_eq!(back.windows.iter().filter(|w| matches!(w, Window::Graph(_))).count(), 2, "{name}");
+    }
+    // The project that was saved from is not touched.
+    assert_eq!(p.workbooks().next().unwrap().sheets[0].columns[0].len(), 3);
+}

@@ -213,6 +213,12 @@ pub enum ImportPick {
 #[derive(Debug, Clone)]
 pub enum Action {
     NewProject,
+    /// File > New > Graph and the Standard toolbar button: an empty graph.
+    NewGraph,
+    /// File > Save Project without Data...: a copy without values to a file of its own.
+    SaveProjectWithoutData,
+    /// File > Duplicate Project without Data: an unsaved copy without values replaces the project.
+    DuplicateProjectWithoutData,
     OpenProject,
     SaveProject,
     SaveProjectAs,

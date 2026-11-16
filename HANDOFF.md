@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **375 listed item locations** at the planning
-  baseline (272 menu bar, 20 toolbar, 83 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **368 listed item locations** at the planning
+  baseline (266 menu bar, 19 toolbar, 83 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -70,6 +70,29 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## Latest integration
+
+T78 recent lists (`recent-lists`, macOS, no Origin): Most Recently Used submenus at the end of the Plot,
+Worksheet, Analysis and Statistics menus (up to 10 menu-bar commands each, newest first, re-resolved against the
+current window when chosen) and Recent Exports (files written by graph, ASCII and Excel exports; choosing one reopens
+that export dialog on its window and folder). Both persist in `recent.json` (T38). New `app/mru.rs`, spec
+`recent-lists.md`; Origin's theme entries and re-run semantics are unmeasured (B10 done).
+
+T77 New Graph and projects without data (`new-graph-nodata`, macOS, no Origin): File > New > Graph and the
+Standard toolbar's New Graph add an empty graph from the default template (one undo step); File > Save Project
+without Data... writes a copy with every value, mask, note, format, filter and fit mark removed (structure,
+formulas and graphs kept), never over the open project's own file; Duplicate Project without Data offers to save,
+then opens that copy as an untitled project (as Origin's later Clone Project). New `core/without_data.rs`.
+Origin 2016's behaviour of the two items is undocumented; unmeasured choices in graphing 25 and project-file-format.
+
+T76 grouped indexed plots (`grouped-indexed`, macOS, no Origin; renumbered from T75): Plot > Column/Bar/Pie >
+Grouped Columns (indexed data) and Plot > Statistics > Grouped Box Charts split one data column by one or two
+group columns (selection: group columns + one Y column; `sheaf plot -t grouped-columns|grouped-box --group G1[,G2]`).
+Sorted categories on X, one plot per subgroup level (legend), mean bars with optional SD/SE (Plot Details Error Bar
+tab, `--group-error`), dodged boxes with the existing box statistics. New `core/indexed.rs`, `Plot.indexed`.
+Origin's dialog, statistic choices, table tick labels and >2 groups are leftovers (graphing 14.28, unmeasured).
+
+T75 (`scatter-central`, B4 slice 3): Plot > Symbol > Scatter Central as Origin 2016's (both axes at
+-50 %, boxed frame, titles at the axis ends); `Axis::offset_pct` now works for X (graphing 18.13).
 
 T73 (`change-xy`, B3 slice 3): plot right-click Change X, Change Y and Ungroup as measured in Origin
 2016 (column lists, greying, no rescale, colours kept on Ungroup; graphing 15.7d).
@@ -228,10 +251,7 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
 | `copy-format` | Claude Windows, "continue all tasks" | B2 slice 1 as new brief T72: Copy Format (All, style groups) and Paste Format on graph, axis, legend and page; new core format_clip.rs, menu items, Paste Format dialog | claimed 2026-11-15; no shape selection/resize, object align/group/order, object cut/copy/paste, T58/T59 toolbar |
 | `b5-fill` | Claude Windows, "t30-origin" | B5 slice as new brief T74: Column > Fill Column With A set of Numbers / Date/Time values / Text&Numeric values (Origin patternN/D/T, measured), menus and column-header context menu | claimed 2026-11-15; worktree wf_c03644a9-997-1, build target/wf-excel; not Row Numbers/random fills (T63), no other B5 items |
-| `grouped-indexed` | Claude macOS, "mac-format-bar" | B4 slice as new brief T76 (renumbered from T75, which `scatter-central` also took): Plot > Column/Bar/Pie > Grouped Columns (indexed data) and Plot > Statistics > Grouped Box Charts (data grouped by an index/category column) | claimed 2026-11-15; worktree `.claude/worktrees/grouped-indexed`, `target/wt-grouped`; core template/plot grouping, plot drawing, Plot menu items, ops/mcp template names, graphing spec section, T75 brief. Built from Origin's documentation on macOS (no Origin), unmeasured choices labelled. Not Line Series, Column Scatter, other statistics/stock/specialized plots, T71 segments or other sessions' scopes |
-| `scatter-central` | Claude Windows, session fe4b37eb | B4 slice 3 as new brief T75: Plot > Symbol > Scatter Central (both axes at 50 % of the frame): X axis offset like the Y axis offset_pct of T61 (core axis field use, plot layout/hit-testing of an inner X axis), template, menu, Origin 2016 measurements | claimed 2026-11-15; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not Line Series, Column Scatter or other B4 items; no T72/T74/grouped-indexed scopes |
-| `new-graph-nodata` | Claude macOS, "mac-format-bar" | B12 slice as new brief T77: File > New > Graph and Standard toolbar New Graph (empty graph from the default template), File > Save Project without Data... and Duplicate Project without Data | claimed 2026-11-16; worktree `.claude/worktrees/new-graph-nodata`, `target/wt-nodata`; app File menu/Standard toolbar items, io/core project copy without data, own tests, spec section, T77 brief. Built from Origin's documentation on macOS (no Origin). Not Re-Import, Worksheet as Image, View Windows, folders, sample projects, B6 sheet-tab Duplicate Without Data or other sessions' scopes |
-| `recent-lists` | Claude macOS, "mac-format-bar" | B10 as new brief T78: Most Recently Used lists in the Plot, Worksheet, Analysis and Statistics menus; File > Export > Recent Exports and the graph Recent Exports | claimed 2026-11-16; worktree `.claude/worktrees/recent-lists`, `target/wt-recent2`; app recent.rs/new MRU module, the six menu entries, export history reuse (T05 last successful exports), own tests, spec section, T78 brief. Built from Origin's documentation on macOS. Not the plot types themselves (T76), File recent files (T38) behaviour changes, export dialog themes or other sessions' scopes |
+| `column-scatter` | Claude Windows, session fe4b37eb | B4 slice as new brief T79: Plot > Symbol > Column Scatter (Y columns as scatter by column position with Origin's offset/jitter, categorical X labels); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not Grouped Columns/T76, Line Series or statistics plots; no other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

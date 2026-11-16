@@ -296,7 +296,7 @@ fn build(bar: Bar) -> Vec<Item> {
         Bar::Standard => vec![
             b(Project, "New Project", Cmd::NewProject, "Project"),
             b(Workbook, "New Workbook", Cmd::NewWorkbook, "Worksheet"),
-            g(Graph, "New Graph"),
+            b(Graph, "New Graph", Cmd::NewGraph, "Graph"),
             g(Matrix, "New Matrix"),
             g(Layout, "New Layout"),
             g(Notes, "New Notes"),

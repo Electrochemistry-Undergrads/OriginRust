@@ -69,6 +69,9 @@ pub enum WindowKind {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Cmd {
     NewProject,
+    NewGraph,
+    SaveProjectNoData,
+    DuplicateProjectNoData,
     NewWorkbook,
     OpenProject,
     SaveProject,
@@ -628,8 +631,13 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         sub(
             "&New",
             [
-                vec![keyed("&Project", ctrl(Key::N), Cmd::NewProject), item("&Worksheet...", Cmd::NewWorkbook)],
-                greys(&["Matrix...", "Graph", "Image", "From Template", "Excel", "Layout", "Notes", "Function Plot"]),
+                vec![
+                    keyed("&Project", ctrl(Key::N), Cmd::NewProject),
+                    item("&Worksheet...", Cmd::NewWorkbook),
+                    grey("Matrix..."),
+                    item("&Graph", Cmd::NewGraph),
+                ],
+                greys(&["Image", "From Template", "Excel", "Layout", "Notes", "Function Plot"]),
             ]
             .concat(),
         ),
@@ -666,8 +674,8 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     }
     v.extend([
         sep(),
-        grey("Save Project without Data..."),
-        grey("Duplicate Project without Data"),
+        item("Save Project without Data...", Cmd::SaveProjectNoData),
+        item("Duplicate Project without Data", Cmd::DuplicateProjectNoData),
         sep(),
         keyed("&Print...", ctrl(Key::P), Cmd::Print),
         item("Print Pre&view", Cmd::PrintPreview),
@@ -876,7 +884,7 @@ fn plot_menu() -> Vec<Entry> {
                 vec![
                     item("&Scatter", Cmd::Plot(Template::Scatter)),
                     item("Scatter + Rug", Cmd::Plot(Template::ScatterRug)),
-                    grey("Scatter Central"),
+                    item("Scatter Central", Cmd::Plot(Template::ScatterCentral)),
                     grey("Column Scatter"),
                 ],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
@@ -906,7 +914,7 @@ fn plot_menu() -> Vec<Entry> {
             [
                 vec![item("&Column", Cmd::Plot(Template::Column))],
                 vec![item("Column + Label", Cmd::Plot(Template::ColumnLabel))],
-                greys(&["Grouped Columns (indexed data)"]),
+                vec![item("Grouped Columns (indexed data)", Cmd::Plot(Template::GroupedColumns))],
                 vec![
                     item("Bar", Cmd::Plot(Template::Bar)),
                     item("Stacked Column", Cmd::Plot(Template::StackedColumn)),
@@ -988,7 +996,7 @@ fn plot_menu() -> Vec<Entry> {
             "S&tatistics",
             [
                 vec![item("Box Chart", Cmd::Plot(Template::BoxChart))],
-                greys(&["Grouped Box Charts", "Interval Plot"]),
+                vec![item("Grouped Box Charts", Cmd::Plot(Template::GroupedBox)), grey("Interval Plot")],
                 vec![
                     item("Violin Plot", Cmd::Plot(Template::Violin)),
                     item("Violin with Box", Cmd::Plot(Template::ViolinBox)),
@@ -2309,6 +2317,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
     let sorting = || if c.sorting_columns.is_empty() { Err(NEED_COLUMNS) } else { Ok(c.sorting_columns.clone()) };
     Ok(match cmd {
         Cmd::NewProject => Action::NewProject,
+        Cmd::NewGraph => Action::NewGraph,
+        Cmd::SaveProjectNoData => Action::SaveProjectWithoutData,
+        Cmd::DuplicateProjectNoData => Action::DuplicateProjectWithoutData,
         Cmd::NewWorkbook => Action::NewWorkbook,
         Cmd::OpenProject => Action::OpenProject,
         Cmd::SaveProject => Action::SaveProject,

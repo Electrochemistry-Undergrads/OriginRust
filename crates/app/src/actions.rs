@@ -314,6 +314,11 @@ pub enum Action {
     },
     /// Tools > Theme Organizer...: list the graph themes and apply one to the active graph.
     ThemeOrganizer,
+    /// Plot > System Templates...: the window of the built-in templates, for these columns.
+    SystemTemplates {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     /// File > New > From Template: an empty graph from the saved template of this name, or (None,
     /// More...) from a template file picked with the system dialog.
     NewFromTemplate(Option<String>),

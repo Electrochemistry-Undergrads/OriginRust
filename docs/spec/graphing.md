@@ -4918,6 +4918,15 @@ datasets are styled, the default folder and name).
   separator and More... (a file picker). Sheaf lists the saved user templates, then More... (a file picker
   for `.sheaftemplate` files starting in the templates folder); either makes a new graph in the template's
   look without data (no plots; axes, text and page as saved), one undo step ("New graph from template").
+- **Plot > System Templates...** (T104, measured 2026-11-16 in Origin 2016, `re-workspace/scratch/t104`):
+  Origin's "System Templates" window has a Category tree under "Graph Template (*.otp)" (Line, Symbol, Line &
+  Symbol, Columns & Bars, Multi-Curve, 3D XYY, Statistics, Area, Contour, Specialized, Stock, 3D Surface, 3D
+  Symbols & Bars & Vector, Image), a Preview Window (picking Line drew its sample graph), Description,
+  Location (the `.otp` file) and Date Modified, and Plot Setup..., Plot (greyed until a template is picked)
+  and Cancel. Sheaf's window lists its 62 built-in templates in those categories (only the ones it has;
+  Sheaf files templates Origin keeps elsewhere by its own choice, `dialogs/system_templates.rs`), previews a
+  picked template with sample data, and Plot plots the selected columns with it (the Plot menu's own action,
+  one undo step). Not done: Plot Setup..., user templates in the tree (Plot > User Templates has them).
 - Tests: `crates/core/src/user_template/tests.rs`, `crates/io/src/user_templates/tests.rs`,
   `crates/plot/src/user_template_tests.rs`, `crates/app/src/app/ui_tests/user_templates.rs`,
   `crates/cli/tests/user_templates.rs`.

@@ -222,6 +222,8 @@ pub struct SheafApp {
     /// Save Format as Theme (with the copied axis format) and the Theme Organizer (T102).
     save_theme: Option<(crate::dialogs::graph_themes::SaveThemeDialog, sheaf_core::format_clip::FormatClip)>,
     theme_organizer: Option<crate::dialogs::graph_themes::ThemeOrganizer>,
+    /// Plot > System Templates....
+    system_templates: Option<crate::dialogs::system_templates::SystemTemplatesDialog>,
     /// The Project Explorer's active folder when last checked, so that a change brings a window of the
     /// new folder forward (View Windows, T100).
     last_folder: Vec<usize>,
@@ -356,6 +358,7 @@ impl SheafApp {
             folder_props: None,
             save_theme: None,
             theme_organizer: None,
+            system_templates: None,
             last_folder: Vec::new(),
             show_x: None,
             user_templates: startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default(),
@@ -1836,6 +1839,10 @@ impl SheafApp {
                 }
             }
             Action::NewFromTemplate(name) => self.new_from_template(name),
+            Action::SystemTemplates { book, columns } => {
+                self.system_templates =
+                    Some(crate::dialogs::system_templates::SystemTemplatesDialog::new(book, columns));
+            }
             Action::ThemeOrganizer => {
                 let entries =
                     self.startup.graph_themes_dir.as_deref().map(sheaf_io::graph_themes::list).unwrap_or_default();
@@ -4245,6 +4252,7 @@ impl SheafApp {
             || self.folder_props.is_some()
             || self.save_theme.is_some()
             || self.theme_organizer.is_some()
+            || self.system_templates.is_some()
             || self.show_x.is_some()
             || self.power.is_some()
             || self.find.is_some()
@@ -4938,6 +4946,18 @@ impl SheafApp {
         self.show_batch_plot(ctx);
         self.show_folder_props(ctx);
         self.show_graph_themes(ctx);
+        if let Some(d) = &mut self.system_templates {
+            use crate::dialogs::system_templates::SystemTemplatesOutcome;
+            match d.show(ctx) {
+                SystemTemplatesOutcome::Open => {}
+                SystemTemplatesOutcome::Closed => self.system_templates = None,
+                SystemTemplatesOutcome::Plot(template) => {
+                    let (book, columns) = (d.book, d.columns.clone());
+                    self.system_templates = None;
+                    self.apply(Action::PlotColumns { book, columns, template }, ctx);
+                }
+            }
+        }
         if self.panels.explorer.folder != self.last_folder {
             self.last_folder = self.panels.explorer.folder.clone();
             self.follow_folder();

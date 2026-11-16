@@ -127,6 +127,8 @@ pub enum Cmd {
     ThemeOrganizer,
     /// File > New > From Template > More...: pick a template file (T103).
     NewFromTemplateFile,
+    /// Plot > System Templates... (T104).
+    SystemTemplates,
     /// Edit > Replace... (Ctrl+H) in a workbook.
     ReplaceInSheets,
     ExportGraph,
@@ -1197,7 +1199,7 @@ fn plot_menu() -> Vec<Entry> {
         ),
         grey_sub("Stoc&k", &["High-Low-Close", "Japanese Candlestick", "OHLC Bar Chart", "OHLC-Volume", "Line"]),
         sep(),
-        grey("System Templates..."),
+        item("System Templates...", Cmd::SystemTemplates),
         // Sheaf's own graph style is the one template that has no Origin counterpart.
         sub(
             "&User Templates",
@@ -2641,6 +2643,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::ThemeOrganizer => Action::ThemeOrganizer,
         Cmd::NewFromTemplateFile => Action::NewFromTemplate(None),
+        Cmd::SystemTemplates => Action::SystemTemplates { book: book?, columns: c.selected.to_vec() },
         Cmd::BatchPlot(columns) => Action::BatchPlot { graph: c.graph.ok_or(NEED_GRAPH)?, columns: *columns },
         Cmd::Reimport(choose) => {
             let book = book?;

@@ -1,6 +1,6 @@
 # T104: Plot > System Templates...
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `system-templates`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 24): Origin's window measured; Sheaf's lists the built-in templates by category with a preview and plots the selected columns. Left: Plot Setup....
 **Size:** S. **Source:** greyed inventory package B11 (Plot > System Templates...).
 **Spec:** `docs/spec/graphing.md` section 24 (templates).
 

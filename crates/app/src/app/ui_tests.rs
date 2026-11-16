@@ -8994,6 +8994,7 @@ mod sheet_navigate;
 mod sheet_tab;
 mod stats3;
 mod swap_transpose;
+mod system_templates;
 #[path = "ui_tests/trendline.rs"]
 mod trendline;
 mod user_templates;

@@ -141,3 +141,38 @@ fn undo_ai_changes_also_clears_shape_selection_when_the_stack_changes() {
     assert_eq!(graph_ui(&h).selected, None, "Undo AI uses the ordinary shape selection cleanup");
     assert!(h.state().status.contains("Undone 1 AI change"));
 }
+
+#[test]
+fn object_edit_toolbar_orders_the_selected_shape_with_one_undo_step() {
+    const FRONT: &str = "Object Edit toolbar: Bring to Front";
+    const BACK: &str = "Object Edit toolbar: Send to Back";
+    let enabled = |h: &Harness<'static, SheafApp>, label: &str| !h.get_by_label(label).accesskit_node().is_disabled();
+    let mut h = setup("toolbar");
+    let original = shapes(&h);
+    let id = graph(&h).id;
+    // Nothing selected: both buttons are state-disabled.
+    assert!(!enabled(&h, FRONT) && !enabled(&h, BACK));
+    // A selected non-shape object keeps them disabled.
+    h.state_mut().graphs.get_mut(&id).unwrap().selected = Some((0, ObjectKind::Legend));
+    settle(&mut h);
+    assert!(!enabled(&h, FRONT) && !enabled(&h, BACK));
+    // The top shape (index 1): it can go to the back only.
+    h.state_mut().graphs.get_mut(&id).unwrap().selected = Some((0, ObjectKind::Shape(1)));
+    settle(&mut h);
+    assert!(!enabled(&h, FRONT) && enabled(&h, BACK));
+    h.get_by_label(BACK).click();
+    settle(&mut h);
+    assert_eq!(shapes(&h), vec![original[1].clone(), original[0].clone()]);
+    assert_eq!(graph_ui(&h).selected, Some((0, ObjectKind::Shape(0))));
+    assert_eq!(h.state().doc.undo_label(), Some("Push drawn object to back"));
+    assert!(enabled(&h, FRONT) && !enabled(&h, BACK));
+    h.get_by_label(FRONT).click();
+    settle(&mut h);
+    assert_eq!(shapes(&h), original);
+    assert_eq!(h.state().doc.undo_label(), Some("Bring drawn object to front"));
+    // One undo step per click.
+    ctrl(&mut h, egui::Key::Z);
+    assert_eq!(shapes(&h), vec![original[1].clone(), original[0].clone()]);
+    ctrl(&mut h, egui::Key::Z);
+    assert_eq!(shapes(&h), original);
+}

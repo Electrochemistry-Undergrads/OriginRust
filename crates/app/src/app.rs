@@ -2987,6 +2987,12 @@ impl SheafApp {
                 let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
                 project.graph(g)?.layers.get(layer).map(|l| l.stack)
             }),
+            selected_shape: graph.and_then(|g| {
+                let (layer, sheaf_plot::scene::ObjectKind::Shape(shape)) = self.graphs.get(&g)?.selected? else {
+                    return None;
+                };
+                Some((layer, shape, project.graph(g)?.layers.get(layer)?.shapes.len()))
+            }),
             can_cumulate: graph.is_some_and(|g| {
                 let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
                 project.graph(g).and_then(|gr| gr.layers.get(layer)).is_some_and(sheaf_core::stack::layer_cumulates)

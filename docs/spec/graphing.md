@@ -2771,6 +2771,13 @@ Everything below is Sheaf's own choice, unmeasured, and must be checked against 
 
 **Not done.** Dragging the label, a free decimals setting, a unit-less "per decade" switch, attaching an annotation to a plot by position instead of by column, annotations across plots, slope annotations in the Graph Slicer or copied with the layer's other objects.
 
+**Object Edit Bring to Front / Send to Back (T63 G).** In Sheaf the two Object Edit toolbar buttons
+dispatch the same `OrderShape` operation as the shape context menu (one undo step, selection follows
+the moved shape). They are enabled only when a drawn shape is selected and the move is possible
+(already frontmost / backmost greys the matching button); text, legend and axis-title selections keep
+them disabled (broader object ordering is B2). Not measured in Origin 2016 yet; the greyed-without-
+selection behaviour follows Origin's convention for Object Edit buttons.
+
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
 Measured on 2026-11-13 by opening Origin's Plot Details on a line plot (`tools/origin-ref/origin-dialog.ps1`,

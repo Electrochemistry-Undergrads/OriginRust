@@ -523,19 +523,57 @@ menu, Ctrl+U underlines a selected column, the X-Function is `wcellformat`. Not 
 Format Cells controls and defaults, Apply-to choices, Format > Worksheet's scope, Set Data Style,
 manual versus conditional precedence, sort behaviour and `.opj` storage.
 
-Sheaf (all unmeasured choices): the **Format Cells** window (cell/column/row menus, Format > Cell...)
-shows Font (Default or an installed family), Size (0 = Default), Bold/Italic/Underline, Use color
-with a Text Color button, Use fill with a Fill Color button, Horizontal Default/Left/Center/Right,
-Clear Formats, OK, Cancel, Apply (Apply enabled once something changed). It starts from the first
-selected cell and applies only what the user changed; OK and Apply are one undo step each ("Format
-cells"), Cancel and the close box are inert, Clear Formats is one step ("Clear formats"). With a
-label cell selected it formats that label row of the column. Format > Worksheet... and Set Data
-Style > Default stay grey: the worksheet-wide scope and the style are not measured. The row height
-stays 16 px whatever the size; the grid draws bold by painting the text twice (egui has no bold
-face) and maps fonts to egui's monospace family when the name says so, else proportional (installed
-fonts in the grid are a leftover). Print, worksheet images and PDF use the real family, size
-scaled by printed font / 12, italic, underline (a line under the text), colours, fills and
-alignment; they also show conditional colours. Model and rules: workbook-model.md 13b.
+Origin 2016 worksheet-toolbar measurements (Windows, 2026-11-15, synthetic two-column
+worksheet): selecting A1 shows Default: Arial and 9 pt. Bold and Italic change only A1; choosing
+Times New Roman changes that cell's glyph family. Opening the font-colour palette and choosing
+its red swatch in the same UI interaction paints only A1 red. A range containing 20 pt A1 and
+9 pt B1 has a blank Size field. The mixed Bold button follows A1, and clicking it clears Bold
+for both selected cells. The font-size step buttons remain disabled. Increasing a cell or label
+row to 20 pt grows that row; reducing A1 to 9 pt leaves Origin's enlarged row height intact.
+Raw captures remain local in `re-workspace/scratch/t59-format-toolbar/`; palette captures that
+foregrounded the main window between opening and picking were excluded because that closes the
+popup. The toolbar and worksheet area used for measurements were unobscured.
+
+Sheaf's shared **Format toolbar** targets selected cells, whole rows/columns, or the selected
+label cell. Font, Size, Bold, Italic, Underline, the basic eight text colours and eight fill colours plus None apply in one "Format cells"
+undo step, leaving values and number formats untouched. Mixed family/size fields are blank;
+Bold/Italic/Underline use the first displayed selected cell's state (mixed Underline is Sheaf's
+existing toolbar policy; its mixed state was not separately measured). Selecting another cell, sheet or
+workbook, editing a cell, or changing the document makes an older toolbar request inert.
+Whole columns include future rows and keep compact format ranges. Size accepts 4..96 pt (0
+restores the default); these bounds remain Sheaf's existing policy, not a measured Origin limit.
+Worksheet size-step controls stay disabled as observed; graph controls keep their own behaviour.
+
+Further Origin 2016 measurements (Windows, 2026-11-16, synthetic cells): the U button and
+Ctrl+B/I/U toggle Bold/Italic/Underline on the selected cell. Fill Color red changes only A1's
+background; None clears it. Ctrl+U on a Long Name label toggles that label separately. Ctrl+U
+on a whole column underlines its data cells while its Long Name label stays
+unchanged. Sheaf implements these target distinctions through the existing format ranges.
+Keyboard formatting belongs to worksheet selections when the grid has the keyboard; text
+editors, dialogs, popups and Project Explorer retain their keys. Graph Ctrl+I stays Zoom In.
+Each key press is one Undo step; multiple presses in a frame retain their order. Fill palettes
+capture their opening selection/revision and cannot follow a changed target. Manual fills keep
+the existing conditional-colour precedence (still unmeasured). The palette is the basic eight
+colours plus None; native custom/system/recent palette storage is not implemented.
+
+Cells use installed regular/bold/italic faces with UI glyph fallbacks; missing styles use the
+existing synthetic fallback. The default is Arial 9 pt (12 logical pixels at 96 dpi). Explicit
+point sizes convert by 4/3 for the grid. Row heights derive from font metrics, with a 16 px
+minimum, including label rows, filtered views and frozen panes. Geometry stores formatting
+intervals and draws only visible rows. **Difference:** Sheaf recomputes and can shrink heights
+when the font shrinks; it has no saved row-height field, so Origin's sticky enlarged heights
+are left for later work. Printed sheets and worksheet images use the same resolved styles,
+font metrics and enlarged rows; their existing 8 pt default scales explicit sizes by 8/9.
+Printing retains its existing omission of label rows with no text, including empty styled labels;
+native printed-layout and range rules remain T27 work.
+
+The **Format Cells** window (cell/column/row menus, Format > Cell...) retains its existing
+unmeasured choices: Font, Size (0 = Default), Bold/Italic/Underline, text/fill colour, horizontal
+alignment, Clear Formats, OK, Cancel and Apply. It starts from the first selected cell and applies
+only changed properties. Format > Worksheet... and Set Data Style > Default remain grey until
+their scope is measured. Vertical alignment, full/custom palettes, and the remaining dialog/precedence measurements
+remain open.
+Model and persistence rules: workbook-model.md 13b.
 
 ## 4. Graph window
 
@@ -609,7 +647,7 @@ Pictures: `gr-plain.png`, `gr-graph.png`, `grc-*.png`, `gdlg-*.png`; second stud
   [seen 2, `gr-titlebar.png`].
 - **Right-click, legend** [seen 2, `legend.png`]: the legend is selected first (eight green
   diamond handles on its corners and edges), then the menu: Plot Details..., Legend (submenu),
-  Add Color Scale (grey), Add Bubble Scale (grey), | Cut (Ctrl+X), Copy (Ctrl+C), Delete
+  Add Color Scale, Add Bubble Scale (enabled with a colour or size mapped plot, T80), | Cut (Ctrl+X), Copy (Ctrl+C), Delete
   (Delete), | Bring to the front, Push to the back, Bring to front of data (grey), Push to
   back of data, | Programming Control..., Properties..., | Copy Format (submenu), Save Format
   as Theme.... No chevron.

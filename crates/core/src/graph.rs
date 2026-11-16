@@ -344,6 +344,9 @@ pub struct Layer {
     /// Straight lines at an axis value with a value label (T67, graphing spec "Straight lines").
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub straight_lines: Vec<crate::straight_line::StraightLine>,
+    /// Colour scales and bubble scales beside the frame (T80, graphing spec 27).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scales: Vec<crate::layer_scale::LayerScale>,
     /// Significance brackets between groups of a multiple comparisons plot (T64, graphing spec 17.7): the pairs
     /// that are shown, drawn above the groups at positions 1, 2, 3, ...
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1391,6 +1394,9 @@ pub enum Connect {
     Segment2,
     /// Origin's "3 Point Segment": points 1-2-3, 4-5-6, ... are joined (line connection 3).
     Segment3,
+    /// k-point segments for k >= 4 (what Line Series makes with more than three columns); not offered in the
+    /// pickers. A plain tuple variant, so the unit variants keep their string form in saved files.
+    Segments(u16),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1505,6 +1511,10 @@ pub enum PlotKind {
     /// A box chart of the plot's Y column (Origin's plot type 206): one box per plot, standing at
     /// 1, 2, 3, ... in plot order, with the median, the mean, whiskers and outliers.
     Box,
+    /// Origin's Column Scatter (2016): each plot's Y column as points standing at 1, 2, 3, ... in plot
+    /// order like [`PlotKind::Box`], spread sideways by a small deterministic jitter so equal values do
+    /// not hide each other. Symbols only, no line, no box.
+    ColumnScatter,
     /// Origin's violin plot (2019, template Violin.otpu): each plot's Y column as a mirrored
     /// kernel density silhouette standing at 1, 2, 3, ... in plot order like [`PlotKind::Box`],
     /// with the median marked inside.
@@ -1675,7 +1685,7 @@ impl PlotKind {
     }
 
     pub fn has_symbols(&self) -> bool {
-        matches!(self, PlotKind::Scatter | PlotKind::LineSymbol)
+        matches!(self, PlotKind::Scatter | PlotKind::LineSymbol | PlotKind::ColumnScatter)
     }
 }
 
@@ -1759,6 +1769,9 @@ pub struct Plot {
     /// Indexed data of a column or box plot: the rows of `y` split by group columns (T76).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub indexed: Option<Indexed>,
+    /// Interval plot point or Pareto bars/curve computed from the Y column (T83).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stat: Option<StatPlot>,
     /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's
     /// Z column of a Bubble plot).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2654,6 +2667,19 @@ mod tests {
     }
 
     #[test]
+    fn connect_keeps_its_old_representation_and_round_trips_segments() {
+        for (c, json) in [
+            (Connect::Straight, r#""straight""#),
+            (Connect::Segment2, r#""segment2""#),
+            (Connect::Segment3, r#""segment3""#),
+            (Connect::Segments(5), r#"{"segments":5}"#),
+        ] {
+            assert_eq!(serde_json::to_string(&c).unwrap(), json);
+            assert_eq!(serde_json::from_str::<Connect>(json).unwrap(), c);
+        }
+    }
+
+    #[test]
     fn a_layer_saved_before_panels_shows_every_end_label_and_is_written_as_before() {
         let layer: Layer = serde_json::from_str(OLD_LAYER).expect("an old layer loads");
         assert!(!layer.x_axis.hide_end_label && !layer.y_axis.hide_end_label);
@@ -2715,6 +2741,7 @@ mod tests {
             parallel: Default::default(),
             treemap: Default::default(),
             indexed: None,
+            stat: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,
@@ -2761,6 +2788,7 @@ mod tests {
             parallel: Default::default(),
             treemap: Default::default(),
             indexed: None,
+            stat: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,
@@ -2884,6 +2912,7 @@ mod tests {
             parallel: Default::default(),
             treemap: Default::default(),
             indexed: None,
+            stat: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,
@@ -2907,6 +2936,7 @@ mod tests {
             y_error: None,
             rows: None,
             indexed: None,
+            stat: None,
             kind: PlotKind::Line,
             line: LineStyle::solid(color, 0.5),
             symbol: layer.default_symbol.clone(),
@@ -3133,6 +3163,7 @@ mod style_tests {
             parallel: Default::default(),
             treemap: Default::default(),
             indexed: None,
+            stat: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,

@@ -18,6 +18,7 @@
 use crate::actions::{Action, CellOp, CopyKind, DataTool, GraphOp, GraphTool, ImportPick, SheetOp, ViewOp};
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
+use crate::dialogs::fill_pattern::FillKind;
 use crate::dialogs::fit::FitKind;
 use crate::dialogs::fit_more::FitMoreKind;
 use crate::dialogs::graph_props::PropsTab;
@@ -30,6 +31,8 @@ use eframe::egui::{
     self, Color32, Key, KeyboardShortcut, Modifiers, Stroke, TextStyle,
     text::{LayoutJob, TextFormat},
 };
+use sheaf_core::clipboard::CopyPart;
+use sheaf_core::data_range::RangeEnd;
 use sheaf_core::format_clip::{AxisPart, GraphPart};
 use sheaf_core::graph::{PlotKind, Stack};
 use sheaf_core::sheetops::{MaskOp, MoveTo};
@@ -41,6 +44,7 @@ use std::sync::OnceLock;
 /// Tooltip of an item that Sheaf does not have.
 pub const NOT_YET: &str = "Not available in Sheaf yet";
 const NEED_BOOK: &str = "Activate a workbook window first";
+pub const NO_COLOR_SCALE: &str = "New Color Scale needs a plot whose symbols take their colour from a Z column";
 pub const NO_CUMULATIVE: &str = "Cumulative needs a line, scatter or line + symbol plot in the layer";
 const NEED_GRAPH: &str = "Activate a graph window first";
 const NEED_SHAPE: &str = "Select a drawn object first";
@@ -48,6 +52,8 @@ const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
 const NEED_CELLS: &str = "Select cells, columns or rows first";
 const NEED_TWO_COLUMNS: &str = "Select two or more columns first";
+const NEED_EXACTLY_TWO_COLUMNS: &str = "Select exactly two columns to swap";
+const NEED_WHOLE_COLUMNS: &str = "Select whole columns first (click their headers)";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
 const NO_TEMPLATE_FOLDER: &str = "There is no folder for user templates (the settings folder is missing)";
@@ -83,6 +89,11 @@ pub enum Cmd {
     SaveTemplateAs,
     /// Plot > User Templates > Manage... (T56).
     ManageTemplates,
+    /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values (T74).
+    FillPattern(FillKind),
+    /// Column > Set Sampling Interval... and Show X Column... (T84).
+    SetSamplingInterval,
+    ShowXColumn,
     /// File > Import > Single ASCII (Ctrl+K).
     Import,
     ImportMultiple,
@@ -115,6 +126,14 @@ pub enum Cmd {
     DeleteColumns,
     /// Column > Move Columns.
     MoveColumns(MoveTo),
+    /// The column header's Swap Columns... (T86): the two selected columns exchange places.
+    SwapColumns,
+    /// Edit > Paste Transpose and the data cell's Paste Transpose (T86).
+    PasteTranspose,
+    /// Edit > Set As Begin / Set As End and the data cell's items (T87).
+    SetRangeEnd(sheaf_core::data_range::RangeEnd),
+    /// Edit > Reset to Full Range on a workbook (T87).
+    ResetFullRange,
     /// Column > Hide/Unhide Columns > Hide Selected.
     HideColumns,
     /// Column > Hide/Unhide Columns > Unhide All.
@@ -162,6 +181,8 @@ pub enum Cmd {
     /// A command of a sheet tab's menu, on the active sheet.
     Sheet(SheetOp),
     Plot(Template),
+    /// Plot > Line + Symbol > Line Series (T82).
+    PlotLineSeries,
     /// Plot > Symbol > Y Error.
     PlotYError,
     /// Plot > Symbol > XY Error: a scatter plot with the X and Y error columns of each Y column.
@@ -281,6 +302,8 @@ pub enum Cmd {
     SlopeTool,
     /// Graph > Add Straight Line...
     AddStraightLine,
+    /// Graph > New Color Scale: a colour scale of the active layer.
+    NewColorScale,
     /// Properties of a straight line.
     EditStraightLine {
         layer: usize,
@@ -328,6 +351,15 @@ pub enum Cmd {
     EditText {
         layer: usize,
         label: usize,
+    },
+    /// Selection-format editor for a layer's existing axis title.
+    EditTitle {
+        layer: Option<usize>,
+        vertical: bool,
+    },
+    /// Selection-format editor for the existing legend content.
+    EditLegendText {
+        layer: Option<usize>,
     },
     /// Edit > Copy Page: the graph as a picture on the clipboard.
     CopyPage,
@@ -441,6 +473,8 @@ pub struct MenuContext<'a> {
     pub selected: &'a [ColumnId],
     /// Data columns within the sorting selection, including whole-row selections.
     pub sorting_columns: Vec<ColumnId>,
+    /// True when whole columns (or the whole sheet) of the active workbook are selected.
+    pub whole_columns: bool,
     /// True when the active workbook has selected cells, columns or rows (Copy, Cut, Paste and
     /// Clear act on them).
     pub cells: bool,
@@ -487,6 +521,8 @@ pub struct MenuContext<'a> {
     pub stack: Option<sheaf_core::graph::Stack>,
     /// True when the active layer has a plot that Cumulative stacking applies to (line, scatter, line + symbol).
     pub can_cumulate: bool,
+    /// The active layer has a plot whose symbols take their colour from a Z column (New Color Scale).
+    pub can_color_scale: bool,
     /// The selected drawn shape of the active graph as (layer, shape index, shapes in that layer).
     pub selected_shape: Option<(usize, usize, usize)>,
     /// The view mode of the active graph (the tick of View > Print View, Page View, Window View, Draft View).
@@ -775,18 +811,29 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
                 keyed("Copy", ctrl(Key::C), Cmd::Copy(CopyKind::Plain)),
                 keyed("Copy full precision", ctrl_alt(Key::C), Cmd::Copy(CopyKind::FullPrecision)),
                 keyed("Copy including label rows", ctrl_shift(Key::C), Cmd::Copy(CopyKind::WithLabels)),
-                grey("Copy formula"),
-                grey("Copy label rows"),
-                grey("Copy formula and label rows"),
-                grey("Copy All"),
+                keyed("Copy formula", ctrl(Key::J), Cmd::Copy(CopyKind::Part(CopyPart::Formula))),
+                // Origin lists Ctrl+Shift+J here too; Sheaf keeps that key for View > Full Screen.
+                item("Copy label rows", Cmd::Copy(CopyKind::Part(CopyPart::LabelRows))),
+                keyed(
+                    "Copy formula and label rows",
+                    ctrl_alt(Key::J),
+                    Cmd::Copy(CopyKind::Part(CopyPart::FormulaAndLabels)),
+                ),
+                keyed("Copy All", ctrl_shift(Key::A), Cmd::Copy(CopyKind::Part(CopyPart::All))),
             ],
         ));
         v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
-        v.extend(greys(&["Paste Transpose", "Paste Link", "Paste Link Transpose", "Paste Special", "-", "Select..."]));
+        v.push(item("Paste Transpose", Cmd::PasteTranspose));
+        v.extend(greys(&["Paste Link", "Paste Link Transpose", "Paste Special", "-", "Select..."]));
         v.push(keyed("C&lear", plain_key(Key::Delete), Cmd::Clear));
-        v.push(item("Insert", Cmd::InsertCells));
+        v.push(item("I&nsert", Cmd::InsertCells));
         v.push(item("&Delete", Cmd::DeleteCells));
-        v.extend(greys(&["Remove Links", "-", "Set As Begin", "Set As End", "Reset to Full Range", "-"]));
+        v.extend(greys(&["Remove Links", "-"]));
+        v.push(item("Set As Begin", Cmd::SetRangeEnd(RangeEnd::Begin)));
+        // Every letter of its text is taken; it takes S from the greyed Paste Link.
+        v.push(item("&Set As End", Cmd::SetRangeEnd(RangeEnd::End)));
+        v.push(item("Reset to Full Range", Cmd::ResetFullRange));
+        v.push(sep());
         v.push(grey_keyed("Find in Project...", plain_key(Key::F3)));
         v.push(keyed("Find in Sheets...", ctrl(Key::F), Cmd::FindInSheets));
         v.push(keyed("R&eplace...", ctrl(Key::H), Cmd::ReplaceInSheets));
@@ -907,7 +954,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("&Scatter", Cmd::Plot(Template::Scatter)),
                     item("Scatter + Rug", Cmd::Plot(Template::ScatterRug)),
                     item("Scatter Central", Cmd::Plot(Template::ScatterCentral)),
-                    grey("Column Scatter"),
+                    item("Column Scatter", Cmd::Plot(Template::ColumnScatter)),
                 ],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
                 vec![item("Vertical Drop Line", Cmd::Plot(Template::VerticalDropLine))],
@@ -922,14 +969,12 @@ fn plot_menu() -> Vec<Entry> {
         ),
         sub(
             "Line + S&ymbol",
-            with(
-                vec![
-                    item("Line + &Symbol", Cmd::Plot(Template::LineSymbol)),
-                    item("2 Point Segment", Cmd::Plot(Template::Segment2)),
-                    item("3 Point Segment", Cmd::Plot(Template::Segment3)),
-                ],
-                &["Line Series"],
-            ),
+            vec![
+                item("Line + &Symbol", Cmd::Plot(Template::LineSymbol)),
+                item("2 Point Segment", Cmd::Plot(Template::Segment2)),
+                item("3 Point Segment", Cmd::Plot(Template::Segment3)),
+                item("Line Series", Cmd::PlotLineSeries),
+            ],
         ),
         sub(
             "Column/Bar/&Pie",
@@ -1018,7 +1063,10 @@ fn plot_menu() -> Vec<Entry> {
             "S&tatistics",
             [
                 vec![item("Box Chart", Cmd::Plot(Template::BoxChart))],
-                vec![item("Grouped Box Charts", Cmd::Plot(Template::GroupedBox)), grey("Interval Plot")],
+                vec![
+                    item("Grouped Box Charts", Cmd::Plot(Template::GroupedBox)),
+                    item("Interval Plot", Cmd::Plot(Template::IntervalPlot)),
+                ],
                 vec![
                     item("Violin Plot", Cmd::Plot(Template::Violin)),
                     item("Violin with Box", Cmd::Plot(Template::ViolinBox)),
@@ -1033,12 +1081,12 @@ fn plot_menu() -> Vec<Entry> {
                     grey("Histogram + Probabilities"),
                     item("Stacked Histograms", Cmd::Plot(Template::StackedHistograms)),
                 ],
+                vec![item("Pareto", Cmd::Plot(Template::Pareto))],
                 greys(&[
                     "Marginal Histograms",
                     "Marginal Box Charts",
                     "2D Kernel Density",
                     "QC (X bar R) Chart",
-                    "Pareto",
                     "Scatter Matrix",
                     "Probability Plot",
                     "Q-Q Plot",
@@ -1138,20 +1186,21 @@ fn column_menu() -> Vec<Entry> {
         keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q), Cmd::SetMultipleColumnsValues),
         // Origin has this as a toolbar button and in the column's right-click menu.
         item("Re&calculate", Cmd::Recalculate),
-        grey_sub(
+        sub(
             "Fill Column With",
-            &[
-                "Row Numbers",
-                "Uniform Random Numbers",
-                "Normal Random Numbers",
-                "A set of Numbers...",
-                "A set of Date/Time values...",
-                "Arbitrary set of Text&&Numeric values...",
+            vec![
+                // Row Numbers and the random fills are T63 group H; still grey here.
+                grey("Row Numbers"),
+                grey("Uniform Random Numbers"),
+                grey("Normal Random Numbers"),
+                item("A set of Numbers...", Cmd::FillPattern(FillKind::Numbers)),
+                item("A set of Date/Time values...", Cmd::FillPattern(FillKind::Dates)),
+                item("Arbitrary set of Text&&Numeric values...", Cmd::FillPattern(FillKind::Text)),
             ],
         ),
         sep(),
-        grey("Set Sampling Interval..."),
-        grey("Show X Column..."),
+        item("Set Sampling Interval...", Cmd::SetSamplingInterval),
+        item("Show X Column...", Cmd::ShowXColumn),
         sep(),
         keyed("Add &New Columns...", ctrl(Key::D), Cmd::AddColumns),
         hide_menu(),
@@ -1500,6 +1549,7 @@ fn graph_menu() -> Vec<Entry> {
             "&Legend",
             vec![
                 // Origin opens the legend's settings by double click; Sheaf also offers them here.
+                item("Edit Legend Text...", Cmd::EditLegendText { layer: None }),
                 item("Legend Properties...", Cmd::GraphProps(PropsTab::Legend)),
                 keyed("Reconstruct Legend", ctrl(Key::L), Cmd::ReconstructLegend),
                 item("Update Legend", Cmd::UpdateLegend),
@@ -1507,7 +1557,7 @@ fn graph_menu() -> Vec<Entry> {
             ],
         ),
         grey("New Table"),
-        grey("New Color Scale"),
+        item("New Color Scale", Cmd::NewColorScale),
         sep(),
         grey("Fit Layer to Graph"),
         item("Fit Page to Layers...", Cmd::FitPageToLayers),
@@ -1621,7 +1671,13 @@ fn format_menu(kind: WindowKind) -> Vec<Entry> {
                 ],
             ),
             grey_sub("Axis Tick Labels", &["X Axis Tick Labels...", "Y Axis Tick Labels..."]),
-            grey_sub("Axis Titles", &["X Axis Title...", "Y Axis Title..."]),
+            sub(
+                "Axis Titles",
+                vec![
+                    item("X Axis Title...", Cmd::EditTitle { layer: None, vertical: false }),
+                    item("Y Axis Title...", Cmd::EditTitle { layer: None, vertical: true }),
+                ],
+            ),
             sep(),
             grey("Programming Control..."),
             grey("Object Properties..."),
@@ -1742,18 +1798,21 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(item("Recalculate", Cmd::Recalculate));
     v.push(item("Add New Columns...", Cmd::AddColumns));
     v.push(sep());
-    v.push(grey_sub(
+    v.push(sub(
         "Fill Column with",
-        &[
-            "Row Numbers",
-            "Uniform Random Numbers",
-            "Normal Random Numbers",
-            "A set of Numbers...",
-            "A set of Date/Time values...",
-            "Arbitrary set of Text&&Numeric values...",
+        vec![
+            // Row Numbers and the random fills are T63 group H; still grey here.
+            grey("Row Numbers"),
+            grey("Uniform Random Numbers"),
+            grey("Normal Random Numbers"),
+            item("A set of Numbers...", Cmd::FillPattern(FillKind::Numbers)),
+            item("A set of Date/Time values...", Cmd::FillPattern(FillKind::Dates)),
+            item("Arbitrary set of Text&&Numeric values...", Cmd::FillPattern(FillKind::Text)),
         ],
     ));
-    v.extend(greys(&["Set Sampling Interval...", "Show X Column...", "-"]));
+    v.push(item("Set Sampling Interval...", Cmd::SetSamplingInterval));
+    v.push(item("Show X Column...", Cmd::ShowXColumn));
+    v.push(sep());
     v.push(filter_menu());
     v.push(mask_menu());
     v.push(item("Mask Cells by Condition...", Cmd::MaskByCondition));
@@ -1791,7 +1850,7 @@ pub fn column_header_menu() -> Vec<Entry> {
             item("To Last", Cmd::MoveColumns(MoveTo::Last)),
         ],
     ));
-    v.push(grey("Swap Columns..."));
+    v.push(item("Swap Columns...", Cmd::SwapColumns));
     v.push(item("Column Width...", Cmd::ColumnProperties));
     v.extend(greys(&["-", "Slide Show of Dependent Graphs"]));
     v.extend(greys(&["Add or Update Sparklines...", "-"]));
@@ -1815,11 +1874,15 @@ pub fn cell_menu_for(noted: bool) -> Vec<Entry> {
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
     v.extend(copy_entries());
     v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
-    v.extend(greys(&["Paste Transpose", "Paste Link", "Paste Link Transpose", "-"]));
+    v.push(item("Paste Transpose", Cmd::PasteTranspose));
+    v.extend(greys(&["Paste Link", "Paste Link Transpose", "-"]));
     v.push(item("Insert", Cmd::InsertCells));
     v.push(item("Delete", Cmd::DeleteCells));
     v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
-    v.extend(greys(&["Remove Links", "-", "Set as Begin", "Set as End", "-"]));
+    v.extend(greys(&["Remove Links", "-"]));
+    v.push(item("Set as Begin", Cmd::SetRangeEnd(RangeEnd::Begin)));
+    v.push(item("Set as End", Cmd::SetRangeEnd(RangeEnd::End)));
+    v.push(sep());
     v.push(grey_sub("Insert Arrow", &["Arrow", "Double Arrow"]));
     v.extend(greys(&[
         "Insert Graph...",
@@ -2060,6 +2123,7 @@ fn axis_paste_format_menu(layer: usize, y: bool) -> Entry {
 pub fn graph_title_menu(layer: usize, y: bool) -> Vec<Entry> {
     let tab = if y { PropsTab::YAxis } else { PropsTab::XAxis };
     vec![
+        item("Edit Text...", Cmd::EditTitle { layer: Some(layer), vertical: y }),
         grey_keyed("Cut", ctrl(Key::X)),
         grey_keyed("Copy", ctrl(Key::C)),
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::HideTitle { layer, y })),
@@ -2117,9 +2181,21 @@ pub fn graph_straight_line_menu(layer: usize, line: usize) -> Vec<Entry> {
     ]
 }
 
+/// The menu of a colour scale or bubble scale.
+pub fn graph_scale_menu(layer: usize, scale: usize) -> Vec<Entry> {
+    vec![keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteScale { layer, scale }))]
+}
+
 /// The menu of the legend.
-pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
+///
+/// Add Color Scale and Add Bubble Scale are enabled when the layer has a plot of that mapping.
+pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool) -> Vec<Entry> {
+    use sheaf_core::layer_scale::LayerScaleKind;
+    let add = |label: &str, can: bool, kind| {
+        if can { item(label, Cmd::GraphEdit(GraphOp::AddScale { layer, kind })) } else { grey(label) }
+    };
     vec![
+        item("Edit Text...", Cmd::EditLegendText { layer: Some(layer) }),
         item("Plot Details...", Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: None }),
         sub(
             "Legend",
@@ -2129,8 +2205,8 @@ pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
                 grey("Add Legend Title"),
             ],
         ),
-        grey("Add Color Scale"),
-        grey("Add Bubble Scale"),
+        add("Add Color Scale", can_color, LayerScaleKind::Color),
+        add("Add Bubble Scale", can_bubble, LayerScaleKind::Bubble),
         sep(),
         grey_keyed("Cut", ctrl(Key::X)),
         grey_keyed("Copy", ctrl(Key::C)),
@@ -2435,6 +2511,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SaveProject => Action::SaveProject,
         Cmd::SaveProjectAs => Action::SaveProjectAs,
         Cmd::SaveWindowAs => Action::SaveWindowAs(c.active.ok_or(NEED_WINDOW)?),
+        Cmd::FillPattern(kind) => Action::FillPattern { kind: *kind, columns: some()? },
+        Cmd::SetSamplingInterval => Action::SetSamplingInterval { columns: some()? },
+        Cmd::ShowXColumn => Action::ShowXColumn { columns: some()? },
         Cmd::SaveTemplateAs => {
             if !c.templates {
                 return Err(NO_TEMPLATE_FOLDER);
@@ -2485,6 +2564,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             book?;
             Action::MoveColumns { columns: some()?, to: *to }
         }
+        Cmd::ResetFullRange => Action::ResetFullRange(book?),
+        Cmd::SwapColumns => {
+            book?;
+            match c.selected {
+                [a, b] => Action::SwapColumns(*a, *b),
+                _ => return Err(NEED_EXACTLY_TWO_COLUMNS),
+            }
+        }
         Cmd::HideColumns => {
             book?;
             Action::HideColumns(some()?)
@@ -2493,14 +2580,27 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Copy(kind) => {
             let book = book?;
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            // Origin greys these four unless whole columns are selected.
+            if matches!(kind, CopyKind::Part(_)) && !c.whole_columns {
+                return Err(NEED_WHOLE_COLUMNS);
+            }
             Action::Cells { book, op: CellOp::Copy(*kind) }
         }
-        Cmd::Cut | Cmd::Paste | Cmd::Clear | Cmd::InsertCells | Cmd::DeleteCells | Cmd::Mask(_) => {
+        Cmd::Cut
+        | Cmd::Paste
+        | Cmd::PasteTranspose
+        | Cmd::SetRangeEnd(_)
+        | Cmd::Clear
+        | Cmd::InsertCells
+        | Cmd::DeleteCells
+        | Cmd::Mask(_) => {
             let book = book?;
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             let op = match cmd {
                 Cmd::Cut => CellOp::Cut,
                 Cmd::Paste => CellOp::Paste,
+                Cmd::PasteTranspose => CellOp::PasteTranspose,
+                Cmd::SetRangeEnd(which) => CellOp::SetRangeEnd(*which),
                 Cmd::InsertCells => CellOp::Insert,
                 Cmd::Mask(m) => CellOp::Mask(*m),
                 Cmd::DeleteCells => CellOp::Delete,
@@ -2569,6 +2669,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             book?;
             Action::ReverseColumns(some()?)
         }
+        Cmd::PlotLineSeries => Action::PlotLineSeries { book: book?, columns: c.selected.to_vec() },
         Cmd::PlotYError => Action::PlotYError { book: book?, columns: c.selected.to_vec(), x: false },
         Cmd::PlotXYError => Action::PlotYError { book: book?, columns: c.selected.to_vec(), x: true },
         Cmd::PlotPanels { rows, cols } => {
@@ -2725,6 +2826,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ZoomAll => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::ZoomAll },
         Cmd::ScaleIn => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ScaleIn },
         Cmd::ScaleOut => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ScaleOut },
+        Cmd::NewColorScale if !c.can_color_scale => return Err(NO_COLOR_SCALE),
+        Cmd::NewColorScale => Action::GraphEdit {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            op: GraphOp::AddScale { layer: c.layer, kind: sheaf_core::layer_scale::LayerScaleKind::Color },
+        },
         Cmd::AddStraightLine => Action::AddStraightLine { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::EditStraightLine { layer, line } => {
             Action::EditStraightLine { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, line: *line }
@@ -2741,6 +2847,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::AddText => Action::AddText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: Some(c.layer), at: None },
         Cmd::EditText { layer, label } => {
             Action::EditText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label }
+        }
+        Cmd::EditTitle { layer, vertical } => Action::EditTitle {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            layer: layer.unwrap_or(c.layer),
+            vertical: *vertical,
+        },
+        Cmd::EditLegendText { layer } => {
+            Action::EditLegendText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: layer.unwrap_or(c.layer) }
         }
         Cmd::CopyPage => Action::CopyPage(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::CopyGraphFormat(part) => Action::CopyGraphFormat { graph: c.graph.ok_or(NEED_GRAPH)?, part: *part },
@@ -3276,8 +3390,11 @@ mod tests {
         let keys = shortcuts();
         for (k, cmd) in &keys {
             for (k2, cmd2) in &keys {
+                let formula = Cmd::Copy(CopyKind::Part(CopyPart::Formula));
                 let shared =
-                    matches!((cmd, cmd2), (Cmd::GoToCell, Cmd::ExportGraph) | (Cmd::ExportGraph, Cmd::GoToCell));
+                    matches!((cmd, cmd2), (Cmd::GoToCell, Cmd::ExportGraph) | (Cmd::ExportGraph, Cmd::GoToCell))
+                        || (*cmd == formula && *cmd2 == Cmd::CopyPage)
+                        || (*cmd == Cmd::CopyPage && *cmd2 == formula);
                 assert!(k != k2 || cmd == cmd2 || shared, "{k:?} runs both {cmd:?} and {cmd2:?}");
             }
         }
@@ -3307,6 +3424,7 @@ mod tests {
             selected: &[],
             sorting_columns: Vec::new(),
             cells: false,
+            whole_columns: false,
             undo: None,
             redo: None,
             undo_ai: false,
@@ -3328,6 +3446,7 @@ mod tests {
             layer_curves: Vec::new(),
             stack: None,
             can_cumulate: false,
+            can_color_scale: false,
             selected_shape: None,
             view_mode: Default::default(),
             layer_icons: true,
@@ -3355,8 +3474,20 @@ mod tests {
         assert_eq!(resolve(&Cmd::ExportGraph, &c).unwrap_err(), NEED_GRAPH);
         // Several columns need two or more.
         assert_eq!(resolve(&Cmd::SetMultipleColumnsValues, &c).unwrap_err(), NEED_TWO_COLUMNS);
+        assert_eq!(resolve(&Cmd::SwapColumns, &c).unwrap_err(), NEED_EXACTLY_TWO_COLUMNS);
+        // The Copy variants need whole columns (T88), as Origin greys them for a block of cells.
+        let part = Cmd::Copy(CopyKind::Part(CopyPart::All));
+        let block = MenuContext { cells: true, whole_columns: false, ..c.clone() };
+        assert_eq!(resolve(&part, &block).unwrap_err(), NEED_WHOLE_COLUMNS);
+        assert!(resolve(&Cmd::Copy(CopyKind::Plain), &block).is_ok());
+        let columns = MenuContext { cells: true, whole_columns: true, ..c.clone() };
+        assert!(resolve(&part, &columns).is_ok());
+        let three = [ColumnId(7), ColumnId(8), ColumnId(9)];
+        let c3 = MenuContext { selected: &three, ..c.clone() };
+        assert_eq!(resolve(&Cmd::SwapColumns, &c3).unwrap_err(), NEED_EXACTLY_TWO_COLUMNS);
         let two = [ColumnId(7), ColumnId(8)];
         let c = MenuContext { selected: &two, ..c };
+        assert!(matches!(resolve(&Cmd::SwapColumns, &c), Ok(Action::SwapColumns(ColumnId(7), ColumnId(8)))));
         assert!(
             matches!(resolve(&Cmd::SetMultipleColumnsValues, &c), Ok(Action::SetMultipleColumnsValues(x)) if x == two)
         );

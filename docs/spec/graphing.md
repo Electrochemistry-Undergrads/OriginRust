@@ -766,6 +766,39 @@ range, combined-script insertion and reuse for titles/legend remain open. The sh
 bar remains a separate target-dispatch implementation. No renderer/model/persistence changes
 are introduced by this editor slice.
 
+### 7.7 Axis-title and legend text editors (T58)
+
+The existing X/Y axis titles and legend content now use the selection editor from 7.5.
+Format > Axis Titles opens the active layer's X or Y title; each title's context menu has
+Edit Text. A legend's context menu has Edit Text, and Graph > Legend > Edit Legend Text
+also reaches a hidden or off-page legend. A multi-layer graph names the layer in the window.
+These entry points and compact window layout are Sheaf choices, not newly measured Origin UI.
+
+Origin documents axis titles and legends as text objects and shares its Text tab between
+common text and legends: [graph annotations](https://docs.originlab.com/user-guide/customizing-graphs/),
+[Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/) and
+[manual legend control](https://docs.originlab.com/origin-help/legend-manualcontrol/).
+The editor preserves raw column-metadata escapes, legend sample codes and name references.
+Automatic text is retained on unchanged OK, Cancel and base-font-only edits; editing raw text
+chooses custom text. Automatic text restores the existing generated title or legend, and
+Show on graph controls the existing visibility flag. Base font sizes through 1,000 points
+are preserved, matching the published Format toolbar's supported range. Titles/legend have
+no invented label-rotation property. OK or Apply writes one history step when values change;
+Cancel discards only the unapplied draft. A replaced project closes a stale editor.
+
+Generated titles come from a read-only facade over the renderer's existing resolver, including
+histogram, category and transposed-plot rules. Preview uses the actual selected scene object's
+glyphs, decorations and legend samples, with the project's data-name substitutions. A read-only
+cropped-scene facade reuses the existing SVG/raster path and supports negative off-page bounds;
+no glyph, layout or export rules change. Only the selected object is shown on the preview canvas.
+
+A selected literal parenthesis is safely encoded when necessary to preserve the text.
+Whole-legend formatting keeps symbol codes and row boundaries outside text-format groups;
+name substitutions remain raw, so formatting does not freeze their data links. This is a Sheaf
+editing choice using the published renderer, not a measured Origin command-rewrite algorithm.
+The existing screenshot hooks accept `--show text:x`, `text:y` and `text:legend` for the first
+layer of the first graph, alongside the existing `text:N` label hook.
+
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
 
 | Group | Plots | Priority |
@@ -1553,7 +1586,23 @@ Sheaf:
 ### 13.16 Plot > Statistics > Stacked Histograms (T62 slice 2)
 
 Origin: the command makes one graph with one histogram panel per selected Y column, the panels stacked
-vertically. **Not measured** (all Sheaf's choices): shared versus per-panel bins, panel order, gaps, labels.
+vertically.
+
+**Measured 2026-11-16 in Origin 2016** (Plot > Statistics > Stacked Histograms on three columns A, B, C of
+200, 150 and 100 deterministic values, `re-workspace/scratch/t62-origin`, PNG `stackhist.png`):
+- A portrait page (the export was 1600 x 2089 px) with three layers. Layer 1 holds the **first** selected
+  column and sits at the **bottom** (top 66.67 %), layer 3 the last one at the top (top 10 %); every layer is
+  at left 25 %, width 70 %, height 23.33 %, so the panels are 5 % of the page apart (not touching).
+- **Each panel has its own bins and its own X scale** (A: -2.5..2.5 step 2 with bins of 0.5; B: -2..5 step 2,
+  bins of 0.5; C: -1.6..-0.4 step 0.2, bins of 0.1) and its own count axis (0..60, 0..34, 0..23). Every
+  panel shows its X tick labels; only the bottom panel has the X title (the first column's name); every
+  panel has the Y title "Count".
+- Every panel is drawn the same way: red outline and a red diagonal hatch on white, not the next colour of a
+  list; each panel has its own legend at its top right (overlapping the panel above).
+
+**Differences from Sheaf's provisional rules below (to change in a code slice):** panel order (Sheaf puts the
+first column at the top), shared bins and linked X (Origin: per-panel bins and scales), colours (Origin: the
+same red hatch everywhere), page orientation and the gaps between panels.
 
 Sheaf (`Project::plot_stacked_histograms`; GUI Plot > Statistics > Stacked Histograms; CLI
 `sheaf plot -t stacked-histograms`):
@@ -1574,7 +1623,20 @@ Sheaf (`Project::plot_stacked_histograms`; GUI Plot > Statistics > Stacked Histo
 ### 13.17 Waterfall Y:Color Mapping and Z:Color Mapping (T62 slice 3)
 
 Origin: Plot > Y-offset/Waterfall has Waterfall Y:Color Mapping and Waterfall Z:Color Mapping (3D waterfall is B15).
-**Not measured** (all Sheaf's choices): palettes, levels, scale layout, where Z comes from.
+
+**Measured 2026-11-16 in Origin 2016** (four Gaussian columns B..E against A, both menu items,
+`re-workspace/scratch/t62-origin`, `waterY.png`, `waterZ.png`):
+- Both draw Origin's oblique waterfall: a skewed three-sided frame with grey grid lines, the curves set back
+  one behind the other along a Z axis whose ticks are labelled with the column names (B at the back, E at the
+  front), the Y axis on the right; no legend and no colour scale.
+- **The colour runs from red at the low end through orange, yellow, green and cyan to blue at the high end**
+  (the reverse of Sheaf's blue-to-red ramp).
+- Y mapping colours each curve along its length by its Y value on one scale for the layer (baselines red, the
+  tallest peak blue, a peak half as high green-yellow); the colour changes smoothly along the curve.
+- Z mapping gives each curve one colour by its place: B red, C yellow, D cyan, E blue.
+
+**Differences from Sheaf's provisional rules below:** the ramp direction (Origin red low, blue high) and the
+oblique 3D-looking frame of Origin's waterfall template (Sheaf's waterfall is the flat 2D offset of 13.6).
 
 Sheaf (`Layer::waterfall_color` None/Y/Z, `Template::WaterfallY` = `waterfall-y`, `WaterfallZ` = `waterfall-z`;
 GUI Plot > Y-offset/Waterfall; CLI `sheaf plot -t waterfall-y|waterfall-z`): the 2D waterfall of 13.6 (placement
@@ -1873,8 +1935,8 @@ Measured through COM (`plot:=219` with the HIST template, `plot:=206` with BOX; 
 Measured through COM: `plotxy iy:=[Book]Sheet1!(1,2) plot:=201 ogl:=[<new template:=BUBBLE>]` with the third column set as Z (`wks.col3.type=5`; X is 4 and Y 1) draws the bubbles (the plot type numbers 245 to 247 gave nothing). Probe: X 1..8, Y 2 4 3 6 5 7 6 8, Z 1 4 2 9 3 6 8 5.
 
 - Bubbles are open circles in the first colour (black rings). Their width is linear in Z from the smallest to the largest value: measured on the 800 px export 2.5, 5, 7, 9, 12, 14, 19 and 22 px (about 2.4 to 21 pt) for Z = 1, 2, 3, 4, 5, 6, 8, 9. Sheaf uses 2 pt to 20 pt (the outline adds the rest).
-- Origin adds a size legend beside the frame (title = the Z column, four circles labelled 1.00, 3.66, 6.32, 8.98: the smallest value and three equal steps to the largest). Not drawn by Sheaf.
-- Colour mapped symbols: Origin's default colour map was not measured (no plot number reached the Color Mapped command); Sheaf maps the smallest to the largest Z over blue, cyan, green, yellow and red. No colour scale is drawn.
+- Origin adds a size legend beside the frame (title = the Z column, four circles labelled 1.00, 3.66, 6.32, 8.98: the smallest value and three equal steps to the largest). Drawn only by Add Bubble Scale (section 27).
+- Colour mapped symbols: Origin's default colour map was not measured (no plot number reached the Color Mapped command); Sheaf maps the smallest to the largest Z over blue, cyan, green, yellow and red. Graph > New Color Scale and the legend's Add Color Scale draw one (section 27).
 - Model: `Plot::size_from` and `Plot::color_from` name the Z column (found from the Z designation after the Y column by `Project::z_column_for`); `Template::Bubble`, `ColorMapped`, `BubbleColorMapped`; CLI `-t bubble` needs a project file with a Z column. `.opj`: written as plain scatter, the save warns.
 
 ### 14.17 Pie; what was seen of polar (T12)
@@ -2042,7 +2104,7 @@ Origin's documented facts (from its help, not measured; no Origin was at hand; [
 
 - Kinds `PlotKind::{Violin, ViolinBox, ViolinPoint, ViolinQuartile, ViolinStick, HalfViolin}` (one kind per variant,
   so no new field of `Plot` and old files load unchanged; `PlotKind::violin_inner()` says what is drawn inside) and the
-  templates of the same names, in Plot > Statistics after the grey Grouped Box Charts / Interval Plot: "Violin Plot"
+  templates of the same names, in Plot > Statistics after Grouped Box Charts and Interval Plot: "Violin Plot"
   (`violin`), "Violin with Box" (`violin-box`), "Violin with Point" (`violin-point`), "Violin with Quartile"
   (`violin-quartile`), "Violin with Stick" (`violin-stick`), "Half Violin" (`half-violin`). They are box chart
   templates: page, axes and the colours starting at red are the box chart's (the box chart is measured, 14.15).
@@ -2513,6 +2575,54 @@ Origin's documented facts (documentation only, **not measured**; no Origin was a
 **Leftovers:** Origin's dialog and data forms, raw-data bar statistics and the other error-bar statistics (CI, percentile
 ranges, MAD), stacking, two-row table tick labels, more than two group levels, Grouped Scatter, panels or pages split by a
 group, themes (half box, violin, ...), colour indexed by the main group, and a measurement of all of it in Origin 2016.
+
+### 14.29 Interval Plot and Pareto chart (T83)
+
+Use: Plot > Statistics > Interval Plot and Pareto. Status: written from Origin's documentation on a machine without Origin;
+nothing here was measured, so every choice not listed as documented is Sheaf's and **unmeasured**.
+
+**Documented** [W: docs.originlab.com/origin-help/interval-plot, .../create-pareto-chart, .../paretochart-rawdata,
+docs.originlab.com/x-function/ref/plot_paretoraw, .../plot_paretobin]:
+
+- An interval plot is a box chart with the box hidden: only the mean shows, as a solid circle (template BoxInterval). The
+  default error statistic, confidence level, labels and colours are not given.
+- Pareto: one command for binned data (category and count columns) and one for raw data (cells counted per distinct value;
+  template ParetoRaw). Bars from most to least significant. The cumulative percent is a line with symbols in a new layer
+  whose right Y axis always runs 0 to 100 (option `cum`, default on); drop lines at 80, a count table, combining small
+  categories into "Other" and groups are options. Fill, gap, colours, tie order and missing values are not given.
+- Pareto, raw data, option `symr` (default 1): the cumulative-percent symbols sit at the right edge of each bar, and the
+  cumulative line starts at (0, 0), the left edge of the first bar at 0 %. Sheaf copies both (placed from the drawn bar
+  width, so they follow the layer's gap); the first and the last point carry no data labels.
+
+**What Sheaf does** (unmeasured unless listed above):
+
+- Pareto counts every cell of the column: row filters and Hide Masked Points are not applied to it (Sheaf's choice; the
+  interval plot does honour them). A column with no usable values is skipped and does not use up a category slot.
+- Items: Plot > Statistics > Interval Plot (`Template::IntervalPlot`, CLI `interval-plot`) and Pareto (`Template::Pareto`,
+  `pareto`), no dialog. Model: the new per-plot field `Plot.stat` (`StatPlot::{Interval{error, level}, Pareto,
+  ParetoCumulative}`), skipped in `.sheaf` while empty. `.opj` export writes plain plots of the data column with a save
+  warning; user templates refuse these graphs; a right Y axis is refused for both.
+- Interval Plot: one `Scatter` plot per selected numeric Y column (symbol: a filled circle, as documented; colours and
+  size are Sheaf's), at X = 1, 2, ... in plot order, named by the column on
+  the X axis (like box charts; no X title). The symbol is the mean of the finite numbers; the error bar is symmetric:
+  the Student-t confidence interval of the mean (default, level 95 %, the Graphical Summary's `mean_confidence_limits`,
+  statistics 22), or the SD (n - 1) or SE. A column of one number has no bar. Plot Details > Error Bar chooses
+  CI/SD/SE and the level for every interval plot of the layer. CLI `--interval-error ci|sd|se`, `--interval-level`.
+  Selection: one or more numeric columns, else the status warning "Nothing to plot".
+- Pareto: select one column (text or numbers); anything else is the status warning "Select one column whose values are
+  counted for the Pareto chart". The left layer holds `Column` bars of the count per distinct value, most frequent first
+  (ties in the order of first occurrence; empty cells are not counted; numbers compare as text without a trailing ".0");
+  the categories are the tick labels at 1..K, the X title is the column's. The right layer (the usual linked right-Y layer)
+  holds a `LineSymbol` plot of the running percent of the counted cells, Y axis fixed to 0 - 100, titles "Count" and
+  "Cumulative %". The cumulative points are at the bar right edges, with an extra first point (0, 0) at the left edge of the first
+  bar (documented, above). Sheaf adds no drop lines, count table, "Other" merge, binned-data input or groups.
+- Tests: `crates/core/src/template.rs`, `crates/plot/src/grouped_tests.rs` (hand-computed mean, SD, SE, t quantiles and
+  Pareto percentages; goldens `interval-plot.svg`, `pareto.svg`), `crates/app/src/app/ui_tests/grouped_indexed.rs`,
+  `crates/cli/tests/interval_pareto.rs`, `crates/io/src/opj/write/graph_feature_tests.rs`.
+
+**Leftovers:** Origin's dialogs, measured defaults (error bar, symbol, colours, gaps), box-chart based interval themes and
+grouped intervals, Scatter Interval, Pareto binned data, groups, drop lines at 80, count table, combine small categories,
+and a measurement of all of it in Origin 2016.
 
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
@@ -3962,6 +4072,31 @@ grouped. Sheaf: `Template::VerticalDropLine` (scatter, `decor.drop.vertical` on,
 data labels of grouped columns and bars are now centred on their own bar. CLI `-t vertical-drop-line`, `-t
 column-label`.
 
+### 18.15 Line Series (T82, measured 2026-11-16)
+
+Origin 2016's Plot > Line + Symbol > Line Series makes the graph at once: every worksheet row of the
+selected Y columns is one line through its values at X = 1, 2, ..., k (k columns, column order); rows are
+not joined. It is one plot with the k-point segment connection (`get %C -l` 2 for two columns, 3 for
+three), filled black squares of size 8, the X axis labelled with the column names and titled "Series",
+the Y axis "Values" (X 0.75..2.25 for two columns, 0.5..3.5 for three); Origin keeps the rearranged
+data out of sight (lock icon). Sheaf: `Project::plot_line_series` adds a `LineSeries<n>` sheet to the
+workbook (positions and values row by row, and the column names), one Line + Symbol plot with
+`Connect::Segment2`/`Segment3`/`Segments(k)` (k >= 4, saved as `{"segments":k}`; `.opj` writes it
+straight with a note), all rows black, the names as X tick labels with a tick at every position, titles
+Series and Values; one undo step. Segment connections group the plot's rows by their index (rows
+1..n, n+1..2n, ...): a missing value breaks its group's line and never shifts later groups.
+
+### 18.14 Column Scatter (T79, measured 2026-11-16)
+
+Origin 2016's Plot > Symbol > Column Scatter draws every selected Y column as points standing at its
+position 1, 2, ... in plot order: filled diamonds of size 8 coloured by the group (black, red, ...), no
+line, the points of a column spread sideways by a jitter (within about +-0.15), the X axis from 0.5 to
+n + 0.5 with one tick per column labelled with its name, the Y title "Range", the usual legend. Sheaf:
+`PlotKind::ColumnScatter` and template `column-scatter` (menu, `sheaf plot -t column-scatter`), placed
+by the box chart's category axis; the jitter is a fixed golden-ratio sequence within +-0.15 (Sheaf's
+choice: Origin's rule was not measured). Trendlines, rugs and slopes do not use the jittered X. `.opj`
+writes a scatter of the data with a warning.
+
 ### 18.13 Scatter Central (T75, measured 2026-11-15)
 
 Origin 2016's Plot > Symbol > Scatter Central is the scatter graph with both axes crossing in the middle
@@ -4644,3 +4779,47 @@ Pasted into an untouched graph of the same data and read back (changed propertie
 - Left greyed (not measured): Symbol/Line/Fill and Text (Edit), Page Background and Legend Translation Mode (page), axis Styles, Scales, Dimensions and the eleven other Paste Format To choices, the page menu's Paste Format To submenus, all of the legend's Copy Format (Styles, Dimensions, All).
 
 - Added after review: Edit > Copy Format with an axis selected copies an axis format (All, All Style Formats and Scales map to the axis parts; Colors, Fonts, Background and Dimensions copy nothing, since an axis format for them is unmeasured); the context menus and Paste Format To follow the clipboard kind. Colors and axis styles also carry the "follows plot colour" flags (Sheaf's reading; unmeasured in Origin). Dimensions pastes a layer frame only between layers of the same kind (root to root, linked to linked) because a linked frame is relative to its parent; mixed pairs are left alone (unmeasured in Origin).
+
+## 27. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
+
+Not measured: Origin 2016 is on Windows only and this slice was built on macOS from Origin's help, so everything
+below that is not a quoted fact is an unmeasured Sheaf choice. The one measured fact is in 14.16 (the bubble size
+legend: four circles at the smallest Z and three equal steps up to the largest, the step truncated to two decimals,
+labelled 1.00, 3.66, 6.32, 8.98 for Z 1..9, titled with the Z column).
+
+Origin's documentation [W] (https://www.originlab.com/doc/origin-help/colorscale,
+https://www.originlab.com/doc/origin-help/bubblescale):
+- A colour scale is an object of the layer reached by Insert > Color Scale, its toolbar button and the legend's Add
+  Color Scale. It can follow a plot's colour map (Fill > Map) or stand alone, and has its own Colour Scale Control
+  dialog (Fill, Levels, Labels, Layout, Title, Line and Ticks). A Bubble + Color Map plot gets a bubble scale by
+  default but no colour scale: the user adds it.
+- A bubble scale is a label-type object, a legend of sample bubbles with numeric labels, for any symbol plot that
+  uses size indexing; Layout is Linear (a row) or Nested; Levels by increment, count or dataset.
+- When the items are enabled, where the objects land by default and what they take as defaults are undocumented.
+
+Sheaf (this slice):
+- Model: `Layer::scales: Vec<LayerScale>` (`sheaf_core::layer_scale`; serde default, skipped while empty,
+  `FORMAT_VERSION` unchanged). `LayerScale { kind: Color | Bubble, title: Option<String> }`. A scale describes the
+  first visible plot of its layer that has `color_from` (colour) or `size_from` (bubble); there is no Map setting.
+  A scale whose layer has no such plot draws nothing and takes no room.
+- Where: right of the frame, side by side in the order they were added, each in a slot of the width the hexbin
+  colour scale takes (`hexbin::scale_reserve`; the bubble scale 6 pt less than that plus its widest circle), the
+  room added to the layer's label edges (`layer_scale::reserve`). Not drawn on polar and ternary layers.
+- Colour scale: the bar of `hexbin::draw_color_bar` (64 strips of `plots::map_color`, title in the Y title font,
+  nice ticks from `sunburst::scale_ticks` over `plots::z_range`, the smallest to the largest finite Z of the
+  plot's rows). Title: the Z column's name.
+- Bubble scale: four circles of the plot's symbol style, sized as the symbols are (`BUBBLE_MIN_PT` to
+  `BUBBLE_MAX_PT`, linear in Z) at Z = lo + k * step, smallest at the top, labels with two decimals in the Y tick font,
+  titled with the Z column; one circle when all values are equal. The step follows the measured 14.16 rule: `(hi -
+  lo) / 3` truncated to two decimals (Z 1..9 gives 2.66 and labels 1.00, 3.66, 6.32, 8.98), and the exact step when
+  that truncation gives zero. The truncation rule is inferred from that one measurement, not confirmed on other ranges.
+- Items: Graph > New Color Scale (active layer) is enabled when the active layer has a colour mapped plot, else
+  grey with a reason; the legend context menu's Add Color Scale / Add Bubble Scale are enabled when the layer has a
+  colour (size) mapped plot. One undo step each ("Add color scale", "Add bubble scale"). Graph > New Bubble Scale
+  (listed in ui-command-map) is not in Sheaf's menu.
+- Selecting: a click picks a scale (`ObjectKind::Scale(i)`, rank of the legend), Delete or its context menu removes
+  it ("Delete scale"), a double click opens Plot Details. Selection JSON: `{"kind": "scale", "index": n}`.
+- Files: `.sheaf` keeps scales; `.opj` writer leaves them out and the save warns (the companion keeps them).
+- Not done: moving by dragging, a properties dialog (orientation, levels, labels, background, nested layout), a
+  Map link to a chosen plot, scales for other plot kinds (hexbin, sunburst, waterfall, parallel keep drawing their
+  own), a CLI flag, the real default colour map.

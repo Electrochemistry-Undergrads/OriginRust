@@ -21,6 +21,7 @@ mod fill;
 mod fonts;
 mod hexbin;
 pub mod hit;
+mod layer_scale;
 mod layout;
 mod legend;
 mod margin;
@@ -37,6 +38,8 @@ mod rug;
 pub mod scene;
 mod shapes;
 mod sheet;
+mod worksheet_font;
+pub use worksheet_font::{WorksheetFont, worksheet_font};
 mod slope;
 mod straight_line;
 pub use slope::{NOT_USABLE as SLOPE_NOT_USABLE, check_point as slope_check_point};
@@ -54,7 +57,11 @@ mod vector;
 mod violin;
 
 #[cfg(test)]
+mod column_scatter_tests;
+#[cfg(test)]
 mod dash_tests;
+#[cfg(test)]
+mod data_range_tests;
 #[cfg(test)]
 mod detail_tests;
 #[cfg(test)]
@@ -71,6 +78,8 @@ mod hexbin_tests;
 mod label_frame_tests;
 #[cfg(test)]
 mod label_whiteout_tests;
+#[cfg(test)]
+mod layer_scale_tests;
 #[cfg(test)]
 mod layers_tests;
 #[cfg(test)]
@@ -93,6 +102,8 @@ mod parallel_tests;
 mod ridgeline_tests;
 #[cfg(test)]
 mod rug_tests;
+#[cfg(test)]
+mod sampling_tests;
 #[cfg(test)]
 mod skip_tests;
 #[cfg(test)]
@@ -455,6 +466,18 @@ pub fn render_svg_with(project: &Project, graph: WindowId, measurer: &dyn TextMe
     Ok(svg::write_svg(&scene))
 }
 
+/// The raw title of an axis, including markup from column metadata when it is automatic.
+/// Uses the same plot-kind and category rules as the graph renderer.
+pub fn axis_title(project: &Project, graph: WindowId, layer: usize, vertical: bool) -> Result<String, PlotError> {
+    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let l = g.layers.get(layer).ok_or(PlotError::NoSuchLayer(layer))?;
+    let axis = if vertical { &l.y_axis } else { &l.x_axis };
+    Ok(axis.title.clone().unwrap_or_else(|| {
+        let plots = data::collect(project, l);
+        layout::first_title(project, axis, &plots.plots, vertical)
+    }))
+}
+
 /// The text of the legend of layer `layer`: its own text when it has one, otherwise the automatic
 /// text with one `\l(n) %(n)` line per plot the legend lists (see [`sheaf_core::graph::Legend::text`]).
 pub fn legend_text(project: &Project, graph: WindowId, layer: usize) -> Result<String, PlotError> {
@@ -503,6 +526,7 @@ pub fn fit_content_bounds(project: &Project, graph: WindowId) -> Result<Option<(
                     | ObjectKind::Shape(_)
                     | ObjectKind::Slope(_)
                     | ObjectKind::StraightLine(_)
+                    | ObjectKind::Scale(_)
             ) && o.bounds.w.is_finite()
                 && o.bounds.h.is_finite()
             {
@@ -519,6 +543,23 @@ pub fn fit_content_bounds(project: &Project, graph: WindowId) -> Result<Option<(
 /// picture is the same as [`render_raster`] of the graph the scene was made from.
 pub fn render_scene_raster(scene: &scene::Scene, pixels_per_point: f64) -> Result<Raster, PlotError> {
     raster::rasterise(&svg::write_svg(scene), pixels_per_point, SystemFonts::shared())
+}
+
+/// Renders a region of a scene, including objects outside the graph page.
+/// The region uses page points; drawing and fonts follow the normal scene renderer.
+pub fn render_scene_raster_region(
+    scene: &scene::Scene,
+    region: Rect,
+    pixels_per_point: f64,
+) -> Result<Raster, PlotError> {
+    if ![region.x, region.y, region.w, region.h, pixels_per_point].iter().all(|v| v.is_finite())
+        || region.w <= 0.0
+        || region.h <= 0.0
+        || pixels_per_point <= 0.0
+    {
+        return Err(PlotError::Size("the scene region must be finite with positive size and pixel scale".into()));
+    }
+    raster::rasterise(&svg::write_svg_view(scene, region, 1.0), pixels_per_point, SystemFonts::shared())
 }
 
 /// [`render_scene_raster`] for Draft View: the same drawing with unsmoothed (crisp, not

@@ -65,7 +65,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | Brief | Wave | Size | Scope and dependency |
 |---|---|---|---|
 | [T58](T58-graph-text-formatting.md) | 1, P0 | L | Renderer slices published; selected graph text font/size/Bold/Italic/colour toolbar, shared dispatch and the six remaining Format-bar graph targets added (graphing 7.4); editor, title menu items, measurement and T59 adapter separate |
-| [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell format model, drawing and Format Cells done (unmeasured); toolbar adapter, Format > Worksheet, Set Data Style after T58 slice 3 |
+| [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell model/dialog and worksheet toolbar font/size/Bold/Italic/Underline/basic text and fill colours; installed faces and derived row/print geometry (basic Origin toolbar measured); left: worksheet-wide dialog, Set Data Style, vertical alignment and remaining measurements |
 | [T60](T60-merge-graphs-layer-management.md) | 2, P0 | L | Done 2026-11-15: Merge Graph Windows (dialog, CLI), Layer Management (Arrange, Size/Position, Link), Fit Page to Layers; left: merge folders/labels/preview, Add/Axes/Display tabs, MCP |
 | [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Done 2026-11-15 (graphing 21): nine Add Layer kinds, insets, Delete Layer, Layer Properties, displaced Y axes and Move to Layer, 3Ys/4Ys templates and Multiple Y Axes (CLI `-t 3ys-y-yy` etc.); left: Open Dialog..., three layer-icon items, Origin's legend in the templates |
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
@@ -77,9 +77,18 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T71](T71-point-segments.md) | 4 (B4), P1 | S | Done 2026-11-15: Plot > Line + Symbol > 2 and 3 Point Segment (line connections 2 and 3) |
 | [T73](T73-change-xy-ungroup.md) | 4 (B3), P1 | S | Done 2026-11-15: plot right-click Change X, Change Y, Ungroup as Origin 2016 |
 | [T75](T75-scatter-central.md) | 4 (B4), P1 | S | Done 2026-11-16: Scatter Central (axes crossing in the middle, X axis offset) |
+| [T79](T79-column-scatter.md) | 4 (B4), P1 | S | Done 2026-11-16: Column Scatter |
+| [T82](T82-line-series.md) | 4 (B4), P1 | S | Done 2026-11-16: Line Series (one plot, k-point segments, helper sheet) |
 | [T76](T76-grouped-indexed-plots.md) | Plot > Column/Bar/Pie > Grouped Columns (indexed data), Plot > Statistics > Grouped Box Charts (B4 slice) | M | Done 2026-11-16 (`grouped-indexed`, graphing 14.28, Origin docs only, unmeasured); left: dialog, raw-data statistics, stacking, table tick labels, more than two groups |
+| [T83](T83-interval-and-pareto.md) | Plot > Statistics > Interval Plot and Pareto (B4 slice) | M | Done 2026-11-16 (`interval-pareto`, graphing 14.29, Origin docs only, unmeasured); left: dialogs, binned Pareto, groups, drop lines, count table |
+| [T80](T80-color-and-bubble-scale.md) | 4 (B3), P2 | M | Done 2026-11-16: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (layer scale objects, graphing 27); left: dragging, properties dialog, Map link |
 | [T78](T78-recent-lists.md) | 4 (B10), P1 | S | Done 2026-11-16: Most Recently Used lists in Plot, Worksheet, Analysis, Statistics menus and Recent Exports (File > Export and graph window) |
-| [T74](T74-fill-column-patterns.md) | Fill Column With: A set of Numbers, Date/Time values, Text & Numeric values (Origin patternN/D/T) | M | claimed 2026-11-15 (`b5-fill`, Claude Windows) |
+| [T74](T74-fill-column-patterns.md) | Fill Column With: A set of Numbers, Date/Time values, Text & Numeric values (Origin patternN/D/T) | M | done 2026-11-16 (workbook-model 13c); left: Origin's window layout, text quoting |
+| [T84](T84-sampling-interval.md) | Set Sampling Interval and Show X Column (Origin colint/colshowx) | M | done 2026-11-16 (workbook-model 13d); left: reading the interval from `.opj`, analysis tools, the label row |
+| [T86](T86-swap-columns-paste-transpose.md) | Swap Columns and Paste Transpose (Origin colswap, Paste Transpose) | S | done 2026-11-16 (workbook-model 13e); left: Paste Transpose measured in Origin |
+| [T87](T87-set-as-begin-end.md) | Set As Begin, Set As End, Reset to Full Range (column data range) | M | done 2026-11-16 (workbook-model 13f); left: analysis tools using the range |
+| [T88](T88-copy-variants.md) | Edit > Copy: Copy formula, Copy label rows, Copy formula and label rows, Copy All | S | done 2026-11-16 (workbook-model 13.4c); left: user parameter rows in Origin's text |
+| [T89](T89-copy-columns-to.md) | Copy Columns to... (Origin colcopy) | S | claimed 2026-11-16 (`copy-columns`, Claude Windows) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: Origin measured (graphing 24); Copy Format and Paste Format on graph, axis and legend, Apply Formats window; left: object cut/copy/paste, align, group, order (rest of B2) |
@@ -150,7 +159,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T56](T56-user-graph-templates.md) | Save Template As and Plot > User Templates (a graph's look without data, applied to new columns; CLI `--template`) | M | done 2026-11-15 (graphing.md 24): Save Template As, Plot > User Templates, Manage, `sheaf plot -t NAME`; left: Origin measurements |
 | [T64](T64-significance-plot.md) | Multiple comparisons plot with significance brackets | M | done 2026-11-15 (statistics 23, `significance-plot`, macOS); left: two-way ANOVA, paired and one-sample, Origin measurements, editable brackets |
 | [T77](T77-new-graph-and-project-without-data.md) | File > New > Graph and Standard New Graph (empty graph from the default template), Save Project without Data... and Duplicate Project without Data (B12 slice) | M | done 2026-11-16 (`new-graph-nodata`, graphing.md 25, project-file-format.md); Origin behaviour of the two project items unmeasured |
-| [T72](T72-copy-paste-format.md) | Copy Format and Paste Format on graph, axis and legend (B2 slice 1) | M | open; Origin 2016 measured (graphing 26), Rust built (core module, menus, Apply Formats window) |
+| [T72](T72-copy-paste-format.md) | Copy Format and Paste Format on graph, axis and legend (B2 slice 1) | M | open; Origin 2016 measured (graphing 27), Rust built (core module, menus, Apply Formats window) |
 | [T81](T81-partial-correlation-anova3-rmanova.md) | Partial Correlation Coefficient, Three-Way ANOVA, One-Way and Two-Way Repeated Measures ANOVA (B8 slice) | L | done 2026-11-16 (`partial-corr`, `anova3`, `rmanova`, statistics.md 24-26, Origin 2016 runs reproduced); left: Raw layout, missing values, two-way means comparisons, mean/plot graphs |
 
 For every active claim (including matrices/contour/heatmaps), read the current

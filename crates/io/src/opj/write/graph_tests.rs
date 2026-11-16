@@ -558,6 +558,21 @@ fn straight_lines_are_named_in_a_warning_and_not_written() {
 }
 
 #[test]
+fn colour_and_bubble_scales_are_named_in_a_warning_and_not_written() {
+    use sheaf_core::layer_scale::{LayerScale, LayerScaleKind};
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.layers[0].scales = vec![LayerScale::new(LayerScaleKind::Color), LayerScale::new(LayerScaleKind::Bubble)];
+    });
+    let (imp, warnings) = round_trip(&p);
+    let w = warnings.iter().find(|w| w.contains("bubble scale")).unwrap_or_else(|| panic!("{warnings:?}"));
+    assert!(w.contains("layer 1 has 2 colour or bubble scales") && w.contains(".opj.sheaf"), "{w}");
+    assert!(imp.graphs[0].layers[0].scales.is_empty());
+    let (_, quiet) = round_trip(&source());
+    assert!(!quiet.iter().any(|w| w.contains("bubble scale")));
+}
+
+#[test]
 fn other_scale_types_survive_a_round_trip() {
     let mut p = source();
     graph_with(&mut p, Template::Scatter, &[(0, 3)], |g| {

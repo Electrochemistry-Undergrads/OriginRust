@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **372 greyed items: 255 in the menu bar, 19 on the toolbars, 98 in context menus.**
+original inventory baseline. This is not a new runtime audit. **341 greyed items: 235 in the menu bar, 19 on the toolbars, 87 in context menus.**
 
 ## How to read and keep this file
 
@@ -35,7 +35,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 |---|---|
 | `T56` | 1 |
 | `T57` | 2 |
-| `T58` | 2 |
+| `T58` | 0 |
 | `T59` | 2 |
 | `T60` | 0 |
 | `T61` | 5 |
@@ -52,11 +52,15 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T75` | 0 |
 | `T76` | 0 |
 | `T78` | 0 |
+| `T79` | 0 |
+| `T80` | 0 |
 | `T81` | 0 |
+| `T82` | 0 |
+| `T83` | 0 |
 | `B2` | 33 |
-| `B3` | 22 |
-| `B4` | 23 |
-| `B5` | 33 |
+| `B3` | 19 |
+| `B4` | 19 |
+| `B5` | 11 |
 | `B6` | 31 |
 | `B7` | 8 |
 | `B8` | 13 |
@@ -70,7 +74,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 67 items, backlog packages (`B`) 285, not planned (`N`) 20.
+Briefs (`T`) hold 65 items, backlog packages (`B`) 256, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -93,10 +97,9 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B12` Export: Worksheet as Image... [no window, Workbook]
 
 ### Edit
-- `B5` Copy: Copy formula · Copy label rows · Copy formula and label rows · Copy All [Workbook]
 - `B5` Paste Link · Paste Special [Workbook, Graph]
-- `B5` Paste Transpose · Paste Link Transpose · Select... [Workbook]
-- `B5` Remove Links · Set As Begin · Set As End · Reset to Full Range [Workbook]
+- `B5` Paste Link Transpose · Select... [Workbook]
+- `B5` Remove Links [Workbook]
 - `B7` Find in Project... [Workbook]
 - `B16` Button Edit Mode [Workbook, Graph]
 - `B2` Cut · Copy · Paste · Clear [Graph]
@@ -115,14 +118,12 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Plot
 - `T63` Line: Horizontal Step · Vertical Step · Spline Connected
-- `B4` Symbol: Column Scatter
-- `B4` Line + Symbol: Line Series
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
 - `B15` 3D Symbol/Bar/Vector: 3D Bars · 3D Scatter · 3D Trajectory · 3D Scatter + Error Bar · 3D Vector XYZ XYZ · 3D Vector XYZ dXdYdZ
 - `B8` Statistics: Probability Plot · Q-Q Plot
-- `B4` Statistics: Interval Plot · Histogram + Probabilities · Marginal Histograms · Marginal Box Charts · 2D Kernel Density · QC (X bar R) Chart · Pareto · Scatter Matrix
+- `B4` Statistics: Histogram + Probabilities · Marginal Histograms · Marginal Box Charts · 2D Kernel Density · QC (X bar R) Chart · Scatter Matrix
 - `B14` Contour/Heat Map: Color Fill · B/W Lines + Labels · Gray Scale Map · Heat Map · Polar Contour theta(X) r(Y) · Polar Contour r(X) theta(Y) · Ternary Contour
 - `B14` Profile: Contour Profiles · Image Profiles
 - `B4` Specialized: Wind Rose · Piper · Smith Chart · High-Low-Close · Vector XYAM · Vector XYXY · Zoom
@@ -131,8 +132,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Column
 - `T63` Fill Column With: Row Numbers · Uniform Random Numbers · Normal Random Numbers
-- `B5` Fill Column With: A set of Numbers... · A set of Date/Time values... · Arbitrary set of Text&Numeric values...
-- `B5` Set Sampling Interval... · Show X Column...
 
 ### Worksheet
 - `B7` Conditional Formatting: Conditional Highlight... · Conditional Heatmap... · Conditional Pareto... · Conditional Outliers... · Conditional Format Manager...
@@ -158,7 +157,7 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Graph
 - `N` Fit Layer to Graph
-- `B3` Add Function Graph... · New Table · New Color Scale · Convert to Standard Font Size
+- `B3` Add Function Graph... · New Table · Convert to Standard Font Size
 - `T61` New Layer(Axes): Open Dialog...
 - `B3` Legend: Add Legend Title
 
@@ -189,7 +188,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B2` Snap Layers to Grid · Snap Objects to Grid [Graph]
 - `B15` Axes: Z Axis... [Graph]
 - `T63` Axis Tick Labels: X Axis Tick Labels... · Y Axis Tick Labels... [Graph]
-- `T58` Axis Titles: X Axis Title... · Y Axis Title... [Graph]
 - `T59` Worksheet... [Workbook]
 - `B6` Snap to Grid · Merge cells [Workbook]
 
@@ -216,12 +214,11 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ## Context menus
 
-- `B5` Worksheet column header: Copy Columns to... · Remove Links · Swap Columns... · Slide Show of Dependent Graphs · Set Sampling Interval... · Show X Column...
+- `B5` Worksheet column header: Copy Columns to... · Remove Links · Slide Show of Dependent Graphs
 - `T63` Worksheet column header: Frequency Count...
 - `B6` Worksheet column header: Add or Update Sparklines...
 - `T63` Worksheet column header > Fill Column with: Row Numbers · Uniform Random Numbers · Normal Random Numbers
-- `B5` Worksheet column header > Fill Column with: A set of Numbers... · A set of Date/Time values... · Arbitrary set of Text&Numeric values...
-- `B5` Worksheet data cell: Paste Transpose · Paste Link · Paste Link Transpose · Remove Links · Set as Begin · Set as End
+- `B5` Worksheet data cell: Paste Link · Paste Link Transpose · Remove Links
 - `B6` Worksheet data cell: Insert Graph... · Insert Images from Files... · Insert Sparklines... · Insert Variables...
 - `B6` Worksheet data cell > Insert Arrow: Arrow · Double Arrow
 - `T59` Worksheet data cell > Set Data Style: Default
@@ -236,7 +233,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B2` Graph axis title: Cut · Copy · Bring to the front · Push to the back
 - `B2` Graph text label: Cut · Copy · Bring to the front · Push to the back
 - `B2` Graph drawn shape: Cut · Copy
-- `B3` Graph legend: Add Color Scale · Add Bubble Scale
 - `B2` Graph legend: Cut · Copy · Bring to the front · Push to the back · Bring to front of data · Push to back of data
 - `B16` Graph legend: Programming Control...
 - `B11` Graph legend: Save Format as Theme...

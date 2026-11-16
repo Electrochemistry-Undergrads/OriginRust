@@ -49,7 +49,8 @@ fn both_menu_items_are_live_and_plot_the_selected_group_and_data_columns() {
         .click();
     settle(&mut h);
     assert!(entry_enabled(&h, "Grouped Box Charts"));
-    assert!(!entry_enabled(&h, "Interval Plot"), "the interval plot is still missing");
+    assert!(entry_enabled(&h, "Interval Plot"));
+    assert!(entry_enabled(&h, "Pareto"));
     close_menus(&mut h);
 
     plot(&mut h, &["Electrolyte", "Current"], Template::GroupedColumns);
@@ -106,4 +107,31 @@ fn plot_details_sets_the_error_bar_of_every_subgroup_plot_with_undo() {
     assert_eq!(errors(&h), vec![IndexedError::Se; 2]);
     menu(&mut h, "Edit", "Undo Change graph settings");
     assert_eq!(errors(&h), vec![IndexedError::None; 2]);
+}
+
+#[test]
+fn interval_plot_and_pareto_plot_from_a_selection_and_warn_on_a_wrong_one() {
+    use sheaf_core::graph::StatPlot;
+    let mut h = start(vec![indexed_file("interval-pareto")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let before = project(&h).graphs().count();
+
+    plot(&mut h, &["Current"], Template::IntervalPlot);
+    let g = project(&h).graphs().last().unwrap();
+    assert_eq!(g.layers[0].plots.len(), 1);
+    assert!(matches!(g.layers[0].plots[0].stat, Some(StatPlot::Interval { .. })));
+
+    // A text column is counted by a Pareto chart (two layers: columns and the cumulative line).
+    plot(&mut h, &["Electrolyte"], Template::Pareto);
+    let g = project(&h).graphs().last().unwrap();
+    assert_eq!(g.layers.len(), 2);
+    assert_eq!(g.layers[0].plots[0].stat, Some(StatPlot::Pareto));
+    assert_eq!(project(&h).graphs().count(), before + 2);
+
+    // Wrong selections: a Pareto of two columns, an interval plot of a text column.
+    plot(&mut h, &["Electrolyte", "Current"], Template::Pareto);
+    assert!(h.state().status.contains("Select one column"));
+    plot(&mut h, &["Electrolyte"], Template::IntervalPlot);
+    assert_eq!(project(&h).graphs().count(), before + 2);
+    assert!(h.state().status.contains("Nothing to plot"));
 }

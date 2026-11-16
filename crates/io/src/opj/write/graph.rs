@@ -720,6 +720,12 @@ impl Writer {
         if has(&|k| k.is_violin()) {
             notes.push("violin plots were written as plain columns of their data".into());
         }
+        if has(&|k| k == PlotKind::ColumnScatter) {
+            notes.push(
+                "column scatter plots were written as scatter plots of their data; the column positions and the jitter were not written"
+                    .into(),
+            );
+        }
         if has(&|k| k.is_hexbin()) {
             notes.push("hexbin plots were written as scatter plots of their data".into());
         }
@@ -744,6 +750,12 @@ impl Writer {
         if plots.iter().any(|r| r.plot.indexed.is_some()) {
             notes.push(
                 "grouped columns and grouped box charts of indexed data were written as plain plots of their data column; the group columns and the grouping were not written"
+                    .into(),
+            );
+        }
+        if plots.iter().any(|r| r.plot.stat.is_some()) {
+            notes.push(
+                "interval plots and Pareto charts were written as plain plots of their data column; the means, error bars, counts and cumulative percent were not written"
                     .into(),
             );
         }
@@ -778,7 +790,7 @@ impl Writer {
             let p = r.plot;
             let kind = match p.kind {
                 PlotKind::Line | PlotKind::Parallel | PlotKind::ParallelIndex => CurveKind::Line,
-                PlotKind::Scatter | PlotKind::Hexbin => CurveKind::Scatter,
+                PlotKind::Scatter | PlotKind::Hexbin | PlotKind::ColumnScatter => CurveKind::Scatter,
                 PlotKind::LineSymbol => CurveKind::LineSymbol,
                 PlotKind::Column
                 | PlotKind::StackedColumn
@@ -813,6 +825,10 @@ impl Writer {
                 Connect::StepVertical => 12,
                 Connect::Segment2 => 2,
                 Connect::Segment3 => 3,
+                Connect::Segments(_) => {
+                    notes.push("a k-point segment line connection (k > 3) was written as a straight line".into());
+                    1
+                }
             };
             let line_color = if kind == CurveKind::Scatter { p.symbol.color } else { p.line.color };
             let spec = CurveSpec {
@@ -1113,6 +1129,16 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         let n = layer.straight_lines.len();
         notes.push(format!(
             "layer {} has {n} straight line{} that an Origin project file written here cannot hold; {} not written (the .opj.sheaf companion keeps {})",
+            index + 1,
+            if n == 1 { "" } else { "s" },
+            if n == 1 { "it was" } else { "they were" },
+            if n == 1 { "it" } else { "them" },
+        ));
+    }
+    if !layer.scales.is_empty() {
+        let n = layer.scales.len();
+        notes.push(format!(
+            "layer {} has {n} colour or bubble scale{} that an Origin project file written here cannot hold; {} not written (the .opj.sheaf companion keeps {})",
             index + 1,
             if n == 1 { "" } else { "s" },
             if n == 1 { "it was" } else { "they were" },

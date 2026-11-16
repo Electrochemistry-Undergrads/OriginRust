@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **375 listed item locations** at the planning
-  baseline (258 menu bar, 19 toolbar, 98 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **341 listed item locations** at the planning
+  baseline (235 menu bar, 19 toolbar, 87 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -71,6 +71,49 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+T81 (B8 slice, branch `stats-anova3`, statistics.md 24-26, Origin 2016 measured): Statistics > Descriptive
+Statistics > Partial Correlation Coefficient (Origin's pcorrcoef), ANOVA > Three-Way ANOVA (type III, means comparisons,
+Levene, power) and One-Way / Two-Way Repeated Measures ANOVA (Mauchly, Greenhouse-Geisser, Huynh-Feldt), with
+`sheaf analyze partial-corr|anova3|rmanova`. Three-way refuses more than 30 levels per factor. fmt, strict Clippy, full tests pass.
+
+T59 worksheet controls (`codex/t59-worksheet-controls`, 2026-11-16): Underline and the basic eight
+fill colours plus None now format selected worksheet cells, label cells and compact whole-column
+ranges. Contextual Ctrl+B/I/U keeps text editors, dialogs and graph shortcuts independent; each
+press or effective palette change is one Undo step, and stale requests/no-ops are rejected.
+Origin 2016 U/shortcut/fill and label-versus-column behaviour was measured on synthetic data.
+Fmt, strict workspace/all-target Clippy, all 3,971 workspace tests (8 ignored), all 26 related
+toolbar regressions and the 348-item inventory pass, with unchanged source/goldens and an
+inspected isolated desktop capture. Only newer claim metadata was merged after validation;
+the exact tested program is unchanged. Own claim/integration slot released; T59 remains partial.
+
+T59 worksheet Format-toolbar adapter (`codex/t59-format-toolbar`, 2026-11-16): Font, Size,
+Bold/Italic and the basic eight text colours now target selected cells, rows, columns and label
+cells. Installed faces and point-to-pixel conversion drive derived grid/print row geometry,
+including filtered views and frozen panes. Enter commits sizes before the editor loses focus
+for worksheet and graph targets. Mixed summaries, stale-selection/revision guards and no-op
+checks preserve data and one-step Undo; whole-column styles remain compact and survive native
+and companion saves. Origin 2016 measurements are in GUI 3: Arial 9 pt, per-cell styles/colour,
+mixed-size blank field, first-cell mixed Bold state and row growth. Sheaf can shrink derived
+heights; Origin retains enlarged heights. Worksheet-wide scope, Set Data Style, toolbar
+underline/fill/shortcuts, persistent heights and remaining measurements stay open. Empty label
+rows retain the existing print omission policy (T27). Validation: fmt, strict workspace/all-target
+Clippy, full 3,934 passed / 0 failed / 8 ignored, all 17 toolbar regressions, inventory 368, frozen
+source/goldens and an inspected isolated desktop capture. Source scope and integration window
+released by this push; the task remains partial.
+
+T82 (`line-series`, B4 slice): Plot > Line + Symbol > Line Series as Origin 2016's (one plot, k-point
+segment connection, rows never joined, column-name ticks; data in a LineSeries sheet; graphing 18.15).
+
+T79 (`column-scatter`, B4 slice): Plot > Symbol > Column Scatter as Origin 2016's (columns at 1, 2, ...,
+diamonds size 8, jitter within +-0.15, column-name ticks, Y title Range; graphing 18.14).
+
+T62 Origin measurements (2026-11-16, Claude Windows, docs only, graphing 13.16-13.17): Origin 2016's
+Stacked Histograms put the first column at the bottom, give each panel its own bins and X scale and draw
+every panel in the same red hatch on a portrait page with 5 % gaps; its Waterfall Y/Z Color Mapping colour
+from red (low) to blue (high), the reverse of Sheaf, on Origin's oblique waterfall. The differences are listed
+in the spec and the T62 Status for a code slice. No build this run: the disk had 836 MB free, so the idle
+build folder `target/wf-autosave` was deleted (23 GB free after) and no new one was made.
+
 T72 Copy Format / Paste Format (B2 slice 1, branch `copy-format`, graphing 26, Origin 2016 measured): Edit,
 page and axis menus copy a graph or axis format (All, All Style Formats, Colors, Fonts, Background, Dimensions,
 Scales; axis All) and paste it as one "Apply Theme" undo step; Edit > Paste Format... opens Apply Formats (its
@@ -88,6 +131,12 @@ without Data... writes a copy with every value, mask, note, format, filter and f
 formulas and graphs kept), never over the open project's own file; Duplicate Project without Data offers to save,
 then opens that copy as an untitled project (as Origin's later Clone Project). New `core/without_data.rs`.
 Origin 2016's behaviour of the two items is undocumented; unmeasured choices in graphing 25 and project-file-format.
+
+T83 interval plot and Pareto (`interval-pareto`, macOS, no Origin; renumbered from T82, which `line-series` also took): Plot > Statistics > Interval Plot (mean of each Y
+column with a t-CI/SD/SE error bar; `sheaf plot -t interval-plot [--interval-error ci|sd|se]`) and Pareto (counts of one
+column, descending, with a cumulative-percent line on a 0-100 right axis; `-t pareto -y COL`). New `Plot.stat`
+(`StatPlot`), `Project::plot_interval`/`plot_pareto`. Origin's dialogs, binned Pareto and measured defaults are
+leftovers (graphing 14.29, unmeasured).
 
 T76 grouped indexed plots (`grouped-indexed`, macOS, no Origin; renumbered from T75): Plot > Column/Bar/Pie >
 Grouped Columns (indexed data) and Plot > Statistics > Grouped Box Charts split one data column by one or two
@@ -140,6 +189,10 @@ and the unresolved 2016 whole-object Bold/Italic difference. Formatting, strict 
 all-target Clippy, 3,713 tests (8 ignored), inventory 397 and eight Python tooling
 tests pass; source hashes match. An isolated desktop capture was inspected. The shared dispatch
 is ready for T59's worksheet adapter; remaining T58 controls/editor work retain their scopes.
+
+T80 colour and bubble scales (`color-scale`, B3 slice 4, macOS, no Origin): `Layer::scales` (colour scale = hexbin's bar over a
+colour mapped plot's Z, bubble scale = 14.16's four-circle size legend), Graph > New Color Scale and the legend's Add Color
+Scale / Add Bubble Scale (enabled when the layer has a matching plot), select/Delete, `.opj` warning (graphing 27).
 
 T67 Add Straight Line (`straight-line`, B3 slice 1): Origin 2016's addline measured (names, ends,
 label text and its 5 % placement) and copied: `Layer::straight_lines`, drawing, the Graph menu
@@ -243,22 +296,28 @@ planning; both claims are released. T52 slope annotation also landed (`33c4d246`
 its implementation and unmeasured Origin defaults are recorded in graphing 17.6 and T52. Results and recorded checks are preserved in
 [known issues/recent results](docs/tasks/known-issues.md).
 
+**T58 axis-title and legend editors (2026-11-16, Codex):** Format > Axis Titles and existing
+title/legend Edit Text routes use the shared selection editor and actual-object preview
+(graphing 7.7). Automatic metadata, legend symbols/name references, fonts, visibility,
+Cancel/Apply/Undo and native/Origin-companion saves are covered. Read-only plot facades
+reuse existing title and raster rules. Remaining T58 inline family/colour pickers and
+combined-script controls remain in the brief. Formatting, strict all-target Clippy and
+3,957 workspace tests pass (eight existing ignored), including all 21 related tests;
+inventory validation, eight Python tooling tests and three inspected desktop captures pass.
+
 ## In flight (check for recent edits before claiming)
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `t62-origin` | Claude Windows, "axis-breaks" | T62 leftovers, docs only: Origin 2016 measurements of Stacked Histograms (graphing 13.16) and Waterfall Y/Z Color Mapping (13.17); differences recorded for a later code slice | claimed 2026-11-16; spec and brief text only, no code; no other sessions' scopes |
-| `codex/t58-title-editors` | Codex Windows, t58-title-editors | T58 slice 2 remainder: reuse selection editor/preview for existing X/Y axis titles and existing legend content; wire the two title entries | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` reused after completed 7bf66f6f; TextDialog/helpers, narrow graph-properties text hooks and existing-target menus/actions/app dispatch, own UI tests; read-only plot/lib.rs axis-title facade and layout::first_title visibility only, forwarding existing rules without render changes; graphing 7.7. Read-only plot/lib axis-title and cropped-scene facades reuse existing resolvers/SVG/raster; layout first_title visibility only, no rendering behaviour changes or font-owner registration edits. No T70 new legend title, shared Format/T59 adapter/toolbar/grid, renderer/fonts/markup (text-run-fonts), new core model fields, formula/parameter labels, graph_view/shape/layer/view tools, stats/other dialogs or pending root/index/roadmap |
-| `codex/t59-format-toolbar` | Codex Windows | T59 step 3 first slice: worksheet Format toolbar target, mixed-state/Undo/persistence/UI tests and Origin measurements; measured font drawing and font-derived row geometry dependency fixes | claimed/refined 2026-11-15; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points`; app/grid + new worksheet-font/geometry helpers, bounded core sheet_print + plot/sheet styled-cell font/geometry and plot/lib helper export as needed; existing cell-format fields only/no new persistent model fields; no graph fonts/markup/text/layout/backends (text-run-fonts), graph editor (t58-text-editor), printer dialogs/page/range/workflows, T69/T70/T54 or other scopes |
-| `codex/text-run-fonts` | Codex Windows, text-run-fonts | T58 step 1 renderer remainder: per-run `\f:Name(text)` family switching, nested/restored metrics and glyph/stroke/export tests, preserving Greek/Symbol behaviour | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; markup/text + private tests, fonts only if necessary; graphing 7.6 (Format 7.4/editor 7.5 reserved); no combined scripts, other colour tags, app/editor/toolbar/dispatch, model/core/IO/backends or global font settings |
+| `codex/t59-worksheet-dialog` | Codex Windows | T59 slice 3: Origin worksheet-format dialog and Set Data Style > Default measurements, then supported measured worksheet formatting behaviour | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` sequentially reused after shipped b79d6e99 and all actors terminal; existing/new private worksheet formatting dialog/helpers, bounded Format/cell-menu entries/actions/dispatch, own UI tests and registration, GUI 3/workbook 13b/T59. Existing cell-format model first. No clipboard/Copy variants (T88), sampling/data range, graph text/editor/toolbar/renderer/fonts/markup, general grid/layout/print (T27) or IO writer, calc/stats/MCP/formula-parameter labels, reserved T26/T29/T16 item6 or ROOT pending files. |
+| `codex/t58-inline-colors` | Codex Windows | T58 step 2 selected-text colour controls in the shared free-label/title/legend editor, eight basic indexed colours first | claimed 2026-11-16; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` sequentially reused after shipped 9f780532 and all actors terminal; TextDialog/private editor/palette helpers, new own UI/helper tests and registration, graphing 7.8/T58. Existing raw markup only; no renderer/fonts/parser/backends (text-run-fonts), core/model/IO, worksheet/Format toolbar/controller (T59), general menus/actions/dispatch, graph_view/shapes/layers, legend title, stats, formula/parameter labels, reserved T26/T27/T29/T16 item6 or pending root metadata.  Requested final product integration window 2026-11-16 04:28 through 04:48 Central Standard Time, after T59 and T88 release; please batch other product pushes outside it. Docs-only claims remain fine; releases on publication, failure or deadline. |
+| `codex/text-run-fonts` | Codex Windows, text-run-fonts | T58 step 1 renderer remainder: per-run `\f:Name(text)` family switching, nested/restored metrics and glyph/stroke/export tests, preserving Greek/Symbol behaviour | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; markup/text + private tests, fonts only if necessary; graphing 7.6 (Format 7.4/editor 7.5 reserved); no combined scripts, other colour tags, app/editor/toolbar/dispatch, model/core/IO/backends or global font settings  Requested final main PRODUCT-push integration window 2026-11-16 02:18 through 02:43 Central Standard Time; please batch product pushes after this window so one full combined font validation can finish; documentation-only claims are fine; releases on font push or deadline. |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
 | `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
-| `b5-fill` | Claude Windows, "t30-origin" | B5 slice as new brief T74: Column > Fill Column With A set of Numbers / Date/Time values / Text&Numeric values (Origin patternN/D/T, measured), menus and column-header context menu | claimed 2026-11-15; worktree wf_c03644a9-997-1, build target/wf-excel; not Row Numbers/random fills (T63), no other B5 items |
-| `column-scatter` | Claude Windows, session fe4b37eb | B4 slice as new brief T79: Plot > Symbol > Column Scatter (Y columns as scatter by column position with Origin's offset/jitter, categorical X labels); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not Grouped Columns/T76, Line Series or statistics plots; no other sessions' scopes |
-| `color-scale` | Claude macOS, "mac-format-bar" | B3 slice as new brief T80: Graph > New Color Scale and the legend context menu's Add Color Scale / Add Bubble Scale (a colour-scale object for colour-mapped plots, a bubble-size scale for bubble plots) | claimed 2026-11-16; worktree `.claude/worktrees/color-scale`, `target/wt-cscale`; core layer object, plot drawing (reusing hexbin's colour bar), Graph menu/legend context items, hit/selection if needed, .sheaf/.opj, spec section, T80 brief. Built from Origin's documentation on macOS (no Origin). Not Add Legend Title, New Table, Function Graph, display range/markers, T72 Copy/Paste Format or other sessions' scopes |
-| `stats-anova3` | Claude Windows, "continue all tasks" | B8 slice as new brief T81: Partial Correlation Coefficient, Three-Way ANOVA, Repeated Measures ANOVA; new calc modules, core tools, Statistics menu dialogs, ops analyze, statistics.md | claimed 2026-11-16; no Probability/Q-Q (T14), crosstab/dunnett/distfit, wavelets, fitting, peaks |
+| `hist-prob` | Claude Windows, session fe4b37eb | B4 slice as new brief T85: Plot > Statistics > Histogram + Probabilities (histogram with the cumulative probability curve on a right axis); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no other B4 plots (T83 interval/Pareto is done) or other sessions' scopes |
+| `copy-columns` | Claude Windows, "t30-origin" | B5 slice as new brief T89: the column header Copy Columns to... (Origin colcopy, measured), core column copy, window, menu | claimed 2026-11-16; worktree swap-transpose, build target/wf-excel; not Paste Link/Special, Select..., Remove Links, Slide Show |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

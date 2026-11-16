@@ -281,6 +281,7 @@ impl GraphUi {
             ObjectKind::Shape(shape) => GraphOp::DeleteShape { layer, shape },
             ObjectKind::Slope(slope) => GraphOp::DeleteSlope { layer, slope },
             ObjectKind::StraightLine(line) => GraphOp::DeleteStraightLine { layer, line },
+            ObjectKind::Scale(scale) => GraphOp::DeleteScale { layer, scale },
             _ => return None,
         };
         self.selected = None;
@@ -814,6 +815,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                 ObjectKind::Shape(shape) => Some(Action::EditShape { graph: graph_id, layer, shape }),
                 ObjectKind::Slope(slope) => Some(Action::EditSlope { graph: graph_id, layer, slope }),
                 ObjectKind::StraightLine(line) => Some(Action::EditStraightLine { graph: graph_id, layer, line }),
+                ObjectKind::Scale(_) => Some(open(layer, PropsTab::Plots, None)),
             },
             Hit::Layer(layer) => Some(open(layer, PropsTab::Plots, None)),
             Hit::Page => Some(open(state.active_layer, PropsTab::Page, None)),
@@ -1082,6 +1084,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         selected: &[],
         sorting_columns: Vec::new(),
         cells: false,
+        whole_columns: false,
         undo: None,
         redo: None,
         undo_ai: false,
@@ -1103,6 +1106,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         layer_curves: Vec::new(),
         stack: None,
         can_cumulate: false,
+        can_color_scale: false,
         selected_shape: None,
         view_mode: Default::default(),
         layer_icons: true,
@@ -1178,11 +1182,20 @@ fn menu_for(
             }
             ObjectKind::XTitle => menus::graph_title_menu(layer, false),
             ObjectKind::YTitle => menus::graph_title_menu(layer, true),
-            ObjectKind::Legend => menus::graph_legend_menu(layer),
+            ObjectKind::Legend => {
+                let l = graph.layers.get(layer);
+                let applies = |k| l.is_some_and(|l| sheaf_core::layer_scale::LayerScale::applies(l, k));
+                menus::graph_legend_menu(
+                    layer,
+                    applies(sheaf_core::layer_scale::LayerScaleKind::Color),
+                    applies(sheaf_core::layer_scale::LayerScaleKind::Bubble),
+                )
+            }
             ObjectKind::Label(k) => menus::graph_label_menu(layer, k),
             ObjectKind::Shape(k) => menus::graph_shape_menu(layer, k),
             ObjectKind::Slope(k) => menus::graph_slope_menu(layer, k),
             ObjectKind::StraightLine(k) => menus::graph_straight_line_menu(layer, k),
+            ObjectKind::Scale(k) => menus::graph_scale_menu(layer, k),
         },
         MenuTarget::Hit(Hit::Layer(layer)) => menus::graph_page_menu(layer),
         MenuTarget::Hit(Hit::Page) => menus::graph_page_menu(0),
@@ -1310,6 +1323,8 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::DeleteShape { layer, .. }
         | GraphOp::DeleteSlope { layer, .. }
         | GraphOp::DeleteStraightLine { layer, .. }
+        | GraphOp::AddScale { layer, .. }
+        | GraphOp::DeleteScale { layer, .. }
         | GraphOp::OrderShape { layer, .. }
         | GraphOp::HideLayer { layer }
         | GraphOp::HideOtherLayers { layer }
@@ -1470,6 +1485,17 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         GraphOp::DeleteStraightLine { line, .. } => {
             if line < l.straight_lines.len() {
                 l.straight_lines.remove(line);
+            }
+        }
+        GraphOp::AddScale { kind, .. } => {
+            // One scale of each kind per layer.
+            if sheaf_core::layer_scale::LayerScale::applies(l, kind) && !l.scales.iter().any(|s| s.kind == kind) {
+                l.scales.push(sheaf_core::layer_scale::LayerScale::new(kind));
+            }
+        }
+        GraphOp::DeleteScale { scale, .. } => {
+            if scale < l.scales.len() {
+                l.scales.remove(scale);
             }
         }
         GraphOp::OrderShape { shape, front, .. } => {

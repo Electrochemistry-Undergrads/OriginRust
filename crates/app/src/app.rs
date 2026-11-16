@@ -197,6 +197,11 @@ pub struct SheafApp {
     template_prompt: Option<crate::dialogs::user_templates::SaveTemplatePrompt>,
     /// Plot > User Templates > Manage.
     template_manager: Option<crate::dialogs::user_templates::TemplateManager>,
+    /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values.
+    fill_pattern: Option<crate::dialogs::fill_pattern::FillPatternDialog>,
+    /// Column > Set Sampling Interval... and Show X Column....
+    sampling: Option<crate::dialogs::sampling::SamplingDialog>,
+    show_x: Option<crate::dialogs::sampling::ShowXDialog>,
     /// The saved user templates as last read from the folder (at start and after a change).
     user_templates: Vec<String>,
     power: Option<PowerDialog>,
@@ -205,12 +210,15 @@ pub struct SheafApp {
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
     copied: String,
+    /// Edit > Paste Transpose asked for the clipboard: the next pasted text is transposed.
+    paste_transposed: bool,
     worksheet_clipboard: crate::wks_clipboard::WorksheetClipboard,
     /// The pixel size of the last page put on the clipboard by Copy Page.
     copied_page: Option<[usize; 2]>,
     about: bool,
     /// Which toolbars are shown.
     toolbars: Toolbars,
+    worksheet_format: crate::worksheet_format::Cache,
     /// View > Status Bar turned the status bar off.
     status_bar_hidden: bool,
     /// View > Full Screen is on (T66): one graph's page over the whole screen until Esc.
@@ -312,16 +320,21 @@ impl SheafApp {
             go_to: None,
             template_prompt: None,
             template_manager: None,
+            fill_pattern: None,
+            sampling: None,
+            show_x: None,
             user_templates: startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default(),
             power: None,
             find: None,
             sort: None,
             sheet_name: None,
             copied: String::new(),
+            paste_transposed: false,
             worksheet_clipboard: crate::wks_clipboard::WorksheetClipboard::default(),
             copied_page: None,
             about: false,
             toolbars: Toolbars::default(),
+            worksheet_format: Default::default(),
             status_bar_hidden: false,
             full_screen: None,
             full_screen_reminder_off: false,
@@ -1346,6 +1359,11 @@ impl SheafApp {
             GraphOp::DeleteShape { .. } => "Delete drawn object",
             GraphOp::DeleteSlope { .. } => "Delete slope annotation",
             GraphOp::DeleteStraightLine { .. } => "Delete straight line",
+            GraphOp::AddScale { kind, .. } => match kind {
+                sheaf_core::layer_scale::LayerScaleKind::Color => "Add color scale",
+                sheaf_core::layer_scale::LayerScaleKind::Bubble => "Add bubble scale",
+            },
+            GraphOp::DeleteScale { .. } => "Delete scale",
             GraphOp::OrderShape { front: true, .. } => "Bring drawn object to front",
             GraphOp::OrderShape { front: false, .. } => "Push drawn object to back",
             GraphOp::HideLayer { .. } => "Hide layer",
@@ -1606,6 +1624,11 @@ impl SheafApp {
             return None;
         }
         let graph = self.active?;
+        if let Some(book) = self.doc.project().workbook(graph) {
+            let sheet = book.active_sheet.min(book.sheets.len().checked_sub(1)?);
+            let range = grid::format_target(self.books.get(&graph)?, &book.sheets[sheet]).ok()?;
+            return self.worksheet_format.snapshot(&self.doc, graph, sheet, range);
+        }
         let (layer, object) = self.graphs.get(&graph)?.selected?;
         crate::text_format::Snapshot::graph(&self.doc, graph, layer, object)
     }
@@ -1730,6 +1753,43 @@ impl SheafApp {
                 });
                 if !moved {
                     self.say("The columns are already there");
+                }
+            }
+            Action::ResetFullRange(book) => {
+                let ids: Vec<ColumnId> = self
+                    .doc
+                    .project()
+                    .workbook(book)
+                    .and_then(|b| b.sheets.get(b.active_sheet))
+                    .map(|s| s.columns.iter().map(|c| c.id).collect())
+                    .unwrap_or_default();
+                let had = self
+                    .doc
+                    .project()
+                    .workbook(book)
+                    .and_then(|b| b.sheets.get(b.active_sheet))
+                    .is_some_and(|s| s.columns.iter().any(|c| c.data_range.is_some()));
+                if had {
+                    let mut n = 0;
+                    self.doc.apply("Reset to full range", |p| n = p.reset_data_range(&ids));
+                    self.say(format!("{n} column(s) use all their rows again"));
+                } else {
+                    self.say("Every column already uses all its rows");
+                }
+            }
+            Action::SwapColumns(a, b) => {
+                let swapped = self.doc.edit("Swap columns", |p| {
+                    let (book, sheet_index) = p
+                        .locate(a)
+                        .and_then(|(b, s, _)| Some((b.id, b.sheets.iter().position(|x| std::ptr::eq(x, s))?)))
+                        .ok_or("the column is gone")?;
+                    let ws =
+                        p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index)).ok_or("the sheet is gone")?;
+                    if ws.swap_columns(a, b) { Ok(()) } else { Err("select two columns of the same sheet") }
+                });
+                match swapped {
+                    Ok(()) => self.say("Swapped the two columns"),
+                    Err(e) => self.warn(format!("Could not swap: {e}")),
                 }
             }
             Action::HideColumns(columns) => {
@@ -1860,6 +1920,7 @@ impl SheafApp {
                 }
             }
             Action::PlotColumns { book, columns, template } => self.plot_columns(book, columns, template),
+            Action::PlotLineSeries { book, columns } => self.plot_line_series(book, columns),
             Action::PlotYError { book, columns, x } => self.plot_y_error(book, columns, x),
             Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
             Action::StackPanels { book, columns } => {
@@ -2210,6 +2271,12 @@ impl SheafApp {
             Action::EditText { graph, layer, label } => {
                 self.text_dialog = TextDialog::edit(&self.doc, graph, layer, label);
             }
+            Action::EditTitle { graph, layer, vertical } => {
+                self.text_dialog = TextDialog::axis_title(&self.doc, graph, layer, vertical);
+            }
+            Action::EditLegendText { graph, layer } => {
+                self.text_dialog = TextDialog::legend(&self.doc, graph, layer);
+            }
             Action::AddShape { graph, layer, shape } => {
                 self.doc.apply("Add drawn object", |p| {
                     if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
@@ -2361,6 +2428,17 @@ impl SheafApp {
                     Some(crate::dialogs::user_templates::TemplateManager::new(self.user_templates.clone()));
             }
             Action::PlotUserTemplate { book, columns, name } => self.plot_user_template(book, columns, &name),
+            Action::FillPattern { kind, columns } => {
+                self.fill_pattern = Some(crate::dialogs::fill_pattern::FillPatternDialog::new(kind, columns));
+            }
+            Action::SetSamplingInterval { columns } => {
+                let current =
+                    columns.first().and_then(|c| self.doc.project().column(*c)).and_then(|c| c.sampling.as_ref());
+                self.sampling = Some(crate::dialogs::sampling::SamplingDialog::new(columns.clone(), current));
+            }
+            Action::ShowXColumn { columns } => {
+                self.show_x = Some(crate::dialogs::sampling::ShowXDialog::new(columns));
+            }
             Action::ReloadRecent => {
                 self.recent.reload();
                 ctx.request_repaint();
@@ -2593,7 +2671,7 @@ impl SheafApp {
         };
         let target = self.books.get(&book).and_then(|s| s.target(sheet));
         let Some(t) = target else {
-            if op == CellOp::Paste || matches!(op, CellOp::PasteText(_)) {
+            if matches!(op, CellOp::Paste | CellOp::PasteTranspose | CellOp::PasteText(_)) {
                 self.warn("Click a cell first: the pasted text starts there".to_string());
             }
             return;
@@ -2601,16 +2679,22 @@ impl SheafApp {
         match op {
             CellOp::Copy(_) | CellOp::Cut => {
                 let kind = if let CellOp::Copy(k) = op { k } else { CopyKind::Plain };
+                let part = if let CopyKind::Part(p) = kind { p } else { sheaf_core::clipboard::CopyPart::Values };
                 let options = CopyOptions {
                     // Copy never drops digits: a copy and paste inside Sheaf must give back the same numbers.
                     full_precision: true,
                     label_rows: kind == CopyKind::WithLabels,
+                    part,
                 };
                 let text = sheet.copy_text(&t.columns, t.rows.clone(), options);
                 let external = sheet.copy_external_text(
                     &t.columns,
                     t.rows.clone(),
-                    CopyOptions { full_precision: kind == CopyKind::FullPrecision, label_rows: options.label_rows },
+                    CopyOptions {
+                        full_precision: kind == CopyKind::FullPrecision,
+                        label_rows: options.label_rows,
+                        part,
+                    },
                 );
                 self.worksheet_clipboard.write(ctx, &external, &text);
                 self.copied = text;
@@ -2658,14 +2742,43 @@ impl SheafApp {
                 self.say(format!("{changed} cell(s) changed"));
             }
             CellOp::Insert | CellOp::Delete => self.insert_or_delete(book, sheet_index, &t, op == CellOp::Insert),
-            CellOp::Paste => {
+            CellOp::SetRangeEnd(which) => {
+                let ids: Vec<ColumnId> = t.columns.iter().filter_map(|&i| sheet.columns.get(i).map(|c| c.id)).collect();
+                let row = match which {
+                    sheaf_core::data_range::RangeEnd::Begin => t.rows.start,
+                    sheaf_core::data_range::RangeEnd::End => t.rows.end.saturating_sub(1),
+                };
+                let label = match which {
+                    sheaf_core::data_range::RangeEnd::Begin => "Set as begin",
+                    sheaf_core::data_range::RangeEnd::End => "Set as end",
+                };
+                match self.doc.edit(label, |p| p.set_data_range_end(&ids, which, row)) {
+                    Ok(()) => self.say(format!(
+                        "Row {} is the {} of {} column(s)",
+                        row + 1,
+                        if label == "Set as begin" { "first row" } else { "last row" },
+                        ids.len()
+                    )),
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
+            CellOp::Paste | CellOp::PasteTranspose => {
                 // The system answers with the text in a later frame (an `Event::Paste`).
+                self.paste_transposed = op == CellOp::PasteTranspose;
                 ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
             }
             CellOp::PasteText(text) => {
                 let text = self.worksheet_clipboard.for_paste(text);
                 let (col, row) = t.top_left;
-                match self.doc.edit("Paste", |p| p.paste_text(book, sheet_index, col, row, &text)) {
+                let transposed = std::mem::take(&mut self.paste_transposed);
+                let label = if transposed { "Paste transpose" } else { "Paste" };
+                match self.doc.edit(label, |p| {
+                    if transposed {
+                        p.paste_text_transposed(book, sheet_index, col, row, &text)
+                    } else {
+                        p.paste_text(book, sheet_index, col, row, &text)
+                    }
+                }) {
                     Ok(report) => {
                         let mut status = format!("Pasted {} row(s) of {} column(s)", report.rows, report.columns);
                         if report.columns_added > 0 {
@@ -2907,6 +3020,18 @@ impl SheafApp {
         } else {
             Vec::new()
         };
+        // A Pareto chart counts the cells of the one selected column, text or numbers.
+        if template == Template::Pareto {
+            let [column] = columns[..] else {
+                self.warn("Select one column whose values are counted for the Pareto chart".to_string());
+                return;
+            };
+            match self.doc.edit("Plot columns", |p| p.plot_pareto(column)) {
+                Ok(_) => self.say("Plotted a Pareto chart".to_string()),
+                Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+            }
+            return;
+        }
         // Grouped columns / grouped box charts of indexed data: the one numeric Y column is the data, the other
         // selected columns (one or two) are the groups, in selection order.
         if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
@@ -2968,6 +3093,84 @@ impl SheafApp {
         match self.doc.edit("Plot columns", |p| p.plot_with_user_template(&template, &ys)) {
             Ok(_) => self.say(format!("Plotted {} column(s) with the template {}", ys.len(), template.name)),
             Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+        }
+    }
+
+    /// Set Sampling Interval and Show X Column: OK changes every chosen column, one undo step.
+    fn show_sampling(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::sampling::{SamplingOutcome, ShowXOutcome};
+        if let Some(d) = &mut self.sampling {
+            match d.show(ctx) {
+                SamplingOutcome::Open => {}
+                SamplingOutcome::Closed => self.sampling = None,
+                SamplingOutcome::Set { columns, x0, inc, long_name, units } => {
+                    let set = self.doc.edit("Set sampling interval", |p| {
+                        p.set_sampling_interval(&columns, x0, inc, &long_name, &units)
+                    });
+                    match set {
+                        Ok(()) => {
+                            self.sampling = None;
+                            let what = if x0 == 1.0 && inc == 1.0 {
+                                "Cleared the sampling interval"
+                            } else {
+                                "Set the sampling interval"
+                            };
+                            self.say(format!("{what} of {} column(s)", columns.len()));
+                        }
+                        Err(e) => d.set_problem(e.to_string()),
+                    }
+                }
+            }
+        }
+        if let Some(d) = &mut self.show_x {
+            match d.show(ctx) {
+                ShowXOutcome::Open => {}
+                ShowXOutcome::Closed => self.show_x = None,
+                ShowXOutcome::Show { columns, clear } => {
+                    let shown = self.doc.edit("Show X column", |p| {
+                        for c in &columns {
+                            p.show_x_column(*c, clear)?;
+                        }
+                        Ok::<(), sheaf_core::sampling::SamplingError>(())
+                    });
+                    match shown {
+                        Ok(()) => {
+                            self.show_x = None;
+                            self.say(format!("Showed the X of {} column(s)", columns.len()));
+                        }
+                        Err(e) => d.set_problem(e.to_string()),
+                    }
+                }
+            }
+        }
+    }
+
+    /// The Fill Column With pattern window: OK fills every chosen column, one undo step.
+    fn show_fill_pattern(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::fill_pattern::FillOutcome;
+        let Some(d) = &mut self.fill_pattern else { return };
+        match d.show(ctx) {
+            FillOutcome::Open => {}
+            FillOutcome::Closed => self.fill_pattern = None,
+            FillOutcome::Fill(columns, pattern) => {
+                let seed = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(1, |t| t.as_nanos() as u64);
+                let filled = self.doc.edit("Fill column", |p| {
+                    let mut rows = 0;
+                    for (k, c) in columns.iter().enumerate() {
+                        rows = p.fill_pattern(*c, &pattern, seed.wrapping_add(k as u64))?;
+                    }
+                    Ok::<usize, sheaf_core::fill_pattern::FillError>(rows)
+                });
+                match filled {
+                    Ok(rows) => {
+                        self.fill_pattern = None;
+                        self.say(format!("Filled {} column(s), {rows} rows each", columns.len()));
+                    }
+                    Err(e) => d.set_problem(e.to_string()),
+                }
+            }
         }
     }
 
@@ -3033,6 +3236,16 @@ impl SheafApp {
                     Err(e) => m.set_error(e.to_string()),
                 },
             }
+        }
+    }
+
+    /// Plot > Line + Symbol > Line Series (T82): the selected Y columns (else the sheet's), two or more.
+    fn plot_line_series(&mut self, book: WindowId, columns: Vec<ColumnId>) {
+        let ys = self.plot_y_columns(book, columns, Template::LineSymbol);
+        let made = self.doc.edit("Line Series", |p| p.plot_line_series(&ys));
+        match made {
+            Ok(_) => self.say(format!("Line Series of {} column(s)", ys.len())),
+            Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
         }
     }
 
@@ -3343,6 +3556,9 @@ impl SheafApp {
                 })
                 .unwrap_or_default(),
             cells: book.and_then(|b| self.books.get(&b)).is_some_and(|s| s.sel != Sel::None),
+            whole_columns: book
+                .and_then(|b| self.books.get(&b))
+                .is_some_and(|s| matches!(s.sel, Sel::Columns | Sel::All)),
             undo: self.doc.undo_label(),
             redo: self.doc.redo_label(),
             undo_ai: self.can_undo_ai_changes(),
@@ -3374,6 +3590,12 @@ impl SheafApp {
             }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
+            can_color_scale: graph.is_some_and(|g| {
+                let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
+                project.graph(g).and_then(|gr| gr.layers.get(layer)).is_some_and(|l| {
+                    sheaf_core::layer_scale::LayerScale::applies(l, sheaf_core::layer_scale::LayerScaleKind::Color)
+                })
+            }),
             can_cumulate: graph.is_some_and(|g| {
                 let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
                 project.graph(g).and_then(|gr| gr.layers.get(layer)).is_some_and(sheaf_core::stack::layer_cumulates)
@@ -3429,8 +3651,38 @@ impl SheafApp {
         out
     }
 
-    /// Keyboard shortcuts: the keys written in the menu table (Origin's keys for the commands
-    /// Sheaf has), and nothing else.
+    /// Cell-format keys take precedence over graph-only keys such as Ctrl+I.
+    fn worksheet_format_keys(&mut self, ctx: &egui::Context) {
+        use crate::text_format::Change;
+        while let Some((index, key)) = ctx.input(|i| {
+            i.events.iter().enumerate().find_map(|(index, event)| match event {
+                egui::Event::Key { key, pressed: true, modifiers, .. }
+                    if matches!(key, egui::Key::B | egui::Key::I | egui::Key::U)
+                        && modifiers.command
+                        && !modifiers.shift
+                        && !modifiers.alt =>
+                {
+                    Some((index, *key))
+                }
+                _ => None,
+            })
+        }) {
+            let Some(state) = self.text_format().filter(|s| s.worksheet.is_some()) else { break };
+            // Consume individual presses so repeated/different shortcuts keep their event order.
+            ctx.input_mut(|i| {
+                i.events.remove(index);
+            });
+            let change = match key {
+                egui::Key::B => Change::Bold(!state.font.bold),
+                egui::Key::I => Change::Italic(!state.font.italic),
+                egui::Key::U => Change::Underline(!state.worksheet.expect("worksheet key target").underline),
+                _ => unreachable!(),
+            };
+            self.apply(Action::FormatText(state.request(change)), ctx);
+        }
+    }
+
+    /// Menu shortcuts and contextual worksheet cell-format keys.
     fn shortcuts(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         // A widget with the keyboard is a text field, except the grid itself (it takes the
         // keyboard when a cell is clicked so that Tab and the arrows stay with it).
@@ -3452,6 +3704,9 @@ impl SheafApp {
         // F2, Delete and Ctrl+A belong to the Project Explorer while it has the keyboard.
         if !typing && !self.dialog_open() {
             explorer::handle_keys(ctx, &mut self.panels.explorer, self.doc.project(), actions);
+        }
+        if !typing && !self.panels.explorer.focus && !egui::Popup::is_any_open(ctx) && !self.dialog_open() {
+            self.worksheet_format_keys(ctx);
         }
         // The cursor keys, Tab, Enter and typing belong to the cells of the active worksheet,
         // unless a text field, a menu or a dialog has the keyboard.
@@ -3497,9 +3752,15 @@ impl SheafApp {
                 if typing && !menus::works_while_typing(&cmd) {
                     continue;
                 }
-                // Ctrl+G is Go to in a workbook and Export Graphs in a graph: a key goes to the
-                // command that can run now.
-                let shared = matches!(cmd, menus::Cmd::GoToCell | menus::Cmd::ExportGraph);
+                // Ctrl+G is Go to in a workbook and Export Graphs in a graph, Ctrl+J Copy formula
+                // and Copy Page (as in Origin): a key goes to the command that can run now.
+                let shared = matches!(
+                    cmd,
+                    menus::Cmd::GoToCell
+                        | menus::Cmd::ExportGraph
+                        | menus::Cmd::CopyPage
+                        | menus::Cmd::Copy(crate::actions::CopyKind::Part(sheaf_core::clipboard::CopyPart::Formula))
+                );
                 let action = menus::resolve(&cmd, &menu_ctx);
                 if shared && action.is_err() {
                     continue;
@@ -3557,6 +3818,9 @@ impl SheafApp {
             || self.go_to.is_some()
             || self.template_prompt.is_some()
             || self.template_manager.is_some()
+            || self.fill_pattern.is_some()
+            || self.sampling.is_some()
+            || self.show_x.is_some()
             || self.power.is_some()
             || self.find.is_some()
             || self.sort.is_some()
@@ -4205,6 +4469,8 @@ impl SheafApp {
             }
         }
         self.show_template_windows(ctx);
+        self.show_fill_pattern(ctx);
+        self.show_sampling(ctx);
         if let Some(d) = &mut self.find {
             let book = d.book;
             match d.show(ctx) {
@@ -4616,15 +4882,32 @@ impl SheafApp {
                         self.data_edit(DataEdit::Mask { cells, masked: true });
                     }
                 }
-                // text:N opens the Text window of the N-th label (from 1) of the first graph's
-                // first layer and selects it.
+                // text:N opens label N; text:x/y/legend opens existing title/legend text.
                 "text" => {
-                    if let (Some(id), Ok(n)) = (first_graph, arg.parse::<usize>()) {
-                        let label = n.saturating_sub(1);
-                        self.text_dialog = TextDialog::edit(&self.doc, id, 0, label);
-                        self.graphs.entry(id).or_default().selected =
-                            Some((0, sheaf_plot::scene::ObjectKind::Label(label)));
-                        self.focus(id);
+                    if let Some(id) = first_graph {
+                        let object = match arg {
+                            "x" | "y" => {
+                                self.text_dialog = TextDialog::axis_title(&self.doc, id, 0, arg == "y");
+                                Some(if arg == "y" {
+                                    sheaf_plot::scene::ObjectKind::YTitle
+                                } else {
+                                    sheaf_plot::scene::ObjectKind::XTitle
+                                })
+                            }
+                            "legend" => {
+                                self.text_dialog = TextDialog::legend(&self.doc, id, 0);
+                                Some(sheaf_plot::scene::ObjectKind::Legend)
+                            }
+                            _ => arg.parse::<usize>().ok().map(|n| {
+                                let label = n.saturating_sub(1);
+                                self.text_dialog = TextDialog::edit(&self.doc, id, 0, label);
+                                sheaf_plot::scene::ObjectKind::Label(label)
+                            }),
+                        };
+                        if let Some(object) = object {
+                            self.graphs.entry(id).or_default().selected = Some((0, object));
+                            self.focus(id);
+                        }
                     }
                 }
                 // shape:N opens the properties window of the N-th drawn object (from 1) of the

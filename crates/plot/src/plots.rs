@@ -690,6 +690,10 @@ fn draw_line_with(
         Some((first, points.next_back().unwrap_or(first)))
     });
     let bottom = geom.frame.y + geom.frame.h;
+    if let Some(n) = segment_size(pd.plot.line.connect) {
+        draw_segments(out, pd, geom, n, &stroke);
+        return;
+    }
     let connect = match pd.plot.line.connect {
         Connect::Spline if !spline_applies(pd) => Connect::Straight,
         c => c,
@@ -803,6 +807,42 @@ fn draw_line_with(
     }
 }
 
+/// The group size of a segment connection (2 Point Segment, 3 Point Segment, k-point segments).
+fn segment_size(c: Connect) -> Option<usize> {
+    match c {
+        Connect::Segment2 => Some(2),
+        Connect::Segment3 => Some(3),
+        Connect::Segments(k) => Some(usize::from(k).max(2)),
+        _ => None,
+    }
+}
+
+/// Draws a segment connection: the plot's rows, counted from its first row, form groups of `n`
+/// (rows 1..n, n+1..2n, ...), the points of a group are joined in order and the groups are not. A row
+/// whose point cannot be placed (a missing value) breaks the line inside its group but does not shift
+/// the groups, so a Line Series row never joins the next row. No decimation: groups are short.
+fn draw_segments(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, n: usize, stroke: &Stroke) {
+    let mut d = String::new();
+    let mut last: Option<(usize, (f64, f64))> = None;
+    for (k, i) in pd.line_rows().enumerate() {
+        let group = k / n;
+        match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
+            Some(p) => {
+                match last {
+                    Some((g, _)) if g == group => line_to(&mut d, p.0, p.1),
+                    _ => move_to(&mut d, p.0, p.1),
+                }
+                last = Some((group, p));
+            }
+            None => last = None,
+        }
+    }
+    let d = crate::break_cut::cut_at_breaks(d, geom);
+    if !d.is_empty() {
+        out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
+    }
+}
+
 /// Writes one piece as path data.
 fn polyline_path(d: &mut String, pts: &[(f64, f64)], connect: Connect) {
     let (x0, y0) = pts[0];
@@ -825,10 +865,14 @@ fn polyline_path(d: &mut String, pts: &[(f64, f64)], connect: Connect) {
                 line_to(d, w[1].0, w[1].1);
             }
         }
-        Connect::Segment2 | Connect::Segment3 => {
+        Connect::Segment2 | Connect::Segment3 | Connect::Segments(_) => {
             // groups of 2 (3) points counted from the first point of the piece; a last group with a
             // single point draws no line
-            let n = if connect == Connect::Segment2 { 2 } else { 3 };
+            let n = match connect {
+                Connect::Segment2 => 2,
+                Connect::Segments(k) => usize::from(k).max(2),
+                _ => 3,
+            };
             for (k, group) in pts.chunks(n).enumerate() {
                 if k > 0 {
                     move_to(d, group[0].0, group[0].1);
@@ -1264,8 +1308,8 @@ fn draw_error_bars(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
 /// Smallest and largest symbol width of a bubble plot, in points: Origin scales the width linearly
 /// with the Z value, from the smallest to the largest (measured: 8 points with Z from 1 to 9 gave
 /// rings 2.4 and 21 pt wide, 5 pt at Z = 2, 15 pt at Z = 6).
-const BUBBLE_MIN_PT: f64 = 2.0;
-const BUBBLE_MAX_PT: f64 = 20.0;
+pub(crate) const BUBBLE_MIN_PT: f64 = 2.0;
+pub(crate) const BUBBLE_MAX_PT: f64 = 20.0;
 
 /// The colour of a colour mapped symbol at `t` in 0..1: blue, cyan, green, yellow, red (a stand-in:
 /// Origin's default colour map was not measured).
@@ -1285,14 +1329,14 @@ pub(crate) fn map_color(t: f64) -> sheaf_core::Color {
 
 /// The position of `v` between the smallest and largest finite value of `z[from..to]`, 0..1; 0.5
 /// when all values are equal.
-fn z_range(z: &[f64], pd: &PlotData) -> (f64, f64) {
+pub(crate) fn z_range(z: &[f64], pd: &PlotData) -> (f64, f64) {
     pd.rows()
         .filter_map(|r| z.get(r))
         .filter(|x| x.is_finite())
         .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(*x), b.max(*x)))
 }
 
-fn z_fraction((lo, hi): (f64, f64), v: f64) -> f64 {
+pub(crate) fn z_fraction((lo, hi): (f64, f64), v: f64) -> f64 {
     if hi > lo { ((v - lo) / (hi - lo)).clamp(0.0, 1.0) } else { 0.5 }
 }
 

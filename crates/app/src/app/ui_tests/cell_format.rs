@@ -38,9 +38,32 @@ fn texts(h: &Harness<'static, SheafApp>) -> Vec<(String, egui::Pos2, egui::text:
     out
 }
 
-/// The painted copies of `text`: bold text is drawn twice, a fraction of a pixel apart.
+/// The painted copies of `text`, including a synthetic face fallback if required.
 fn runs(h: &Harness<'static, SheafApp>, text: &str) -> Vec<(egui::Pos2, egui::text::TextFormat)> {
     texts(h).into_iter().filter(|(t, _, _)| t == text).map(|(_, p, f)| (p, f)).collect()
+}
+
+fn assert_style(h: &Harness<'static, SheafApp>, text: &str, bold: bool, italic: bool) {
+    let drawn = runs(h, text);
+    let face = sheaf_plot::worksheet_font("Arial", bold, italic);
+    let expected_family = if face.is_some() {
+        egui::FontFamily::Name(format!("worksheet:Arial:{bold}:{italic}").into())
+    } else {
+        egui::FontFamily::Proportional
+    };
+    assert_eq!(
+        drawn.len(),
+        if bold && face.as_ref().is_none_or(|f| !f.bold) { 2 } else { 1 },
+        "{text}: one real face, or the synthetic fallback"
+    );
+    for (_, format) in drawn {
+        assert_eq!(format.font_id.family, expected_family, "{text}: the requested family/style is registered");
+        assert_eq!(
+            format.italics,
+            italic && face.as_ref().is_none_or(|f| !f.italic),
+            "avoid shearing an already italic face"
+        );
+    }
 }
 
 fn painted(h: &Harness<'static, SheafApp>) -> Vec<(egui::Rect, egui::Color32)> {
@@ -91,10 +114,7 @@ fn ok_from_the_cell_menu_formats_the_cell_in_one_undo_step() {
     assert!(!sheet(&h).cell_format_at(b, 0).bold && !sheet(&h).cell_format_at(b, 2).bold);
     // Select another cell so the black selection does not change the colours.
     click_text(&mut h, "6.5");
-    let drawn = runs(&h, "4.5");
-    assert_eq!(drawn.len(), 2, "bold text is drawn twice");
-    assert!(drawn.iter().all(|(_, f)| f.italics));
-    assert!((drawn[1].0.x - drawn[0].0.x).abs() > 0.1 && (drawn[1].0.y - drawn[0].0.y).abs() < 0.01);
+    assert_style(&h, "4.5", true, true);
     assert_eq!(runs(&h, "6.5").len(), 1, "other cells are plain");
     assert!(!runs(&h, "6.5")[0].1.italics);
     // One undo undoes the whole format; redo brings it back.
@@ -262,7 +282,7 @@ fn a_conditional_colour_overrides_the_manual_fill_and_the_manual_bold_stays() {
     assert_eq!(fill_behind(&h, "0.5", &all), Some(rgb(condformat::MIN_FILL)));
     assert_eq!(fill_behind(&h, "20.5", &all), Some(rgb(PALE)), "the rest keeps the manual fill");
     for t in ["30.5", "20.5"] {
-        assert_eq!(runs(&h, t).len(), 2, "{t} stays bold");
+        assert_style(&h, t, true, false);
     }
     // The conditional font colour wins over a manual text colour too.
     let c = col_id(&h, "C");
@@ -325,13 +345,13 @@ fn a_frozen_overlay_cell_and_a_label_cell_are_drawn_styled() {
     assert!(book_ui(&h).scroll_offsets().0 > 20.0, "the sheet scrolled right");
     let cell = runs(&h, "101");
     assert_eq!(cell.len(), 1, "the frozen cell is drawn once");
-    assert!(cell[0].1.italics);
+    assert_style(&h, "101", false, true);
     let green = [egui::Color32::from_rgb(10, 200, 30)];
     assert_eq!(fill_behind(&h, "101", &green), Some(green[0]), "its fill is painted");
     assert_eq!(fill_behind(&h, "1101", &green), Some(green[0]));
-    // The label row cell of A: bold (two copies) in the manual colour.
+    // The label row cell of A uses its bold face and manual colour.
     let label = runs(&h, "c0");
-    assert_eq!(label.len(), 2, "{label:?}");
+    assert_style(&h, "c0", true, false);
     assert!(label.iter().all(|(_, f)| f.color == rgb(Color::rgb(200, 0, 0))));
     // Cells of other columns are plain.
     let other = texts(&h).into_iter().find(|(t, _, _)| t.len() == 3 && t.starts_with('1') && t != "101").unwrap();
@@ -366,7 +386,7 @@ fn a_sort_moves_the_format_with_its_row() {
     assert_eq!(s.column(b).unwrap().numeric().unwrap()[2], 4.5);
     assert!(s.cell_format_at(b, 2).bold && !s.cell_format_at(b, 1).bold);
     click_text(&mut h, "6.5");
-    assert_eq!(runs(&h, "4.5").len(), 2, "the moved cell is drawn bold");
+    assert_style(&h, "4.5", true, false);
 }
 
 #[test]
@@ -391,7 +411,7 @@ fn a_filtered_selection_formats_its_whole_row_span_and_hidden_rows_stay_formatte
     h.state_mut().doc.apply("unfilter", |p| p.remove_row_filter(book, 0));
     settle(&mut h);
     click_text(&mut h, "30.5");
-    assert!(runs(&h, "4.5")[0].1.italics);
+    assert_style(&h, "4.5", false, true);
     assert!(!runs(&h, "2.5")[0].1.italics);
 }
 

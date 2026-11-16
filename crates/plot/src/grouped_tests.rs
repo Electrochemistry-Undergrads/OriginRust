@@ -214,3 +214,105 @@ fn the_plots_draw_and_other_box_and_column_plots_are_untouched() {
     let l = data_of(&p2, g2);
     assert!(l.plots[0].boxed.is_some() && l.plots[0].gboxes.is_empty() && l.plots[0].categories.is_none());
 }
+
+// ---- Interval plot and Pareto chart (T83) ----
+
+fn stat_project(template: Template) -> (Project, WindowId) {
+    let mut p = Project::new();
+    let b = p.add_workbook("data");
+    // A: 2, 4, 6, 8 (mean 5, SD sqrt(20/3), SE SD/2); B: 1, 3 and a gap; defects as text.
+    let a = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![2.0, 4.0, 6.0, 8.0])).unwrap();
+    let c = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 3.0, f64::NAN, f64::NAN])).unwrap();
+    let t = p
+        .add_column(
+            b,
+            0,
+            Designation::X,
+            ColumnData::text(["scratch", "dent", "scratch", "crack", "scratch", "dent", ""].map(String::from).to_vec()),
+        )
+        .unwrap();
+    let g = if template == Template::Pareto {
+        p.plot_columns(template, &[t]).unwrap()
+    } else {
+        p.plot_columns(template, &[a, c]).unwrap()
+    };
+    (p, g)
+}
+
+#[test]
+fn interval_points_are_the_column_means_with_a_t_confidence_interval() {
+    use sheaf_core::graph::{IntervalError, StatPlot};
+    let (mut p, g) = stat_project(Template::IntervalPlot);
+    let l = data_of(&p, g);
+    assert_eq!(l.plots.len(), 2);
+    assert_vec(&l.plots[0].y, &[5.0]);
+    assert_vec(l.plots[0].x.as_deref().unwrap(), &[1.0]);
+    assert_vec(l.plots[1].x.as_deref().unwrap(), &[2.0]);
+    assert_vec(&l.plots[1].y, &[2.0]);
+    // t(0.975, 3) = 3.182446305; SE = sqrt(20/3) / 2.
+    let se = (20.0f64 / 3.0).sqrt() / 2.0;
+    assert_vec(l.plots[0].err.as_deref().unwrap(), &[3.182446305284263 * se]);
+    // Two numbers: t(0.975, 1) = 12.7062047, SE = sqrt(2) / sqrt(2) = 1.
+    assert_vec(l.plots[1].err.as_deref().unwrap(), &[12.706204736174694]);
+    assert_eq!(l.plots[0].slot_label.as_deref(), Some("A"));
+    for (error, level, want) in [
+        (IntervalError::Sd, 95.0, (20.0f64 / 3.0).sqrt()),
+        (IntervalError::Se, 95.0, se),
+        (IntervalError::Ci, 90.0, 2.353363435555 * se),
+    ] {
+        for plot in &mut p.graph_mut(g).unwrap().layers[0].plots {
+            plot.stat = Some(StatPlot::Interval { error, level });
+        }
+        assert_vec(data_of(&p, g).plots[0].err.as_deref().unwrap(), &[want]);
+    }
+}
+
+#[test]
+fn an_empty_column_does_not_use_up_an_interval_slot() {
+    let mut p = Project::new();
+    let b = p.add_workbook("data");
+    let a = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 3.0])).unwrap();
+    let e = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![f64::NAN, f64::NAN])).unwrap();
+    let c = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![2.0, 6.0])).unwrap();
+    let g = p.plot_columns(Template::IntervalPlot, &[a, e, c]).unwrap();
+    let l = data_of(&p, g);
+    assert_eq!(l.plots.len(), 2);
+    assert_vec(l.plots[0].x.as_deref().unwrap(), &[1.0]);
+    assert_vec(l.plots[1].x.as_deref().unwrap(), &[2.0]);
+}
+
+#[test]
+fn interval_plot_draws_symbols_bars_and_column_names() {
+    let (p, g) = stat_project(Template::IntervalPlot);
+    let svg = svg_of(&p, g);
+    let t = texts(&doc(&svg));
+    assert!(t.iter().any(|s| s == "A") && t.iter().any(|s| s == "B" || s == "Y"), "{t:?}");
+    // The mean is a solid circle (the documented BoxInterval look).
+    let sym = p.graph(g).unwrap().layers[0].plots[0].symbol.clone();
+    assert!(sym.shape == sheaf_core::graph::SymbolShape::Circle && sym.filled);
+    compare_golden("interval-plot", &svg);
+}
+
+#[test]
+fn pareto_counts_sorts_and_accumulates() {
+    let (mut p, g) = stat_project(Template::Pareto);
+    let layers = data::collect_graph(&p, p.graph(g).unwrap());
+    let (bars, line) = (&layers[0], &layers[1]);
+    assert_eq!(bars.plots[0].categories.as_deref(), Some(&["scratch".to_string(), "dent".into(), "crack".into()][..]));
+    assert_vec(&bars.plots[0].y, &[3.0, 2.0, 1.0]);
+    // Origin's symr = 1: the line starts at (0, 0) at the left edge of the first bar and its symbols sit at the
+    // right edge of each bar; the default gap is 20 %, so a bar is 0.8 wide.
+    assert_vec(line.plots[0].x.as_deref().unwrap(), &[0.6, 1.4, 2.4, 3.4]);
+    assert_vec(&line.plots[0].y, &[0.0, 50.0, 50.0 * 5.0 / 3.0, 100.0]);
+    // The edges follow the drawn bars: a gap of 50 % makes them 0.5 wide.
+    p.graph_mut(g).unwrap().layers[0].bars.gap_pct = 50.0;
+    let layers = data::collect_graph(&p, p.graph(g).unwrap());
+    assert_vec(layers[1].plots[0].x.as_deref().unwrap(), &[0.75, 1.25, 2.25, 3.25]);
+    p.graph_mut(g).unwrap().layers[0].bars.gap_pct = 20.0;
+    let svg = svg_of(&p, g);
+    let t = texts(&doc(&svg));
+    for want in ["scratch", "dent", "crack", "Count", "Cumulative %", "100"] {
+        assert!(t.iter().any(|s| s == want), "{want} in {t:?}");
+    }
+    compare_golden("pareto", &svg);
+}

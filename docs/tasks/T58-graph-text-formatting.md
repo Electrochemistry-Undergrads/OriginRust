@@ -45,11 +45,20 @@ still open; the renderer and text-editor results above are preserved.
 Formatting, strict workspace all-target Clippy and the combined 3,713-test suite pass
 (8 existing ignored), with all seven toolbar UI regressions, source-hash checks,
 the 397-item inventory and eight Python tooling tests; a desktop capture was inspected.
+Title/legend editor reuse (`codex/t58-title-editors`): the existing X/Y axis title entries and
+title/legend Edit Text routes use the shared selection editor and actual-object preview.
+Automatic text, raw metadata/legend notation, base fonts, visibility, draft cancellation and
+history are preserved; read-only title/region facades reuse existing rendering rules (7.7).
+The two title-menu entries are enabled. Inline family/colour pickers, combined-script insertion
+and remaining renderer gaps still need their separate slices. Final combined validation passed formatting, strict workspace all-target Clippy and
+3,957 tests (eight existing ignored), including all 21 related editor tests. Inventory
+and eight Python tooling tests pass; X-title, Y-title and legend desktop captures were
+inspected, and their four editor/test source files remain unchanged on the combined tree.
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;
 [command map](../spec/ui-command-map.md) toolbar and shortcut tables.
-**Inventory:** 8 locations tagged `T58` in [greyed-items](greyed-items.md).
+**Inventory:** 0 locations tagged `T58` in [greyed-items](greyed-items.md).
 **Ownership:** graph text model/rendering/editor; Format toolbar dispatch. T59 owns its worksheet
 adapter. Coordinate shared `graph.rs`, `toolbar.rs`, actions and menus with other claims.
 

@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 372 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 341 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -65,7 +65,7 @@ their files do not overlap; the "Main files" column shows where each one works.
 
 | ✓ | Package | What | Size | Origin needed | Greyed items | Main files |
 |---|---|---|---|---|---|---|
-| [ ] | [T58](T58-graph-text-formatting.md) | Format toolbar on graph text; underline, strikethrough and colour and font escapes; formatting buttons and preview in the text window; Axis Titles menu items | L | for the toolbar's exact behaviour; build first without | 2 | `plot/markup.rs`, `plot/text.rs`, backends, `app/toolbar.rs`, `dialogs/text_object.rs` |
+| [ ] | [T58](T58-graph-text-formatting.md) | Format toolbar on graph text; underline, strikethrough and colour and font escapes; formatting buttons and preview in the text window; Axis Titles menu items | L | for the toolbar's exact behaviour; build first without | 0 | `plot/markup.rs`, `plot/text.rs`, backends, `app/toolbar.rs`, `dialogs/text_object.rs` |
 | [ ] | [T59](T59-worksheet-cell-formatting.md) | Format Cells: font style, colours and alignment of worksheet cells; Format toolbar on a cell selection | L | for the Format Cells window | 2 | `core/worksheet.rs` (new `cellformat.rs`), `app/grid.rs`, new dialog |
 
 T58 goes first (it builds the toolbar's dispatch); T59 can start on its model and dialog at once.
@@ -102,11 +102,15 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T67](T67-add-straight-line.md) | Add Straight Line (B3 slice 1) | M | 0 |
 | [x] | [T70](T70-axis-center-fit-page-to-printer.md) | Axis Center and Fit Page To Printer (B3 slice 2) | S | 0 |
 | [x] | [T73](T73-change-xy-ungroup.md) | Change X, Change Y, Ungroup on a plot (B3 slice 3) | S | 0 |
-| [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 22 |
+| [x] | [T80](T80-color-and-bubble-scale.md) | New Color Scale, legend Add Color Scale and Add Bubble Scale (B3 slice 4) | M | 0 |
+| [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 19 |
 | [x] | [T71](T71-point-segments.md) | 2 and 3 Point Segment plots (B4 slice 2) | S | 0 |
 | [x] | [T75](T75-scatter-central.md) | Scatter Central (B4 slice 3) | S | 0 |
+| [x] | [T79](T79-column-scatter.md) | Column Scatter (B4 slice) | S | 0 |
 | [x] | [T76](T76-grouped-indexed-plots.md) | Grouped Columns (indexed data), Grouped Box Charts (B4 slice) | M | 0 |
-| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label; Grouped Columns (indexed data) and Grouped Box Charts done as [T76](T76-grouped-indexed-plots.md)): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 23 |
+| [x] | [T82](T82-line-series.md) | Line Series (B4 slice) | S | 0 |
+| [x] | [T83](T83-interval-and-pareto.md) | Interval Plot, Pareto (B4 slice) | M | 0 |
+| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label; Grouped Columns (indexed data) and Grouped Box Charts done as [T76](T76-grouped-indexed-plots.md); Interval Plot and Pareto done as [T83](T83-interval-and-pareto.md)): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 19 |
 
 - **B1.** The graph view draws the page to fit the window. Add a view transform (zoom factor and
   scroll offset) in `crates/app/src/graph_view.rs` so hit-testing (`sheaf_plot::hit`) still works,
@@ -121,10 +125,10 @@ Backlog packages: write the brief first (step 3 above).
 - **B3.** Small independent tools; split freely. Add Straight Line and Add Function Graph reuse
   drawn shapes and the fit library's functions (`sheaf simulate`, T47). Display range and markers
   are T48's leftovers (graphing 20.4). New Color Scale and Add Bubble Scale reuse the colour scale
-  that hexbin and parallel plots draw.
+  that hexbin and parallel plots draw: done (T80).
 - **B4.** One commit per type as in T12. Order by use in the owner's field: Vertical Drop Line,
-  Column + Label, Grouped Columns (indexed data), Grouped Box Charts, Interval Plot, Histogram +
-  Probabilities, Marginal Histograms and Box Charts (two extra layers: do after T61), Pareto, QC
+  Column + Label, Grouped Columns (indexed data), Grouped Box Charts, Interval Plot (done as T83), Histogram +
+  Probabilities, Marginal Histograms and Box Charts (two extra layers: do after T61), Pareto (done as T83), QC
   chart, Scatter Matrix, 2D Kernel Density, vectors, stock charts, wind rose, Piper, Smith, Zoom.
   Line Series and 2/3 Point Segment are line-connection variants: check `Connect` first.
 
@@ -132,7 +136,7 @@ Backlog packages: write the brief first (step 3 above).
 
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
-| [ ] | B5 | Worksheet editing: copy variants, Paste Transpose/Link/Special, cell links, Set As Begin/End, fill with a set of numbers/dates/text, sampling interval, Copy Columns to, Swap Columns | L | 33 |
+| [ ] | B5 | Worksheet editing: copy variants, Paste Transpose/Link/Special, cell links, Set As Begin/End, fill with a set of numbers/dates/text, sampling interval, Copy Columns to, Swap Columns | L | 11 |
 | [ ] | B6 | Worksheet view and sheets: header and grid toggles, row label rows, sheet-tab items, Split, objects in cells (graphs, images, sparklines, variables), Merge cells | L | 31 |
 | [ ] | B7 | Worksheet tools: rest of Conditional Formatting (T35 leftovers), Pivot Table, Find in Project | M | 8 |
 

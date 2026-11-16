@@ -45,6 +45,8 @@ pub fn style_spec(s: &StyleArgs) -> Style {
         treemap_depth: s.treemap_depth,
         treemap_gap: s.treemap_gap,
         group_error: s.group_error.clone(),
+        interval_error: s.interval_error.clone(),
+        interval_level: s.interval_level,
         sunburst_start: s.sunburst_start,
         sunburst_hole: s.sunburst_hole,
         sunburst_gap: s.sunburst_gap,

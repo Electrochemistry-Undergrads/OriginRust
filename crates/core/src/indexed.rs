@@ -49,6 +49,21 @@ pub fn sort_levels(levels: &mut [String]) {
     levels.sort_by(|a, b| compare(numeric, a, b));
 }
 
+/// The cells of `col` counted per distinct value (T83, Pareto chart): `(value as text, count)`, most frequent first,
+/// values with the same count in the order of their first cell. Empty cells are not counted (Sheaf's choice).
+pub fn counts_descending(col: &Column) -> Vec<(String, usize)> {
+    let mut out: Vec<(String, usize)> = Vec::new();
+    for row in 0..col.data.len() {
+        let Some(t) = level_text(col, row) else { continue };
+        match out.iter_mut().find(|(l, _)| *l == t) {
+            Some((_, n)) => *n += 1,
+            None => out.push((t, 1)),
+        }
+    }
+    out.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
+    out
+}
+
 /// The position of `level` in `levels`.
 pub fn level_position(levels: &[String], level: &str) -> Option<usize> {
     levels.iter().position(|l| l == level)

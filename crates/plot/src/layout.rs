@@ -27,7 +27,7 @@ use crate::{LayerGeometry, PlotError, Rect};
 use sheaf_core::Color;
 use sheaf_core::graph::{
     Axis, AxisSide, Font, Graph, Layer, Legend, LegendPosition, LegendScope, LineStyle, Page, PlotKind, ScaleLink,
-    TickDirection,
+    StatPlot, TickDirection,
 };
 use sheaf_core::{Project, WindowId};
 
@@ -169,7 +169,7 @@ fn graph_geometry_once(project: &Project, g: &Graph, pds: &[LayerData], m: &dyn 
 ///   that the end bars are not cut; a linear Y axis over column plots reaches down to their base.
 /// - An X axis over a date or time column gets date tick labels (see [`data::date_axis`]).
 /// - An axis with a label column shows that column's cells at whole-number ticks.
-fn resolve_dim(
+pub(crate) fn resolve_dim(
     project: &Project,
     axis: &Axis,
     dim: Dim,
@@ -205,10 +205,22 @@ fn resolve_dim(
         let mut r = crate::ticks::resolve_category(axis, Some((1.0, names.len() as f64)));
         crate::ticks::label_from_cells(&mut r, &names);
         r
+    } else if dim == Dim::X && sources.iter().any(|pd| pd.slot_label.is_some()) {
+        // Interval plot (T83): one category per plotted column, named by it.
+        let names: Vec<String> = sources.iter().filter_map(|pd| pd.slot_label.clone()).collect();
+        let mut r = crate::ticks::resolve_category(axis, Some((1.0, names.len() as f64)));
+        crate::ticks::label_from_cells(&mut r, &names);
+        r
     } else if dim == Dim::X && !boxes.is_empty() {
         // Box charts: one category per box, named by its column.
         let mut r = crate::ticks::resolve_category(axis, Some((1.0, boxes.len() as f64)));
         let names: Vec<String> = boxes.iter().map(|b| b.label.clone()).collect();
+        crate::ticks::label_from_cells(&mut r, &names);
+        r
+    } else if dim == Dim::X && sources.iter().any(|pd| pd.column_at.is_some()) {
+        // Column scatter: one category per plot, named by its column (0.5 .. n + 0.5).
+        let names: Vec<String> = sources.iter().filter_map(|pd| pd.column_at.as_ref().map(|c| c.1.clone())).collect();
+        let mut r = crate::ticks::resolve_category(axis, Some((1.0, names.len() as f64)));
         crate::ticks::label_from_cells(&mut r, &names);
         r
     } else if dim == Dim::X && data::is_category(project, axis, first) {
@@ -421,7 +433,7 @@ fn group_geometry(
             crate::parallel::label_edges(&mut edges, &g.layers[i], &pds[i].plots, f, m);
             continue;
         }
-        label_edges(&mut edges, &g.layers[i], f, x, y, m, stack::waterfall(g, i).is_some());
+        label_edges(&mut edges, &g.layers[i], f, x, y, m, stack::waterfall(g, i).is_some(), &pds[i].plots);
     }
     // A linked X:Y ratio is not given up to keep the labels on the page.
     let fitted = if linked_height.is_some() { bounds } else { fit_on_page(bounds, &edges, &g.page) };
@@ -490,6 +502,7 @@ fn label_edges(
     y: &ResolvedAxis,
     m: &dyn TextMeasurer,
     waterfall: bool,
+    pds: &[PlotData],
 ) {
     let mut scratch = Vec::new();
     let (xa, ya) = (&layer.x_axis, &layer.y_axis);
@@ -547,6 +560,13 @@ fn label_edges(
     // The colour scale of a sunburst plot beside the frame.
     if layer.display.show_data && layer.plots.iter().any(|p| p.visible && p.kind == PlotKind::Sunburst) {
         e.right = e.right.max(f.x + f.w + crate::hexbin::scale_reserve(ya.tick_font.size_pt));
+    }
+    // The colour scales and bubble scales of the layer, side by side beside the frame.
+    if layer.display.show_data && layer.coords.polar().is_none() && layer.coords.ternary().is_none() {
+        let room = crate::layer_scale::reserve(layer, pds);
+        if room > 0.0 {
+            e.right = e.right.max(f.x + f.w + room);
+        }
     }
     let y_size = ya.title_font.size_pt;
     match ya.side {
@@ -939,6 +959,9 @@ fn layer_scene(
     if waterfall.is_none() && layer.display.show_data {
         crate::slope::draw(out, objects, project, layer, index, pds, geom, m);
         crate::brackets::draw(out, layer, pds, geom, (bracket_step, band_base(layer, &geom.x, geom.frame, m)), m);
+    }
+    if layer.display.show_data {
+        crate::layer_scale::draw(out, objects, project, layer, index, pds, geom, m);
     }
     if waterfall.is_none() {
         crate::straight_line::draw(out, objects, project, layer, index, geom, m);
@@ -1402,7 +1425,7 @@ fn draw_y_labels(
 /// The title of an axis without a title of its own, from the layer's first plot: its Y column for
 /// a Y axis; for an X axis its X column (numbers or text), else the column that labels the ticks,
 /// else `Row`.
-fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
+pub(crate) fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
     let Some(pd) = pds.first() else { return String::new() };
     if pd.plot.kind == PlotKind::Histogram {
         // The counts up the page, the binned column along it.
@@ -1416,8 +1439,18 @@ fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -
         // Indexed data: the X axis is named by the main group column.
         return project.column(ix.group).map(|c| c.axis_title()).unwrap_or_default();
     }
-    if pd.boxed.is_some() && !y_axis {
+    if (pd.boxed.is_some() || pd.column_at.is_some()) && !y_axis {
         return String::new();
+    }
+    match (&pd.plot.stat, y_axis) {
+        (Some(StatPlot::Interval { .. }), false) => return String::new(),
+        (Some(StatPlot::Pareto | StatPlot::ParetoCumulative), false) => {
+            return project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default();
+        }
+        _ => {}
+    }
+    if pd.column_at.is_some() {
+        return "Range".to_string();
     }
     if pd.ridge.is_some() {
         // The columns name the baselines; the values along X have no column of their own.
@@ -1428,6 +1461,12 @@ fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -
         return project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default();
     }
     let x = pd.plot.x.and_then(|id| project.column(id));
+    if x.is_none()
+        && let Some(s) = project.column(pd.plot.y).and_then(|c| c.sampling.as_ref())
+    {
+        // A sampling interval names the X axis by its long name and units (T84).
+        return s.title();
+    }
     match x.or_else(|| data::label_column(project, axis, Dim::X, Some(pd))) {
         Some(c) => c.axis_title(),
         None => "Row".to_string(),

@@ -19,6 +19,9 @@ pub enum Template {
     /// Scatter plot whose axes cross in the middle of the layer (Origin's "Scatter Central", 2016): both
     /// axes at -50 %, the frame drawn as a closed box.
     ScatterCentral,
+    /// Origin's Plot > Symbol > Column Scatter (2016): every Y column as filled diamonds (size 8) standing at
+    /// 1, 2, 3, ... with a small jitter, the X axis named by the columns, the Y title "Range" (measured, T79).
+    ColumnScatter,
     /// Line plot with a symbol on every point.
     LineSymbol,
     /// Cyclic voltammetry overlay: smooth lines without markers, no grid,
@@ -157,10 +160,16 @@ pub enum Template {
     /// Origin's Plot > Statistics > Grouped Box Charts (X-Function plot_gboxindexed, T76): the box chart
     /// template; the rows of one data column are split by one or two group columns.
     GroupedBox,
+    /// Origin's Plot > Statistics > Interval Plot (BoxInterval template, T83): one point per Y column at its
+    /// mean, with an error bar (SD, SE or a confidence interval).
+    IntervalPlot,
+    /// Origin's Plot > Statistics > Pareto (plot_paretoraw, ParetoRaw template, T83): the counts of the distinct
+    /// values of a column as columns in descending order, with the cumulative percent on a right axis of 0 to 100.
+    Pareto,
 }
 
 impl Template {
-    pub const ALL: [Template; 59] = [
+    pub const ALL: [Template; 62] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -182,6 +191,8 @@ impl Template {
         Template::WaterfallZ,
         Template::BoxChart,
         Template::GroupedBox,
+        Template::IntervalPlot,
+        Template::Pareto,
         Template::Violin,
         Template::ViolinBox,
         Template::ViolinPoint,
@@ -220,6 +231,7 @@ impl Template {
         Template::Segment3,
         Template::ScatterRug,
         Template::ScatterCentral,
+        Template::ColumnScatter,
     ];
 
     /// The name used on the command line and in menus.
@@ -228,6 +240,7 @@ impl Template {
             Template::Line => "line",
             Template::Scatter => "scatter",
             Template::ScatterCentral => "scatter-central",
+            Template::ColumnScatter => "column-scatter",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
@@ -269,6 +282,8 @@ impl Template {
             Template::ColumnLabel => "column-label",
             Template::GroupedColumns => "grouped-columns",
             Template::GroupedBox => "grouped-box",
+            Template::IntervalPlot => "interval-plot",
+            Template::Pareto => "pareto",
             Template::Segment2 => "segment2",
             Template::Segment3 => "segment3",
             Template::ScatterRug => "scatter-rug",
@@ -292,6 +307,7 @@ impl Template {
             Template::Line => "Line",
             Template::Scatter => "Scatter",
             Template::ScatterCentral => "Scatter Central",
+            Template::ColumnScatter => "Column Scatter",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
@@ -333,6 +349,8 @@ impl Template {
             Template::ColumnLabel => "Column + Label",
             Template::GroupedColumns => "Grouped Columns (indexed data)",
             Template::GroupedBox => "Grouped Box Charts",
+            Template::IntervalPlot => "Interval Plot",
+            Template::Pareto => "Pareto",
             Template::Segment2 => "2 Point Segment",
             Template::Segment3 => "3 Point Segment",
             Template::ScatterRug => "Scatter + Rug",
@@ -392,6 +410,13 @@ impl Template {
             Template::Line => general(id, name, PlotKind::Line),
             Template::Scatter => general(id, name, PlotKind::Scatter),
             Template::ScatterCentral => scatter_central(id, name),
+            Template::ColumnScatter => {
+                let mut g = general(id, name, PlotKind::ColumnScatter);
+                let s = &mut g.layers[0].default_symbol;
+                s.shape = SymbolShape::Diamond;
+                s.size_pt = 8.0;
+                g
+            }
             Template::LineSymbol => general(id, name, PlotKind::LineSymbol),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
@@ -436,7 +461,18 @@ impl Template {
             Template::Ternary => ternary(id, name),
             Template::Lollipop => general(id, name, PlotKind::Scatter),
             Template::VerticalDropLine => general(id, name, PlotKind::Scatter),
-            Template::ColumnLabel | Template::GroupedColumns => from_red(column(id, name, PlotKind::Column)),
+            Template::IntervalPlot => {
+                // The mean is a solid circle (documented: the box chart template with the box hidden).
+                let mut g = from_red(general(id, name, PlotKind::Scatter));
+                for l in &mut g.layers {
+                    l.default_symbol.shape = SymbolShape::Circle;
+                    l.default_symbol.filled = true;
+                }
+                g
+            }
+            Template::ColumnLabel | Template::GroupedColumns | Template::Pareto => {
+                from_red(column(id, name, PlotKind::Column))
+            }
             Template::Segment2 | Template::Segment3 => {
                 let mut g = general(id, name, PlotKind::LineSymbol);
                 let connect = if *self == Template::Segment2 {
@@ -704,6 +740,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             shapes: Vec::new(),
             slopes: Vec::new(),
             straight_lines: Vec::new(),
+            scales: Vec::new(),
             brackets: Vec::new(),
             comparison: None,
             palette,
@@ -985,6 +1022,7 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
     l.shapes.clear();
     l.slopes.clear();
     l.straight_lines.clear();
+    l.scales.clear();
     l.brackets.clear();
     l.comparison = None;
     l.plot_offsets.clear();
@@ -1047,6 +1085,24 @@ mod tests {
         assert_eq!(l.y_axis.auto_range, AutoRange::SymmetricZero);
     }
 
+    /// Origin 2016's Column Scatter template (T79).
+    #[test]
+    fn column_scatter_template_makes_filled_diamonds_without_a_line() {
+        use crate::{ColumnData, Designation, Project};
+        let mut p = Project::new();
+        let book = p.add_workbook("T");
+        let y1 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 5.0, 2.0])).unwrap();
+        let y2 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 1.0, 4.0])).unwrap();
+        let g = p.plot_columns(Template::ColumnScatter, &[y1, y2]).unwrap();
+        let layer = &p.graph(g).unwrap().layers[0];
+        assert!(layer.plots.iter().all(|q| q.kind == PlotKind::ColumnScatter));
+        assert!(!PlotKind::ColumnScatter.has_line() && PlotKind::ColumnScatter.has_symbols());
+        let s = &layer.plots[0].symbol;
+        assert_eq!((s.shape, s.size_pt, s.filled, s.color), (SymbolShape::Diamond, 8.0, true, Color::BLACK));
+        assert_ne!(layer.plots[0].symbol.color, layer.plots[1].symbol.color, "the palette steps");
+        assert_eq!(Template::ColumnScatter.label(), "Column Scatter");
+    }
+
     #[test]
     fn template_names_round_trip() {
         for t in Template::ALL {
@@ -1064,7 +1120,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 59);
+        assert_eq!(Template::ALL.len(), 62);
+        assert_eq!(Template::from_name("column-scatter"), Some(Template::ColumnScatter));
         assert_eq!(Template::from_name("scatter-central"), Some(Template::ScatterCentral));
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
         assert_eq!(Template::from_name("violin"), Some(Template::Violin));
@@ -1629,6 +1686,60 @@ mod tests {
         // A grouped plot is not a template look.
         let err = crate::user_template::UserTemplate::from_graph("t", p.graph(g).unwrap()).unwrap_err();
         assert!(err.to_string().contains("indexed"), "{err}");
+    }
+
+    #[test]
+    fn interval_and_pareto_templates_build_their_plots_and_refuse_a_wrong_selection() {
+        use crate::graph::{IntervalError, StatPlot};
+        use crate::{ColumnData, Designation, Project};
+        assert_eq!(Template::from_name("interval-plot"), Some(Template::IntervalPlot));
+        assert_eq!(Template::from_name("pareto"), Some(Template::Pareto));
+        assert_eq!((Template::IntervalPlot.label(), Template::Pareto.label()), ("Interval Plot", "Pareto"));
+        assert_eq!(Template::IntervalPlot.new_graph(WindowId(1), "G").layers[0].default_kind, PlotKind::Scatter);
+        let sym = Template::IntervalPlot.new_graph(WindowId(1), "G").layers[0].default_symbol.clone();
+        assert!((sym.shape, sym.filled) == (SymbolShape::Circle, true));
+        assert_eq!(Template::Pareto.new_graph(WindowId(1), "G").layers[0].default_kind, PlotKind::Column);
+
+        let mut p = Project::new();
+        let b = p.add_workbook("d");
+        let t = p
+            .add_column(b, 0, Designation::X, ColumnData::text(["a", "b", "a", "", "a"].map(String::from).to_vec()))
+            .unwrap();
+        let v = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0, 5.0])).unwrap();
+        let w = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![2.0, 4.0, 6.0, 8.0, 10.0])).unwrap();
+
+        assert!(p.plot_columns(Template::IntervalPlot, &[t]).unwrap_err().to_string().contains("numeric data column"));
+        assert!(p.plot_columns(Template::IntervalPlot, &[]).is_err());
+        assert!(p.plot_columns(Template::Pareto, &[v, w]).unwrap_err().to_string().contains("exactly one column"));
+        assert!(
+            p.plot_columns_double_y(Template::IntervalPlot, &[v], &[w]).unwrap_err().to_string().contains("right Y")
+        );
+        assert!(p.plot_columns_double_y(Template::Pareto, &[v], &[w]).unwrap_err().to_string().contains("right Y"));
+        assert_eq!(p.graphs().count(), 0, "a refused plot leaves no graph behind");
+
+        let g = p.plot_columns(Template::IntervalPlot, &[v, w]).unwrap();
+        let l = &p.graph(g).unwrap().layers[0];
+        assert_eq!(l.plots.len(), 2);
+        assert!(l.plots.iter().all(|q| q.kind == PlotKind::Scatter && q.x.is_none()));
+        assert_eq!(l.plots[1].stat, Some(StatPlot::Interval { error: IntervalError::Ci, level: 95.0 }));
+
+        // Pareto: left columns, right cumulative line of 0 - 100, on a text column.
+        let g = p.plot_columns(Template::Pareto, &[t]).unwrap();
+        let gr = p.graph(g).unwrap();
+        assert_eq!(gr.layers.len(), 2);
+        assert_eq!(gr.layers[0].plots[0].stat, Some(StatPlot::Pareto));
+        assert_eq!(gr.layers[1].plots[0].stat, Some(StatPlot::ParetoCumulative));
+        assert_eq!(gr.layers[1].plots[0].kind, PlotKind::LineSymbol);
+        assert_eq!((gr.layers[1].y_axis.min, gr.layers[1].y_axis.max), (Some(0.0), Some(100.0)));
+        let blank = p.add_column(b, 0, Designation::X, ColumnData::text(vec![String::new(); 5])).unwrap();
+        assert!(p.plot_pareto(blank).is_err());
+
+        // The .sheaf form round trips; a plain plot writes no "stat" key; no user template.
+        let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(back.graph(g).unwrap().layers[1].plots[0].stat, Some(StatPlot::ParetoCumulative));
+        let plain = p.plot_columns(Template::Column, &[v]).unwrap();
+        assert!(!serde_json::to_string(p.graph(plain).unwrap()).unwrap().contains("\"stat\""));
+        assert!(crate::user_template::UserTemplate::from_graph("t", p.graph(g).unwrap()).is_err());
     }
 
     #[test]

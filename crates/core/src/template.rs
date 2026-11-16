@@ -157,10 +157,16 @@ pub enum Template {
     /// Origin's Plot > Statistics > Grouped Box Charts (X-Function plot_gboxindexed, T76): the box chart
     /// template; the rows of one data column are split by one or two group columns.
     GroupedBox,
+    /// Origin's Plot > Statistics > Interval Plot (BoxInterval template, T82): one point per Y column at its
+    /// mean, with an error bar (SD, SE or a confidence interval).
+    IntervalPlot,
+    /// Origin's Plot > Statistics > Pareto (plot_paretoraw, ParetoRaw template, T82): the counts of the distinct
+    /// values of a column as columns in descending order, with the cumulative percent on a right axis of 0 to 100.
+    Pareto,
 }
 
 impl Template {
-    pub const ALL: [Template; 59] = [
+    pub const ALL: [Template; 61] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -182,6 +188,8 @@ impl Template {
         Template::WaterfallZ,
         Template::BoxChart,
         Template::GroupedBox,
+        Template::IntervalPlot,
+        Template::Pareto,
         Template::Violin,
         Template::ViolinBox,
         Template::ViolinPoint,
@@ -269,6 +277,8 @@ impl Template {
             Template::ColumnLabel => "column-label",
             Template::GroupedColumns => "grouped-columns",
             Template::GroupedBox => "grouped-box",
+            Template::IntervalPlot => "interval-plot",
+            Template::Pareto => "pareto",
             Template::Segment2 => "segment2",
             Template::Segment3 => "segment3",
             Template::ScatterRug => "scatter-rug",
@@ -333,6 +343,8 @@ impl Template {
             Template::ColumnLabel => "Column + Label",
             Template::GroupedColumns => "Grouped Columns (indexed data)",
             Template::GroupedBox => "Grouped Box Charts",
+            Template::IntervalPlot => "Interval Plot",
+            Template::Pareto => "Pareto",
             Template::Segment2 => "2 Point Segment",
             Template::Segment3 => "3 Point Segment",
             Template::ScatterRug => "Scatter + Rug",
@@ -436,7 +448,10 @@ impl Template {
             Template::Ternary => ternary(id, name),
             Template::Lollipop => general(id, name, PlotKind::Scatter),
             Template::VerticalDropLine => general(id, name, PlotKind::Scatter),
-            Template::ColumnLabel | Template::GroupedColumns => from_red(column(id, name, PlotKind::Column)),
+            Template::IntervalPlot => from_red(general(id, name, PlotKind::Scatter)),
+            Template::ColumnLabel | Template::GroupedColumns | Template::Pareto => {
+                from_red(column(id, name, PlotKind::Column))
+            }
             Template::Segment2 | Template::Segment3 => {
                 let mut g = general(id, name, PlotKind::LineSymbol);
                 let connect = if *self == Template::Segment2 {
@@ -1066,7 +1081,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 59);
+        assert_eq!(Template::ALL.len(), 61);
         assert_eq!(Template::from_name("scatter-central"), Some(Template::ScatterCentral));
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
         assert_eq!(Template::from_name("violin"), Some(Template::Violin));
@@ -1631,6 +1646,58 @@ mod tests {
         // A grouped plot is not a template look.
         let err = crate::user_template::UserTemplate::from_graph("t", p.graph(g).unwrap()).unwrap_err();
         assert!(err.to_string().contains("indexed"), "{err}");
+    }
+
+    #[test]
+    fn interval_and_pareto_templates_build_their_plots_and_refuse_a_wrong_selection() {
+        use crate::graph::{IntervalError, StatPlot};
+        use crate::{ColumnData, Designation, Project};
+        assert_eq!(Template::from_name("interval-plot"), Some(Template::IntervalPlot));
+        assert_eq!(Template::from_name("pareto"), Some(Template::Pareto));
+        assert_eq!((Template::IntervalPlot.label(), Template::Pareto.label()), ("Interval Plot", "Pareto"));
+        assert_eq!(Template::IntervalPlot.new_graph(WindowId(1), "G").layers[0].default_kind, PlotKind::Scatter);
+        assert_eq!(Template::Pareto.new_graph(WindowId(1), "G").layers[0].default_kind, PlotKind::Column);
+
+        let mut p = Project::new();
+        let b = p.add_workbook("d");
+        let t = p
+            .add_column(b, 0, Designation::X, ColumnData::text(["a", "b", "a", "", "a"].map(String::from).to_vec()))
+            .unwrap();
+        let v = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0, 5.0])).unwrap();
+        let w = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![2.0, 4.0, 6.0, 8.0, 10.0])).unwrap();
+
+        assert!(p.plot_columns(Template::IntervalPlot, &[t]).unwrap_err().to_string().contains("numeric data column"));
+        assert!(p.plot_columns(Template::IntervalPlot, &[]).is_err());
+        assert!(p.plot_columns(Template::Pareto, &[v, w]).unwrap_err().to_string().contains("exactly one column"));
+        assert!(
+            p.plot_columns_double_y(Template::IntervalPlot, &[v], &[w]).unwrap_err().to_string().contains("right Y")
+        );
+        assert!(p.plot_columns_double_y(Template::Pareto, &[v], &[w]).unwrap_err().to_string().contains("right Y"));
+        assert_eq!(p.graphs().count(), 0, "a refused plot leaves no graph behind");
+
+        let g = p.plot_columns(Template::IntervalPlot, &[v, w]).unwrap();
+        let l = &p.graph(g).unwrap().layers[0];
+        assert_eq!(l.plots.len(), 2);
+        assert!(l.plots.iter().all(|q| q.kind == PlotKind::Scatter && q.x.is_none()));
+        assert_eq!(l.plots[1].stat, Some(StatPlot::Interval { error: IntervalError::Ci, level: 95.0 }));
+
+        // Pareto: left columns, right cumulative line of 0 - 100, on a text column.
+        let g = p.plot_columns(Template::Pareto, &[t]).unwrap();
+        let gr = p.graph(g).unwrap();
+        assert_eq!(gr.layers.len(), 2);
+        assert_eq!(gr.layers[0].plots[0].stat, Some(StatPlot::Pareto));
+        assert_eq!(gr.layers[1].plots[0].stat, Some(StatPlot::ParetoCumulative));
+        assert_eq!(gr.layers[1].plots[0].kind, PlotKind::LineSymbol);
+        assert_eq!((gr.layers[1].y_axis.min, gr.layers[1].y_axis.max), (Some(0.0), Some(100.0)));
+        let blank = p.add_column(b, 0, Designation::X, ColumnData::text(vec![String::new(); 5])).unwrap();
+        assert!(p.plot_pareto(blank).is_err());
+
+        // The .sheaf form round trips; a plain plot writes no "stat" key; no user template.
+        let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(back.graph(g).unwrap().layers[1].plots[0].stat, Some(StatPlot::ParetoCumulative));
+        let plain = p.plot_columns(Template::Column, &[v]).unwrap();
+        assert!(!serde_json::to_string(p.graph(plain).unwrap()).unwrap().contains("\"stat\""));
+        assert!(crate::user_template::UserTemplate::from_graph("t", p.graph(g).unwrap()).is_err());
     }
 
     #[test]

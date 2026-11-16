@@ -671,6 +671,33 @@ pub struct Indexed {
     pub error: IndexedError,
 }
 
+/// The error bar of an interval plot point (T82).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IntervalError {
+    /// The sample standard deviation (n - 1).
+    Sd,
+    /// The standard error of the mean.
+    Se,
+    /// The Student-t confidence interval of the mean (Sheaf's default, as in the Graphical Summary).
+    #[default]
+    Ci,
+}
+
+/// A plot whose points are computed from its Y column's cells instead of read from them (T82).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StatPlot {
+    /// Interval Plot: the one point of this column is its mean at the next position 1, 2, ..., with an error bar
+    /// (`level` is the confidence level in percent, used by [`IntervalError::Ci`]).
+    Interval { error: IntervalError, level: f64 },
+    /// Pareto chart, the bars: the cells of the Y column (text or numbers) counted per distinct value, in
+    /// descending order of count.
+    Pareto,
+    /// Pareto chart, the curve on the right axis: the running percent of the counted cells.
+    ParetoCumulative,
+}
+
 /// The settings of a treemap plot (Origin 2025b Treemap plot, graphing spec 14.26). The plot's own Y column is
 /// the value column; the category columns are named here, the first the root level. Every field is skipped when
 /// written while it has its default, so older files load unchanged.

@@ -429,6 +429,7 @@ fn into_project_renumbers_the_stack_offsets_with_the_columns() {
             parallel: Default::default(),
             treemap: Default::default(),
             indexed: None,
+            stat: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,

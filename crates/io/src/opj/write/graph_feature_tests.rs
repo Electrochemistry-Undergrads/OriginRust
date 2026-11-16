@@ -792,6 +792,20 @@ fn grouped_indexed_plots_are_written_as_plain_plots_with_a_save_warning() {
 }
 
 #[test]
+fn interval_plots_and_pareto_charts_are_written_as_plain_plots_with_a_save_warning() {
+    let mut p = source();
+    line_graph(&mut p, |l| {
+        l.plots[0].stat = Some(sheaf_core::graph::StatPlot::Pareto);
+    });
+    let (_, out) = round_trip(&p);
+    assert!(
+        out.warnings.iter().any(|w| w.contains("interval plots and Pareto charts were written")),
+        "{:?}",
+        out.warnings
+    );
+}
+
+#[test]
 fn violin_plots_are_written_as_plain_columns_with_a_save_warning() {
     for kind in [sheaf_core::graph::PlotKind::Violin, sheaf_core::graph::PlotKind::HalfViolin] {
         let mut p = source();

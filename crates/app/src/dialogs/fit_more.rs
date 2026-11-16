@@ -132,8 +132,8 @@ impl FitMoreDialog {
         } else if let Some(first) = x_choices.first_mut() {
             first.2 = true;
         }
-        let y_second = y_choices.get(1).or(y_choices.first()).map(|c| c.0)?;
-        let implicit_x = x_choices.first().map_or(y, |c| c.0);
+        let y_second = y_choices.iter().map(|c| c.0).find(|c| *c != y).or(y_choices.first().map(|c| c.0))?;
+        let implicit_x = x_choices.iter().find(|c| c.2).or(x_choices.first()).map_or(y, |c| c.0);
         let models = model_choices();
         let model_b = models.iter().position(|m| m.0 == "Polynomial (order 2)").unwrap_or(1);
         let functions: Vec<(String, String, bool)> =
@@ -449,5 +449,36 @@ impl FitMoreDialog {
             _ if !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) => FitMoreOutcome::Closed,
             _ => FitMoreOutcome::Open,
         }
+    }
+}
+
+#[cfg(test)]
+mod default_tests {
+    use super::*;
+    use sheaf_core::ColumnData;
+
+    fn book(designations: &[Designation]) -> (Project, WindowId, Vec<ColumnId>) {
+        let mut p = Project::default();
+        let b = p.add_workbook("B");
+        let ids = designations
+            .iter()
+            .map(|d| p.add_column(b, 0, *d, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap())
+            .collect();
+        (p, b, ids)
+    }
+
+    #[test]
+    fn second_dataset_differs_from_the_first_even_when_y2_is_selected() {
+        let (p, b, ids) = book(&[Designation::X, Designation::Y, Designation::Y]);
+        let d = FitMoreDialog::new(&p, b, Some(ids[2]), FitMoreKind::CompareDatasets).unwrap();
+        assert_eq!(d.y, ids[2]);
+        assert_eq!(d.y2, ids[1]);
+    }
+
+    #[test]
+    fn implicit_x_defaults_to_the_x_designated_column() {
+        let (p, b, ids) = book(&[Designation::Y, Designation::X, Designation::Y]);
+        let d = FitMoreDialog::new(&p, b, Some(ids[0]), FitMoreKind::Implicit).unwrap();
+        assert_eq!(d.implicit_x, ids[1]);
     }
 }

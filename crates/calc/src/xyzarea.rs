@@ -152,7 +152,7 @@ pub fn delaunay(points: &[(f64, f64)]) -> Result<Vec<[usize; 3]>, XyzAreaError> 
         return Err(XyzAreaError::Collinear);
     }
     for (factor, reversed) in [(1e3, false), (1e5, true), (1e4, false), (1e6, true)] {
-        let mut order: Vec<usize> = (0..unit.len()).collect();
+        let mut order = serpentine_order(&unit);
         if reversed {
             order.reverse();
         }
@@ -164,6 +164,24 @@ pub fn delaunay(points: &[(f64, f64)]) -> Result<Vec<[usize; 3]>, XyzAreaError> 
         }
     }
     Err(XyzAreaError::NoTriangulation)
+}
+
+/// Insertion order that keeps consecutive points close: vertical strips of about sqrt(n/2) per side, walked up and
+/// down alternately. The point-location walk starts at the last triangle made, so near points keep it short.
+fn serpentine_order(unit: &[(f64, f64)]) -> Vec<usize> {
+    // Small sets keep the row order (cocircular ties then fall as the measured Origin results do).
+    if unit.len() <= 2000 {
+        return (0..unit.len()).collect();
+    }
+    let strips = ((unit.len() as f64 / 2.0).sqrt().ceil() as usize).max(1);
+    let strip = |p: &(f64, f64)| (((p.0 + 0.5) * strips as f64).floor().max(0.0) as usize).min(strips - 1);
+    let mut order: Vec<usize> = (0..unit.len()).collect();
+    order.sort_by(|&a, &b| {
+        let (sa, sb) = (strip(&unit[a]), strip(&unit[b]));
+        let ord = unit[a].1.total_cmp(&unit[b].1);
+        sa.cmp(&sb).then(if sa % 2 == 0 { ord } else { ord.reverse() }).then(a.cmp(&b))
+    });
+    order
 }
 
 /// Area of the convex hull (Andrew's monotone chain).
@@ -451,5 +469,26 @@ mod tests {
         let r = xyz_surface_area(&x, &y, &z).unwrap();
         assert!((r.area - 59.0 * 59.0).abs() < 1e-9, "{r:?}");
         assert_eq!(r.triangles, 2 * 59 * 59);
+    }
+
+    #[test]
+    fn many_random_points_do_not_take_quadratic_time() {
+        // A deterministic pseudo-random scatter; 20000 points must triangulate in well under a few seconds.
+        let mut state = 12345u64;
+        let mut next = || {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (state >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let n = 20000;
+        let (mut x, mut y, mut z) = (Vec::new(), Vec::new(), Vec::new());
+        for _ in 0..n {
+            x.push(next());
+            y.push(next());
+            z.push(0.0);
+        }
+        let t = std::time::Instant::now();
+        let r = xyz_surface_area(&x, &y, &z).unwrap();
+        assert!(t.elapsed().as_secs() < 20, "took {:?}", t.elapsed());
+        assert!((r.area - r.projected_area).abs() < 1e-9);
     }
 }

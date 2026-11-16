@@ -129,7 +129,7 @@ impl ImplicitFunction {
                     .expect("the scan has points");
                 let (mut lo, mut hi) = (best - step, best + step);
                 if slope(lo) < 0.0 && slope(hi) > 0.0 {
-                    for _ in 0..200 {
+                    for _ in 0..100 {
                         let mid = 0.5 * (lo + hi);
                         if slope(mid) < 0.0 {
                             lo = mid;
@@ -138,7 +138,7 @@ impl ImplicitFunction {
                         }
                     }
                 } else {
-                    for _ in 0..200 {
+                    for _ in 0..100 {
                         let (m1, m2) = (lo + (hi - lo) / 3.0, hi - (hi - lo) / 3.0);
                         if dist2(m1) < dist2(m2) {
                             hi = m2;
@@ -366,6 +366,29 @@ pub fn fit_implicit(
     let r2 = if tss > 0.0 { 1.0 - rss / tss } else { f64::NAN };
     let adj = if tss > 0.0 && dof > 0 { 1.0 - reduced / (tss / (n - 1) as f64) } else { f64::NAN };
     let mut warnings = Vec::new();
+    // Points on a line (or all the same) have no closed curve: the search runs off to huge or zero sizes. This is
+    // Sheaf's own check (Origin's behaviour on such data was not measured).
+    let extent = {
+        let span = |v: &[f64]| {
+            v.iter().cloned().fold(f64::NEG_INFINITY, f64::max) - v.iter().cloned().fold(f64::INFINITY, f64::min)
+        };
+        span(&xs).max(span(&ys))
+    };
+    let collinear = extent > 0.0 && {
+        let far = (0..n)
+            .max_by(|&a, &b| (xs[a] - xs[0]).hypot(ys[a] - ys[0]).total_cmp(&(xs[b] - xs[0]).hypot(ys[b] - ys[0])))
+            .unwrap_or(0);
+        let (dx, dy) = (xs[far] - xs[0], ys[far] - ys[0]);
+        (0..n).all(|i| (dx * (ys[i] - ys[0]) - dy * (xs[i] - xs[0])).abs() <= 1e-9 * extent * extent)
+    };
+    let degenerate = collinear
+        || extent <= 0.0
+        || p.iter().any(|v| !v.is_finite() || v.abs() > 1e3 * extent + 1e3 * (xs[0].abs() + ys[0].abs()))
+        || p[2..].iter().any(|v| *v < 1e-6 * extent);
+    if degenerate {
+        status = FitStatus::Other("degenerate data: the points do not define a closed curve".to_string());
+        warnings.push("the points are collinear or identical, so the fitted curve is not meaningful".to_string());
+    }
     if status == FitStatus::MaxIterations {
         warnings.push("the fit stopped at the iteration limit before converging".to_string());
     }
@@ -424,6 +447,26 @@ mod tests {
                 (xc + r * t.cos() + noise * rnd(), yc + r * t.sin() + noise * rnd())
             })
             .unzip()
+    }
+
+    #[test]
+    fn collinear_or_identical_points_are_not_reported_as_converged() {
+        let x: Vec<f64> = (0..6).map(|v| v as f64).collect();
+        for f in [ImplicitFunction::Circle, ImplicitFunction::Ellipse] {
+            if let Ok(fit) = fit_implicit(f, &x, &x, &ImplicitOptions::default()) {
+                assert!(
+                    matches!(fit.report.status, FitStatus::Other(_)),
+                    "{f:?} {:?} {:?}",
+                    fit.report.status,
+                    fit.report.params
+                );
+                assert!(!fit.report.warnings.is_empty());
+            }
+            let same = vec![2.0; 6];
+            if let Ok(fit) = fit_implicit(f, &same, &same, &ImplicitOptions::default()) {
+                assert!(matches!(fit.report.status, FitStatus::Other(_)), "{f:?} {:?}", fit.report.status);
+            }
+        }
     }
 
     #[test]

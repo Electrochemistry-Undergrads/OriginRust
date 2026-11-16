@@ -88,6 +88,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T86](T86-swap-columns-paste-transpose.md) | Swap Columns and Paste Transpose (Origin colswap, Paste Transpose) | S | done 2026-11-16 (workbook-model 13e); left: Paste Transpose measured in Origin |
 | [T87](T87-set-as-begin-end.md) | Set As Begin, Set As End, Reset to Full Range (column data range) | M | done 2026-11-16 (workbook-model 13f); left: analysis tools using the range |
 | [T88](T88-copy-variants.md) | Edit > Copy: Copy formula, Copy label rows, Copy formula and label rows, Copy All | S | done 2026-11-16 (workbook-model 13.4c); left: user parameter rows in Origin's text |
+| [T89](T89-copy-columns-to.md) | Copy Columns to... (Origin colcopy) | S | claimed 2026-11-16 (`copy-columns`, Claude Windows) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: Origin measured (graphing 24); Copy Format and Paste Format on graph, axis and legend, Apply Formats window; left: object cut/copy/paste, align, group, order (rest of B2) |

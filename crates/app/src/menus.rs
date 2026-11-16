@@ -1393,7 +1393,7 @@ fn statistics_menu() -> Vec<Entry> {
                 item("Normality Test...", Cmd::Analyze(AnalysisKind::Normality)),
                 sep(),
                 item("Correlation Coefficient...", Cmd::Analyze(AnalysisKind::Correlation)),
-                grey("Partial Correlation Coefficient..."),
+                item("Partial Correlation Coefficient...", Cmd::Analyze(AnalysisKind::PartialCorr)),
                 sep(),
                 item("Grubbs Test...", Cmd::Analyze(AnalysisKind::Grubbs)),
                 item("Dixon's Q-test...", Cmd::Analyze(AnalysisKind::Dixon)),

@@ -829,6 +829,22 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
+        AnalyzeTool::PartialCorr { target, control, listwise, one_tailed, show_significance, flag_significant } => {
+            no_x_range(&target, "the partial correlation")?;
+            (
+                target,
+                Job::PartialCorr {
+                    controls: control,
+                    spec: analysis::PartialCorrSpec {
+                        controls: Vec::new(),
+                        listwise,
+                        one_tailed,
+                        show_significance,
+                        flag_significant,
+                    },
+                },
+            )
+        }
         AnalyzeTool::Mannwhitney { target, tail, exact, alpha } => {
             (target, Job::Tool(Tool::MannWhitney(analysis::MannWhitneySpec { tail: tail_of(tail), exact, alpha })))
         }

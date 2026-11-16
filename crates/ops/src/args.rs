@@ -2339,6 +2339,27 @@ pub enum AnalyzeTool {
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
     },
+    /// Partial correlation coefficients (Pearson) of the --y columns, controlling for the --control columns.
+    /// A table of pairs and the matrices go to a new sheet.
+    PartialCorr {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The controlling variables (columns of the same sheet, comma-separated; at least one).
+        #[arg(long, value_delimiter = ',', required = true)]
+        control: Vec<String>,
+        /// Leave out every row where any column has no number (default: pair by pair).
+        #[arg(long)]
+        listwise: bool,
+        /// One-tailed instead of two-tailed test.
+        #[arg(long)]
+        one_tailed: bool,
+        /// Add the p-value and df blocks ("Show Significance in Result Table").
+        #[arg(long)]
+        show_significance: bool,
+        /// Flag the coefficients that are significant at 0.05 with a `*`.
+        #[arg(long)]
+        flag_significant: bool,
+    },
     /// Mann-Whitney test of two columns (two independent samples). The alternative is about the first
     /// column.
     Mannwhitney {

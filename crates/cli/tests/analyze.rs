@@ -1536,3 +1536,57 @@ fn ttest_comparison_plot_and_the_refusals() {
     ]);
     assert!(!ok && stderr.contains("means comparison"), "{stderr}");
 }
+
+#[test]
+fn partial_corr_reproduces_an_origin_run_and_explains_its_refusals() {
+    let dir = scratch("partial-corr");
+    let file = dir.join("pc.csv");
+    // The 20 rows of the Origin run with two controlling variables: r = 0.3195, p = 0.19622, df = 16.
+    std::fs::write(
+        &file,
+        "a,b,c,d
+0.632,4.903,-1.224,0.095
+2.929,7.068,0.378,0.145
+2.723,8.643,0.995,-0.345
+1.709,5.173,-0.513,-0.062
+0.907,4.698,-1.329,0.273
+1.646,5.831,-0.066,0.692
+3.531,6.826,0.478,1.097
+2.656,7.268,1.098,0.21
+1.02,5.578,-1.216,-1.79
+0.775,3.524,-1.293,0.702
+2.334,6.63,0.706,-1.42
+2.373,6.334,0.474,-0.171
+3.316,9.095,1.534,-1.474
+2.562,8.275,0.982,0.002
+2.13,7.155,-0.102,-0.779
+1.767,6.4,-0.274,0.214
+7.435,9.746,2.571,3.3
+2.119,6.412,-0.289,-0.049
+1.819,5.007,-0.785,0.842
+-0.479,5.129,-1.138,-1.323
+",
+    )
+    .unwrap();
+    let file = file.to_str().unwrap();
+    let (ok, out, err) =
+        sheaf(&["analyze", "partial-corr", file, "--y", "a,b", "--control", "c,d", "--show-significance"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("0.319499") && out.contains("0.196219") && out.contains("Controlling variables: c, d"),
+        "{out}"
+    );
+    assert!(out.contains("Two-tailed test of significance is used.") && out.contains("PartialCorr1"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "partial-corr", file, "--y", "a,b", "--control", "c", "--one-tailed", "--flag-significant"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("One-tailed test of significance is used."), "{out}");
+
+    // A control is required, a variable cannot control itself, an X range has nothing to limit.
+    let (ok, _, err) = sheaf(&["analyze", "partial-corr", file, "--y", "a,b"]);
+    assert!(!ok && err.contains("--control"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "partial-corr", file, "--y", "a,b", "--control", "b"]);
+    assert!(!ok && err.contains("both a variable and a controlling variable"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "partial-corr", file, "--y", "a,b", "--control", "c", "--x-range", "1:3"]);
+    assert!(!ok, "{err}");
+}

@@ -86,6 +86,11 @@ pub enum Job {
         level: f64,
         arrangement: analysis::GraphArrangement,
     },
+    /// Partial correlation; the controlling columns are looked up once the project is loaded.
+    PartialCorr {
+        controls: Vec<String>,
+        spec: analysis::PartialCorrSpec,
+    },
     Sort {
         by: String,
         descending: bool,
@@ -268,6 +273,10 @@ pub fn run_job_to(project: &mut Project, target: &Target, job: Job, output: &ana
         Job::GraphSummary { groups, level, arrangement } => {
             let groups = if groups.is_empty() { Vec::new() } else { named_columns(project, book, sheet, &groups)? };
             Tool::GraphSummary(analysis::GraphSummarySpec { groups, level, arrangement })
+        }
+        Job::PartialCorr { controls, mut spec } => {
+            spec.controls = named_columns(project, book, sheet, &controls)?;
+            Tool::PartialCorrelation(spec)
         }
         Job::Sort { by, descending } => {
             let key = named_columns(project, book, sheet, std::slice::from_ref(&by))?[0];

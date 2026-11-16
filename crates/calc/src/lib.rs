@@ -42,6 +42,7 @@ pub mod normality;
 pub mod normalize;
 pub mod nptests;
 pub mod outlier;
+pub mod partcorr;
 pub mod pca;
 pub mod peakchain;
 pub mod peaks;
@@ -122,6 +123,7 @@ pub use nptests::{
     SIGN_EXACT_MAX_N, SignTest, friedman, ks_two_sample, median_test, sign_test,
 };
 pub use outlier::{DixonQ, Grubbs, OutlierError, OutlierSide, dixon_q, grubbs};
+pub use partcorr::{PartialCorr, PartialCorrError, partial_correlation};
 pub use pca::{EigenTest, Pca, PcaError, PcaOptions, pca};
 pub use peakchain::{
     BaselineStat, ChainBaseline, ChainError, ChainOptions, ChainResult, FindMethod, FindOptions, LimitMode, PeakInfo,

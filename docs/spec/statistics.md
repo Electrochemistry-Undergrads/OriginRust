@@ -1491,6 +1491,17 @@ matrix of r only, with the variable names in column 1 (the first column of the c
 Unmeasured: the exact message texts of the refusals, whether the flag threshold follows another alpha (there is no alpha field),
 how the report looks with listwise deletion (the Notes lines were not compared), and the sheet names of a default run.
 
+**What Sheaf does (T81; `crates/calc/src/partcorr.rs`, `crates/core/src/analysis/partcorr.rs`, `dialogs/stats3_options.rs`,
+`sheaf analyze partial-corr`).** The six measured runs with data (a, b, c, d, e, g; 2 and 3 variables, 1 and 2 controls,
+pairwise and listwise with gaps, one- and two-tailed) are reproduced to the printed digits (`crates/calc/tests/origin_t81.rs`).
+The refusals are the six measured ones, each with a message that says why. With df 0 and two or more controls the coefficient is
+printed as -1 or 1 and has no p (Origin printed the same); with df 0 and one control it is refused. The window and the command
+have Origin's inputs (variables, controlling variables, Pairwise/Listwise, One-/Two-tailed, Show Significance, Flag Significant;
+defaults as measured). The report is a Sheaf sheet, not a copy of Origin's report tree: a descriptive table (variables, then
+controls), the matrix of coefficients (text with a `*` when "Flag Significant" is on) with the p-value and df matrices when "Show
+Significance" is on, a pair table in the result and the footer lines as notes. **Sheaf's own, unmeasured:** the sheet name
+`PartialCorr1`, the refusal wording, the descriptive N under listwise deletion (the complete rows), the flag level fixed at 0.05.
+
 ## 25 Three-way ANOVA (T81, measured against Origin 2016 through its dialog)
 
 Origin: Statistics > ANOVA > Three-Way ANOVA (a submenu with "1 <Last used>" and "Open Dialog..." once it has been run).

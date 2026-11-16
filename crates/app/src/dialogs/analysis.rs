@@ -100,6 +100,8 @@ pub enum AnalysisKind {
     Normality,
     /// Statistics > ANOVA > Two-Way ANOVA.
     Anova2,
+    /// Statistics > Descriptive Statistics > Partial Correlation Coefficient (options in `stats3_options.rs`).
+    PartialCorr,
     /// Statistics > Nonparametric Tests and Descriptive Statistics > Correlation Coefficient.
     MannWhitney,
     SignedRank,
@@ -216,6 +218,7 @@ impl AnalysisKind {
             AnalysisKind::DiscreteFreq => "Discrete Frequency...",
             AnalysisKind::Normality => "Normality Test...",
             AnalysisKind::Anova2 => "Two-Way ANOVA...",
+            AnalysisKind::PartialCorr => "Partial Correlation Coefficient...",
             AnalysisKind::MannWhitney => "Mann-Whitney Test...",
             AnalysisKind::SignedRank => "One-Sample Wilcoxon Signed Rank Test...",
             AnalysisKind::SignedRankPaired => "Paired Sample Wilcoxon Signed Rank Test...",
@@ -293,6 +296,7 @@ impl AnalysisKind {
             "discfreq" => AnalysisKind::DiscreteFreq,
             "normality" => AnalysisKind::Normality,
             "anova2" => AnalysisKind::Anova2,
+            "partial-corr" => AnalysisKind::PartialCorr,
             "mannwhitney" => AnalysisKind::MannWhitney,
             "signrank" => AnalysisKind::SignedRank,
             "signrank-paired" => AnalysisKind::SignedRankPaired,
@@ -748,6 +752,8 @@ pub struct AnalysisDialog {
     multi: super::multivariate_options::MultiOptions,
     curves: super::math_curves::CurveOptions,
     bin2d: super::bin2d_options::Bin2dState,
+    /// The partial correlation window.
+    partcorr: super::stats3_options::PartCorrState,
     discfreq: DiscreteFreqSpec,
     /// Options of the Data Manipulation windows and the median filter.
     manip: super::manip_options::ManipOptions,
@@ -1247,6 +1253,7 @@ impl AnalysisDialog {
             multi: Default::default(),
             curves: Default::default(),
             bin2d: Default::default(),
+            partcorr: Default::default(),
             discfreq: Default::default(),
             manip: super::manip_options::ManipOptions::new(x_lo, x_hi),
             sheet_columns,
@@ -1779,6 +1786,7 @@ impl AnalysisDialog {
                     alpha: self.stats.alpha,
                 })
             }
+            AnalysisKind::PartialCorr => Tool::PartialCorrelation(self.partcorr.spec(&self.sheet_columns)?),
             AnalysisKind::MannWhitney => Tool::MannWhitney(MannWhitneySpec {
                 tail: self.stats.tail,
                 exact: self.stats.exact,
@@ -2491,6 +2499,7 @@ impl AnalysisDialog {
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
             }
+            AnalysisKind::PartialCorr => self.partcorr.ui(ui, &self.sheet_columns, &self.columns),
             AnalysisKind::GraphSummary => {
                 let st = &mut self.stats;
                 ui.label(
@@ -2840,6 +2849,7 @@ impl AnalysisDialog {
             AnalysisKind::DiscreteFreq => "discfreqs",
             AnalysisKind::Normality => "normtest",
             AnalysisKind::Anova2 => "anova2",
+            AnalysisKind::PartialCorr => "pcorrcoef",
             AnalysisKind::MannWhitney => "mannwhitney",
             AnalysisKind::SignedRank | AnalysisKind::SignedRankPaired => "signrank",
             AnalysisKind::KruskalWallis => "kwanova",
@@ -2925,6 +2935,9 @@ impl AnalysisDialog {
             AnalysisKind::DiscreteFreq => "Count how often each distinct value, text or number, occurs",
             AnalysisKind::Normality => "Test whether the input columns come from a normal distribution",
             AnalysisKind::Anova2 => "Two-way analysis of variance",
+            AnalysisKind::PartialCorr => {
+                "Partial correlation coefficients of the input columns, controlling for other columns"
+            }
             AnalysisKind::MannWhitney => "Compare two independent samples by their ranks",
             AnalysisKind::SignedRank => "Test the median of one sample by signed ranks",
             AnalysisKind::SignedRankPaired => "Test the difference of two paired samples by signed ranks",
@@ -3015,6 +3028,7 @@ impl AnalysisDialog {
                 "The tables (statistics, ANOVA, comparisons) in a new sheet; sums of squares are adjusted for the \
                  other terms, as in Origin"
             }
+            AnalysisKind::PartialCorr => "The partial correlations, p-values and degrees of freedom in a new sheet",
             AnalysisKind::MannWhitney => "Ranks, U, Z and the p-values in a new sheet",
             AnalysisKind::SignedRank | AnalysisKind::SignedRankPaired => "Both p-values in a new sheet",
             AnalysisKind::KruskalWallis => "Mean ranks, the chi-square statistic and its p-value in a new sheet",
@@ -3107,6 +3121,9 @@ impl AnalysisDialog {
         }
         if self.kind == AnalysisKind::Anova2 {
             self.stats.two_way_levels.resize(columns.len(), (String::new(), String::new()));
+        }
+        if self.kind == AnalysisKind::PartialCorr {
+            self.partcorr.drop_variables(&self.sheet_columns, &columns);
         }
         // These tools run on the columns of their own boxes, not on the Input range: the picker sets the boxes.
         if matches!(self.kind, AnalysisKind::Crosstab | AnalysisKind::Anova2) {

@@ -584,6 +584,21 @@ impl Default for TwoWayAnovaSpec {
     }
 }
 
+/// What [`Tool::PartialCorrelation`] does (Origin's Partial Correlation Coefficient, `pcorrcoef`): the chosen
+/// columns are the variables; `controls` are the controlling variables, read from the same sheet. Pearson only.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PartialCorrSpec {
+    pub controls: Vec<ColumnId>,
+    /// Leave out every row where any variable or control has no number (default: pair by pair).
+    pub listwise: bool,
+    /// One-tailed instead of the default two-tailed test.
+    pub one_tailed: bool,
+    /// "Show Significance in Result Table": the p-value and df blocks (default off).
+    pub show_significance: bool,
+    /// "Flag Significant Correlations": a `*` after the coefficients whose p-value is below 0.05 (default off).
+    pub flag_significant: bool,
+}
+
 /// What [`Tool::MannWhitney`] does: two chosen columns, two independent samples.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MannWhitneySpec {
@@ -865,6 +880,8 @@ pub enum Tool {
     Normality(NormalitySpec),
     Crosstab(CrosstabSpec),
     TwoWayAnova(TwoWayAnovaSpec),
+    /// Statistics > Descriptive Statistics > Partial Correlation Coefficient.
+    PartialCorrelation(PartialCorrSpec),
     MannWhitney(MannWhitneySpec),
     SignedRank(SignedRankSpec),
     KruskalWallis(KruskalWallisSpec),
@@ -951,6 +968,7 @@ impl Tool {
             Tool::Normality(_) => "Normality test",
             Tool::Crosstab(_) => "Cross tabulation",
             Tool::TwoWayAnova(_) => "Two-way ANOVA",
+            Tool::PartialCorrelation(_) => "Partial correlation",
             Tool::MannWhitney(_) => "Mann-Whitney test",
             Tool::SignedRank(spec) => match spec.kind {
                 SignedRankKind::OneSample { .. } => "One-sample Wilcoxon signed rank test",
@@ -1024,6 +1042,7 @@ impl Tool {
             Tool::Normality(_) => "Normality",
             Tool::Crosstab(_) => "Crosstab",
             Tool::TwoWayAnova(_) => "ANOVA2Way",
+            Tool::PartialCorrelation(_) => "PartialCorr",
             Tool::MannWhitney(_) => "MannWhitney",
             Tool::SignedRank(_) => "SignedRank",
             Tool::KruskalWallis(_) => "KruskalWallis",
@@ -1716,6 +1735,7 @@ mod dist;
 mod filters;
 mod manip;
 mod multivariate;
+mod partcorr;
 mod power;
 mod roc;
 mod simulate;
@@ -1878,6 +1898,7 @@ impl Project {
         let own_columns = matches!(
             request.tool,
             Tool::TwoWayAnova(_)
+                | Tool::PartialCorrelation(_)
                 | Tool::Crosstab(_)
                 | Tool::DiscreteFrequency(_)
                 | Tool::PropTest(_)
@@ -1938,6 +1959,12 @@ impl Project {
         match &request.tool {
             Tool::TwoWayAnova(spec) => {
                 let out = statistics::two_way_anova(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::PartialCorrelation(spec) => {
+                let out = partcorr::partial_correlation(spec, sheet, &request.columns, request.rows)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

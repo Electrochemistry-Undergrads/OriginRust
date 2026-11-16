@@ -1354,6 +1354,8 @@ Analysis > Mathematics > XYZ Surface Area... gives the area of the surface throu
 - Too few or degenerate points (two points; four collinear points in XY): no result, the output variable is left unset (the `area` argument keeps its previous value) and the call returns false; the message was not read.
 - Not measured: the window (title, controls: the input range selector, the Output field), whether the result also goes to the Results Log or a sheet when run from the menu, the number of decimals shown, the diagonal choice on cocircular points, tolerance for nearly duplicate points, missing values in the input, the maximum point count, and a Z column not designated Z.
 
+**Built (T91).** `sheaf_calc::xyzarea` (Delaunay by Bowyer-Watson, checked against the convex hull area; `tests/origin_xyzarea.rs` reproduces the seven measured areas to 1e-12), tool `Tool::XyzArea`, window and `sheaf analyze xyz-area`.
+
 **Sheaf's choice** until the window is measured: Analysis > Mathematics > XYZ Surface Area... uses the XYZ columns of the active sheet (X, Y, Z designations as the surface fits do, fitting.md 14), runs the Delaunay triangulation (`sheaf-calc`, new module, one triangulation also usable by the gridding work that other packages plan) and writes a small results sheet or log line with the area, the number of points used and of triangles, and the number of merged duplicates; `sheaf analyze xyz-area` prints the number; rows with a missing X, Y or Z are skipped and counted.
 
 ## Files

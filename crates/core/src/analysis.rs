@@ -60,6 +60,7 @@ pub use sheaf_fit::simulate::Spacing as SimulateSpacing;
 pub use simulate::{SimulateCurveSpec, SimulateX};
 pub use summary::{GraphArrangement, GraphSummarySpec};
 pub use survival::KaplanMeierSpec;
+pub use xyzarea::default_columns as xyz_default_columns;
 
 /// The multi-peak fit of [`PeakChainSpec`]: a sum of peaks on `baseline`, one peak for every peak
 /// the search found, started at the found centre, width and height. Peak `k` (0-based) has the
@@ -996,6 +997,9 @@ pub enum Tool {
     /// Analysis > Fitting > Simulate Curve (T47, `docs/spec/fitting.md` section 13): a built-in fit function at typed
     /// parameters, as an X and a Y column on a new sheet. Reads no data except an optional X column.
     SimulateCurve(SimulateCurveSpec),
+    /// Analysis > Mathematics > XYZ Surface Area (T91, `docs/spec/analysis-tools.md` section 18): the columns are X, Y
+    /// and Z, in this order; one row of results (area, points, triangles).
+    XyzArea,
 }
 
 impl Tool {
@@ -1090,6 +1094,7 @@ impl Tool {
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "Polygon area",
             Tool::SimulateCurve(_) => "Simulate curve",
+            Tool::XyzArea => "XYZ surface area",
         }
     }
 
@@ -1155,6 +1160,7 @@ impl Tool {
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "PolygonArea",
             Tool::SimulateCurve(_) => "Simulate",
+            Tool::XyzArea => "XYZArea",
             _ => "Result",
         }
     }
@@ -1832,6 +1838,7 @@ mod simulate;
 mod statistics;
 mod summary;
 mod survival;
+mod xyzarea;
 pub use manip::{
     MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
 };
@@ -1998,6 +2005,7 @@ impl Project {
                 | Tool::KaplanMeier(_)
                 | Tool::GraphSummary(_)
                 | Tool::SimulateCurve(_)
+                | Tool::XyzArea
         );
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
@@ -2095,6 +2103,11 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 xy_graph = out.graph;
+            }
+            Tool::XyzArea => {
+                let out = xyzarea::xyz_area(sheet, &request.columns, request.rows)?;
+                table = out.table;
+                notes = out.notes;
             }
             Tool::TTest(_)
             | Tool::VarTest(_)

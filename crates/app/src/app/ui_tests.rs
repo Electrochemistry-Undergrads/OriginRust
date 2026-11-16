@@ -5679,6 +5679,34 @@ fn the_polygon_area_window_measures_a_closed_loop() {
     assert_eq!(result_column(&h, "Perimeter").1, vec![10.0]);
 }
 
+/// Analysis > Mathematics > XYZ Surface Area...: three columns X, Y, Z, taken from the sheet when nothing is
+/// selected. A tilted plane z = 2x + 3y over a unit square has the area sqrt(14).
+#[test]
+fn the_xyz_surface_area_window_measures_a_tilted_plane() {
+    let plane = csv_file(
+        "xyzplane",
+        "plane",
+        "x,y,z
+0,0,0
+1,0,2
+0,1,3
+1,1,5
+",
+    );
+    let mut h = start(vec![plane]);
+    show_window(&mut h, "Book1 - plane.csv");
+    menu_path(&mut h, &["Analysis", "Mathematics", "XYZ Surface Area..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, area) = result_column(&h, "Area");
+    assert!(sheet.starts_with("XYZArea"), "{sheet}");
+    assert!((area[0] - 14f64.sqrt()).abs() < 1e-12, "{area:?}");
+    assert_eq!(result_column(&h, "Points").1, vec![4.0]);
+    assert_eq!(result_column(&h, "Triangles").1, vec![2.0]);
+    assert_eq!(h.state().doc.undo_label(), Some("XYZ surface area"));
+}
+
 /// From a graph, Average Multiple Curves and Intersect start with the curves of the layer, so OK
 /// runs without picking the columns again.
 #[test]

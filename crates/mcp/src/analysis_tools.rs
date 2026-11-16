@@ -295,6 +295,12 @@ pub fn registry() -> Vec<ToolDesc> {
     );
     add("polygon_area", "Area of the polygon each curve encloses.", Vec::new(), None);
     add(
+        "xyz_area",
+        "Area of the surface through scattered X, Y, Z points: the Delaunay triangulation of X and Y lifted to Z (rows with the same X and Y are merged with the mean Z). Name the three columns X, Y, Z in this order; default: the sheet's first Z column with its Y and X.",
+        Vec::new(),
+        None,
+    );
+    add(
         "intersect",
         "Where two curves cross (name two columns).",
         vec![flag("touching", false, "Count points where the curves only touch.")],
@@ -875,6 +881,7 @@ pub fn build(name: &str, options: &Map<String, Value>) -> Result<Job> {
             p2: analysis::LinePoint { x: o.required_num("x2")?, y: o.opt_num("y2")? },
         })),
         "polygon_area" => Job::Tool(Tool::PolygonArea),
+        "xyz_area" => Job::Tool(Tool::XyzArea),
         "intersect" => {
             Job::Tool(Tool::Intersect(analysis::IntersectSpec { include_touching: o.flag("touching", false)? }))
         }

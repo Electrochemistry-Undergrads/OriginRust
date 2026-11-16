@@ -2015,6 +2015,14 @@ pub enum AnalyzeTool {
         #[command(flatten)]
         target: TargetArgs,
     },
+    /// The area of the surface through scattered X, Y, Z points (Delaunay triangulation of X and Y, sum of the 3D
+    /// triangle areas; rows with the same X and Y are merged with the mean Z). Name the three columns with --y X,Y,Z
+    /// in this order (default: the sheet's first Z column with its Y and X). One row: area, projected area, points,
+    /// triangles, merged and skipped rows.
+    XyzArea {
+        #[command(flatten)]
+        target: TargetArgs,
+    },
     /// Subtract the straight line through two points from each curve. The points are X values;
     /// their Y values are read from the curve (straight lines between data points) unless
     /// --y1 / --y2 give them.

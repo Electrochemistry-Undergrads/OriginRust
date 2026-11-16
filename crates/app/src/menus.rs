@@ -1335,7 +1335,7 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Normalize Columns...", Cmd::Analyze(AnalysisKind::Normalize)),
                 item("Average Multiple Curves...", Cmd::Analyze(AnalysisKind::AverageCurves)),
                 item("Polygon Area...", Cmd::Analyze(AnalysisKind::PolygonArea)),
-                grey("XYZ Surface Area..."),
+                item("XYZ Surface Area...", Cmd::Analyze(AnalysisKind::XyzArea)),
                 item("Median Filter...", Cmd::Analyze(AnalysisKind::MedianFilter)),
                 grey("Special Filter..."),
                 grey("Inverse..."),

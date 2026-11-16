@@ -145,6 +145,8 @@ pub enum AnalysisKind {
     AverageCurves,
     Intersect,
     PolygonArea,
+    /// Analysis > Mathematics > XYZ Surface Area (T91; options in `xyz_options.rs`).
+    XyzArea,
     /// Data Manipulation (options in `manip_options.rs`) and Mathematics > Median Filter.
     SubtractLine,
     ReduceDup,
@@ -252,6 +254,7 @@ impl AnalysisKind {
             AnalysisKind::AverageCurves => "Average Multiple Curves...",
             AnalysisKind::Intersect => "Intersect...",
             AnalysisKind::PolygonArea => "Polygon Area...",
+            AnalysisKind::XyzArea => "XYZ Surface Area...",
             AnalysisKind::SubtractLine => "Subtract Straight Line...",
             AnalysisKind::ReduceDup => "Reduce Duplicate X Data...",
             AnalysisKind::ReduceX => "Reduce to Evenly Spaced X...",
@@ -333,6 +336,7 @@ impl AnalysisKind {
             "average-curves" => AnalysisKind::AverageCurves,
             "intersect" => AnalysisKind::Intersect,
             "polygon-area" => AnalysisKind::PolygonArea,
+            "xyz-area" => AnalysisKind::XyzArea,
             "subtract-line" => AnalysisKind::SubtractLine,
             "reduce-dup" => AnalysisKind::ReduceDup,
             "reduce-x" => AnalysisKind::ReduceX,
@@ -767,6 +771,7 @@ pub struct AnalysisDialog {
     /// Partial correlation and three-way ANOVA windows.
     partcorr: super::stats3_options::PartCorrState,
     anova3: super::stats3_options::Anova3State,
+    xyz: super::xyz_options::XyzState,
     rm: super::rm_options::RmState,
     discfreq: DiscreteFreqSpec,
     /// Options of the Data Manipulation windows and the median filter.
@@ -1202,6 +1207,14 @@ impl AnalysisDialog {
         } else {
             Default::default()
         };
+        let xyz = {
+            let chosen: Vec<usize> =
+                columns.iter().filter_map(|id| sheet_columns.iter().position(|(c, _)| c == id)).collect();
+            let at = |id: ColumnId| sheet_columns.iter().position(|(c, _)| *c == id);
+            let default =
+                sheaf_core::analysis::xyz_default_columns(sheet).and_then(|[x, y, z]| Some([at(x)?, at(y)?, at(z)?]));
+            super::xyz_options::XyzState::new(&chosen, default, sheet_columns.len())
+        };
         let rm = {
             let chosen: Vec<usize> =
                 columns.iter().filter_map(|id| sheet_columns.iter().position(|(c, _)| c == id)).collect();
@@ -1281,6 +1294,7 @@ impl AnalysisDialog {
             bin2d: Default::default(),
             partcorr: Default::default(),
             anova3,
+            xyz,
             rm,
             discfreq: Default::default(),
             manip: super::manip_options::ManipOptions::new(x_lo, x_hi),
@@ -1634,6 +1648,7 @@ impl AnalysisDialog {
             AnalysisKind::AverageCurves => self.curves.average_tool(),
             AnalysisKind::Intersect => self.curves.intersect_tool(),
             AnalysisKind::PolygonArea => Tool::PolygonArea,
+            AnalysisKind::XyzArea => Tool::XyzArea,
             AnalysisKind::Smooth => Tool::Smooth(SmoothOptions {
                 method: match self.smooth_kind {
                     SmoothKind::SavitzkyGolay => SmoothMethod::SavitzkyGolay { poly_order: self.smooth_poly },
@@ -1868,6 +1883,8 @@ impl AnalysisDialog {
             }
         } else if self.kind == AnalysisKind::Anova3 {
             self.anova3.picked(&self.sheet_columns)?
+        } else if self.kind == AnalysisKind::XyzArea {
+            self.xyz.picked(&self.sheet_columns)?
         } else if matches!(self.kind, AnalysisKind::RmAnova1 | AnalysisKind::RmAnova2) {
             self.rm.picked(&self.sheet_columns)?
         } else if self.kind == AnalysisKind::Crosstab {
@@ -2534,6 +2551,7 @@ impl AnalysisDialog {
                 });
             }
             AnalysisKind::Anova3 => self.anova3.ui(ui, &self.sheet_columns),
+            AnalysisKind::XyzArea => self.xyz.ui(ui, &self.sheet_columns),
             AnalysisKind::RmAnova1 | AnalysisKind::RmAnova2 => self.rm.ui(ui, &self.sheet_columns),
             AnalysisKind::PartialCorr => self.partcorr.ui(ui, &self.sheet_columns, &self.columns),
             AnalysisKind::GraphSummary => {
@@ -2905,6 +2923,7 @@ impl AnalysisDialog {
             AnalysisKind::AverageCurves => "avecurves",
             AnalysisKind::Intersect => "intersect",
             AnalysisKind::PolygonArea => "polyarea",
+            AnalysisKind::XyzArea => "xyzarea",
             AnalysisKind::ReduceDup => "reducedup",
             // Origin's X-Function names for these were not looked up; the title shows the tool alone.
             AnalysisKind::Crosstab
@@ -3011,6 +3030,7 @@ impl AnalysisDialog {
             AnalysisKind::AverageCurves => "Average several curves on a common set of X values",
             AnalysisKind::Intersect => "Find the points where two curves meet",
             AnalysisKind::PolygonArea => "Area, centroid and perimeter of each input curve taken as a closed polygon",
+            AnalysisKind::XyzArea => "Area of the surface through the points of three columns X, Y and Z",
             AnalysisKind::Correlation => "Correlation coefficients of the input columns",
             AnalysisKind::SubtractLine => "Subtract the straight line through two points from the input curves",
             AnalysisKind::ReduceDup => "Replace the points that share an X value by one point",
@@ -3122,6 +3142,7 @@ impl AnalysisDialog {
             AnalysisKind::PolygonArea => {
                 "Area, signed area, centroid, perimeter and a self-intersection flag in a new sheet"
             }
+            AnalysisKind::XyzArea => "The surface area with the points and triangles used in a new sheet",
             AnalysisKind::Correlation => "The matrices of coefficients and p-values in a new sheet",
             AnalysisKind::SubtractLine | AnalysisKind::TranslateY | AnalysisKind::MedianFilter => {
                 "New columns beside the input"
@@ -3181,6 +3202,7 @@ impl AnalysisDialog {
             AnalysisKind::Crosstab
                 | AnalysisKind::Anova2
                 | AnalysisKind::Anova3
+                | AnalysisKind::XyzArea
                 | AnalysisKind::RmAnova1
                 | AnalysisKind::RmAnova2
         ) {
@@ -3191,6 +3213,9 @@ impl AnalysisDialog {
             }
             if self.kind == AnalysisKind::Anova2 && chosen.len() >= 3 {
                 self.stats.two_way_columns = [chosen[0], chosen[1], chosen[2]];
+            }
+            if self.kind == AnalysisKind::XyzArea && chosen.len() >= 3 {
+                self.xyz.columns = [chosen[0], chosen[1], chosen[2]];
             }
             if self.kind == AnalysisKind::Anova3 && chosen.len() >= 4 {
                 self.anova3.columns = [chosen[0], chosen[1], chosen[2], chosen[3]];
@@ -3447,6 +3472,7 @@ impl AnalysisDialog {
             AnalysisKind::Crosstab
                 | AnalysisKind::Anova2
                 | AnalysisKind::Anova3
+                | AnalysisKind::XyzArea
                 | AnalysisKind::RmAnova1
                 | AnalysisKind::RmAnova2
                 | AnalysisKind::PartialCorr

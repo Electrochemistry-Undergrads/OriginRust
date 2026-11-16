@@ -96,6 +96,9 @@ pub const DELETE_LAYER_UNDO: &str = "Undelete frame";
 /// fractions, from one measurement; Origin's own offset varied between runs, graphing spec 21.1).
 const NORMAL_LAYER_SHIFT: (f64, f64) = (-0.0232, -0.0305);
 
+/// The size of an inset as a share of its parent's, and the factor its axis fonts are scaled by.
+const INSET_FRAME_SCALE: f64 = 0.25;
+
 /// An axis of a new layer: the style of the parent's axis, but with a scale, title and grid of its own.
 fn fresh_axis(from: &crate::graph::Axis, side: AxisSide) -> crate::graph::Axis {
     let mut a = from.clone();
@@ -166,6 +169,17 @@ impl Graph {
                 new.major_step = old.major_step;
             }
             layer.plots = parent.plots.first().cloned().into_iter().collect();
+            // Origin keeps the parent's axis title text (graphing spec 21.1).
+            layer.x_axis.title = parent.x_axis.title.clone();
+            layer.y_axis.title = parent.y_axis.title.clone();
+        }
+        if kind.is_inset() {
+            // Scale With Layer Frame: tick label and title fonts shrink with the inset (21.1). The
+            // exact factor was not measured; Sheaf uses the inset's share of the parent's size.
+            for axis in [&mut layer.x_axis, &mut layer.y_axis] {
+                axis.tick_font.size_pt *= INSET_FRAME_SCALE;
+                axis.title_font.size_pt *= INSET_FRAME_SCALE;
+            }
         }
         if kind == NewLayerKind::Normal {
             layer.link = None;
@@ -178,11 +192,31 @@ impl Graph {
             };
         } else {
             layer.link = Some(LayerLink { parent: parent_index, x: xl, y: yl });
-            layer.frame =
-                if kind.is_inset() { Frame { left: 0.75, top: 0.0, width: 0.25, height: 0.25 } } else { Frame::WHOLE };
+            layer.frame = if kind.is_inset() {
+                Frame { left: 1.0 - INSET_FRAME_SCALE, top: 0.0, width: INSET_FRAME_SCALE, height: INSET_FRAME_SCALE }
+            } else {
+                Frame::WHOLE
+            };
         }
         self.layers.push(layer);
         Some(self.layers.len() - 1)
+    }
+
+    /// Gives the layers that follow layer `index` on a straight link their range as it is drawn now
+    /// (`ranges[i]` is layer i's X and Y as (min, max, step)), so that they keep it when `index` goes
+    /// away (graphing spec 21.4: x.from and x.to stay). Call before [`Graph::delete_layer`].
+    pub fn freeze_linked_ranges(&mut self, index: usize, ranges: &[((f64, f64, f64), (f64, f64, f64))]) {
+        for (i, layer) in self.layers.iter_mut().enumerate() {
+            let Some(link) = layer.link.filter(|l| l.parent == index) else { continue };
+            let Some(&(x, y)) = ranges.get(i) else { continue };
+            for (axis, shared, (min, max, step)) in [(&mut layer.x_axis, link.x, x), (&mut layer.y_axis, link.y, y)] {
+                if shared == ScaleLink::Straight && axis.min.is_none() && axis.max.is_none() {
+                    axis.min = Some(min);
+                    axis.max = Some(max);
+                    axis.major_step.get_or_insert(step);
+                }
+            }
+        }
     }
 
     /// Deletes layer `index` (Delete Layer of the layer icon, `layer -d`). Origin never refuses and
@@ -428,5 +462,31 @@ mod tests {
             assert_eq!(NewLayerKind::from_name(k.name()), Some(k));
         }
         assert_eq!(NewLayerKind::from_name("horizontal"), None);
+    }
+
+    #[test]
+    fn an_inset_scales_its_fonts_and_inset_with_data_keeps_the_titles() {
+        let mut g = graph();
+        g.layers[0].x_axis.title = Some("Potential (V)".into());
+        let parent_tick = g.layers[0].x_axis.tick_font.size_pt;
+        let i = g.add_layer(NewLayerKind::InsetWithData, 0).unwrap();
+        assert!((g.layers[i].x_axis.tick_font.size_pt - parent_tick * 0.25).abs() < 1e-9);
+        assert_eq!(g.layers[i].x_axis.title.as_deref(), Some("Potential (V)"));
+        let j = g.add_layer(NewLayerKind::Inset, 0).unwrap();
+        assert!(g.layers[j].x_axis.title.is_none());
+        assert!(g.layers[j].y_axis.title_font.size_pt < g.layers[0].y_axis.title_font.size_pt);
+    }
+
+    #[test]
+    fn deleting_a_parent_freezes_the_range_a_child_followed() {
+        let mut g = graph();
+        let i = g.add_layer(NewLayerKind::RightY, 0).unwrap();
+        g.freeze_linked_ranges(0, &[((0.0, 1.0, 1.0), (0.0, 1.0, 1.0)), ((-1.0, 11.0, 2.0), (5.0, 6.0, 1.0))]);
+        assert_eq!(i, 1);
+        let c = &g.layers[1];
+        assert_eq!((c.x_axis.min, c.x_axis.max, c.x_axis.major_step), (Some(-1.0), Some(11.0), Some(2.0)));
+        assert_eq!(c.y_axis.min, None, "an own scale stays automatic");
+        assert!(g.delete_layer(0));
+        assert_eq!(g.layers[0].x_axis.min, Some(-1.0));
     }
 }

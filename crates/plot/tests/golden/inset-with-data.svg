@@ -34,15 +34,15 @@
 <path d="M532.801 68.41L532.801 174.496" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
 <path d="M532.801 174.496L532.801 183.496M570.379 174.496L570.379 183.496M607.956 174.496L607.956 183.496M645.534 174.496L645.534 183.496M551.59 174.496L551.59 178.996M589.168 174.496L589.168 178.996M626.745 174.496L626.745 178.996M664.323 174.496L664.323 178.996" fill="none" stroke="#000000" stroke-width="1.5"/>
 <path d="M532.801 156.815L523.801 156.815M532.801 121.453L523.801 121.453M532.801 86.091L523.801 86.091M532.801 174.496L528.301 174.496M532.801 139.134L528.301 139.134M532.801 103.772L528.301 103.772M532.801 68.41L528.301 68.41" fill="none" stroke="#000000" stroke-width="1.5"/>
-<text x="532.801" y="202.756" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">−0.5</text>
-<text x="570.379" y="202.756" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">0.0</text>
-<text x="607.956" y="202.756" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">0.5</text>
-<text x="645.534" y="202.756" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">1.0</text>
-<text x="517.501" y="161.405" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">−50</text>
-<text x="517.501" y="126.043" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">0</text>
-<text x="517.501" y="90.681" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">50</text>
-<text x="598.562" y="235.576" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">Potential (V)</text>
-<text x="469.981" y="121.453" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 469.981 121.453)">Current 1 (mA)</text>
+<text x="532.801" y="188.311" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="4.5" fill="#000000" text-anchor="middle">−0.5</text>
+<text x="570.379" y="188.311" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="4.5" fill="#000000" text-anchor="middle">0.0</text>
+<text x="607.956" y="188.311" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="4.5" fill="#000000" text-anchor="middle">0.5</text>
+<text x="645.534" y="188.311" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="4.5" fill="#000000" text-anchor="middle">1.0</text>
+<text x="522.226" y="157.962" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="4.5" fill="#000000" text-anchor="end">−50</text>
+<text x="522.226" y="122.6" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="4.5" fill="#000000" text-anchor="end">0</text>
+<text x="522.226" y="87.238" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="4.5" fill="#000000" text-anchor="end">50</text>
+<text x="598.562" y="196.516" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="5.5" fill="#000000" text-anchor="middle">Potential (V)</text>
+<text x="510.346" y="121.453" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="5.5" fill="#000000" text-anchor="middle" transform="rotate(-90 510.346 121.453)">Current 1 (mA)</text>
 </g>
 </g>
 </svg>

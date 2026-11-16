@@ -12,6 +12,8 @@ use crate::template::{ORIGIN_COLOR_LIST, Template, right_y_layer};
 
 /// Origin's frame of a plain Line graph as fractions of the page: top, width, height (the left edge is
 /// computed from the axes).
+/// The left of the frame of a plain Line graph, which a single Y axis keeps (graphing spec 21.6, 17.91 %).
+const ORDINARY_FRAME_LEFT: f64 = 0.1791;
 const LINE_FRAME: (f64, f64, f64) = (0.1158, 0.6816, 0.7183);
 /// Default distance between neighbouring Y axes, in percent of the X axis length (21.6).
 pub const DEFAULT_GAP_PCT: f64 = 10.0;
@@ -259,7 +261,8 @@ impl MultiYOptions {
         if self.per_layer.contains(&0) {
             return Err(MultiYError::EmptyLayer);
         }
-        let sum: usize = self.per_layer.iter().sum();
+        // A sum too large for usize is also too large for any number of columns.
+        let sum = self.per_layer.iter().try_fold(0usize, |a, &n| a.checked_add(n)).unwrap_or(usize::MAX);
         if sum != columns {
             return Err(MultiYError::PlotsPerLayer { sum, columns });
         }
@@ -283,6 +286,8 @@ impl MultiYOptions {
         let mid = usize::from(self.middle && layers > 1);
         let free = layers - mid;
         let (left, right) = match (self.left, self.right) {
+            // N = 1 makes an ordinary one-layer graph with a left axis (graphing spec 21.6).
+            (None, None) if layers == 1 => (1, 0),
             (None, None) => (free / 2, free - free / 2),
             (Some(l), None) => (l, free.saturating_sub(l)),
             (None, Some(r)) => (free.saturating_sub(r), r),
@@ -310,7 +315,11 @@ impl MultiYOptions {
         let step = gap * w / 100.0;
         let left_room = left.saturating_sub(1) as f64 * step;
         let right_room = right.saturating_sub(1) as f64 * step;
-        let frame = Frame { left: (1.0 - w - left_room - right_room) / 2.0 + left_room, top: t, width: w, height: h };
+        let mut frame =
+            Frame { left: (1.0 - w - left_room - right_room) / 2.0 + left_room, top: t, width: w, height: h };
+        if layers == 1 && left == 1 {
+            frame.left = ORDINARY_FRAME_LEFT;
+        }
         Ok(MultiYPlan {
             frame,
             axes,
@@ -406,6 +415,20 @@ mod tests {
             let plan = MultiYOptions { left: Some(left), right: Some(right), ..opts() }.plan(n).unwrap();
             assert!((plan.frame.left * 100.0 - want).abs() < 0.01, "{n}: {}", plan.frame.left * 100.0);
         }
+    }
+
+    #[test]
+    fn one_column_is_an_ordinary_graph_with_a_left_axis() {
+        let p = opts().plan(1).unwrap();
+        assert_eq!(p.axes.len(), 1);
+        assert_eq!(p.axes[0].side, AxisSide::Normal);
+        assert!((p.frame.left - 0.1791).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_huge_plots_per_layer_sum_does_not_overflow() {
+        let o = MultiYOptions { per_layer: vec![usize::MAX, 4], ..opts() };
+        assert!(matches!(o.plots_per_layer(3), Err(MultiYError::PlotsPerLayer { .. })));
     }
 
     #[test]

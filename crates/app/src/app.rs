@@ -1218,8 +1218,9 @@ impl SheafApp {
         if layer >= g.layers.len() || g.layers.len() < 2 {
             return;
         }
+        let resolved = sheaf_plot::layout_geometry(self.doc.project(), graph).ok();
         self.doc.apply(sheaf_core::layers::DELETE_LAYER_UNDO, |p| {
-            graph_view::apply_op(p, graph, GraphOp::DeleteLayer { layer }, None)
+            graph_view::apply_op(p, graph, GraphOp::DeleteLayer { layer }, resolved.as_deref())
         });
         let remaining = self.doc.project().graph(graph).map_or(1, |g| g.layers.len());
         let state = self.graphs.entry(graph).or_default();

@@ -294,9 +294,13 @@ pub enum ProjectError {
     SunburstNeedsValue,
     #[error("a sunburst plot cannot have a right Y axis; use one Y axis or another template")]
     SunburstNoRightAxis,
-    #[error("a grouped plot of indexed data needs exactly one numeric data column (designated Y); select one")]
+    #[error(
+        "a grouped plot of indexed data needs exactly one numeric data column (designated Y; a numeric group column must be designated X or Group); select one"
+    )]
     IndexedNeedsData,
-    #[error("a grouped plot of indexed data needs one or two group columns besides the data column; select them")]
+    #[error(
+        "a grouped plot of indexed data needs one or two group columns with levels besides the data column; select them"
+    )]
     IndexedNeedsGroup,
     #[error(
         "a grouped plot of indexed data takes at most two group columns (got {0}); deeper hierarchies are not made yet"
@@ -1141,10 +1145,18 @@ impl Project {
                 levels.into_iter().map(|l| Some((*second, l))).collect()
             }
         };
+        if subsets.is_empty()
+            || cols.first().and_then(|c| self.column(*c)).is_none_or(|c| crate::indexed::levels(c).is_empty())
+        {
+            return Err(ProjectError::IndexedNeedsGroup);
+        }
         let long_name = self.locate(y).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(template);
         for subset in subsets {
-            self.add_plot(graph, 0, y)?;
+            if let Err(e) = self.add_plot(graph, 0, y) {
+                let _ = self.remove_window(graph);
+                return Err(e);
+            }
             if let Some(p) = self.graph_mut(graph).and_then(|g| g.layers[0].plots.last_mut()) {
                 // The categories are the group levels, not an X column; error columns do not apply.
                 p.x = None;

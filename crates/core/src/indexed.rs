@@ -45,7 +45,7 @@ pub fn levels(col: &Column) -> Vec<String> {
 
 /// Sorts level names the way [`levels`] does: numerically when every one parses as a number, else in string order.
 pub fn sort_levels(levels: &mut [String]) {
-    let numeric = levels.iter().all(|l| l.parse::<f64>().is_ok());
+    let numeric = levels.iter().all(|l| l.parse::<f64>().is_ok_and(f64::is_finite));
     levels.sort_by(|a, b| compare(numeric, a, b));
 }
 
@@ -62,6 +62,16 @@ mod tests {
 
     fn text(v: &[&str]) -> Column {
         Column::new(ColumnId(1), "G", Designation::Y, ColumnData::text(v.iter().map(|s| s.to_string()).collect()))
+    }
+
+    #[test]
+    fn non_finite_words_do_not_make_levels_numeric() {
+        let mut l = vec!["NaN".to_string(), "5".to_string()];
+        sort_levels(&mut l);
+        assert_eq!(l, ["5", "NaN"].map(String::from));
+        let mut l = vec!["Inf".to_string(), "10".to_string()];
+        sort_levels(&mut l);
+        assert_eq!(l, ["10", "Inf"].map(String::from));
     }
 
     #[test]

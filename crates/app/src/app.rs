@@ -1104,6 +1104,7 @@ impl SheafApp {
         let asked = if cfg!(test) { None } else { crate::winprint::printable_size_pt(&setup, page) };
         #[cfg(not(windows))]
         let asked: Option<(f64, f64)> = None;
+        #[cfg_attr(not(windows), allow(clippy::unnecessary_literal_unwrap))]
         let (w, h) = asked.unwrap_or_else(|| setup.fallback_printable_pt(page.0, page.1));
         self.doc.apply("Fit Page to Printer", |p| {
             if let Some(g) = p.graph_mut(graph) {
@@ -2815,7 +2816,7 @@ impl SheafApp {
             Vec::new()
         };
         // Grouped columns / grouped box charts of indexed data: the one numeric Y column is the data, the other
-        // selected columns (one or two) are the groups, in sheet order.
+        // selected columns (one or two) are the groups, in selection order.
         if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
             let project = self.doc.project();
             let is_data = |id: &ColumnId| {
@@ -2824,7 +2825,7 @@ impl SheafApp {
             let data = columns.iter().filter(|id| is_data(id)).count();
             let groups = columns.len() - data;
             if data != 1 || groups == 0 {
-                self.warn("Select one or two group columns and one data column".to_string());
+                self.warn("Select one or two group columns and one data column (a numeric group column must be designated X or Group)".to_string());
                 return;
             }
             match self.doc.edit("Plot columns", |p| p.plot_columns(template, &columns)) {

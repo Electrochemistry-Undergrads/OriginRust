@@ -2470,10 +2470,10 @@ Origin's documented facts (documentation only, **not measured**; no Origin was a
   Plot > Statistics > Grouped Box Charts (`Template::GroupedBox`, `grouped-box`). They plot straight from the selection
   with no dialog (Origin's dialog is a leftover).
 - Selection: the data is the one selected numeric column designated Y; every other selected column is a group column, in
-  sheet order, one or two (a numeric group column such as a scan number must be designated X or Group first). Anything else
-  is a status-bar warning, "Select one or two group columns and one data column", and no graph. More than two group
+  selection order, one or two (a numeric group column such as a scan number must be designated X or Group first). Anything else
+  is a status-bar warning, "Select one or two group columns and one data column (a numeric group column must be designated X or Group)", and no graph. More than two group
   columns and a right Y axis are refused with a message. CLI: `sheaf plot -t grouped-columns|grouped-box -y DATA --group
-  G1[,G2]` (`--group` required) and `--group-error none|sd|se` for the columns; panels, overlay, graph styling and
+  G1[,G2]` (`--group` required; the data is the last numeric `--y` column, designation is not checked) and `--group-error none|sd|se` for the columns; panels, overlay, graph styling and
   `--y2` are refused. MCP's `plot` takes the same names and `group_error`.
 - Model: the plots stay `PlotKind::Column` and `PlotKind::Box`; the new per-plot field `Plot.indexed` holds the group column,
   for two group columns the second column and this plot's level, and the error bar. One group column gives one plot; two
@@ -2486,7 +2486,7 @@ Origin's documented facts (documentation only, **not measured**; no Origin was a
   those of all rows with data, so every subgroup plot shares the positions 1..K.
 - Columns: the bar is the mean of the rows of the category (and subgroup); a category with no rows in a subgroup has no
   bar. The error bar is None by default, or the SD (n-1) or the SE of those rows (a single row has none); Plot Details >
-  Error Bar sets it for every plot of the graph, one undo step. Bars side by side come from the layer's gap and overlap.
+  Error Bar sets it for every plot of the layer, one undo step. Bars side by side come from the layer's gap and overlap.
 - Boxes: the existing box statistics (Hazen quartiles, 1.5 IQR whiskers, outliers, mean) of the rows of the category and
   subgroup. S subgroups share the 0.8 box band, each box 0.8/S wide; one subgroup keeps the plain box width. The Y range
   covers whiskers, outliers and error bar ends. No significance brackets on grouped boxes.

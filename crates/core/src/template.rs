@@ -1568,6 +1568,11 @@ mod tests {
         assert!(err.to_string().contains("at most two"), "{err}");
         let err = p.plot_indexed(Template::GroupedColumns, &[a], s).unwrap_err();
         assert!(err.to_string().contains("numeric data column"), "{err}");
+        let blank = p.add_column(b, 0, Designation::X, text(&["", " ", "", ""])).unwrap();
+        let before = p.graphs().count();
+        assert!(p.plot_indexed(Template::GroupedColumns, &[a, blank], v).is_err(), "no levels in the subgroup column");
+        assert!(p.plot_indexed(Template::GroupedColumns, &[blank], v).is_err(), "no levels in the group column");
+        assert_eq!(p.graphs().count(), before, "a refused plot leaves no graph behind");
         let err = p.plot_columns_double_y(Template::GroupedBox, &[v], &[w]).unwrap_err();
         assert!(err.to_string().contains("right Y axis"), "{err}");
         assert_eq!(p.graphs().count(), 0, "a refused plot leaves no graph behind");

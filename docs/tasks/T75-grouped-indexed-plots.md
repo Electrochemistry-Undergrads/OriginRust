@@ -1,6 +1,6 @@
 # T75: Grouped Columns (indexed data) and Grouped Box Charts (B4 slice)
 
-**Status:** built 2026-11-16 (Claude macOS, branch `grouped-indexed`; graphing 14.28). Built from Origin's documentation on a
+**Status:** Done 2026-11-16 (Claude macOS, branch `grouped-indexed`; graphing 14.28). Built from Origin's documentation on a
 machine without Origin: every choice the documentation does not give is Sheaf's and **unmeasured** (14.28).
 **Size:** M. **Branch:** `grouped-indexed`.
 **Spec:** [graphing.md 14.28](../spec/graphing.md). **Inventory:** Plot > Column/Bar/Pie > Grouped Columns (indexed data) and

@@ -930,6 +930,9 @@ fn layer_scene(
         crate::slope::draw(out, objects, project, layer, index, pds, geom, m);
         crate::brackets::draw(out, layer, pds, geom, (bracket_step, band_base(layer, &geom.x, geom.frame, m)), m);
     }
+    if waterfall.is_none() {
+        crate::straight_line::draw(out, objects, project, layer, index, geom, m);
+    }
     draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
     scene
 }

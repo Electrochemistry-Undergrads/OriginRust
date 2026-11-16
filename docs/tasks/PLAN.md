@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 405 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 404 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -98,7 +98,8 @@ Backlog packages: write the brief first (step 3 above).
 | [ ] | [T66](T66-graph-view-modes.md) | Graph view modes (Print, Page, Window, Draft), Show > Layer Icons and Full Screen done; the nine other Show items and Show Data Info wait for measurement (B1 slice 2) | M | 10 |
 | [ ] | B1 | Graph view: Zoom All (the rest of B1: T65, T66) | S | 3 |
 | [ ] | B2 | Graph objects: cut/copy/paste, Copy/Paste Format, align, same size, group, order across object kinds, snap to grid | L | 51 |
-| [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 28 |
+| [x] | [T67](T67-add-straight-line.md) | Add Straight Line (B3 slice 1) | M | 0 |
+| [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 27 |
 | [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 28 |
 
 - **B1.** The graph view draws the page to fit the window. Add a view transform (zoom factor and

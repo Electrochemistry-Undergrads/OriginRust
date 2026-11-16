@@ -269,6 +269,13 @@ pub enum Cmd {
     TextTool,
     /// The Slope tool of the Tools toolbar.
     SlopeTool,
+    /// Graph > Add Straight Line...
+    AddStraightLine,
+    /// Properties of a straight line.
+    EditStraightLine {
+        layer: usize,
+        line: usize,
+    },
     /// View > Zoom In (Ctrl+I): the mode in which the next click on the page zooms in.
     ZoomIn,
     /// View > Zoom Out (Ctrl+M).
@@ -1393,7 +1400,7 @@ fn graph_menu() -> Vec<Entry> {
         item("Layer Management...", Cmd::LayerManagement(None)),
         item("Add Error Bars...", Cmd::AddErrorBars),
         grey("Add Function Graph..."),
-        grey("Add Straight Line..."),
+        item("Add Straight Line...", Cmd::AddStraightLine),
         item("Add Text...", Cmd::AddText),
         new_layer_menu(),
         item("Merge Graph Windows...", Cmd::MergeGraphs),
@@ -1915,6 +1922,15 @@ pub fn graph_slope_menu(layer: usize, slope: usize) -> Vec<Entry> {
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteSlope { layer, slope })),
         sep(),
         item("Properties...", Cmd::EditSlope { layer, slope }),
+    ]
+}
+
+/// The menu of a straight line.
+pub fn graph_straight_line_menu(layer: usize, line: usize) -> Vec<Entry> {
+    vec![
+        keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteStraightLine { layer, line })),
+        sep(),
+        item("Properties...", Cmd::EditStraightLine { layer, line }),
     ]
 }
 
@@ -2480,6 +2496,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::PanTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pan },
         Cmd::ZoomOut => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::ZoomOut },
         Cmd::WholePage => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::WholePage },
+        Cmd::AddStraightLine => Action::AddStraightLine { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
+        Cmd::EditStraightLine { layer, line } => {
+            Action::EditStraightLine { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, line: *line }
+        }
         Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
         Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
         Cmd::FullScreen => Action::FullScreen(c.graph.ok_or(NEED_GRAPH)?),

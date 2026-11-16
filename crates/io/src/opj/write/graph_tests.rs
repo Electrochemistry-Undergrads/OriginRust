@@ -539,6 +539,21 @@ fn slope_annotations_are_named_in_a_warning_and_not_written() {
 }
 
 #[test]
+fn straight_lines_are_named_in_a_warning_and_not_written() {
+    use sheaf_core::straight_line::StraightLine;
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.layers[0].straight_lines = vec![StraightLine::new(true, 1.0), StraightLine::new(false, 2.0)];
+    });
+    let (imp, warnings) = round_trip(&p);
+    let w = warnings.iter().find(|w| w.contains("straight line")).unwrap_or_else(|| panic!("{warnings:?}"));
+    assert!(w.contains("layer 1 has 2 straight lines") && w.contains(".opj.sheaf"), "{w}");
+    assert!(imp.graphs[0].layers[0].straight_lines.is_empty());
+    let (_, quiet) = round_trip(&source());
+    assert!(!quiet.iter().any(|w| w.contains("straight line")));
+}
+
+#[test]
 fn other_scale_types_survive_a_round_trip() {
     let mut p = source();
     graph_with(&mut p, Template::Scatter, &[(0, 3)], |g| {

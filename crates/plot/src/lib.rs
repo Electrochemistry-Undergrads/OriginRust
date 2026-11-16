@@ -38,6 +38,7 @@ pub mod scene;
 mod shapes;
 mod sheet;
 mod slope;
+mod straight_line;
 pub use slope::{NOT_USABLE as SLOPE_NOT_USABLE, check_point as slope_check_point};
 mod stack;
 mod sunburst;
@@ -96,6 +97,8 @@ mod skip_tests;
 mod slope_tests;
 #[cfg(test)]
 mod sort_x_tests;
+#[cfg(test)]
+mod straight_line_tests;
 #[cfg(test)]
 mod sunburst_tests;
 #[cfg(test)]
@@ -489,8 +492,14 @@ pub fn fit_content_bounds(project: &Project, graph: WindowId) -> Result<Option<(
         .collect();
     for layer in &scene.layers {
         for o in &layer.objects {
-            if matches!(o.kind, ObjectKind::Legend | ObjectKind::Label(_) | ObjectKind::Shape(_) | ObjectKind::Slope(_))
-                && o.bounds.w.is_finite()
+            if matches!(
+                o.kind,
+                ObjectKind::Legend
+                    | ObjectKind::Label(_)
+                    | ObjectKind::Shape(_)
+                    | ObjectKind::Slope(_)
+                    | ObjectKind::StraightLine(_)
+            ) && o.bounds.w.is_finite()
                 && o.bounds.h.is_finite()
             {
                 boxes.push((o.bounds.x, o.bounds.y, o.bounds.x + o.bounds.w, o.bounds.y + o.bounds.h));

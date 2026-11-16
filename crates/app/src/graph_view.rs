@@ -1473,19 +1473,6 @@ fn short(v: f64) -> String {
     sheaf_core::format::format_general(v, 5)
 }
 
-#[cfg(test)]
-mod legend_update_tests {
-    use super::update_legend_text;
-
-    #[test]
-    fn keeps_custom_lines_drops_gone_plots_and_adds_new_ones() {
-        let auto = "\\l(1) %(1)\n\\l(2) %(2)\n\\l(3) %(3)";
-        // Plot 4 is gone, plot 3 is new, plot 1 keeps its custom text.
-        let custom = "\\l(1) T = 5 K\n\\l(4) %(4)\nnote\n\\l(2) %(2)";
-        assert_eq!(update_legend_text(custom, auto), "\\l(1) T = 5 K\nnote\n\\l(2) %(2)\n\\l(3) %(3)");
-    }
-}
-
 /// Writes a new range (`lo` below `hi`) as fixed limits, keeping the axis' direction: an axis drawn
 /// reversed (`drawn_reversed`) without its Reverse switch is reversed by its limits (min above max),
 /// so they are written that way round again.
@@ -1496,5 +1483,18 @@ fn set_limits(a: &mut sheaf_core::graph::Axis, lo: f64, hi: f64, drawn_reversed:
     } else {
         a.min = Some(lo);
         a.max = Some(hi);
+    }
+}
+
+#[cfg(test)]
+mod legend_update_tests {
+    use super::update_legend_text;
+
+    #[test]
+    fn keeps_custom_lines_drops_gone_plots_and_adds_new_ones() {
+        let auto = "\\l(1) %(1)\n\\l(2) %(2)\n\\l(3) %(3)";
+        // Plot 4 is gone, plot 3 is new, plot 1 keeps its custom text.
+        let custom = "\\l(1) T = 5 K\n\\l(4) %(4)\nnote\n\\l(2) %(2)";
+        assert_eq!(update_legend_text(custom, auto), "\\l(1) T = 5 K\nnote\n\\l(2) %(2)\n\\l(3) %(3)");
     }
 }

@@ -837,12 +837,42 @@ still apply. EPS maps the three standard families to Helvetica, Times-Roman and 
 SVG/EMF retain their requested family and PNG/PDF use the existing SVG font resolution.
 
 This slice supports full, nonempty names with no edge whitespace, up to the existing
-64-character bound. Empty or edge-whitespace names keep Sheaf's previous neutral-family
-behaviour and enclosed text. Native `\f:(...)` instead remained literal; a whitespace
-Times name and missing/abbreviated names selected Arial in these controls. Those invalid,
-short-name and alias/default-name behaviours are not claimed as matching Origin. Missing
-fonts retain the existing platform-dependent fallback. Nesting limits and malformed/literal
-text rules remain unchanged.
+64-character bound. An empty name keeps the complete `\f:(...)` text literal, matching the
+accepted Origin 2016 N6 control (correction 2026-11-16). Edge-whitespace names retain Sheaf's
+previous neutral-family behaviour and enclosed text. A whitespace Times name and missing or
+abbreviated names selected Arial in the native controls; those whitespace, short-name and
+alias/default-name behaviours are not claimed as matching Origin. Missing fonts retain the
+existing platform-dependent fallback. Nesting limits and other malformed/literal text rules
+remain unchanged.
+
+The empty-name correction uses the already accepted `font-names.emf`, its all-successful
+command log and synthetic `font-names.lines.txt`: N6 contains one Arial run with the seven
+literal characters `\f:(MM)`, reference (1694, 1047), font height -100 and advance 317.
+The two-character `MM` controls advance 166 in the same export. The earlier quoted parent-font
+request did not select Courier New, so no Courier-parent inference is made. Three regressions
+retain the full literal text, surrounding family/underline state and measured advance, and
+compare SVG, EPS, EMF and raster output with an explicit literal span. Valid full-name escapes
+and existing goldens are unchanged.
+
+A fresh 21-control Origin 2016 probe (2026-11-16) sets the parent with
+`Probe.font=font(Courier New)` and verifies the selected Courier New EMF face. All commands
+and exports succeeded in a separate hidden COM server; its exact process identity was closed
+and the pre-existing server's identity stayed unchanged. `A\f:(B)C` is one complete Courier
+New run (advance 480); inside Times New Roman the text `B\f:(C)D` remains in Times, with the
+outer Courier restored afterward. Full Times New Roman, Courier New and Symbol controls
+confirm the family switches. Default/default/Default: Arial, e/a/g/s, Swiss, Times, Helvetica,
+an unknown name and an edge-whitespace Times name select Arial in this configuration; these
+results do not distinguish special aliases from ordinary missing-name fallback. Roman and
+Courier select those named faces. No short-name substitution or platform font lookup policy
+is changed. Raw exports, selected-font records and identity checks are hashed in ignored
+`t58-font-aliases/native-proof.json`.
+
+Modern special defaults require separate version and configuration evidence: Origin's
+[2022b release note](https://www.originlab.com/ReleaseNotes/detail.aspx?id=2022b2ORG-23928)
+introduces the special-default-font controls and mixed-font `\f:e` / `\f:a` examples; the
+[current dialog reference](https://docs.originlab.com/origin-help/special_default_fonts/)
+links those names to configurable categories. These references do not establish their
+behaviour in Origin 2016. This correction adds no short-name aliases or global font settings.
 
 Eight font regressions cover native family/style restoration, same-family coalescing,
 family-sensitive widths and decoration geometry, rotation, Greek/literal/Unicode behaviour,

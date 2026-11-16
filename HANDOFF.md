@@ -71,6 +71,17 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+T58 empty font-family syntax (`codex/t58-font-aliases`, 2026-11-16): `\f:(...)` stays
+literal instead of silently dropping its wrapper. The accepted older N6 record and 21 fresh
+Origin 2016 controls establish literal text, Courier/Times inheritance and restoration.
+Default/short names that matched ordinary fallback do not add unmeasured alias mappings;
+modern special defaults remain separate. Three regressions cover parsing, styles/width and
+SVG/EPS/EMF/raster output. Fmt, strict workspace/all-target Clippy, all 4,296 tests (eight
+ignored), all 11 font regressions, inventory 293 and eight Python tests pass with frozen
+source/goldens and four test threads. Native and current-CLI PNG/SVG outputs were inspected.
+Only the parser guard and tests change; no font resolver, model, editor or backend changes.
+Own claim/window released by this push; broader T58 work remains partial.
+
 **T58 custom RGB graph-font toolbar colours (2026-11-16, Windows):** Font Color >
 Custom RGB... provides 0 to 255 fields, a preview, Apply/Cancel and valid Enter for selected
 labels/titles/legends. The existing captured requests preserve target/revision/generation,
@@ -530,7 +541,6 @@ is released; other sessions' claims are preserved.
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t58-font-aliases` | Codex Windows | T58 empty font-family escape literal correction; 21 fresh Origin 2016 font-name/default controls measured | claimed/refined 2026-11-16; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`. ONLY plot markup.rs/text_font_tests.rs +graphing7.6/T58 metadata. Empty font-name syntax remains literal as accepted native records; no short/default alias substitutions inferred from fallback. No font resolver/editor/toolbar/palette/Core/model/IO/backend changes, worksheet/T59 fonts, layer-management/T60, graph_view/shapes/gadgets/plots/T112, stats/fitting/MCP/import/clipboard/formula-parameter or reserved modules/ROOT pending paths. Requested FIXED15:50-16:15 CST final product integration; ready T112 may publish before15:50, docs-only claims fine, release on publication/failure/deadline. |
 | `codex/t59-label-default-fonts` | Codex Windows | T59 remaining worksheet label-category font defaults, Native inheritance/manual-family-size/future-column measurements first; first mutators Long Name, Units and Comments only if established | claimed 2026-11-16; sequential reuse OWN CLEAN `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` after public00021dc3/FULL4293/all own actors and shippingCI terminal. Bounded optional label-font fields in existing sheet_fonts +cellformat label fallback, private worksheet_fonts dialog category state and own tests/registry, effective XLSX label style/omission warning and existing OPJ loss condition only as required; GUI3/workbook13b/T59 metadata. Measure Column Labels hierarchy and remaining Data/manual cross-property precedence read-only before decisions; bulk Column Labels implementation only if scope/behavior clear. Preserve published Data-font behavior unless a measured correction is required. Formula/parameter-specific and Standard/header mutators stay disabled; no formula/parameter text/evaluation/insertion/substitution or their modules, category colors/text controls/sticky heights/T27, graph editor/toolbar/palettes/render/fonts/T58/T60/T61, gadgets/stats/fitting/MCP/import/clipboard, reserved T26/T29/T16item6 or ROOT pending paths. Native-only narrowing allowed; no product hold. Claim public BEFORE Graphify/source/spec/Native. |
 | `t22-origin` | Claude Windows, "axis-breaks" | T22 leftovers, docs only: Origin 2016 measurements of Intersect (output order, touching points, coincident stretches, shared vertices) and Polygon Area with fewer than three points (analysis-curve-math Unmeasured 7, 10) | claimed 2026-11-16; spec text only, no code (no free build folder, 12 GB disk); no other sessions' scopes |
 | `codex/t60-layer-border-display` | Codex Windows | T60 Layer Management Display Border Fill/Border Color: measure first, wire only existing supported layer fields | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` reused afteraae34725/FULL4274/all own actors and CI terminal. Bounded dialogs/layer_management.rs +new private border helper if supported, own tests/registry, graphing15.7/T60/index/roadmap/parity; existing preview/selected-layer/history/stale paths. Preserve published Background Color; unsupported border settings remain disabled with measured constraints. No Core/model/renderer/IO production changes, Drawing Order/Dimensions/Add/Axes/merge/layer lifecycle, graph_view/shapes/gadgets, T58 editor/toolbar/palette, worksheet defaults/T59, stockT109, stats/fitting/MCP/import/clipboard, reserved tasks/formula-parameter labels or ROOT pending files. Respect T10913:56-14:15; no own product hold. |

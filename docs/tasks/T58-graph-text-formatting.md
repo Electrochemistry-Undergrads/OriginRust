@@ -169,6 +169,16 @@ related formatting UI/helper/preview tests, inventory 299 and eight Python tooli
 with unchanged source/goldens on integrated T108 source. Fresh desktop seeded RGB,
 invalid-input and closed-menu captures from the tested executable were inspected.
 
+Empty font-name follow-up (`codex/t58-font-aliases`, 2026-11-16): an empty `\f:(...)`
+remains literal, matching the accepted Origin 2016 N6 record and 21 fresh controls with a verified Courier parent.
+Three regressions
+cover exact text, inherited family/style/width and shared vector/raster output. Valid names,
+whitespace-name behaviour and current unknown-family fallback are preserved. Modern special
+font defaults are documented as a separate 2022b feature; no unmeasured alias mapping is added.
+Graphing 7.6 records the native evidence and limits. Fmt, strict workspace/all-target Clippy
+and all 4,296 workspace tests pass (eight ignored), including all 11 font regressions.
+Inventory 293 and eight Python tooling tests pass with frozen source/goldens and four test threads.
+
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

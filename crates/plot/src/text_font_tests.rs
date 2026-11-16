@@ -124,11 +124,9 @@ fn literal_unicode_and_bounded_names_keep_their_existing_text_rules() {
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].text, "\\b(x)\u{03bc}A");
     assert_eq!(runs[0].family.as_deref(), Some("Times New Roman"));
-    for name in ["", " Times New Roman "] {
-        let runs = crate::markup::parse(&format!(r"\f:{name}(x)"));
-        assert_eq!(runs[0].text, "x");
-        assert_eq!(runs[0].family, None);
-    }
+    let runs = crate::markup::parse(r"\f: Times New Roman (x)");
+    assert_eq!(runs[0].text, "x");
+    assert_eq!(runs[0].family, None);
     let name = "n".repeat(64);
     assert_eq!(crate::markup::parse(&format!(r"\f:{name}(x)"))[0].family.as_deref(), Some(name.as_str()));
     let source = format!(r"\f:{}(x)", "n".repeat(65));
@@ -138,6 +136,68 @@ fn literal_unicode_and_bounded_names_keep_their_existing_text_rules() {
     let fonts = crate::SystemFonts::from_database(fontdb::Database::new());
     let font = Font::new("Arial", 20.0);
     assert_eq!(crate::text::width(&fonts, r"\f:Missing Family(ab)", &font, 20.0), 22.0);
+}
+
+#[test]
+fn empty_font_names_retain_the_literal_origin_control() {
+    // Accepted Origin 2016 N6: one Arial run containing all seven characters,
+    // at (1694,1047), advance 317, rather than the two-character MM run (166).
+    let source = r"\f:(MM)";
+    let runs = crate::markup::parse(source);
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].text, source);
+    assert_eq!(runs[0].family, None);
+    assert_eq!(crate::markup::plain(source), source);
+    assert_eq!(crate::markup::plain(r"left\f:()right"), r"left\f:()right");
+    assert_eq!(crate::markup::plain(r"\f:(MM"), r"\f:(MM");
+}
+
+#[test]
+fn empty_font_literals_keep_the_surrounding_family_styles_and_measured_width() {
+    let source = r"\u(\f:Times New Roman(a\f:(MM)b))x";
+    let runs = crate::markup::parse(source);
+    assert_eq!(runs.len(), 2);
+    assert_eq!(runs[0].text, r"a\f:(MM)b");
+    assert_eq!(runs[0].family.as_deref(), Some("Times New Roman"));
+    assert!(runs[0].underline);
+    assert_eq!(runs[1].text, "x");
+    assert_eq!(runs[1].family, None);
+    assert!(!runs[1].underline);
+    let font = Font::new("Arial", 20.0);
+    let mut inner = font.clone();
+    inner.family = "Times New Roman".into();
+    let expected = FamilyMetrics.width(r"a\f:(MM)b", &inner, 20.0) + FamilyMetrics.width("x", &font, 20.0);
+    assert_eq!(crate::text::width(&FamilyMetrics, source, &font, 20.0), expected);
+    let items = placed(source, &font, Anchor::Middle, 37.0);
+    assert_eq!(texts(&items).iter().map(|t| t.text.as_str()).collect::<String>(), r"a\f:(MM)bx");
+}
+
+#[test]
+fn empty_font_literals_export_like_explicit_literal_text() {
+    let scene = |source| Scene {
+        width: 155.0,
+        height: 80.0,
+        background: Color::WHITE,
+        layers: vec![LayerScene {
+            clip: crate::Rect { x: 0.0, y: 0.0, w: 155.0, h: 80.0 },
+            grid: vec![],
+            plots: vec![],
+            overlay: placed(source, &Font::new("Arial", 20.0), Anchor::Start, 0.0),
+            underlay_len: 0,
+            objects: vec![],
+        }],
+    };
+    let actual = scene(r"\f:(MM)");
+    let literal = scene(r"\v(\f:(MM))");
+    let svg = crate::svg::write_svg(&actual);
+    assert!(svg.contains(r"\f:(MM)"));
+    assert_eq!(svg, crate::svg::write_svg(&literal));
+    assert_eq!(crate::eps::write_eps(&actual, 1.0).bytes, crate::eps::write_eps(&literal, 1.0).bytes);
+    assert_eq!(crate::emf::write_emf(&actual, 1.0, &FixedMetrics), crate::emf::write_emf(&literal, 1.0, &FixedMetrics));
+    assert_eq!(
+        crate::render_scene_raster(&actual, 2.0).unwrap().rgba,
+        crate::render_scene_raster(&literal, 2.0).unwrap().rgba
+    );
 }
 
 fn family_scene() -> Scene {

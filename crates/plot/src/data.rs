@@ -64,6 +64,9 @@ pub(crate) struct PlotData<'a> {
     pub bar: Option<BarSlot>,
     /// The statistics a box chart plot draws; `None` for other kinds.
     pub boxed: Option<BoxStats>,
+    /// For a column scatter plot, `(position, column name)`: the plot stands at 1, 2, 3, ... in plot order
+    /// and its X values are the position plus a jitter; `None` for other kinds.
+    pub column_at: Option<(f64, String)>,
     /// The density silhouette a violin plot draws (its box statistics are in `boxed`); `None`
     /// for other kinds.
     pub violin: Option<crate::violin::ViolinData>,
@@ -381,6 +384,14 @@ fn attach_waterfall_colors(project: &Project, layer: &Layer, plots: &mut [PlotDa
     }
 }
 
+/// The X value of the `k`-th row of the column scatter plot at position `g + 1` (0-based `g`): the position
+/// plus a fixed pseudo-random shift of up to 0.18 either way (the golden-ratio sequence of
+/// [`sheaf_core::compplot::jittered`], so the picture is the same every time). Sheaf's choice: Origin's jitter
+/// rule was not measured.
+fn column_jitter(g: usize, k: usize) -> f64 {
+    sheaf_core::compplot::jittered(g, k)
+}
+
 /// The drawable plots of a layer, in plot order, with their stack offsets. A plot that is hidden
 /// or whose Y column is missing or not numeric is skipped (a hidden plot still keeps its place in
 /// the stack).
@@ -389,6 +400,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
     let mut cumulative = sheaf_core::stack::cumulative_add(project, layer);
     let mut plots = Vec::new();
     let mut boxes = 0usize;
+    let mut scatter_columns = 0usize;
     let mut ridges = 0usize;
     for (index, (plot, place)) in layer.plots.iter().zip(places).enumerate().filter(|(_, (p, _))| p.visible) {
         let Some(y) = project.numeric(plot.y) else { continue };
@@ -436,6 +448,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             member: place.member,
             bar: None,
             boxed: None,
+            column_at: None,
             violin: None,
             ridge: None,
             pie: None,
@@ -543,6 +556,14 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.xerr = None;
                 pd.base = None;
                 pd.boxed = Some(stats);
+            }
+            PlotKind::ColumnScatter => {
+                scatter_columns += 1;
+                // Every row stands at the plot's position, spread by Sheaf's own deterministic jitter
+                // (Origin's rule was not measured; its points stayed within about +-0.15).
+                let pos = scatter_columns as f64;
+                pd.x = Some(Cow::Owned((0..pd.y.len()).map(|k| column_jitter(scatter_columns - 1, k)).collect()));
+                pd.column_at = Some((pos, project.plot_label(plot)));
             }
             PlotKind::Ridgeline => {
                 // Masked rows are left out, as in a violin; filtered rows too.

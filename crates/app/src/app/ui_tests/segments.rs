@@ -11,13 +11,13 @@ fn the_segment_plots_are_in_the_line_and_symbol_menu() {
     close_menus(&mut h);
 }
 
-/// Plot > Symbol > Scatter Central is live (T75); Column Scatter is not built.
+/// Plot > Symbol > Scatter Central (T75) and Column Scatter (T79) are live.
 #[test]
 fn scatter_central_is_in_the_symbol_menu() {
     let mut h = start(vec![data_file("scatter-central-menu")]);
     click(&mut h, "Title Book1 - sample.csv");
     menu_path(&mut h, &["Plot", "Symbol"]);
     assert!(entry_enabled(&h, "Scatter Central"));
-    assert!(!entry_enabled(&h, "Column Scatter"), "Column Scatter stays grey");
+    assert!(entry_enabled(&h, "Column Scatter"));
     close_menus(&mut h);
 }

@@ -169,7 +169,7 @@ fn graph_geometry_once(project: &Project, g: &Graph, pds: &[LayerData], m: &dyn 
 ///   that the end bars are not cut; a linear Y axis over column plots reaches down to their base.
 /// - An X axis over a date or time column gets date tick labels (see [`data::date_axis`]).
 /// - An axis with a label column shows that column's cells at whole-number ticks.
-fn resolve_dim(
+pub(crate) fn resolve_dim(
     project: &Project,
     axis: &Axis,
     dim: Dim,
@@ -203,6 +203,12 @@ fn resolve_dim(
         // Box charts: one category per box, named by its column.
         let mut r = crate::ticks::resolve_category(axis, Some((1.0, boxes.len() as f64)));
         let names: Vec<String> = boxes.iter().map(|b| b.label.clone()).collect();
+        crate::ticks::label_from_cells(&mut r, &names);
+        r
+    } else if dim == Dim::X && sources.iter().any(|pd| pd.column_at.is_some()) {
+        // Column scatter: one category per plot, named by its column (0.5 .. n + 0.5).
+        let names: Vec<String> = sources.iter().filter_map(|pd| pd.column_at.as_ref().map(|c| c.1.clone())).collect();
+        let mut r = crate::ticks::resolve_category(axis, Some((1.0, names.len() as f64)));
         crate::ticks::label_from_cells(&mut r, &names);
         r
     } else if dim == Dim::X && data::is_category(project, axis, first) {
@@ -1406,8 +1412,11 @@ fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -
             project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default()
         };
     }
-    if pd.boxed.is_some() && !y_axis {
+    if (pd.boxed.is_some() || pd.column_at.is_some()) && !y_axis {
         return String::new();
+    }
+    if pd.column_at.is_some() {
+        return "Range".to_string();
     }
     if pd.ridge.is_some() {
         // The columns name the baselines; the values along X have no column of their own.

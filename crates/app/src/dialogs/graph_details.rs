@@ -1259,6 +1259,7 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 hexbin: layer.inherited_hexbin(),
                 parallel: layer.inherited_parallel(),
                 treemap: layer.inherited_treemap(),
+                indexed: None,
                 sunburst: layer.inherited_sunburst(),
                 size_from: None,
                 color_from: None,

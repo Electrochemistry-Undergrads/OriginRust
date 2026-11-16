@@ -560,6 +560,10 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   targets). Selections: a block that runs to the last data row is open-ended; columns, rows and
   the whole sheet are cells of those columns/rows; a row filter does not matter (hidden rows in
   the span are formatted too).
+- **Toolbar/keys.** Underline and fill use the existing range fields. Origin 2016 measurements
+  (GUI 3, 2026-11-16) confirm per-cell U and Ctrl+B/I/U, Fill Color/None, and data-only whole-column
+  underline distinct from label underline. Sheaf uses one Undo per key or palette change, leaves
+  source columns/formulas alone and rejects stale requests and effective no-ops.
 - **Conditional formats.** Conditional fill and text colour override manual ones; bold, italic,
   underline, font, size and alignment stay manual.
 - **Maintenance.** Row insert/delete shift, grow, shrink or drop spans of the affected columns

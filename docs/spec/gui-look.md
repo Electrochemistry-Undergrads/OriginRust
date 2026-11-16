@@ -535,13 +535,26 @@ foregrounded the main window between opening and picking were excluded because t
 popup. The toolbar and worksheet area used for measurements were unobscured.
 
 Sheaf's shared **Format toolbar** targets selected cells, whole rows/columns, or the selected
-label cell. Font, Size, Bold, Italic and the basic eight text colours apply in one "Format cells"
+label cell. Font, Size, Bold, Italic, Underline, the basic eight text colours and eight fill colours plus None apply in one "Format cells"
 undo step, leaving values and number formats untouched. Mixed family/size fields are blank;
-Bold/Italic use the first displayed selected cell's state. Selecting another cell, sheet or
+Bold/Italic/Underline use the first displayed selected cell's state (mixed Underline is Sheaf's
+existing toolbar policy; its mixed state was not separately measured). Selecting another cell, sheet or
 workbook, editing a cell, or changing the document makes an older toolbar request inert.
 Whole columns include future rows and keep compact format ranges. Size accepts 4..96 pt (0
 restores the default); these bounds remain Sheaf's existing policy, not a measured Origin limit.
 Worksheet size-step controls stay disabled as observed; graph controls keep their own behaviour.
+
+Further Origin 2016 measurements (Windows, 2026-11-16, synthetic cells): the U button and
+Ctrl+B/I/U toggle Bold/Italic/Underline on the selected cell. Fill Color red changes only A1's
+background; None clears it. Ctrl+U on a Long Name label toggles that label separately. Ctrl+U
+on a whole column underlines its data cells while its Long Name label stays
+unchanged. Sheaf implements these target distinctions through the existing format ranges.
+Keyboard formatting belongs to worksheet selections when the grid has the keyboard; text
+editors, dialogs, popups and Project Explorer retain their keys. Graph Ctrl+I stays Zoom In.
+Each key press is one Undo step; multiple presses in a frame retain their order. Fill palettes
+capture their opening selection/revision and cannot follow a changed target. Manual fills keep
+the existing conditional-colour precedence (still unmeasured). The palette is the basic eight
+colours plus None; native custom/system/recent palette storage is not implemented.
 
 Cells use installed regular/bold/italic faces with UI glyph fallbacks; missing styles use the
 existing synthetic fallback. The default is Arial 9 pt (12 logical pixels at 96 dpi). Explicit
@@ -558,8 +571,8 @@ The **Format Cells** window (cell/column/row menus, Format > Cell...) retains it
 unmeasured choices: Font, Size (0 = Default), Bold/Italic/Underline, text/fill colour, horizontal
 alignment, Clear Formats, OK, Cancel and Apply. It starts from the first selected cell and applies
 only changed properties. Format > Worksheet... and Set Data Style > Default remain grey until
-their scope is measured. Underline and fill from the worksheet toolbar, vertical alignment,
-Ctrl+B/I/U, full/custom palettes, and the remaining dialog/precedence measurements remain open.
+their scope is measured. Vertical alignment, full/custom palettes, and the remaining dialog/precedence measurements
+remain open.
 Model and persistence rules: workbook-model.md 13b.
 
 ## 4. Graph window

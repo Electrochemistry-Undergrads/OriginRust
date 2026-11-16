@@ -17,7 +17,15 @@ pub(super) fn show(
             Item::Gap => gap(ui),
             Item::FontBox => family(ui, state, actions),
             Item::SizeBox => size(ui, state, actions),
-            Item::Button(button) if object_icon(button.icon) => object_button(ui, button, object, actions),
+            Item::Button(button) if object_icon(button.icon) => {
+                if let Some(state) = state.filter(|s| s.worksheet.is_some())
+                    && matches!(button.icon, Icon::Underline | Icon::FillColor)
+                {
+                    worksheet_button(ui, button, state, actions);
+                } else {
+                    object_button(ui, button, object, actions);
+                }
+            }
             Item::Button(button) => {
                 let Some(state) = state else {
                     if matches!(button.icon, Icon::Bold | Icon::Italic | Icon::Bigger | Icon::Smaller | Icon::FontColor)
@@ -184,6 +192,64 @@ fn colors(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
     }
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Format toolbar: Font Color"));
     response.on_hover_text("Font Color");
+}
+
+/// Worksheet controls use range requests; graph-object formatting keeps its own dispatcher.
+fn worksheet_button(ui: &mut Ui, button: &Button, state: &Snapshot, actions: &mut Vec<Action>) {
+    let style = state.worksheet.expect("worksheet control target");
+    if button.icon == Icon::FillColor {
+        worksheet_fill(ui, state, actions);
+        return;
+    }
+    let response = ui.add(egui::Button::new("").selected(style.underline).min_size(vec2(CELL, CELL)));
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::SelectableLabel,
+            true,
+            style.underline,
+            "Format toolbar: Underline",
+        )
+    });
+    paint(ui, &response, button.icon, true);
+    if response.clicked() {
+        actions.push(Action::FormatText(state.request(Change::Underline(!style.underline))));
+    }
+    response.on_hover_text("Underline");
+}
+
+fn worksheet_fill(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
+    let capture_id = ui.id().with("worksheet_fill_capture");
+    let captured = ui.data_mut(|d| d.get_temp::<Snapshot>(capture_id)).unwrap_or_else(|| state.clone());
+    let mut label = egui::RichText::new("F").strong();
+    if !state.mixed.fill
+        && let Some(color) = state.worksheet.and_then(|s| s.fill)
+    {
+        let dark = u32::from(color.r) * 299 + u32::from(color.g) * 587 + u32::from(color.b) * 114 < 128_000;
+        label = label.background_color(Color32::from_rgb(color.r, color.g, color.b)).color(if dark {
+            Color32::WHITE
+        } else {
+            Color32::BLACK
+        });
+    }
+    let response = ui
+        .menu_button(label, |ui| {
+            if ui.button("Fill Color: None").clicked() {
+                actions.push(Action::FormatText(captured.request(Change::Fill(None))));
+                ui.close();
+            }
+            for (name, color) in object_format::PALETTE {
+                if ui.button(format!("Fill Color: {name}")).clicked() {
+                    actions.push(Action::FormatText(captured.request(Change::Fill(Some(color)))));
+                    ui.close();
+                }
+            }
+        })
+        .response;
+    if response.clicked() {
+        ui.data_mut(|d| d.insert_temp(capture_id, state.clone()));
+    }
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Format toolbar: Fill Color"));
+    response.on_hover_text(if state.mixed.fill { "Fill Color (mixed selection)" } else { "Fill Color" });
 }
 
 fn object_icon(icon: Icon) -> bool {

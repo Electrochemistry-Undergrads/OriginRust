@@ -17,6 +17,8 @@ pub enum Change {
     Size(f64),
     Bold(bool),
     Italic(bool),
+    Underline(bool),
+    Fill(Option<Color>),
     Color(Color),
     Scale(f64),
 }
@@ -27,7 +29,16 @@ pub struct Mixed {
     pub size: bool,
     pub bold: bool,
     pub italic: bool,
+    pub underline: bool,
+    pub fill: bool,
     pub color: bool,
+}
+
+/// Cell properties beyond the shared font. Graph objects use object_format.
+#[derive(Clone, Copy, Debug)]
+pub struct WorksheetStyle {
+    pub underline: bool,
+    pub fill: Option<Color>,
 }
 
 #[derive(Clone, Debug)]
@@ -35,6 +46,7 @@ pub struct Snapshot {
     pub target: Target,
     pub font: Font,
     pub mixed: Mixed,
+    pub worksheet: Option<WorksheetStyle>,
     pub generation: u64,
     pub revision: u64,
 }
@@ -51,7 +63,14 @@ impl Snapshot {
     pub fn graph(doc: &Document, graph: WindowId, layer: usize, object: ObjectKind) -> Option<Self> {
         let target = Target::GraphText { graph, layer, object };
         let font = font(doc.project(), target.clone())?.clone();
-        Some(Self { target, font, mixed: Mixed::default(), generation: doc.generation(), revision: doc.revision() })
+        Some(Self {
+            target,
+            font,
+            mixed: Mixed::default(),
+            worksheet: None,
+            generation: doc.generation(),
+            revision: doc.revision(),
+        })
     }
 
     pub fn scaling_enabled(&self) -> bool {
@@ -118,6 +137,7 @@ pub fn apply(doc: &mut Document, request: Request) -> bool {
         Change::Size(size) => after.size_pt = size,
         Change::Bold(value) => after.bold = value,
         Change::Italic(value) => after.italic = value,
+        Change::Underline(_) | Change::Fill(_) => return false,
         Change::Color(color) => after.color = color,
         Change::Scale(factor) => after.size_pt = (after.size_pt * factor).round(),
     }

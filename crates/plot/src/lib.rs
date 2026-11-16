@@ -129,6 +129,8 @@ mod text_font_tests;
 #[cfg(test)]
 mod text_rgb_tests;
 #[cfg(test)]
+mod text_script_pair_tests;
+#[cfg(test)]
 mod treemap_tests;
 #[cfg(test)]
 mod trend_tests;

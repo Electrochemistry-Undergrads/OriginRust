@@ -74,6 +74,15 @@ Format toolbar work stay with their owners.
 Formatting, strict workspace all-target Clippy and 4,037 combined tests pass (eight existing ignored).
 The 340-item inventory and eight Python tooling tests pass; all workspace tests ran
 with four test threads, retaining every test and assertion.
+Fifth renderer slice (`codex/text-script-pairs`): `\=(sub,sup)` uses measured shared
+columns, 60% script size and 49% up / 35% down baselines, with maximum branch advance,
+literal commas, empty branches, nesting and inherited style restoration. Graphing 7.10
+records twenty native controls and four size checks. Independent placement/parser,
+font/decoration/anchor/rotation/export regressions and SVG/stroke PNG goldens cover it.
+Combined-script **editor insertion** remains separate; other unsupported escape codes,
+font aliases and the separately owned custom-colour/editor work remain open.
+Validation pending on the final combined tree.
+
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

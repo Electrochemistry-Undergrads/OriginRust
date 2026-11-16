@@ -192,7 +192,8 @@ impl GraphUi {
         }
     }
 
-    /// Zoom Out: half the zoom, never below 1; the window centre's page point stays centred.
+    /// Zoom Out: half the zoom, down to 25 % (Origin: 200 to 100 to 50 to 25 %, then no change); the
+    /// window centre's page point stays centred.
     pub fn zoom_out(&mut self) {
         if let Some((window, page)) = self.frame {
             self.zoom = graph_zoom::zoom_about(window, page, self.zoom, self.zoom.factor / 2.0, window.center());
@@ -287,6 +288,12 @@ impl GraphUi {
         Some(screen((o.bounds.x + o.bounds.w / 2.0, o.bounds.y + o.bounds.h / 2.0)))
     }
 
+    /// The middle of the part of the window the page is drawn in, in the last frame.
+    #[cfg(test)]
+    pub fn view_centre(&self) -> Option<Pos2> {
+        self.frame.map(|(window, _)| graph_zoom::content(window).center())
+    }
+
     /// The screen point of a page point (points from the page's top left) in the last frame.
     #[cfg(test)]
     pub fn page_point(&self, x: f64, y: f64) -> Option<Pos2> {
@@ -326,7 +333,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
 
     // The view input: Zoom In mode, Pan, the wheel and the scroll bars. They change the zoom
     // before the page is placed, from the layout the user saw in the last frame.
-    let zoom_took_input = state.zoom_in_tool;
+    // Zoom In mode and Origin's Zoom-Panning tool take the clicks: a click with the hand changes nothing.
+    let zoom_took_input = state.zoom_in_tool || state.pan_tool;
     view_input(ui, &response, rect, page_size, state);
 
     // UI points per page point (zoom 1: the whole page fits in the window, "fit page to window"),
@@ -866,8 +874,9 @@ fn view_input(ui: &mut egui::Ui, response: &egui::Response, rect: Rect, page: Ve
         if response.clicked()
             && let Some(pos) = response.interact_pointer_pos()
         {
+            // Origin re-centres the view on the clicked point.
             let factor = state.zoom.factor * graph_zoom::CLICK_FACTOR;
-            state.zoom = graph_zoom::zoom_about(rect, page, state.zoom, factor, pos);
+            state.zoom = graph_zoom::centre_on(rect, page, state.zoom, factor, pos);
             state.zoom_in_tool = false;
         }
     }
@@ -878,8 +887,49 @@ fn view_input(ui: &mut egui::Ui, response: &egui::Response, rect: Rect, page: Ve
         } else if response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
         }
+        // Origin's Zoom-Panning tool: "+" and "-" zoom by 1.25 and 0.85 about the middle of the view,
+        // the arrow keys move it by a small step, the wheel zooms (measured except the wheel).
+        let (plus, minus, keys, wheel, pointer) = ui.input(|i| {
+            let plus = i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals);
+            let minus = i.key_pressed(egui::Key::Minus);
+            let step = graph_zoom::ARROW_STEP_PT;
+            let mut d = Vec2::ZERO;
+            for (key, v) in [
+                (egui::Key::ArrowLeft, egui::vec2(-step, 0.0)),
+                (egui::Key::ArrowRight, egui::vec2(step, 0.0)),
+                (egui::Key::ArrowUp, egui::vec2(0.0, -step)),
+                (egui::Key::ArrowDown, egui::vec2(0.0, step)),
+            ] {
+                if i.key_pressed(key) {
+                    d += v;
+                }
+            }
+            (plus, minus, d, i.raw_scroll_delta.y, i.pointer.hover_pos())
+        });
+        let centre = graph_zoom::content(rect).center();
+        if plus {
+            let f = state.zoom.factor * graph_zoom::PAN_ZOOM_IN;
+            state.zoom = graph_zoom::zoom_about(rect, page, state.zoom, f, centre);
+        }
+        if minus {
+            let f = state.zoom.factor * graph_zoom::PAN_ZOOM_OUT;
+            state.zoom = graph_zoom::zoom_about(rect, page, state.zoom, f, centre);
+        }
+        if keys != Vec2::ZERO {
+            // the view moves over the page: the page moves the other way on screen
+            let scale = graph_zoom::layout(rect, page, state.zoom).scale;
+            state.zoom = graph_zoom::pan(rect, page, state.zoom, -keys * scale);
+        }
+        if response.hovered() && wheel != 0.0 {
+            let f = state.zoom.factor * if wheel > 0.0 { graph_zoom::PAN_ZOOM_IN } else { graph_zoom::PAN_ZOOM_OUT };
+            state.zoom = graph_zoom::zoom_about(rect, page, state.zoom, f, pointer.unwrap_or(centre));
+            ui.input_mut(|i| {
+                i.smooth_scroll_delta = Vec2::ZERO;
+                i.raw_scroll_delta = Vec2::ZERO;
+            });
+        }
     }
-    if response.hovered() {
+    if response.hovered() && !state.pan_tool {
         let (scroll, zoom_delta, pointer) =
             ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.pointer.hover_pos()));
         if (zoom_delta - 1.0).abs() > f32::EPSILON

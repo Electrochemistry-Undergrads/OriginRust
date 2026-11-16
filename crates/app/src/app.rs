@@ -4153,6 +4153,18 @@ impl SheafApp {
                             .apply("Hide plot", |p| objects::set_plot_visible(p, graph, 0, n.saturating_sub(1), false));
                     }
                 }
+                "zoom" => {
+                    // the first graph's window zoomed by the factor, its view scrolled to the page's centre
+                    if let (Some(graph), Ok(f)) = (first_graph, arg.parse::<f32>()) {
+                        let page = self.doc.project().graph(graph).map(|g| (g.page.width_pt, g.page.height_pt));
+                        let factor = f.clamp(1.0, 32.0);
+                        let (w, h) = page.unwrap_or((0.0, 0.0));
+                        // the view shows 1/factor of the page; this top left centres it
+                        let k = (1.0 - 1.0 / factor) / 2.0;
+                        let scroll = egui::vec2(w as f32 * k, h as f32 * k);
+                        self.graphs.entry(graph).or_default().zoom = crate::graph_zoom::Zoom { factor, scroll };
+                    }
+                }
                 "merge-graphs" if self.doc.project().graphs().count() >= 2 => {
                     self.merge_graphs = Some(MergeGraphsDialog::new(self.doc.project()));
                 }

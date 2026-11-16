@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **423 greyed items: 294 in the menu bar, 41 on the toolbars, 88 in context menus.**
+original inventory baseline. This is not a new runtime audit. **416 greyed items: 291 in the menu bar, 37 on the toolbars, 88 in context menus.**
 
 ## How to read and keep this file
 
@@ -41,8 +41,8 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T61` | 5 |
 | `T62` | 0 |
 | `T63` | 22 |
-| `T65` | 9 |
-| `B1` | 18 |
+| `T65` | 0 |
+| `B1` | 20 |
 | `B2` | 51 |
 | `B3` | 28 |
 | `B4` | 30 |
@@ -61,7 +61,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 56 items, backlog packages (`B`) 347, not planned (`N`) 20.
+Briefs (`T`) hold 47 items, backlog packages (`B`) 349, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -108,7 +108,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B12` View Windows: None · Windows in Active Folder · Active Folder and Subfolders
 - `B6` Actively Update Plots · Page Break Preview Lines [Workbook]
 - `B1` Print View · Page View · Window View · Draft View · Zoom All [Graph]
-- `T65` Zoom In · Zoom Out · Whole Page [Graph]
 - `B1` Show: Layer Icons · Active Layer Indicator · Axis Layer Icons · Object Grid · Layer Grid · Frame · Labels · Data · Active Layer Only · Master Items on Screen [Graph]
 - `B1` Show Data Info [Graph]
 - `B1` Full Screen [Graph]
@@ -222,10 +221,9 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B12` Standard: New Graph
 - `B14` Standard: New Matrix · New Layout · New Notes
 - `T58` Format: Font name box · Font size box · Bold · Italic · Underline · Superscript · Subscript · Greek · Increase Font Size · Decrease Font Size · Font Color · Fill Color · Line Color
-- `T65` Graph: Zoom In · Zoom Out · Whole Page
 - `T63` 2D Graphs: Bar · Stacked Area · Box Chart · Histogram · Bubble
 - `B4` 2D Graphs: High-Low-Close
-- `T65` Tools: Zoom In · Zoom Out · Pan
+- `B1` Tools: Zoom In · Zoom Out
 - `B2` Object Edit: Align Left · Align Right · Align Top · Align Bottom · Align Horizontal Center · Align Vertical Center · Make Same Width · Make Same Height · Group · Ungroup
 - `T63` Object Edit: Bring to Front · Send to Back
 

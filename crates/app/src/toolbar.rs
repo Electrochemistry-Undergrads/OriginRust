@@ -368,8 +368,10 @@ fn build(bar: Bar) -> Vec<Item> {
         ],
         Bar::Tools => vec![
             tool(Pointer, "Pointer", Cmd::Pointer),
-            b(ZoomIn, "Zoom In", Cmd::ZoomIn, "Zoom In"),
-            b(ZoomOut, "Zoom Out", Cmd::ZoomOut, "Zoom Out"),
+            // Origin's Tools-bar magnifiers are "Scale In" and "Scale Out" (axis magnification, measured
+            // 2026-11-15), not the page zoom of the View menu: they stay grey (B1).
+            g(ZoomIn, "Zoom In"),
+            g(ZoomOut, "Zoom Out"),
             b(Rescale, "Rescale", Cmd::Rescale, "Rescale to Show All"),
             tool(DataReader, "Data Reader", Cmd::DataReader),
             gap(),

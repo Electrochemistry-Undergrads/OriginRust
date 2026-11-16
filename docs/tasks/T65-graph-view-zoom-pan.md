@@ -1,6 +1,6 @@
 # T65: Graph view zoom and pan (B1, slice 1)
 
-**Status:** in progress 2026-11-15 (branch `graph-zoom`, Claude Windows, session fe4b37eb).
+**Status:** done 2026-11-15 (branch `graph-zoom`, Claude Windows, session fe4b37eb): View Zoom In/Zoom Out/Whole Page, Graph toolbar buttons and the Tools-bar Zoom-Panning tool, as measured (gui-look 4.x). The Tools-bar magnifiers turned out to be Origin's axis Scale In/Scale Out and went back to `B1`. Left: the zoom combo, Scale In/Out, Zoom All.
 **Size:** M. **Priority:** wave 4 (B1), the first backlog package after waves 1-3 were claimed.
 **Spec:** [gui-look](../spec/gui-look.md) section 4 (graph window mouse actions); add a "Zoom and
 pan" subsection there. **Inventory:** 9 locations tagged `T65` (View > Zoom In, Zoom Out, Whole

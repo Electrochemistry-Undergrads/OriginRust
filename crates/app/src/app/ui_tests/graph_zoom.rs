@@ -34,7 +34,7 @@ fn a_new_graph_window_shows_the_whole_page() {
 }
 
 #[test]
-fn zoom_in_is_a_mode_and_the_click_zooms_by_two_keeping_the_point_under_the_pointer() {
+fn zoom_in_is_a_mode_and_the_click_zooms_by_two_centring_the_clicked_point() {
     let mut h = start(vec![data_file("zoom-in")]);
     menu_path(&mut h, &["View", "Zoom In"]);
     assert_eq!(graph_ui(&h).tool(), GraphTool::ZoomIn);
@@ -45,8 +45,10 @@ fn zoom_in_is_a_mode_and_the_click_zooms_by_two_keeping_the_point_under_the_poin
     assert_eq!(factor(&h), 2.0);
     assert_eq!(graph_ui(&h).tool(), GraphTool::Pointer, "one click ends the mode");
     assert!(graph_ui(&h).selected.is_none(), "the click only zooms");
+    // Origin re-centres the view on the clicked point
     let after = graph_ui(&h).page_point(page.width_pt * 0.4, page.height_pt * 0.45).unwrap();
-    assert!(after.distance(p) < 2.0, "{p:?} moved to {after:?}");
+    let centre = graph_ui(&h).view_centre().unwrap();
+    assert!(after.distance(centre) < 2.0, "{after:?} is not the centre {centre:?}");
     // Again: 400 %.
     let p = at_page(&h, 0.4, 0.45);
     zoom_in_at(&mut h, p);
@@ -64,7 +66,7 @@ fn zoom_is_limited_to_3200_percent() {
 }
 
 #[test]
-fn zoom_out_acts_at_once_and_stops_at_the_whole_page() {
+fn zoom_out_acts_at_once_by_halves_down_to_25_percent() {
     let mut h = start(vec![data_file("zoom-out")]);
     let p = at_page(&h, 0.5, 0.5);
     zoom_in_at(&mut h, p);
@@ -76,8 +78,14 @@ fn zoom_out_acts_at_once_and_stops_at_the_whole_page() {
     menu_path(&mut h, &["View", "Zoom Out"]);
     assert_eq!(factor(&h), 1.0);
     assert_eq!(graph_ui(&h).zoom.scroll, egui::Vec2::ZERO);
+    // Origin: 100 % to 50 % to 25 %, then no change
     menu_path(&mut h, &["View", "Zoom Out"]);
-    assert_eq!(factor(&h), 1.0, "never below the whole page");
+    assert_eq!(factor(&h), 0.5);
+    menu_path(&mut h, &["View", "Zoom Out"]);
+    menu_path(&mut h, &["View", "Zoom Out"]);
+    assert_eq!(factor(&h), 0.25);
+    menu_path(&mut h, &["View", "Whole Page"]);
+    assert_eq!(factor(&h), 1.0);
 }
 
 #[test]
@@ -198,5 +206,31 @@ fn the_wheel_scrolls_and_ctrl_wheel_zooms_about_the_pointer() {
     wheel(&mut h, p, egui::vec2(0.0, -1.0), egui::Modifiers::SHIFT);
     assert!(graph_ui(&h).zoom.scroll.x > after.x, "Shift+wheel scrolls sideways");
     wheel(&mut h, p, egui::vec2(0.0, -4.0), egui::Modifiers::COMMAND);
-    assert!(factor(&h) < zoomed && factor(&h) >= 1.0);
+    assert!(factor(&h) < zoomed && factor(&h) >= 0.25);
+}
+
+#[test]
+fn the_zoom_panning_tool_zooms_with_plus_and_minus_and_moves_with_the_arrows() {
+    let mut h = start(vec![data_file("zoom-pan-keys")]);
+    let p = at_page(&h, 0.5, 0.5);
+    zoom_in_at(&mut h, p);
+    assert_eq!(factor(&h), 2.0);
+    h.state_mut().graphs.values_mut().for_each(|g| g.pan_tool = true);
+    settle(&mut h);
+    // Origin: "+" 100 % to 125 %, "-" to 85 %
+    h.key_press(egui::Key::Plus);
+    settle(&mut h);
+    assert!((factor(&h) - 2.5).abs() < 1e-4, "{}", factor(&h));
+    h.key_press(egui::Key::Minus);
+    settle(&mut h);
+    assert!((factor(&h) - 2.125).abs() < 1e-4, "{}", factor(&h));
+    let before = graph_ui(&h).zoom.scroll;
+    h.key_press(egui::Key::ArrowRight);
+    settle(&mut h);
+    let after = graph_ui(&h).zoom.scroll;
+    assert!((after.x - before.x - 2.0).abs() < 1e-3, "{before:?} -> {after:?}");
+    // a click with the hand selects nothing
+    let legend = at_page(&h, 0.5, 0.5);
+    click_at(&mut h, legend);
+    assert!(graph_ui(&h).selected.is_none());
 }

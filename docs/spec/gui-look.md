@@ -614,6 +614,33 @@ Pictures: `gr-plain.png`, `gr-graph.png`, `grc-*.png`, `gdlg-*.png`; second stud
 - Colour list of the default palette ("By One"): black, red, green, blue... [spec graphing.md]; in
   the Group tab of Plot Details the strip behind "By One" shows a long list of colours.
 
+### 4.x Zoom and pan (T65, measured 2026-11-15)
+
+Origin 2016 (scripted clicks and pictures, scratch `re-workspace/scratch/t60/zoom`, `zoom2`):
+- View > Zoom In (Ctrl+I) is a mode: nothing changes until a click on the page, which doubles the
+  zoom (100, 200, 400, 800, 1600 % seen) and **re-centres the view on the clicked point**; the mode
+  ends after the click. Scroll bars appear above 100 %.
+- View > Zoom Out (Ctrl+M) acts at once and halves: 800, 400, 200, 100, 50, 25 %, then nothing.
+- View > Whole Page (Ctrl+W) returns to 100 %: the page fitted to the window, no scroll bars.
+- The Standard toolbar's zoom combo lists 25, 50, 75, 100 and 200 % and takes a typed value
+  (300 gave 300 %); it shows the zoom rounded to whole percent.
+- The Tools toolbar's magnifiers are **Scale In** and **Scale Out** (axis magnification: "double-click
+  to restore, ctrl-drag to create zoom graph"), not the page zoom. The hand is the **Zoom-Panning
+  Tool**: drag the page (or arrow keys) to pan, mouse wheel (or + and -) to zoom; "+" zooms by 1.25
+  and "-" by 0.85 about the middle of the view, an arrow key moves about 2 points; a click with it
+  changes nothing.
+- View > Zoom All is a presentation of all graphs (Escape ends it), not a zoom.
+
+Sheaf (`crates/app/src/graph_zoom.rs`, `graph_view.rs`): the same Zoom In mode (one click, x2,
+re-centred, up to 3200 %), Zoom Out by halves to 25 %, Whole Page, the Zoom-Panning tool (drag, +/-
+x1.25/x0.85 about the middle, arrows 2 pt, wheel x1.25/x0.85 a notch about the pointer: the wheel's
+factor and anchor are Sheaf's choice) on the Tools bar, manual scroll bars, and, without the tool,
+the wheel scrolling a zoomed page (Shift+wheel sideways) and Ctrl+wheel zooming about the pointer
+(Sheaf's choices: Origin's wheel without the tool was not measured). Zoom is per window, screen-only
+and not saved; every click, drag and hit-test goes through the zoomed transform. The page raster is
+capped at 4096 px a side (the texture is stretched beyond that). Not built: the zoom combo, Scale
+In/Scale Out (they stay grey), Zoom All, the margin Origin lets the view scroll past the page.
+
 ## 5. Dialogs, as seen
 
 All dialogs are ordinary Windows dialogs with a title bar (text left, "?" help button and

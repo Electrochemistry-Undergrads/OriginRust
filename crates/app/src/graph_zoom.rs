@@ -8,10 +8,19 @@ use eframe::egui::{Pos2, Rect, Vec2, vec2};
 
 /// The grey border kept round the page at zoom 1, in UI points.
 pub const MARGIN: f32 = 12.0;
-/// The largest zoom: 3200 %.
+/// The largest zoom: 3200 % (Origin went on doubling to 1600 %; its limit was not reached).
 pub const MAX_ZOOM: f32 = 32.0;
-/// The zoom factor of one Zoom In click (Origin: 100 % to 200 %).
+/// The smallest zoom: 25 % (Origin's Zoom Out stopped there).
+pub const MIN_ZOOM: f32 = 0.25;
+/// The zoom factor of one Zoom In click and of Zoom Out (Origin: 100 % to 200 % and back, by halves
+/// down to 25 %).
 pub const CLICK_FACTOR: f32 = 2.0;
+/// The Zoom-Panning tool's "+" and "-" (measured: 100 % to 125 % and to 85 %); Sheaf uses them for
+/// one wheel notch with the tool too.
+pub const PAN_ZOOM_IN: f32 = 1.25;
+pub const PAN_ZOOM_OUT: f32 = 0.85;
+/// The Zoom-Panning tool's arrow-key step, in page points (measured: about 2 px a press at 200 %).
+pub const ARROW_STEP_PT: f32 = 2.0;
 /// The largest side of the page raster, in pixels.
 pub const MAX_RASTER_PX: f32 = 4096.0;
 
@@ -54,7 +63,7 @@ pub fn content(window: Rect) -> Rect {
 /// The page rectangle for `zoom` in `window`. The scroll is clamped so that the page cannot be
 /// scrolled away; an axis on which the page is smaller than the window is centred.
 pub fn layout(window: Rect, page: Vec2, zoom: Zoom) -> Layout {
-    let scale = fit_scale(window, page) * zoom.factor.clamp(1.0, MAX_ZOOM);
+    let scale = fit_scale(window, page) * zoom.factor.clamp(MIN_ZOOM, MAX_ZOOM);
     let content = content(window);
     let axis = |avail: f32, size: f32, scroll: f32| -> (f32, f32) {
         if size <= avail + 0.01 {
@@ -74,13 +83,26 @@ pub fn layout(window: Rect, page: Vec2, zoom: Zoom) -> Layout {
 /// position) where it is, as far as the scroll range allows.
 pub fn zoom_about(window: Rect, page: Vec2, zoom: Zoom, factor: f32, anchor: Pos2) -> Zoom {
     let old = layout(window, page, zoom);
-    let factor = factor.clamp(1.0, MAX_ZOOM);
+    let factor = factor.clamp(MIN_ZOOM, MAX_ZOOM);
     let scale = fit_scale(window, page) * factor;
     let under = (anchor - old.image.min) / old.scale;
     let min = anchor - under * scale;
     let scroll = (content(window).min - min) / scale;
     let new = Zoom { factor, scroll };
     Zoom { factor, scroll: layout(window, page, new).scroll }
+}
+
+/// The zoom with `factor` after the change, with the page point under `at` (a screen position)
+/// moved to the middle of the window as far as the scroll range allows: Origin's Zoom In click
+/// re-centres the view on the clicked point (measured at 200, 400, 800 and 1600 %).
+pub fn centre_on(window: Rect, page: Vec2, zoom: Zoom, factor: f32, at: Pos2) -> Zoom {
+    let old = layout(window, page, zoom);
+    let point = (at - old.image.min) / old.scale;
+    let factor = factor.clamp(MIN_ZOOM, MAX_ZOOM);
+    let scale = fit_scale(window, page) * factor;
+    let view = content(window).size() / scale;
+    let scroll = point - view / 2.0;
+    Zoom { factor, scroll: layout(window, page, Zoom { factor, scroll }).scroll }
 }
 
 /// The zoom after moving the view by `delta` UI points (a pan drag moves the page with the pointer).
@@ -159,7 +181,7 @@ mod tests {
         assert_eq!(l.scroll.x, 0.0);
         assert!(l.image.max.y >= content(window()).max.y - 0.01);
         assert_eq!(zoom_about(window(), page(), Zoom::default(), 100.0, window().center()).factor, MAX_ZOOM);
-        assert_eq!(zoom_about(window(), page(), Zoom::default(), 0.1, window().center()).factor, 1.0);
+        assert_eq!(zoom_about(window(), page(), Zoom::default(), 0.1, window().center()).factor, MIN_ZOOM);
     }
 
     #[test]
@@ -167,6 +189,20 @@ mod tests {
         let z = zoom_about(window(), page(), Zoom::default(), 2.0, pos2(100.0, 100.0));
         let back = zoom_about(window(), page(), z, 1.0, window().center());
         assert_eq!(back.scroll, Vec2::ZERO);
+    }
+
+    #[test]
+    fn a_zoom_in_click_centres_the_clicked_point() {
+        let at = pos2(250.0, 200.0);
+        let l0 = layout(window(), page(), Zoom::default());
+        let point = (at - l0.image.min) / l0.scale;
+        let z = centre_on(window(), page(), Zoom::default(), 2.0, at);
+        let l = layout(window(), page(), z);
+        let shown = l.image.min + point * l.scale;
+        assert!((shown - content(window()).center()).length() < 0.5, "{shown:?}");
+        // below 100 % the page is smaller than the window and stays centred
+        let small = layout(window(), page(), Zoom { factor: 0.5, scroll: Vec2::ZERO });
+        assert!((small.image.center() - content(window()).center()).length() < 0.1);
     }
 
     #[test]

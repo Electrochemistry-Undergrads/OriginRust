@@ -273,6 +273,10 @@ pub struct Column {
     /// that need a grouping column, such as Unstack Columns, offer these columns first.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub categorical: bool,
+    /// Column > Set Sampling Interval: the column's own X (`x0 + i * inc` for row `i`), which its
+    /// plots use instead of an X column (Origin's `colint`; see [`crate::sampling`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sampling: Option<crate::sampling::SamplingInterval>,
     /// The values. Not part of the JSON description: the project file stores
     /// column data separately (see the `sheaf-io` crate).
     #[serde(skip)]
@@ -408,6 +412,7 @@ impl Column {
             mask: BTreeSet::new(),
             mask_disabled: false,
             categorical: false,
+            sampling: None,
             data,
         }
     }

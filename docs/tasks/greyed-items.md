@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **369 greyed items: 254 in the menu bar, 19 on the toolbars, 96 in context menus.**
+original inventory baseline. This is not a new runtime audit. **359 greyed items: 249 in the menu bar, 19 on the toolbars, 91 in context menus.**
 
 ## How to read and keep this file
 
@@ -58,7 +58,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B2` | 33 |
 | `B3` | 19 |
 | `B4` | 20 |
-| `B5` | 33 |
+| `B5` | 23 |
 | `B6` | 31 |
 | `B7` | 8 |
 | `B8` | 16 |
@@ -72,7 +72,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 67 items, backlog packages (`B`) 282, not planned (`N`) 20.
+Briefs (`T`) hold 67 items, backlog packages (`B`) 272, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -132,8 +132,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Column
 - `T63` Fill Column With: Row Numbers · Uniform Random Numbers · Normal Random Numbers
-- `B5` Fill Column With: A set of Numbers... · A set of Date/Time values... · Arbitrary set of Text&Numeric values...
-- `B5` Set Sampling Interval... · Show X Column...
 
 ### Worksheet
 - `B7` Conditional Formatting: Conditional Highlight... · Conditional Heatmap... · Conditional Pareto... · Conditional Outliers... · Conditional Format Manager...
@@ -221,11 +219,10 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ## Context menus
 
-- `B5` Worksheet column header: Copy Columns to... · Remove Links · Swap Columns... · Slide Show of Dependent Graphs · Set Sampling Interval... · Show X Column...
+- `B5` Worksheet column header: Copy Columns to... · Remove Links · Swap Columns... · Slide Show of Dependent Graphs
 - `T63` Worksheet column header: Frequency Count...
 - `B6` Worksheet column header: Add or Update Sparklines...
 - `T63` Worksheet column header > Fill Column with: Row Numbers · Uniform Random Numbers · Normal Random Numbers
-- `B5` Worksheet column header > Fill Column with: A set of Numbers... · A set of Date/Time values... · Arbitrary set of Text&Numeric values...
 - `B5` Worksheet data cell: Paste Transpose · Paste Link · Paste Link Transpose · Remove Links · Set as Begin · Set as End
 - `B6` Worksheet data cell: Insert Graph... · Insert Images from Files... · Insert Sparklines... · Insert Variables...
 - `B6` Worksheet data cell > Insert Arrow: Arrow · Double Arrow

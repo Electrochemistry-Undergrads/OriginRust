@@ -99,6 +99,8 @@ mod ridgeline_tests;
 #[cfg(test)]
 mod rug_tests;
 #[cfg(test)]
+mod sampling_tests;
+#[cfg(test)]
 mod skip_tests;
 #[cfg(test)]
 mod slope_tests;

@@ -87,7 +87,7 @@ How a Y column finds its X [W]:
 1. If the sheet has exactly one X column, that X is used for all Y columns on either side of it.
 2. If there are several X columns, each X covers the Y and Z columns to its right, up to the next X.
 3. In a non-adjacent selection, a selected X column is used; if none is selected, search to the left of the Y first, then to the right (Z only searches left).
-4. If there is no X column, the X values are the row index or the column's sampling interval (start value and step), P1.
+4. If there is no X column, the X values are the row index or the column's sampling interval (start value and step; section 13d). A column with an interval plots at it even when an X column stands to its left.
 5. X error columns associate with the nearest X on the left, else the right.
 
 The header shows the designation in parentheses after the short name, e.g. "A(X)", "B(Y)"; Disregard shows only the short name. Pattern shorthand for setting many columns: `XY` repeated, `3(XY)`; leftover columns become Y. [W] The default designation list in the import filters is "XY" (CSV) [F].
@@ -583,6 +583,38 @@ Date/Time values..., Arbitrary set of Text&Numeric values... are Origin's X-Func
   12:00 by an hour. OK fills every selected column, one undo step ("Fill column"); a refused fill (no
   value, no text item) keeps the window open with the reason.
 - Row Numbers, Uniform and Normal Random Numbers in the same submenu are T63 group H.
+
+## 13d. Sampling interval (T84, measured 2026-11-16, Origin 2016)
+
+Column > Set Sampling Interval... and Show X Column... (and the same two items of the column header's
+menu) are Origin's X-Functions `colint` (Initial X Value, default 1; X Increment, default 1; Units; Long
+Name) and `colshowx` (Clear Sampling Interval, default off). Measured from LabTalk
+(`tools/origin-ref/run-labtalk-lines.ps1`, `re-workspace/scratch/t84/s1`-`s3`, local only) and copied in
+`sheaf_core::sampling` (tests `crates/core/src/sampling/tests.rs`):
+
+- **The interval** gives row `i` (from 0) the X value `x0 + i * inc`, with an X long name and units
+  (`wks.col.xinit`, `xinc`, `xname$`, `xunits$`; `xof()` gave 0 to 2 for x0 = 0, inc = 0.5). An initial
+  value and increment of 1 clear it (Origin's own hint in the window). Several selected columns get the
+  same interval.
+- **Plots** of the column use the interval even when an X column stands to its left: a scatter of B with
+  x0 = 0, inc = 0.5 drew X from 0 to 2 (axis -0.5 to 2.5), not the X column's 1 to 5. Sheaf gives such a
+  plot no X column and draws it at the interval; the X axis title is the interval's long name and units
+  (Sheaf's choice; Origin's title not measured). A negative increment works (100, 98, 96).
+- **Show X Column** inserts a new column directly left of the column, named as a new column (the next
+  free letter: E, then F), with the interval's long name and units and as many rows as the column (3 for
+  a 3-row column in a 5-row sheet). Without Clear Sampling Interval it is a **Disregard** column (type 2)
+  and the interval stays, so plots still use the interval; with it, it is an **X** column (type 4) and the
+  interval is cleared, so the column now plots against it (axis 95 to 101 for 100, 98, 96). Showing it
+  again inserts another copy. A column without an interval shows nothing: Origin's `colshowx` fails; Sheaf
+  keeps the window open with "column B has no sampling interval to show" and changes nothing.
+- **Windows** (Sheaf's layout; Origin's windows not opened): Set Sampling Interval has the four fields
+  filled from the first selected column's interval (1, 1 and empty without one) and Origin's hint line; Show
+  X Column has the one check box. OK changes every selected column, one undo step each ("Set sampling
+  interval", "Show X column").
+- **Files**: the interval is saved with the column in `.sheaf` (`"sampling": {"x0", "inc", "long_name",
+  "units"}`). The `.opj` written here does not hold it: the save warning says "N column(s) have a sampling
+  interval ...", and the companion keeps it for Sheaf. Not read from Origin's `.opj` files yet. Sheaf's
+  analysis tools (fits, statistics) still take the X column or the row number, not the interval.
 
 ## 14. Suggested Rust data model (P0)
 

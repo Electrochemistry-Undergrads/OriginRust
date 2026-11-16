@@ -45,6 +45,7 @@ pub mod printing;
 pub mod recovery;
 pub mod reshape;
 pub mod row_filter;
+pub mod sampling;
 pub mod set_values;
 pub mod shape_object;
 pub mod simulate;

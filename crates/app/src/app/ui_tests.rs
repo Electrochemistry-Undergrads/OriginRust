@@ -8875,6 +8875,7 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
 }
 
 mod fill_pattern;
+mod sampling;
 #[path = "ui_tests/trendline.rs"]
 mod trendline;
 mod user_templates;

@@ -36,6 +36,9 @@ pub enum CellOp {
     /// Edit > Paste Transpose: as `Paste`, and the text that comes back is pasted transposed.
     PasteTranspose,
     PasteText(String),
+    /// Edit > Set As Begin / Set As End: the top (or bottom) selected row becomes the first (or
+    /// last) row of each selected column's data range.
+    SetRangeEnd(sheaf_core::data_range::RangeEnd),
     /// Empty the cells (the Delete key).
     Clear,
     /// Store the same text in every selected cell (Ctrl+Enter in the cell editor).
@@ -285,6 +288,8 @@ pub enum Action {
     },
     /// The column header's Swap Columns...: the two columns exchange places.
     SwapColumns(ColumnId, ColumnId),
+    /// Edit > Reset to Full Range: every column of the workbook's active sheet uses all its rows.
+    ResetFullRange(WindowId),
     /// Column > Hide/Unhide Columns > Hide Selected.
     HideColumns(Vec<ColumnId>),
     /// Column > Hide/Unhide Columns > Unhide All, on the active sheet of the workbook.

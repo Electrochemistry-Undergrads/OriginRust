@@ -615,6 +615,11 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         let xerr = plot.x_error.and_then(|id| project.numeric(id));
         let base = plot.y_base.and_then(|id| project.numeric(id));
         let (start, end) = row_range(plot, y.len());
+        // Set As Begin / Set As End: the rows outside the column's data range are left out (T87).
+        let (start, end) = match project.column(plot.y).and_then(|c| c.data_range) {
+            Some(r) => r.clip(start, end),
+            None => (start, end),
+        };
         let active_mask = project.column(plot.y).and_then(|c| c.active_mask());
         // Hide Masked Points: masked rows become gaps, like missing values, and nothing is drawn red.
         let (y_plot, mask): (Cow<'_, [f64]>, _) = match active_mask {

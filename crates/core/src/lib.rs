@@ -16,6 +16,7 @@ pub mod color;
 pub mod column;
 pub mod compplot;
 pub mod condformat;
+pub mod data_range;
 pub mod datetime;
 pub mod extract;
 pub mod fill_pattern;

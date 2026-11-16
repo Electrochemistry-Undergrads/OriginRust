@@ -637,6 +637,29 @@ Name) and `colshowx` (Clear Sampling Interval, default off). Measured from LabTa
   Sheaf's rule, not measured in Origin (a menu-only command that a script cannot reach with the
   clipboard).
 
+## 13f. Column data range: Set As Begin, Set As End, Reset to Full Range (T87, measured 2026-11-16)
+
+Edit > Set As Begin, Set As End and Reset to Full Range (workbook), and the data cell's Set as Begin and
+Set as End. Measured in Origin 2016 with the LabTalk commands behind them (`set col(B) -b n`, `-e n`,
+`get col(B) -b`; `re-workspace/scratch/t87/r1` and a screenshot, local only) and copied in
+`sheaf_core::data_range`:
+
+- A column's **data range** is its rows from a begin to an end; the values outside stay stored (a dump of
+  the sheet still read them, and setting begin 1 and end 6 brought them back).
+- The **worksheet shows the cells outside blank** (B begun at row 3: rows 1 and 2 empty; C ended at row 4:
+  rows 5 and 6 empty).
+- **Plots and statistics use only the rows inside**: B (10 to 60) from row 2 to 4 gave `stats` n = 3, mean
+  30, and its scatter's X axis went from 1.5 to 4.5. Sheaf's plots leave the rows out; Sheaf's analysis
+  tools still read all rows (left for later).
+- **Sheaf's commands**: Set As Begin makes the top selected row the first row of every selected column's
+  range, Set As End the bottom selected row the last; a begin after the end drops the end (and the other
+  way round). Reset to Full Range clears the range of every column of the active sheet. One undo step each
+  ("Set as begin", "Set as end", "Reset to full range"). Which columns Origin's menu commands change was
+  not checked in its window.
+- **Files**: saved with the column in `.sheaf` (`"data_range": {"begin", "end"}`, rows from 0). The `.opj`
+  written here does not hold it: the save warning names it, and the companion keeps it. The graph's own
+  Data > Reset to Full Range (display range of a plot) is a different command and stays grey.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

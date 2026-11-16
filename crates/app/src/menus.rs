@@ -31,6 +31,7 @@ use eframe::egui::{
     self, Color32, Key, KeyboardShortcut, Modifiers, Stroke, TextStyle,
     text::{LayoutJob, TextFormat},
 };
+use sheaf_core::data_range::RangeEnd;
 use sheaf_core::format_clip::{AxisPart, GraphPart};
 use sheaf_core::graph::{PlotKind, Stack};
 use sheaf_core::sheetops::{MaskOp, MoveTo};
@@ -127,6 +128,10 @@ pub enum Cmd {
     SwapColumns,
     /// Edit > Paste Transpose and the data cell's Paste Transpose (T86).
     PasteTranspose,
+    /// Edit > Set As Begin / Set As End and the data cell's items (T87).
+    SetRangeEnd(sheaf_core::data_range::RangeEnd),
+    /// Edit > Reset to Full Range on a workbook (T87).
+    ResetFullRange,
     /// Column > Hide/Unhide Columns > Hide Selected.
     HideColumns,
     /// Column > Hide/Unhide Columns > Unhide All.
@@ -805,7 +810,11 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(keyed("C&lear", plain_key(Key::Delete), Cmd::Clear));
         v.push(item("Insert", Cmd::InsertCells));
         v.push(item("&Delete", Cmd::DeleteCells));
-        v.extend(greys(&["Remove Links", "-", "Set As Begin", "Set As End", "Reset to Full Range", "-"]));
+        v.extend(greys(&["Remove Links", "-"]));
+        v.push(item("Set As Begin", Cmd::SetRangeEnd(RangeEnd::Begin)));
+        v.push(item("Set As End", Cmd::SetRangeEnd(RangeEnd::End)));
+        v.push(item("Reset to Full Range", Cmd::ResetFullRange));
+        v.push(sep());
         v.push(grey_keyed("Find in Project...", plain_key(Key::F3)));
         v.push(keyed("Find in Sheets...", ctrl(Key::F), Cmd::FindInSheets));
         v.push(keyed("R&eplace...", ctrl(Key::H), Cmd::ReplaceInSheets));
@@ -1843,7 +1852,10 @@ pub fn cell_menu_for(noted: bool) -> Vec<Entry> {
     v.push(item("Insert", Cmd::InsertCells));
     v.push(item("Delete", Cmd::DeleteCells));
     v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
-    v.extend(greys(&["Remove Links", "-", "Set as Begin", "Set as End", "-"]));
+    v.extend(greys(&["Remove Links", "-"]));
+    v.push(item("Set as Begin", Cmd::SetRangeEnd(RangeEnd::Begin)));
+    v.push(item("Set as End", Cmd::SetRangeEnd(RangeEnd::End)));
+    v.push(sep());
     v.push(grey_sub("Insert Arrow", &["Arrow", "Double Arrow"]));
     v.extend(greys(&[
         "Insert Graph...",
@@ -2523,6 +2535,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             book?;
             Action::MoveColumns { columns: some()?, to: *to }
         }
+        Cmd::ResetFullRange => Action::ResetFullRange(book?),
         Cmd::SwapColumns => {
             book?;
             match c.selected {
@@ -2543,6 +2556,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Cut
         | Cmd::Paste
         | Cmd::PasteTranspose
+        | Cmd::SetRangeEnd(_)
         | Cmd::Clear
         | Cmd::InsertCells
         | Cmd::DeleteCells
@@ -2553,6 +2567,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
                 Cmd::Cut => CellOp::Cut,
                 Cmd::Paste => CellOp::Paste,
                 Cmd::PasteTranspose => CellOp::PasteTranspose,
+                Cmd::SetRangeEnd(which) => CellOp::SetRangeEnd(*which),
                 Cmd::InsertCells => CellOp::Insert,
                 Cmd::Mask(m) => CellOp::Mask(*m),
                 Cmd::DeleteCells => CellOp::Delete,

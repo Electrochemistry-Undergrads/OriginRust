@@ -61,6 +61,8 @@ mod column_scatter_tests;
 #[cfg(test)]
 mod dash_tests;
 #[cfg(test)]
+mod data_range_tests;
+#[cfg(test)]
 mod detail_tests;
 #[cfg(test)]
 mod export_tests;

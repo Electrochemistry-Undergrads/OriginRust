@@ -2019,7 +2019,9 @@ fn body_cell(
         edit_cell(ui, state, sheet, book_id, actions);
         return;
     }
-    let text = if r < column.len() { column.shown_text(r) } else { String::new() };
+    // A cell outside the column's data range (Set As Begin / Set As End) shows blank, as in Origin.
+    let in_range = column.data_range.is_none_or(|d| d.contains(r));
+    let text = if r < column.len() && in_range { column.shown_text(r) } else { String::new() };
     let numeric = column.data.is_numeric();
     // A missing number shows as an empty cell, as in Origin.
     let is_text_cell = column.data.text_cell(r).is_some();

@@ -1755,6 +1755,28 @@ impl SheafApp {
                     self.say("The columns are already there");
                 }
             }
+            Action::ResetFullRange(book) => {
+                let ids: Vec<ColumnId> = self
+                    .doc
+                    .project()
+                    .workbook(book)
+                    .and_then(|b| b.sheets.get(b.active_sheet))
+                    .map(|s| s.columns.iter().map(|c| c.id).collect())
+                    .unwrap_or_default();
+                let had = self
+                    .doc
+                    .project()
+                    .workbook(book)
+                    .and_then(|b| b.sheets.get(b.active_sheet))
+                    .is_some_and(|s| s.columns.iter().any(|c| c.data_range.is_some()));
+                if had {
+                    let mut n = 0;
+                    self.doc.apply("Reset to full range", |p| n = p.reset_data_range(&ids));
+                    self.say(format!("{n} column(s) use all their rows again"));
+                } else {
+                    self.say("Every column already uses all its rows");
+                }
+            }
             Action::SwapColumns(a, b) => {
                 let swapped = self.doc.edit("Swap columns", |p| {
                     let (book, sheet_index) = p
@@ -2708,6 +2730,26 @@ impl SheafApp {
                 self.say(format!("{changed} cell(s) changed"));
             }
             CellOp::Insert | CellOp::Delete => self.insert_or_delete(book, sheet_index, &t, op == CellOp::Insert),
+            CellOp::SetRangeEnd(which) => {
+                let ids: Vec<ColumnId> = t.columns.iter().filter_map(|&i| sheet.columns.get(i).map(|c| c.id)).collect();
+                let row = match which {
+                    sheaf_core::data_range::RangeEnd::Begin => t.rows.start,
+                    sheaf_core::data_range::RangeEnd::End => t.rows.end.saturating_sub(1),
+                };
+                let label = match which {
+                    sheaf_core::data_range::RangeEnd::Begin => "Set as begin",
+                    sheaf_core::data_range::RangeEnd::End => "Set as end",
+                };
+                match self.doc.edit(label, |p| p.set_data_range_end(&ids, which, row)) {
+                    Ok(()) => self.say(format!(
+                        "Row {} is the {} of {} column(s)",
+                        row + 1,
+                        if label == "Set as begin" { "first row" } else { "last row" },
+                        ids.len()
+                    )),
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
             CellOp::Paste | CellOp::PasteTranspose => {
                 // The system answers with the text in a later frame (an `Event::Paste`).
                 self.paste_transposed = op == CellOp::PasteTranspose;

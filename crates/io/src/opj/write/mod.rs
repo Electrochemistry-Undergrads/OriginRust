@@ -147,6 +147,8 @@ struct Notes {
     /// Columns with a sampling interval (Set Sampling Interval), which the file written here does
     /// not hold: Origin plots them against their X column or the row number.
     sampling_dropped: usize,
+    /// Columns with a data range (Set As Begin / Set As End), which the file written here does not hold.
+    ranges_dropped: usize,
     /// Columns with masked cells: the file written here holds no mask.
     /// Group and Subject columns, written as unused.
     group_roles_dropped: usize,
@@ -359,6 +361,7 @@ impl Writer {
             self.notes.formats_dropped += usize::from(column.format != sheaf_core::format::NumberFormat::General);
             self.notes.hidden_dropped += usize::from(column.hidden);
             self.notes.sampling_dropped += usize::from(column.sampling.is_some());
+            self.notes.ranges_dropped += usize::from(column.data_range.is_some());
             self.notes.widths_dropped += usize::from(column.width.is_some());
             let long = self.label_text(&column.long_name, "long name")?;
             let units = self.label_text(&column.units, "units")?;
@@ -721,6 +724,12 @@ impl Writer {
             warnings.push(format!(
                 "{} column(s) have a sampling interval, which the project file written here does not hold; Origin plots them against their X column or the row number (Column > Show X Column writes the X as a column first).",
                 n.sampling_dropped
+            ));
+        }
+        if n.ranges_dropped > 0 {
+            warnings.push(format!(
+                "{} column(s) have a data range (Set As Begin or Set As End), which the project file written here does not hold; Origin shows and plots all their rows.",
+                n.ranges_dropped
             ));
         }
         if n.filters_dropped > 0 {

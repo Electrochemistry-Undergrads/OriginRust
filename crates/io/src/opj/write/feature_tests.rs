@@ -506,6 +506,7 @@ fn hidden_columns_and_column_widths_are_named_in_the_warnings() {
     b.sheets[0].columns[2].width = Some(14);
     b.sheets[0].columns[2].sampling =
         Some(sheaf_core::sampling::SamplingInterval { x0: 0.0, inc: 0.5, long_name: "Time".into(), units: "s".into() });
+    b.sheets[0].columns[1].data_range = Some(sheaf_core::data_range::DataRange { begin: 1, end: Some(2) });
     b.sheets[0].columns[0].mask.insert(0);
     b.sheets[0].columns[3].designation = sheaf_core::Designation::Group;
     b.sheets[0].filter =
@@ -530,6 +531,7 @@ fn hidden_columns_and_column_widths_are_named_in_the_warnings() {
     assert!(all.contains("1 hidden column(s)"), "{all}");
     assert!(all.contains("1 column(s) have their own width"), "{all}");
     assert!(all.contains("1 column(s) have a sampling interval"), "{all}");
+    assert!(all.contains("1 column(s) have a data range"), "{all}");
     assert!(!all.contains("masked cells"), "masks are written now: {all}");
     assert!(all.contains("1 Group or Subject column(s)"), "{all}");
     assert!(all.contains("1 sheet(s) have a worksheet filter"), "{all}");

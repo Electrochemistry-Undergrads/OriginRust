@@ -6295,6 +6295,7 @@ mod go_to;
 mod go_to_browser;
 mod go_to_picker;
 mod label_panels;
+mod layer_management;
 #[path = "ui_tests/merge_graphs.rs"]
 mod merge_graphs;
 #[path = "ui_tests/stack_panels.rs"]

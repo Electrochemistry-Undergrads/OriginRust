@@ -30,6 +30,7 @@ pub mod import_theme;
 pub mod import_wizard;
 pub mod label_panels;
 pub mod layer_contents;
+pub mod layer_management;
 pub mod manip_options;
 pub mod mask_condition;
 pub mod math_curves;

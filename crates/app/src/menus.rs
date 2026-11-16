@@ -217,6 +217,8 @@ pub enum Cmd {
     /// Graph > Layer Contents... (F12): Origin's own window for the plots of a layer; `None` is the
     /// active layer.
     LayerContents(Option<usize>),
+    /// Graph > Layer Management... (T60); the layer to select, if any.
+    LayerManagement(Option<usize>),
     /// Graph > Plot Setup...: Origin's own window for the data of a layer's plots.
     PlotSetup(Option<usize>),
     /// The graph settings of a given layer, with a plot chosen (the graph's right-click menus).
@@ -1323,7 +1325,7 @@ fn graph_menu() -> Vec<Entry> {
         item("Plot Setup...", Cmd::PlotSetup(None)),
         grey_sub("Add Plot to Layer", &["Line...", "Scatter...", "Line + Symbol...", "Column...", "Area..."]),
         sep(),
-        grey("Layer Management..."),
+        item("Layer Management...", Cmd::LayerManagement(None)),
         item("Add Error Bars...", Cmd::AddErrorBars),
         grey("Add Function Graph..."),
         grey("Add Straight Line..."),
@@ -1869,7 +1871,7 @@ pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
 pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
     vec![
         item("Add Text...", Cmd::AddText),
-        grey("Layer Management..."),
+        item("Layer Management...", Cmd::LayerManagement(None)),
         grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
         grey("Add Shortcut to Favorites"),
         keyed("Copy Page", ctrl(Key::J), Cmd::CopyPage),
@@ -1904,7 +1906,7 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
         sep(),
         item("Axis...", Cmd::GraphPropsAt { layer, tab: PropsTab::XAxis, plot: None }),
         grey("Layer Properties..."),
-        grey("Layer Management..."),
+        item("Layer Management...", Cmd::LayerManagement(Some(layer))),
     ];
     if !plots.is_empty() {
         v.push(sep());
@@ -2327,6 +2329,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::LayerContents(layer) => {
             Action::LayerContents { graph: c.graph.ok_or(NEED_GRAPH)?, layer: layer.unwrap_or(c.layer) }
         }
+        Cmd::LayerManagement(layer) => Action::LayerManagement { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer },
         Cmd::GraphPropsAt { layer, tab, plot } => {
             Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, tab: *tab, plot: *plot }
         }

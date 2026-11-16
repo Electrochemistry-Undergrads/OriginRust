@@ -145,6 +145,7 @@ pub struct SheafApp {
     import_wizard: Option<ImportWizard>,
     graph_props: Option<GraphPropsDialog>,
     layer_contents: Option<crate::dialogs::layer_contents::LayerContentsDialog>,
+    layer_management: Option<crate::dialogs::layer_management::LayerManagementDialog>,
     plot_setup: Option<crate::dialogs::plot_setup::PlotSetupDialog>,
     error_bars: Option<ErrorBarsDialog>,
     trendline: Option<TrendlineDialog>,
@@ -247,6 +248,7 @@ impl SheafApp {
             import_wizard: None,
             graph_props: None,
             layer_contents: None,
+            layer_management: None,
             plot_setup: None,
             error_bars: None,
             trendline: None,
@@ -769,6 +771,7 @@ impl SheafApp {
         self.trendline = None;
         self.stack_panels = None;
         self.merge_graphs = None;
+        self.layer_management = None;
         self.label_panels = None;
         self.simulate = None;
         self.column_props = None;
@@ -1900,6 +1903,15 @@ impl SheafApp {
                 self.focus(graph);
                 self.graphs.entry(graph).or_default().active_layer = layer;
             }
+            Action::LayerManagement { graph, layer } => {
+                self.layer_management =
+                    crate::dialogs::layer_management::LayerManagementDialog::new(self.doc.project(), graph, layer);
+                if self.layer_management.is_some() {
+                    self.focus(graph);
+                } else {
+                    self.warn("Layer Management needs a graph with layers");
+                }
+            }
             Action::GraphProperties { graph, layer, tab, plot } => {
                 let token = self.token();
                 let mut dialog = GraphPropsDialog::new(graph, layer, tab, token);
@@ -3010,6 +3022,7 @@ impl SheafApp {
             || self.import_wizard.is_some()
             || self.graph_props.is_some()
             || self.layer_contents.is_some()
+            || self.layer_management.is_some()
             || self.plot_setup.is_some()
             || self.error_bars.is_some()
             || self.trendline.is_some()
@@ -3304,6 +3317,17 @@ impl SheafApp {
                     self.stack_panels = None;
                     self.focus(graph);
                     self.say("Created stacked panels");
+                }
+            }
+        }
+        if let Some(d) = &mut self.layer_management {
+            use crate::dialogs::layer_management::Outcome;
+            match d.show(ctx, &mut self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed => self.layer_management = None,
+                Outcome::Applied => {
+                    self.layer_management = None;
+                    self.say("Updated the layers");
                 }
             }
         }

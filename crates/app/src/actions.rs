@@ -422,6 +422,11 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
     },
+    /// Opens Layer Management (arrange, size/position and link the layers) for a graph, with a layer selected when given.
+    LayerManagement {
+        graph: WindowId,
+        layer: Option<usize>,
+    },
     /// Opens the graph settings on a tab, for one layer, with a plot chosen in the Plots tab.
     GraphProperties {
         graph: WindowId,

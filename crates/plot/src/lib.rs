@@ -105,6 +105,8 @@ mod symbol_line_order_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod text_color_tests;
+#[cfg(test)]
 mod text_decoration_tests;
 #[cfg(test)]
 mod treemap_tests;

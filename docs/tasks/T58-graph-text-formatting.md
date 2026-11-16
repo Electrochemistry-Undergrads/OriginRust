@@ -9,6 +9,13 @@ all 15 UI inventory locations still await wiring. This rendering work is separat
 (`T64-significance-plot.md`). Formatting, strict workspace all-target Clippy and the combined
 3,624-test suite pass (eight existing ignored); the 421-item inventory and eight Python tooling
 tests also pass.
+Second renderer slice (`codex/text-run-colors`): indexed `\cN(text)` colours compose with
+nested font/script styles and underline/strikeout strokes. The 24-colour Classic list and
+numeric boundaries are measured from Origin 2016 EMF records (graphing 7.2); independent
+glyph/stroke/export fixtures and new colour SVG/PNG goldens cover them. Font switching,
+combined scripts, tagged RGB/special colour syntax and the separately claimed editor/toolbar
+work remain open. Formatting, strict workspace all-target Clippy and 3,654 combined tests
+pass (eight existing ignored), as do the 414-item inventory and eight Python tooling tests.
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

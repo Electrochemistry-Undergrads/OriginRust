@@ -81,6 +81,7 @@ impl LayerContentsDialog {
     }
 
     /// The kind chosen on the plot type button.
+    #[cfg(test)]
     pub fn kind(&self) -> PlotKind {
         self.kind
     }

@@ -19,7 +19,7 @@ open until implemented and verified. The underlying milestones were not globally
   escapes, editor and live Format toolbar; [T59](tasks/T59-worksheet-cell-formatting.md), worksheet
   font/style/colour/alignment and Format Cells (toolbar adapter depends on T58).
   T58 whole-object graph font/size/Bold/Italic/basic colour controls and shared dispatch are implemented;
-  T59 adds selected worksheet font/size/Bold/Italic/Underline, basic text/fill colours and Ctrl+B/I/U,
+  T59 adds selected worksheet font/size/Bold/Italic/Underline, basic and custom RGB text/fill colours and Ctrl+B/I/U,
   installed faces and derived row geometry; Set Data Style > More opens Format Cells. Worksheet defaults, vertical alignment,
   sticky heights, full palettes and remaining measurements stay open (GUI 3).
 - [ ] **P0 stacked figures, wave 2:** [T60](tasks/T60-merge-graphs-layer-management.md), merge

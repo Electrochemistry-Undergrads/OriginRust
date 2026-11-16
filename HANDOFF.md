@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **404 listed item locations** at the planning
-  baseline (282 menu bar, 35 toolbar, 87 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **402 listed item locations** at the planning
+  baseline (281 menu bar, 35 toolbar, 86 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -70,6 +70,10 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## Latest integration
+
+T70 (`b3-small`, B3 slice 2): axis right-click Center and Format > Fit Page To Printer as measured in
+Origin 2016; Format > Fit Page To Layers... now opens its window as Origin's does (graphing 15.7d).
+Add Legend Title is not in Origin 2016 and stays B3.
 
 T67 Add Straight Line (`straight-line`, B3 slice 1): Origin 2016's addline measured (names, ends,
 label text and its 5 % placement) and copied: `Layer::straight_lines`, drawing, the Graph menu
@@ -186,7 +190,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
 | `b1-rest` | Claude Windows, "continue all tasks" | rest of B1 as new brief T69: View > Zoom All presentation and Tools-bar Scale In / Scale Out axis tools; app view_modes.rs, new scale tool module, toolbar Tools items | claimed 2026-11-15; no T65 transform changes, shape-resize, T58, T67, T68 |
 | `t29-roc-low` | Claude Windows, "t30-origin" | T29 ROC leftovers ONLY: Origin 2016 measurements of "Positive v.s. Low", text state values and Speed Mode (statistics.md 19.5), copied into crates/calc/src/roc.rs and the ROC tool/dialog where Sheaf differs; fixtures in crates/calc/tests/origin_roc.rs | claimed 2026-11-15; worktree wf_c03644a9-997-1, build target/wf-excel; no other statistics, PCA/k-means/KM or MCP |
-| `b3-small` | Claude Windows, session fe4b37eb | B3 slice 2 as new brief T70: Legend > Add Legend Title (Graph menu and legend context menu), Format > Fit Page To Printer, axis context menu Center; Origin 2016 measurements, core/plot/app, tests | claimed 2026-11-15; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not Add Function Graph, tables, colour/bubble scales, display range/markers, Change X/Y (rest of B3), no T58/T69/shape-resize scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

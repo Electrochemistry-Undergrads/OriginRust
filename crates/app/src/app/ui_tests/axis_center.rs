@@ -68,3 +68,25 @@ fn fit_page_to_printer_sets_the_fallback_size_and_keeps_the_frames() {
     let g = graph(&h);
     assert_eq!((g.page.width_pt, g.page.height_pt), page);
 }
+
+#[test]
+fn center_keeps_an_axis_reversed_by_its_limits_reversed() {
+    let mut h = start(vec![data_file("axcenter-rev")]);
+    let id = *h.state().graphs.keys().next().unwrap();
+    h.state_mut().doc.apply("reverse", |p| {
+        let a = &mut p.graph_mut(id).unwrap().layers[0].x_axis;
+        a.min = Some(10.0);
+        a.max = Some(0.0);
+    });
+    settle(&mut h);
+    let g = geometry(&h);
+    let value = g.x.from_unit(0.8);
+    let on_axis = on(&h, 0, ObjectKind::XAxis);
+    let at = egui::pos2(graph_ui(&h).page_point(g.frame.x + 0.8 * g.frame.w, 0.0).unwrap().x, on_axis.y);
+    right_click_at(&mut h, at);
+    click(&mut h, "Center");
+    let a = &graph(&h).layers[0].x_axis;
+    let (mn, mx) = (a.min.unwrap(), a.max.unwrap());
+    assert!(mn > mx, "still reversed: {mn}..{mx}");
+    assert!(close(mn - mx, 10.0, 10.0) && close((mn + mx) / 2.0, value, 10.0), "{mn}..{mx}, middle {value}");
+}

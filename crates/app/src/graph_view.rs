@@ -1357,9 +1357,9 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             let (u0, u1) = if zoom_in { (0.25, 0.75) } else { (-0.5, 1.5) };
             let (lo, hi) = (ra.from_unit(u0), ra.from_unit(u1));
             if lo.is_finite() && hi.is_finite() && lo != hi {
+                let by_limits = ra.reversed;
                 let a = if y { &mut l.y_axis } else { &mut l.x_axis };
-                a.min = Some(lo.min(hi));
-                a.max = Some(lo.max(hi));
+                set_limits(a, lo.min(hi), lo.max(hi), by_limits);
             }
         }
         GraphOp::AxisCenter { y, page, .. } => {
@@ -1370,9 +1370,9 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             }
             let (ra, u) = if y { (&r.y, 1.0 - (page.1 - f.y) / f.h) } else { (&r.x, (page.0 - f.x) / f.w) };
             if let Some((lo, hi)) = centered_range(ra, u) {
+                let by_limits = ra.reversed;
                 let a = if y { &mut l.y_axis } else { &mut l.x_axis };
-                a.min = Some(lo);
-                a.max = Some(hi);
+                set_limits(a, lo, hi, by_limits);
             }
         }
         GraphOp::HideLegend { .. } => l.legend.visible = false,
@@ -1483,5 +1483,18 @@ mod legend_update_tests {
         // Plot 4 is gone, plot 3 is new, plot 1 keeps its custom text.
         let custom = "\\l(1) T = 5 K\n\\l(4) %(4)\nnote\n\\l(2) %(2)";
         assert_eq!(update_legend_text(custom, auto), "\\l(1) T = 5 K\nnote\n\\l(2) %(2)\n\\l(3) %(3)");
+    }
+}
+
+/// Writes a new range (`lo` below `hi`) as fixed limits, keeping the axis' direction: an axis drawn
+/// reversed (`drawn_reversed`) without its Reverse switch is reversed by its limits (min above max),
+/// so they are written that way round again.
+fn set_limits(a: &mut sheaf_core::graph::Axis, lo: f64, hi: f64, drawn_reversed: bool) {
+    if drawn_reversed && !a.reverse {
+        a.min = Some(hi);
+        a.max = Some(lo);
+    } else {
+        a.min = Some(lo);
+        a.max = Some(hi);
     }
 }

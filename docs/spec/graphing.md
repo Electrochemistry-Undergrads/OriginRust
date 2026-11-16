@@ -2735,10 +2735,21 @@ no dialog. What it acts on (a selected object, perhaps) is unknown, so Sheaf lea
 
 **Sheaf's Fit Page to Layers** (`Graph::fit_page_to_content`, `sheaf_plot::fit_content_bounds`): Graph
 > Fit Page to Layers... opens Margin Control (Border, Tight), Border Width (5) and Adjust Direction
-(Height and Width, Height Only, Width Only); Format > Fit Page To Layers applies the defaults at once
-(Sheaf choice; whether Origin's Format item asks was not measured). The content box is the layer
+(Height and Width, Height Only, Width Only); Format > Fit Page To Layers... opens the same window, as
+Origin's Format item does (measured 2026-11-15, T70). The content box is the layer
 frames and the boxes of legends, text labels, drawn shapes and slope annotations; Tight leaves
 1.56 pt (13 dots at 600 dpi). One undo step.
+
+**Fit Page To Printer** (Format menu, T70, measured 2026-11-15): acts at once; the page becomes the
+default printer's printable area for the Page Setup paper in the page's orientation (the stock 10.72 x
+8.205 in page became 10.667 x 8.0 in on landscape Letter: 1/6 in less on the left and right, 1/4 in on
+top and bottom); the layers keep their frames in percent of the page. Sheaf asks the default printer
+(Windows) and otherwise uses the paper less those measured edges (12 pt, 18 pt). One undo step.
+
+**Axis Center** (axis right-click menu, after Axis Zoom In/Out; T70, measured): the axis keeps its span
+and its range moves so that the value under the right-click becomes the middle (X 0..11 at 5.42 gave
+-0.08..10.92); only that axis changes and its range becomes fixed. Sheaf works in the axis' own scale
+(decades on a log axis) and keeps an axis reversed by its limits reversed (Axis Zoom too).
 
 ### 15.8 Origin project files
 

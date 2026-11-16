@@ -1,6 +1,6 @@
 # T70: Axis Center and Fit Page To Printer (B3, slice 2)
 
-**Status:** in progress 2026-11-15 (branch `b3-small`, Claude Windows, session fe4b37eb).
+**Status:** done 2026-11-15 (branch `b3-small`, Claude Windows, session fe4b37eb; graphing 15.7d). Left: Add Legend Title (not in Origin 2016, stays B3); the Windows printer query is not exercised by tests (they use the measured fallback).
 **Size:** S. **Priority:** wave 4 (B3). **Spec:** graphing (axis context menu; page sizing next to
 Fit Page to Layers, 15.7d). **Inventory:** Graph axis: Center; Fit Page To Printer [Graph].
 

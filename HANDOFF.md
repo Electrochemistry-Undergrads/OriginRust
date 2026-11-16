@@ -75,6 +75,15 @@ T67 Add Straight Line (`straight-line`, B3 slice 1): Origin 2016's addline measu
 label text and its 5 % placement) and copied: `Layer::straight_lines`, drawing, the Graph menu
 window, select/Delete/edit, `sheaf plot --vline/--hline`, `.opj` warning (graphing 17.7).
 
+T58 RGB text colours: numeric `\cN(text)` escapes now follow the measured one-based
+RGB encoding, including channel borrows and the white boundary. Nested palette/RGB spans
+restore their surroundings; glyphs and decoration paths use the same colour. Graphing 7.3
+records native scalar/vector controls and new SVG/stroke PNG goldens. Font-family switching,
+combined scripts and special colour tags remain open; editor and Format-bar work retain
+their separate claims.
+Formatting, strict workspace all-target Clippy and 3,677 combined tests pass (eight existing
+ignored); the 407-item inventory and eight Python tooling tests also pass.
+
 T66 graph view modes (B1 slice 2, branch `graph-view-modes`, graphing 22, Origin 2016 measured): View > Print View
 (Ctrl+2), Page View (Ctrl+1, default), Window View, Draft View (Ctrl+0), saved per graph in `.sheaf`; View > Show >
 Layer Icons; Full Screen (Ctrl+Shift+J, reminder, Esc ends, arrows/Home/End switch graphs). Nine Show items and Show Data
@@ -164,7 +173,7 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/text-run-rgb` | Codex Windows, text-run-rgb | T58 step 1 renderer colour remainder: numeric RGB-tagged `\cN(text)` values returned by Origin Color(r,g,b), measured controls and nested glyph/stroke/export fixtures | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; markup/text + own tests only; no signed Auto/None or other tags, font-family/combined-script changes, editor/Format toolbar/dispatch, model/global palettes/settings, worksheet/core/IO/backends or other scopes |
+| `codex/text-run-fonts` | Codex Windows, text-run-fonts | T58 step 1 renderer remainder: per-run `\f:Name(text)` family switching, nested/restored metrics and glyph/stroke/export tests, preserving Greek/Symbol behaviour | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; markup/text + private tests, fonts only if necessary; graphing 7.6 (Format 7.4/editor 7.5 reserved); no combined scripts, other colour tags, app/editor/toolbar/dispatch, model/core/IO/backends or global font settings |
 | `plot-types-b4` | Claude Windows, "axis-breaks" | B4 slice 1 as new brief T68: Plot > Symbol > Vertical Drop Line and Plot > Column/Bar/Pie > Column + Label, measured in Origin 2016; core templates, plot drawing, Plot menu items, CLI template names, tests | claimed 2026-11-15; worktree .claude/worktrees/axis-range2, build target/wf-autosave; no step/spline/line-series items (T63 B), no other B4 types, text formatting or other sessions' scopes |
 | `codex/t58-text-editor` | Codex Windows, t58-text-editor | T58 slice 2 ONLY: graph Text window formatting/selection controls and live preview using published renderer capabilities | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` reused sequentially after completed T63 F; dialogs/text_object.rs + private helper, isolated UI tests/registration, existing text startup screenshot hook if needed, T58/graphing7; no markup/fonts/layout/renderers/backends (text-decorations), shared Format bar/dispatch/actions (t58-format-toolbar), core model fields, formula/parameter labels, graph_view/shapes/layers/axis menus, other dialogs, pending root/index/roadmap; unsupported formatting stays disabled until published renderer support |
 | `codex/t58-format-toolbar` | Codex Windows | T58 slice 3: shared Format toolbar dispatch and existing whole-object graph font controls; selected-target/undo/persistence tests and Origin measurement | claimed 2026-11-15; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points`; Format bar only, local actions/app dispatch + new helper/tests; no renderer/fonts/markup (text-decorations), editor slice 2, worksheet adapter/model, Graph/Standard/Explorer bars, layers/stack, graph_view or new model fields without refinement |

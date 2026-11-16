@@ -1487,7 +1487,8 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             }
         }
         GraphOp::AddScale { kind, .. } => {
-            if sheaf_core::layer_scale::LayerScale::applies(l, kind) {
+            // One scale of each kind per layer.
+            if sheaf_core::layer_scale::LayerScale::applies(l, kind) && !l.scales.iter().any(|s| s.kind == kind) {
                 l.scales.push(sheaf_core::layer_scale::LayerScale::new(kind));
             }
         }

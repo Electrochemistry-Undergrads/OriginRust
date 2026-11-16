@@ -12,6 +12,7 @@ fn map_colour(h: &mut Harness<'static, SheafApp>) {
     let id = graph(h).id;
     h.state_mut().doc.apply("Test: map colour", |p| {
         let plot = &mut p.graph_mut(id).unwrap().layers[0].plots[0];
+        plot.kind = sheaf_core::graph::PlotKind::Scatter;
         plot.color_from = Some(plot.y);
     });
     settle(h);

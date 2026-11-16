@@ -421,7 +421,7 @@ fn group_geometry(
             crate::parallel::label_edges(&mut edges, &g.layers[i], &pds[i].plots, f, m);
             continue;
         }
-        label_edges(&mut edges, &g.layers[i], f, x, y, m, stack::waterfall(g, i).is_some());
+        label_edges(&mut edges, &g.layers[i], f, x, y, m, stack::waterfall(g, i).is_some(), &pds[i].plots);
     }
     // A linked X:Y ratio is not given up to keep the labels on the page.
     let fitted = if linked_height.is_some() { bounds } else { fit_on_page(bounds, &edges, &g.page) };
@@ -490,6 +490,7 @@ fn label_edges(
     y: &ResolvedAxis,
     m: &dyn TextMeasurer,
     waterfall: bool,
+    pds: &[PlotData],
 ) {
     let mut scratch = Vec::new();
     let (xa, ya) = (&layer.x_axis, &layer.y_axis);
@@ -550,7 +551,7 @@ fn label_edges(
     }
     // The colour scales and bubble scales of the layer, side by side beside the frame.
     if layer.display.show_data && layer.coords.polar().is_none() && layer.coords.ternary().is_none() {
-        let room = crate::layer_scale::reserve(layer);
+        let room = crate::layer_scale::reserve(layer, pds);
         if room > 0.0 {
             e.right = e.right.max(f.x + f.w + room);
         }

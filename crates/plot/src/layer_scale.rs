@@ -33,9 +33,26 @@ fn slot_width(kind: LayerScaleKind, size: f64) -> f64 {
 }
 
 /// The room all scales of `layer` that describe a plot take right of the frame.
-pub(crate) fn reserve(layer: &Layer) -> f64 {
+pub(crate) fn reserve(layer: &Layer, pds: &[PlotData]) -> f64 {
     let size = layer.y_axis.tick_font.size_pt;
-    layer.scales.iter().filter(|s| LayerScale::applies(layer, s.kind)).map(|s| slot_width(s.kind, size)).sum()
+    layer.scales.iter().filter(|s| drawable(layer, s.kind, pds).is_some()).map(|s| slot_width(s.kind, size)).sum()
+}
+
+/// The plot data a scale of `kind` describes and its Z range, when the scale can be drawn: the plot's Z
+/// column resolves and has a finite value. `reserve` and `draw` share this test.
+fn drawable<'a, 'b>(
+    layer: &Layer,
+    kind: LayerScaleKind,
+    pds: &'b [PlotData<'a>],
+) -> Option<(&'b PlotData<'a>, (f64, f64))> {
+    let plot = LayerScale::plot_of(layer, kind)?;
+    let pd = pds.iter().find(|pd| std::ptr::eq(pd.plot, plot))?;
+    let z = match kind {
+        LayerScaleKind::Color => pd.color_z,
+        LayerScaleKind::Bubble => pd.size_z,
+    }?;
+    let (lo, hi) = z_range(z, pd);
+    (lo.is_finite() && hi.is_finite()).then_some((pd, (lo, hi)))
 }
 
 /// The title: the scale's own, or the name of the Z column of the plot.
@@ -69,17 +86,7 @@ pub(crate) fn draw(
     let size = layer.y_axis.tick_font.size_pt;
     let mut offset = 0.0;
     for (k, s) in layer.scales.iter().enumerate() {
-        let Some(plot) = LayerScale::plot_of(layer, s.kind) else { continue };
-        let Some(pd) = pds.iter().find(|pd| std::ptr::eq(pd.plot, plot)) else { continue };
-        let z = match s.kind {
-            LayerScaleKind::Color => pd.color_z,
-            LayerScaleKind::Bubble => pd.size_z,
-        };
-        let Some(z) = z else { continue };
-        let (lo, hi) = z_range(z, pd);
-        if !(lo.is_finite() && hi.is_finite()) {
-            continue;
-        }
+        let Some((pd, (lo, hi))) = drawable(layer, s.kind, pds) else { continue };
         let title = title_of(project, layer, s).unwrap_or_default();
         let start = out.len();
         match s.kind {

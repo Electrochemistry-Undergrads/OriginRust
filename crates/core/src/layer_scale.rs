@@ -44,6 +44,7 @@ impl LayerScale {
     pub fn plot_of(layer: &Layer, kind: LayerScaleKind) -> Option<&Plot> {
         layer.plots.iter().find(|p| {
             p.visible
+                && p.kind.has_symbols()
                 && match kind {
                     LayerScaleKind::Color => p.color_from.is_some(),
                     LayerScaleKind::Bubble => p.size_from.is_some(),
@@ -79,11 +80,24 @@ mod tests {
     }
 
     #[test]
-    fn applies_only_with_a_mapped_visible_plot() {
+    fn applies_only_with_a_mapped_visible_symbol_plot() {
+        use crate::column::{ColumnData, Designation};
         let mut p = crate::Project::new();
-        let g = p.add_graph(Template::Scatter);
+        let book = p.add_workbook("demo");
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 4.0, 9.0])).unwrap();
+        let g = p.plot_columns(Template::Scatter, &[y]).unwrap();
         let layer = &mut p.graph_mut(g).unwrap().layers[0];
         assert!(!LayerScale::applies(layer, LayerScaleKind::Color));
         assert!(!LayerScale::applies(layer, LayerScaleKind::Bubble));
+        layer.plots[0].color_from = Some(y);
+        layer.plots[0].size_from = Some(y);
+        layer.plots[0].kind = crate::graph::PlotKind::Scatter;
+        assert!(LayerScale::applies(layer, LayerScaleKind::Color));
+        assert!(LayerScale::applies(layer, LayerScaleKind::Bubble));
+        layer.plots[0].visible = false;
+        assert!(!LayerScale::applies(layer, LayerScaleKind::Color));
+        layer.plots[0].visible = true;
+        layer.plots[0].kind = crate::graph::PlotKind::Column;
+        assert!(!LayerScale::applies(layer, LayerScaleKind::Color));
     }
 }

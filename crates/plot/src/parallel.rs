@@ -348,6 +348,7 @@ fn scale_shift(layer: &Layer, f: Rect, title: &str, ticks: &[(f64, String)], m: 
         LegendPosition::Automatic => return (0.0, 0.0),
         LegendPosition::TopLeft | LegendPosition::BottomLeft => (f.x + edge, f.y),
         LegendPosition::TopRight | LegendPosition::BottomRight => (f.x + f.w - edge - w, f.y),
+        LegendPosition::ManualTopLeft { x, y } => (f.x + x * f.w, f.y + y * f.h),
         LegendPosition::Manual { x, y } => (f.x + x * f.w - w / 2.0, f.y + y * f.h - f.h / 2.0),
     };
     (tx - x0, ty - f.y)
@@ -361,6 +362,14 @@ pub(crate) fn draw_scale(
     geom: &LayerGeometry,
     m: &dyn TextMeasurer,
 ) {
+    if let LegendPosition::ManualTopLeft { x, y } = layer.legend.position {
+        crate::legend_anchor::place(out, m, geom.frame, (x, y), |out, position| {
+            let mut layer = layer.clone();
+            layer.legend.position = position;
+            draw_scale(out, &layer, pds, geom, m);
+        });
+        return;
+    }
     if let Some(ParallelData { color: ParColor::Ramp { title, ticks, .. }, .. }) =
         pds.iter().find_map(|pd| pd.parallel.as_deref())
     {
@@ -386,6 +395,14 @@ fn legend_size(layer: &Layer, names: &[String], m: &dyn TextMeasurer) -> (f64, f
 /// The legend of a Parallel Index: a line sample and the text of each group. Automatic places it right of the
 /// frame, top aligned with it; the corner positions place it inside the frame as the ordinary legend does.
 pub(crate) fn draw_legend(out: &mut Vec<Item>, layer: &Layer, pds: &[PlotData], f: Rect, m: &dyn TextMeasurer) {
+    if let LegendPosition::ManualTopLeft { x, y } = layer.legend.position {
+        crate::legend_anchor::place(out, m, f, (x, y), |out, position| {
+            let mut layer = layer.clone();
+            layer.legend.position = position;
+            draw_legend(out, &layer, pds, f, m);
+        });
+        return;
+    }
     let lg = &layer.legend;
     let Some(ParallelData { color: ParColor::Groups { names, colors, .. }, style, .. }) =
         pds.iter().find_map(|pd| pd.parallel.as_deref())
@@ -405,6 +422,7 @@ pub(crate) fn draw_legend(out: &mut Vec<Item>, layer: &Layer, pds: &[PlotData], 
         LegendPosition::TopRight => (f.x + f.w - edge - w, f.y + edge),
         LegendPosition::BottomLeft => (f.x + edge, f.y + f.h - edge - h),
         LegendPosition::BottomRight => (f.x + f.w - edge - w, f.y + f.h - edge - h),
+        LegendPosition::ManualTopLeft { x, y } => (f.x + x * f.w, f.y + y * f.h),
         LegendPosition::Manual { x, y } => (f.x + x * f.w - w / 2.0, f.y + y * f.h - h / 2.0),
     };
     if lg.background.is_some() || lg.frame {

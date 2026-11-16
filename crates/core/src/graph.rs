@@ -2259,7 +2259,7 @@ fn yes() -> bool {
     true
 }
 
-/// Where the legend sits inside the layer frame.
+/// Where the legend sits relative to the layer frame.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum LegendPosition {
@@ -2269,6 +2269,12 @@ pub enum LegendPosition {
     TopLeft,
     BottomRight,
     BottomLeft,
+    /// Legend top-left at these fractions of the layer frame (negative y is above it).
+    /// The anchor stays fixed as text grows; stock multi-Y defaults use this (graphing 21.12).
+    ManualTopLeft {
+        x: f64,
+        y: f64,
+    },
     /// Legend centre at these fractions of the layer frame (0,0 = top-left).
     Manual {
         x: f64,

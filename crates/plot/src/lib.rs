@@ -24,6 +24,7 @@ pub mod hit;
 mod layer_scale;
 mod layout;
 mod legend;
+mod legend_anchor;
 mod margin;
 pub mod markup;
 mod multipage;
@@ -88,6 +89,8 @@ mod legend_tests;
 mod lollipop_tests;
 #[cfg(test)]
 mod margin_tests;
+#[cfg(test)]
+mod multi_y_legend_tests;
 #[cfg(test)]
 mod multi_y_tests;
 #[cfg(test)]

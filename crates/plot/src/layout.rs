@@ -1641,6 +1641,14 @@ fn draw_legend(
     if !lg.visible || entries.is_empty() || entries.iter().any(|pd| pd.plot.kind.is_parallel()) {
         return;
     }
+    if let LegendPosition::ManualTopLeft { x, y } = lg.position {
+        crate::legend_anchor::place(out, m, f, (x, y), |out, position| {
+            let mut legend = lg.clone();
+            legend.position = position;
+            draw_legend(out, project, &legend, f, entries, ids, ticks, m);
+        });
+        return;
+    }
     let fs = lg.font.size_pt;
     let sample = 2.2 * fs;
     let gap = 0.5 * fs;
@@ -1734,6 +1742,7 @@ fn draw_legend(
         LegendPosition::TopRight => (f.x + f.w - m_right - w, f.y + m_top),
         LegendPosition::BottomLeft => (f.x + m_left, f.y + f.h - m_bottom - h),
         LegendPosition::BottomRight => (f.x + f.w - m_right - w, f.y + f.h - m_bottom - h),
+        LegendPosition::ManualTopLeft { x, y } => (f.x + x * f.w, f.y + y * f.h),
         LegendPosition::Manual { x, y } => (f.x + x * f.w - w / 2.0, f.y + y * f.h - h / 2.0),
     };
     if lg.background.is_some() || lg.frame {

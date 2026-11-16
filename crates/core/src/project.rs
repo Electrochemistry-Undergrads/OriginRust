@@ -1504,7 +1504,9 @@ impl Project {
         }
         let n = kind.layers();
         let assignment: Vec<usize> = (0..ys.len()).map(|i| i % n).collect();
-        self.plot_multi_y_plan(&kind.plan(), Template::Line, ys, &assignment)
+        let id = self.plot_multi_y_plan(&kind.plan(), Template::Line, ys, &assignment)?;
+        kind.apply_legend_defaults(self.graph_mut(id).expect("new multi-Y graph"));
+        Ok(id)
     }
 
     /// Creates a graph from Plot > Multi-Y > Multiple Y Axes... : the columns in order fill the layers with

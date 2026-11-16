@@ -8997,3 +8997,5 @@ mod trendline;
 mod user_templates;
 mod view_windows;
 mod wks_image;
+
+mod multi_y_legend_position;

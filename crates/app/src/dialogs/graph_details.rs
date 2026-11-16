@@ -1521,7 +1521,7 @@ fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend, ids: &[String]) {
                 LegendPosition::TopLeft => "Top left",
                 LegendPosition::BottomRight => "Bottom right",
                 LegendPosition::BottomLeft => "Bottom left",
-                LegendPosition::Manual { .. } => "Custom",
+                LegendPosition::Manual { .. } | LegendPosition::ManualTopLeft { .. } => "Custom",
             };
             egui::ComboBox::from_id_salt("legend_pos").selected_text(name(&legend.position)).show_ui(ui, |ui| {
                 for p in [
@@ -1533,18 +1533,22 @@ fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend, ids: &[String]) {
                 ] {
                     ui.selectable_value(&mut legend.position, p, name(&p));
                 }
-                let is_manual = matches!(legend.position, LegendPosition::Manual { .. });
+                let is_manual =
+                    matches!(legend.position, LegendPosition::Manual { .. } | LegendPosition::ManualTopLeft { .. });
                 if ui.selectable_label(is_manual, "Custom").clicked() && !is_manual {
                     legend.position = LegendPosition::Manual { x: 0.8, y: 0.5 };
                 }
             });
         });
         ui.end_row();
-        if let LegendPosition::Manual { x, y } = &mut legend.position {
-            ui.label("Centre (fraction of plot area)");
+        let top_left = matches!(legend.position, LegendPosition::ManualTopLeft { .. });
+        if let LegendPosition::Manual { x, y } | LegendPosition::ManualTopLeft { x, y } = &mut legend.position {
+            ui.label(if top_left { "Top left (fraction of plot area)" } else { "Centre (fraction of plot area)" });
             ui.horizontal(|ui| {
-                ui.add(DragValue::new(x).range(0.0..=1.0).speed(0.005).prefix("x "));
-                ui.add(DragValue::new(y).range(0.0..=1.0).speed(0.005).prefix("y "));
+                let x = DragValue::new(x).speed(0.005).prefix("x ");
+                let y = DragValue::new(y).speed(0.005).prefix("y ");
+                ui.add(if top_left { x } else { x.range(0.0..=1.0) });
+                ui.add(if top_left { y } else { y.range(0.0..=1.0) });
             });
             ui.end_row();
         }

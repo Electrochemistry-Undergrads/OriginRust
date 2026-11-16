@@ -1,9 +1,20 @@
 # T61: Layers, insets and three/four Y axes
 
 **Status:** in progress; recovered and refined 2026-11-15. Step 0 (Origin measurements, graphing 21) and slice 1 (add/delete layers, inset, icon Delete and Layer Properties) are done; slice 2 (axis offsets, Move to Layer) and slice 3 (3Ys/4Ys templates, Multiple Y Axes, CLI/MCP names, .sheaf/.opj handling) are done. Open: Open Dialog..., Show Active Layer Only and Set Active Layer By Layer Icon Only (unmeasured), Hide Layer hiding axes, Double click to open Plot Setup. Hide Layer should also hide axes; Open Dialog... and two icon-menu items stay grey (unmeasured). **Size:** L, three slices.
+Legend-anchor follow-up (`codex/multi-y-template-legends`): the four stock templates use
+measured top-left positions above the frame, Arial 22 pt (YY-YY: 20 pt), and no frame or background.
+A compatible top-left position variant keeps the left edge fixed when labels grow; existing
+centre positions, Multiple Y Axes dialog plans and layer assignment remain unchanged.
+The Legend editor and native/companion saves handle the anchor. Graphing 21.12 records
+24 synthetic native controls/readbacks and the remaining spacing/membership limits.
+Fmt, strict workspace/all-target Clippy and all 4,212 workspace tests pass (eight ignored),
+including seven anchor/layout/editor/persistence regressions. Four updated SVG goldens and
+fresh CLI PNGs were reviewed; inventory 312 and eight Python tooling tests pass. Source and
+goldens stayed frozen through validation, with four test threads.
+
 **Branch:** `layers-multi-y`. **Priority:** P0, wave 2.
 **Spec:** [graphing](../spec/graphing.md) 1.3 and 12; ADR 0009.
-**Inventory:** 20 locations tagged `T61`. **Ownership:** layer creation/deletion, icon actions,
+**Inventory:** 5 locations tagged `T61`. **Ownership:** layer creation/deletion, icon actions,
 axis offsets, multi-Y templates/dialog. T60 owns arrangement/merge; coordinate `graph.rs` edits.
 
 ## Goal

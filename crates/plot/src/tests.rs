@@ -4205,3 +4205,25 @@ fn connect_line_across_missing_data_joins_the_points_around_missing_rows() {
     }
     assert_eq!(pieces(&p), 2);
 }
+
+/// Fit Page to Layers counts the layer frames and the legend, not the tick labels or titles (Origin
+/// 2016, graphing spec 15.7d).
+#[test]
+fn the_fit_page_content_box_is_the_frames_and_the_objects_not_the_tick_labels() {
+    let (mut p, g) = line_project_for_ratio();
+    let graph = p.graph(g).unwrap().clone();
+    let f = graph.layers[0].frame;
+    let (pw, ph) = (graph.page.width_pt, graph.page.height_pt);
+    let (x, y, w, h) = crate::fit_content_bounds(&p, g).unwrap().unwrap();
+    // the Y tick labels and title stand left of the frame and the X ones below it: not counted
+    assert!((x - f.left * pw).abs() < 1e-6, "{x} vs {}", f.left * pw);
+    assert!((y + h - (f.top + f.height) * ph).abs() < 1e-6);
+    assert!(w >= f.width * pw - 1e-6);
+    // without the legend the box is the frame exactly
+    p.graph_mut(g).unwrap().layers[0].legend.visible = false;
+    let (x2, y2, w2, h2) = crate::fit_content_bounds(&p, g).unwrap().unwrap();
+    let frame = (f.left * pw, f.top * ph, f.width * pw, f.height * ph);
+    for (a, b) in [(x2, frame.0), (y2, frame.1), (w2, frame.2), (h2, frame.3)] {
+        assert!((a - b).abs() < 1e-6, "{:?} vs {frame:?}", (x2, y2, w2, h2));
+    }
+}

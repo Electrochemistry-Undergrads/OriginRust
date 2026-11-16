@@ -18,6 +18,7 @@ pub mod compplot;
 pub mod condformat;
 pub mod datetime;
 pub mod extract;
+pub mod fit_page;
 pub mod fitting;
 pub mod format;
 pub mod formula;

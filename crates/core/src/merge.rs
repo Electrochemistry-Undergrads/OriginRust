@@ -52,9 +52,10 @@ pub struct MergeOptions {
     /// scaled; the grid settings are not used (measured: a 2 x 2 merge with it off gave the layers the
     /// source's (17.91, 11.58, 68.17, 71.82) and factor 1).
     pub rearrange: bool,
-    /// A portrait page: width and height of [`MergeOptions::page_in`] swapped.
+    /// A portrait page: Origin's page (11.41 x 7.973 in) turned upright. Not used with `page_in`.
     pub portrait: bool,
-    /// The page size in inches, landscape (the longer side first); `None` is Origin's 11.41 x 7.973.
+    /// The page size in inches, width and height as given; `None` is Origin's 11.41 x 7.973 in
+    /// (turned by `portrait`).
     pub page_in: Option<(f64, f64)>,
     /// "Keep Layer Aspect Ratio": a source keeps the width-to-height ratio of its layers (in percent
     /// of its page) and is drawn at the top left of its cell, as large as fits.
@@ -184,11 +185,14 @@ impl MergeOptions {
 
     /// The merged page size in points.
     fn page_pt(&self) -> Result<(f64, f64), MergeError> {
-        let (a, b) = self.page_in.unwrap_or(MERGE_PAGE_IN);
-        if !(0.5..=200.0).contains(&a) || !(0.5..=200.0).contains(&b) {
+        let (w, h) = match self.page_in {
+            Some(size) => size,
+            None if self.portrait => (MERGE_PAGE_IN.1, MERGE_PAGE_IN.0),
+            None => MERGE_PAGE_IN,
+        };
+        if !(0.5..=200.0).contains(&w) || !(0.5..=200.0).contains(&h) {
             return Err(MergeError::Page);
         }
-        let (w, h) = if self.portrait { (a.min(b), a.max(b)) } else { (a.max(b), a.min(b)) };
         Ok((w * 72.0, h * 72.0))
     }
 }
@@ -202,8 +206,8 @@ fn bounds(frames: &[Frame]) -> Frame {
     Frame { left, top, width: right - left, height: bottom - top }
 }
 
-/// Multiplies every font size of a layer (axis titles and tick labels, the legend and the text
-/// labels) by `factor`: the text factor of a merged layer.
+/// Multiplies every font size of a layer (axis titles and tick labels, the legend, the text labels
+/// and the plots' data labels) by `factor`: the text factor of a merged layer.
 fn scale_text(layer: &mut crate::graph::Layer, factor: f64) {
     if (factor - 1.0).abs() < 1e-12 {
         return;
@@ -215,6 +219,9 @@ fn scale_text(layer: &mut crate::graph::Layer, factor: f64) {
     layer.legend.font.size_pt *= factor;
     for label in &mut layer.labels {
         label.font.size_pt *= factor;
+    }
+    for plot in &mut layer.plots {
+        plot.decor.labels.font.size_pt *= factor;
     }
 }
 
@@ -242,7 +249,8 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
         page: Page { width_pt: page_w, height_pt: page_h, ..first.page.clone() },
         layers: Vec::new(),
     };
-    let link = opts.link || opts.share_x;
+    // linking belongs to the rearranged layout (Origin's dialog puts it under Arrange Settings)
+    let link = opts.rearrange && (opts.link || opts.share_x);
     for (k, src) in sources.iter().enumerate() {
         let cell = cells.get(k).copied().unwrap_or(Frame::WHOLE);
         if src.layers.is_empty() {
@@ -264,8 +272,10 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
         } else {
             cell
         };
+        // the automatic factor follows the frame the source gets (with Keep Layer Aspect Ratio the
+        // shrunk frame: a 3 x 1 merge gave 0.28 for 20.57 x 21.68); without rearranging it is 1
         let factor = match opts.text_scale {
-            _ if !opts.rearrange => 1.0,
+            MergeTextScale::Auto if !opts.rearrange => 1.0,
             MergeTextScale::Auto => auto_text_factor((100.0 * target.width, 100.0 * target.height)),
             MergeTextScale::Fixed(f) => f,
             MergeTextScale::Keep => 1.0,

@@ -42,6 +42,8 @@ pub enum LayerError {
     Link { layer: usize, parent: usize },
     #[error("swapping the order would put a parent layer after a layer linked to it")]
     ReorderLinks,
+    #[error("the reference layer {} follows a selected layer and would move with it; choose another reference", .0 + 1)]
+    ReferenceFollows(usize),
 }
 
 /// In which order Arrange Selected Layers fills the cells.
@@ -382,6 +384,15 @@ impl Graph {
         Ok((self.page_frame(reference), self.page.width_pt, self.page.height_pt))
     }
 
+    /// Refuses a reference layer that follows (is validly linked to) a selected layer: it would move
+    /// with that layer, so the result would not match the reference any more.
+    fn reference_stays(&self, reference: usize, sel: &[usize]) -> Result<(), LayerError> {
+        match self.link_parent(reference) {
+            Some(p) if sel.contains(&p) && !sel.contains(&reference) => Err(LayerError::ReferenceFollows(reference)),
+            _ => Ok(()),
+        }
+    }
+
     /// Size/Position > Resize > Apply: sets the width and height of the selected layers; their left
     /// and top stay. `reference` matters for [`SizeUnit::ReferencePercent`].
     pub fn resize_layers(
@@ -394,6 +405,9 @@ impl Graph {
     ) -> Result<(), LayerError> {
         let sel = self.checked_selection(selection)?;
         let (r, pw, ph) = self.reference(reference)?;
+        if unit == SizeUnit::ReferencePercent {
+            self.reference_stays(reference, &sel)?;
+        }
         let (w, h) = (unit.fraction(width, pw, r.width), unit.fraction(height, ph, r.height));
         let targets: Vec<(usize, Frame)> =
             sel.iter().map(|&i| (i, Frame { width: w, height: h, ..self.page_frame(i) })).collect();
@@ -413,6 +427,9 @@ impl Graph {
     ) -> Result<(), LayerError> {
         let sel = self.checked_selection(selection)?;
         let (r, pw, ph) = self.reference(reference)?;
+        if unit == SizeUnit::ReferencePercent {
+            self.reference_stays(reference, &sel)?;
+        }
         let (mut x, mut y) = (unit.fraction(left, pw, r.width), unit.fraction(top, ph, r.height));
         if unit == SizeUnit::ReferencePercent {
             x += r.left;
@@ -428,6 +445,7 @@ impl Graph {
     pub fn align_layers(&mut self, selection: &[usize], reference: usize, edge: AlignEdge) -> Result<(), LayerError> {
         let sel = self.checked_selection(selection)?;
         let (r, _, _) = self.reference(reference)?;
+        self.reference_stays(reference, &sel)?;
         let targets: Vec<(usize, Frame)> = sel
             .iter()
             .filter(|&&i| i != reference)

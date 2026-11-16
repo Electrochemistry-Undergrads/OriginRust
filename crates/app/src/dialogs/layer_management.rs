@@ -74,6 +74,8 @@ pub struct LayerManagementDialog {
     link_to: Option<usize>,
     link_x: ScaleLink,
     link_y: ScaleLink,
+    /// The layer whose link the Link tab shows (the first selected one when the tab was drawn).
+    link_shown_for: Option<usize>,
     problem: Option<String>,
 }
 
@@ -106,6 +108,7 @@ impl LayerManagementDialog {
             link_to: None,
             link_x: ScaleLink::None,
             link_y: ScaleLink::None,
+            link_shown_for: None,
             problem: None,
         })
     }
@@ -378,6 +381,15 @@ impl LayerManagementDialog {
     fn link_tab(&mut self, ui: &mut egui::Ui) {
         // Only layers before the first selected layer that are not linked themselves can be parents.
         let first = self.selected.iter().next().copied().unwrap_or(0);
+        // Like Origin's tab, show the link the (first) selected layer has now.
+        let shown = self.selected.iter().next().copied();
+        if shown != self.link_shown_for {
+            self.link_shown_for = shown;
+            let link = shown.and_then(|i| self.work.layers.get(i)).and_then(|l| l.link);
+            self.link_to = link.map(|k| k.parent);
+            self.link_x = link.map_or(ScaleLink::None, |k| k.x);
+            self.link_y = link.map_or(ScaleLink::None, |k| k.y);
+        }
         let parents: Vec<usize> =
             (0..first.min(self.work.layers.len())).filter(|&p| self.work.layers[p].link.is_none()).collect();
         if self.link_to.is_some_and(|p| !parents.contains(&p)) {

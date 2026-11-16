@@ -459,6 +459,36 @@ pub fn graph_scene(project: &Project, graph: WindowId) -> Result<scene::Scene, P
     layout::build_scene(project, graph, SystemFonts::shared())
 }
 
+/// The box Origin's Fit Page to Layers fits the page to (graphing spec 15.7d), as `(x, y, width,
+/// height)` in page points: the frames of the layers and the boxes of the page's objects (legends,
+/// text labels, drawn shapes and slope annotations), but not the tick labels or axis titles, as
+/// measured in Origin 2016. `None` when the graph has no layer.
+pub fn fit_content_bounds(project: &Project, graph: WindowId) -> Result<Option<(f64, f64, f64, f64)>, PlotError> {
+    use scene::ObjectKind;
+    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let scene = graph_scene(project, graph)?;
+    let (pw, ph) = (g.page.width_pt, g.page.height_pt);
+    let mut boxes: Vec<(f64, f64, f64, f64)> = (0..g.layers.len())
+        .map(|i| {
+            let f = g.page_frame(i);
+            (f.left * pw, f.top * ph, (f.left + f.width) * pw, (f.top + f.height) * ph)
+        })
+        .collect();
+    for layer in &scene.layers {
+        for o in &layer.objects {
+            if matches!(o.kind, ObjectKind::Legend | ObjectKind::Label(_) | ObjectKind::Shape(_) | ObjectKind::Slope(_))
+                && o.bounds.w.is_finite()
+                && o.bounds.h.is_finite()
+            {
+                boxes.push((o.bounds.x, o.bounds.y, o.bounds.x + o.bounds.w, o.bounds.y + o.bounds.h));
+            }
+        }
+    }
+    let Some(first) = boxes.first().copied() else { return Ok(None) };
+    let (x0, y0, x1, y1) = boxes.iter().fold(first, |a, b| (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3)));
+    Ok(Some((x0, y0, x1 - x0, y1 - y0)))
+}
+
 /// Renders a scene from [`graph_scene`] to pixels at `pixels_per_point` (1 = 72 dpi). The
 /// picture is the same as [`render_raster`] of the graph the scene was made from.
 pub fn render_scene_raster(scene: &scene::Scene, pixels_per_point: f64) -> Result<Raster, PlotError> {

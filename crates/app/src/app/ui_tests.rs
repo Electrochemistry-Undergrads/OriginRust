@@ -6291,6 +6291,7 @@ mod clipboard_formats;
 
 mod find_replace;
 mod find_selection;
+mod fit_page;
 mod go_to;
 mod go_to_browser;
 mod go_to_picker;

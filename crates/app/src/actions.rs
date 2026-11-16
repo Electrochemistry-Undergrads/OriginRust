@@ -422,6 +422,11 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
     },
+    /// Fit Page to Layers: opens its window (`dialog`) or fits the page with Origin's defaults at once.
+    FitPageToLayers {
+        graph: WindowId,
+        dialog: bool,
+    },
     /// Opens Layer Management (arrange, size/position and link the layers) for a graph, with a layer selected when given.
     LayerManagement {
         graph: WindowId,

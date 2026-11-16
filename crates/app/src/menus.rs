@@ -219,6 +219,10 @@ pub enum Cmd {
     LayerContents(Option<usize>),
     /// Graph > Layer Management... (T60); the layer to select, if any.
     LayerManagement(Option<usize>),
+    /// Graph > Fit Page to Layers... (the window) and Format > Fit Page To Layers (Origin's defaults at once) (T60).
+    FitPageToLayers {
+        dialog: bool,
+    },
     /// Graph > Plot Setup...: Origin's own window for the data of a layer's plots.
     PlotSetup(Option<usize>),
     /// The graph settings of a given layer, with a plot chosen (the graph's right-click menus).
@@ -1348,7 +1352,7 @@ fn graph_menu() -> Vec<Entry> {
         grey("New Color Scale"),
         sep(),
         grey("Fit Layer to Graph"),
-        grey("Fit Page to Layers..."),
+        item("Fit Page to Layers...", Cmd::FitPageToLayers { dialog: true }),
         item("Exchange X-Y Axes", Cmd::ExchangeAxes),
         grey_sub("Offset Grouped Data in Layer", &["None", "Cumulative", "Constant", "Auto", "Individual"]),
         grey("Convert to Standard Font Size"),
@@ -1437,7 +1441,7 @@ fn format_menu(kind: WindowKind) -> Vec<Entry> {
             sep(),
             grey("Snap Layers to Grid"),
             grey("Snap Objects to Grid"),
-            grey("Fit Page To Layers"),
+            item("Fit Page To Layers", Cmd::FitPageToLayers { dialog: false }),
             grey("Fit Page To Printer"),
             sep(),
             item("&Axes...", Cmd::GraphProps(PropsTab::XAxis)),
@@ -2330,6 +2334,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::LayerContents { graph: c.graph.ok_or(NEED_GRAPH)?, layer: layer.unwrap_or(c.layer) }
         }
         Cmd::LayerManagement(layer) => Action::LayerManagement { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer },
+        Cmd::FitPageToLayers { dialog } => {
+            Action::FitPageToLayers { graph: c.graph.ok_or(NEED_GRAPH)?, dialog: *dialog }
+        }
         Cmd::GraphPropsAt { layer, tab, plot } => {
             Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, tab: *tab, plot: *plot }
         }

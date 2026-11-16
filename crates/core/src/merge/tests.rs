@@ -284,3 +284,27 @@ fn without_rearranging_the_layers_keep_their_source_frames() {
         assert_eq!(l.x_axis.tick_font.size_pt, src.x_axis.tick_font.size_pt);
     }
 }
+
+#[test]
+fn a_typed_page_is_used_as_given_and_links_need_the_rearranged_layout() {
+    let (mut p, gs, _) = project(2);
+    let id = p.merge_graphs(&MergeOptions { page_in: Some((5.0, 10.0)), ..opts(&gs) }).unwrap();
+    let g = p.graph(id).unwrap();
+    assert!(close(g.page.width_pt, 360.0, 1e-9) && close(g.page.height_pt, 720.0, 1e-9));
+    let o = MergeOptions { rearrange: false, link: true, share_x: true, ..opts(&gs) };
+    let id = p.merge_graphs(&o).unwrap();
+    assert!(p.graph(id).unwrap().layers.iter().all(|l| l.link.is_none()));
+    // a fixed factor still applies without rearranging; the automatic one is 1
+    let o = MergeOptions { rearrange: false, text_scale: MergeTextScale::Fixed(0.5), ..opts(&gs) };
+    let id = p.merge_graphs(&o).unwrap();
+    let tick = p.graph(gs[0]).unwrap().layers[0].x_axis.tick_font.size_pt;
+    assert!(close(p.graph(id).unwrap().layers[0].x_axis.tick_font.size_pt, 0.5 * tick, 1e-9));
+}
+
+#[test]
+fn data_labels_shrink_with_the_rest_of_the_text() {
+    let (mut p, gs, _) = project(3);
+    p.graph_mut(gs[0]).unwrap().layers[0].plots[0].decor.labels.font.size_pt = 20.0;
+    let id = p.merge_graphs(&opts(&gs)).unwrap();
+    assert!(close(p.graph(id).unwrap().layers[0].plots[0].decor.labels.font.size_pt, 20.0 * 0.46, 1e-9));
+}

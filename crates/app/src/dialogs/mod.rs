@@ -19,6 +19,7 @@ pub mod filter_options;
 pub mod find;
 pub mod fit;
 pub mod fit_more;
+pub mod fit_page;
 pub mod frame;
 pub mod go_to;
 pub mod graph_axis;

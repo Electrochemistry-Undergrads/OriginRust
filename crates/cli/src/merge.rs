@@ -57,7 +57,8 @@ pub(crate) fn merge_graphs(a: MergeGraphsArgs) -> Result<()> {
     }
     match a.page_size[..] {
         [] => {}
-        [w, h] => opts.page_in = Some((w, h)),
+        // --portrait turns a typed page upright too
+        [w, h] => opts.page_in = Some(if a.portrait { (w.min(h), w.max(h)) } else { (w, h) }),
         _ => bail!("--page-size takes two numbers in inches, the width and the height (for example 8,10)"),
     }
     let id = project.merge_graphs(&opts).context("cannot merge the graphs")?;

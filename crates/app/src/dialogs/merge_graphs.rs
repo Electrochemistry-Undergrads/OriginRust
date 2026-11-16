@@ -131,11 +131,12 @@ impl MergeGraphsDialog {
             keep_sources: self.keep_sources,
             rearrange: self.rearrange,
             portrait: self.portrait,
-            // The options hold the landscape page, longer side first.
-            page_in: (!default_page).then_some(if self.portrait { (page.1, page.0) } else { page }),
+            // the numbers as shown: Orientation has already swapped them
+            page_in: (!default_page).then_some(page),
             keep_aspect: self.keep_aspect,
-            link: self.link,
-            share_x: self.link && self.share_x,
+            // greyed with the rest of Arrange Settings when the layout is not rearranged
+            link: self.rearrange && self.link,
+            share_x: self.rearrange && self.link && self.share_x,
             hide_inner: self.hide_inner,
             text_scale: match self.scale {
                 Scale::Auto | Scale::LayerFrame => MergeTextScale::Auto,

@@ -411,3 +411,18 @@ fn linking_the_layers_of_a_double_y_graph_to_a_new_layer_is_refused_for_the_pare
     g.layers[2].link = Some(LayerLink { parent: 1, x: ScaleLink::Straight, y: ScaleLink::None });
     assert!(g.link_layers(&[1], Some(0), ScaleLink::None, ScaleLink::None).is_err());
 }
+
+#[test]
+fn a_reference_that_follows_a_selected_layer_is_refused() {
+    // layer 3 follows layer 1: aligning layer 1 to it would move the reference too
+    let mut g = linked_graph();
+    let before = g.clone();
+    assert_eq!(g.align_layers(&[0], 2, AlignEdge::Left), Err(LayerError::ReferenceFollows(2)));
+    assert_eq!(g.move_layers(&[0], 2, SizeUnit::ReferencePercent, 0.0, 0.0), Err(LayerError::ReferenceFollows(2)));
+    assert_eq!(g.resize_layers(&[0], 2, SizeUnit::ReferencePercent, 50.0, 50.0), Err(LayerError::ReferenceFollows(2)));
+    assert_eq!(g, before);
+    // in page units the reference does not matter, and an unrelated reference is fine
+    g.move_layers(&[0], 2, SizeUnit::PagePercent, 10.0, 10.0).unwrap();
+    g.align_layers(&[1], 2, AlignEdge::Left).unwrap();
+    assert!(close(g.page_frame(1).left, g.page_frame(2).left));
+}

@@ -146,6 +146,7 @@ pub struct SheafApp {
     graph_props: Option<GraphPropsDialog>,
     layer_contents: Option<crate::dialogs::layer_contents::LayerContentsDialog>,
     layer_management: Option<crate::dialogs::layer_management::LayerManagementDialog>,
+    fit_page: Option<crate::dialogs::fit_page::FitPageDialog>,
     plot_setup: Option<crate::dialogs::plot_setup::PlotSetupDialog>,
     error_bars: Option<ErrorBarsDialog>,
     trendline: Option<TrendlineDialog>,
@@ -249,6 +250,7 @@ impl SheafApp {
             graph_props: None,
             layer_contents: None,
             layer_management: None,
+            fit_page: None,
             plot_setup: None,
             error_bars: None,
             trendline: None,
@@ -772,6 +774,7 @@ impl SheafApp {
         self.stack_panels = None;
         self.merge_graphs = None;
         self.layer_management = None;
+        self.fit_page = None;
         self.label_panels = None;
         self.simulate = None;
         self.column_props = None;
@@ -1903,6 +1906,23 @@ impl SheafApp {
                 self.focus(graph);
                 self.graphs.entry(graph).or_default().active_layer = layer;
             }
+            Action::FitPageToLayers { graph, dialog } => {
+                if dialog {
+                    self.fit_page = Some(crate::dialogs::fit_page::FitPageDialog::new(graph));
+                    self.focus(graph);
+                } else {
+                    use sheaf_core::fit_page::{FitDirection, FitMargin};
+                    match crate::dialogs::fit_page::fit_page(
+                        &mut self.doc,
+                        graph,
+                        FitMargin::Border(5.0),
+                        FitDirection::Both,
+                    ) {
+                        Ok(()) => self.say("Fitted the page to the layers"),
+                        Err(e) => self.warn(e),
+                    }
+                }
+            }
             Action::LayerManagement { graph, layer } => {
                 self.layer_management =
                     crate::dialogs::layer_management::LayerManagementDialog::new(self.doc.project(), graph, layer);
@@ -3023,6 +3043,7 @@ impl SheafApp {
             || self.graph_props.is_some()
             || self.layer_contents.is_some()
             || self.layer_management.is_some()
+            || self.fit_page.is_some()
             || self.plot_setup.is_some()
             || self.error_bars.is_some()
             || self.trendline.is_some()
@@ -3317,6 +3338,17 @@ impl SheafApp {
                     self.stack_panels = None;
                     self.focus(graph);
                     self.say("Created stacked panels");
+                }
+            }
+        }
+        if let Some(d) = &mut self.fit_page {
+            use crate::dialogs::fit_page::Outcome;
+            match d.show(ctx, &mut self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed => self.fit_page = None,
+                Outcome::Done => {
+                    self.fit_page = None;
+                    self.say("Fitted the page to the layers");
                 }
             }
         }

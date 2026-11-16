@@ -148,10 +148,10 @@ pub enum Template {
     /// Sunburst plot (Origin's "Sunburst Plot", 2022): the hierarchy of the category columns as concentric rings,
     /// the angles proportional to a value column. No axes and no legend; a colour scale beside the layer.
     Sunburst,
-    /// Origin's Plot > Column/Bar/Pie > Grouped Columns (indexed data) (X-Function plot_gindexed, T75): the
+    /// Origin's Plot > Column/Bar/Pie > Grouped Columns (indexed data) (X-Function plot_gindexed, T76): the
     /// column template; one data column whose rows are split by the values of one or two group columns.
     GroupedColumns,
-    /// Origin's Plot > Statistics > Grouped Box Charts (X-Function plot_gboxindexed, T75): the box chart
+    /// Origin's Plot > Statistics > Grouped Box Charts (X-Function plot_gboxindexed, T76): the box chart
     /// template; the rows of one data column are split by one or two group columns.
     GroupedBox,
 }

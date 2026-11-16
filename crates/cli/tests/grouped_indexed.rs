@@ -1,4 +1,4 @@
-//! `sheaf plot -t grouped-columns` and `-t grouped-box` (T75): one numeric column split by one or two group columns.
+//! `sheaf plot -t grouped-columns` and `-t grouped-box` (T76): one numeric column split by one or two group columns.
 
 use sheaf_core::graph::{IndexedError, PlotKind};
 use std::path::PathBuf;

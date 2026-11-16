@@ -2632,7 +2632,7 @@ fn menu_items_sheaf_lacks_are_greyed_with_origins_name_and_a_tooltip() {
     assert!(entry_enabled(&h, "3D Color Pie") && entry_enabled(&h, "2D B&W Pie"), "the pies exist now");
     assert!(h.query_by_label("2D Color Pie").is_none(), "Origin has no 2D Color Pie");
     assert!(entry_enabled(&h, "Column + Label"), "Column + Label exists now");
-    assert!(entry_enabled(&h, "Grouped Columns (indexed data)"), "grouped columns exist now (T75)");
+    assert!(entry_enabled(&h, "Grouped Columns (indexed data)"), "grouped columns exist now (T76)");
     close_menus(&mut h);
     // A greyed item with a shortcut still shows the key.
     click(&mut h, "View");

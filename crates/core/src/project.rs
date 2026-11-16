@@ -1111,7 +1111,7 @@ impl Project {
     }
 
     /// Creates a grouped column plot ([`Template::GroupedColumns`]) or grouped box chart ([`Template::GroupedBox`])
-    /// of indexed data (T75): the rows of the numeric column `y` are split by the levels of one or two `groups`
+    /// of indexed data (T76): the rows of the numeric column `y` are split by the levels of one or two `groups`
     /// columns. One group column gives one plot; with two, there is one plot per sorted level of the second, named
     /// after the level, so the legend lists the subgroups and the first column's levels are on the X axis.
     pub fn plot_indexed(

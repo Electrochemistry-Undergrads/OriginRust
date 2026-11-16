@@ -1726,7 +1726,7 @@ pub struct Plot {
     /// The settings of a sunburst plot (graphing spec 14.27).
     #[serde(default, skip_serializing_if = "SunburstStyle::is_default")]
     pub sunburst: SunburstStyle,
-    /// Indexed data of a column or box plot: the rows of `y` split by group columns (T75).
+    /// Indexed data of a column or box plot: the rows of `y` split by group columns (T76).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub indexed: Option<Indexed>,
     /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's

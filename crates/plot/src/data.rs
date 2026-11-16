@@ -64,7 +64,7 @@ pub(crate) struct PlotData<'a> {
     pub bar: Option<BarSlot>,
     /// The statistics a box chart plot draws; `None` for other kinds.
     pub boxed: Option<BoxStats>,
-    /// The boxes of a grouped box chart plot of indexed data (T75), one per level of the main group present in
+    /// The boxes of a grouped box chart plot of indexed data (T76), one per level of the main group present in
     /// its subset, at dodged positions; empty for other plots.
     pub gboxes: Vec<BoxStats>,
     /// The names of the categories at 1, 2, ... of a plot of indexed data (the levels of its main group).
@@ -173,7 +173,7 @@ pub(crate) fn box_stats(values: &[f64], pos: f64, label: String) -> Option<BoxSt
     Some(BoxStats { pos, label, q1, median, q3, mean, whisker_low, whisker_high, outliers, width: BOX_WIDTH })
 }
 
-/// Reads the rows of an indexed plot (T75) as its bars or boxes: the Y values of the rows are split by the levels
+/// Reads the rows of an indexed plot (T76) as its bars or boxes: the Y values of the rows are split by the levels
 /// of the main group column (the categories 1, 2, ... of the X axis, in sorted order, over every row with a data
 /// value so that all subgroup plots share the positions) and, when the plot has a subset, by a level of the second
 /// group column. A column plot gets the mean of each category (a category without rows in its subset has no bar)

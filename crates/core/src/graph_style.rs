@@ -643,7 +643,7 @@ pub struct TreemapLevel {
 
 pub use sheaf_calc::treemap::Layout as TreemapLayout;
 
-/// The error bars of a grouped column plot (T75).
+/// The error bars of a grouped column plot (T76).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IndexedError {
@@ -656,7 +656,7 @@ pub enum IndexedError {
     Se,
 }
 
-/// Indexed data on a column or box plot (T75, Origin's plot_gindexed and plot_gboxindexed): the plot's Y column
+/// Indexed data on a column or box plot (T76, Origin's plot_gindexed and plot_gboxindexed): the plot's Y column
 /// holds all the values, and the rows are split by the levels of `group` (the categories on the X axis) and, in
 /// one plot per level, by a second column.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

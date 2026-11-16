@@ -47,7 +47,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T69` | 0 |
 | `T70` | 0 |
 | `T71` | 0 |
-| `T75` | 0 |
+| `T76` | 0 |
 | `B2` | 51 |
 | `B3` | 25 |
 | `B4` | 24 |

@@ -200,7 +200,7 @@ fn resolve_dim(
         crate::ticks::label_from_cells(&mut r, &names);
         r
     } else if dim == Dim::X && sources.iter().any(|pd| pd.categories.is_some()) {
-        // Indexed data (T75): one category per level of the main group, at 1, 2, ...
+        // Indexed data (T76): one category per level of the main group, at 1, 2, ...
         let names = sources.iter().find_map(|pd| pd.categories.clone()).unwrap_or_default();
         let mut r = crate::ticks::resolve_category(axis, Some((1.0, names.len() as f64)));
         crate::ticks::label_from_cells(&mut r, &names);

@@ -1,4 +1,4 @@
-//! Indexed data (T75): one data column whose rows are split by the values (levels) of one or two group columns.
+//! Indexed data (T76): one data column whose rows are split by the values (levels) of one or two group columns.
 //! The grouped column and grouped box plots read their levels from here.
 
 use crate::column::{Column, ColumnData};

@@ -1,4 +1,4 @@
-//! Grouped columns and grouped box charts of indexed data (T75): the categories, the mean and error of each bar,
+//! Grouped columns and grouped box charts of indexed data (T76): the categories, the mean and error of each bar,
 //! unbalanced subgroups, the boxes and where they stand, and the axis range.
 
 use super::*;

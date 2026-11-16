@@ -2446,7 +2446,7 @@ Origin's documented facts (Origin 2022 help, not measured; no Origin was at hand
   the Radius/Center settings, tangential labels for thin rings, a colour-by-category-palette option, a label font setting, reading
   Origin's sunburst from .opj.
 
-### 14.28 Grouped Columns (indexed data) and Grouped Box Charts (T75)
+### 14.28 Grouped Columns (indexed data) and Grouped Box Charts (T76)
 
 Origin's documented facts (documentation only, **not measured**; no Origin was at hand; paraphrased;
 [W:docs.originlab.com/x-function/ref/plot_gindexed], [W:docs.originlab.com/origin-help/grouped-column-index-data],

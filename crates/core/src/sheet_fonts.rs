@@ -1,6 +1,6 @@
 //! Worksheet-wide category fonts, below per-range cell formatting (T59).
 use crate::Worksheet;
-use crate::cellformat::{ResolvedStyle, clamp_cell_pt};
+use crate::cellformat::{LabelKind, ResolvedStyle, clamp_cell_pt};
 use serde::{Deserialize, Serialize};
 
 /// Empty family is the automatic face. Sizes use the existing worksheet point-size bounds.
@@ -26,11 +26,38 @@ impl Default for WorksheetFont {
 pub struct WorksheetFonts {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<WorksheetFont>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub long_name_size_pt: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub units_size_pt: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comments_size_pt: Option<f32>,
 }
 
 impl WorksheetFonts {
     pub fn is_empty(&self) -> bool {
         self.data.is_none()
+            && self.long_name_size_pt.is_none()
+            && self.units_size_pt.is_none()
+            && self.comments_size_pt.is_none()
+    }
+
+    pub fn label_size(&self, kind: &LabelKind) -> Option<f32> {
+        match kind {
+            LabelKind::LongName => self.long_name_size_pt,
+            LabelKind::Units => self.units_size_pt,
+            LabelKind::Comments => self.comments_size_pt,
+            _ => None,
+        }
+    }
+
+    pub(crate) fn label_style<'a>(&self, kind: &LabelKind, mut manual: ResolvedStyle<'a>) -> ResolvedStyle<'a> {
+        if manual.size_pt.is_none() {
+            manual.size_pt = self
+                .label_size(kind)
+                .map(|size| clamp_cell_pt(if size.is_finite() && size > 0.0 { size } else { default_size() }));
+        }
+        manual
     }
 
     pub(crate) fn data_style<'a>(&'a self, mut manual: ResolvedStyle<'a>) -> ResolvedStyle<'a> {
@@ -48,6 +75,25 @@ impl WorksheetFonts {
 }
 
 impl Worksheet {
+    /// Changes only one supported label category's point size, including future columns.
+    pub fn set_label_font_size(&mut self, kind: &LabelKind, size_pt: f32) -> bool {
+        if !size_pt.is_finite() || size_pt <= 0.0 {
+            return false;
+        }
+        let slot = match kind {
+            LabelKind::LongName => &mut self.font_defaults.long_name_size_pt,
+            LabelKind::Units => &mut self.font_defaults.units_size_pt,
+            LabelKind::Comments => &mut self.font_defaults.comments_size_pt,
+            _ => return false,
+        };
+        let size = clamp_cell_pt(size_pt);
+        if *slot == Some(size) {
+            return false;
+        }
+        *slot = Some(size);
+        true
+    }
+
     /// Changes the Data font of this sheet, including rows/columns subsequently added.
     /// Per-cell/range fonts remain above this layer; this does not create per-row records.
     pub fn set_data_font(&mut self, mut font: WorksheetFont) -> bool {
@@ -184,5 +230,69 @@ mod tests {
             assert!(ops.iter().any(|op| matches!(op, PrintOp::Text { text, size, fmt, .. }
                 if text == value && *size == pt * 8.0 / 9.0 && fmt.family.as_deref() == Some("Times New Roman"))));
         }
+    }
+
+    #[test]
+    fn label_categories_reach_future_columns_independently_and_roundtrip_sparsely() {
+        let mut s = sheet();
+        for (kind, size) in [(LabelKind::LongName, 18.0), (LabelKind::Units, 12.0), (LabelKind::Comments, 24.0)] {
+            assert!(s.set_label_font_size(&kind, size));
+            assert!(!s.set_label_font_size(&kind, size));
+        }
+        s.columns.push(Column::new(ColumnId(9), "B", Designation::Y, ColumnData::default()));
+        let back: Worksheet = serde_json::from_slice(&serde_json::to_vec(&s).unwrap()).unwrap();
+        assert_eq!(back.font_defaults, s.font_defaults);
+        assert_eq!(back.clone().font_defaults, s.font_defaults);
+        assert!(back.cell_formats.is_empty());
+        assert!(!back.format_index().is_empty());
+        for col in [ColumnId(1), ColumnId(9)] {
+            let index = back.format_index();
+            for (kind, size) in [(LabelKind::LongName, 18.0), (LabelKind::Units, 12.0), (LabelKind::Comments, 24.0)] {
+                assert_eq!(index.resolve_label(&back, col, &kind).size_pt, Some(size));
+            }
+            assert!(index.resolve_label(&back, col, &LabelKind::Formula).is_default());
+            assert!(index.resolve_label(&back, col, &LabelKind::Param("Sample".into())).is_default());
+            assert!(index.resolve(&back, col, 0).is_default());
+        }
+        assert_eq!(s.columns[0].numeric().unwrap(), &[1.0, 2.0]);
+        assert!(serde_json::to_string(&s.font_defaults).unwrap().len() < 100);
+    }
+
+    #[test]
+    fn label_defaults_keep_manual_properties_above_independent_category_sizes() {
+        let mut s = sheet();
+        s.set_label_font_size(&LabelKind::LongName, 18.0);
+        s.set_label_font_size(&LabelKind::Units, 24.0);
+        s.apply_cell_format(
+            FormatTarget::label_rows(vec![ColumnId(1)], vec![LabelKind::LongName]),
+            CellFormat {
+                size_pt: Some(12.0),
+                font: Some("Courier New".into()),
+                bold: Some(true),
+                ..Default::default()
+            },
+        );
+        s.set_label_font_size(&LabelKind::LongName, 20.0);
+        let index = s.format_index();
+        let manual = index.resolve_label(&s, ColumnId(1), &LabelKind::LongName);
+        assert_eq!((manual.size_pt, manual.font, manual.bold), (Some(12.0), Some("Courier New"), true));
+        assert_eq!(index.resolve_label(&s, ColumnId(1), &LabelKind::Units).size_pt, Some(24.0));
+        assert!(index.resolve_label(&s, ColumnId(1), &LabelKind::Comments).is_default());
+    }
+
+    #[test]
+    fn invalid_and_unsupported_label_defaults_do_not_write_and_sizes_are_bounded() {
+        let mut s = sheet();
+        for size in [f32::NAN, f32::INFINITY, 0.0, -1.0] {
+            assert!(!s.set_label_font_size(&LabelKind::LongName, size));
+        }
+        for kind in [LabelKind::Formula, LabelKind::Param("Sample".into())] {
+            assert!(!s.set_label_font_size(&kind, 18.0));
+        }
+        assert!(s.font_defaults.is_empty());
+        assert!(s.set_label_font_size(&LabelKind::Units, 200.0));
+        assert_eq!(s.font_defaults.label_size(&LabelKind::Units), Some(96.0));
+        s.font_defaults.comments_size_pt = Some(-1.0);
+        assert_eq!(s.format_index().resolve_label(&s, ColumnId(1), &LabelKind::Comments).size_pt, Some(9.0));
     }
 }

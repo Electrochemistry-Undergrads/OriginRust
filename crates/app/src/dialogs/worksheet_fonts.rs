@@ -1,6 +1,7 @@
-//! Worksheet Properties: Data fonts, below manual cell/range formats (T59).
+//! Worksheet Properties: category defaults below manual cell/range formats (T59).
 use super::frame::{DialogButton, ok_cancel_apply};
 use eframe::egui;
+use sheaf_core::cellformat::LabelKind;
 use sheaf_core::sheet_fonts::WorksheetFont;
 use sheaf_core::{Document, WindowId};
 
@@ -9,8 +10,9 @@ pub struct WorksheetFontsDialog {
     sheet: usize,
     generation: u64,
     revision: u64,
-    base: WorksheetFont,
-    shown: WorksheetFont,
+    base: [WorksheetFont; 4],
+    shown: [WorksheetFont; 4],
+    category: usize,
     fonts: Vec<String>,
     font_search: String,
 }
@@ -19,7 +21,13 @@ impl WorksheetFontsDialog {
     pub fn new(doc: &Document, book: WindowId) -> Option<Self> {
         let b = doc.project().workbook(book)?;
         let sheet = b.active_sheet.min(b.sheets.len().checked_sub(1)?);
-        let base = b.sheets[sheet].font_defaults.data.clone().unwrap_or_default();
+        let defaults = &b.sheets[sheet].font_defaults;
+        let base = [
+            defaults.data.clone().unwrap_or_default(),
+            WorksheetFont { size_pt: defaults.long_name_size_pt.unwrap_or(9.0), ..Default::default() },
+            WorksheetFont { size_pt: defaults.units_size_pt.unwrap_or(9.0), ..Default::default() },
+            WorksheetFont { size_pt: defaults.comments_size_pt.unwrap_or(9.0), ..Default::default() },
+        ];
         let mut fonts: Vec<_> = sheaf_plot::SystemFonts::shared()
             .database()
             .faces()
@@ -34,6 +42,7 @@ impl WorksheetFontsDialog {
             revision: doc.revision(),
             shown: base.clone(),
             base,
+            category: 0,
             fonts,
             font_search: String::new(),
         })
@@ -52,9 +61,16 @@ impl WorksheetFontsDialog {
         if self.shown == self.base || !self.current(doc) {
             return;
         }
-        let font = self.shown.clone();
         doc.apply("Worksheet font", |p| {
-            p.workbook_mut(self.book).unwrap().sheets[self.sheet].set_data_font(font);
+            let sheet = &mut p.workbook_mut(self.book).unwrap().sheets[self.sheet];
+            if self.shown[0] != self.base[0] {
+                sheet.set_data_font(self.shown[0].clone());
+            }
+            for (i, kind) in [LabelKind::LongName, LabelKind::Units, LabelKind::Comments].iter().enumerate() {
+                if self.shown[i + 1] != self.base[i + 1] {
+                    sheet.set_label_font_size(kind, self.shown[i + 1].size_pt);
+                }
+            }
         });
         self.base = self.shown.clone();
         self.revision = doc.revision();
@@ -77,52 +93,56 @@ impl WorksheetFontsDialog {
                 ui.label("Format");
                 egui::Grid::new("worksheet_fonts_grid").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
                     ui.label("Apply To");
-                    egui::ComboBox::from_id_salt("worksheet_font_category").selected_text("Data").show_ui(ui, |ui| {
-                        let _ = ui
-                            .selectable_label(true, "Data")
-                            .on_hover_text("All current and future data cells in this sheet");
-                        ui.add_enabled_ui(false, |ui| {
-                            for name in [
-                                "Standard",
-                                "Column Labels",
-                                "Column Header",
-                                "Row Header",
-                                "Long Name",
-                                "Units",
-                                "Comments",
-                                "F(x)=",
-                            ] {
-                                let _ = ui.selectable_label(false, name).on_hover_text("Not available in Sheaf yet");
+                    const CATEGORIES: [&str; 4] = ["Data", "Long Name", "Units", "Comments"];
+                    egui::ComboBox::from_id_salt("worksheet_font_category")
+                        .selected_text(CATEGORIES[self.category])
+                        .show_ui(ui, |ui| {
+                            for (i, name) in CATEGORIES.iter().enumerate() {
+                                ui.selectable_value(&mut self.category, i, *name);
                             }
+                            ui.add_enabled_ui(false, |ui| {
+                                for name in ["Standard", "Column Labels", "Column Header", "Row Header", "F(x)="] {
+                                    let _ =
+                                        ui.selectable_label(false, name).on_hover_text("Not available in Sheaf yet");
+                                }
+                            });
                         });
-                    });
                     ui.end_row();
                     ui.label("Font");
-                    let family = if self.shown.family.is_empty() { "Automatic" } else { &self.shown.family };
-                    egui::ComboBox::from_id_salt("worksheet_default_family")
-                        .selected_text(family)
-                        .width(180.0)
-                        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-                        .show_ui(ui, |ui| {
-                            ui.add(egui::TextEdit::singleline(&mut self.font_search).hint_text("Find font"))
-                                .widget_info(|| {
-                                    egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Worksheet font search")
-                                });
-                            let search = self.font_search.trim().to_lowercase();
-                            if ui.selectable_value(&mut self.shown.family, String::new(), "Automatic").clicked() {
-                                ui.close();
-                            }
-                            for name in self.fonts.iter().filter(|name| name.to_lowercase().contains(&search)) {
-                                if ui.selectable_value(&mut self.shown.family, name.clone(), name).clicked() {
+                    let shown = &mut self.shown[self.category];
+                    let family = if shown.family.is_empty() { "Automatic".to_owned() } else { shown.family.clone() };
+                    ui.add_enabled_ui(self.category == 0, |ui| {
+                        egui::ComboBox::from_id_salt("worksheet_default_family")
+                            .selected_text(family)
+                            .width(180.0)
+                            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                            .show_ui(ui, |ui| {
+                                ui.add(egui::TextEdit::singleline(&mut self.font_search).hint_text("Find font"))
+                                    .widget_info(|| {
+                                        egui::WidgetInfo::labeled(
+                                            egui::WidgetType::TextEdit,
+                                            true,
+                                            "Worksheet font search",
+                                        )
+                                    });
+                                let search = self.font_search.trim().to_lowercase();
+                                if ui.selectable_value(&mut shown.family, String::new(), "Automatic").clicked() {
                                     ui.close();
                                 }
-                            }
-                        });
+                                for name in self.fonts.iter().filter(|name| name.to_lowercase().contains(&search)) {
+                                    if ui.selectable_value(&mut shown.family, name.clone(), name).clicked() {
+                                        ui.close();
+                                    }
+                                }
+                            });
+                    })
+                    .response
+                    .on_disabled_hover_text("Label category font families are not available yet");
                     ui.end_row();
                     ui.label("Size (pt)");
-                    ui.add(egui::DragValue::new(&mut self.shown.size_pt).range(4.0..=96.0).speed(0.25)).widget_info(
-                        || egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, "Worksheet font size"),
-                    );
+                    ui.add(egui::DragValue::new(&mut shown.size_pt).range(4.0..=96.0).speed(0.25)).widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, "Worksheet font size")
+                    });
                     ui.end_row();
                 });
                 ui.add_space(6.0);

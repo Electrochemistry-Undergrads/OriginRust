@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **336 greyed items: 235 in the menu bar, 19 on the toolbars, 82 in context menus.**
+original inventory baseline. This is not a new runtime audit. **333 greyed items: 235 in the menu bar, 19 on the toolbars, 79 in context menus.**
 
 ## How to read and keep this file
 
@@ -61,7 +61,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B3` | 19 |
 | `B4` | 19 |
 | `B5` | 10 |
-| `B6` | 27 |
+| `B6` | 24 |
 | `B7` | 8 |
 | `B8` | 13 |
 | `B9` | 13 |
@@ -74,7 +74,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 65 items, backlog packages (`B`) 251, not planned (`N`) 20.
+Briefs (`T`) hold 65 items, backlog packages (`B`) 248, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -224,8 +224,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T59` Worksheet data cell > Set Data Style: Default
 - `B6` Worksheet row number: Insert Graph...
 - `B6` Worksheet sheet tab: Add Graph as Sheet... · Add Notes as Sheet · Navigate...
-- `B6` Worksheet corner: Column Header · Row Header · Column Grid · Row Grid · Page Break Preview Lines
-- `B6` Worksheet corner > Row Labels for Column Label Rows: Long Name · Units · Comments · F(x)= · Sparklines · Parameters
+- `B6` Worksheet corner: Parameters · Sampling Interval · Sparklines · Filter · Categories · Column Header · Row Header · Page Break Preview Lines
 - `B11` Graph axis: Save Format as Theme...
 - `T72` Graph axis > Copy Format: Styles · Scales · Dimensions
 - `T72` Graph axis > Paste Format To: Tick Direction · Ticks · Line · Tick Labels · Title Styles · Colors · Thickness · Styles · Scales · Title Dimensions · Title Text

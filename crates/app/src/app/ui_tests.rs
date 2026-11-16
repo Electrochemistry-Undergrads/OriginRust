@@ -3607,7 +3607,7 @@ fn the_sheet_tab_menu_adds_duplicates_renames_and_deletes_sheets() {
 }
 
 #[test]
-fn the_corner_menu_lists_the_grid_switches_greyed() {
+fn the_corner_menu_lists_origins_view_switches() {
     let mut h = start(vec![data_file("corner")]);
     show_window(&mut h, "Book1 - sample.csv");
     let title_x = text_pos(&h, "Long Name").x;
@@ -3626,15 +3626,20 @@ fn the_corner_menu_lists_the_grid_switches_greyed() {
     assert_in_order(
         &h,
         &[
-            "Row Labels for Column Label Rows",
+            "✓ Long Name",
+            "✓ Units",
+            "✓ F(x)=",
+            "✓ Row Labels for Column Label Rows",
             "Column Header",
             "Row Header",
-            "Column Grid",
-            "Row Grid",
+            "✓ Column Grid",
+            "✓ Row Grid",
             "Page Break Preview Lines",
         ],
     );
-    assert!(!entry_enabled(&h, "Column Grid"));
+    // T92: the switches Sheaf has work; the headers and Page Break Preview Lines stay grey.
+    assert!(entry_enabled(&h, "✓ Column Grid"));
+    assert!(!entry_enabled(&h, "Column Header"));
 }
 
 #[test]
@@ -8879,6 +8884,7 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
 
 mod copy_columns;
 mod copy_variants;
+mod corner_menu;
 mod data_range;
 mod fill_pattern;
 mod sampling;

@@ -50,6 +50,7 @@ pub mod scales;
 pub mod shape;
 pub mod sheet_print;
 pub mod sheet_tab;
+pub mod sheet_view;
 pub mod sheetops;
 pub mod stack;
 pub mod straight_line;

@@ -734,6 +734,25 @@ Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-
 - The `.opj` written here does not hold the long name or the choice: the save warning names the sheets,
   and the companion keeps them.
 
+## 13i. Worksheet corner menu (T92, measured 2026-11-16, Origin 2016)
+
+Right-clicking the corner above the row numbers in Origin 2016 gives a short menu (Save Template As...,
+View, Add New Sheet, Add Graph..., and more behind the chevron). Its **View** submenu, expanded, lists
+the switches (screenshots `re-workspace/scratch/t92`, local only): Long Name, Units, Comments,
+Parameters, Sampling Interval, Sparklines, Filter, F(x)= (Ctrl+Shift+U), Categories | Row Labels for
+Column Label Rows | Column Header, Row Header | Column Grid, Row Grid, Page Break Preview Lines. On a new
+sheet Long Name, Units, Comments, F(x)=, Row Labels, both headers and both grids are ticked. (The greyed
+inventory had listed Row Labels for Column Label Rows as a submenu of the label rows; in Origin 2016 it is
+one switch, the titles left of the label rows.)
+
+Sheaf's corner menu is that list (`sheaf_core::sheet_view`, saved per sheet in `.sheaf`; Sheaf's choice,
+the per-book or per-sheet scope was not checked): Long Name, Units, Comments and F(x)= hide or show their
+label row; Row Labels hides the row titles; Column Grid and Row Grid the vertical and horizontal lines
+between data cells. One undo step each ("Worksheet view"). Grey: Parameters (Origin's system rows),
+Sampling Interval (the interval of T84 has no label row yet), Sparklines, Filter, Categories, Column Header,
+Row Header and Page Break Preview Lines. User parameter rows show whenever a column has one. The `.opj`
+written here does not hold the switches (the save warning names the sheets).
+
 ## 14. Suggested Rust data model (P0)
 
 ```

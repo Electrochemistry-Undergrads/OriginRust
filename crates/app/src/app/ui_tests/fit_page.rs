@@ -27,7 +27,7 @@ fn fit_page_to_layers_keeps_the_layer_size_and_is_one_undo_step() {
 }
 
 #[test]
-fn cancel_changes_nothing_and_the_format_menu_fits_at_once() {
+fn cancel_changes_nothing_and_the_format_menu_opens_the_window() {
     let mut h = start(vec![data_file("fitpage-cancel")]);
     let before = page_and_frame(&h);
     let revision = h.state().doc.revision();
@@ -35,8 +35,10 @@ fn cancel_changes_nothing_and_the_format_menu_fits_at_once() {
     click(&mut h, "Cancel");
     assert!(h.state().fit_page.is_none());
     assert_eq!(h.state().doc.revision(), revision);
-    menu_path(&mut h, &["Format", "Fit Page To Layers"]);
-    assert!(h.state().fit_page.is_none(), "no window");
+    menu_path(&mut h, &["Format", "Fit Page To Layers..."]);
+    assert!(h.state().fit_page.is_some(), "the window opens");
+    assert_eq!(page_and_frame(&h), before, "nothing changes until OK");
+    click(&mut h, "OK");
     assert_ne!(page_and_frame(&h), before);
     assert_eq!(h.state().doc.undo_label(), Some("Fit Page to Layers"));
 }

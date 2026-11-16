@@ -101,6 +101,9 @@ pub enum GraphOp {
     SetStack { layer: usize, stack: sheaf_core::graph::Stack },
     /// Axis Zoom In and Axis Zoom Out: the axis range shrinks or grows about its middle.
     AxisZoom { layer: usize, y: bool, zoom_in: bool },
+    /// Axis Center: the axis keeps its span and moves so that the value at `page` (the right-clicked
+    /// page point, in points) becomes the middle of its range. The range becomes fixed.
+    AxisCenter { layer: usize, y: bool, page: (f64, f64) },
     /// Delete on the legend: it is hidden.
     HideLegend { layer: usize },
     /// Reconstruct Legend: the legend text is made again from the plots (the automatic text).
@@ -465,10 +468,13 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
     },
-    /// Fit Page to Layers: opens its window (`dialog`) or fits the page with Origin's defaults at once.
+    /// Fit Page to Layers...: opens its window.
     FitPageToLayers {
         graph: WindowId,
-        dialog: bool,
+    },
+    /// Format > Fit Page To Printer: the page takes the default printer's printable size at once.
+    FitPageToPrinter {
+        graph: WindowId,
     },
     /// Opens Layer Management (arrange, size/position and link the layers) for a graph, with a layer selected when given.
     LayerManagement {

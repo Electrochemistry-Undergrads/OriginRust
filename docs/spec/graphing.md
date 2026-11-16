@@ -711,6 +711,38 @@ target rather than following a later selection. No model or file-format fields w
 
 ---
 
+### 7.5 Text label selection editor (T58)
+
+Origin's [Text Object Properties, Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/)
+documents selection/caret formatting buttons above a raw text box and a formatted preview below.
+The buttons insert commands around selected text or insert an empty command group at the caret.
+This is a documentation reference, not a fresh measurement of Origin's dialog geometry.
+
+Sheaf's free-label Text window now offers Normal, bold, italic, underline, strikethrough,
+superscript, subscript and Greek. A button keeps the raw characters outside the selected range
+and returns focus to the selected body. With no selection, typing enters the empty group.
+Selecting `-2` in `cm-2` and choosing superscript produces `cm\+(-2)`; Unicode cursor offsets
+are characters, not UTF-8 bytes. Applying the same format to its complete selected body removes
+that wrapper. Normal removes complete inline formatting wrappers from the selection and its
+immediate surrounding wrappers, preserving literal `\v(...)`, substitution and Unicode escapes.
+These toggle/Normal details are Sheaf choices, not measured Origin rules. The existing whole-label
+Bold/Italic checkboxes still change the base font; Normal affects inline markup only.
+
+The preview uses the public graph export renderer with an isolated one-label graph. It therefore
+shares the published parser, glyphs, script layout, colours, decorations and rotation with exports.
+Its cache changes with text, font, rotation or display scale. It fits large text into a bounded
+preview and reports text over 8,192 characters or excessive dimensions without truncating the
+stored text. Size and base styles also update the preview. Buttons and preview do not mutate the
+project: OK/Apply performs the existing single history operation; Cancel discards the draft.
+A new draft containing only empty formatting groups adds no invisible label.
+
+The button labels, compact layout and Ctrl+B/I/U/G and Ctrl+= / Ctrl+Shift+= bindings are
+Sheaf choices based on the published command forms and existing shortcut map; their behaviour
+inside Origin's properties dialog has not been measured. Font/colour selection for an inline
+range, combined-script insertion and reuse for titles/legend remain open. The shared Format
+bar remains a separate target-dispatch implementation. No renderer/model/persistence changes
+are introduced by this editor slice.
+
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
 
 | Group | Plots | Priority |
@@ -2776,10 +2808,21 @@ no dialog. What it acts on (a selected object, perhaps) is unknown, so Sheaf lea
 
 **Sheaf's Fit Page to Layers** (`Graph::fit_page_to_content`, `sheaf_plot::fit_content_bounds`): Graph
 > Fit Page to Layers... opens Margin Control (Border, Tight), Border Width (5) and Adjust Direction
-(Height and Width, Height Only, Width Only); Format > Fit Page To Layers applies the defaults at once
-(Sheaf choice; whether Origin's Format item asks was not measured). The content box is the layer
+(Height and Width, Height Only, Width Only); Format > Fit Page To Layers... opens the same window, as
+Origin's Format item does (measured 2026-11-15, T70). The content box is the layer
 frames and the boxes of legends, text labels, drawn shapes and slope annotations; Tight leaves
 1.56 pt (13 dots at 600 dpi). One undo step.
+
+**Fit Page To Printer** (Format menu, T70, measured 2026-11-15): acts at once; the page becomes the
+default printer's printable area for the Page Setup paper in the page's orientation (the stock 10.72 x
+8.205 in page became 10.667 x 8.0 in on landscape Letter: 1/6 in less on the left and right, 1/4 in on
+top and bottom); the layers keep their frames in percent of the page. Sheaf asks the default printer
+(Windows) and otherwise uses the paper less those measured edges (12 pt, 18 pt). One undo step.
+
+**Axis Center** (axis right-click menu, after Axis Zoom In/Out; T70, measured): the axis keeps its span
+and its range moves so that the value under the right-click becomes the middle (X 0..11 at 5.42 gave
+-0.08..10.92); only that axis changes and its range becomes fixed. Sheaf works in the axis' own scale
+(decades on a log axis) and keeps an axis reversed by its limits reversed (Axis Zoom too).
 
 ### 15.8 Origin project files
 
@@ -2825,7 +2868,7 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 **Desktop app.**
 - Graph > Add Text... and the page's right-click "Add Text...": open the Text window for a new label in the active layer, placed in the middle of its frame (`0.5, 0.5`).
 - The Text tool of the Tools toolbar: a click on the page places the label at that point in the layer under the click (a click outside every frame uses the active layer) and opens the Text window. The tool ends after one label, or with Esc.
-- The Text window has the text (several lines; escapes allowed), Size, Bold, Italic and Rotation, and OK, Apply and Cancel. A new label is in the project only after OK or Apply; Cancel, or OK with no text, adds none. OK or Apply on an existing label with no text is refused with a message (Delete removes a label).
+- The Text window has inline formatting buttons, text (several lines; escapes allowed), Size, Bold, Italic, Rotation and a rendered preview (7.5), and OK, Apply and Cancel. A new label is in the project only after OK or Apply; Cancel, or OK with no text, adds none. OK or Apply on an existing label with no text is refused with a message (Delete removes a label).
 - Double click on a label, or its right-click "Properties...", opens the window for it. A click selects it; dragging it moves it (the selection handles follow the pointer; the label moves when the button is let go). Delete removes it.
 - Each of Add text, Edit text, Move text and Delete text is one undo step.
 - `sheaf-app --show text:N` opens the Text window of the N-th label of the first graph (for pictures).

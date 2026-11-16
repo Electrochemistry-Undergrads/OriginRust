@@ -1081,6 +1081,26 @@ impl SheafApp {
         }
     }
 
+    /// Format > Fit Page To Printer: the page gets the printable size of the default printer for
+    /// Page Setup's paper in the page's orientation (the Page Setup paper less the measured edges
+    /// when no printer answers, and always under test); the layers keep their frames, which are
+    /// fractions of the page. One undo step.
+    fn fit_page_to_printer(&mut self, graph: WindowId) {
+        let setup = self.doc.project().page_setup;
+        let Some(page) = self.doc.project().graph(graph).map(|g| (g.page.width_pt, g.page.height_pt)) else { return };
+        #[cfg(windows)]
+        let asked = if cfg!(test) { None } else { crate::winprint::printable_size_pt(&setup, page) };
+        #[cfg(not(windows))]
+        let asked: Option<(f64, f64)> = None;
+        let (w, h) = asked.unwrap_or_else(|| setup.fallback_printable_pt(page.0, page.1));
+        self.doc.apply("Fit Page to Printer", |p| {
+            if let Some(g) = p.graph_mut(graph) {
+                g.resize_page(w, h, false);
+            }
+        });
+        self.say("Fitted the page to the printer");
+    }
+
     /// File > Print... (Ctrl+P): the active window printed as a vector drawing through the
     /// system's print dialog. A graph page is scaled into the paper of Page Setup as File > Print
     /// Preview shows; a workbook's active sheet prints as a table, split over as many pages as it
@@ -1298,6 +1318,7 @@ impl SheafApp {
             GraphOp::ExchangeAxes { .. } => "Exchange X-Y axes",
             GraphOp::AxisZoom { zoom_in: true, .. } => "Axis zoom in",
             GraphOp::AxisZoom { .. } => "Axis zoom out",
+            GraphOp::AxisCenter { .. } => "Axis center",
             GraphOp::HideLegend { .. } => "Delete legend",
             GraphOp::ReconstructLegend { .. } => "Reconstruct legend",
             GraphOp::UpdateLegend { .. } => "Update legend",
@@ -2024,22 +2045,10 @@ impl SheafApp {
                 self.focus(graph);
                 self.graphs.entry(graph).or_default().active_layer = layer;
             }
-            Action::FitPageToLayers { graph, dialog } => {
-                if dialog {
-                    self.fit_page = Some(crate::dialogs::fit_page::FitPageDialog::new(graph));
-                    self.focus(graph);
-                } else {
-                    use sheaf_core::fit_page::{FitDirection, FitMargin};
-                    match crate::dialogs::fit_page::fit_page(
-                        &mut self.doc,
-                        graph,
-                        FitMargin::Border(5.0),
-                        FitDirection::Both,
-                    ) {
-                        Ok(()) => self.say("Fitted the page to the layers"),
-                        Err(e) => self.warn(e),
-                    }
-                }
+            Action::FitPageToPrinter { graph } => self.fit_page_to_printer(graph),
+            Action::FitPageToLayers { graph } => {
+                self.fit_page = Some(crate::dialogs::fit_page::FitPageDialog::new(graph));
+                self.focus(graph);
             }
             Action::LayerManagement { graph, layer } => {
                 self.layer_management =

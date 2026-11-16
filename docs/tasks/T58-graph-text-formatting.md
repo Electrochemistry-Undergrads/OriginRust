@@ -24,6 +24,16 @@ exports. Font-family switches, combined scripts and other special colour tags re
 editor/toolbar work stays with its owners.
 Formatting, strict workspace all-target Clippy and 3,677 combined tests pass (eight existing
 ignored); inventory 407 and all eight Python tooling tests pass.
+Editor slice (`codex/t58-text-editor`): free-label Text window selection/caret buttons and
+live export-renderer preview are implemented; Unicode selections, nested/toggled formats,
+Normal, empty drafts, Cancel/Apply/history and saved-project preservation are covered.
+Origin's documented Text-tab workflow and explicitly unmeasured choices are recorded in
+graphing 7.5. Title/legend editor reuse, the two title menu entries, inline font/colour
+selection and combined-script insertion remain open; the separate Format/renderer claims
+retain their scopes. This does not complete all of step 2 or the whole brief.
+Formatting, strict workspace all-target Clippy and 3,725 combined tests pass (eight
+existing ignored); inventory validation, eight Python tooling tests and the inspected native
+app capture also pass. All twelve owned UI/helper/preview tests pass in the complete suite.
 Whole-object toolbar slice (`codex/t58-format-toolbar`): shared target/snapshot/dispatch;
 installed family, size, Bold/Italic, measured 1.2 size scaling and eight basic font colours for
 selected labels/legends/titles. Seven toolbar locations enabled; the six other toolbar controls

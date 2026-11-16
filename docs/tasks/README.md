@@ -107,6 +107,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T106](T106-import-filters-manager.md) | Tools > Import Filters Manager (saved import themes) | S | done 2026-11-16 (import-ascii.md); left: filter switches, Customize Menu |
 | [T107](T107-vector-plots.md) | Plot > Specialized > Vector XYAM, Vector XYXY | M | done 2026-11-16 (graphing 30); left: Vector tab, legend arrows |
 | [T108](T108-stock-plots.md) | Plot > Stock: High-Low-Close, Japanese Candlestick, OHLC Bar Chart | M | done 2026-11-16 (graphing 31); left: Plot Details price tabs, date X axis |
+| [T109](T109-stock-volume-line.md) | Plot > Stock: OHLC-Volume, Line | M | claimed 2026-11-16 (`stock-volume`, Claude Windows) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: Origin measured (graphing 24); Copy Format and Paste Format on graph, axis and legend, Apply Formats window; left: object cut/copy/paste, align, group, order (rest of B2) |

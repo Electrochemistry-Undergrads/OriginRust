@@ -54,6 +54,14 @@ and remaining renderer gaps still need their separate slices. Final combined val
 3,957 tests (eight existing ignored), including all 21 related editor tests. Inventory
 and eight Python tooling tests pass; X-title, Y-title and legend desktop captures were
 inspected, and their four editor/test source files remain unchanged on the combined tree.
+Selected-text colour slice (`codex/t58-inline-colors`): the shared text editor offers eight
+named Classic colours through Text color, with selection/caret insertion, idempotent recolouring
+and style/literal/reference preservation (graphing 7.8). The renderer and base font are unchanged.
+Automatic text stays automatic when the menu is dismissed; changed colour remains a draft until
+Apply/OK. Existing history and native/Origin-companion persistence are used. Broader/custom
+colour controls, inline family selection and combined-script insertion remain separate work.
+Validation results are recorded after the combined checks.
+
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

@@ -71,6 +71,13 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+T58 Format-bar remainder (`format-bar-rest`, macOS, no Origin): Underline, Superscript, Subscript and Greek
+toggle one whole-text markup group on a selected free label or explicit X/Y title (unmatched parentheses
+escaped); Fill Color sets a selected rectangle/ellipse fill (or None) or the legend background; Line Color
+sets a drawn shape's or straight line's colour. One undo step each, stale requests rejected, selection kept.
+New `app/object_format.rs` beside `text_format.rs`. Auto titles, legend markup, label frames and plots stay
+grey; whole-object semantics are unmeasured Sheaf choices (graphing 7.4). Three rustc 1.100 Clippy lints fixed.
+
 T71 (`b4-segments`, B4 slice 2): Plot > Line + Symbol > 2 and 3 Point Segment as Origin 2016's line
 connections 2 and 3 (measured; graphing 5.2), in the plot settings' connect lists and `.opj`. Scatter
 Central needs an X axis inside the frame and stays B4.
@@ -217,7 +224,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
 | `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
 | `copy-format` | Claude Windows, "continue all tasks" | B2 slice 1 as new brief T72: Copy Format (All, style groups) and Paste Format on graph, axis, legend and page; new core format_clip.rs, menu items, Paste Format dialog | claimed 2026-11-15; no shape selection/resize, object align/group/order, object cut/copy/paste, T58/T59 toolbar |
-| `format-bar-rest` | Claude macOS, "mac-format-bar" | T58 step 3 remainder: graph targets for the six still-grey Format-bar controls (Underline, Superscript, Subscript, Greek on a whole selected label/legend/axis title; Fill Color and Line Color only where Origin's documented semantics can be copied, else they stay grey with reasons) | claimed 2026-11-15; worktree `.claude/worktrees/format-bar-rest`, `target/wt-fmtbar`; `app/text_format.rs` graph target + small `toolbar.rs` Format-bar hooks, own UI tests, graphing 7.4 addendum. No worksheet/T59 cell target (T59 may enable the same buttons for cells behind the shared dispatch), no text editor/title editors, renderer/markup/fonts, model/file-format fields or other sessions' scopes |
 | `change-xy` | Claude Windows, session fe4b37eb | B3 slice 3 as new brief T73: plot right-click Change X, Change Y and Ungroup; Origin 2016 measurements, app plot context menu, core plot column edits, tests | claimed 2026-11-15; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not the other B3 items, no T58/T59/T72/shape-resize scopes |
 | `b5-fill` | Claude Windows, "t30-origin" | B5 slice as new brief T74: Column > Fill Column With A set of Numbers / Date/Time values / Text&Numeric values (Origin patternN/D/T, measured), menus and column-header context menu | claimed 2026-11-15; worktree wf_c03644a9-997-1, build target/wf-excel; not Row Numbers/random fills (T63), no other B5 items |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |

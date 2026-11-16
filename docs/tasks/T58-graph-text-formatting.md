@@ -125,6 +125,20 @@ related formatting UI/helper/preview tests, inventory 306 and eight Python tooli
 on combined T104/T105/T106/T60 source, with unchanged source/goldens. Fresh desktop
 submenu and Royal captures from the tested executable were inspected.
 
+Inline font-family editor (`codex/t58-inline-font-family`): Text font searches installed
+families and applies the measured full-name escape to a selection or empty caret group in the
+shared label/title/legend editor. Family replacement is idempotent and preserves other styles,
+base fonts, literal blocks and legend references. Search/dismissal keeps automatic text;
+changes stay drafts through the existing Apply/OK/Cancel/history paths. Six UI and four helper
+regressions cover Unicode/scripts/focus, rendered families, styles, Symbol mapping, unsafe
+fragments, project replacement and native/companion persistence. Graphing 7.5/7.6 records the
+existing accepted Origin controls and the explicitly separate Sheaf picker policy. Remaining
+combined-script insertion, special escape aliases and other palette lists/storage stay open.
+Fmt, strict workspace/all-target Clippy, all 4,248 workspace tests (eight ignored), all 110
+related formatting UI/helper/preview tests, inventory 306 and eight Python tooling tests pass
+with unchanged source/goldens on combined T104/T105/T106/T60 source. Fresh desktop font-search
+and Times draft-preview captures from the tested executable were inspected.
+
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

@@ -775,10 +775,10 @@ A new draft containing only empty formatting groups adds no invisible label.
 
 The button labels, compact layout and Ctrl+B/I/U/G and Ctrl+= / Ctrl+Shift+= bindings are
 Sheaf choices based on the published command forms and existing shortcut map; their behaviour
-inside Origin's properties dialog has not been measured. Font/colour selection for an inline
-range, combined-script insertion and reuse for titles/legend remain open. The shared Format
-bar remains a separate target-dispatch implementation. No renderer/model/persistence changes
-are introduced by this editor slice.
+inside Origin's properties dialog has not been measured. Inline colour selection is covered
+in 7.8/7.9, family selection below, and title/legend reuse in 7.7. Combined-script insertion
+remains open. The shared Format bar remains a separate target-dispatch implementation.
+No renderer/model/persistence changes are introduced by this editor slice.
 
 ### 7.6 Inline font families (T58 graph text)
 
@@ -827,6 +827,29 @@ family-sensitive widths and decoration geometry, rotation, Greek/literal/Unicode
 name bounds, an empty font database and EPS/EMF/PDF/SVG output. New SVG and stroke-only PNG
 goldens use deliberately different deterministic test-family metrics; those synthetic
 metrics are not Origin measurements or installed-font rasterization fixtures.
+
+**Inline family picker (2026-11-16, `codex/t58-inline-font-family`).** The shared label/title/
+legend editor adds Text font, with a case-insensitive search of installed family names. Names
+must fit the existing full-name grammar: nonempty, no edge whitespace, at most 64 characters,
+no control characters, parentheses or backslashes. It uses the existing font database; no new
+font loading, fallback, parser, model or export behaviour is added. The accepted Origin EMF
+controls above establish the full-name escapes and Symbol mapping; this picker layout and its
+selection/replacement policy are Sheaf choices, without a new Origin GUI-selection measurement.
+
+A choice writes `\f:Family(...)` around the selected raw text, or inserts an empty group at the
+caret, restores the selected body and returns keyboard focus to the text box. Inside the chosen
+range, existing family wrappers are replaced; other styles, colours, scripts and literal blocks
+remain intact. Repeating the same family on its selected group is idempotent. A neutral style
+probe reuses the editor's raw-fragment validation before family replacement; the actual family
+change retains the renderer's documented start/end of Symbol Greek mapping. Invalid names and
+unsafe fragments add no markup. The object's base font stays unchanged.
+
+Search/dismissal alone keeps automatic text automatic and adds no history. A changed family
+remains a draft until Apply/OK; Cancel discards only unapplied edits. Legend samples and line
+boundaries stay outside text-format groups, while name substitutions remain raw. All four text
+targets use the existing preview, rendering, one-step history and project/companion save paths.
+The six UI and four private-helper regressions cover these rules, installed-family output,
+Unicode/script selection, styles/literals, Symbol transitions, stale generation and persistence.
 
 ### 7.7 Axis-title and legend text editors (T58)
 

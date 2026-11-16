@@ -71,6 +71,21 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+**T58 inline font-family picker (2026-11-16, Windows):** Text font searches installed
+families in the shared label/title/legend editor, applying the existing measured full-name
+escape to a selection or empty caret group. It replaces only family wrappers in that range,
+keeps other styles/colours/literal blocks and base fonts, and restores selection/typing focus.
+Existing draft, automatic text, Apply/OK/Cancel, history, preview and project/companion paths
+are reused. The accepted Origin family EMF controls are retained (graphing 7.6); the searchable
+picker layout/replacement policy is explicitly Sheaf's. Six UI and four helper regressions cover
+Unicode/scripts, idempotence, references, actual rendered families, Symbol mapping, unsafe
+fragments, stale generation and persistence. Fmt, strict workspace/all-target Clippy, all 4,248
+workspace tests (eight ignored), all 110 related formatting UI/helper/preview tests, inventory306
+and eight Python tests pass with frozen source/goldens. Inspected fresh font-search/Times draft
+captures match the tested executable. Only own claim/window released; combined-script editor
+insertion and other special escape/palette gaps stay open. No toolbar, palette, renderer, model
+or IO production changes.
+
 **T58 Classic graph-font toolbar palette (2026-11-16, Windows):** selected labels, legends
 and X/Y titles now offer all 24 measured Classic font colours. More Classic colors reuses the
 existing worksheet presets and captured requests; the worksheet custom RGB and graph object
@@ -469,7 +484,6 @@ T59 remains partial; category defaults and sticky heights are separate work.
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t58-inline-font-family` | Codex Windows | T58 shared label/title/legend editor inline font-family chooser, existing measured full-name escapes and installed families | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` reused after0e7c265a/FULL4238/all owned actors and CI terminal. Only dialogs/text_object.rs +new private family helper/bounded existing selection-format helpers, own UI/helper tests and registry, graphing7.5/7.6/7.7/T58/index/roadmap/parity. Existing font service, renderer syntax, draft/history/preview/raw references and save paths reused. No toolbar/palette production edits, worksheet defaults/T59, Core/model/IO/renderer/font loading, graph_view/shapes/gadgets/T60/T61/vectorT107, stats/fitting/MCP/import/clipboard, reserved tasks/formula-parameter labels or ROOT pending files. No product window. |
 | `codex/t59-worksheet-default-fonts` | Codex Windows | T59 worksheet category font defaults for Data and Column Labels/specific label rows; Native inheritance/manual override/new-column measurement first | claimed 2026-11-16; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` reused after23e89f2c/FULL4205/all actors terminal. Bounded compatible worksheet font-default model/new module +cellformat-index fallback, existing worksheet font-derived metrics/text rendering, new private category-font dialog +existing Worksheet Format/F4 dispatch/state/menu branch/registrations, XLSX effective styles and existing worksheet-format save warning as required, own regressions and GUI3/workbook13b/T59 metadata. Font family/size only; unsupported Standard/header mutators remain disabled. No colour defaults/text controls/vertical alignment/sticky heights, print dialog/layout/extents/T27, graph editor/palette/renderer/fonts/T61, T102 theme storage/T101 gadgets, stats/fitting/MCP/import/clipboard, reserved tasks/formula-parameter labels or ROOT pending files. Measure before implementation. No product window; respect T61 FIXED10:45-11:15 and all other claims. |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |

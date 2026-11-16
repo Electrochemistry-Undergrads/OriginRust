@@ -19,7 +19,7 @@ open until implemented and verified. The underlying milestones were not globally
   escapes, editor and live Format toolbar; [T59](tasks/T59-worksheet-cell-formatting.md), worksheet
   font/style/colour/alignment and Format Cells (toolbar adapter depends on T58).
   T58 whole-object graph font/size/Bold/Italic/all 24 Classic colour controls and shared dispatch are implemented;
-  its shared label/title/legend editor offers all 24 Classic and custom RGB text colours.
+  its shared label/title/legend editor offers installed-family selection and all 24 Classic/custom RGB text colours.
   T59 adds selected worksheet font/size/Bold/Italic/Underline, all 24 Classic and custom RGB text/fill colours and Ctrl+B/I/U,
   installed faces and derived row geometry; Set Data Style > More opens Format Cells. Worksheet defaults, vertical alignment,
   sticky heights, full palettes and remaining measurements stay open (GUI 3).

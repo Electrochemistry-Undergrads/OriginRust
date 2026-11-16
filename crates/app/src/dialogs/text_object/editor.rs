@@ -13,6 +13,7 @@ pub(super) enum Format {
     Subscript,
     Greek,
     Color(TextColor),
+    Family(&'static str),
 }
 
 impl Format {
@@ -38,6 +39,7 @@ impl Format {
             Self::Subscript => "Subscript",
             Self::Greek => "Greek",
             Self::Color(_) => "Text color",
+            Self::Family(_) => "Text font",
         }
     }
 
@@ -52,6 +54,7 @@ impl Format {
             Self::Subscript => "x₂",
             Self::Greek => "α",
             Self::Color(_) => "Color",
+            Self::Family(_) => "Font",
         }
     }
 
@@ -66,6 +69,7 @@ impl Format {
             Self::Subscript => "Subscript (Ctrl+=)",
             Self::Greek => "Greek letters (Ctrl+G)",
             Self::Color(_) => "Color selected text, or insert colored text at the caret",
+            Self::Family(_) => "Set the font of selected text, or insert text in that font at the caret",
         }
     }
 
@@ -80,6 +84,7 @@ impl Format {
             Self::Subscript => r"\-(",
             Self::Greek => r"\g(",
             Self::Color(color) => return color.prefix(),
+            Self::Family(name) => return format!("\\f:{name}("),
         };
         prefix.to_string()
     }
@@ -122,7 +127,14 @@ fn prefix_end(chars: &[char], start: usize) -> Option<usize> {
     (chars.get(open) == Some(&'(')).then_some(open + 1)
 }
 
-fn clear(chars: &[char], depth: usize, only_colors: bool) -> String {
+#[derive(Clone, Copy)]
+enum Clear {
+    All,
+    Color,
+    Family,
+}
+
+fn clear(chars: &[char], depth: usize, kind: Clear) -> String {
     if depth == 24 {
         return chars.iter().collect();
     }
@@ -132,11 +144,15 @@ fn clear(chars: &[char], depth: usize, only_colors: bool) -> String {
         if let Some(body) = prefix_end(chars, index)
             && let Some(end) = closing(chars, body)
         {
-            let retain = only_colors && chars.get(index + 1) != Some(&'c');
+            let retain = match kind {
+                Clear::All => false,
+                Clear::Color => chars.get(index + 1) != Some(&'c'),
+                Clear::Family => chars.get(index + 1) != Some(&'f'),
+            };
             if retain {
                 out.extend(chars[index..body].iter());
             }
-            out.push_str(&clear(&chars[body..end], depth + 1, only_colors));
+            out.push_str(&clear(&chars[body..end], depth + 1, kind));
             if retain {
                 out.push(')');
             }
@@ -189,6 +205,19 @@ fn safe_body(chars: &[char]) -> Option<String> {
 
 /// Apply or remove one complete wrapper. Returned cursors select the body, not its markup.
 pub(super) fn apply(text: &mut String, cursor: CCursorRange, format: Format) -> CCursorRange {
+    if let Format::Family(name) = format {
+        if !super::family::valid(name) {
+            return cursor;
+        }
+        // Validate raw-fragment wrapping with the existing neutral style operation first.
+        // A family switch may intentionally start/end Symbol Greek mapping (graphing 7.6),
+        // so its final rendered text cannot be the fragment-validity check.
+        let mut probe = text.clone();
+        apply(&mut probe, cursor, Format::Underline);
+        if probe == *text {
+            return cursor;
+        }
+    }
     let original = text.clone();
     let mut chars: Vec<char> = text.chars().collect();
     let backwards = cursor.primary.index < cursor.secondary.index;
@@ -206,16 +235,17 @@ pub(super) fn apply(text: &mut String, cursor: CCursorRange, format: Format) -> 
             start = outer;
             end += 1;
         }
-        replacement = clear(&chars[start..end], 0, false);
+        replacement = clear(&chars[start..end], 0, Clear::All);
         body_len = replacement.chars().count();
         body_start = start;
-    } else if matches!(format, Format::Color(_)) {
+    } else if matches!(format, Format::Color(_) | Format::Family(_)) {
+        let (code, kind) = if matches!(format, Format::Family(_)) { ('f', Clear::Family) } else { ('c', Clear::Color) };
         let adjacent = (0..start).rev().find(|&i| {
-            chars.get(i + 1) == Some(&'c')
+            chars.get(i + 1) == Some(&code)
                 && prefix_end(&chars, i) == Some(start)
                 && closing(&chars, start) == Some(end)
         });
-        let whole = (chars.get(start + 1) == Some(&'c'))
+        let whole = (chars.get(start + 1) == Some(&code))
             .then(|| prefix_end(&chars, start))
             .flatten()
             .filter(|&body| closing(&chars, body) == end.checked_sub(1));
@@ -230,7 +260,7 @@ pub(super) fn apply(text: &mut String, cursor: CCursorRange, format: Format) -> 
             let Some(body) = safe_body(&chars[start..end]) else { return cursor };
             body.chars().collect()
         };
-        let body = clear(&body, 0, true);
+        let body = clear(&body, 0, kind);
         replacement = format!("{}{body})", format.prefix());
         body_len = body.chars().count();
         body_start = start + format.prefix().chars().count();
@@ -260,7 +290,7 @@ pub(super) fn apply(text: &mut String, cursor: CCursorRange, format: Format) -> 
     }
     chars.splice(start..end, replacement.chars());
     let candidate: String = chars.into_iter().collect();
-    if !matches!(format, Format::Normal | Format::Greek)
+    if !matches!(format, Format::Normal | Format::Greek | Format::Family(_))
         && sheaf_plot::markup::plain(&candidate) != sheaf_plot::markup::plain(&original)
     {
         return cursor;

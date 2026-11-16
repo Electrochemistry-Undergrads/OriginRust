@@ -10,6 +10,7 @@ use sheaf_core::{Document, WindowId};
 use sheaf_plot::scene::ObjectKind;
 
 mod editor;
+mod family;
 mod palette;
 mod preview;
 use editor::Format;
@@ -38,6 +39,7 @@ pub struct TextDialog {
     selection: CCursorRange,
     preview: preview::Preview,
     colors: palette::Picker,
+    families: family::Picker,
 }
 
 impl TextDialog {
@@ -55,6 +57,7 @@ impl TextDialog {
             at,
             size: font.size_pt,
             colors: palette::Picker::new(font.color),
+            families: family::Picker::default(),
             bold: font.bold,
             italic: font.italic,
             font,
@@ -81,6 +84,7 @@ impl TextDialog {
             at: (l.x, l.y),
             font: l.font.clone(),
             colors: palette::Picker::new(l.font.color),
+            families: family::Picker::default(),
             text: l.text.clone(),
             size: l.font.size_pt,
             bold: l.font.bold,
@@ -243,6 +247,19 @@ impl TextDialog {
                         })
                         .0
                         .on_hover_text("Color selected text, or insert colored text at the caret");
+                    egui::containers::menu::MenuButton::new("Text font")
+                        .config(
+                            egui::containers::menu::MenuConfig::new()
+                                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+                        )
+                        .ui(ui, |ui| {
+                            if let Some(name) = self.families.show(ui) {
+                                command = Some(Format::Family(name));
+                                ui.close();
+                            }
+                        })
+                        .0
+                        .on_hover_text("Set the font of selected text, or insert text in that font at the caret");
                 });
                 if let Some(format) = command {
                     let before = self.text.clone();

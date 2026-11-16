@@ -510,6 +510,33 @@ matching Origin's unquoted commas; parameter rows follow the current alphabetica
 number display details remain those of the column formatter. Formatted/OLE tables, links and
 automatic label detection on paste are separate features.
 
+### 13.4c Edit > Copy variants (T88, measured 2026-11-16, Origin 2016)
+
+The workbook's Edit > Copy submenu (Origin 2016: Copy Ctrl+C, Copy (full precision) Ctrl+Alt+C, Copy
+(including label rows) Ctrl+Shift+C, Copy (formula) Ctrl+J, Copy (label rows) Ctrl+Shift+J, Copy (formula
+and label rows) Ctrl+Alt+J, Copy All Ctrl+Shift+A). Measured by pressing the keys with whole columns
+selected and reading the clipboard (`tools/origin-ref/origin-dialog.ps1 -NoDialog` with `@KEY` and
+`@CLIP`, `re-workspace/scratch/t88`, local only; fixture in `crates/core/src/clipboard.rs`). Columns B
+(Long Name Bee, Units mA, Comments note, no formula; 10 20 30) and C (Long Name Double, F(x) `col(B)*2`;
+20 40 60); rows end in CRLF, no line break after the last:
+
+| Item | Text | Sheaf |
+|---|---|---|
+| Copy (formula) | a tab, then `col(B)*2` (the F(x)= row) | `CopyPart::Formula` |
+| Copy (label rows) | Long Name, Units, Comments, then F(x)= | `CopyPart::LabelRows` (then the user parameter rows) |
+| Copy (formula and label rows) | F(x)= first, then Long Name, Units, Comments | `CopyPart::FormulaAndLabels` |
+| Copy All | F(x)=, Long Name, Units, Comments, then the values | `CopyPart::All` (of the selected columns) |
+| Copy (including label rows) | Long Name, Units, Comments, F(x)=, then the values | unchanged (13.4) |
+
+- With a block of cells selected, Origin greys the four (and Copy (including label rows)); with whole
+  columns they are enabled. Sheaf refuses the four unless whole columns or the whole sheet are selected
+  ("Select whole columns first"); Copy including label rows stays enabled for a block, as before.
+- Keys: Ctrl+J is Copy formula in a workbook and Copy Page in a graph (the key goes to the command that can
+  run, as Ctrl+G); Ctrl+Alt+J and Ctrl+Shift+A as Origin. Ctrl+Shift+J stays View > Full Screen in Sheaf,
+  so Copy label rows has no key (which one Origin runs in a workbook was not checked).
+- Where the user parameter rows go in Origin's text was not measured (Sheaf puts them after the other
+  label rows, as Copy including label rows does).
+
 ## 13b. Cell formats (T59)
 
 Manual formatting of data cells and label cells: bold, italic, underline, font, size, text colour,

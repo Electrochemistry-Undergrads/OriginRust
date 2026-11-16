@@ -2679,16 +2679,22 @@ impl SheafApp {
         match op {
             CellOp::Copy(_) | CellOp::Cut => {
                 let kind = if let CellOp::Copy(k) = op { k } else { CopyKind::Plain };
+                let part = if let CopyKind::Part(p) = kind { p } else { sheaf_core::clipboard::CopyPart::Values };
                 let options = CopyOptions {
                     // Copy never drops digits: a copy and paste inside Sheaf must give back the same numbers.
                     full_precision: true,
                     label_rows: kind == CopyKind::WithLabels,
+                    part,
                 };
                 let text = sheet.copy_text(&t.columns, t.rows.clone(), options);
                 let external = sheet.copy_external_text(
                     &t.columns,
                     t.rows.clone(),
-                    CopyOptions { full_precision: kind == CopyKind::FullPrecision, label_rows: options.label_rows },
+                    CopyOptions {
+                        full_precision: kind == CopyKind::FullPrecision,
+                        label_rows: options.label_rows,
+                        part,
+                    },
                 );
                 self.worksheet_clipboard.write(ctx, &external, &text);
                 self.copied = text;
@@ -3547,6 +3553,9 @@ impl SheafApp {
                 })
                 .unwrap_or_default(),
             cells: book.and_then(|b| self.books.get(&b)).is_some_and(|s| s.sel != Sel::None),
+            whole_columns: book
+                .and_then(|b| self.books.get(&b))
+                .is_some_and(|s| matches!(s.sel, Sel::Columns | Sel::All)),
             undo: self.doc.undo_label(),
             redo: self.doc.redo_label(),
             undo_ai: self.can_undo_ai_changes(),
@@ -3707,9 +3716,15 @@ impl SheafApp {
                 if typing && !menus::works_while_typing(&cmd) {
                     continue;
                 }
-                // Ctrl+G is Go to in a workbook and Export Graphs in a graph: a key goes to the
-                // command that can run now.
-                let shared = matches!(cmd, menus::Cmd::GoToCell | menus::Cmd::ExportGraph);
+                // Ctrl+G is Go to in a workbook and Export Graphs in a graph, Ctrl+J Copy formula
+                // and Copy Page (as in Origin): a key goes to the command that can run now.
+                let shared = matches!(
+                    cmd,
+                    menus::Cmd::GoToCell
+                        | menus::Cmd::ExportGraph
+                        | menus::Cmd::CopyPage
+                        | menus::Cmd::Copy(crate::actions::CopyKind::Part(sheaf_core::clipboard::CopyPart::Formula))
+                );
                 let action = menus::resolve(&cmd, &menu_ctx);
                 if shared && action.is_err() {
                     continue;

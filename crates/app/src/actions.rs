@@ -24,6 +24,9 @@ pub enum CopyKind {
     FullPrecision,
     /// The label rows above the values, which are written as shown.
     WithLabels,
+    /// Copy (formula), Copy (label rows), Copy (formula and label rows), Copy All (T88): whole
+    /// columns only, as Origin's.
+    Part(sheaf_core::clipboard::CopyPart),
 }
 
 /// What to do with the selected cells of a worksheet.

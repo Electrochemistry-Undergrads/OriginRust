@@ -31,6 +31,7 @@ use eframe::egui::{
     self, Color32, Key, KeyboardShortcut, Modifiers, Stroke, TextStyle,
     text::{LayoutJob, TextFormat},
 };
+use sheaf_core::clipboard::CopyPart;
 use sheaf_core::data_range::RangeEnd;
 use sheaf_core::format_clip::{AxisPart, GraphPart};
 use sheaf_core::graph::{PlotKind, Stack};
@@ -52,6 +53,7 @@ const NEED_COLUMNS: &str = "Select one or more columns first";
 const NEED_CELLS: &str = "Select cells, columns or rows first";
 const NEED_TWO_COLUMNS: &str = "Select two or more columns first";
 const NEED_EXACTLY_TWO_COLUMNS: &str = "Select exactly two columns to swap";
+const NEED_WHOLE_COLUMNS: &str = "Select whole columns first (click their headers)";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
 const NO_TEMPLATE_FOLDER: &str = "There is no folder for user templates (the settings folder is missing)";
@@ -471,6 +473,8 @@ pub struct MenuContext<'a> {
     pub selected: &'a [ColumnId],
     /// Data columns within the sorting selection, including whole-row selections.
     pub sorting_columns: Vec<ColumnId>,
+    /// True when whole columns (or the whole sheet) of the active workbook are selected.
+    pub whole_columns: bool,
     /// True when the active workbook has selected cells, columns or rows (Copy, Cut, Paste and
     /// Clear act on them).
     pub cells: bool,
@@ -807,10 +811,15 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
                 keyed("Copy", ctrl(Key::C), Cmd::Copy(CopyKind::Plain)),
                 keyed("Copy full precision", ctrl_alt(Key::C), Cmd::Copy(CopyKind::FullPrecision)),
                 keyed("Copy including label rows", ctrl_shift(Key::C), Cmd::Copy(CopyKind::WithLabels)),
-                grey("Copy formula"),
-                grey("Copy label rows"),
-                grey("Copy formula and label rows"),
-                grey("Copy All"),
+                keyed("Copy formula", ctrl(Key::J), Cmd::Copy(CopyKind::Part(CopyPart::Formula))),
+                // Origin lists Ctrl+Shift+J here too; Sheaf keeps that key for View > Full Screen.
+                item("Copy label rows", Cmd::Copy(CopyKind::Part(CopyPart::LabelRows))),
+                keyed(
+                    "Copy formula and label rows",
+                    ctrl_alt(Key::J),
+                    Cmd::Copy(CopyKind::Part(CopyPart::FormulaAndLabels)),
+                ),
+                keyed("Copy All", ctrl_shift(Key::A), Cmd::Copy(CopyKind::Part(CopyPart::All))),
             ],
         ));
         v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
@@ -2570,6 +2579,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Copy(kind) => {
             let book = book?;
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            // Origin greys these four unless whole columns are selected.
+            if matches!(kind, CopyKind::Part(_)) && !c.whole_columns {
+                return Err(NEED_WHOLE_COLUMNS);
+            }
             Action::Cells { book, op: CellOp::Copy(*kind) }
         }
         Cmd::Cut
@@ -3376,8 +3389,11 @@ mod tests {
         let keys = shortcuts();
         for (k, cmd) in &keys {
             for (k2, cmd2) in &keys {
+                let formula = Cmd::Copy(CopyKind::Part(CopyPart::Formula));
                 let shared =
-                    matches!((cmd, cmd2), (Cmd::GoToCell, Cmd::ExportGraph) | (Cmd::ExportGraph, Cmd::GoToCell));
+                    matches!((cmd, cmd2), (Cmd::GoToCell, Cmd::ExportGraph) | (Cmd::ExportGraph, Cmd::GoToCell))
+                        || (*cmd == formula && *cmd2 == Cmd::CopyPage)
+                        || (*cmd == Cmd::CopyPage && *cmd2 == formula);
                 assert!(k != k2 || cmd == cmd2 || shared, "{k:?} runs both {cmd:?} and {cmd2:?}");
             }
         }
@@ -3407,6 +3423,7 @@ mod tests {
             selected: &[],
             sorting_columns: Vec::new(),
             cells: false,
+            whole_columns: false,
             undo: None,
             redo: None,
             undo_ai: false,
@@ -3457,6 +3474,13 @@ mod tests {
         // Several columns need two or more.
         assert_eq!(resolve(&Cmd::SetMultipleColumnsValues, &c).unwrap_err(), NEED_TWO_COLUMNS);
         assert_eq!(resolve(&Cmd::SwapColumns, &c).unwrap_err(), NEED_EXACTLY_TWO_COLUMNS);
+        // The Copy variants need whole columns (T88), as Origin greys them for a block of cells.
+        let part = Cmd::Copy(CopyKind::Part(CopyPart::All));
+        let block = MenuContext { cells: true, whole_columns: false, ..c.clone() };
+        assert_eq!(resolve(&part, &block).unwrap_err(), NEED_WHOLE_COLUMNS);
+        assert!(resolve(&Cmd::Copy(CopyKind::Plain), &block).is_ok());
+        let columns = MenuContext { cells: true, whole_columns: true, ..c.clone() };
+        assert!(resolve(&part, &columns).is_ok());
         let three = [ColumnId(7), ColumnId(8), ColumnId(9)];
         let c3 = MenuContext { selected: &three, ..c.clone() };
         assert_eq!(resolve(&Cmd::SwapColumns, &c3).unwrap_err(), NEED_EXACTLY_TWO_COLUMNS);

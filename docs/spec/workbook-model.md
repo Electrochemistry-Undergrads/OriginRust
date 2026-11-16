@@ -564,6 +564,16 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   (GUI 3, 2026-11-16) confirm per-cell U and Ctrl+B/I/U, Fill Color/None, and data-only whole-column
   underline distinct from label underline. Sheaf uses one Undo per key or palette change, leaves
   source columns/formulas alone and rejects stale requests and effective no-ops.
+- **Custom toolbar colours.** Worksheet text/fill Custom... accepts opaque RGB bytes, with a
+  preview and explicit OK/Enter or Cancel/Escape. GUI 3 records the native chooser and target
+  measurements. This one-off dialog starts at the current manual colour (white for no fill),
+  a Sheaf policy; drafts do not mutate the project. Existing range/request fields preserve
+  independent labels/data, compact whole columns, other styles and `.sheaf`/companion saves.
+  Stale selection/generation/revision and effective no-ops create no history entry.
+- **Classic presets.** The worksheet Font Color and Fill Color menus include all 24 native
+  Classic RGB colours (GUI 3, measurements 2026-11-16). The additional 16 names are grouped in a
+  submenu, a Sheaf UI choice. They reuse the same captured range changes and persistence as
+  basic/custom colours, including stale-target rejection and independent data/label styles.
 - **Dialog scope.** Set Data Style > More... reuses the selected-range Format Cells window.
   Origin 2016 has no Default data-style command; Rich Text/Wrap Text/Float remain separate,
   unsupported text controls (B5). Its Worksheet Properties Format tab instead has category
@@ -591,8 +601,19 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   uses format intervals, not one record per data row. Derived heights can shrink with the font;
   Origin retains enlarged row heights, which the current model cannot persist.
 - **Files.** `.sheaf` and the `.opj` companion keep everything. The `.opj` writer holds none and
-  warns ("N sheet(s) have cell formatting ..."). Excel export does not write them and says so in
-  its warnings (per-cell fonts combined with column number formats are left).
+  warns ("N sheet(s) have cell formatting ..."). Excel export combines resolved manual styles
+  with each column's numeric/date/time code. Fonts use the worksheet default Arial 9 pt,
+  explicit sizes use the same 4..96 pt clamp, and bold/italic/underline, RGB text/fill and
+  horizontal alignment are retained. Number values stay numeric and mixed/text cells stay text;
+  pre-1900 dates retain the existing plain-number fallback and warning, with their cell style.
+  Long-name/units/comments styles follow the label rows actually requested by the export;
+  short names use the default style. Blank styled cells inside the existing data rectangle are
+  included. Open-ended ranges do not create extra rows; explicit formatting outside that rectangle
+  and omitted label-row formatting generate warnings. Future-cell styling is not exported.
+  Conditional colours use the existing effective precedence as a static snapshot, with a warning
+  that rules are not written. Transparent resets remain resets; partial alpha is written as
+  opaque RGB with a warning. These are Sheaf export choices, not new Origin measurements.
+  The Excel importer still reads data/column number formats rather than cell styles.
 
 ## 13c. Fill Column With patterns (T74, measured 2026-11-15, Origin 2016)
 
@@ -769,6 +790,67 @@ F(x)=, with "0.5 (s)" in B (the increment and the units in parentheses) and empt
 corner switch hides it again. The column heads also changed: B became "B(Y#)" with a small icon, A "A(X1)"
 and C "C(Y1)" (designation numbers appear once a column has its own X). Building it needs a new label-row
 kind in the worksheet layout and cell formats (T59's area), so it waits for that work.
+
+## 13j. Find in Project (T95, measured 2026-11-16, Origin 2016)
+
+Edit > Find in Project... (F3; "Find in Project" on a graph's Edit menu) opens Origin's **Find** window
+(screenshots `re-workspace/scratch/t95`, local only): Current Path, Find What, Within (Entire Project), Case
+Sensitive, Match Whole Word, Allow Wildcards (* and ?), Types to be Included > Metadata: Folder, Graph,
+Book, Sheet, Column, Notes and Select..., then Data in Cells (1st Matched in Column), Text Objects on
+Graphs, Notes Content; a result list (No., Range, Element, Attribute, Folder) and "Found: N". Defaults
+(Select Metadata): Graph, Book, Sheet and Notes with Long Name, Short Name and Comments; Column with Long
+Name, Short Name, Comments, Parameters and User Parameters, **not** Units, F(x), Categories, Sampling
+Intervals, Filters, Info Variables; Data in Cells off, Text Objects on Graphs on. Origin keeps the settings
+between sessions.
+
+Measured hits (book with B "Current density", mA; a line graph of B): "density" gave
+`[Graph1]Layer1!YL` Graph / Axis Title, `[Graph1]Layer1!Legend` Graph / Legend and
+`[Book1]Sheet1!B"Current density"` Column / Long Name (text objects as drawn); "Graph" gave `[Graph1]`
+Graph / Short Name; "30" with Data in Cells gave column B once, attribute Data Cells.
+
+Sheaf (`crate::project_find` in the app, window `dialogs/find_project.rs`): the same fields except Within
+(always the whole project), Folder and Notes (Sheaf has no notes windows); Select... shows the column's
+Units and F(x) switches; axis titles are searched as drawn (`sheaf_plot::axis_title`), legends with `%(n)`
+replaced by the plots' names, and text labels by their text. Clicking a hit brings its window forward (and
+its sheet, with the column selected); the window stays open and keeps its settings for the session.
+Double-clicking a hit in Origin was not measured.
+
+## 13k. Export > Worksheet as Image (T97, measured 2026-11-16, Origin 2016)
+
+File > Export > Worksheet as Image... is Origin's `expWks` (Image Type AI, BMP, CGM, DXF, EMF, EPS, GIF,
+JPG, PCX, PDF, PNG, PSD, TGA, TIF, WMF; Select Sheet(s) Current Sheet / Sheets in Book / Sheets in Folder
+/ ... / Specified; File Name(s); Path; Overwrite Existing Auto Rename / Replace / Skip / Ask; Use Tools
+Options; Keep Original Size; Image Size and Image Settings). Measured from LabTalk
+(`re-workspace/scratch/t97`, local only): the picture of a sheet holds the **label rows filled light
+yellow** (long name and units centred) and the **cells** (numbers right-aligned), **without** the column
+heads, the row numbers or grid lines, and runs down all the sheet's rows (691 x 1863 px for three columns
+of the default 32-row sheet, about 300 dpi). With no file name the script wrote ".png"; a token such as
+`<short>` in the name was not replaced.
+
+Sheaf: one picture of the active sheet (its data rows, not empty spare rows), drawn from the printed table
+(`sheaf_core::sheet_print`) with the heads, row numbers and grid left out (`sheaf_plot::sheet_image_svg`).
+The save window offers PNG (300 dpi), PDF and SVG; the name defaults to `<book long name or name>_<sheet>.png`
+in the project's folder (Sheaf's choice). Not done: the other image types, several sheets at once, the size
+and overwrite options.
+
+## 13l. Re-Import (T98, measured 2026-11-16, Origin 2016)
+
+File > Import > Re-Import Directly (Ctrl+4) and Re-Import... (workbook File menu; a graph's has none) are
+Origin's `reimport` (`dialog` Re-Import Directly / Re-Import by Changing Options; ReImport Selected Range
+Only). Measured from LabTalk (`re-workspace/scratch/t98`, local only; `impasc` of x,y,z with three rows,
+a comment and units typed on B and B plotted, then the file replaced by x,y,z,w with four rows):
+
+- The values were replaced (four rows) and the graph followed (axes rescaled).
+- The book kept its three columns: the file's fourth column was **not** added.
+- B kept the comment and units the user typed (the file has none) and its long name from the header.
+
+Sheaf (`Project::replace_book_data`, app `reimport_book`): the book's source file (`Workbook::source`,
+importer ascii, chi or excel) is read again with that importer's default options (Origin reuses the
+import settings; Sheaf does not store them yet) and each column takes the new values and the labels the
+file gives, keeping its id, so graphs keep plotting it; extra columns of the file are reported and not
+added; a column the file no longer has is emptied (not measured). One undo step ("Re-import"). Re-Import...
+picks a file (starting at the source) and reads it the same way. A book made in Sheaf or opened from a
+project has no source and the items are refused. Not done: the stored import options, Selected Range Only.
 
 ## 14. Suggested Rust data model (P0)
 

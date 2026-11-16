@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **325 greyed items: 226 in the menu bar, 19 on the toolbars, 80 in context menus.**
+original inventory baseline. This is not a new runtime audit. **317 greyed items: 219 in the menu bar, 19 on the toolbars, 79 in context menus.**
 
 ## How to read and keep this file
 
@@ -64,11 +64,11 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B4` | 19 |
 | `B5` | 13 |
 | `B6` | 23 |
-| `B7` | 8 |
+| `B7` | 6 |
 | `B8` | 4 |
 | `B9` | 13 |
-| `B11` | 10 |
-| `B12` | 12 |
+| `B11` | 7 |
+| `B12` | 9 |
 | `B13` | 7 |
 | `B14` | 44 |
 | `B15` | 21 |
@@ -76,7 +76,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 64 items, backlog packages (`B`) 241, not planned (`N`) 20.
+Briefs (`T`) hold 64 items, backlog packages (`B`) 233, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -94,20 +94,16 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Add Word Bookmarks to Analysis Template... [Workbook]
 - `B11` Batch Processing... [Workbook, Graph]
 - `B14` Import: Image... · Binary 2D Array... [no window, Workbook]
-- `B12` Import: Re-Import Directly · Re-Import... [no window, Workbook]
 - `T63` Export: Graph as Image... · Multi-Page PDF... [no window, Workbook]
-- `B12` Export: Worksheet as Image... [no window, Workbook]
 
 ### Edit
 - `B5` Paste Link · Paste Special [Workbook, Graph]
 - `B5` Paste Link Transpose · Select... [Workbook]
 - `B5` Remove Links [Workbook]
-- `B7` Find in Project... [Workbook]
 - `B16` Button Edit Mode [Workbook, Graph]
 - `B2` Cut · Copy · Paste · Clear [Graph]
 - `N` Insert New Object · Links · Update Client [Graph]
 - `T72` Copy Format: Symbol/Line/Fill · Text [Graph]
-- `B7` Find in Project [Graph]
 
 ### View
 - `N` Menu
@@ -192,7 +188,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Window
 - `B12` Arrange Icons
-- `B11` Duplicate (Batch Plotting): With New Sheets/Books · With New Columns [Graph]
 - `B6` Split [Workbook]
 - `B16` Command Window · Script Window
 - `B12` Folders: Folders List
@@ -239,7 +234,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T61` Graph page > New Layer(Axes): Open Dialog...
 - `T72` Graph page > Copy Format: Page Background · Legend Translation Mode
 - `T72` Graph page > Paste Format To: Bottom Axes · All X Axes · All Axes · All
-- `B11` Graph page > Duplicate (Batch Plotting): Duplicate
 - `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Double click to open Plot Setup
 - `B12` Explorer folder: Properties...
 

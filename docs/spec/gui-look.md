@@ -554,7 +554,42 @@ editors, dialogs, popups and Project Explorer retain their keys. Graph Ctrl+I st
 Each key press is one Undo step; multiple presses in a frame retain their order. Fill palettes
 capture their opening selection/revision and cannot follow a changed target. Manual fills keep
 the existing conditional-colour precedence (still unmeasured). The palette is the basic eight
-colours plus None; native custom/system/recent palette storage is not implemented.
+colours plus None, with the custom RGB choice described below; native custom/system/recent
+palette storage is not implemented.
+
+**Custom worksheet colours (Origin 2016, measured 2026-11-16).** Both Font Color and Fill Color
+palettes have custom slots. Double-clicking an empty slot opens Colors on its Custom tab, with
+RGB and HSL fields, preview, OK and Cancel. An empty slot initially showed RGB 64/192/192.
+Entering RGB 17/34/51 for text and 32/128/224 for fill, then OK, changed only selected A1;
+neighbouring cells and values stayed intact. The Custom list dropdown instead offers Clear,
+Load and Open Increment Editor (not invoked). Captures/control dumps remain local in
+`re-workspace/scratch/t59-custom-colors/`; only the owned unobscured dialogs/results are evidence.
+
+Sheaf adds **Custom...** to the worksheet Font Color and Fill Color menus. Its one-off RGB
+chooser validates whole numbers 0..255, previews the opaque colour and applies on OK or Enter;
+Cancel, Escape and the close box discard the draft. Starting from the current manual colour
+(white when fill is None) is Sheaf policy, differing from the measured empty native slot. A
+choice changes only the captured range and property, preserving other styles and data, with
+one Undo for an effective change. Selection, project-generation or revision changes invalidate
+the request. Text and fill survive native project and `.opj` companion reopen through the
+existing fields. Palette storage, HSL and eyedropper controls remain open; graph Format controls and the
+separate T58 text editor retain their own behaviour.
+
+**Classic worksheet presets (Origin 2016, measured 2026-11-16).** Both worksheet palettes
+show the original 24 Classic colours above the additional colour lists. All 24 swatch-centre
+RGB triples were measured from each palette and agree with the published [Classic list](https://docs.originlab.com/labtalk/ref/list-of-colors/).
+Selecting Dark Yellow text, Dark Cyan fill and Royal text affected only A1; Fill None cleared
+that fill while retaining Royal text, with neighbouring cells and source values unchanged.
+Captures and RGB measurements remain local in `re-workspace/scratch/t59-classic-colors/`.
+Dark Yellow is RGB 128/128/0, Olive is 0/128/0 and Royal is 0/0/160; Green remains 0/255/0.
+
+Sheaf keeps the eight existing named choices and adds **More Classic colors** with the other
+16 to worksheet Font Color and Fill Color. The compact text-submenu grouping is a Sheaf UI
+choice; Origin uses swatches. These choices use the existing captured range requests, effective
+no-op checks and one-step Undo, including independent labels and compact whole columns. Both
+menu levels close after a choice; the separate Custom... RGB chooser remains available. Graph
+palettes and the T58 text editor keep their own lists. Other native colour lists and palette
+storage remain open.
 
 Cells use installed regular/bold/italic faces with UI glyph fallbacks; missing styles use the
 existing synthetic fallback. The default is Arial 9 pt (12 logical pixels at 96 dpi). Explicit

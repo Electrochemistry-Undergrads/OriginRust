@@ -1085,6 +1085,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         sorting_columns: Vec::new(),
         cells: false,
         whole_columns: false,
+        imported: false,
         undo: None,
         redo: None,
         undo_ai: false,

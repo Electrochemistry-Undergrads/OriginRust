@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **330 listed item locations** at the planning
-  baseline (231 menu bar, 19 toolbar, 80 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **317 listed item locations** at the planning
+  baseline (219 menu bar, 19 toolbar, 79 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -70,6 +70,36 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## Latest integration
+
+T96 wavelets (B8 slice, branch `wavelets`, analysis-tools.md 19, Origin 2016 measured): Analysis > Signal Processing >
+Wavelet > Decompose, Reconstruction, Denoise, Smooth (Origin's 21 wavelets and two boundary modes; dwt/idwt exact) and
+Continuous Wavelet (Morlet, DGauss, MexHat; CWTResults sheet). Open rules: the sqtwolog threshold is a fit to measured
+brackets, Smooth is exact only for periodic power-of-two lengths, denoise boundary samples can differ (analysis-tools 19.5).
+
+T59 worksheet Classic presets (`codex/t59-classic-colors`, 2026-11-16): More Classic colors
+adds 16 named choices to the worksheet Font Color and Fill Color menus, completing all 24
+Classic RGB colours. Both native palettes and selected-cell Dark Yellow/Royal/Dark Cyan/None
+effects were measured in Origin 2016 (GUI 3); the compact submenu grouping is Sheaf policy.
+Existing captured requests preserve one-step Undo, effective no-ops, stale-target protection,
+compact whole columns, independent labels and project/companion persistence. Both menu levels
+close after choosing a colour; Custom RGB remains available and graph lists retain their scope.
+Fmt, strict workspace/all-target Clippy, all 4,157 workspace tests (eight ignored), all 52 related
+UI regressions, inventory 327 and eight Python tests pass on the combined T97 source, with frozen
+source/goldens and inspected desktop submenus from the tested executable. Own claim/window
+released by this push; T59 remains partial for worksheet category defaults, vertical alignment,
+sticky heights, Excel formats, other colour lists and palette storage.
+
+T59 worksheet custom RGB colours (`codex/t59-custom-colors`, 2026-11-16): worksheet
+Font Color and Fill Color > Custom... accept opaque RGB bytes, preview a swatch and commit
+on OK/Enter; Cancel/Escape discard the draft. Native Colors/Custom and selected-cell effects
+were measured in Origin 2016 (GUI 3). Starting from the current manual colour is Sheaf policy.
+Existing captured range/revision/generation guards, no-op checks and one-step Undo preserve
+independent data/label styles and compact whole columns; `.sheaf` and `.opj` companion reopen
+retain both colours. Fmt, strict workspace/all-target Clippy, all 4,146 workspace tests (eight
+ignored), all 47 related UI regressions, inventory 330 and eight Python tooling tests pass,
+with unchanged source/goldens and inspected compact choosers from the tested executable.
+Own claim/window released by this push. T59 remains partial: worksheet category defaults,
+vertical alignment, sticky heights, Excel formats and full Classic/palette storage remain open.
 
 T91 (B8 slice, branch `fit-surface-more`, fitting.md 16-18, analysis-tools.md 18, Origin 2016 measured): Analysis >
 Fitting > Simulate Surface (22 surface functions, Origin's defaults and noise rule), Nonlinear Implicit Curve Fit
@@ -365,19 +395,29 @@ controls remain separate. Formatting, strict all-target Clippy and 4,062 workspa
 pass (eight existing ignored), including all 37 related editor tests. Inventory, eight
 Python tooling tests and four inspected desktop captures pass with source hashes unchanged.
 
+**T59 worksheet Excel cell styles (`codex/t59-xlsx-formats`):** XLSX export now combines resolved
+worksheet fonts, point sizes, bold/italic/underline, text/fill RGB and horizontal alignment with
+column numeric/date/time codes. Labels, mixed/text values, overlapping resets and bounded blank
+cells retain their semantics. Conditional colours are reported snapshots; omitted label/future
+formats and partial transparency have explicit limits (workbook-model 13b). Formatting, strict
+workspace all-target Clippy and 4,169 tests pass (8 existing ignored), including all six new
+output regressions and all 50 existing Excel tests. Inventory and eight Python tooling tests
+pass; independent openpyxl review confirms the generated file's values, Unicode, literal text,
+styles and labels. All source/golden hashes stayed fixed. No model, UI, renderer or OPJ changes.
+T59 category defaults, vertical alignment and sticky row heights remain separate work.
+
 ## In flight (check for recent edits before claiming)
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t59-custom-colors` | Codex Windows | T59 custom opaque RGB text/fill colours for worksheet Format toolbar; Native chooser measurements and existing range-request/Undo/stale-target/persistence behaviour | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` sequentially reused after shipped e068/all actors terminal; worksheet-only toolbar/format colour branches, new private worksheet colour dialog/helper, bounded ephemeral app state/action/show wiring + dialog registration, own UI tests/registry and GUI 3/workbook 13b/T59 metadata. Existing CellFormat/Change fields only. No graph Format/editor/custom-RGB T58 picker/palette helpers, Classic24 expansion, Core/model/IO/renderer/fonts/parser, T92 corner/display flags or general grid/layout/print (T27), calc/stats/fitting/MCP/formula-parameter labels/sampling/clipboard, reserved T26/T29/T16 item6 or ROOT pending files. |
+| `codex/t58-classic-editor-colors` | Codex Windows | T58 remaining named Classic24 colour choices in the shared graph label/title/legend text editor | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` reused after8e7726d6/full4157/52 UI/all actors terminal. Only private text_object/palette.rs colour choices/menu close/focus, bounded editor.rs forwarding if needed, own UI tests/registry and graphing 7.8/T58/index/roadmap/parity metadata. Existing Classic index escapes only; preserve custom RGB, scripts/fonts/name refs and draft/Apply/OK/Cancel/history/saves. No Format toolbar/object_format palettes or worksheet/T59 picker, parser/renderer/Core/model/fonts/IO/geometry, T61/legend templates, name/formula/parameter-label insertion/selectors, stats/fitting/MCP/import/clipboard, palette storage/HSL/eyedropper, ROOT pending or reserved T26/T27/T29/T16 item6. Respect ready T98 integration; no product window claimed. ALL prior palette product-window requests WITHDRAWN; NO current or future-timed product hold. Worksheet XLSX5376f2cc/36e55f25 goes first. Palette source will not publish until XLSX product is PUBLIC on main and its owner RELEASES; request a new slot only afterward. Ready T99 may proceed too. Docs-only claims remain fine. |
 | `codex/multi-y-template-legends` | Codex Windows | T61 remainder: Origin-measured legend defaults for three/four-Y templates | claimed/refined 2026-11-16 after native controls; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`. Bounded core multi_y.rs defaults/template.rs + project.rs named-template construction + compatible LegendPosition top-left variant (graph.rs), plot legend placement, existing Legend position fields in app dialogs/graph_details.rs, .opj graph annotation writer/warning, isolated regressions/template goldens and T61/graphing docs. Necessary anchor expansion measured before code edits; no other model fields, layer management/contents, graph-view/shapes/actions, toolbar/menus, worksheet/T59/T90, fitting/stats/MCP, T58 editor/colours, reserved tasks or ROOT pending files. Requested final PRODUCT integration window 2026-11-16 07:55 through 08:20 Central Standard Time, CONDITIONAL on T58 custom RGB and ready T93 publication/release first (otherwise defer, no competing hold). Earlier tentative 07:25 request deferred. Respect T58 07:13-07:33; docs-only claims remain fine. Releases on publication, failure or deadline. |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
 | `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
 | `hist-prob` | Claude Windows, session fe4b37eb | B4 slice as new brief T85: Plot > Statistics > Histogram + Probabilities (histogram with the cumulative probability curve on a right axis); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no other B4 plots (T83 interval/Pareto is done) or other sessions' scopes |
-| `find-project` | Claude Windows, "t30-origin" | B7 slice as new brief T95: Edit > Find in Project (F3) on workbooks and graphs (Origin measured): new core project search, new dialog, menu items | claimed 2026-11-16; worktree swap-transpose, build target/wf-excel; not Find in Sheets/Replace (T02), Pivot Table, Conditional Formatting |
-| `wavelets` | Claude Windows, "continue all tasks" | B8 slice as new brief T96: Signal Processing > Wavelet (Decompose, Reconstruction, Denoise, Smooth, Continuous Wavelet); new calc wavelet module, core tools, windows, ops analyze, analysis-tools.md | claimed 2026-11-16; no T57 deconvolution/STFT, FFT/filters, peaks |
+| `view-windows` | Claude Windows, "t30-origin" | B12 slice as new brief T100: Project Explorer View Windows (None / Windows in Active Folder / Active Folder and Subfolders), Window > Folders > Folders List, explorer folder Properties... (Origin measured); app explorer/workspace visibility, menus | claimed 2026-11-16; worktree swap-transpose, build target/wf-excel; not Open Sample Projects, Add Shortcut to Favorites, Arrange Icons |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

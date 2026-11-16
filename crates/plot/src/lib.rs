@@ -143,7 +143,10 @@ pub use eps::EpsOutput;
 pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextLineMetrics, TextMeasurer};
 pub use margin::{DEFAULT_BORDER_PT, ExportLayout, Margin, drawn_bounds};
 pub use raster::{ColorDepth, RasterOptions, TiffCompression};
-pub use sheet::{SheetPages, render_sheet_emf_pages, render_sheet_pdf, render_sheet_raster, sheet_pages};
+pub use sheet::{
+    SheetPages, render_sheet_emf_pages, render_sheet_pdf, render_sheet_raster, sheet_image_pdf, sheet_image_png,
+    sheet_image_svg, sheet_pages,
+};
 
 use sheaf_core::graph::ScaleKind;
 use sheaf_core::{Project, WindowId};

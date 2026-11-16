@@ -288,6 +288,7 @@ pub enum Action {
     UndoAiChanges,
     /// A change captured by the shared Format toolbar.
     FormatText(crate::text_format::Request),
+    WorksheetColorDialog(Box<crate::dialogs::worksheet_color::WorksheetColorDialog>),
     FormatObject(crate::object_format::Request),
     NewWorkbook,
     AddColumn(WindowId),
@@ -299,6 +300,20 @@ pub enum Action {
     },
     /// The column header's Swap Columns...: the two columns exchange places.
     SwapColumns(ColumnId, ColumnId),
+    /// Edit > Find in Project (F3): open the Find window.
+    FindInProject,
+    /// File > Export > Worksheet as Image...: save the active sheet as a picture.
+    ExportWorksheetImage(WindowId),
+    /// Window > Duplicate (Batch Plotting): open the window that picks sheets or columns.
+    BatchPlot {
+        graph: WindowId,
+        columns: bool,
+    },
+    /// File > Import > Re-Import Directly / Re-Import...: read the book's source file again.
+    Reimport {
+        book: WindowId,
+        choose: bool,
+    },
     /// The column header's Copy Columns to...: open its window for these columns.
     CopyColumnsTo(Vec<ColumnId>),
     /// Edit > Reset to Full Range: every column of the workbook's active sheet uses all its rows.

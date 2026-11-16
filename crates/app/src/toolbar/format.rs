@@ -171,6 +171,49 @@ fn size(ui: &mut Ui, state: Option<&Snapshot>, actions: &mut Vec<Action>) {
     response.on_hover_text(state.map_or("Font Size", Snapshot::size_help));
 }
 
+// Origin Classic entries 8-17 and 19-24; the other eight remain in the basic menu.
+// RGB values measured from Origin 2016 worksheet swatches, GUI 3.
+const WORKSHEET_CLASSIC_EXTRA: [(&str, sheaf_core::Color); 16] = [
+    ("Dark Yellow", sheaf_core::Color::rgb(128, 128, 0)),
+    ("Navy", sheaf_core::Color::rgb(0, 0, 128)),
+    ("Purple", sheaf_core::Color::rgb(128, 0, 128)),
+    ("Wine", sheaf_core::Color::rgb(128, 0, 0)),
+    ("Olive", sheaf_core::Color::rgb(0, 128, 0)),
+    ("Dark Cyan", sheaf_core::Color::rgb(0, 128, 128)),
+    ("Royal", sheaf_core::Color::rgb(0, 0, 160)),
+    ("Orange", sheaf_core::Color::rgb(255, 128, 0)),
+    ("Violet", sheaf_core::Color::rgb(128, 0, 255)),
+    ("Pink", sheaf_core::Color::rgb(255, 0, 128)),
+    ("LT Gray", sheaf_core::Color::rgb(192, 192, 192)),
+    ("Gray", sheaf_core::Color::rgb(128, 128, 128)),
+    ("LT Yellow", sheaf_core::Color::rgb(255, 255, 128)),
+    ("LT Cyan", sheaf_core::Color::rgb(128, 255, 255)),
+    ("LT Magenta", sheaf_core::Color::rgb(255, 128, 255)),
+    ("Dark Gray", sheaf_core::Color::rgb(64, 64, 64)),
+];
+
+fn worksheet_classic(ui: &mut Ui, captured: &Snapshot, fill: bool, actions: &mut Vec<Action>) {
+    let prefix = if fill { "Fill Color" } else { "Font Color" };
+    let response = ui.menu_button(format!("{prefix}: More Classic colors"), |ui| {
+        for (name, color) in WORKSHEET_CLASSIC_EXTRA {
+            if ui.button(format!("{prefix}: {name}")).clicked() {
+                ui.close();
+                return Some(color);
+            }
+        }
+        None
+    });
+    response.response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("{prefix}: More Classic colors"))
+    });
+    if let Some(color) = response.inner.flatten() {
+        let change = if fill { Change::Fill(Some(color)) } else { Change::Color(color) };
+        actions.push(Action::FormatText(captured.request(change)));
+        // Also close the root palette, so the next toolbar/editor interaction owns focus.
+        ui.close();
+    }
+}
+
 fn colors(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
     let capture_id = ui.id().with("format_color_capture");
     let captured = ui.data_mut(|d| d.get_temp::<Snapshot>(capture_id)).unwrap_or_else(|| state.clone());
@@ -178,10 +221,21 @@ fn colors(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
     let label = egui::RichText::new("A").strong().color(Color32::from_rgb(color.r, color.g, color.b));
     let response = ui
         .menu_button(label, |ui| {
-            // A compact named palette; custom/persistent Origin palettes remain a separate feature.
+            // Shared named presets; the custom chooser below is worksheet-only.
             for (name, color) in object_format::PALETTE {
                 if ui.button(format!("Font Color: {name}")).clicked() {
                     actions.push(Action::FormatText(captured.request(Change::Color(color))));
+                    ui.close();
+                }
+            }
+            if captured.worksheet.is_some() {
+                worksheet_classic(ui, &captured, false, actions);
+                ui.separator();
+                if ui.button("Font Color: Custom...").clicked() {
+                    use crate::dialogs::worksheet_color::{Kind, WorksheetColorDialog};
+                    if let Some(dialog) = WorksheetColorDialog::new(captured.clone(), Kind::Text) {
+                        actions.push(Action::WorksheetColorDialog(Box::new(dialog)));
+                    }
                     ui.close();
                 }
             }
@@ -242,6 +296,15 @@ fn worksheet_fill(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
                     actions.push(Action::FormatText(captured.request(Change::Fill(Some(color)))));
                     ui.close();
                 }
+            }
+            worksheet_classic(ui, &captured, true, actions);
+            ui.separator();
+            if ui.button("Fill Color: Custom...").clicked() {
+                use crate::dialogs::worksheet_color::{Kind, WorksheetColorDialog};
+                if let Some(dialog) = WorksheetColorDialog::new(captured.clone(), Kind::Fill) {
+                    actions.push(Action::WorksheetColorDialog(Box::new(dialog)));
+                }
+                ui.close();
             }
         })
         .response;

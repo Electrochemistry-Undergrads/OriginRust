@@ -3,6 +3,7 @@
 
 pub mod analysis;
 pub mod autosave;
+pub mod batch_plot;
 pub mod bin2d_options;
 pub mod cell_format;
 pub mod cell_note;
@@ -19,6 +20,7 @@ pub mod export_sheet;
 pub mod fill_pattern;
 pub mod filter_options;
 pub mod find;
+pub mod find_project;
 pub mod fit;
 pub mod fit_more;
 pub mod fit_page;
@@ -62,4 +64,5 @@ pub mod text_object;
 pub mod trendline;
 pub mod user_templates;
 pub mod wavelet;
+pub mod worksheet_color;
 pub mod xyz_options;

@@ -54,6 +54,7 @@ const NEED_CELLS: &str = "Select cells, columns or rows first";
 const NEED_TWO_COLUMNS: &str = "Select two or more columns first";
 const NEED_EXACTLY_TWO_COLUMNS: &str = "Select exactly two columns to swap";
 const NEED_WHOLE_COLUMNS: &str = "Select whole columns first (click their headers)";
+const NOT_IMPORTED: &str = "This workbook was not imported from a file";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
 const NO_TEMPLATE_FOLDER: &str = "There is no folder for user templates (the settings folder is missing)";
@@ -107,6 +108,14 @@ pub enum Cmd {
     Power(sheaf_core::analysis::PowerKind),
     /// Edit > Find in Sheets... (Ctrl+F) in a workbook.
     FindInSheets,
+    /// Edit > Find in Project (F3, T95).
+    FindInProject,
+    /// File > Export > Worksheet as Image... (T97).
+    ExportWorksheetImage,
+    /// File > Import > Re-Import Directly (false) and Re-Import... (true, choose the file) (T98).
+    Reimport(bool),
+    /// Window > Duplicate (Batch Plotting) > with New Sheets/Books (false) or New Columns (true) (T99).
+    BatchPlot(bool),
     /// Edit > Replace... (Ctrl+H) in a workbook.
     ReplaceInSheets,
     ExportGraph,
@@ -479,6 +488,8 @@ pub struct MenuContext<'a> {
     pub sorting_columns: Vec<ColumnId>,
     /// True when whole columns (or the whole sheet) of the active workbook are selected.
     pub whole_columns: bool,
+    /// True when the active workbook was imported from a data file (Re-Import, T98).
+    pub imported: bool,
     /// True when the active workbook has selected cells, columns or rows (Copy, Cut, Paste and
     /// Clear act on them).
     pub cells: bool,
@@ -757,7 +768,11 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                 if kind == WindowKind::Graph {
                     Vec::new()
                 } else {
-                    vec![sep(), grey_keyed("Re-Import Directly", ctrl(Key::Num4)), grey("Re-Import...")]
+                    vec![
+                        sep(),
+                        keyed("Re-Import Directly", ctrl(Key::Num4), Cmd::Reimport(false)),
+                        item("Re-Import...", Cmd::Reimport(true)),
+                    ]
                 },
                 vec![sub(
                     "Recent Imports",
@@ -784,7 +799,9 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                     item("&Worksheet as ASCII...", Cmd::ExportWorksheet),
                     item("Worksheet as E&xcel...", Cmd::ExportExcel),
                 ],
-                greys(&["Graph as Image...", "Worksheet as Image...", "Multi-Page PDF..."]),
+                greys(&["Graph as Image..."]),
+                vec![item("Worksheet as Image...", Cmd::ExportWorksheetImage)],
+                greys(&["Multi-Page PDF..."]),
                 vec![exports_submenu()],
             ]
             .concat(),
@@ -838,7 +855,7 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(item("&Set As End", Cmd::SetRangeEnd(RangeEnd::End)));
         v.push(item("Reset to Full Range", Cmd::ResetFullRange));
         v.push(sep());
-        v.push(grey_keyed("Find in Project...", plain_key(Key::F3)));
+        v.push(keyed("Find in Project...", plain_key(Key::F3), Cmd::FindInProject));
         v.push(keyed("Find in Sheets...", ctrl(Key::F), Cmd::FindInSheets));
         v.push(keyed("R&eplace...", ctrl(Key::H), Cmd::ReplaceInSheets));
         v.push(keyed("Go to...", ctrl(Key::G), Cmd::GoToCell));
@@ -874,7 +891,7 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         ));
         v.push(item("Paste Format...", Cmd::PasteFormatDialog));
         v.push(sep());
-        v.push(grey_keyed("Find in Project", plain_key(Key::F3)));
+        v.push(keyed("Find in Project", plain_key(Key::F3), Cmd::FindInProject));
     }
     v
 }
@@ -1719,9 +1736,13 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
         item("&Duplicate", Cmd::DuplicateWindow),
     ];
     match kind {
-        WindowKind::Graph => {
-            v.push(grey_sub("Duplicate (&Batch Plotting)", &["With New Sheets/Books", "With New Columns"]))
-        }
+        WindowKind::Graph => v.push(sub(
+            "Duplicate (&Batch Plotting)",
+            vec![
+                item("Duplicate with New Sheets/Books...", Cmd::BatchPlot(false)),
+                item("Duplicate with New Columns...", Cmd::BatchPlot(true)),
+            ],
+        )),
         WindowKind::Workbook => v.push(grey("Sp&lit")),
         WindowKind::None => {}
     }
@@ -2285,7 +2306,14 @@ pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
             ],
         ),
         page_paste_format_entry(),
-        grey_sub("Duplicate (Batch Plotting)", &["Duplicate"]),
+        sub(
+            "Duplicate (Batch Plotting)",
+            vec![
+                item("Duplicate", Cmd::DuplicateWindow),
+                item("Duplicate with New Sheets/Books...", Cmd::BatchPlot(false)),
+                item("Duplicate with New Columns...", Cmd::BatchPlot(true)),
+            ],
+        ),
     ]
 }
 
@@ -2568,10 +2596,18 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::GoToCell => Action::GoToCell(book?),
         Cmd::Power(kind) => Action::Power(*kind),
         Cmd::FindInSheets => Action::FindInSheets(book?),
+        Cmd::FindInProject => Action::FindInProject,
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::ExportExcel => Action::ExportExcel(book?),
+        Cmd::ExportWorksheetImage => Action::ExportWorksheetImage(book?),
+        Cmd::BatchPlot(columns) => Action::BatchPlot { graph: c.graph.ok_or(NEED_GRAPH)?, columns: *columns },
+        Cmd::Reimport(choose) => {
+            let book = book?;
+            c.imported.then_some(()).ok_or(NOT_IMPORTED)?;
+            Action::Reimport { book, choose: *choose }
+        }
         Cmd::Print => Action::Print(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
         Cmd::PrintPreview => Action::PrintPreview(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
         Cmd::PageSetup => Action::PageSetup,
@@ -3464,6 +3500,7 @@ mod tests {
             sorting_columns: Vec::new(),
             cells: false,
             whole_columns: false,
+            imported: false,
             undo: None,
             redo: None,
             undo_ai: false,

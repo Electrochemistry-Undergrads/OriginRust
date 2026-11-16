@@ -4981,3 +4981,27 @@ Sheaf (this slice):
 - Not done: moving by dragging, a properties dialog (orientation, levels, labels, background, nested layout), a
   Map link to a chosen plot, scales for other plot kinds (hexbin, sunburst, waterfall, parallel keep drawing their
   own), a CLI flag, the real default colour map.
+
+## 28. Batch plotting: Window > Duplicate (Batch Plotting) (T99, measured 2026-11-16, Origin 2016)
+
+With a graph active, Origin 2016's Window menu has Duplicate (Batch Plotting) > **Duplicate with New
+Sheets/Books...** and **Duplicate with New Columns...** (screenshots `re-workspace/scratch/t99`, local
+only; Book1 with two sheets of A (X), B, C, and Graph1 a line plot of Sheet1's B):
+
+- *With New Sheets/Books...* opens **Select Worksheet**: a list of the other sheets (`[Book1]Sheet2`),
+  Match Plot Columns by (Column Index), Graph Short Name and Graph Long Name (`<auto>`), OK (greyed until a
+  sheet is picked) and Cancel. Picking Sheet2 made **Graph2**, long name **"Graph1 - Copy"**, plotting
+  Sheet2's B (`Book1_B@2`): the columns at the same positions of the chosen sheet.
+- *With New Columns...* opens **Select Column - [Book1]Sheet1**: the sheet's other Y columns (C), Use
+  Associated X (ticked), the two name fields, OK and Cancel. Picking C made a copy plotting C against A,
+  the axis title and legend following.
+- After making the copy Origin asked "A significant portion of the new data lie outside the current axes
+  limits. Would you like to rescale the axes to show all the data?" (Yes by default); the axes were
+  rescaled (Y 100 to 425 for Sheet2, 4 to 9 for C).
+
+Sheaf (`sheaf_core::batch_plot`, window `dialogs/batch_plot.rs`): the same two windows with tick boxes
+(several sheets or columns at once, one copy each), Match Plot Columns by Column Index, Short Name or Long
+Name, Use Associated X; each copy is `<long name or name> - Copy` and its axes rescale without asking
+(Origin's default answer). One undo step for all the copies. The graph page's right-click menu has the same
+submenu with Duplicate (a plain copy, as Window > Duplicate) first. Not done: the Graph Short/Long Name
+fields (Sheaf names the copies itself), books as a whole.

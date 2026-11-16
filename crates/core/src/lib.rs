@@ -10,6 +10,7 @@
 pub mod analysis;
 pub mod analysis_link;
 pub mod autorange;
+pub mod batch_plot;
 pub mod cellformat;
 pub mod clipboard;
 pub mod color;
@@ -43,6 +44,7 @@ pub mod notes;
 pub mod page_setup;
 pub mod panels;
 pub mod project;
+pub mod reimport;
 pub mod reshape;
 pub mod rowfilter;
 pub mod sampling;

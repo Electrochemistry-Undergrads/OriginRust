@@ -45,6 +45,7 @@ use crate::dialogs::stack_panels::{Outcome as StackPanelsOutcome, StackPanelsDia
 use crate::dialogs::straight_line::StraightLineDialog;
 use crate::dialogs::text_object::TextDialog;
 use crate::dialogs::trendline::{Outcome as TrendlineOutcome, TrendlineDialog};
+use crate::dialogs::worksheet_color::WorksheetColorDialog;
 use crate::graph_scale::{self, ScaleTool};
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi, Sel};
@@ -188,6 +189,7 @@ pub struct SheafApp {
     cond_format: Option<CondFormatDialog>,
     pub(crate) cell_note: Option<CellNoteDialog>,
     pub(crate) cell_format: Option<CellFormatDialog>,
+    pub(crate) worksheet_color: Option<WorksheetColorDialog>,
     reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
@@ -208,6 +210,11 @@ pub struct SheafApp {
     copy_columns: Option<crate::dialogs::copy_columns::CopyColumnsDialog>,
     /// The sheet tab's Navigate....
     sheet_navigate: Option<crate::dialogs::sheet_navigate::SheetNavigateDialog>,
+    /// Edit > Find in Project, and the settings of the last search (Origin keeps them).
+    find_project: Option<crate::dialogs::find_project::FindProjectDialog>,
+    find_spec: crate::project_find::FindSpec,
+    /// Window > Duplicate (Batch Plotting).
+    batch_plot: Option<crate::dialogs::batch_plot::BatchPlotDialog>,
     show_x: Option<crate::dialogs::sampling::ShowXDialog>,
     /// The saved user templates as last read from the folder (at start and after a change).
     user_templates: Vec<String>,
@@ -318,6 +325,7 @@ impl SheafApp {
             cond_format: None,
             cell_note: None,
             cell_format: None,
+            worksheet_color: None,
             reshape: None,
             export: None,
             export_sheet: None,
@@ -332,6 +340,9 @@ impl SheafApp {
             sampling: None,
             copy_columns: None,
             sheet_navigate: None,
+            find_project: None,
+            find_spec: Default::default(),
+            batch_plot: None,
             show_x: None,
             user_templates: startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default(),
             power: None,
@@ -850,6 +861,7 @@ impl SheafApp {
         self.cond_format = None;
         self.cell_note = None;
         self.cell_format = None;
+        self.worksheet_color = None;
         self.reshape = None;
         self.sort = None;
         self.sheet_name = None;
@@ -1723,6 +1735,11 @@ impl SheafApp {
                 self.clear_changed_shape_selections(selected, None);
             }
             Action::UndoAiChanges => self.undo_ai_changes(ctx),
+            Action::WorksheetColorDialog(dialog) => {
+                if self.text_format().is_some_and(|state| dialog.matches(&state)) {
+                    self.worksheet_color = Some(*dialog);
+                }
+            }
             Action::FormatText(request) => {
                 if self.text_format().is_some_and(|state| state.target == request.target) {
                     crate::text_format::apply(&mut self.doc, request);
@@ -1787,6 +1804,17 @@ impl SheafApp {
                 } else {
                     self.say("Every column already uses all its rows");
                 }
+            }
+            Action::ExportWorksheetImage(book) => self.export_worksheet_image(book),
+            Action::Reimport { book, choose } => self.reimport(book, choose),
+            Action::BatchPlot { graph, columns } => {
+                match crate::dialogs::batch_plot::BatchPlotDialog::new(self.doc.project(), graph, columns) {
+                    Some(d) => self.batch_plot = Some(d),
+                    None => self.warn("The graph plots no worksheet column"),
+                }
+            }
+            Action::FindInProject => {
+                self.find_project = Some(crate::dialogs::find_project::FindProjectDialog::new(self.find_spec.clone()));
             }
             Action::CopyColumnsTo(columns) => {
                 self.copy_columns =
@@ -3144,6 +3172,64 @@ impl SheafApp {
         }
     }
 
+    /// Duplicate (Batch Plotting): OK makes the copies, one undo step, and brings the last forward.
+    fn show_batch_plot(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::batch_plot::BatchOutcome;
+        let Some(d) = &mut self.batch_plot else { return };
+        let made = match d.show(ctx) {
+            BatchOutcome::Open => return,
+            BatchOutcome::Closed => {
+                self.batch_plot = None;
+                return;
+            }
+            BatchOutcome::Sheets { graph, sheets, by } => {
+                self.doc.edit("Duplicate (batch plotting)", |p| p.batch_plot_sheets(graph, &sheets, by))
+            }
+            BatchOutcome::Columns { graph, columns, associated_x } => {
+                self.doc.edit("Duplicate (batch plotting)", |p| p.batch_plot_columns(graph, &columns, associated_x))
+            }
+        };
+        self.batch_plot = None;
+        match made {
+            Ok(ids) => {
+                for id in &ids {
+                    self.focus(*id);
+                }
+                self.say(format!("Made {} graph(s)", ids.len()));
+            }
+            Err(e) => self.warn(e.to_string()),
+        }
+    }
+
+    /// Find in Project: a hit brings its window forward (its sheet, and its column selected). The
+    /// window stays open, as Origin's.
+    fn show_find_project(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::find_project::FindProjectOutcome;
+        use crate::project_find::FindTarget;
+        let Some(d) = &mut self.find_project else { return };
+        let outcome = d.show(ctx, self.doc.project());
+        self.find_spec = d.spec.clone();
+        match outcome {
+            FindProjectOutcome::Open => {}
+            FindProjectOutcome::Closed => self.find_project = None,
+            FindProjectOutcome::Go(target) => match target {
+                FindTarget::Window(id) => self.apply(Action::Focus(id), ctx),
+                FindTarget::Sheet { book, sheet } => {
+                    self.apply(Action::Focus(book), ctx);
+                    self.apply(Action::SelectSheet { book, sheet }, ctx);
+                }
+                FindTarget::Column { book, sheet, column } => {
+                    self.apply(Action::Focus(book), ctx);
+                    self.apply(Action::SelectSheet { book, sheet }, ctx);
+                    if let Some(state) = self.books.get_mut(&book) {
+                        state.sel = Sel::Columns;
+                        state.selected = vec![column];
+                    }
+                }
+            },
+        }
+    }
+
     /// Navigate Worksheets: OK (or a double click) goes to the picked sheet.
     fn show_sheet_navigate(&mut self, ctx: &egui::Context) {
         use crate::dialogs::sheet_navigate::NavigateOutcome;
@@ -3605,6 +3691,62 @@ impl SheafApp {
         self.focus(id);
     }
 
+    /// File > Import > Re-Import Directly and Re-Import... (T98): reads the book's source file (or, for
+    /// Re-Import..., a file picked starting from it) again and replaces the data, one undo step.
+    fn reimport(&mut self, book: WindowId, choose: bool) {
+        let Some(b) = self.doc.project().workbook(book) else { return };
+        let Some((source, kind)) = b.source.clone().zip(reimport_kind(b)) else {
+            self.warn("This workbook was not imported from a file");
+            return;
+        };
+        let mut path = PathBuf::from(&source.path);
+        if choose {
+            let mut chooser = rfd::FileDialog::new().set_title("Re-Import");
+            if let Some(dir) = path.parent().filter(|d| d.is_dir()) {
+                chooser = chooser.set_directory(dir);
+            }
+            if let Some(name) = path.file_name() {
+                chooser = chooser.set_file_name(name.to_string_lossy());
+            }
+            let Some(picked) = chooser.pick_file() else { return };
+            path = picked;
+        }
+        match reimport_book(&mut self.doc, book, &path, kind) {
+            Ok(r) => {
+                let mut s = format!("Re-imported {}: {} column(s), {} row(s)", path.display(), r.columns, r.rows);
+                if r.ignored > 0 {
+                    s.push_str(&format!("; {} more column(s) in the file were not added", r.ignored));
+                }
+                if r.emptied > 0 {
+                    s.push_str(&format!("; {} column(s) the file no longer has are empty", r.emptied));
+                }
+                self.say(s);
+            }
+            Err(e) => self.message = Some(("Could not re-import".to_string(), e)),
+        }
+    }
+
+    /// File > Export > Worksheet as Image (T97): the active sheet as PNG (300 dpi), PDF or SVG.
+    fn export_worksheet_image(&mut self, book: WindowId) {
+        let Some(b) = self.doc.project().workbook(book) else { return };
+        let sheet = b.sheet();
+        let stem = if b.long_name.is_empty() { b.name.clone() } else { b.long_name.clone() };
+        let mut chooser = rfd::FileDialog::new()
+            .set_title("Export worksheet as image")
+            .add_filter("PNG image", &["png"])
+            .add_filter("PDF", &["pdf"])
+            .add_filter("SVG", &["svg"])
+            .set_file_name(format!("{stem}_{}.png", sheet.name));
+        if let Some(dir) = self.folder() {
+            chooser = chooser.set_directory(dir);
+        }
+        let Some(path) = chooser.save_file() else { return };
+        match write_worksheet_image(sheet, &path) {
+            Ok(path) => self.say(format!("Exported the sheet to {}", path.display())),
+            Err(e) => self.message = Some(("Could not export the sheet".to_string(), e)),
+        }
+    }
+
     fn export_data(&mut self, book: WindowId) {
         if self.doc.project().workbook(book).is_some() {
             self.export_sheet = Some(SheetExportDialog::new(book, self.folder()));
@@ -3641,6 +3783,7 @@ impl SheafApp {
             whole_columns: book
                 .and_then(|b| self.books.get(&b))
                 .is_some_and(|s| matches!(s.sel, Sel::Columns | Sel::All)),
+            imported: book.and_then(|b| project.workbook(b)).is_some_and(|b| reimport_kind(b).is_some()),
             undo: self.doc.undo_label(),
             redo: self.doc.redo_label(),
             undo_ai: self.can_undo_ai_changes(),
@@ -3891,6 +4034,7 @@ impl SheafApp {
             || self.cond_format.is_some()
             || self.cell_note.is_some()
             || self.cell_format.is_some()
+            || self.worksheet_color.is_some()
             || self.reshape.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
@@ -3905,6 +4049,8 @@ impl SheafApp {
             || self.sampling.is_some()
             || self.copy_columns.is_some()
             || self.sheet_navigate.is_some()
+            || self.find_project.is_some()
+            || self.batch_plot.is_some()
             || self.show_x.is_some()
             || self.power.is_some()
             || self.find.is_some()
@@ -4440,6 +4586,15 @@ impl SheafApp {
         {
             self.cell_format = None;
         }
+        if let Some(d) = &mut self.worksheet_color {
+            let (open, request) = d.show(ctx);
+            if !open {
+                self.worksheet_color = None;
+            }
+            if let Some(request) = request {
+                self.apply(Action::FormatText(request), ctx);
+            }
+        }
         if let Some(d) = &mut self.row_filter
             && !d.show(ctx, &mut self.doc)
         {
@@ -4585,6 +4740,8 @@ impl SheafApp {
         self.show_sampling(ctx);
         self.show_copy_columns(ctx);
         self.show_sheet_navigate(ctx);
+        self.show_find_project(ctx);
+        self.show_batch_plot(ctx);
         if let Some(d) = &mut self.find {
             let book = d.book;
             match d.show(ctx) {
@@ -5561,6 +5718,57 @@ fn panel_data<'a>(
         .unwrap_or_else(|| "UNTITLED".to_string());
     let props_plot = props.as_ref().filter(|d| Some(d.graph) == active).map(GraphPropsDialog::selected_plot);
     PanelData { project: doc.project(), active, project_name, props_plot, logs }
+}
+
+/// The importer a book's source file is read again with (Re-Import, T98); `None` for a book not
+/// imported from a data file (made in Sheaf, or opened from a project).
+pub(crate) fn reimport_kind(book: &sheaf_core::Workbook) -> Option<sheaf_io::ImportKind> {
+    match book.source.as_ref()?.importer.as_str() {
+        "ascii" => Some(sheaf_io::ImportKind::Ascii),
+        "chi" => Some(sheaf_io::ImportKind::Chi),
+        "excel" => Some(sheaf_io::ImportKind::Auto),
+        _ => None,
+    }
+}
+
+/// Reads `path` again with `kind` (default options) and replaces the data of `book` with it, one undo
+/// step; the book's source becomes `path`.
+pub(crate) fn reimport_book(
+    doc: &mut sheaf_core::Document,
+    book: WindowId,
+    path: &Path,
+    kind: sheaf_io::ImportKind,
+) -> Result<sheaf_core::reimport::ReimportReport, String> {
+    let fresh =
+        sheaf_io::import_file(path, kind, &Default::default(), &Default::default()).map_err(|e| e.to_string())?;
+    doc.edit("Re-import", |p| {
+        let r = p.replace_book_data(book, &fresh.workbook)?;
+        if let Some(b) = p.workbook_mut(book) {
+            b.source = fresh.workbook.source.clone();
+        }
+        Ok::<_, sheaf_core::project::ProjectError>(r)
+    })
+    .map_err(|e| e.to_string())
+}
+
+/// Writes the worksheet picture of File > Export > Worksheet as Image to `path`, the kind chosen by
+/// its extension (PNG at 300 dpi when there is none). Returns the path written.
+pub(crate) fn write_worksheet_image(sheet: &sheaf_core::Worksheet, path: &Path) -> Result<PathBuf, String> {
+    let mut path = path.to_path_buf();
+    let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
+    let bytes = match ext.as_deref() {
+        Some("pdf") => sheaf_plot::sheet_image_pdf(sheet),
+        Some("svg") => sheaf_plot::sheet_image_svg(sheet).map(String::into_bytes),
+        Some("png") => sheaf_plot::sheet_image_png(sheet, 300.0),
+        None => {
+            path.set_extension("png");
+            sheaf_plot::sheet_image_png(sheet, 300.0)
+        }
+        Some(other) => return Err(format!("Sheaf writes worksheet pictures as PNG, PDF or SVG, not .{other}")),
+    }
+    .map_err(|e| e.to_string())?;
+    std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path)
 }
 
 #[cfg(test)]

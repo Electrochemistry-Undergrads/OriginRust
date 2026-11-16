@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 325 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 317 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -138,7 +138,7 @@ Backlog packages: write the brief first (step 3 above).
 |---|---|---|---|---|
 | [ ] | B5 | Worksheet editing: copy variants, Paste Transpose/Link/Special, cell links, Set As Begin/End, fill with a set of numbers/dates/text, sampling interval, Copy Columns to, Swap Columns | L | 13 |
 | [ ] | B6 | Worksheet view and sheets: header and grid toggles, row label rows, sheet-tab items, Split, objects in cells (graphs, images, sparklines, variables), Merge cells | L | 23 |
-| [ ] | B7 | Worksheet tools: rest of Conditional Formatting (T35 leftovers), Pivot Table, Find in Project | M | 8 |
+| [ ] | B7 | Worksheet tools: rest of Conditional Formatting (T35 leftovers), Pivot Table, Find in Project | M | 6 |
 
 - **B5 worksheet text controls.** Origin 2016 Set Data Style has Rich Text, Wrap Text, Float
   and More... (GUI 3, measured 2026-11-16), with no Default item. More reuses Format Cells (T59);
@@ -179,8 +179,8 @@ Backlog packages: write the brief first (step 3 above).
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
 | [ ] | [T56](T56-user-graph-templates.md) | Save Template As and user graph templates (open; unverified start on branch `user-templates`) | M | 1 |
-| [ ] | B11 | Templates and themes: template library, From Template, analysis templates, Batch Processing, batch-plotting Duplicate, Theme Organizer, Save Format as Theme | L | 10 |
-| [ ] | B12 | Project and window management: Re-Import, worksheet as image, View Windows, Folders List, folder Properties, sample projects (New Graph and save/duplicate project without data done as T77) | M | 12 |
+| [ ] | B11 | Templates and themes: template library, From Template, analysis templates, Batch Processing, batch-plotting Duplicate, Theme Organizer, Save Format as Theme | L | 7 |
+| [ ] | B12 | Project and window management: Re-Import, worksheet as image, View Windows, Folders List, folder Properties, sample projects (New Graph and save/duplicate project without data done as T77) | M | 9 |
 | [ ] | B13 | Tools: Options window, System Variables, Fitting Function Builder and Organizer, Import Filters Manager, project protection, audit log | L | 7 |
 
 - **B11** depends on T56. Analysis templates depend on recalculating analysis results (T03).

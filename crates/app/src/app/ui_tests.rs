@@ -66,7 +66,9 @@ mod toolbar_print;
 mod treemap;
 mod view_modes;
 mod violin;
+mod worksheet_classic_colors;
 mod worksheet_controls;
+mod worksheet_custom_colors;
 mod worksheet_format_toolbar;
 mod worksheet_style_menu;
 
@@ -8977,11 +8979,14 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
     assert_eq!(h.state().doc.undo_label(), Some("K-means cluster analysis"));
 }
 
+mod batch_plot;
 mod copy_columns;
 mod copy_variants;
 mod corner_menu;
 mod data_range;
 mod fill_pattern;
+mod find_project;
+mod reimport;
 mod sampling;
 mod sheet_navigate;
 mod sheet_tab;
@@ -8990,3 +8995,4 @@ mod swap_transpose;
 #[path = "ui_tests/trendline.rs"]
 mod trendline;
 mod user_templates;
+mod wks_image;

@@ -131,6 +131,9 @@ pub(crate) fn draw(
                 0.0,
             );
         }
-        hit::record(objects, out, start, ObjectKind::StraightLine(k), index, ItemList::Overlay, &[], m);
+        // A line that is not Selectable is no object for a click: the click goes to what lies under it.
+        if s.selectable {
+            hit::record(objects, out, start, ObjectKind::StraightLine(k), index, ItemList::Overlay, &[], m);
+        }
     }
 }

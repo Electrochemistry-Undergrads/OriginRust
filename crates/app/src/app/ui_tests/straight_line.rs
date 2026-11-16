@@ -96,7 +96,8 @@ fn a_click_selects_a_line_and_delete_removes_it_in_one_undo_step() {
     open_dialog(&mut h);
     type_into_text_window(&mut h, &format!("{at}"), true);
     click(&mut h, "OK");
-    let on_line = data_point(&h, at, (y0 + y1) / 2.0);
+    // the label above the frame (Top): nothing else is there; on the frame plots and axes come first
+    let on_line = data_point(&h, at, y1 + 0.05 * (y1 - y0));
     click_at(&mut h, on_line);
     assert_eq!(graph_ui(&h).selected, Some((0, ObjectKind::StraightLine(0))));
     h.key_press(egui::Key::Delete);
@@ -118,7 +119,8 @@ fn a_line_that_is_not_selectable_takes_no_click() {
         p.graph_mut(g).unwrap().layers[0].straight_lines.push(l);
     });
     settle(&mut h);
-    let on_line = data_point(&h, at, (y0 + y1) / 2.0);
+    // the label above the frame (Top): nothing else is there; on the frame plots and axes come first
+    let on_line = data_point(&h, at, y1 + 0.05 * (y1 - y0));
     click_at(&mut h, on_line);
     assert_ne!(graph_ui(&h).selected, Some((0, ObjectKind::StraightLine(0))));
 }
@@ -131,7 +133,8 @@ fn double_click_edits_the_line_in_one_undo_step() {
     open_dialog(&mut h);
     type_into_text_window(&mut h, &format!("{at}"), true);
     click(&mut h, "OK");
-    let on_line = data_point(&h, at, (y0 + y1) / 2.0);
+    // the label above the frame (Top): nothing else is there; on the frame plots and axes come first
+    let on_line = data_point(&h, at, y1 + 0.05 * (y1 - y0));
     double_click_at(&mut h, on_line);
     assert!(h.state().straight_line_dialog.is_some(), "double click opens the window");
     let new = x0 + (x1 - x0) * 0.25;

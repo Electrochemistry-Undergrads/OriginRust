@@ -398,18 +398,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     };
     let to_page = |p: Pos2| (f64::from((p.x - image_rect.left()) / fit), f64::from((p.y - image_rect.top()) / fit));
     let to_screen = |(x, y): (f64, f64)| image_rect.min + egui::vec2(x as f32 * fit, y as f32 * fit);
-    let pick = |p: Pos2| {
-        let hit = hit_test(&t.scene, to_page(p), f64::from(PICK_TOLERANCE / fit));
-        // A straight line that is not Selectable takes no click.
-        match hit {
-            Hit::Object { layer, kind: ObjectKind::StraightLine(k) }
-                if graph.layers.get(layer).and_then(|l| l.straight_lines.get(k)).is_some_and(|s| !s.selectable) =>
-            {
-                Hit::Layer(layer)
-            }
-            h => h,
-        }
-    };
+    // (a straight line that is not Selectable has no hit object, so clicks pass through it)
+    let pick = |p: Pos2| hit_test(&t.scene, to_page(p), f64::from(PICK_TOLERANCE / fit));
 
     // The selection, drawn over the picture.
     if let Some((layer, kind)) = state.selected {

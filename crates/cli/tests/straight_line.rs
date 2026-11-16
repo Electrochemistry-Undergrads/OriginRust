@@ -67,3 +67,29 @@ fn vline_rejects_a_bad_value_and_writes_nothing() {
         assert!(!svg.exists());
     }
 }
+
+#[test]
+fn negative_values_are_taken_as_values() {
+    // a baseline at a negative current or a negative potential is the common case
+    let dir = scratch("neg");
+    let data = dir.join("d.csv");
+    std::fs::write(&data, "X,A\n-2,-4\n-1,-2\n0,0\n1,2\n").unwrap();
+    let saved = dir.join("p.sheaf");
+    let (ok, err) = sheaf(&[
+        "plot",
+        data.to_str().unwrap(),
+        "-o",
+        dir.join("o.svg").to_str().unwrap(),
+        "--save",
+        saved.to_str().unwrap(),
+        "--vline",
+        "-0.5,bottom",
+        "--hline",
+        "-1",
+    ]);
+    assert!(ok, "{err}");
+    let p: Project = sheaf_io::project_file::load(&saved).unwrap();
+    let lines = &p.graphs().next().unwrap().layers[0].straight_lines;
+    assert_eq!((lines[0].value, lines[0].location), (-0.5, StraightLineLabel::Bottom));
+    assert_eq!(lines[1].value, -1.0);
+}

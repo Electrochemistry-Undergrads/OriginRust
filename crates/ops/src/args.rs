@@ -737,10 +737,10 @@ pub struct StyleArgs {
     /// "VALUE" or "VALUE,LOCATION" with LOCATION top (the default), bottom, left or right (for example
     /// --vline 0.5 or --vline 0.5,bottom). The line runs across the whole frame in black, 0.5 pt. Repeat
     /// the option for more lines. A value outside the axis range draws nothing.
-    #[arg(long, value_name = "VALUE[,LOCATION]")]
+    #[arg(long, value_name = "VALUE[,LOCATION]", allow_hyphen_values = true)]
     pub vline: Vec<String>,
     /// Draw a horizontal straight line at a Y value on the first layer: like --vline.
-    #[arg(long, value_name = "VALUE[,LOCATION]")]
+    #[arg(long, value_name = "VALUE[,LOCATION]", allow_hyphen_values = true)]
     pub hline: Vec<String>,
 }
 

@@ -109,7 +109,10 @@ impl StraightLineDialog {
         let next = [StraightLine::next_name(lines, true), StraightLine::next_name(lines, false)];
         let mut open = true;
         let mut close = false;
-        egui::Window::new("Add Straight Line")
+        // Editing an existing line is not adding one (Sheaf's title; Origin's line properties are its
+        // object Properties window).
+        let title = if self.existing.is_some() { "Straight Line" } else { "Add Straight Line" };
+        egui::Window::new(title)
             .id(egui::Id::new("straight_line"))
             .open(&mut open)
             .collapsible(false)

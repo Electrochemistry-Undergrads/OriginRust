@@ -247,7 +247,9 @@ pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
         })
     };
     let rank = |layer: &LayerScene, k: ObjectKind| match k {
-        ObjectKind::Label(_) | ObjectKind::Shape(_) | ObjectKind::Slope(_) | ObjectKind::StraightLine(_) => 0,
+        ObjectKind::Label(_) | ObjectKind::Shape(_) | ObjectKind::Slope(_) => 0,
+        // A straight line runs across the whole frame: axes and plots under it are tried first.
+        ObjectKind::StraightLine(_) => 5,
         ObjectKind::Legend => 1,
         ObjectKind::XTitle | ObjectKind::YTitle => {
             if layer.underlay_len > 0 {
@@ -271,7 +273,7 @@ pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
             }
         }
     };
-    for wanted in 0..=4 {
+    for wanted in 0..=5 {
         for (layer, o) in all(wanted == 0) {
             if rank(layer, o.kind) != wanted || !contains(o.bounds, p, tol) {
                 continue;

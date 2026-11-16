@@ -3042,8 +3042,6 @@ impl SheafApp {
         }
     }
 
-    /// Plot > Symbol > Y Error: a scatter plot; the error bars come from the Y error column that
-    /// follows each Y column (Column > Set As > Y Error).
     /// Plot > Line + Symbol > Line Series (T82): the selected Y columns (else the sheet's), two or more.
     fn plot_line_series(&mut self, book: WindowId, columns: Vec<ColumnId>) {
         let ys = self.plot_y_columns(book, columns, Template::LineSymbol);
@@ -3054,6 +3052,8 @@ impl SheafApp {
         }
     }
 
+    /// Plot > Symbol > Y Error: a scatter plot; the error bars come from the Y error column that
+    /// follows each Y column (Column > Set As > Y Error).
     fn plot_y_error(&mut self, book: WindowId, columns: Vec<ColumnId>, x: bool) {
         let ys = self.plot_y_columns(book, columns, Template::Scatter);
         if ys.is_empty() {

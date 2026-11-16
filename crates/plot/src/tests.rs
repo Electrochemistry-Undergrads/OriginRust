@@ -4693,3 +4693,20 @@ fn a_new_graph_without_any_plot_lays_out_and_renders() {
     svg_of(&p, g);
     assert!(!crate::render_png(&p, g, 96.0).unwrap().is_empty());
 }
+
+/// A missing value inside a group of a segment connection breaks only that group: the next group
+/// still starts at its own first row (a Line Series row never joins the next row).
+#[test]
+fn a_missing_value_does_not_shift_the_segment_groups() {
+    // rows: (1,1) (2,NaN) (3,100) | (1,2) (2,200) (3,300)
+    let (mut p, g) = project(
+        Template::Line,
+        vec![1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
+        vec![vec![1.0, f64::NAN, 100.0, 2.0, 200.0, 300.0]],
+    );
+    p.graph_mut(g).unwrap().layers[0].plots[0].line.connect = Connect::Segment3;
+    let d = svg_of(&p, g);
+    let path = paths_in(with_class(&doc(&d), "plots")[0])[0].attribute("d").unwrap().to_string();
+    // group 1: lone (1,1), then (3,100) alone after the gap: two moves, no line; group 2: one move, two lines
+    assert_eq!((path.matches('M').count(), path.matches('L').count()), (3, 2), "{path}");
+}

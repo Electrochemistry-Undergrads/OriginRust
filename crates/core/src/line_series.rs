@@ -74,6 +74,8 @@ impl Project {
         p.symbol.size_pt = 8.0;
         l.x_axis.tick_label_source = TickLabelSource::Column { column: label };
         l.x_axis.title = Some("Series".to_string());
+        // a tick (and so a column name) at every position, however many columns
+        l.x_axis.major_step = Some(1.0);
         l.y_axis.title = Some("Values".to_string());
         Ok(graph)
     }

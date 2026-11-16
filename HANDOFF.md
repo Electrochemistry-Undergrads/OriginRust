@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **371 listed item locations** at the planning
-  baseline (256 menu bar, 19 toolbar, 96 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **370 listed item locations** at the planning
+  baseline (255 menu bar, 19 toolbar, 96 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -70,6 +70,9 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## Latest integration
+
+T82 (`line-series`, B4 slice): Plot > Line + Symbol > Line Series as Origin 2016's (one plot, k-point
+segment connection, rows never joined, column-name ticks; data in a LineSeries sheet; graphing 18.15).
 
 T79 (`column-scatter`, B4 slice): Plot > Symbol > Column Scatter as Origin 2016's (columns at 1, 2, ...,
 diamonds size 8, jitter within +-0.15, column-name ticks, Y title Range; graphing 18.14).
@@ -271,7 +274,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `b5-fill` | Claude Windows, "t30-origin" | B5 slice as new brief T74: Column > Fill Column With A set of Numbers / Date/Time values / Text&Numeric values (Origin patternN/D/T, measured), menus and column-header context menu | claimed 2026-11-15; worktree wf_c03644a9-997-1, build target/wf-excel; not Row Numbers/random fills (T63), no other B5 items |
 | `stats-anova3` | Claude Windows, "continue all tasks" | B8 slice as new brief T81: Partial Correlation Coefficient, Three-Way ANOVA, Repeated Measures ANOVA; new calc modules, core tools, Statistics menu dialogs, ops analyze, statistics.md | claimed 2026-11-16; no Probability/Q-Q (T14), crosstab/dunnett/distfit, wavelets, fitting, peaks |
 | `interval-pareto` | Claude macOS, "mac-format-bar" | B4 slice as new brief T82: Plot > Statistics > Interval Plot and Pareto (Origin's ParetoRaw: sorted counts as columns plus a cumulative-percent line on a right axis) | claimed 2026-11-16; worktree `.claude/worktrees/interval-pareto`, `target/wt-interval`; core templates, plot drawing (reusing Graphical Summary's interval panel), Plot menu items, CLI/MCP template names, .opj warning, spec section, T82 brief. Built from Origin's documentation on macOS (no Origin). Not Column Scatter (T79), Histogram + Probabilities, marginal plots, 2D kernel density, QC chart, Scatter Matrix, stock/specialized plots or other sessions' scopes |
-| `line-series` | Claude Windows, session fe4b37eb | B4 slice as new brief T82: Plot > Line + Symbol > Line Series (each worksheet row of the selected Y columns as one line+symbol plot against column position); Origin 2016 measurements, core plot creation, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no other B4 items or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

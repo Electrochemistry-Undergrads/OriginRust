@@ -1,6 +1,6 @@
 # T82: Line Series (B4 slice)
 
-**Status:** in progress 2026-11-16 (branch `line-series`, Claude Windows, session fe4b37eb).
+**Status:** done 2026-11-16 (branch `line-series`, Claude Windows, session fe4b37eb; graphing 18.15). Left: no CLI form (it makes a sheet, not a template).
 **Size:** S-M. **Inventory:** Plot > Line + Symbol > Line Series (1).
 
 ## Origin facts (measured 2026-11-16, Origin 2016, scratch `re-workspace/scratch/t82`)

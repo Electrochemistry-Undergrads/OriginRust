@@ -690,6 +690,10 @@ fn draw_line_with(
         Some((first, points.next_back().unwrap_or(first)))
     });
     let bottom = geom.frame.y + geom.frame.h;
+    if let Some(n) = segment_size(pd.plot.line.connect) {
+        draw_segments(out, pd, geom, n, &stroke);
+        return;
+    }
     let connect = match pd.plot.line.connect {
         Connect::Spline if !spline_applies(pd) => Connect::Straight,
         c => c,
@@ -800,6 +804,42 @@ fn draw_line_with(
     flush(&mut piece, &mut pending, out, first_row.take(), last_row.take());
     if !outline.is_empty() {
         out.push(Item::Path { d: outline, fill: None, stroke: Some(stroke) });
+    }
+}
+
+/// The group size of a segment connection (2 Point Segment, 3 Point Segment, k-point segments).
+fn segment_size(c: Connect) -> Option<usize> {
+    match c {
+        Connect::Segment2 => Some(2),
+        Connect::Segment3 => Some(3),
+        Connect::Segments(k) => Some(usize::from(k).max(2)),
+        _ => None,
+    }
+}
+
+/// Draws a segment connection: the plot's rows, counted from its first row, form groups of `n`
+/// (rows 1..n, n+1..2n, ...), the points of a group are joined in order and the groups are not. A row
+/// whose point cannot be placed (a missing value) breaks the line inside its group but does not shift
+/// the groups, so a Line Series row never joins the next row. No decimation: groups are short.
+fn draw_segments(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, n: usize, stroke: &Stroke) {
+    let mut d = String::new();
+    let mut last: Option<(usize, (f64, f64))> = None;
+    for (k, i) in pd.line_rows().enumerate() {
+        let group = k / n;
+        match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
+            Some(p) => {
+                match last {
+                    Some((g, _)) if g == group => line_to(&mut d, p.0, p.1),
+                    _ => move_to(&mut d, p.0, p.1),
+                }
+                last = Some((group, p));
+            }
+            None => last = None,
+        }
+    }
+    let d = crate::break_cut::cut_at_breaks(d, geom);
+    if !d.is_empty() {
+        out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
     }
 }
 

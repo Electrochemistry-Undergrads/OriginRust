@@ -41,6 +41,7 @@ use crate::dialogs::simulate::{Outcome as SimulateOutcome, SimulateDialog};
 use crate::dialogs::slope_object::SlopeDialog;
 use crate::dialogs::sort::{SortDialog, SortOutcome};
 use crate::dialogs::stack_panels::{Outcome as StackPanelsOutcome, StackPanelsDialog};
+use crate::dialogs::straight_line::StraightLineDialog;
 use crate::dialogs::text_object::TextDialog;
 use crate::dialogs::trendline::{Outcome as TrendlineOutcome, TrendlineDialog};
 use crate::graph_view::{self, GraphUi};
@@ -161,6 +162,7 @@ pub struct SheafApp {
     text_dialog: Option<TextDialog>,
     shape_dialog: Option<ShapeDialog>,
     slope_dialog: Option<SlopeDialog>,
+    straight_line_dialog: Option<StraightLineDialog>,
     comparison_plot: Option<ComparisonPlotDialog>,
     multi_y: Option<MultiYDialog>,
     set_values: Option<SetValuesDialog>,
@@ -266,6 +268,7 @@ impl SheafApp {
             text_dialog: None,
             shape_dialog: None,
             slope_dialog: None,
+            straight_line_dialog: None,
             comparison_plot: None,
             multi_y: None,
             set_values: None,
@@ -1295,6 +1298,7 @@ impl SheafApp {
             GraphOp::DeleteLabel { .. } => "Delete text",
             GraphOp::DeleteShape { .. } => "Delete drawn object",
             GraphOp::DeleteSlope { .. } => "Delete slope annotation",
+            GraphOp::DeleteStraightLine { .. } => "Delete straight line",
             GraphOp::OrderShape { front: true, .. } => "Bring drawn object to front",
             GraphOp::OrderShape { front: false, .. } => "Push drawn object to back",
             GraphOp::HideLayer { .. } => "Hide layer",
@@ -2115,6 +2119,12 @@ impl SheafApp {
             }
             Action::EditSlope { graph, layer, slope } => {
                 self.slope_dialog = SlopeDialog::edit(&self.doc, graph, layer, slope);
+            }
+            Action::AddStraightLine { graph, layer } => {
+                self.straight_line_dialog = StraightLineDialog::new_line(&self.doc, graph, layer);
+            }
+            Action::EditStraightLine { graph, layer, line } => {
+                self.straight_line_dialog = StraightLineDialog::edit(&self.doc, graph, layer, line);
             }
             Action::Hint(text) => self.say(text),
             Action::EditShape { graph, layer, shape } => {
@@ -3174,6 +3184,7 @@ impl SheafApp {
             || self.text_dialog.is_some()
             || self.shape_dialog.is_some()
             || self.slope_dialog.is_some()
+            || self.straight_line_dialog.is_some()
             || self.comparison_plot.is_some()
             || self.multi_y.is_some()
             || self.set_values.is_some()
@@ -3566,6 +3577,11 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.slope_dialog = None;
+        }
+        if let Some(d) = &mut self.straight_line_dialog
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.straight_line_dialog = None;
         }
         if let Some(d) = &mut self.set_values
             && !d.show(ctx, &mut self.doc)

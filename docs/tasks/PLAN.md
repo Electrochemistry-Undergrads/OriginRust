@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 377 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 367 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -152,7 +152,7 @@ Backlog packages: write the brief first (step 3 above).
 | [ ] | [T57](T57-deconvolution-stft.md) | Deconvolution and STFT (claimed 2026-11-15) | M | 2 |
 | [ ] | B8 | Analysis and statistics: wavelets, Multiple Peak Fit, batch peak analysis, implicit fit, Simulate Surface, Compare Datasets, XYZ Surface Area, partial correlation, three-way and repeated-measures ANOVA | L | 16 |
 | [ ] | B9 | Gadgets on the graph (Statistics, Quick Fit, Quick Peaks, Differentiate, Interpolate, Intersect, FFT, Rise Time, Cluster, Vertical Cursor, ...) | L | 13 |
-| [ ] | B10 | Most Recently Used lists in the Plot, Worksheet, Analysis and Statistics menus; Recent Exports | S | 6 |
+| [x] | [T78](T78-recent-lists.md) | Most Recently Used lists in the Plot, Worksheet, Analysis and Statistics menus; Recent Exports (B10) | S | 0 |
 
 - **B8.** One brief per tool family, each checked against Origin where it can be scripted and
   against scipy/statsmodels otherwise. Multiple Peak Fit first (peak fitting is daily work; reuse
@@ -160,7 +160,7 @@ Backlog packages: write the brief first (step 3 above).
 - **B9.** The Integrate gadget exists (`crates/app/src/gadget.rs`): the region of interest, its
   menu and its live result. Turn it into a shared gadget frame, then add one gadget per commit;
   most reuse an existing analysis tool.
-- **B10.** Reuse `crates/app/src/recent.rs` (T38).
+- **B10.** Done as T78.
 
 ## Wave 7: project, templates and settings
 
@@ -168,7 +168,7 @@ Backlog packages: write the brief first (step 3 above).
 |---|---|---|---|---|
 | [ ] | [T56](T56-user-graph-templates.md) | Save Template As and user graph templates (open; unverified start on branch `user-templates`) | M | 1 |
 | [ ] | B11 | Templates and themes: template library, From Template, analysis templates, Batch Processing, batch-plotting Duplicate, Theme Organizer, Save Format as Theme | L | 10 |
-| [ ] | B12 | Project and window management: New Graph, save/duplicate project without data, Re-Import, worksheet as image, View Windows, Folders List, folder Properties, sample projects | M | 16 |
+| [ ] | B12 | Project and window management: Re-Import, worksheet as image, View Windows, Folders List, folder Properties, sample projects (New Graph and save/duplicate project without data done as T77) | M | 12 |
 | [ ] | B13 | Tools: Options window, System Variables, Fitting Function Builder and Organizer, Import Filters Manager, project protection, audit log | L | 7 |
 
 - **B11** depends on T56. Analysis templates depend on recalculating analysis results (T03).

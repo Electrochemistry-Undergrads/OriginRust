@@ -4,8 +4,9 @@
 //! again each time the File menu opens (so a change by another instance shows), and it is written
 //! through `sheaf_io::recent::update`, which merges with what another instance wrote meanwhile.
 
-use sheaf_io::recent::{self, RecentList};
+use sheaf_io::recent::{self, ExportEntry, RecentList};
 use sheaf_io::window_file::{self, WindowFileKind};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// Which list an entry belongs to.
@@ -67,6 +68,30 @@ impl Recent {
 
     pub fn graphs(&self) -> &[PathBuf] {
         &self.list.graphs
+    }
+
+    /// The Most Recently Used command keys of every menu (menu name to keys, newest first).
+    pub fn commands(&self) -> &BTreeMap<String, Vec<String>> {
+        &self.list.commands
+    }
+
+    /// The files written by exports, newest first.
+    pub fn exports(&self) -> &[ExportEntry] {
+        &self.list.exports
+    }
+
+    /// A command was run from a menu: it goes to the top of that menu's Most Recently Used list.
+    pub fn push_command(&mut self, menu: &str, key: &str) -> Option<String> {
+        self.change(|l| l.push_command(menu, key))
+    }
+
+    /// An export wrote a file.
+    pub fn push_export(&mut self, entry: &ExportEntry) -> Option<String> {
+        self.change(|l| l.push_export(entry.clone()))
+    }
+
+    pub fn clear_exports(&mut self) -> Option<String> {
+        self.change(RecentList::clear_exports)
     }
 
     /// A window file was saved or opened: it goes to the top of the books or the graphs.

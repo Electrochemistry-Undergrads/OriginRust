@@ -418,6 +418,8 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         recent_projects: &[],
         recent_books: &[],
         recent_graphs: &[],
+        recent_commands: &crate::menus::NO_COMMANDS,
+        recent_exports: &[],
         user_templates: &[],
         templates: false,
         recent_imports: &[],

@@ -40,6 +40,7 @@ mod live;
 #[cfg(target_os = "macos")]
 mod macprint;
 mod menus;
+mod mru;
 mod object_format;
 mod panels;
 mod reader;

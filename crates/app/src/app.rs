@@ -67,10 +67,13 @@ use sheaf_core::template::Template;
 use sheaf_core::{ColumnData, ColumnId, Designation, Document, Project, WindowId};
 use sheaf_io::batch::{ImportMode, PlaceOptions, Target, place_workbook_with};
 use sheaf_io::project_file;
+use sheaf_io::recent::{ExportEntry, ExportKind};
 use sheaf_io::recovery::{self, AutosaveSettings, Session};
 use sheaf_io::window_file::{self, WindowFileKind};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+
+mod no_data;
 
 pub const APP_NAME: &str = "Sheaf";
 
@@ -113,6 +116,8 @@ enum Pending {
     OpenFile,
     /// Open the newest recovery of an earlier run (the Recover button).
     Recover,
+    /// Duplicate Project without Data (it replaces the open project).
+    DuplicateNoData,
     Quit,
 }
 
@@ -1625,6 +1630,15 @@ impl SheafApp {
                     self.do_pending(Pending::New, ctx);
                 }
             }
+            Action::NewGraph => self.new_graph(),
+            Action::SaveProjectWithoutData => self.save_project_without_data(),
+            Action::DuplicateProjectWithoutData => {
+                if self.doc.dirty {
+                    self.pending = Some(Pending::DuplicateNoData);
+                } else {
+                    self.do_pending(Pending::DuplicateNoData, ctx);
+                }
+            }
             Action::OpenProject => {
                 // The chooser comes first: only a project replaces this one, so only a project asks.
                 if let Some(path) = self.choose_project_file() {
@@ -2319,6 +2333,20 @@ impl SheafApp {
                     self.logs.warn(why);
                 }
             }
+            Action::UsedCommand { menu, cmd } => {
+                let kind = self.menu_context().kind;
+                if let Some(key) = crate::mru::key_of(crate::menus::bar(kind), menu, &cmd)
+                    && let Some(why) = self.recent.push_command(&menu.list_name(), &key)
+                {
+                    self.logs.warn(why);
+                }
+            }
+            Action::OpenRecentExport(entry) => self.open_recent_export(&entry),
+            Action::ClearRecentExports => {
+                if let Some(why) = self.recent.clear_exports() {
+                    self.logs.warn(why);
+                }
+            }
             Action::DuplicateWindow(id) => {
                 let mut new = None;
                 self.doc.apply("Duplicate window", |p| new = p.duplicate_window(id));
@@ -2470,6 +2498,7 @@ impl SheafApp {
                     }
                 }
             }
+            Pending::DuplicateNoData => self.duplicate_project_without_data(),
             Pending::Recover => self.recover_newest(),
             Pending::Quit => {
                 self.quit_confirmed = true;
@@ -3187,6 +3216,52 @@ impl SheafApp {
         self.focus(book);
     }
 
+    /// Puts the files an export wrote into Recent Exports, each with the short name of its window (unique, and unchanged by a
+    /// rename of the long name or title display).
+    fn record_exports(&mut self, kind: ExportKind, files: Vec<(WindowId, PathBuf)>) {
+        for (id, path) in files.into_iter().rev() {
+            let Some(window) = self.doc.project().windows.iter().find(|w| w.id() == id).map(|w| w.name().to_string())
+            else {
+                continue;
+            };
+            if let Some(why) = self.recent.push_export(&ExportEntry { path, kind, window }) {
+                self.logs.warn(why);
+            }
+        }
+    }
+
+    /// File > Export > Recent Exports: opens the export that wrote the file again, on the window it
+    /// was made from and in the file's folder. A window that is not in the project any more is
+    /// reported and nothing opens (Sheaf's choice, docs/spec/recent-lists.md 3).
+    fn open_recent_export(&mut self, entry: &ExportEntry) {
+        let title = "Recent Exports".to_string();
+        let project = self.doc.project();
+        let Some(id) = project.windows.iter().find(|w| w.name() == entry.window).map(|w| w.id()) else {
+            let text = format!("The window '{}' is not in this project, so its export cannot be opened.", entry.window);
+            self.message = Some((title, text));
+            return;
+        };
+        let folder = entry.path.parent().map(Path::to_path_buf).or_else(|| self.folder());
+        match entry.kind {
+            ExportKind::Graph if project.graph(id).is_some() => {
+                self.export = Some(ExportDialog::new(id, folder).with_themes(self.startup.themes_dir.clone()));
+            }
+            ExportKind::Sheet if project.workbook(id).is_some() => {
+                self.export_sheet = Some(SheetExportDialog::new(id, folder));
+            }
+            ExportKind::Excel if project.workbook(id).is_some() => {
+                let sheets = project.workbook(id).map_or(0, |b| b.sheets.len());
+                self.export_excel = Some(ExcelExportDialog::new(id, sheets, folder));
+            }
+            _ => {
+                let text = format!("'{}' is not the kind of window that wrote {}.", entry.window, entry.path.display());
+                self.message = Some((title, text));
+                return;
+            }
+        }
+        self.focus(id);
+    }
+
     fn export_data(&mut self, book: WindowId) {
         if self.doc.project().workbook(book).is_some() {
             self.export_sheet = Some(SheetExportDialog::new(book, self.folder()));
@@ -3229,6 +3304,8 @@ impl SheafApp {
             recent_imports: self.recent.imports(),
             recent_books: self.recent.books(),
             recent_graphs: self.recent.graphs(),
+            recent_commands: self.recent.commands(),
+            recent_exports: self.recent.exports(),
             user_templates: &self.user_templates,
             templates: self.startup.templates_dir.is_some(),
             panels: self.panels.shown_flags(),
@@ -3956,7 +4033,10 @@ impl SheafApp {
             }
         }
         if let Some(d) = &mut self.export {
-            match d.show(ctx, &self.doc) {
+            let outcome = d.show(ctx, &self.doc);
+            let written = d.take_written();
+            self.record_exports(ExportKind::Graph, written);
+            match outcome {
                 ExportOutcome::Open => {}
                 ExportOutcome::Closed => self.export = None,
                 ExportOutcome::Saved(path) => {
@@ -3996,14 +4076,17 @@ impl SheafApp {
             }
         }
         if let Some(d) = &mut self.export_sheet {
+            let book = d.book;
             match d.show(ctx, &self.doc) {
                 ExportOutcome::Open => {}
                 ExportOutcome::Closed => self.export_sheet = None,
                 ExportOutcome::Saved(path) => {
+                    self.record_exports(ExportKind::Sheet, vec![(book, path.clone())]);
                     self.say(format!("Wrote {}", path.display()));
                     self.export_sheet = None;
                 }
                 ExportOutcome::SavedWithNotes(path, _) => {
+                    self.record_exports(ExportKind::Sheet, vec![(book, path.clone())]);
                     self.say(format!("Wrote {}", path.display()));
                     self.export_sheet = None;
                 }
@@ -4012,14 +4095,17 @@ impl SheafApp {
             }
         }
         if let Some(d) = &mut self.export_excel {
+            let book = d.book;
             match d.show(ctx, &self.doc) {
                 ExportOutcome::Open | ExportOutcome::Applied(_) => {}
                 ExportOutcome::Closed => self.export_excel = None,
                 ExportOutcome::Saved(path) => {
+                    self.record_exports(ExportKind::Excel, vec![(book, path.clone())]);
                     self.say(format!("Wrote {}", path.display()));
                     self.export_excel = None;
                 }
                 ExportOutcome::SavedWithNotes(path, notes) => {
+                    self.record_exports(ExportKind::Excel, vec![(book, path.clone())]);
                     self.say(format!("Wrote {}", path.display()));
                     self.export_excel = None;
                     for note in &notes {

@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **377 listed item locations** at the planning
-  baseline (274 menu bar, 20 toolbar, 83 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **367 listed item locations** at the planning
+  baseline (265 menu bar, 19 toolbar, 83 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -73,6 +73,19 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 T79 (`column-scatter`, B4 slice): Plot > Symbol > Column Scatter as Origin 2016's (columns at 1, 2, ...,
 diamonds size 8, jitter within +-0.15, column-name ticks, Y title Range; graphing 18.14).
+
+T78 recent lists (`recent-lists`, macOS, no Origin): Most Recently Used submenus at the end of the Plot,
+Worksheet, Analysis and Statistics menus (up to 10 menu-bar commands each, newest first, re-resolved against the
+current window when chosen) and Recent Exports (files written by graph, ASCII and Excel exports; choosing one reopens
+that export dialog on its window and folder). Both persist in `recent.json` (T38). New `app/mru.rs`, spec
+`recent-lists.md`; Origin's theme entries and re-run semantics are unmeasured (B10 done).
+
+T77 New Graph and projects without data (`new-graph-nodata`, macOS, no Origin): File > New > Graph and the
+Standard toolbar's New Graph add an empty graph from the default template (one undo step); File > Save Project
+without Data... writes a copy with every value, mask, note, format, filter and fit mark removed (structure,
+formulas and graphs kept), never over the open project's own file; Duplicate Project without Data offers to save,
+then opens that copy as an untitled project (as Origin's later Clone Project). New `core/without_data.rs`.
+Origin 2016's behaviour of the two items is undocumented; unmeasured choices in graphing 25 and project-file-format.
 
 T76 grouped indexed plots (`grouped-indexed`, macOS, no Origin; renumbered from T75): Plot > Column/Bar/Pie >
 Grouped Columns (indexed data) and Plot > Statistics > Grouped Box Charts split one data column by one or two
@@ -243,6 +256,9 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `b5-fill` | Claude Windows, "t30-origin" | B5 slice as new brief T74: Column > Fill Column With A set of Numbers / Date/Time values / Text&Numeric values (Origin patternN/D/T, measured), menus and column-header context menu | claimed 2026-11-15; worktree wf_c03644a9-997-1, build target/wf-excel; not Row Numbers/random fills (T63), no other B5 items |
 | `new-graph-nodata` | Claude macOS, "mac-format-bar" | B12 slice as new brief T77: File > New > Graph and Standard toolbar New Graph (empty graph from the default template), File > Save Project without Data... and Duplicate Project without Data | claimed 2026-11-16; worktree `.claude/worktrees/new-graph-nodata`, `target/wt-nodata`; app File menu/Standard toolbar items, io/core project copy without data, own tests, spec section, T77 brief. Built from Origin's documentation on macOS (no Origin). Not Re-Import, Worksheet as Image, View Windows, folders, sample projects, B6 sheet-tab Duplicate Without Data or other sessions' scopes |
 | `recent-lists` | Claude macOS, "mac-format-bar" | B10 as new brief T78: Most Recently Used lists in the Plot, Worksheet, Analysis and Statistics menus; File > Export > Recent Exports and the graph Recent Exports | claimed 2026-11-16; worktree `.claude/worktrees/recent-lists`, `target/wt-recent2`; app recent.rs/new MRU module, the six menu entries, export history reuse (T05 last successful exports), own tests, spec section, T78 brief. Built from Origin's documentation on macOS. Not the plot types themselves (T76), File recent files (T38) behaviour changes, export dialog themes or other sessions' scopes |
+
+| `column-scatter` | Claude Windows, session fe4b37eb | B4 slice as new brief T79: Plot > Symbol > Column Scatter (Y columns as scatter by column position with Origin's offset/jitter, categorical X labels); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not Grouped Columns/T76, Line Series or statistics plots; no other sessions' scopes |
+| `color-scale` | Claude macOS, "mac-format-bar" | B3 slice as new brief T80: Graph > New Color Scale and the legend context menu's Add Color Scale / Add Bubble Scale (a colour-scale object for colour-mapped plots, a bubble-size scale for bubble plots) | claimed 2026-11-16; worktree `.claude/worktrees/color-scale`, `target/wt-cscale`; core layer object, plot drawing (reusing hexbin's colour bar), Graph menu/legend context items, hit/selection if needed, .sheaf/.opj, spec section, T80 brief. Built from Origin's documentation on macOS (no Origin). Not Add Legend Title, New Table, Function Graph, display range/markers, T72 Copy/Paste Format or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

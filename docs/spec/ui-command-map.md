@@ -64,6 +64,7 @@ The ids 507, 510, 511, 532 are assigned by guess from their contents (INFER).
 - Open... [Ctrl+O]; Open Excel... [Ctrl+E]; Open Sample OPJ; Append... (merge another project in);
   Close.
 - Save Project [Ctrl+S]; Save Project As...
+- New > Graph, Save Project without Data... and Duplicate Project without Data (work, T77).
 - Save Window As... (works, T54: a workbook or a graph with its books to a `.sheafbook` or `.sheafgraph`);
   Save Template As...: writes the active window as a template (still greyed).
 - Save Workbook As Analysis Template...; Add Word Bookmarks to Analysis Template...;
@@ -77,7 +78,7 @@ The ids 507, 510, 511, 532 are assigned by guess from their contents (INFER).
 - Recent Books, Recent Graphs, Recent Projects; Exit. Recent Projects and Recent Imports work (T38,
   `docs/spec/recent-files.md`; 15 entries per list (Origin measured, T38), the numbering and the path display are Sheaf's
   choices, not measured in Origin). Recent Books and Recent Graphs work too (T54, `docs/spec/window-files.md`):
-  they list the window files saved with Save Window As or opened. Recent Exports stays greyed.
+  they list the window files saved with Save Window As or opened. Recent Exports lists the files exports wrote (T78, recent-lists.md).
 - Graph windows additionally have Export Page... in the Layout version and the graph File menu
   carries Batch Processing but no "Re-Import".
 

@@ -94,6 +94,10 @@ pub struct Style {
     pub treemap_gap: Option<f64>,
     /// Grouped columns: the error bars, none (default), sd or se.
     pub group_error: Option<String>,
+    /// Interval plots: the error bar, ci (default), sd or se.
+    pub interval_error: Option<String>,
+    /// Interval plots: the confidence level in percent for ci, above 0 and below 100 (default 95).
+    pub interval_level: Option<f64>,
     /// Sunburst plots: the start angle in degrees counter-clockwise from 3 o'clock (default 90).
     pub sunburst_start: Option<f64>,
     /// Sunburst plots: the hole as a percentage of the radius, 0 to 90 (default 30).
@@ -265,6 +269,20 @@ impl PlotSpec {
         {
             bail!("--group-error needs -t grouped-columns");
         }
+        let special = self.template.as_deref().and_then(Template::from_name);
+        if matches!(special, Some(Template::IntervalPlot | Template::Pareto)) {
+            if !self.y2.is_empty() {
+                bail!("an interval plot or Pareto chart cannot have a --y2 axis; leave it out");
+            }
+            if self.panels.is_some() || self.graph.is_some() || self.overlay {
+                bail!(
+                    "an interval plot or Pareto chart cannot be made in panels, as an overlay or by styling a graph; leave those options out"
+                );
+            }
+        }
+        if (st.interval_error.is_some() || st.interval_level.is_some()) && special != Some(Template::IntervalPlot) {
+            bail!("--interval-error and --interval-level need -t interval-plot");
+        }
         let sunburst_option = st.sunburst_start.is_some()
             || st.sunburst_hole.is_some()
             || st.sunburst_gap.is_some()
@@ -344,6 +362,8 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
             sunburst_graph(project, book, sheet, &ys, a.group.as_deref(), &a.style)?
         } else if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
             grouped_graph(project, book, sheet, template, &ys, a.group.as_deref(), &a.style)?
+        } else if template == Template::IntervalPlot {
+            interval_graph(project, &ys, &a.style)?
         } else if a.group.is_some() {
             bail!(
                 "--group needs -t parallel, -t parallel-index, -t treemap, -t sunburst, -t grouped-columns or -t grouped-box"
@@ -455,6 +475,29 @@ fn treemap_graph(
         t.order_column = order_column.or(t.order_column);
         t.depth = style.treemap_depth.map(|d| d as u32).or(t.depth);
         t.gap_pt = style.treemap_gap.unwrap_or(t.gap_pt);
+    }
+    Ok(graph)
+}
+
+/// An interval plot of the columns `ys`, with the error bar the style names.
+fn interval_graph(project: &mut Project, ys: &[ColumnId], style: &Style) -> Result<WindowId> {
+    use sheaf_core::graph::{IntervalError, StatPlot};
+    let error = match style.interval_error.as_deref().map(str::trim) {
+        None => IntervalError::Ci,
+        Some(e) if e.eq_ignore_ascii_case("ci") => IntervalError::Ci,
+        Some(e) if e.eq_ignore_ascii_case("sd") => IntervalError::Sd,
+        Some(e) if e.eq_ignore_ascii_case("se") => IntervalError::Se,
+        Some(e) => bail!("--interval-error {e}: choose ci, sd or se"),
+    };
+    let level = style.interval_level.unwrap_or(95.0);
+    if !(level > 0.0 && level < 100.0) {
+        bail!("--interval-level {level}: the confidence level is a percent above 0 and below 100");
+    }
+    let graph = project.plot_interval(ys)?;
+    if let Some(l) = project.graph_mut(graph).and_then(|g| g.layers.first_mut()) {
+        for p in &mut l.plots {
+            p.stat = Some(StatPlot::Interval { error, level });
+        }
     }
     Ok(graph)
 }

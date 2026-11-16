@@ -45,12 +45,15 @@ impl UserTemplate {
     /// back to the Y value, a tick label column back to automatic and the column a rug follows
     /// back to all plots. Text objects, the legend text, drawn objects, axis titles and fixed or
     /// automatic axis ranges stay as they are. Refused for plots that are made of their data
-    /// structure: treemap, sunburst, grouped column and box plots of indexed data, parallel plot and parallel
+    /// structure: treemap, sunburst, grouped column and box plots of indexed data, interval plots and Pareto charts, parallel plot and parallel
     /// index, floating column and bar, and the fill between two curves.
     pub fn from_graph(name: &str, graph: &Graph) -> Result<UserTemplate, UserTemplateError> {
         for p in graph.layers.iter().flat_map(|l| &l.plots) {
             if p.indexed.is_some() {
                 return Err(UserTemplateError::Unsupported("a grouped plot of indexed data"));
+            }
+            if p.stat.is_some() {
+                return Err(UserTemplateError::Unsupported("an interval plot or Pareto chart"));
             }
             match p.kind {
                 PlotKind::Treemap => return Err(UserTemplateError::Unsupported("a treemap")),

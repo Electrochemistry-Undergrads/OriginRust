@@ -2918,6 +2918,18 @@ impl SheafApp {
         } else {
             Vec::new()
         };
+        // A Pareto chart counts the cells of the one selected column, text or numbers.
+        if template == Template::Pareto {
+            let [column] = columns[..] else {
+                self.warn("Select one column whose values are counted for the Pareto chart".to_string());
+                return;
+            };
+            match self.doc.edit("Plot columns", |p| p.plot_pareto(column)) {
+                Ok(_) => self.say("Plotted a Pareto chart".to_string()),
+                Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+            }
+            return;
+        }
         // Grouped columns / grouped box charts of indexed data: the one numeric Y column is the data, the other
         // selected columns (one or two) are the groups, in selection order.
         if matches!(template, Template::GroupedColumns | Template::GroupedBox) {

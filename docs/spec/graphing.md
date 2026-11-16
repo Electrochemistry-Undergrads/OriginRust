@@ -2071,7 +2071,7 @@ Origin's documented facts (from its help, not measured; no Origin was at hand; [
 
 - Kinds `PlotKind::{Violin, ViolinBox, ViolinPoint, ViolinQuartile, ViolinStick, HalfViolin}` (one kind per variant,
   so no new field of `Plot` and old files load unchanged; `PlotKind::violin_inner()` says what is drawn inside) and the
-  templates of the same names, in Plot > Statistics after the grey Grouped Box Charts / Interval Plot: "Violin Plot"
+  templates of the same names, in Plot > Statistics after Grouped Box Charts and Interval Plot: "Violin Plot"
   (`violin`), "Violin with Box" (`violin-box`), "Violin with Point" (`violin-point`), "Violin with Quartile"
   (`violin-quartile`), "Violin with Stick" (`violin-stick`), "Half Violin" (`half-violin`). They are box chart
   templates: page, axes and the colours starting at red are the box chart's (the box chart is measured, 14.15).
@@ -2542,6 +2542,54 @@ Origin's documented facts (documentation only, **not measured**; no Origin was a
 **Leftovers:** Origin's dialog and data forms, raw-data bar statistics and the other error-bar statistics (CI, percentile
 ranges, MAD), stacking, two-row table tick labels, more than two group levels, Grouped Scatter, panels or pages split by a
 group, themes (half box, violin, ...), colour indexed by the main group, and a measurement of all of it in Origin 2016.
+
+### 14.29 Interval Plot and Pareto chart (T83)
+
+Use: Plot > Statistics > Interval Plot and Pareto. Status: written from Origin's documentation on a machine without Origin;
+nothing here was measured, so every choice not listed as documented is Sheaf's and **unmeasured**.
+
+**Documented** [W: docs.originlab.com/origin-help/interval-plot, .../create-pareto-chart, .../paretochart-rawdata,
+docs.originlab.com/x-function/ref/plot_paretoraw, .../plot_paretobin]:
+
+- An interval plot is a box chart with the box hidden: only the mean shows, as a solid circle (template BoxInterval). The
+  default error statistic, confidence level, labels and colours are not given.
+- Pareto: one command for binned data (category and count columns) and one for raw data (cells counted per distinct value;
+  template ParetoRaw). Bars from most to least significant. The cumulative percent is a line with symbols in a new layer
+  whose right Y axis always runs 0 to 100 (option `cum`, default on); drop lines at 80, a count table, combining small
+  categories into "Other" and groups are options. Fill, gap, colours, tie order and missing values are not given.
+- Pareto, raw data, option `symr` (default 1): the cumulative-percent symbols sit at the right edge of each bar, and the
+  cumulative line starts at (0, 0), the left edge of the first bar at 0 %. Sheaf copies both (placed from the drawn bar
+  width, so they follow the layer's gap); the first and the last point carry no data labels.
+
+**What Sheaf does** (unmeasured unless listed above):
+
+- Pareto counts every cell of the column: row filters and Hide Masked Points are not applied to it (Sheaf's choice; the
+  interval plot does honour them). A column with no usable values is skipped and does not use up a category slot.
+- Items: Plot > Statistics > Interval Plot (`Template::IntervalPlot`, CLI `interval-plot`) and Pareto (`Template::Pareto`,
+  `pareto`), no dialog. Model: the new per-plot field `Plot.stat` (`StatPlot::{Interval{error, level}, Pareto,
+  ParetoCumulative}`), skipped in `.sheaf` while empty. `.opj` export writes plain plots of the data column with a save
+  warning; user templates refuse these graphs; a right Y axis is refused for both.
+- Interval Plot: one `Scatter` plot per selected numeric Y column (symbol: a filled circle, as documented; colours and
+  size are Sheaf's), at X = 1, 2, ... in plot order, named by the column on
+  the X axis (like box charts; no X title). The symbol is the mean of the finite numbers; the error bar is symmetric:
+  the Student-t confidence interval of the mean (default, level 95 %, the Graphical Summary's `mean_confidence_limits`,
+  statistics 22), or the SD (n - 1) or SE. A column of one number has no bar. Plot Details > Error Bar chooses
+  CI/SD/SE and the level for every interval plot of the layer. CLI `--interval-error ci|sd|se`, `--interval-level`.
+  Selection: one or more numeric columns, else the status warning "Nothing to plot".
+- Pareto: select one column (text or numbers); anything else is the status warning "Select one column whose values are
+  counted for the Pareto chart". The left layer holds `Column` bars of the count per distinct value, most frequent first
+  (ties in the order of first occurrence; empty cells are not counted; numbers compare as text without a trailing ".0");
+  the categories are the tick labels at 1..K, the X title is the column's. The right layer (the usual linked right-Y layer)
+  holds a `LineSymbol` plot of the running percent of the counted cells, Y axis fixed to 0 - 100, titles "Count" and
+  "Cumulative %". The cumulative points are at the bar right edges, with an extra first point (0, 0) at the left edge of the first
+  bar (documented, above). Sheaf adds no drop lines, count table, "Other" merge, binned-data input or groups.
+- Tests: `crates/core/src/template.rs`, `crates/plot/src/grouped_tests.rs` (hand-computed mean, SD, SE, t quantiles and
+  Pareto percentages; goldens `interval-plot.svg`, `pareto.svg`), `crates/app/src/app/ui_tests/grouped_indexed.rs`,
+  `crates/cli/tests/interval_pareto.rs`, `crates/io/src/opj/write/graph_feature_tests.rs`.
+
+**Leftovers:** Origin's dialogs, measured defaults (error bar, symbol, colours, gaps), box-chart based interval themes and
+grouped intervals, Scatter Interval, Pareto binned data, groups, drop lines at 80, count table, combine small categories,
+and a measurement of all of it in Origin 2016.
 
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 

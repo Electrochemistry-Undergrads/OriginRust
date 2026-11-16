@@ -27,7 +27,7 @@ use crate::{LayerGeometry, PlotError, Rect};
 use sheaf_core::Color;
 use sheaf_core::graph::{
     Axis, AxisSide, Font, Graph, Layer, Legend, LegendPosition, LegendScope, LineStyle, Page, PlotKind, ScaleLink,
-    TickDirection,
+    StatPlot, TickDirection,
 };
 use sheaf_core::{Project, WindowId};
 
@@ -202,6 +202,12 @@ pub(crate) fn resolve_dim(
     } else if dim == Dim::X && sources.iter().any(|pd| pd.categories.is_some()) {
         // Indexed data (T76): one category per level of the main group, at 1, 2, ...
         let names = sources.iter().find_map(|pd| pd.categories.clone()).unwrap_or_default();
+        let mut r = crate::ticks::resolve_category(axis, Some((1.0, names.len() as f64)));
+        crate::ticks::label_from_cells(&mut r, &names);
+        r
+    } else if dim == Dim::X && sources.iter().any(|pd| pd.slot_label.is_some()) {
+        // Interval plot (T83): one category per plotted column, named by it.
+        let names: Vec<String> = sources.iter().filter_map(|pd| pd.slot_label.clone()).collect();
         let mut r = crate::ticks::resolve_category(axis, Some((1.0, names.len() as f64)));
         crate::ticks::label_from_cells(&mut r, &names);
         r
@@ -1435,6 +1441,13 @@ fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -
     }
     if (pd.boxed.is_some() || pd.column_at.is_some()) && !y_axis {
         return String::new();
+    }
+    match (&pd.plot.stat, y_axis) {
+        (Some(StatPlot::Interval { .. }), false) => return String::new(),
+        (Some(StatPlot::Pareto | StatPlot::ParetoCumulative), false) => {
+            return project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default();
+        }
+        _ => {}
     }
     if pd.column_at.is_some() {
         return "Range".to_string();

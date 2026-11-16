@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **438 greyed items: 301 in the menu bar, 46 on the toolbars, 91 in context menus.**
+original inventory baseline. This is not a new runtime audit. **423 greyed items: 294 in the menu bar, 41 on the toolbars, 88 in context menus.**
 
 ## How to read and keep this file
 
@@ -38,7 +38,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T58` | 15 |
 | `T59` | 2 |
 | `T60` | 0 |
-| `T61` | 20 |
+| `T61` | 5 |
 | `T62` | 0 |
 | `T63` | 22 |
 | `B1` | 27 |
@@ -60,7 +60,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 62 items, backlog packages (`B`) 356, not planned (`N`) 20.
+Briefs (`T`) hold 47 items, backlog packages (`B`) 356, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -116,7 +116,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B4` Symbol: Scatter Central · Column Scatter · Vertical Drop Line
 - `B4` Line + Symbol: Line Series · 2 Point Segment · 3 Point Segment
 - `B4` Column/Bar/Pie: Column + Label · Grouped Columns (indexed data)
-- `T61` Multi-Y: 3Ys Y-YY · 3Ys Y-Y-Y · 4Ys Y-YYY · 4Ys YY-YY · Multiple Y Axes...
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
@@ -167,7 +166,7 @@ changes. The baseline labels remain open until implementation or a documented re
 ### Graph
 - `N` Fit Layer to Graph
 - `B3` Add Function Graph... · Add Straight Line... · New Table · New Color Scale · Convert to Standard Font Size
-- `T61` New Layer(Axes): Horizontal Axis Layer... · Vertical Axis Layer...
+- `T61` New Layer(Axes): Open Dialog...
 - `B3` Legend: Add Legend Title
 
 ### Data
@@ -194,7 +193,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Menu
 - `B16` Programming Control...
 - `B2` Object Properties...
-- `T61` Layer Properties... [Graph]
 - `B2` Snap Layers to Grid · Snap Objects to Grid [Graph]
 - `B3` Fit Page To Printer [Graph]
 - `B15` Axes: Z Axis... [Graph]
@@ -223,7 +221,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B14` Standard: New Matrix · New Layout · New Notes
 - `T58` Format: Font name box · Font size box · Bold · Italic · Underline · Superscript · Subscript · Greek · Increase Font Size · Decrease Font Size · Font Color · Fill Color · Line Color
 - `B1` Graph: Zoom In · Zoom Out · Whole Page
-- `T61` Graph: Add Layer (Bottom-X Left-Y) · Add Layer (Top-X Left-Y) · Add Layer (Bottom-X Right-Y) · Add Layer (Top-X Right-Y) · Add Inset Graph
 - `T63` 2D Graphs: Bar · Stacked Area · Box Chart · Histogram · Bubble
 - `B4` 2D Graphs: High-Low-Close
 - `B1` Tools: Zoom In · Zoom Out · Pan
@@ -261,10 +258,10 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B2` Graph legend > Copy Format: All · All Style Formats · Text
 - `B12` Graph page: Add Shortcut to Favorites
 - `B1` Graph page: View Full Screen
-- `T61` Graph page > New Layer(Axes): Horizontal Axis Layer... · Vertical Axis Layer...
+- `T61` Graph page > New Layer(Axes): Open Dialog...
 - `B2` Graph page > Copy Format: All · All Style Formats
 - `B11` Graph page > Duplicate (Batch Plotting): Duplicate
-- `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Delete Layer · Double click to open Plot Setup · Layer Properties...
+- `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Double click to open Plot Setup
 - `B12` Explorer folder: Properties...
 
 No greyed item was found in the label-cell menu or the Integrate gadget menu.

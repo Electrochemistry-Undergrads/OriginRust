@@ -166,6 +166,7 @@ pub enum Cmd {
     MergeGraphs,
     /// Statistics > Multiple Comparisons Plot... (T64).
     ComparisonPlot,
+    MultiYAxes,
     /// Add / Edit Trendline... on a plot of the active layer.
     Trendline {
         layer: usize,
@@ -236,6 +237,8 @@ pub enum Cmd {
     },
     /// A change made from a graph's right-click menus.
     GraphEdit(GraphOp),
+    /// Graph > New Layer(Axes) or a Graph toolbar button: a layer of this kind next to the active layer.
+    AddLayer(sheaf_core::layers::NewLayerKind),
     /// Rescale to Show All on the active layer (Ctrl+R).
     Rescale,
     /// Graph > Exchange X-Y Axes on the active layer.
@@ -835,10 +838,14 @@ fn plot_menu() -> Vec<Entry> {
         sep(),
         sub(
             "&Multi-Y",
-            with(
-                vec![item("&Double-Y", Cmd::Plot(Template::DoubleY))],
-                &["3Ys Y-YY", "3Ys Y-Y-Y", "4Ys Y-YYY", "4Ys YY-YY", "Multiple Y Axes..."],
-            ),
+            vec![
+                item("&Double-Y", Cmd::Plot(Template::DoubleY)),
+                item("3Ys Y-YY", Cmd::Plot(Template::Multi3YYy)),
+                item("3Ys Y-Y-Y", Cmd::Plot(Template::Multi3YYY)),
+                item("4Ys Y-YYY", Cmd::Plot(Template::Multi4YYyy)),
+                item("4Ys YY-YY", Cmd::Plot(Template::Multi4YyYy)),
+                item("Multiple Y Axes...", Cmd::MultiYAxes),
+            ],
         ),
         sub(
             "Y-offset/&Waterfall",
@@ -1360,7 +1367,7 @@ fn graph_menu() -> Vec<Entry> {
         grey("Add Function Graph..."),
         grey("Add Straight Line..."),
         item("Add Text...", Cmd::AddText),
-        grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
+        new_layer_menu(),
         item("Merge Graph Windows...", Cmd::MergeGraphs),
         sep(),
         keyed("Rescale to Show All", ctrl(Key::R), Cmd::Rescale),
@@ -1471,7 +1478,7 @@ fn format_menu(kind: WindowKind) -> Vec<Entry> {
         WindowKind::Graph => vec![
             grey("Menu"),
             keyed("&Page Properties...", plain_key(Key::F2), Cmd::GraphProps(PropsTab::Page)),
-            grey("&Layer Properties..."),
+            item("&Layer Properties...", Cmd::GraphProps(PropsTab::Layer)),
             item("Plot P&roperties...", Cmd::GraphProps(PropsTab::Plots)),
             sep(),
             grey("Snap Layers to Grid"),
@@ -1752,6 +1759,7 @@ pub fn graph_plot_menu(
     on_right: bool,
     book: Option<(WindowId, String)>,
     trendlines: usize,
+    layers: usize,
 ) -> Vec<Entry> {
     let change = |label: &str, to: PlotKind| {
         if to == kind {
@@ -1783,6 +1791,14 @@ pub fn graph_plot_menu(
         sep(),
         item("Add Trendline...", Cmd::Trendline { layer, plot, edit: false }),
     ];
+    if layers > 1 {
+        // The plot takes the axes of the layer it goes to (the extra Y axes of a multi-Y graph, T61).
+        let to_layer = (0..layers)
+            .filter(|&to| to != layer)
+            .map(|to| item(&format!("Layer {}", to + 1), Cmd::GraphEdit(GraphOp::MovePlotToLayer { layer, plot, to })))
+            .collect();
+        v.insert(5, sub("Move to Layer", to_layer));
+    }
     if trendlines > 0 {
         v.push(item("Edit Trendline...", Cmd::Trendline { layer, plot, edit: true }));
         v.push(item("Remove Trendline", Cmd::GraphEdit(GraphOp::RemoveTrendline { layer, plot })));
@@ -1906,12 +1922,22 @@ pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
     ]
 }
 
+/// Graph > New Layer(Axes): the nine kinds of Origin 2016 (Open Dialog... is the `layadd` window, unmeasured).
+fn new_layer_menu() -> Entry {
+    use sheaf_core::layers::NewLayerKind;
+    let mut entries: Vec<Entry> =
+        NewLayerKind::ALL.iter().map(|&kind| item(kind.menu_label(), Cmd::AddLayer(kind))).collect();
+    entries.push(sep());
+    entries.push(grey("Open Dialog..."));
+    sub("New Layer(Axes)", entries)
+}
+
 /// The menu of the page outside the plots and axes, or of the inside of a layer.
 pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
     vec![
         item("Add Text...", Cmd::AddText),
         item("Layer Management...", Cmd::LayerManagement(None)),
-        grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
+        new_layer_menu(),
         grey("Add Shortcut to Favorites"),
         keyed("Copy Page", ctrl(Key::J), Cmd::CopyPage),
         item("Export Graphs...", Cmd::ExportGraph),
@@ -1937,14 +1963,18 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
         others,
         grey("Show Active Layer Only"),
         grey("Set Active Layer By Layer Icon Only"),
-        grey("Delete Layer"),
+        if layers > 1 {
+            item("Delete Layer", Cmd::GraphEdit(GraphOp::DeleteLayer { layer }))
+        } else {
+            grey("Delete Layer")
+        },
         sep(),
         keyed("Layer Contents...", plain_key(Key::F12), Cmd::LayerContents(Some(layer))),
         item("Plot Setup...", Cmd::PlotSetup(Some(layer))),
         grey("Double click to open Plot Setup"),
         sep(),
         item("Axis...", Cmd::GraphPropsAt { layer, tab: PropsTab::XAxis, plot: None }),
-        grey("Layer Properties..."),
+        item("Layer Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Layer, plot: None }),
         item("Layer Management...", Cmd::LayerManagement(Some(layer))),
     ];
     if !plots.is_empty() {
@@ -2275,6 +2305,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::MergeGraphs => Action::MergeGraphs,
         Cmd::StackPanels => Action::StackPanels { book: book?, columns: c.selected.to_vec() },
+        Cmd::MultiYAxes => Action::MultiYAxes { book: book?, columns: c.selected.to_vec() },
         Cmd::ComparisonPlot => Action::ComparisonPlot { book: book?, sheet: None },
         Cmd::LabelPanels => Action::LabelPanels { book: book?, columns: c.selected.to_vec() },
         Cmd::Trendline { layer, plot, edit } => {
@@ -2379,6 +2410,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, tab: *tab, plot: *plot }
         }
         Cmd::GraphEdit(op) => Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
+        Cmd::AddLayer(kind) => Action::GraphEdit {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            op: GraphOp::AddLayer { layer: c.layer, kind: *kind },
+        },
         Cmd::Rescale => {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::Rescale { layer: c.layer } }
         }

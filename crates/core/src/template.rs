@@ -26,6 +26,14 @@ pub enum Template {
     /// on the right (Origin's "Double-Y"). Selected columns alternate between the left and the
     /// right axis, and each Y axis is drawn in the color of its first curve.
     DoubleY,
+    /// Origin's "3Ys Y-YY": three layers, a left axis and two right ones (graphing spec 21.5).
+    Multi3YYy,
+    /// Origin's "3Ys Y-Y-Y": a left axis, a left axis in the middle of the plot and a right axis.
+    Multi3YYY,
+    /// Origin's "4Ys Y-YYY": a left axis and three right ones.
+    Multi4YYyy,
+    /// Origin's "4Ys YY-YY": two left axes and two right ones.
+    Multi4YyYy,
     /// Curves stacked above each other with a gap (Origin's "Stacked Lines by Y Offsets"): the
     /// line template with automatic offsets and a 10 % gap, no Y tick labels and no Y ticks, and
     /// a closed box, as in the owner's XRD figures.
@@ -131,7 +139,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 48] = [
+    pub const ALL: [Template; 52] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -176,6 +184,10 @@ impl Template {
         Template::Ternary,
         Template::CyclicVoltammetry,
         Template::DoubleY,
+        Template::Multi3YYy,
+        Template::Multi3YYY,
+        Template::Multi4YYyy,
+        Template::Multi4YyYy,
         Template::StackedLines,
         Template::Waterfall,
         Template::Lollipop,
@@ -190,6 +202,10 @@ impl Template {
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
+            Template::Multi3YYy => "3ys-y-yy",
+            Template::Multi3YYY => "3ys-y-y-y",
+            Template::Multi4YYyy => "4ys-y-yyy",
+            Template::Multi4YyYy => "4ys-yy-yy",
             Template::StackedLines => "stacked",
             Template::Waterfall => "waterfall",
             Template::Column => "column",
@@ -243,6 +259,10 @@ impl Template {
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
+            Template::Multi3YYy => "3Ys Y-YY",
+            Template::Multi3YYY => "3Ys Y-Y-Y",
+            Template::Multi4YYyy => "4Ys Y-YYY",
+            Template::Multi4YyYy => "4Ys YY-YY",
             Template::StackedLines => "Stacked lines (Y offsets)",
             Template::Waterfall => "Waterfall",
             Template::Column => "Column",
@@ -289,6 +309,18 @@ impl Template {
         }
     }
 
+    /// The template of Plot > Multi-Y with more than two Y axes, if this is one.
+    pub fn multi_y(&self) -> Option<crate::multi_y::MultiYKind> {
+        use crate::multi_y::MultiYKind;
+        match self {
+            Template::Multi3YYy => Some(MultiYKind::ThreeYYy),
+            Template::Multi3YYY => Some(MultiYKind::ThreeYYY),
+            Template::Multi4YYyy => Some(MultiYKind::FourYYyy),
+            Template::Multi4YyYy => Some(MultiYKind::FourYyYy),
+            _ => None,
+        }
+    }
+
     /// True for [`Template::Parallel`] and [`Template::ParallelIndex`].
     pub fn is_parallel(&self) -> bool {
         matches!(self, Template::Parallel | Template::ParallelIndex)
@@ -320,6 +352,9 @@ impl Template {
             Template::LineSymbol => general(id, name, PlotKind::LineSymbol),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
+            Template::Multi3YYy | Template::Multi3YYY | Template::Multi4YYyy | Template::Multi4YyYy => {
+                self.multi_y().expect("multi-Y template").plan().graph(Template::Line, id, name)
+            }
             Template::StackedLines => stacked_lines(id, name),
             Template::Waterfall => waterfall(id, name),
             Template::WaterfallY | Template::WaterfallZ => {
@@ -547,6 +582,7 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         major_grid: None,
         minor_grid: None,
         side: AxisSide::Normal,
+        offset_pct: 0.0,
         color_follows_plot: false,
         title_color_follows_plot: false,
         tick_label_source: TickLabelSource::Auto,
@@ -953,7 +989,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 48);
+        assert_eq!(Template::ALL.len(), 52);
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
         assert_eq!(Template::from_name("violin"), Some(Template::Violin));
         assert_eq!(Template::from_name("violin-box"), Some(Template::ViolinBox));

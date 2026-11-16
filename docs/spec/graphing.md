@@ -3906,3 +3906,215 @@ Still different: the Data menu has no plot list with a check on the active plot;
 instead); Move is Sheaf's design, unmeasured (M4): the reach for the grab (30), X-and-Y, follow-by-distance, undo text
 stay [Sheaf choice]. Unmeasured and left: items 6 and 8 (other plot kinds, Hide Masked Points, filters, clipped
 points, Skip Points, Show Elements Data, waterfall), the exact hit radius, log axes, column plots.
+
+## 21. Layers, insets and three/four Y axes (T61, measured 2026-11-15, Origin 2016)
+
+Everything here was measured in OriginPro 2016 on our own synthetic data (21 rows, X = 0 to 10, five Y columns of very different size) through COM/LabTalk and by driving the menus (`tools/origin-ref`). Raw outputs, pictures and the generator scripts stay in the git-ignored `re-workspace/scratch/t61/`. Anything not listed was **unmeasured**. Layer numbers are 1-based as in LabTalk; frames are in the layer's own unit (`layer.unit` 1 = % of page, 7 = % of linked layer); `showAxes` of an axis is 1 = bottom/left only, 2 = top/right only, 3 = both, 0 = none (`showLabels` follows it).
+
+### 21.1 Graph > New Layer(Axes) and the Graph toolbar
+
+**Menu** (Graph menu of Origin 2016; the short menu shows Add Plot to Layer, Layer Management..., Add Straight Line..., New Layer(Axes), Merge Graph Windows..., Legend, Fit Page to Layers..., Exchange X-Y Axes; the full menu adds Layer Contents... F12, Plot Setup..., Add Error Bars..., Add Function Graph..., Rescale to Show All Ctrl+R, Add Axis Scrollbar, Extract to Graphs..., Apply Palette to Color Map..., Add Graphs to Layout..., Speed Mode..., New Table..., New Color Scale, New Bubble Scale, New XY Scaler, Set Active Layer By Layer Icon Only, Fit Layer to Graph, Offset Grouped Data in Layer, Convert to Standard Font Size). **New Layer(Axes)** has nine items and then a separator and "Open Dialog..." (the `layadd` dialog):
+
+1. Bottom-X Left-Y
+2. Top-X (Linked Y Scale and Dimension)
+3. Right-Y (Linked X Scale and Dimension)
+4. Left-Y (Linked X Scale and Dimension)
+5. Top-X Right-Y (Linked Dimension)
+6. Bottom-X Right-Y (Linked Dimension)
+7. Inset (Linked Dimension)
+8. Inset With Data (Linked Dimension)
+9. No Axes (Linked XY Scale and Dimension)
+
+**There is no "Horizontal Axis Layer..." or "Vertical Axis Layer..." item in Origin 2016** (neither in the menu nor in `layadd`'s `type` list). The two greyed Sheaf items have no reference behaviour and are reassigned (21.8).
+
+**Toolbar.** The vertical Graph toolbar has six layer buttons, top to bottom, with these tooltips: "Add Bottom-X Left-Y Layer" (tooltip text "Add a new layer (X axis at the bottom and Y axis on the left)"), "Add Top-X Layer", "Add Right-Y Layer", "Add Top-X Right-Y Layer", "Add Inset Graph" ("Add a linked inset layer to the active layer") and "Add Inset Graph With Data" ("Add a linked inset layer and include the data from the active layer"). They add the layers of menu items 1, 2, 3, 5, 7 and 8 (the same result in the picture; Bottom-X Right-Y, Left-Y and No Axes have no button). Left-Y and Bottom-X Right-Y exist only in the menu and in `layadd`.
+
+**LabTalk.** `layadd type:=NAME;` with `NAME` = `normal`, `topx`, `righty`, `lefty`, `txry`, `bxry`, `inset`, `insetdata`, `noxy`. The layer is appended as the last layer, becomes the active layer (`page.active` = new index) and is named by `layer.name$` as in the table. `layadd userdef:=1 bottom:=B left:=L top:=T right:=R linkto:=P xaxis:=none|straight|custom yaxis:=none|straight|custom;` makes any combination (measured: `bottom:=1 left:=0 top:=1 right:=1 linkto:=1 xaxis:=straight yaxis:=custom` gave link 1, x.link 1, y.link 2 = custom, both X sides shown (`x.showAxes` 3) and the right Y side (`y.showAxes` 2); `layadd`'s `offset` and `activate` options were not measured).
+
+**Parent.** The parent of the new linked layer is the **active layer** (`layer.link` = its number): with three layers and layer 2 active, `type:=righty` gave link 2; `righty` then `topx` gave the top-X layer link 2. A linked layer's `unit` is 7 (% of linked layer) and its frame is the parent's, `0 0 100 100`.
+
+Measured on a plain Line graph (parent frame left 17.91, top 11.58, width 68.16, height 71.83 % of page; X -2.5 to 12.5, Y -25 to 125; the new layer is empty, so its own scales are the empty defaults 0 to 10, step 2):
+
+| type | `layer.name$` | link | x.link / y.link | frame | axes shown X / Y | scales |
+|---|---|---|---|---|---|---|
+| normal | BottomXLeftY | none (0) | 0 / 0 | unit 1, 15.59 / 8.531 / 68.17 / 71.83 (first run; 20.69 / 7.963 in a second run after data was plotted; the offset from the parent was **not** constant) | 1 / 1 | own |
+| topx | TopX | parent | 0 / 1 (straight) | 0 / 0 / 100 / 100 | 2 / 0 (top line, ticks and labels) | X own, Y = parent's |
+| righty | RightY | parent | 1 (straight) / 0 | 0 / 0 / 100 / 100 | 0 / 2 | X = parent's, Y own |
+| lefty | LeftY | parent | 1 / 0 | 0 / 0 / 100 / 100 | 0 / 1 (a second left axis over the first) | X = parent's, Y own |
+| txry | TopXRightY | parent | 0 / 0 | 0 / 0 / 100 / 100 | 2 / 2 | both own |
+| bxry | BottomXRightY | parent | 0 / 0 | 0 / 0 / 100 / 100 | 1 / 2 | both own |
+| inset | Inset | parent | 0 / 0 | 75 / 0 / 25 / 25 (left / top / width / height, % of linked layer) | 1 / 1 | own (empty 0 to 10) |
+| insetdata | InsetWithData | parent | 0 / 0 | 75 / 0 / 25 / 25 | 1 / 1 | **copied** from the parent (-2.5 to 12.5, -25 to 125) but not linked; the parent's first plot is plotted again in it |
+| noxy | NoAxes | parent | 1 / 1 | 0 / 0 / 100 / 100 | 0 / 0 | both = parent's |
+
+Pictures (PNG exports of each type are in the scratch folder): top-X, right-Y and top-X right-Y layers show ticks pointing out, tick labels and the placeholder titles "X Axis Title" / "Y Axis Title" until data is plotted in them; an empty layer has no curve. The inset is a small box in the parent's top-right corner (left 75 %, top 0 %, 25 % by 25 % of the parent's frame, so it overlaps the parent's own data and legend) with only a bottom X and a left Y axis, no top or right line, and tick label, title and legend fonts scaled down with the layer. Plotting data into any new layer gives it its own legend; with data, right-Y and inset layers show the data's long name and units as the axis title (for example "Sine (mA)"), rotated like the left title, to the right of the right axis. The inset with data keeps the parent's X and Y title text.
+
+Plotting into a new layer: `plotxy iy:=[Book]Sheet!(1,3) plot:=200 ogl:=[Graph1]2!;` (layer 2). Autoscale of an unlinked scale fits that layer's data (an inset's Y became -0.075 to 0.075 for the sine column); a linked scale follows the parent.
+
+### 21.2 Toolbar and menu facts that the app copies
+
+- Undo text after adding any of these layers (button or menu): "Undo Create".
+- The graph shows layer icons "1 2 3 ..." in its top-left corner; the active layer's icon is dark, the others grey (see 21.3).
+
+### 21.3 Layer icon: right-click menu, Hide, Layer Properties
+
+**Icons.** A graph with several layers shows numbered icons in the top-left corner of the window; clicking one makes that layer active. Right-clicking an icon (the same menu for the first and for any other layer) shows:
+
+1. Hide Layer (a check mark when the layer is hidden)
+2. Hide Other Layers
+3. Show Active Layer Only
+4. Set Active Layer By Layer Icon Only
+5. Delete Layer
+6. separator; Layer Contents... (F12); Plot Setup...; Double click to open Plot Setup
+7. separator; Axis...; Layer Properties...; Layer Management...
+8. separator; one row per plot of the layer ("1  [DQ]Sheet1! A(X), B(Y) [1*:21*]", ticked)
+
+(The effects of "Set Active Layer By Layer Icon Only", "Show Active Layer Only" and "Hide Other Layers" were **unmeasured**; only their presence in the icon menu, and for the first also in the Graph menu, is known.)
+
+**Hide Layer** hides everything the layer draws: its curves and its axes, ticks and labels disappear from the window (the other layers keep their positions); it is a toggle on the same menu item. It does not delete anything. It did not add an Undo entry (the Edit menu still said "Undo Create" from the layer added before; weak evidence).
+
+**Layer Properties...** opens the Plot Details dialog (title "Plot Details - Layer Properties") with the layer's node selected in the tree on the left (the tree lists the graph, then Layer1, Layer2, ... each with a check box, and each layer expands to its plots). The right side has five tabs for a layer:
+
+- **Background**: Color (None), Border Style (None), Gradient Fill: Mode (None), Color (Black), Direction (Top Bottom).
+- **Size/Speed**: Layer Area Left / Top / Width / Height with a Units combo (measured for a linked layer: 0, 0, 100, 100, "% of Linked Layer"); "Link Axis Length to Scale with X:Y Ratio" (off, value 1); "When dragged to reposition, also reposition parent layer" (on); Graphic Image Caching (None); Speed Mode, Skip Points if needed: Worksheet data, maximum points per curve (on, 3000), Matrix data (off, 32 by 32).
+- **Display**: Scale Elements: Scale With Layer Frame (selected) or Fixed Factor (0.87 greyed); Show Elements: X Axes, Y Axes, Labels, Data (all on), Frame (off), Z Axes (grey); Data Drawing Options: Clip Data to Frame (on), Data on Top of Axes (off), Grid on Top of Data (off); Clipping Margins (%) Horizontal 0, Vertical 0.
+- **Link Axes Scales**: "Link to" combo (the parent layer, "Layer1"); "Link Axes in Child Layer to Parent"; X Axis Link and Y Axis Link groups each with None / Straight (1 to 1) / Align (X = or Y =) / Custom (X1 =, X2 = or Y1 =, Y2 =). For a right-Y layer: X Straight, Y None.
+- **Stack**: Offset None / Cumulative / Incremental / Constant / Auto (Gap 8, Keep Proportion of Plot Range) / Individual, and the stacked-column options (as section 13.14).
+
+The dialog has OK, Cancel and Apply and a ">>" button; Apply is disabled until something changes. The axis dialog opened by Axis... or by double-clicking an axis ("Y Axis - Layer 3") has a left strip with Bottom, Top, Left, Right (or Horizontal, Vertical when the layer shows one side per direction) and the tabs Scale, Tick Labels, Title, Grids, Line and Ticks, Special Ticks, Breaks. **Line and Ticks** has, per side: Show Line and Ticks, "Use Same Options for Left and Right", Line: Show, Color (Auto), Thickness (0.2, 0.5, 1, 1.5, 2, 3, 4, 5; default 1.5), **Axis Position** with three items and **Percent/Value**; Major Ticks and Minor Ticks: Style (In & Out, In, Out, None; Out), Length (3, 5, 8, 10, 15; major 8), Color, Thickness.
+
+**Axis Position** items: for the left axis "Left", "% From Left", "At Position ="; for the right axis "Right", "% From Right", "At Position =". "% From Right" with 12 draws the right axis 12 % of the layer's width **outside** the frame; "% From Left" with 11 draws the left axis 11 % outside; a negative value moves the axis inside (-50 puts a left axis at 50 % of the layer's width). In LabTalk the left/bottom axis reads as `layer.y.position`, `layer.y.posType`, `layer.x.position`, `layer.x.posType` and the right/top axis as **`layer.y2.position`, `layer.y2.posType`, `layer.x2.position`, `layer.x2.posType`** (`layer.y.opposite` is something else; names such as `axisPos` or `offset` do not exist). `posType` 0 = "Left"/"Right" (at the frame), 1 = "% From ..." (the value is the offset in % of the **X axis length**, outward positive), the "At Position =" type was not read. A hidden side of an axis keeps stale values (for example `posType` 1 with 0 on the left of a right-only layer), so read only the shown side.
+
+### 21.4 Deleting a layer
+
+Right-click icon > Delete Layer deletes the layer at once (no question). LabTalk: `layer -d;` deletes the **active** layer; `layer -d N;` deletes layer N. Undo text in the Edit menu afterwards: **"Undelete frame"** (Ctrl+Z). The icons renumber (4 layers: deleting layer 2 left icons 1 2 3).
+
+Measured on the 3Ys templates (layers linked to each other, all `x.link` straight):
+
+| state | deleted | result |
+|---|---|---|
+| Y-YY: L2 linked to L1, L3 linked to L2 | L2 (a parent) | 2 layers; the old L3 is now L2, **unlinked** (`layer.link` 0), its frame became the parent's absolute rectangle (page % 9.593 / 19.89 / 75.73 / 66.52, same as L1), its own scales, axes and `x.link` = 1 setting stay |
+| same | L1 (the root, and the parent of L2) | 2 layers; the old L2 becomes L1 and is unlinked with the old L1's absolute frame (and keeps its right-only axis, so the graph now has no left axis); the old L3, linked to the old L2, keeps its link to it (now `layer.link` 1, frame 0 0 100 100) |
+| Y-Y-Y: L2 and L3 both linked to L1 | L1 | 2 layers, **both children unlinked** (`layer.link` 0), each with L1's absolute frame, so they sit on top of each other; no axes are added back |
+| Y-YY | L3 (last, no children) | 2 layers, nothing else changes |
+
+So Origin has no refusal and no re-parenting: deleting a parent turns every child into an independent layer that keeps the parent's rectangle, and links of other layers are renumbered. The legend text is **not** rewritten: a four-layer graph whose legend lists layer 1 to 4 plots showed "B, D, E, ???" after deleting layer 2 (the entries are references by layer index, so the one pointing at the removed layer index 4 shows "???").
+
+Not measured: deleting through the icon menu a layer that is a parent (the LabTalk `layer -d` behaviour above is taken as the same command), deleting the only layer, and the effect on `layer.y.link`.
+
+### 21.5 The multi-Y templates (Plot > Multi-Y)
+
+**Menu.** Plot > Multi-Y has: Double-Y, 3Ys Y-YY, 3Ys Y-Y-Y, 4Ys Y-YYY, 4Ys YY-YY, Multiple Y Axes... (21.6). The templates are `3Ys_Y-YY.otp`, `3Ys_Y-Y-Y.otp`, `4Ys_Y-YYY.otp`, `4Ys_YY-YY.otp` (and `DOUBLEY.OTP`) in the program folder. LabTalk: select the Y columns, `worksheet -s 2 0 4 0; worksheet -p 200 3Ys_Y-YY;` (the Plot > Multi-Y item is this call; columns 2 to 4 = three Y columns, column 1 is X). `plotxy ... template:=` was not used.
+
+**Layer count and Y assignment.** The number of layers is fixed by the template (3, 3, 4, 4) **whatever the number of columns**: one Y column still makes all three layers (the two empty layers show a 0 to 1 scale and their axes); the GUI menu item behaved the same for one selected column (no refusal, no message). Y column *i* of the selection (1-based, in column order) goes to layer ((*i* - 1) mod *N*) + 1, so the first *N* columns go one per layer and the next ones go round again: with five Y columns in a 3-layer template layers 1 and 2 hold two plots each and layer 3 one (measured for both 3Ys and 4Ys, 1 to 5 columns). Plots added to a layer that already has one are drawn in the next colour of that layer's sequence (a second curve in layer 1 came out red after a black one; legend line colours in the PNG did not always agree with the curve colours, so legend colours here are **unmeasured**).
+
+**Common to all four templates** (measured with exactly *N* Y columns):
+- Layer 1 is the root (`layer.link` 0), shows the bottom X axis with labels and one left Y axis. Every other layer is linked with `x.link` = 1 (straight), `y.link` = 0 (own scale), frame `0 0 100 100` in % of the linked layer (unit 7), shows no X axis (`x.showAxes` 0) and one Y axis. The X range is shared (-1 to 11 for X = 0..10, the template's autoscale margin 8 %), each Y scale fits its own layer's data.
+- The box is open: no top line and no right line on layer 1 (the right-hand axes belong to the other layers).
+- Every axis (line, ticks and tick labels) uses the "automatic" colour = the colour of its layer's first plot (`layer.y.color` / `y2.color` read -9), thickness 1.5, ticks Out, major length 8. Axis titles: none (the Y title text objects hold " "), so the Y axes are identified by colour and by the legend only; the X title is layer 1's (here "Time (s)").
+- One legend in layer 1 lists every plot of every layer, one row per plot as "long name (units)", in layer order; it sits above the frame (outside it). No other layer has a legend. Approximate positions in the 800 px PNG: 3Ys at the top-left (left edge about 19 % of the width), 4Ys Y-YYY at the top-right corner, 4Ys YY-YY at the top-left (about 18 %).
+- Plot colours are fixed by the template (below), not by the default colour list. The PNG exporter quantises to a palette, so the greens and oranges read as (0, 132, 0) and (255, 132, 0); they are taken as Origin's (0, 128, 0) and (255, 128, 0).
+- Frames are template values, not computed: the frame of layer 1 as % of the page (left / top / width / height) is given per template.
+
+| template | layers | layer 1 frame | layer 1 | layer 2 | layer 3 | layer 4 |
+|---|---|---|---|---|---|---|
+| 3Ys Y-YY | 3 | 9.593 / 19.89 / 75.73 / 66.52 | left axis at the frame, black (0, 0, 0) | right axis at the frame (posType 0, offset 0), red (255, 0, 0); link 1 | right axis `% From Right` **10**, blue (0, 0, 255); **linked to layer 2** (`layer.link` 2) | none |
+| 3Ys Y-Y-Y | 3 | 9.764 / 15.7 / 81.69 / 68.84 | left axis, black | **left** axis `% From Left` **-50** (the axis stands in the middle of the plot, tick labels on its left), red; link 1 | right axis at the frame, blue; link 1 | none |
+| 4Ys Y-YYY | 4 | 6.856 / 21.47 / 67.72 / 64.07 | left, blue (0, 0, 255) | right at the frame, green (0, 128, 0) | right `% From Right` **12**, orange (255, 128, 0) | right `% From Right` **23**, magenta (255, 0, 255) |
+| 4Ys YY-YY | 4 | 14.91 / 21.25 / 68.5 / 63.48 | left, blue | **left** `% From Left` **11**, green | right at the frame, magenta | right `% From Right` **11**, orange |
+
+All of layers 2 to 4 are linked to layer 1 (link 1) except layer 3 of Y-YY. The offsets are in % of the X axis length as in 21.3; in the 800 px pictures the outer axes stand 62 px (Y-YY, 10.2 % of the frame width), 66 and 128 px (Y-YYY, 12.2 and 23.6 %), 59 px (YY-YY left, 10.8 %) from the frame edge, which agrees with the stored 10, 12, 23 and 11 % within the picture's resolution.
+
+**Colour of the data in the templates.** The plot of layer *k* has colour index 1, 2, 4 (3Ys: black, red, blue) or 4, 12, 15, 6 (4Ys Y-YYY: blue, green, orange, magenta) or 4, 12, 6, 15 (YY-YY: blue, green, magenta, orange) in LabTalk's `get %C -c`, which are 1-based entries of Origin's colour list (1 black, 2 red, 4 blue are certain; 12 green, 15 orange and 6 magenta read from the pixels, not from the list). Layer 1's axes and plot in 3Ys are black (the colour is the plot's).
+
+**PNG per template**: `re-workspace/scratch/t61/png/C_3Ys_Y_YY_3.png`, `C_3Ys_Y_Y_Y_3.png`, `C_4Ys_Y_YYY_4.png`, `C_4Ys_YY_YY_4.png` (800 px wide, local only).
+
+**Unmeasured**: the number of columns the GUI warns about (none observed), the effect of selecting columns with two X columns, grouped column selections of several sheets, legend position values in page units, the exact text of any message for too many columns.
+
+### 21.6 Plot > Multi-Y > Multiple Y Axes... (`plotmyaxes`)
+
+**Dialog** ("Plotting: plotmyaxes", description "Customize Multi-Axes plot", with a Dialog Theme row, an Auto Preview check box, Preview, OK, Cancel and a preview pane on the right; the controls, top to bottom):
+
+- **Input**: the selected columns as a range, for example `[Book1]Sheet1!((A,B),(A,C),(A,D),(A,E))` (one X/Y pair per Y column); a range picker button.
+- **Plot Type**: combo Line (default), Scatter, Line+Symbol, Custom.
+- **Axis and Plot Assignment**: "Number of Left Y Axes" (a number with an Auto check box, ticked), "Number of Right Y Axes" (same), "Add Middle Y Axis" (check box, off), a blue summary "4 Y axes and 4 plots in total", "Number of Plots in Each Layer" (text, default 1, hint "Separate numbers by space. Example: 1 2 3") and a blue line "Actual number of plots in each layer : 1 1 1 1".
+- **Options**: "Link Axis Color to Plot" (on), "Show Y Title" (off), "Show Top X Axis" (off), "Y Axes Gap (%)" (a number, shown 10, with an Auto check box, ticked).
+
+LabTalk: `plotmyaxes iy:=[Book]Sheet!(1,2:5) plottype:=line|scatter|linesymb|custom ly:=N ry:=N my:=0|1 number:="2 1 1" axiscolor:=0|1 ytitle:=0|1 topx:=0|1 gap:=G hide:=0|1;` (`plotmyaxes` is an X-Function; `iy` takes several ranges; `ly`, `ry` and `gap` default to `<auto>`).
+
+**What it builds** (Origin 2016, Line template for the frame; layer 1's frame is 17.91 / 11.58 / 68.16 / 71.83 % of the page for a plain Line graph; the new layers are linked as in 21.5: `link` 1, X straight, Y own, frame 0 0 100 100 in % of linked layer):
+
+- With *N* Y columns it makes *N* layers, one plot each, and the default split of axes is `ly` = floor(*N* / 2) left axes and `ry` = *N* - `ly` right axes (measured *N* = 2: 1 and 1; 3: 1 and 2; 4: 2 and 2; 5: 2 and 3; 6: 3 and 3). *N* = 1 makes an ordinary one-layer graph (no extra layer).
+- Layer 1 is the first left axis (at the frame). Layers 2 to `ly` have **left** axes at `% From Left` = gap, 2 gap, ... (10 % steps by default). Layers `ly` + 1 to *N* have **right** axes at `% From Right` = 0, gap, 2 gap, ... (the first right axis is at the frame). With "Add Middle Y Axis" the layer after the left ones is a left axis at `% From Left` **-50** (the middle of the plot), then the right axes follow; the total of axes is still the number of columns (3 columns, middle on: 1 left, the middle, 1 right).
+- `ly:=0` makes layer 1's own axis a right one (right axes at 0, 10, 20 for three columns); `ry:=0` makes all axes left axes (0, 10, 20).
+- Default gap **10** (% of the X axis length); `gap:=20` gave right offsets 0, 20. With `ytitle:=1` and `topx:=1` (and `axiscolor:=0`) the automatic gap was **14** (which of the three options needs the room was not separated); an explicit gap is used as given.
+- The **frame of layer 1 moves** so that the frame plus the outward offsets is centred on the page: left = (100 - W - L - R) / 2 + L, with W = 68.16, L = (number of left offsets) * gap * W / 100 and R = (number of right offsets) * gap * W / 100 (checked on six layouts, for example 12.52 for one right offset, 9.111 for two, 15.92 for one left and one right, 22.73 for two left offsets and none right, 11.15 for one right offset at gap 14); width and top do not change.
+- Plot colours are Origin's default colour list in order, not the template colours of 21.5: black (0, 0, 0), red (255, 0, 0), green (0, 255, 0), blue (0, 0, 255), cyan (0, 255, 255); `plottype:=scatter` draws squares, circles and up-triangles in the same colours. With `axiscolor:=1` (default) each axis line, tick and label takes its plot's colour; `axiscolor:=0` keeps them black (the picture showed black axes). `ytitle:=1` shows "long name (units)" next to each Y axis, rotated like the left title; `topx:=1` shows the top X axis line with ticks and labels on layer 1 (`x.showAxes` 3).
+- A legend lists every plot of every layer (one legend, in layer 1, top-right above the frame).
+- `number:="2 1 1"` with four columns made three layers (the number of layers is the number of numbers) with 2, 1 and 1 plots in them.
+
+**Unmeasured**: `hide:=1`, the `custom` plot type's template choice, the preview, how the dialog refuses a column count that does not fit `ly + ry (+ 1)` (the OK path was not run), the legend text format, the axis title placement values.
+
+### 21.7 Exact LabTalk used (Origin 2016, through COM, one line at a time; setup `newbook name:=DQ sheet:=1 option:=lsname;` and a worksheet with X in column 1)
+
+```
+plotxy iy:=[DQ]1!(1,2) plot:=200 ogl:=[<new>]; win -r %H G1; win -a G1;
+layadd type:=righty;                       // also normal, topx, lefty, txry, bxry, inset, insetdata, noxy
+page.active = 2; layadd type:=righty;      // the parent is the active layer
+layadd userdef:=1 bottom:=1 left:=0 top:=1 right:=1 linkto:=1 xaxis:=straight yaxis:=custom;
+plotxy iy:=[DQ]1!(1,3) plot:=200 ogl:=[G1]2!;
+page.active = 2; layer -d;                 // delete the active layer; "layer -d 1;" deletes layer 1
+double pv0 = layer.link;  pv0 = layer.x.link;  pv0 = layer.y.link;  pv0 = layer.unit;  pv0 = layer.left;
+pv0 = layer.top;  pv0 = layer.width;  pv0 = layer.height;  pv0 = layer.x.from;  pv0 = layer.x.to;
+pv0 = layer.y.from;  pv0 = layer.y.to;  pv0 = layer.x.showAxes;  pv0 = layer.y.showAxes;
+pv0 = layer.y.position;  pv0 = layer.y.posType;  pv0 = layer.y2.position;  pv0 = layer.y2.posType;
+pv0 = layer.y.color;  pv0 = layer.y2.color;
+string ts$ = layer.name$;  ts$ = xb.text$;  ts$ = yl.text$;  ts$ = %C;   // %C after layer.plot = n;
+get %C -c cc;                              // plot colour index
+win -a DQ; worksheet -s 2 0 4 0; worksheet -p 200 3Ys_Y-YY;     // 3Ys_Y-Y-Y, 4Ys_Y-YYY, 4Ys_YY-YY
+plotmyaxes iy:=[DQ]1!(1,2:5) plottype:=line ly:=2 ry:=2 my:=0 number:="1 1 1 1" axiscolor:=1 ytitle:=0 topx:=0 gap:=10;
+expGraph type:=png path:="DIR" filename:=NAME overwrite:=1 tr1.unit:=2 tr1.width:=800;
+```
+
+A LabTalk variable named `v1` to `v9` is not usable in `double v1 = ...;` (the call returned false; the names `pv1` or `q` work). Properties that do not exist read as -1.23456789E-300. `layer.nplots` does not exist here; count a layer's plots by stepping `layer.plot = n;` and watching `%C` repeat (the index clamps at the last plot).
+
+### 21.8 What Sheaf takes from this
+
+- Add Layer buttons and menu: the nine types of 21.1 (the six toolbar ones as buttons). "Horizontal Axis Layer..." and "Vertical Axis Layer..." do not exist in Origin 2016: the greyed items are reassigned to a later task (not implemented).
+- The new layer's parent is the active layer; a linked layer is placed over its parent (% of linked layer 0 0 100 100); the inset is 75 / 0 / 25 / 25 of the parent.
+- Delete: children of the deleted layer become unlinked and keep its absolute rectangle; other links are renumbered; Undo text "Undelete frame"; no confirmation.
+- 3Ys / 4Ys: build as in 21.5; Multiple Y Axes with the defaults of 21.6; an axis position is a percentage of the X axis length, outward positive, one value per shown side.
+
+### 21.9 How Sheaf builds layers (slice 1)
+
+Implemented in `crates/core/src/layers.rs` (`Graph::add_layer`, `Graph::delete_layer`), the Graph > New Layer(Axes) menu, the Graph toolbar (six buttons) and the layer icon menu (Delete Layer, Layer Properties...).
+
+- The nine kinds are as in 21.1. The parent is the active layer; Sheaf's model allows a link only to an unlinked earlier layer, so when the active layer is itself linked the new layer follows that layer's root (Origin chains links; **provisional deviation**). A Bottom-X Left-Y layer is unlinked, has the root's width and height and starts 2.3 % of the page width left and 3.05 % of the page height above it (from one measurement; Origin's offset varied, so the value is Sheaf's own). New layers hide their legend (unmeasured in Origin). Inset With Data copies the parent's limits and major step, its axis title text and its first plot, not its link. Both insets scale their tick label and title fonts by 0.25 (the inset's share of the parent; Origin's Scale With Layer Frame factor is **unmeasured**, provisional). Deleting a layer freezes the X/Y range that a child took from a straight link (the app passes the drawn ranges), as Origin keeps x.from and x.to.
+- Delete follows 21.4: children are unlinked and keep their place on the page (the parent's rectangle for a layer that covers it; for an inset the inset's own place, **unmeasured**), later links are renumbered, no confirmation, undo text "Undelete frame". Deleting the **only** layer is refused (Origin's behaviour unmeasured). After a delete the active layer is the one before the deleted layer (or the first), a selection in a later layer moves up, a selection in the deleted layer is cleared, and Plot Details, Layer Contents, Plot Setup and the drawn-object window of that graph close.
+- Add makes the new layer active and clears the selection; one undo step each ("Create", "Undelete frame").
+- Layer Properties... (Format menu and layer icon) opens Plot Details on the layer's node with the Background tab. Sheaf's layer node keeps its Layer Contents and Legend tabs as well.
+- Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer still hides only the plots, not the axes (Origin hides both; a later slice).
+
+### 21.10 How Sheaf draws a displaced Y axis (slice 2)
+
+`Axis::offset_pct` (Y axis, default 0, kept in `.sheaf` files only when not 0) is Origin's axis position "% From Left" / "% From Right" (21.3): the distance in percent of the frame's **width** (the X axis length), outward positive, negative inward (-50 puts a left axis in the middle). Implemented in `crates/plot/src/axis_offset.rs` and used by the layout.
+
+- The axis line, its ticks, its tick labels and its title move together; the frame, the grid, the data and the line on the opposite edge stay. The left axis of a layer moves left, a right axis moves right.
+- Automatic margins: the labels of the displaced axis count in the label edges of the group, so the frame narrows exactly as it does for a right axis at the frame (the existing "Keeping labels on the page" rule). The offset is a share of the frame as finally fitted.
+- Clipping: data stay clipped to the frame; the axis is drawn outside the clip, in the overlay.
+- Hit testing: the displaced line, ticks and labels are the Y axis object of the layer that owns them; the line at the edge stays the object of the layer whose axis is there.
+- Linked ranges: unchanged (`ScaleLink::Straight` shares the parent's limits, offset or not).
+- Layer Properties/Axis dialog: Line and Ticks tab, Axis Position, a "% From Left" / "% From Right" field (vertical axes). Plot context menu: "Move to Layer > Layer N" (**Sheaf's own design, not measured in Origin**: the item, its label and its place in the menu) moves a plot to another layer with that layer's axes (the existing Move to Right Y Axis stays).
+- The offset is not written to .opj yet (slice 3). A displaced Y title is placed beyond the displaced labels and can collide with the titles of the axes between; the multi-Y templates show no Y titles (21.5) and Origin raises the automatic gap when titles are on (21.6, 14 %); that rule is **unmeasured** in Sheaf.
+- Origin's offset of the X axis (bottom/top) is **unmeasured** and not implemented.
+
+### 21.11 Sheaf rules for the 3Ys / 4Ys templates and Multiple Y Axes (slice 3)
+
+Implemented in `crates/core/src/multi_y.rs` (plans, options), `Template::Multi3YYy`, `Multi3YYY`, `Multi4YYyy` and `Multi4YyYy` (names `3ys-y-yy`, `3ys-y-y-y`, `4ys-y-yyy`, `4ys-yy-yy`; labels "3Ys Y-YY" and so on), `Project::plot_multi_y_template` and `Project::plot_multi_y`, the Plot > Multi-Y menu and `dialogs/multi_y.rs`. The same names work in `sheaf plot -t` and the MCP `plot` tool.
+
+- **Templates** take the frames, sides, offsets and colours of the table in 21.5 (`MultiYKind::plan`). Layer 1 is the root with the bottom X axis; every other layer is linked to it with a straight X scale and its own Y scale, covers it and shows only its Y axis. The box is open, the Y axes have no titles, each axis takes its plot's colour, one legend in layer 1 lists every plot. **Provisional deviation:** layer 3 of Y-YY is linked to layer 1, not to layer 2 (Sheaf links only to an unlinked layer; the X range is the same either way).
+- **Columns** go to layer *i* mod *N* (21.5), N = 3 or 4. Fewer columns than layers still make every layer (Origin did the same, no message); the empty layers draw their axis with a 0 to 1 scale. No column at all is refused ("a multiple Y axes graph needs at least one Y column"). `--y2` and `--panels` are refused with these templates.
+- **Colours**: the layer's colour first, then Origin's colour list without it, so a second plot in the layer takes the next colour. Legend position is **unmeasured**: Sheaf uses top-left (3Ys, YY-YY) and top-right (Y-YYY) inside the frame, Origin puts the legend above the frame.
+- **Multiple Y Axes...** follows 21.6: Plot Type (Line, Scatter, Line + Symbol; Custom is not offered), Number of Left/Right Y Axes with Auto (floor(N/2) left, rest right), Add Middle Y Axis (-50 %), Number of Plots in Each Layer (the sum must equal the number of columns, a layer cannot be empty), Link Axis Color to Plot, Show Y Title, Show Top X Axis (line and ticks only; tick labels on the top axis are not drawn), Y Axes Gap (Auto 10, and 14 when Y titles or the top X axis are on: which of the options causes it is **unmeasured**, Sheaf uses titles or top X; `axiscolor:=0` alone is unmeasured). The first frame is centred with the outward offsets by the formula of 21.6; one Y column makes an ordinary graph with a left axis and the frame at 17.91 %. A count of axes that does not fit the number of layers is reported in the dialog and nothing is made. The Preview button and `hide` are not built.
+- **Files**: `.sheaf` keeps `offset_pct` and the layer links. The `.opj` writer writes one ordinary layer per Y axis but no axis position; the save names "the position of a Y axis away from the frame" so the `.opj.sheaf` companion keeps it (ADR 0008). CLI and MCP have the four template names only; the Multiple Y Axes options are in the app.
+- Goldens: `crates/plot/tests/golden/multi-y-3ys-y-yy.svg`, `-3ys-y-y-y`, `-4ys-y-yyy`, `-4ys-yy-yy` and `multi-y-multiple-axes.svg`.

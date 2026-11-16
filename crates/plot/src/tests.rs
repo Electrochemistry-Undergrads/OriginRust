@@ -9,7 +9,7 @@ use sheaf_core::template::Template;
 use sheaf_core::{Color, ColumnData, Designation};
 
 /// A project with one workbook: X "Potential (V)" and the given Y columns.
-fn project(template: Template, x: Vec<f64>, ys: Vec<Vec<f64>>) -> (Project, WindowId) {
+pub(crate) fn project(template: Template, x: Vec<f64>, ys: Vec<Vec<f64>>) -> (Project, WindowId) {
     let mut p = Project::new();
     let book = p.add_workbook("data");
     let xc = p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
@@ -695,7 +695,7 @@ fn thinning_leaves_sparse_and_reversing_curves_alone() {
 // ----- golden images -------------------------------------------------------
 
 /// The X values and the curve shape used by the golden images.
-fn golden_data() -> (Vec<f64>, impl Fn(f64) -> Vec<f64>) {
+pub(crate) fn golden_data() -> (Vec<f64>, impl Fn(f64) -> Vec<f64>) {
     let n = 41;
     let x: Vec<f64> = (0..n).map(|i| -0.2 + 0.03 * i as f64).collect();
     let xs = x.clone();

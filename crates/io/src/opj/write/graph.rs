@@ -1159,6 +1159,12 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
     if layer.bars.width_pct.is_some() {
         notes.push("the width of column bars (in percent) was not written; the bars reopen with the layer's gap setting instead".into());
     }
+    if layer.y_axis.offset_pct != 0.0 {
+        notes.push(
+            "the position of a Y axis away from the frame (3Ys/4Ys, Multiple Y Axes) was not written; the axis              reopens at the frame (the .opj.sheaf companion keeps the offset)"
+                .into(),
+        );
+    }
     if layer.legend.visible && layer.legend.columns > 1 {
         notes.push("the number of columns of the legend was not written; its entries stand in one column".into());
     }

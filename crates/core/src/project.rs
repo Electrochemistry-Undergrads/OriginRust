@@ -4,6 +4,7 @@
 use crate::column::{Column, ColumnData, Designation};
 use crate::graph::{ErrorStyle, Graph, LegendScope, Plot};
 use crate::ids::{ColumnId, WindowId};
+use crate::multi_y::{MultiYError, MultiYKind, MultiYOptions, MultiYPlan};
 use crate::panels::{PanelError, PanelLayout, PanelPage, panel_layers};
 use crate::template::{Template, right_y_layer};
 use crate::worksheet::{Workbook, Worksheet};
@@ -210,6 +211,10 @@ pub enum ProjectError {
     NoSuchPlot(usize),
     #[error("{0}")]
     Panels(#[from] PanelError),
+    #[error("{0}")]
+    MultiY(#[from] MultiYError),
+    #[error("the {0} template puts one Y column on each axis by itself; leave out --y2 and the left/right split")]
+    MultiYNoRightAxis(&'static str),
     #[error("a lollipop plot needs two or more Y columns (got {0}); select at least two Y columns")]
     LollipopNeedsTwoColumns(usize),
     #[error("a lollipop plot cannot have a right Y axis; use one Y axis or another template")]
@@ -790,7 +795,7 @@ impl Project {
         };
         let ys: Vec<&Column> =
             ws.columns.iter().filter(|c| c.designation == Designation::Y && c.data.is_numeric()).collect();
-        if template == Template::DoubleY {
+        if template == Template::DoubleY || template.multi_y().is_some() {
             return ys.iter().map(|c| c.id).collect();
         }
         if template == Template::Ternary {
@@ -835,6 +840,9 @@ impl Project {
     /// Origin's Double-Y command: the 1st, 3rd, 5th ... go on the left axis and
     /// the 2nd, 4th ... on the right axis.
     pub fn plot_columns(&mut self, template: Template, ys: &[ColumnId]) -> Result<WindowId, ProjectError> {
+        if let Some(kind) = template.multi_y() {
+            return self.plot_multi_y_template(kind, ys);
+        }
         if template == Template::DoubleY {
             let left: Vec<ColumnId> = ys.iter().step_by(2).copied().collect();
             let right: Vec<ColumnId> = ys.iter().skip(1).step_by(2).copied().collect();
@@ -1116,6 +1124,9 @@ impl Project {
         left: &[ColumnId],
         right: &[ColumnId],
     ) -> Result<WindowId, ProjectError> {
+        if template.multi_y().is_some() {
+            return Err(ProjectError::MultiYNoRightAxis(template.name()));
+        }
         if template == Template::Lollipop {
             return Err(ProjectError::LollipopNoRightAxis);
         }
@@ -1162,6 +1173,56 @@ impl Project {
             }
         }
         Ok(graph)
+    }
+
+    /// Creates one of the 3Ys / 4Ys graphs (graphing spec 21.5): Y column *i* (from 0) goes into layer
+    /// *i* mod the number of layers, so that with fewer columns than layers the last layers stay empty,
+    /// as in Origin. At least one column is needed.
+    pub fn plot_multi_y_template(&mut self, kind: MultiYKind, ys: &[ColumnId]) -> Result<WindowId, ProjectError> {
+        if ys.is_empty() {
+            return Err(MultiYError::NoColumns.into());
+        }
+        let n = kind.layers();
+        let assignment: Vec<usize> = (0..ys.len()).map(|i| i % n).collect();
+        self.plot_multi_y_plan(&kind.plan(), Template::Line, ys, &assignment)
+    }
+
+    /// Creates a graph from Plot > Multi-Y > Multiple Y Axes... : the columns in order fill the layers with
+    /// the numbers of plots of `options` (one each when none are given).
+    pub fn plot_multi_y(&mut self, options: &MultiYOptions, ys: &[ColumnId]) -> Result<WindowId, ProjectError> {
+        let per_layer = options.plots_per_layer(ys.len())?;
+        let plan = options.plan(per_layer.len())?;
+        let assignment: Vec<usize> =
+            per_layer.iter().enumerate().flat_map(|(l, &k)| std::iter::repeat_n(l, k)).collect();
+        self.plot_multi_y_plan(&plan, options.plot_type.template(), ys, &assignment)
+    }
+
+    fn plot_multi_y_plan(
+        &mut self,
+        plan: &MultiYPlan,
+        base: Template,
+        ys: &[ColumnId],
+        assignment: &[usize],
+    ) -> Result<WindowId, ProjectError> {
+        for y in ys {
+            self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
+        }
+        let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
+        let id = WindowId(self.fresh_id());
+        let name = self.unique_name("Graph");
+        self.windows.push(Window::Graph(plan.graph(base, id, &name)));
+        for (y, &layer) in ys.iter().zip(assignment) {
+            self.add_plot(id, layer, *y)?;
+        }
+        if let Some(g) = self.graph_mut(id) {
+            for l in &mut g.layers {
+                l.apply_palette();
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(id)
     }
 
     /// Gives layer `parent` of a graph a right Y axis and returns the index of the layer that
@@ -1643,6 +1704,47 @@ mod tests {
         assert_eq!(graph.layers[right].slopes[0].plot, ys[0]);
         assert_eq!(graph.layers[0].slopes.len(), 1);
         assert_eq!(graph.layers[0].slopes[0].plot, ys[1]);
+    }
+
+    #[test]
+    fn multi_y_templates_deal_the_columns_out_round_and_round() {
+        let (mut p, mut ys) = four_ys();
+        let book = p.workbooks().next().unwrap().id;
+        ys.push(p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![9.0; 3])).unwrap());
+        let g = p.plot_columns(Template::Multi3YYy, &ys).unwrap();
+        assert_eq!(p.graph(g).unwrap().layers.len(), 3);
+        assert_eq!(plot_ys(&p, g, 0), vec![ys[0], ys[3]]);
+        assert_eq!(plot_ys(&p, g, 1), vec![ys[1], ys[4]]);
+        assert_eq!(plot_ys(&p, g, 2), vec![ys[2]]);
+        // The first plot of a layer has the layer's template colour; the second the next one of its list.
+        let graph = p.graph(g).unwrap();
+        assert_eq!(graph.layers[1].plots[0].line.color, crate::Color::rgb(255, 0, 0));
+        assert_ne!(graph.layers[1].plots[1].line.color, crate::Color::rgb(255, 0, 0));
+        let g = p.plot_columns(Template::Multi4YyYy, &ys[..2]).unwrap();
+        let graph = p.graph(g).unwrap();
+        assert_eq!(graph.layers.len(), 4, "all layers are made whatever the number of columns");
+        assert!(graph.layers[2].plots.is_empty() && graph.layers[3].plots.is_empty());
+    }
+
+    #[test]
+    fn multi_y_needs_a_column_and_no_right_axis_split() {
+        let (mut p, ys) = four_ys();
+        assert_eq!(p.plot_columns(Template::Multi4YYyy, &[]), Err(MultiYError::NoColumns.into()));
+        assert_eq!(
+            p.plot_columns_double_y(Template::Multi3YYY, &ys[..1], &ys[1..2]),
+            Err(ProjectError::MultiYNoRightAxis("3ys-y-y-y"))
+        );
+    }
+
+    #[test]
+    fn multiple_y_axes_fills_the_layers_with_the_given_numbers() {
+        let (mut p, ys) = four_ys();
+        let o = MultiYOptions { per_layer: vec![2, 1, 1], ..MultiYOptions::default() };
+        let g = p.plot_multi_y(&o, &ys).unwrap();
+        assert_eq!(plot_ys(&p, g, 0), vec![ys[0], ys[1]]);
+        assert_eq!(plot_ys(&p, g, 2), vec![ys[3]]);
+        let bad = MultiYOptions { per_layer: vec![2, 1], ..MultiYOptions::default() };
+        assert_eq!(p.plot_multi_y(&bad, &ys), Err(MultiYError::PlotsPerLayer { sum: 3, columns: 4 }.into()));
     }
 
     #[test]

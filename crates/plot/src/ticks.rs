@@ -853,6 +853,7 @@ mod tests {
             major_grid: None,
             minor_grid: None,
             side: Default::default(),
+            offset_pct: 0.0,
             color_follows_plot: false,
             title_color_follows_plot: false,
             tick_label_source: Default::default(),

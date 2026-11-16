@@ -27,6 +27,7 @@ use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::label_panels::{LabelPanelsDialog, Outcome as LabelPanelsOutcome};
 use crate::dialogs::mask_condition::MaskConditionDialog;
 use crate::dialogs::merge_graphs::{MergeGraphsDialog, Outcome as MergeGraphsOutcome};
+use crate::dialogs::multi_y::{MultiYDialog, Outcome as MultiYOutcome};
 use crate::dialogs::power::{PowerDialog, PowerOutcome};
 use crate::dialogs::printing::{PageSetupDialog, PageSetupOutcome, PreviewOutcome, PrintPreview};
 use crate::dialogs::recovery::{RecoveryChoice, RecoveryOffer};
@@ -159,6 +160,7 @@ pub struct SheafApp {
     shape_dialog: Option<ShapeDialog>,
     slope_dialog: Option<SlopeDialog>,
     comparison_plot: Option<ComparisonPlotDialog>,
+    multi_y: Option<MultiYDialog>,
     set_values: Option<SetValuesDialog>,
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
@@ -263,6 +265,7 @@ impl SheafApp {
             shape_dialog: None,
             slope_dialog: None,
             comparison_plot: None,
+            multi_y: None,
             set_values: None,
             analysis: None,
             fit: None,
@@ -1207,6 +1210,55 @@ impl SheafApp {
         }
     }
 
+    /// Graph > New Layer(Axes): one undo step; the new layer becomes the active layer.
+    fn add_layer(&mut self, graph: WindowId, active: usize, kind: sheaf_core::layers::NewLayerKind) {
+        let Some(g) = self.doc.project().graph(graph) else { return };
+        if active >= g.layers.len() {
+            return;
+        }
+        self.doc.apply(sheaf_core::layers::ADD_LAYER_UNDO, |p| {
+            graph_view::apply_op(p, graph, GraphOp::AddLayer { layer: active, kind }, None)
+        });
+        let count = self.doc.project().graph(graph).map_or(0, |g| g.layers.len());
+        let state = self.graphs.entry(graph).or_default();
+        state.active_layer = count.saturating_sub(1);
+        state.selected = None;
+    }
+
+    /// Delete Layer: one undo step. The active layer, the selection and the windows that name a
+    /// layer by its index are repaired for the layers that moved up.
+    fn delete_layer(&mut self, graph: WindowId, layer: usize) {
+        let Some(g) = self.doc.project().graph(graph) else { return };
+        if layer >= g.layers.len() || g.layers.len() < 2 {
+            return;
+        }
+        let resolved = sheaf_plot::layout_geometry(self.doc.project(), graph).ok();
+        self.doc.apply(sheaf_core::layers::DELETE_LAYER_UNDO, |p| {
+            graph_view::apply_op(p, graph, GraphOp::DeleteLayer { layer }, resolved.as_deref())
+        });
+        let remaining = self.doc.project().graph(graph).map_or(1, |g| g.layers.len());
+        let state = self.graphs.entry(graph).or_default();
+        state.active_layer = if state.active_layer == layer {
+            sheaf_core::layers::active_after_delete(layer, remaining)
+        } else {
+            sheaf_core::layers::index_after_delete(state.active_layer, layer).unwrap_or(0)
+        };
+        state.selected =
+            state.selected.and_then(|(l, kind)| sheaf_core::layers::index_after_delete(l, layer).map(|l| (l, kind)));
+        state.reset_layer_interactions();
+        // Windows that edit a layer by its index close rather than edit the wrong layer.
+        if self.graph_props.as_ref().is_some_and(|d| d.graph == graph) {
+            self.graph_props = None;
+        }
+        if self.layer_contents.as_ref().is_some_and(|d| d.graph == graph) {
+            self.layer_contents = None;
+        }
+        if self.plot_setup.as_ref().is_some_and(|d| d.graph == graph) {
+            self.plot_setup = None;
+        }
+        self.shape_dialog = None;
+    }
+
     /// Applies a change made from a graph window (right-click menus, Delete, Ctrl+R) as one undo
     /// step.
     fn edit_graph(&mut self, graph: WindowId, op: GraphOp) {
@@ -1245,11 +1297,22 @@ impl SheafApp {
             GraphOp::OrderShape { front: false, .. } => "Push drawn object to back",
             GraphOp::HideLayer { .. } => "Hide layer",
             GraphOp::HideOtherLayers { .. } => "Hide other layers",
+            GraphOp::AddLayer { .. } => sheaf_core::layers::ADD_LAYER_UNDO,
+            GraphOp::DeleteLayer { .. } => sheaf_core::layers::DELETE_LAYER_UNDO,
             GraphOp::MovePlotToAxis { right: true, .. } => "Move plot to right Y axis",
             GraphOp::MovePlotToAxis { .. } => "Move plot to left Y axis",
+            GraphOp::MovePlotToLayer { .. } => "Move plot to layer",
             GraphOp::RemoveTrendline { .. } => "Remove trendline",
             GraphOp::HidePlot { .. } | GraphOp::SetStack { .. } => unreachable!("handled above"),
         };
+        if let GraphOp::AddLayer { layer, kind } = op {
+            self.add_layer(graph, layer, kind);
+            return;
+        }
+        if let GraphOp::DeleteLayer { layer } = op {
+            self.delete_layer(graph, layer);
+            return;
+        }
         // The present axis ranges, for the zoom (an automatic axis has no stored limits).
         let resolved = sheaf_plot::layout_geometry(self.doc.project(), graph).ok();
         let shapes = self.shape_dialog_shapes();
@@ -1724,6 +1787,14 @@ impl SheafApp {
                 self.label_panels = LabelPanelsDialog::new(self.doc.project(), book, columns, rows);
                 if self.label_panels.is_none() {
                     self.warn("Select at least one numeric Y column to plot by label.");
+                }
+            }
+            Action::MultiYAxes { book, columns } => {
+                let columns = self.plot_y_columns(book, columns, Template::DoubleY);
+                if columns.is_empty() {
+                    self.warn("Nothing to plot: select one or more numeric Y columns");
+                } else {
+                    self.multi_y = Some(MultiYDialog::new(columns));
                 }
             }
             Action::ComparisonPlot { book, sheet } => {
@@ -3083,6 +3154,7 @@ impl SheafApp {
             || self.shape_dialog.is_some()
             || self.slope_dialog.is_some()
             || self.comparison_plot.is_some()
+            || self.multi_y.is_some()
             || self.set_values.is_some()
             || self.analysis.is_some()
             || self.fit.is_some()
@@ -3409,6 +3481,17 @@ impl SheafApp {
                     self.label_panels = None;
                     self.focus(graph);
                     self.say("Created panels by label");
+                }
+            }
+        }
+        if let Some(d) = &mut self.multi_y {
+            match d.show(ctx, &mut self.doc) {
+                MultiYOutcome::Open => {}
+                MultiYOutcome::Closed => self.multi_y = None,
+                MultiYOutcome::Created(graph) => {
+                    self.multi_y = None;
+                    self.focus(graph);
+                    self.say("Created multiple Y axes graph");
                 }
             }
         }

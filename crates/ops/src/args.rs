@@ -774,7 +774,9 @@ pub struct PlotArgs {
     /// Figure template: line, scatter, line-symbol, column, cv, double-y, stacked or waterfall
     /// (default: what the importer suggests). column draws one group of bars per row, the Y columns
     /// side by side, with sample names from a text X column under the bars; double-y puts the 1st,
-    /// 3rd, ... Y column on the left axis and the 2nd, 4th, ... on a right axis; stacked moves each
+    /// 3rd, ... Y column on the left axis and the 2nd, 4th, ... on a right axis; 3ys-y-yy, 3ys-y-y-y, 4ys-y-yyy and
+    /// 4ys-yy-yy make three or four layers, each with its own Y axis (colours and offsets as Origin's
+    /// templates of these names) and deal the Y columns out one to a layer, round and round; stacked moves each
     /// curve above the one before it; lollipop (two or more Y columns) joins each Y column's points
     /// to the next column's at the same row with drop lines, X and Y exchanged; scatter-rug is a scatter
     /// with a rug (one short line per point) beside the bottom and left axes; violin draws each

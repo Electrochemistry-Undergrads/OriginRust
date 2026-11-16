@@ -81,6 +81,8 @@ pub enum GraphOp {
     /// Move to Right Y Axis / Move to Left Y Axis: the plot goes to the right Y layer of its
     /// panel (made when there is none) or back to the panel's own layer.
     MovePlotToAxis { layer: usize, plot: usize, right: bool },
+    /// Move to Layer N: the plot goes to another layer of the graph, with that layer's axes (T61).
+    MovePlotToLayer { layer: usize, plot: usize, to: usize },
     /// Hide Data Plot.
     HidePlot { layer: usize, plot: usize },
     /// Remove Trendline: the plot's last trendline goes.
@@ -120,6 +122,10 @@ pub enum GraphOp {
     HideLayer { layer: usize },
     /// Hide Other Layers.
     HideOtherLayers { layer: usize },
+    /// Graph > New Layer(Axes) and the Graph toolbar: a layer of `kind` next to the active layer `layer`.
+    AddLayer { layer: usize, kind: sheaf_core::layers::NewLayerKind },
+    /// Delete Layer of the layer icon: the layer goes, its children become independent.
+    DeleteLayer { layer: usize },
 }
 
 /// The tool of a graph window (the Tools toolbar).
@@ -392,6 +398,11 @@ pub enum Action {
     /// Graph > Merge Graph Windows...
     MergeGraphs,
     LabelPanels {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    /// Plot > Multi-Y > Multiple Y Axes... (T61) for the selected columns (none: the sheet's Y columns).
+    MultiYAxes {
         book: WindowId,
         columns: Vec<ColumnId>,
     },

@@ -36,6 +36,7 @@ pub mod manip_options;
 pub mod mask_condition;
 pub mod math_curves;
 pub mod merge_graphs;
+pub mod multi_y;
 pub mod multivariate_options;
 pub mod plot_setup;
 pub mod power;

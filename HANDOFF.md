@@ -85,6 +85,22 @@ change production code; the basic palette contract and model/renderer/IO stay in
 claim/window is released by publication; custom object RGB, other lists/storage and broader T58
 work remain open.
 
+**T59 worksheet label-size defaults (2026-11-16, Windows):** Format > Worksheet/F4
+now offers independent Long Name, Units and Comments point sizes for existing/future columns.
+Sparse fields resolve below manual label ranges; Data fonts remain independent. Switching
+categories retains drafts, Apply/OK writes all changed categories in one Undo, Cancel/Escape
+discard unapplied changes, and stale requests close. Project/OPJ companions and effective Excel
+label styles retain sizes; omitted labels warn without manufacturing styled data blanks.
+Five Native2016 cases establish category sizes/new columns and specific-over-bulk priority in
+both orders. Label family/manual-priority and native draft semantics remain unmeasured;
+retained manual-label precedence and category drafts are documented Sheaf policies. Bulk,
+Standard/header/formula/parameter defaults and label family controls stay disabled. Existing
+derived geometry and T27 empty-label omission policy remain. Fmt, strict workspace/all-target
+Clippy, all 4,302 tests (eight ignored), all17 category-font regressions including six new,
+inventory293, eight Python tooling tests and frozen source/goldens pass. Fresh desktop and
+independent openpyxl/SVG reviews were inspected; all owned actors are terminal. Only this
+claim and its fixed16:15-16:40 window are released; other claims remain.
+
 T58 empty font-family syntax (`codex/t58-font-aliases`, 2026-11-16): `\f:(...)` stays
 literal instead of silently dropping its wrapper. The accepted older N6 record and 21 fresh
 Origin 2016 controls establish literal text, Courier/Times inheritance and restoration.
@@ -555,7 +571,7 @@ is released; other sessions' claims are preserved.
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/t59-label-default-fonts` | Codex Windows | T59 Long Name/Units/Comments point-size defaults after five Native category/new-column/order measurements | claimed 2026-11-16; sequential reuse OWN CLEAN `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` after public00021dc3/FULL4293/all own actors and shippingCI terminal. Bounded optional label-font fields in existing sheet_fonts +cellformat label fallback, private worksheet_fonts dialog category state and own tests/registry, effective XLSX label style/omission warning and existing OPJ loss condition only as required; GUI3/workbook13b/T59 metadata. Measure Column Labels hierarchy and remaining Data/manual cross-property precedence read-only before decisions; bulk Column Labels implementation only if scope/behavior clear. Preserve published Data-font behavior unless a measured correction is required. Formula/parameter-specific and Standard/header mutators stay disabled; no formula/parameter text/evaluation/insertion/substitution or their modules, category colors/text controls/sticky heights/T27, graph editor/toolbar/palettes/render/fonts/T58/T60/T61, gadgets/stats/fitting/MCP/import/clipboard, reserved T26/T29/T16item6 or ROOT pending paths. Narrowed implementation: point-size fields only; label family/bulk/Standard/headers/formula/parameter mutators disabled. Retain existing manual-label precedence as explicitly unverified Sheaf policy, category drafts retained and applied together. FIXED product integration window 2026-11-16 16:15-16:40 CST; release on publication/failure/deadline, no extension; docs-only claims allowed. Claim public BEFORE Graphify/source/spec/Native. |
+
 | `t22-origin` | Claude Windows, "axis-breaks" | T22 leftovers, docs only: Origin 2016 measurements of Intersect (output order, touching points, coincident stretches, shared vertices) and Polygon Area with fewer than three points (analysis-curve-math Unmeasured 7, 10) | claimed 2026-11-16; spec text only, no code (no free build folder, 12 GB disk); no other sessions' scopes |
 | `codex/t60-layer-border-display` | Codex Windows | T60 Layer Management Display Border Fill/Border Color: measure first, wire only existing supported layer fields | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` reused afteraae34725/FULL4274/all own actors and CI terminal. Bounded dialogs/layer_management.rs +new private border helper if supported, own tests/registry, graphing15.7/T60/index/roadmap/parity; existing preview/selected-layer/history/stale paths. Preserve published Background Color; unsupported border settings remain disabled with measured constraints. No Core/model/renderer/IO production changes, Drawing Order/Dimensions/Add/Axes/merge/layer lifecycle, graph_view/shapes/gadgets, T58 editor/toolbar/palette, worksheet defaults/T59, stockT109, stats/fitting/MCP/import/clipboard, reserved tasks/formula-parameter labels or ROOT pending files. Respect T10913:56-14:15; no own product hold. |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |

@@ -578,7 +578,8 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   Origin 2016 has no Default data-style command; Rich Text/Wrap Text/Float remain separate,
   unsupported text controls (B5). Its Worksheet Properties Format tab instead has category
   defaults (Data > Standard, plus headers and label categories). F4 now opens a separate
-  Data-font default dialog; other categories remain disabled (GUI 3, measurements 2026-11-16).
+  category-font dialog with Data family/size and Long Name/Units/Comments sizes (GUI 3,
+  measurements 2026-11-16). Other categories remain disabled.
 - **Data font defaults.** Optional `Worksheet.font_defaults.data` holds a family/point size;
   old files omit the empty field. Resolution fills missing manual family/size from that default,
   preserving every other manual/conditional property and keeping labels independent. One sparse
@@ -590,6 +591,20 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   Excel writes current values and blank cells inside the used rectangle; it cannot retain Sheaf's
   future-cell inheritance, and import still does not read cell styles. Category labels, Standard/
   header defaults and persistent row-height changes remain outside this slice.
+- **Label size defaults.** Optional `font_defaults.long_name_size_pt`, `units_size_pt` and
+  `comments_size_pt` store independent sparse point sizes below manual label ranges. Old sheets
+  retain their serialized shape. Each setting covers existing and future columns without
+  per-column records, leaves data and unsupported formula/parameter categories independent,
+  and uses the existing 4..96 pt bounds. The F4 dialog keeps category drafts and commits all
+  changed categories in one Undo; Cancel/Escape discard unapplied drafts. These draft rules
+  and retained manual-label precedence are Sheaf policy, not measured Native parity. Native
+  category sizes/new columns and specific-over-bulk priority were measured (GUI3); family and
+  manual-label precedence remain open. Print/image/grid use existing effective label resolution
+  and derived geometry; empty printed labels remain under T27's existing omission policy.
+  Project and OPJ-companion saves preserve the fields; unsupported native OPJ formatting warns.
+  Excel writes effective sizes only for exported label rows, reports omitted category styles,
+  and leaves data blanks unstyled when only label defaults exist. Future Excel label inheritance
+  is not preserved. Bulk/Standard/header defaults and label family controls remain disabled.
 - **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe

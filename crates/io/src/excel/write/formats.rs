@@ -33,7 +33,7 @@ impl<'a> Formats<'a> {
     /// never manufacture a million blank rows, nor stretch the exported data to a remote range.
     pub(super) fn blank_ranges(&self, column: ColumnId) -> Vec<Range<usize>> {
         let limit = self.sheet.row_count();
-        if !self.sheet.font_defaults.is_empty() {
+        if self.sheet.font_defaults.data.is_some() {
             return (limit > 0).then_some(0..limit).into_iter().collect();
         }
         let mut ranges: Vec<_> = self
@@ -71,7 +71,10 @@ impl<'a> Formats<'a> {
         }
         let rows = self.sheet.row_count();
         let mut outside = false;
-        let mut omitted_labels = false;
+        let mut omitted_labels = [LabelKind::LongName, LabelKind::Units, LabelKind::Comments].iter().any(|kind| {
+            self.sheet.font_defaults.label_size(kind).is_some()
+                && !labels.iter().any(|label| label.as_ref() == Some(kind))
+        });
         let mut alpha = false;
         for range in &self.sheet.cell_formats {
             match &range.target {

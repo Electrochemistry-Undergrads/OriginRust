@@ -382,6 +382,10 @@ impl FormatIndex {
 
     /// The format of a label cell.
     pub fn resolve_label<'a>(&self, sheet: &'a Worksheet, column: ColumnId, row: &LabelKind) -> ResolvedStyle<'a> {
+        sheet.font_defaults.label_style(row, self.resolve_label_manual(sheet, column, row))
+    }
+
+    fn resolve_label_manual<'a>(&self, sheet: &'a Worksheet, column: ColumnId, row: &LabelKind) -> ResolvedStyle<'a> {
         let Some(list) = self.labels.get(&column) else { return ResolvedStyle::default() };
         let mut f = CellFormat::default();
         let mut font: Option<&'a str> = None;

@@ -77,6 +77,42 @@ fn plain() -> ExcelExportOptions {
 }
 
 #[test]
+fn worksheet_label_default_sizes_export_independently_without_styling_data_blanks() {
+    let mut a = column(1, vec![1.23456789012345, f64::NAN, 3.0]);
+    a.long_name = "Potential".into();
+    a.units = "V".into();
+    a.comments = "note".into();
+    let mut b = column(2, vec![101.0]);
+    b.long_name = "Future".into();
+    let mut s = Worksheet { columns: vec![a], ..Worksheet::new("Labels") };
+    s.set_label_font_size(&LabelKind::LongName, 18.0);
+    s.set_label_font_size(&LabelKind::Units, 12.0);
+    s.set_label_font_size(&LabelKind::Comments, 24.0);
+    s.columns.push(b);
+    s.apply_cell_format(
+        FormatTarget::label_rows(vec![ColumnId(1)], vec![LabelKind::LongName]),
+        CellFormat { size_pt: Some(10.0), bold: Some(true), ..Default::default() },
+    );
+    let before = s.clone();
+    let (xml, styles, warnings) = Output::new("label-defaults").export(&s, &ExcelExportOptions::default());
+    assert_eq!(s, before);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    for (address, size) in [("A1", 10), ("B1", 18), ("A2", 12), ("B2", 12), ("A3", 24), ("B3", 24)] {
+        let f = font(style(&xml, &styles, address), &styles);
+        assert!(f.contains(&format!("val=\"{size}\"")), "{address}: {f}");
+        assert!(f.contains("val=\"Arial\""));
+        assert_eq!(f.contains("<b/>"), address == "A1");
+    }
+    assert!(xml.contains("<v>1.23456789012345</v>"));
+    assert!(xml.contains("<v>101</v>"));
+    for address in ["A5", "B5", "B6"] {
+        assert!(!xml.contains(&format!("r=\"{address}\"")), "label defaults must not manufacture styled data blanks");
+    }
+    let (_, _, warnings) = Output::new("label-defaults-omitted").export(&s, &plain());
+    assert!(warnings.iter().any(|w| w.contains("label rows omitted")));
+}
+
+#[test]
 fn worksheet_default_fonts_reach_values_and_blanks_below_manual_formats() {
     use sheaf_core::sheet_fonts::WorksheetFont;
     let mut a = column(1, vec![1.234, f64::NAN, 3.0]);

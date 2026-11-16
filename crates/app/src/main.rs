@@ -54,6 +54,9 @@ mod view_modes;
 mod winclip;
 mod winprint;
 mod wks_clipboard;
+mod worksheet_fonts;
+mod worksheet_format;
+mod worksheet_layout;
 mod workspace;
 
 use std::path::PathBuf;

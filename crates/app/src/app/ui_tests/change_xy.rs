@@ -18,6 +18,9 @@ fn change_y_replaces_the_y_column_and_leaves_the_axis_ranges() {
     let (b, c) = (before.layers[0].plots[0].y, before.layers[0].plots[1].y);
     let x = before.layers[0].plots[0].x;
     assert_eq!(project(&h).plot_label(&before.layers[0].plots[0]), "up");
+    let id = *h.state().graphs.keys().next().unwrap();
+    let geo = sheaf_plot::layout_geometry(project(&h), id).unwrap().remove(0);
+    let drawn_y = (geo.y.from_unit(0.0).min(geo.y.from_unit(1.0)), geo.y.from_unit(0.0).max(geo.y.from_unit(1.0)));
     open_plot_menu(&mut h, 0);
     menu_path(&mut h, &["Change Y"]);
     // The column the plot uses on the other axis is greyed, its own is ticked.
@@ -31,7 +34,9 @@ fn change_y_replaces_the_y_column_and_leaves_the_axis_ranges() {
     assert_eq!(g.layers[0].plots[1].y, c, "the other plot is untouched");
     assert_ne!(b, c);
     assert_eq!(project(&h).plot_label(&g.layers[0].plots[0]), "down", "the legend follows");
-    assert_eq!((g.layers[0].y_axis.min, g.layers[0].y_axis.max), (None, None));
+    // the Y axis keeps the range it was drawn with (fixed now); X is untouched
+    let (lo, hi) = (g.layers[0].y_axis.min.expect("fixed"), g.layers[0].y_axis.max.expect("fixed"));
+    assert_eq!((lo, hi), drawn_y, "the Y axis keeps the range it was drawn with");
     assert_eq!((g.layers[0].x_axis.min, g.layers[0].x_axis.max), (None, None));
     assert_eq!(h.state().doc.undo_label(), Some("Change Y"));
     menu(&mut h, "Edit", "Undo Change Y");
@@ -50,7 +55,7 @@ fn change_x_sets_the_x_column_and_undo_restores() {
     let p = &graph(&h).layers[0].plots[0];
     assert_eq!((p.x, p.y), (Some(project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().id), y));
     assert_eq!(h.state().doc.undo_label(), Some("Change X"));
-    assert_eq!(graph(&h).layers[0].x_axis.min, None);
+    assert!(graph(&h).layers[0].x_axis.min.is_some(), "the X axis keeps its drawn range (fixed)");
     menu(&mut h, "Edit", "Undo Change X");
     assert_eq!(*graph(&h), before);
 }

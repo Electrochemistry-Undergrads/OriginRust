@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **390 listed item locations** at the planning
-  baseline (278 menu bar, 26 toolbar, 86 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **387 listed item locations** at the planning
+  baseline (278 menu bar, 26 toolbar, 83 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -70,6 +70,9 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## Latest integration
+
+T73 (`change-xy`, B3 slice 3): plot right-click Change X, Change Y and Ungroup as measured in Origin
+2016 (column lists, greying, no rescale, colours kept on Ungroup; graphing 15.7d).
 
 T71 (`b4-segments`, B4 slice 2): Plot > Line + Symbol > 2 and 3 Point Segment as Origin 2016's line
 connections 2 and 3 (measured; graphing 5.2), in the plot settings' connect lists and `.opj`. Scatter
@@ -219,7 +222,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `copy-format` | Claude Windows, "continue all tasks" | B2 slice 1 as new brief T72: Copy Format (All, style groups) and Paste Format on graph, axis, legend and page; new core format_clip.rs, menu items, Paste Format dialog | claimed 2026-11-15; no shape selection/resize, object align/group/order, object cut/copy/paste, T58/T59 toolbar |
 | `user-templates` | Claude Windows, "t30-origin" | T56 Save Template As and user graph templates, continuing the stopped start `449ef7b` (core user_template, io user_templates, plot tests), then app menus/prompt/User Templates submenu/Manage, `sheaf plot --template`, graphing.md "User templates" | claimed 2026-11-15; worktree wf_c03644a9-997-1, build target/wf-excel; no T54 window files, T58/T59 formatting, MCP beyond shared clap options |
 | `format-bar-rest` | Claude macOS, "mac-format-bar" | T58 step 3 remainder: graph targets for the six still-grey Format-bar controls (Underline, Superscript, Subscript, Greek on a whole selected label/legend/axis title; Fill Color and Line Color only where Origin's documented semantics can be copied, else they stay grey with reasons) | claimed 2026-11-15; worktree `.claude/worktrees/format-bar-rest`, `target/wt-fmtbar`; `app/text_format.rs` graph target + small `toolbar.rs` Format-bar hooks, own UI tests, graphing 7.4 addendum. No worksheet/T59 cell target (T59 may enable the same buttons for cells behind the shared dispatch), no text editor/title editors, renderer/markup/fonts, model/file-format fields or other sessions' scopes |
-| `change-xy` | Claude Windows, session fe4b37eb | B3 slice 3 as new brief T73: plot right-click Change X, Change Y and Ungroup; Origin 2016 measurements, app plot context menu, core plot column edits, tests | claimed 2026-11-15; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not the other B3 items, no T58/T59/T72/shape-resize scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

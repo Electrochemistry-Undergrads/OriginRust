@@ -1,6 +1,6 @@
 # T73: Change X, Change Y and Ungroup on a plot (B3, slice 3)
 
-**Status:** in progress 2026-11-15 (branch `change-xy`, Claude Windows, session fe4b37eb).
+**Status:** done 2026-11-15 (branch `change-xy`, Claude Windows, session fe4b37eb; graphing 15.7d).
 **Size:** S. **Inventory:** Graph plot (right-click): Change X · Change Y · Ungroup (3).
 
 ## Origin facts (measured 2026-11-15, Origin 2016, scratch `re-workspace/scratch/t73`)

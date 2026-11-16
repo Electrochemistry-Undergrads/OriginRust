@@ -1316,6 +1316,17 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         return;
     }
     if let GraphOp::SetPlotColumn { layer, plot, y, column } = op {
+        // Origin keeps the axis as drawn (measured: Y stayed -25..125): an automatic range is fixed
+        // at its present values before the column changes.
+        let drawn = resolved.and_then(|r| r.get(layer)).map(|r| if y { r.y.clone() } else { r.x.clone() });
+        let grouped = g.layers.get(layer).and_then(|l| l.plots.get(plot)).is_some_and(|p| p.group.is_some());
+        if let (Some(ra), false, Some(l)) = (drawn, grouped, g.layers.get_mut(layer)) {
+            let a = if y { &mut l.y_axis } else { &mut l.x_axis };
+            let (lo, hi) = (ra.from_unit(0.0), ra.from_unit(1.0));
+            if a.min.is_none() && a.max.is_none() && lo.is_finite() && hi.is_finite() && lo != hi {
+                set_limits(a, lo.min(hi), lo.max(hi), ra.reversed);
+            }
+        }
         g.set_plot_column(layer, plot, y, column);
         return;
     }

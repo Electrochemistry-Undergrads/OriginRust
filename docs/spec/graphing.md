@@ -2826,6 +2826,14 @@ default printer's printable area for the Page Setup paper in the page's orientat
 top and bottom); the layers keep their frames in percent of the page. Sheaf asks the default printer
 (Windows) and otherwise uses the paper less those measured edges (12 pt, 18 pt). One undo step.
 
+**Change X, Change Y, Ungroup** (plot right-click menu, T73, measured 2026-11-15): Change X and Change Y
+list the plot's sheet's columns (`[Book1]Sheet1!A(X)`, ...) in column order, the current one ticked and
+the one the plot uses on the other axis greyed; choosing one replaces that column, the legend and axis
+title follow, and the axis keeps the range it was drawn with (Sheaf fixes an automatic range at its
+drawn values). On a plot of a group Change X/Y are greyed and Ungroup ends the group with every plot
+keeping its drawn colour (Sheaf makes those colours explicit); on a plot in no group Ungroup is greyed.
+One undo step each.
+
 **Axis Center** (axis right-click menu, after Axis Zoom In/Out; T70, measured): the axis keeps its span
 and its range moves so that the value under the right-click becomes the middle (X 0..11 at 5.42 gave
 -0.08..10.92); only that axis changes and its range becomes fixed. Sheaf works in the axis' own scale

@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **401 listed item locations** at the planning
-  baseline (281 menu bar, 33 toolbar, 87 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **394 listed item locations** at the planning
+  baseline (281 menu bar, 26 toolbar, 87 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -75,6 +75,15 @@ T69 rest of B1 (branch `b1-rest`, graphing 23, Origin 2016 measured): View > Zoo
 objects fit (it is not a presentation of all graphs; T65's note corrected); Tools-bar Scale In sets the active
 layer's axes to a dragged rectangle (linked axes follow, log axes in log10, one undo step "Zoom In/Out"), Scale
 Out steps back through earlier scales. Left: Ctrl+drag "Enlarged" graph, double-click restore. B1 is complete.
+
+T58 whole-object Format toolbar (`178e28ca`) now applies installed font family, size,
+Bold/Italic, measured size scaling and eight basic font colours to selected labels, legends
+and generated/explicit axis titles. Seven UI regressions cover selection, stale palettes/actions,
+validation, Undo/Redo, SVG and native/companion saves. Graphing 7.4 records the Origin controls
+and the unresolved 2016 whole-object Bold/Italic difference. Formatting, strict workspace
+all-target Clippy, 3,713 tests (8 ignored), inventory 397 and eight Python tooling
+tests pass; source hashes match. An isolated desktop capture was inspected. The shared dispatch
+is ready for T59's worksheet adapter; remaining T58 controls/editor work retain their scopes.
 
 T67 Add Straight Line (`straight-line`, B3 slice 1): Origin 2016's addline measured (names, ends,
 label text and its 5 % placement) and copied: `Layer::straight_lines`, drawing, the Graph menu
@@ -184,7 +193,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 |---|---|---|---|
 | `codex/text-run-fonts` | Codex Windows, text-run-fonts | T58 step 1 renderer remainder: per-run `\f:Name(text)` family switching, nested/restored metrics and glyph/stroke/export tests, preserving Greek/Symbol behaviour | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; markup/text + private tests, fonts only if necessary; graphing 7.6 (Format 7.4/editor 7.5 reserved); no combined scripts, other colour tags, app/editor/toolbar/dispatch, model/core/IO/backends or global font settings |
 | `codex/t58-text-editor` | Codex Windows, t58-text-editor | T58 slice 2 ONLY: graph Text window formatting/selection controls and live preview using published renderer capabilities | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` reused sequentially after completed T63 F; dialogs/text_object.rs + private helper, isolated UI tests/registration, existing text startup screenshot hook if needed, T58/graphing7; no markup/fonts/layout/renderers/backends (text-decorations), shared Format bar/dispatch/actions (t58-format-toolbar), core model fields, formula/parameter labels, graph_view/shapes/layers/axis menus, other dialogs, pending root/index/roadmap; unsupported formatting stays disabled until published renderer support |
-| `codex/t58-format-toolbar` | Codex Windows | T58 slice 3: shared Format toolbar dispatch and existing whole-object graph font controls; selected-target/undo/persistence tests and Origin measurement | claimed 2026-11-15; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points`; Format bar only, local actions/app dispatch + new helper/tests; no renderer/fonts/markup (text-decorations), editor slice 2, worksheet adapter/model, Graph/Standard/Explorer bars, layers/stack, graph_view or new model fields without refinement |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |

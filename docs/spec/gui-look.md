@@ -125,6 +125,16 @@ use Filliben positions and lack that band control. Their dispatch cannot establi
 Plot-menu behavior. The existing tools remain documented in statistics section 16; no new
 Origin 2016 numeric measurement was made by this entry-point review.
 
+
+### Format bar: selected graph text (Sheaf, T58 slice 3)
+
+For a selected title, label or legend, the bar shows its installed font family and point size,
+pressed Bold/Italic state, size increase/decrease and a Font Color menu. Without a text target,
+or while a dialog/cell editor owns editing, these controls are disabled; the size reads 0.
+Enter commits a size draft; Escape or loss of focus cancels it. Text and worksheet numbers are
+unchanged. Graphing 7.4 records the Origin 2016 size/font/colour controls and the unresolved
+native whole-object Bold/Italic difference. Other Format controls remain disabled in this slice.
+
 ## 2. Child windows
 
 Pictures: `gr-plain.png`, `grc-page.png`, `rc-titlebar.png`; second study `graph2-plain.png`,

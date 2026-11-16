@@ -97,7 +97,8 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T65](T65-graph-view-zoom-pan.md) | Graph view zoom and pan (B1 slice 1): Zoom In mode, Zoom Out, Whole Page, Pan | M | 0 |
 | [ ] | [T66](T66-graph-view-modes.md) | Graph view modes (Print, Page, Window, Draft), Show > Layer Icons and Full Screen done; the nine other Show items and Show Data Info wait for measurement (B1 slice 2) | M | 10 |
 | [x] | [T69](T69-zoom-all-scale-tools.md) | Graph view, the rest of B1: View > Zoom All and the Tools-bar Scale In / Scale Out (measured in graphing 23) | S | 0 |
-| [ ] | B2 | Graph objects: cut/copy/paste, Copy/Paste Format, align, same size, group, order across object kinds, snap to grid | L | 51 |
+| [ ] | [T72](T72-copy-paste-format.md) | Copy Format and Paste Format on graph, axis and legend (B2 slice 1) | M | 18 |
+| [ ] | B2 | Graph objects: cut/copy/paste, align, same size, group, order across object kinds, snap to grid (Copy/Paste Format is T72) | L | 33 |
 | [x] | [T67](T67-add-straight-line.md) | Add Straight Line (B3 slice 1) | M | 0 |
 | [x] | [T70](T70-axis-center-fit-page-to-printer.md) | Axis Center and Fit Page To Printer (B3 slice 2) | S | 0 |
 | [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 25 |
@@ -109,9 +110,9 @@ Backlog packages: write the brief first (step 3 above).
   are T66 (measured in graphing 22); Zoom All and the Tools-bar magnifiers (Scale In / Scale Out) are T69 (measured in graphing 23).
 - **B2.** Continues T24 (drawn shapes; ordering inside one layer and resize handles are done or in
   flight). Needs one ordering for all objects of a page (labels, legend, shapes, axis titles), an
-  object clipboard, the nine Copy Format choices with Paste Format, and the Object Edit toolbar on
+  object clipboard, and the Object Edit toolbar on
   a multi-selection (the view has single selection today: `selected: Option<(usize, ObjectKind)>`).
-  Split it: (a) multi-selection and align/same size, (b) cut/copy/paste, (c) copy/paste format,
+  Split it: (a) multi-selection and align/same size, (b) cut/copy/paste, (c) copy/paste format (done as T72, measured in graphing 24),
   (d) grouping and ordering across kinds.
 - **B3.** Small independent tools; split freely. Add Straight Line and Add Function Graph reuse
   drawn shapes and the fit library's functions (`sheaf simulate`, T47). Display range and markers

@@ -46,7 +46,8 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T67` | 0 |
 | `T69` | 0 |
 | `T70` | 0 |
-| `B2` | 51 |
+| `T72` | 18 |
+| `B2` | 33 |
 | `B3` | 25 |
 | `B4` | 28 |
 | `B5` | 33 |
@@ -64,7 +65,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 48 items, backlog packages (`B`) 324, not planned (`N`) 20.
+Briefs (`T`) hold 66 items, backlog packages (`B`) 306, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -100,8 +101,8 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B16` Button Edit Mode [Workbook, Graph]
 - `B2` Cut · Copy · Paste · Clear [Graph]
 - `N` Insert New Object · Links · Update Client [Graph]
-- `B2` Copy Format: All · All Style Formats · Colors · Fonts · Background · Symbol/Line/Fill · Dimensions · Scales · Text [Graph]
-- `B2` Paste Format... [Graph]
+- `T72` Copy Format: All · All Style Formats · Colors · Fonts · Background · Symbol/Line/Fill · Dimensions · Scales · Text [Graph]
+- `T72` Paste Format... [Graph]
 - `B7` Find in Project [Graph]
 
 ### View
@@ -243,7 +244,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B6` Worksheet corner > Row Labels for Column Label Rows: Long Name · Units · Comments · F(x)= · Sparklines · Parameters
 - `B3` Graph plot: Change X · Change Y · Ungroup
 - `B11` Graph axis: Save Format as Theme...
-- `B2` Graph axis > Copy Format: All · All Style Formats · Axis
+- `T72` Graph axis > Copy Format: All · All Style Formats · Axis
 - `B2` Graph axis title: Cut · Copy · Bring to the front · Push to the back
 - `B2` Graph text label: Cut · Copy · Bring to the front · Push to the back
 - `B2` Graph drawn shape: Cut · Copy
@@ -252,10 +253,10 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B16` Graph legend: Programming Control...
 - `B11` Graph legend: Save Format as Theme...
 - `B3` Graph legend > Legend: Add Legend Title
-- `B2` Graph legend > Copy Format: All · All Style Formats · Text
+- `T72` Graph legend > Copy Format: All · All Style Formats · Text
 - `B12` Graph page: Add Shortcut to Favorites
 - `T61` Graph page > New Layer(Axes): Open Dialog...
-- `B2` Graph page > Copy Format: All · All Style Formats
+- `T72` Graph page > Copy Format: All · All Style Formats
 - `B11` Graph page > Duplicate (Batch Plotting): Duplicate
 - `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Double click to open Plot Setup
 - `B12` Explorer folder: Properties...

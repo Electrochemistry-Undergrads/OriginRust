@@ -337,6 +337,15 @@ pub enum Cmd {
         layer: usize,
         label: usize,
     },
+    /// Selection-format editor for a layer's existing axis title.
+    EditTitle {
+        layer: Option<usize>,
+        vertical: bool,
+    },
+    /// Selection-format editor for the existing legend content.
+    EditLegendText {
+        layer: Option<usize>,
+    },
     /// Edit > Copy Page: the graph as a picture on the clipboard.
     CopyPage,
     /// Copy Format of the whole graph (Edit menu, page menu): what the clipboard takes (T72).
@@ -1511,6 +1520,7 @@ fn graph_menu() -> Vec<Entry> {
             "&Legend",
             vec![
                 // Origin opens the legend's settings by double click; Sheaf also offers them here.
+                item("Edit Legend Text...", Cmd::EditLegendText { layer: None }),
                 item("Legend Properties...", Cmd::GraphProps(PropsTab::Legend)),
                 keyed("Reconstruct Legend", ctrl(Key::L), Cmd::ReconstructLegend),
                 item("Update Legend", Cmd::UpdateLegend),
@@ -1632,7 +1642,13 @@ fn format_menu(kind: WindowKind) -> Vec<Entry> {
                 ],
             ),
             grey_sub("Axis Tick Labels", &["X Axis Tick Labels...", "Y Axis Tick Labels..."]),
-            grey_sub("Axis Titles", &["X Axis Title...", "Y Axis Title..."]),
+            sub(
+                "Axis Titles",
+                vec![
+                    item("X Axis Title...", Cmd::EditTitle { layer: None, vertical: false }),
+                    item("Y Axis Title...", Cmd::EditTitle { layer: None, vertical: true }),
+                ],
+            ),
             sep(),
             grey("Programming Control..."),
             grey("Object Properties..."),
@@ -2072,6 +2088,7 @@ fn axis_paste_format_menu(layer: usize, y: bool) -> Entry {
 pub fn graph_title_menu(layer: usize, y: bool) -> Vec<Entry> {
     let tab = if y { PropsTab::YAxis } else { PropsTab::XAxis };
     vec![
+        item("Edit Text...", Cmd::EditTitle { layer: Some(layer), vertical: y }),
         grey_keyed("Cut", ctrl(Key::X)),
         grey_keyed("Copy", ctrl(Key::C)),
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::HideTitle { layer, y })),
@@ -2143,6 +2160,7 @@ pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool) -> Vec
         if can { item(label, Cmd::GraphEdit(GraphOp::AddScale { layer, kind })) } else { grey(label) }
     };
     vec![
+        item("Edit Text...", Cmd::EditLegendText { layer: Some(layer) }),
         item("Plot Details...", Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: None }),
         sub(
             "Legend",
@@ -2771,6 +2789,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::AddText => Action::AddText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: Some(c.layer), at: None },
         Cmd::EditText { layer, label } => {
             Action::EditText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label }
+        }
+        Cmd::EditTitle { layer, vertical } => Action::EditTitle {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            layer: layer.unwrap_or(c.layer),
+            vertical: *vertical,
+        },
+        Cmd::EditLegendText { layer } => {
+            Action::EditLegendText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: layer.unwrap_or(c.layer) }
         }
         Cmd::CopyPage => Action::CopyPage(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::CopyGraphFormat(part) => Action::CopyGraphFormat { graph: c.graph.ok_or(NEED_GRAPH)?, part: *part },

@@ -578,6 +578,17 @@ pub enum Action {
         layer: usize,
         label: usize,
     },
+    /// Edits the existing axis title with text-selection formatting.
+    EditTitle {
+        graph: WindowId,
+        layer: usize,
+        vertical: bool,
+    },
+    /// Edits the existing legend content, retaining plot substitutions.
+    EditLegendText {
+        graph: WindowId,
+        layer: usize,
+    },
     /// Moves a label to a new anchor (fractions of the layer frame): one undo step.
     MoveLabel {
         graph: WindowId,

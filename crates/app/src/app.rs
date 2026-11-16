@@ -2219,6 +2219,12 @@ impl SheafApp {
             Action::EditText { graph, layer, label } => {
                 self.text_dialog = TextDialog::edit(&self.doc, graph, layer, label);
             }
+            Action::EditTitle { graph, layer, vertical } => {
+                self.text_dialog = TextDialog::axis_title(&self.doc, graph, layer, vertical);
+            }
+            Action::EditLegendText { graph, layer } => {
+                self.text_dialog = TextDialog::legend(&self.doc, graph, layer);
+            }
             Action::AddShape { graph, layer, shape } => {
                 self.doc.apply("Add drawn object", |p| {
                     if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
@@ -4684,15 +4690,32 @@ impl SheafApp {
                         self.data_edit(DataEdit::Mask { cells, masked: true });
                     }
                 }
-                // text:N opens the Text window of the N-th label (from 1) of the first graph's
-                // first layer and selects it.
+                // text:N opens label N; text:x/y/legend opens existing title/legend text.
                 "text" => {
-                    if let (Some(id), Ok(n)) = (first_graph, arg.parse::<usize>()) {
-                        let label = n.saturating_sub(1);
-                        self.text_dialog = TextDialog::edit(&self.doc, id, 0, label);
-                        self.graphs.entry(id).or_default().selected =
-                            Some((0, sheaf_plot::scene::ObjectKind::Label(label)));
-                        self.focus(id);
+                    if let Some(id) = first_graph {
+                        let object = match arg {
+                            "x" | "y" => {
+                                self.text_dialog = TextDialog::axis_title(&self.doc, id, 0, arg == "y");
+                                Some(if arg == "y" {
+                                    sheaf_plot::scene::ObjectKind::YTitle
+                                } else {
+                                    sheaf_plot::scene::ObjectKind::XTitle
+                                })
+                            }
+                            "legend" => {
+                                self.text_dialog = TextDialog::legend(&self.doc, id, 0);
+                                Some(sheaf_plot::scene::ObjectKind::Legend)
+                            }
+                            _ => arg.parse::<usize>().ok().map(|n| {
+                                let label = n.saturating_sub(1);
+                                self.text_dialog = TextDialog::edit(&self.doc, id, 0, label);
+                                sheaf_plot::scene::ObjectKind::Label(label)
+                            }),
+                        };
+                        if let Some(object) = object {
+                            self.graphs.entry(id).or_default().selected = Some((0, object));
+                            self.focus(id);
+                        }
                     }
                 }
                 // shape:N opens the properties window of the N-th drawn object (from 1) of the

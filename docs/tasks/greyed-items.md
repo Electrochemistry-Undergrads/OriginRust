@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **368 greyed items: 253 in the menu bar, 19 on the toolbars, 96 in context menus.**
+original inventory baseline. This is not a new runtime audit. **366 greyed items: 251 in the menu bar, 19 on the toolbars, 96 in context menus.**
 
 ## How to read and keep this file
 
@@ -35,7 +35,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 |---|---|
 | `T56` | 1 |
 | `T57` | 2 |
-| `T58` | 2 |
+| `T58` | 0 |
 | `T59` | 2 |
 | `T60` | 0 |
 | `T61` | 5 |
@@ -73,7 +73,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 67 items, backlog packages (`B`) 281, not planned (`N`) 20.
+Briefs (`T`) hold 65 items, backlog packages (`B`) 281, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -194,7 +194,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B2` Snap Layers to Grid · Snap Objects to Grid [Graph]
 - `B15` Axes: Z Axis... [Graph]
 - `T63` Axis Tick Labels: X Axis Tick Labels... · Y Axis Tick Labels... [Graph]
-- `T58` Axis Titles: X Axis Title... · Y Axis Title... [Graph]
 - `T59` Worksheet... [Workbook]
 - `B6` Snap to Grid · Merge cells [Workbook]
 

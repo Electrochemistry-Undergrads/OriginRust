@@ -58,6 +58,7 @@ mod symbol_line_gaps;
 mod symbol_line_order;
 mod text_editor;
 mod text_format_toolbar;
+mod title_editors;
 mod toolbar_print;
 mod treemap;
 mod view_modes;

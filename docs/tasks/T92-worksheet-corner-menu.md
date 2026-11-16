@@ -1,6 +1,6 @@
 # T92: Worksheet corner menu (label rows, headers, grid lines)
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `corner-menu`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13i): Origin's corner View list measured (Row Labels is one switch, not a submenu), Long Name / Units / Comments / F(x)= / Row Labels / Column Grid / Row Grid work per sheet, saved in `.sheaf`, named in the `.opj` warning. Left: Column Header and Row Header (the grid layout), Parameters, Sampling Interval, Filter, Categories rows.
 **Size:** M. **Source:** greyed inventory package B6 (the worksheet corner menu: Row Labels for Column
 Label Rows > Long Name, Units, Comments, F(x)=, Parameters; Column Header, Row Header, Column Grid, Row
 Grid). Sparklines and Page Break Preview Lines stay in B6.

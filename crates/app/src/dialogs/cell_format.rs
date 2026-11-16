@@ -1,7 +1,7 @@
 //! Format Cells: the window that sets the font, size, bold/italic/underline, text and fill colour
 //! and horizontal alignment of the selected data cells, or of a selected label cell (T59).
-//! Origin's controls and defaults here are not measured; this is Sheaf's own layout, see
-//! docs/spec/gui-look.md "Format Cells (T59)".
+//! Sheaf's manual-style layout is its own. Origin 2016's extra text-control and numeric fields
+//! were measured separately; they are not implemented here. See docs/spec/gui-look.md (T59).
 //!
 //! The window starts from the look of the first selected cell and applies only what the user
 //! changed, so a mixed selection keeps what it had. OK and Apply are one undo step each; Cancel

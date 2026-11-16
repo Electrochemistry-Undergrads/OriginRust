@@ -513,6 +513,7 @@ fn hidden_columns_and_column_widths_are_named_in_the_warnings() {
         Some(sheaf_core::rowfilter::RowFilter { condition: "col(A) > 0".into(), enabled: true, keep: vec![true] });
     b.sheets[0].frozen = sheaf_core::Frozen { rows: 1, columns: 0 };
     b.sheets[0].long_name = "Scan".into();
+    b.sheets[0].view.units = false;
     b.sheets[0].cond_formats = vec![sheaf_core::condformat::CondFormat {
         name: "C1R1-C1R0".into(),
         range: sheaf_core::condformat::CondRange::whole_columns(vec![b.sheets[0].columns[0].id]),
@@ -529,6 +530,7 @@ fn hidden_columns_and_column_widths_are_named_in_the_warnings() {
     assert!(all.contains("1 cell note(s) are not written"), "{all}");
     assert!(all.contains("1 sheet(s) have frozen panes"), "{all}");
     assert!(all.contains("1 sheet(s) have a long name"), "{all}");
+    assert!(all.contains("1 sheet(s) hide label rows"), "{all}");
     assert!(all.contains("1 sheet(s) have conditional formatting"), "{all}");
     assert!(all.contains("1 hidden column(s)"), "{all}");
     assert!(all.contains("1 column(s) have their own width"), "{all}");

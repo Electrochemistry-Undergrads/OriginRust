@@ -94,7 +94,10 @@ The existing selection/caret, style/literal/reference preservation, history and 
 paths are reused, including the newly published font-family and paired-script renderer rules.
 No renderer, base-font, project-model or worksheet formatting behaviour changes. Full named
 Classic palette expansion and other editor insertion controls remain separate work.
-Custom RGB validation results follow after the combined checks.
+Formatting, strict workspace all-target Clippy and 4,062 combined tests pass
+(eight existing ignored), including all 37 related editor UI/helper/preview tests.
+Inventory, eight Python tooling tests and four inspected desktop captures pass, including
+the real RGB popup with verified channel values; editor/test source hashes are unchanged.
 
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.

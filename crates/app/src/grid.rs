@@ -639,7 +639,17 @@ fn cell_scope(ui: &mut egui::Ui, rect: Rect, salt: impl std::hash::Hash, add: im
 
 /// The label rows of a sheet in order: the four fixed ones, then one per user parameter.
 fn label_rows(sheet: &Worksheet) -> Vec<LabelRow> {
-    let mut rows = vec![LabelRow::LongName, LabelRow::Units, LabelRow::Comments, LabelRow::Formula];
+    // The corner menu's View switches hide label rows (T92).
+    let v = &sheet.view;
+    let mut rows: Vec<LabelRow> = [
+        (v.long_name, LabelRow::LongName),
+        (v.units, LabelRow::Units),
+        (v.comments, LabelRow::Comments),
+        (v.formula, LabelRow::Formula),
+    ]
+    .into_iter()
+    .filter_map(|(shown, row)| shown.then_some(row))
+    .collect();
     rows.extend(sheet.parameter_names().into_iter().map(LabelRow::Param));
     rows
 }
@@ -1433,7 +1443,9 @@ fn corner_and_titles(
         state.select_all(sheet);
         state.focus(ui.ctx());
     }
-    response.context_menu(|ui| menus::show_context(ui, &menus::corner_menu(), &book_ctx(book_id, state), actions));
+    response.context_menu(|ui| {
+        menus::show_context(ui, &menus::corner_menu(&sheet.view), &book_ctx(book_id, state), actions)
+    });
     for (i, row) in label_rows.iter().enumerate() {
         let cell = Rect::from_min_size(
             Pos2::new(
@@ -1442,7 +1454,10 @@ fn corner_and_titles(
             ),
             vec2(rect.width(), state.layout_cache.as_ref().expect("worksheet layout").value.labels[i]),
         );
-        title_text(ui, cell, &row_title(row));
+        // Row Labels for Column Label Rows off: the titles are left out (T92).
+        if sheet.view.row_labels {
+            title_text(ui, cell, &row_title(row));
+        }
     }
     for i in 0..=label_rows.len() {
         let y = rect.top() + state.layout_cache.as_ref().expect("worksheet layout").value.label_top(i) - 0.5;
@@ -2011,8 +2026,13 @@ fn body_cell(
     }
     let (right, bottom) = (rect.right() - 0.5, rect.bottom() - 0.5);
     let grid = Stroke::new(1.0_f32, LINE_BODY);
-    ui.painter().hline(rect.x_range(), bottom, grid);
-    ui.painter().vline(right, rect.y_range(), grid);
+    // Row Grid and Column Grid of the corner menu (T92).
+    if sheet.view.row_grid {
+        ui.painter().hline(rect.x_range(), bottom, grid);
+    }
+    if sheet.view.column_grid {
+        ui.painter().vline(right, rect.y_range(), grid);
+    }
     if look == Look::Anchor {
         ui.painter().rect_stroke(rect.shrink(0.5), 0.0, Stroke::new(1.5_f32, Color32::BLACK), egui::StrokeKind::Inside);
     }

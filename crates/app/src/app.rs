@@ -2962,6 +2962,13 @@ impl SheafApp {
                     Err(e) => self.warn(e.to_string()),
                 }
             }
+            SheetOp::ToggleView(switch) => {
+                self.doc.apply("Worksheet view", |p| {
+                    if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(active)) {
+                        s.view.toggle(switch);
+                    }
+                });
+            }
             SheetOp::ShowName(label) => {
                 if b.sheets[active].tab_label != label {
                     self.doc.apply("Sheet name to show", |p| {

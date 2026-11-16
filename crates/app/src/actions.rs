@@ -81,6 +81,8 @@ pub enum SheetOp {
     DuplicateWithoutData,
     /// Sheet Name to Show: what the sheet's tab shows (T90).
     ShowName(sheaf_core::sheet_tab::SheetLabel),
+    /// The corner menu's View switches: show or hide a label row, the row labels or grid lines (T92).
+    ToggleView(sheaf_core::sheet_view::ViewSwitch),
     /// Open the window that asks for a new name.
     RenameDialog,
 }

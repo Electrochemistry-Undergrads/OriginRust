@@ -1902,7 +1902,10 @@ pub fn cell_menu_for(noted: bool) -> Vec<Entry> {
     }
     v.push(mask_menu());
     v.push(cond_format_menu());
-    v.push(grey_sub("Set Data Style", &["Default"]));
+    v.push(sub(
+        "Set Data Style",
+        vec![grey("Rich Text"), grey("Wrap Text"), grey("Float"), item("More...", Cmd::FormatCells)],
+    ));
     v
 }
 
@@ -2327,18 +2330,32 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
     v
 }
 
-/// The menu of the corner above the row numbers: switches for the parts of the grid.
-pub fn corner_menu() -> Vec<Entry> {
+/// The menu of the corner above the row numbers: the switches of Origin 2016's corner View submenu
+/// (T92), ticked when on.
+pub fn corner_menu(view: &sheaf_core::sheet_view::SheetView) -> Vec<Entry> {
+    use sheaf_core::sheet_view::ViewSwitch as V;
+    let switch = |s: V| {
+        let tick = if view.shows(s) { "\u{2713} " } else { "" };
+        item(&format!("{tick}{}", s.name()), Cmd::Sheet(SheetOp::ToggleView(s)))
+    };
     vec![
-        grey_sub(
-            "Row Labels for Column Label Rows",
-            &["Long Name", "Units", "Comments", "F(x)=", "Sparklines", "Parameters"],
-        ),
+        switch(V::LongName),
+        switch(V::Units),
+        switch(V::Comments),
+        grey("Parameters"),
+        grey("Sampling Interval"),
+        grey("Sparklines"),
+        grey("Filter"),
+        switch(V::Formula),
+        grey("Categories"),
+        sep(),
+        switch(V::RowLabels),
         sep(),
         grey("Column Header"),
         grey("Row Header"),
-        grey("Column Grid"),
-        grey("Row Grid"),
+        sep(),
+        switch(V::ColumnGrid),
+        switch(V::RowGrid),
         grey("Page Break Preview Lines"),
     ]
 }

@@ -80,7 +80,9 @@ fn has_trendlines(pd: &PlotData) -> bool {
         || pd.violin.is_some()
         || pd.ridge.is_some()
         || pd.hex.is_some()
-        || pd.hist_raw.is_some())
+        || pd.hist_raw.is_some()
+        // a column scatter's X is its column position with a jitter, not data
+        || pd.column_at.is_some())
 }
 
 /// The number of label lines a layer's trendlines write (the layers that share a frame stack their

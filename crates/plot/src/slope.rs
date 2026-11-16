@@ -60,6 +60,7 @@ fn usable(pd: &PlotData) -> bool {
         && pd.ridge.is_none()
         && pd.hex.is_none()
         && pd.hist_raw.is_none()
+        && pd.column_at.is_none()
         && pd.parallel.is_none()
         && pd.treemap.is_none()
         && pd.sunburst.is_none()

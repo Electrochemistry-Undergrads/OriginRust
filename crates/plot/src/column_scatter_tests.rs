@@ -31,7 +31,7 @@ fn the_points_stand_at_their_position_within_the_jitter() {
     assert!(layer.plots.iter().all(|q| q.kind == PlotKind::ColumnScatter));
     assert_eq!(layer.plots[0].symbol.shape, SymbolShape::Diamond);
     let l = data::collect(&p, layer);
-    for (k, (lo, hi)) in [(0.82, 1.18), (1.82, 2.18)].into_iter().enumerate() {
+    for (k, (lo, hi)) in [(0.85, 1.15), (1.85, 2.15)].into_iter().enumerate() {
         let pd = &l.plots[k];
         assert!(pd.rows().count() == 9);
         for i in pd.rows() {

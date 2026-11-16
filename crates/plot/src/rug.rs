@@ -45,7 +45,12 @@ fn selected<'a, 'b>(layer: &Layer, rug: &Rug, pds: &'a [PlotData<'b>]) -> Vec<&'
     let chosen = rug.plot.and_then(|id| layer.plots.iter().find(|p| p.y == id));
     pds.iter()
         .filter(|pd| {
-            pd.pie.is_none() && pd.boxed.is_none() && pd.violin.is_none() && pd.ridge.is_none() && pd.hex.is_none()
+            pd.pie.is_none()
+                && pd.boxed.is_none()
+                && pd.violin.is_none()
+                && pd.ridge.is_none()
+                && pd.hex.is_none()
+                && pd.column_at.is_none()
         })
         .filter(|pd| chosen.is_none_or(|c| std::ptr::eq(c, pd.plot)))
         .collect()

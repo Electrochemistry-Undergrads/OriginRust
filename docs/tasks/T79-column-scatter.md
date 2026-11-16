@@ -1,6 +1,6 @@
 # T79: Column Scatter (B4 slice)
 
-**Status:** in progress 2026-11-16 (branch `column-scatter`, Claude Windows, session fe4b37eb).
+**Status:** done 2026-11-16 (branch `column-scatter`, Claude Windows, session fe4b37eb; graphing 18.14). Left: the plot-type pickers of Plot Setup / Layer Contents / Change Plot to do not offer it (as for Box).
 **Size:** S-M. **Inventory:** Plot > Symbol > Column Scatter (1).
 
 ## Origin facts (measured 2026-11-16, Origin 2016, scratch `re-workspace/scratch/t79`)

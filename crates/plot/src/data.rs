@@ -385,11 +385,12 @@ fn attach_waterfall_colors(project: &Project, layer: &Layer, plots: &mut [PlotDa
 }
 
 /// The X value of the `k`-th row of the column scatter plot at position `g + 1` (0-based `g`): the position
-/// plus a fixed pseudo-random shift of up to 0.18 either way (the golden-ratio sequence of
-/// [`sheaf_core::compplot::jittered`], so the picture is the same every time). Sheaf's choice: Origin's jitter
-/// rule was not measured.
+/// plus a fixed pseudo-random shift of up to 0.15 either way (the golden-ratio sequence, so the picture is the
+/// same every time). Origin's points stayed within about +-0.15 of their column (measured); its jitter rule
+/// itself was not measured, so the sequence is Sheaf's choice.
 fn column_jitter(g: usize, k: usize) -> f64 {
-    sheaf_core::compplot::jittered(g, k)
+    let u = ((k as f64 + 1.0) * 0.618_033_988_749_894_9).fract();
+    (g + 1) as f64 + (u - 0.5) * 0.30
 }
 
 /// The drawable plots of a layer, in plot order, with their stack offsets. A plot that is hidden

@@ -61,6 +61,7 @@ pub mod treemap_tree;
 pub mod trend;
 mod util;
 pub mod vartest;
+pub mod wavelet;
 pub mod xyzarea;
 
 pub use anova::{
@@ -158,4 +159,5 @@ pub use vartest::{
     proportion_one, proportion_two, ratio_interval, two_sample_normal_doubtful, variance_interval, vartest_one,
     vartest_two, wald_difference_interval, wald_interval,
 };
+pub use wavelet::{Extension as WaveletExtension, Threshold as WaveletThreshold, Wavelet, WaveletError};
 pub use xyzarea::{SurfaceArea, XyzAreaError, delaunay, xyz_surface_area};

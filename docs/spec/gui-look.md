@@ -633,6 +633,25 @@ first selected cell and applies only changed properties. The layout and choices 
 remain Sheaf's policy; Origin's text-control and per-cell numeric-display features are not supplied
 by this window. Vertical alignment, full/custom palettes and remaining dialog/precedence
 measurements remain open.
+**Vertical alignment probe (Origin 2016, 2026-11-16).** A numeric data cell A1 was
+selected before Format > Cell; the dialog reported `[Book1]Sheet1!A[1:1]`. Its Text
+controls include font/size and text/fill colour, with no top/middle/bottom text-alignment
+control found in the inspected list. Worksheet Properties > Format with Data selected
+and its Size tab likewise supplied no vertical text-alignment choice in these probes.
+The Size tab controls worksheet dimensions; Dynamic Merge's Vertical option describes
+merging. This is bounded negative evidence for these routes, not a claim about every
+cell type, category, version or possible command.
+
+The [official Format-tab reference](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+lists font family/size and colour controls; that current reference is separate from the
+2016 measurements. A supported vertical-alignment route and its mutation rules still
+need to be established before adding a per-range model field or a live control.
+Sheaf retains its current placement. The successful selected-A1 and settled Format/Size
+captures, control lists, hashes and cleanup proof are local in
+`re-workspace/scratch/t59-cell-vertical-align/native-proof.json`. The unsuccessful script
+command, unselected-cell dialog, incorrect tab clicks and early paint snapshots are
+excluded. Every temporary Origin instance, helper and identity guard closed.
+
 Model and persistence rules: workbook-model.md 13b.
 
 ## 4. Graph window

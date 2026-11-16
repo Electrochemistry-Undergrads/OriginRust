@@ -91,6 +91,8 @@ pub struct GraphUi {
     pub selected: Option<(usize, ObjectKind)>,
     /// What the open right-click menu is about.
     menu_on: Option<MenuTarget>,
+    /// The page point (in points) that opened the right-click menu: Axis Center needs it.
+    menu_page: (f64, f64),
     /// Where the page was drawn in the last frame (screen rectangle) and UI points per page point.
     view: Option<(Rect, f32)>,
     /// The open Integrate gadget, if any.
@@ -794,6 +796,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     {
         let hit = pick(pos);
         state.menu_on = Some(MenuTarget::Hit(hit));
+        state.menu_page = to_page(pos);
         if let Some(layer) = layer_of(hit) {
             state.active_layer = layer;
             actions.push(Action::ActivateLayer { graph: graph_id, layer });
@@ -854,7 +857,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
 
     // The right-click menus.
     let c = graph_context(graph_id, state.active_layer, state.tool());
-    let entries = |target: MenuTarget| menu_for(doc.project(), graph_id, target, state.selected);
+    let entries = |target: MenuTarget| menu_for(doc.project(), graph_id, target, state.selected, state.menu_page);
     let target = state.menu_on;
     let mut shown = response.context_menu(|ui| {
         if let Some(t @ MenuTarget::Hit(_)) = target {
@@ -1095,6 +1098,7 @@ fn menu_for(
     graph_id: WindowId,
     target: MenuTarget,
     selected: Option<(usize, ObjectKind)>,
+    page: (f64, f64),
 ) -> Vec<menus::Entry> {
     let Some(graph) = project.graph(graph_id) else {
         return Vec::new();
@@ -1135,7 +1139,7 @@ fn menu_for(
                     let a = if y { &l.y_axis } else { &l.x_axis };
                     a.major_grid.is_some() || a.minor_grid.is_some()
                 });
-                menus::graph_axis_menu(layer, y, grids)
+                menus::graph_axis_menu(layer, y, grids, page)
             }
             ObjectKind::XTitle => menus::graph_title_menu(layer, false),
             ObjectKind::YTitle => menus::graph_title_menu(layer, true),
@@ -1210,6 +1214,14 @@ fn draw_selection(
     }
 }
 
+/// The range an axis gets from Axis Center: the span is kept, in the axis' own scale (decades on a
+/// log axis), and the value at unit position `u` (0 at the axis' low end, 1 at its high end, as
+/// drawn) becomes the middle. `None` when the position or the result is not a number.
+fn centered_range(axis: &sheaf_plot::ticks::ResolvedAxis, u: f64) -> Option<(f64, f64)> {
+    let (a, b) = (axis.from_unit(u - 0.5), axis.from_unit(u + 0.5));
+    (u.is_finite() && a.is_finite() && b.is_finite() && a != b).then(|| (a.min(b), a.max(b)))
+}
+
 /// Applies a change made from the graph window to the project. `resolved` is the present layout
 /// of the graph (its axes' ranges), used by the axis zoom.
 pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: Option<&[LayerGeometry]>) {
@@ -1237,6 +1249,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::ExchangeAxes { layer }
         | GraphOp::SetStack { layer, .. }
         | GraphOp::AxisZoom { layer, .. }
+        | GraphOp::AxisCenter { layer, .. }
         | GraphOp::HideLegend { layer }
         | GraphOp::ReconstructLegend { layer }
         | GraphOp::UpdateLegend { layer }
@@ -1347,6 +1360,19 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
                 let a = if y { &mut l.y_axis } else { &mut l.x_axis };
                 a.min = Some(lo.min(hi));
                 a.max = Some(lo.max(hi));
+            }
+        }
+        GraphOp::AxisCenter { y, page, .. } => {
+            let Some(r) = resolved.and_then(|r| r.get(layer_index)) else { return };
+            let f = r.frame;
+            if !(f.w > 0.0 && f.h > 0.0) {
+                return;
+            }
+            let (ra, u) = if y { (&r.y, 1.0 - (page.1 - f.y) / f.h) } else { (&r.x, (page.0 - f.x) / f.w) };
+            if let Some((lo, hi)) = centered_range(ra, u) {
+                let a = if y { &mut l.y_axis } else { &mut l.x_axis };
+                a.min = Some(lo);
+                a.max = Some(hi);
             }
         }
         GraphOp::HideLegend { .. } => l.legend.visible = false,

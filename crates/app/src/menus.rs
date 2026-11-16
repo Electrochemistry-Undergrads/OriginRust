@@ -224,10 +224,10 @@ pub enum Cmd {
     AddPlotToLayer(PlotKind),
     /// Graph > Layer Management... (T60); the layer to select, if any.
     LayerManagement(Option<usize>),
-    /// Graph > Fit Page to Layers... (the window) and Format > Fit Page To Layers (Origin's defaults at once) (T60).
-    FitPageToLayers {
-        dialog: bool,
-    },
+    /// Graph > Fit Page to Layers... (the window) and Format > Fit Page To Layers... (T60).
+    FitPageToLayers,
+    /// Format > Fit Page To Printer: the page takes the printable size of the default printer (T70).
+    FitPageToPrinter,
     /// Graph > Plot Setup...: Origin's own window for the data of a layer's plots.
     PlotSetup(Option<usize>),
     /// The graph settings of a given layer, with a plot chosen (the graph's right-click menus).
@@ -1420,7 +1420,7 @@ fn graph_menu() -> Vec<Entry> {
         grey("New Color Scale"),
         sep(),
         grey("Fit Layer to Graph"),
-        item("Fit Page to Layers...", Cmd::FitPageToLayers { dialog: true }),
+        item("Fit Page to Layers...", Cmd::FitPageToLayers),
         item("Exchange X-Y Axes", Cmd::ExchangeAxes),
         sub(
             "Offset Grouped Data in Layer",
@@ -1518,8 +1518,8 @@ fn format_menu(kind: WindowKind) -> Vec<Entry> {
             sep(),
             grey("Snap Layers to Grid"),
             grey("Snap Objects to Grid"),
-            item("Fit Page To Layers", Cmd::FitPageToLayers { dialog: false }),
-            grey("Fit Page To Printer"),
+            item("Fit Page To Layers...", Cmd::FitPageToLayers),
+            item("Fit Page To Printer", Cmd::FitPageToPrinter),
             sep(),
             item("&Axes...", Cmd::GraphProps(PropsTab::XAxis)),
             sub(
@@ -1852,7 +1852,8 @@ pub fn graph_plot_menu(
 }
 
 /// The menu of an axis. `grids` tells whether the axis shows grid lines now.
-pub fn graph_axis_menu(layer: usize, y: bool, grids: bool) -> Vec<Entry> {
+/// `page` is the page point that was right-clicked (Center puts the value there in the middle).
+pub fn graph_axis_menu(layer: usize, y: bool, grids: bool, page: (f64, f64)) -> Vec<Entry> {
     let tab = if y { PropsTab::YAxis } else { PropsTab::XAxis };
     let at = Cmd::GraphPropsAt { layer, tab, plot: None };
     vec![
@@ -1862,7 +1863,7 @@ pub fn graph_axis_menu(layer: usize, y: bool, grids: bool) -> Vec<Entry> {
         keyed("Rescale To Show All", ctrl(Key::R), Cmd::GraphEdit(GraphOp::Rescale { layer })),
         item("Axis Zoom In", Cmd::GraphEdit(GraphOp::AxisZoom { layer, y, zoom_in: true })),
         item("Axis Zoom Out", Cmd::GraphEdit(GraphOp::AxisZoom { layer, y, zoom_in: false })),
-        grey("Center"),
+        item("Center", Cmd::GraphEdit(GraphOp::AxisCenter { layer, y, page })),
         sep(),
         grey_sub("Copy Format", &["All", "All Style Formats", "Axis"]),
         grey("Save Format as Theme..."),
@@ -2447,9 +2448,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::LayerContents { graph: c.graph.ok_or(NEED_GRAPH)?, layer: layer.unwrap_or(c.layer) }
         }
         Cmd::LayerManagement(layer) => Action::LayerManagement { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer },
-        Cmd::FitPageToLayers { dialog } => {
-            Action::FitPageToLayers { graph: c.graph.ok_or(NEED_GRAPH)?, dialog: *dialog }
-        }
+        Cmd::FitPageToPrinter => Action::FitPageToPrinter { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::FitPageToLayers => Action::FitPageToLayers { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::GraphPropsAt { layer, tab, plot } => {
             Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, tab: *tab, plot: *plot }
         }

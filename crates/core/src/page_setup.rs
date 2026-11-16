@@ -9,6 +9,10 @@ use serde::{Deserialize, Serialize};
 const PT_PER_IN: f64 = 72.0;
 const PT_PER_MM: f64 = 72.0 / 25.4;
 
+/// The unprintable edge of the fallback printable area, in points (measured in Origin 2016).
+const FALLBACK_EDGE_X_PT: f64 = 12.0;
+const FALLBACK_EDGE_Y_PT: f64 = 18.0;
+
 /// The paper sizes Page Setup offers (the Windows paper list's common entries).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -149,6 +153,15 @@ impl PageSetup {
         }
     }
 
+    /// The page size Format > Fit Page To Printer gives when no printer can be asked: the paper in
+    /// the page's orientation less the unprintable edges measured in Origin 2016 (12 pt at left and
+    /// right, 18 pt at top and bottom). Letter landscape gives 768 x 576 pt, Origin's 6400 x 4800
+    /// dots at 600 dpi.
+    pub fn fallback_printable_pt(&self, page_w: f64, page_h: f64) -> (f64, f64) {
+        let (w, h) = self.paper_pt(page_w, page_h);
+        ((w - 2.0 * FALLBACK_EDGE_X_PT).max(1.0), (h - 2.0 * FALLBACK_EDGE_Y_PT).max(1.0))
+    }
+
     /// Where a page of `page_w` x `page_h` points lands on this setup's paper when the whole paper
     /// can be printed on (the Print Preview case). See [`placement`].
     pub fn place(&self, page_w: f64, page_h: f64) -> Option<Rect> {
@@ -185,6 +198,21 @@ mod tests {
 
     fn a4(orientation: Orientation, m: f64) -> PageSetup {
         PageSetup { paper: Paper::A4, orientation, margins: Margins::all(m) }
+    }
+
+    #[test]
+    fn the_fallback_printable_area_is_the_paper_less_the_measured_edges() {
+        let letter = PageSetup::default();
+        // A landscape page (Automatic follows it): 11 x 8.5 in less 12 pt and 18 pt edges.
+        let (w, h) = letter.fallback_printable_pt(768.0, 576.0);
+        assert!(close(w, 768.0) && close(h, 576.0));
+        assert!(close(w / 72.0, 10.0 + 2.0 / 3.0) && close(h / 72.0, 8.0));
+        // A portrait page gives the portrait area.
+        let (w, h) = letter.fallback_printable_pt(576.0, 768.0);
+        assert!(close(w, 8.5 * 72.0 - 24.0) && close(h, 11.0 * 72.0 - 36.0));
+        // A forced orientation wins over the page's shape.
+        let forced = PageSetup { orientation: Orientation::Portrait, ..letter };
+        assert_eq!(forced.fallback_printable_pt(768.0, 576.0), (8.5 * 72.0 - 24.0, 11.0 * 72.0 - 36.0));
     }
 
     #[test]

@@ -50,5 +50,6 @@ pub mod simulate;
 pub mod slope_object;
 pub mod sort;
 pub mod stack_panels;
+pub mod straight_line;
 pub mod text_object;
 pub mod trendline;

@@ -1,0 +1,52 @@
+newbook;
+col(1)=data(1,10);
+col(2)=col(1)^2;
+plotxy iy:=(1,2) plot:=200 ogl:=[<new name:=GA>];
+win -a GA;
+addline type:=1 value:=40 location:=bottom name:=HB;
+$HBText.text$
+?HBText.x
+?HBText.y
+?HBText.dx
+?HBText.dy
+?HBText.rotate
+addline type:=1 value:=60 location:=left name:=HL;
+$HLText.text$
+?HLText.x
+?HLText.y
+?HLText.dx
+?HLText.dy
+?HLText.rotate
+addline type:=1 value:=80 location:=right name:=HR;
+$HRText.text$
+?HRText.x
+?HRText.y
+?HRText.dx
+?HRText.dy
+?HRText.rotate
+addline type:=0 value:=2 location:=left name:=VL;
+$VLText.text$
+?VLText.x
+?VLText.y
+?VLText.dx
+?VLText.dy
+?VLText.rotate
+addline type:=0 value:=9 location:=right name:=VR;
+$VRText.text$
+?VRText.x
+?VRText.y
+?VRText.dx
+?VRText.dy
+?VRText.rotate
+addline type:=1 value:=33.3333 name:=HF format:=.2;
+$HFText.text$
+?HFText.x
+?HFText.y
+?HFText.dx
+?HFText.dy
+?HFText.rotate
+layer.y.to=200;
+?HB.y1
+?HB.y2
+?VL.y1
+?VL.y2

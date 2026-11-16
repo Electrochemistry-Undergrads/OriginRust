@@ -66,6 +66,7 @@ mod view_modes;
 mod violin;
 mod worksheet_controls;
 mod worksheet_format_toolbar;
+mod worksheet_style_menu;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {

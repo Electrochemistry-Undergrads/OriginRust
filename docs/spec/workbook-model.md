@@ -510,12 +510,13 @@ matching Origin's unquoted commas; parameter rows follow the current alphabetica
 number display details remain those of the column formatter. Formatted/OLE tables, links and
 automatic label detection on paste are separate features.
 
-## 13b. Cell formats (T59, Sheaf's choices, none measured with Origin)
+## 13b. Cell formats (T59)
 
 Manual formatting of data cells and label cells: bold, italic, underline, font, size, text colour,
 fill colour, horizontal alignment (`crates/core/src/cellformat.rs`, `Worksheet.cell_formats`).
-Origin's own controls, defaults, precedence and `.opj` storage are not measured (T59 step 5); every
-rule below is Sheaf's choice.
+Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on Windows
+(2026-11-15, GUI 3 Cell formatting). The model rules, dialog scope, conditional precedence and
+`.opj` storage below remain Sheaf's choices unless explicitly stated otherwise.
 
 - **Storage.** An ordered list of ranges. A range is column ids plus either a data-row span
   (first row, optional last row; no last row runs to the end of the data and beyond) or label rows
@@ -548,7 +549,11 @@ rule below is Sheaf's choice.
   non-overlapping row stretches with their resolved style, found by binary search, so a lookup
   costs O(log n) whatever the number of records.
 - **Size.** Font sizes are clamped to 4..96 pt (`clamp_cell_pt`) in the grid, print, PDF and
-  image export alike; print scales the clamped size by the printed font over the grid's 12 pt.
+  image export alike. Origin's measured default is Arial 9 pt. The grid converts points to
+  logical pixels by 4/3; print scales by its existing default font over 9 pt. Installed faces
+  and derived row geometry keep enlarged cells visible in grid/print/image output. Geometry
+  uses format intervals, not one record per data row. Derived heights can shrink with the font;
+  Origin retains enlarged row heights, which the current model cannot persist.
 - **Files.** `.sheaf` and the `.opj` companion keep everything. The `.opj` writer holds none and
   warns ("N sheet(s) have cell formatting ..."). Excel export does not write them and says so in
   its warnings (per-cell fonts combined with column number formats are left).

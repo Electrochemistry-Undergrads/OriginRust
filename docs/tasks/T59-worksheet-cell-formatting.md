@@ -1,9 +1,9 @@
 # T59: Worksheet cell formatting
 
-**Status:** steps 1, 2 and 4 done 2026-11-15 (macOS, no Origin, branch `cell-format`): model with range upkeep, grid/print/image drawing, Format Cells window, `.sheaf`/companion, `.opj` and Excel warnings. Step 3 (toolbar adapter; Format > Worksheet; Set Data Style) waits for T58 slice 3. Step 5 (Origin measurements) open. Leftovers: installed fonts in the grid, vertical alignment, row heights following sizes, Excel export of formats, Ctrl+B/I/U.
-**Size:** L. **Branch:** `cell-format`. **Priority:** P0, wave 1.
+**Status:** steps 1, 2 and 4 done 2026-11-15 (`cell-format`). Step 3 first toolbar slice adds selected cells/rows/columns/label targets to T58's shared dispatch: installed font, size, Bold/Italic, basic text colours, mixed-state summaries, stale-request protection and one-step Undo. Grid point sizes and derived row geometry are corrected, including print/image geometry. Basic Origin 2016 toolbar/font/row-growth measurements are in GUI 3; `codex/t59-format-toolbar` passes fmt, strict workspace/all-target Clippy, all 3,922 workspace tests (8 ignored), 17 toolbar regressions and the inventory check; the desktop rendering was inspected. Main integration is in progress. Remaining: Format > Worksheet and Set Data Style, worksheet toolbar underline/fill, vertical alignment, persistent/sticky row heights, Excel export of formats, Ctrl+B/I/U, full/custom palettes and remaining dialog/precedence measurements.
+**Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry). **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;
-[GUI](../spec/gui-look.md) 3. **Inventory:** 6 locations tagged `T59`.
+[GUI](../spec/gui-look.md) 3. **Inventory:** 2 remaining locations tagged `T59` (worksheet-wide scope and Set Data Style).
 **Depends on:** T58's toolbar dispatch (slice 3). Model/dialog work can start independently.
 **Ownership:** worksheet format model, range maintenance, grid and print drawing, Format Cells
 window; worksheet adapter behind T58's dispatch. Coordinate worksheet/sheetops/grid edits with
@@ -19,8 +19,11 @@ appear in printed sheets and worksheet images. Numeric display format remains Co
 
 GUI section 3 records Format Cells on cell/column/row menus, Set Data Style on the cell menu,
 and Ctrl+U underlining a selected column. The X-Function index names `wcellformat`.
+**Measured 2026-11-15:** selected-cell Arial 9 pt default, Bold/Italic, Times New Roman, red text,
+mixed-size blank field, first-cell mixed Bold state and row growth. Size-step buttons were disabled.
+Reducing font size leaves Origin's enlarged height; Sheaf's current derived height can shrink.
 **Not measured:** Format Cells controls/defaults/Apply-to, Format > Worksheet, Set Data Style
-choices, rich-text toolbar actions, precedence of manual/conditional colours, sort behaviour and
+choices, rich text inside a cell, precedence of manual/conditional colours, sort behaviour and
 `.opj` storage. Measure on Windows; label interim choices. The cloud draft proposed conditional
 colours overriding manual colours and styles following rows during sort; these are proposals.
 

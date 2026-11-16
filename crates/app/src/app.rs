@@ -211,6 +211,7 @@ pub struct SheafApp {
     about: bool,
     /// Which toolbars are shown.
     toolbars: Toolbars,
+    worksheet_format: crate::worksheet_format::Cache,
     /// View > Status Bar turned the status bar off.
     status_bar_hidden: bool,
     /// View > Full Screen is on (T66): one graph's page over the whole screen until Esc.
@@ -322,6 +323,7 @@ impl SheafApp {
             copied_page: None,
             about: false,
             toolbars: Toolbars::default(),
+            worksheet_format: Default::default(),
             status_bar_hidden: false,
             full_screen: None,
             full_screen_reminder_off: false,
@@ -1611,6 +1613,11 @@ impl SheafApp {
             return None;
         }
         let graph = self.active?;
+        if let Some(book) = self.doc.project().workbook(graph) {
+            let sheet = book.active_sheet.min(book.sheets.len().checked_sub(1)?);
+            let range = grid::format_target(self.books.get(&graph)?, &book.sheets[sheet]).ok()?;
+            return self.worksheet_format.snapshot(&self.doc, graph, sheet, range);
+        }
         let (layer, object) = self.graphs.get(&graph)?.selected?;
         crate::text_format::Snapshot::graph(&self.doc, graph, layer, object)
     }

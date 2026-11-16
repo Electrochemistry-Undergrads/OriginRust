@@ -31,6 +31,9 @@ Origin's documented Text-tab workflow and explicitly unmeasured choices are reco
 graphing 7.5. Title/legend editor reuse, the two title menu entries, inline font/colour
 selection and combined-script insertion remain open; the separate Format/renderer claims
 retain their scopes. This does not complete all of step 2 or the whole brief.
+Formatting, strict workspace all-target Clippy and 3,725 combined tests pass (eight
+existing ignored); inventory validation, eight Python tooling tests and the inspected native
+app capture also pass. All twelve owned UI/helper/preview tests pass in the complete suite.
 Whole-object toolbar slice (`codex/t58-format-toolbar`): shared target/snapshot/dispatch;
 installed family, size, Bold/Italic, measured 1.2 size scaling and eight basic font colours for
 selected labels/legends/titles. Seven toolbar locations enabled; the six other toolbar controls

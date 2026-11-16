@@ -71,6 +71,16 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+T58 label text editor: Normal, bold, italic, underline, strikethrough, scripts and Greek
+buttons now format the selection or caret group, with a cached preview through the public
+export renderer. Twelve focused regressions cover Unicode selections, nesting/toggling,
+empty drafts, Cancel/Apply/Undo and native/Origin-project preservation; an inspected desktop
+capture shows the scientific label preview and unobscured controls. Graphing 7.5 records
+Origin's published Text-tab workflow and the unmeasured Sheaf choices. Title/legend editor
+reuse, title menu entries and inline family/colour pickers remain open; other T58 owners keep
+their scopes. Formatting, strict workspace all-target Clippy, 3,725 tests (eight existing
+ignored), inventory and eight Python tooling tests pass on the latest integration tree.
+
 T58 whole-object Format toolbar (`178e28ca`) now applies installed font family, size,
 Bold/Italic, measured size scaling and eight basic font colours to selected labels, legends
 and generated/explicit axis titles. Seven UI regressions cover selection, stale palettes/actions,
@@ -186,8 +196,8 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t59-format-toolbar` | Codex Windows | T59 step 3 first slice: worksheet target behind shared Format dispatch, selected-range font/style/size/colour controls, mixed-state/Undo/persistence/UI tests and Origin measurement | claimed 2026-11-15; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` reused sequentially; app formatting extension/new private helper + bounded grid/Format bar hooks; existing cell-format model only, no core/new model fields, Format Cells dialog/menu leftovers, plot renderer/fonts/markup (text-run-fonts), graph editor (t58-text-editor), T69/T70/T54 or other scopes |
 | `codex/text-run-fonts` | Codex Windows, text-run-fonts | T58 step 1 renderer remainder: per-run `\f:Name(text)` family switching, nested/restored metrics and glyph/stroke/export tests, preserving Greek/Symbol behaviour | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; markup/text + private tests, fonts only if necessary; graphing 7.6 (Format 7.4/editor 7.5 reserved); no combined scripts, other colour tags, app/editor/toolbar/dispatch, model/core/IO/backends or global font settings |
-| `codex/t58-text-editor` | Codex Windows, t58-text-editor | T58 slice 2 ONLY: graph Text window formatting/selection controls and live preview using published renderer capabilities | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` reused sequentially after completed T63 F; dialogs/text_object.rs + private helper, isolated UI tests/registration, existing text startup screenshot hook if needed, T58/graphing7; no markup/fonts/layout/renderers/backends (text-decorations), shared Format bar/dispatch/actions (t58-format-toolbar), core model fields, formula/parameter labels, graph_view/shapes/layers/axis menus, other dialogs, pending root/index/roadmap; unsupported formatting stays disabled until published renderer support |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |

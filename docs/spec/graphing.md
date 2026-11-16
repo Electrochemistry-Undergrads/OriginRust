@@ -2531,6 +2531,8 @@ docs.originlab.com/x-function/ref/plot_paretoraw, .../plot_paretobin]:
 
 **What Sheaf does** (unmeasured unless listed above):
 
+- Pareto counts every cell of the column: row filters and Hide Masked Points are not applied to it (Sheaf's choice; the
+  interval plot does honour them). A column with no usable values is skipped and does not use up a category slot.
 - Items: Plot > Statistics > Interval Plot (`Template::IntervalPlot`, CLI `interval-plot`) and Pareto (`Template::Pareto`,
   `pareto`), no dialog. Model: the new per-plot field `Plot.stat` (`StatPlot::{Interval{error, level}, Pareto,
   ParetoCumulative}`), skipped in `.sheaf` while empty. `.opj` export writes plain plots of the data column with a save

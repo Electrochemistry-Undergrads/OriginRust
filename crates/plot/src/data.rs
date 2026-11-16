@@ -632,11 +632,11 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         };
         match plot.kind {
             _ if plot.stat.is_some() => {
+                if !stat_data(project, &mut pd, intervals + 1) {
+                    continue;
+                }
                 if matches!(plot.stat, Some(StatPlot::Interval { .. })) {
                     intervals += 1;
-                }
-                if !stat_data(project, &mut pd, intervals) {
-                    continue;
                 }
             }
             PlotKind::Column | PlotKind::Box if plot.indexed.is_some() => {

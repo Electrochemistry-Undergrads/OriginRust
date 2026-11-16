@@ -268,6 +268,20 @@ fn interval_points_are_the_column_means_with_a_t_confidence_interval() {
 }
 
 #[test]
+fn an_empty_column_does_not_use_up_an_interval_slot() {
+    let mut p = Project::new();
+    let b = p.add_workbook("data");
+    let a = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 3.0])).unwrap();
+    let e = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![f64::NAN, f64::NAN])).unwrap();
+    let c = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![2.0, 6.0])).unwrap();
+    let g = p.plot_columns(Template::IntervalPlot, &[a, e, c]).unwrap();
+    let l = data_of(&p, g);
+    assert_eq!(l.plots.len(), 2);
+    assert_vec(l.plots[0].x.as_deref().unwrap(), &[1.0]);
+    assert_vec(l.plots[1].x.as_deref().unwrap(), &[2.0]);
+}
+
+#[test]
 fn interval_plot_draws_symbols_bars_and_column_names() {
     let (p, g) = stat_project(Template::IntervalPlot);
     let svg = svg_of(&p, g);

@@ -12,9 +12,11 @@
 
 pub mod bands;
 pub mod compare;
+pub mod compare_data;
 pub mod dist;
 pub mod fdf;
 pub mod global;
+pub mod implicit;
 pub mod library;
 pub mod linear;
 pub mod multi;

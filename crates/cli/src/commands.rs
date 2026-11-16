@@ -25,6 +25,8 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Fit(a) => crate::fit::fit(*a),
         Command::Simulate(a) => crate::simulate::simulate(a),
         Command::SimulateSurface(a) => crate::simulate_surface::simulate_surface(a),
+        Command::FitImplicit(a) => crate::fit_datasets::fit_implicit(a),
+        Command::CompareDatasets(a) => crate::fit_datasets::compare_datasets(a),
         Command::MergeGraphs(a) => crate::merge::merge_graphs(a),
     }
 }

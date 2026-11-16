@@ -9,6 +9,7 @@ pub mod cli_fit;
 pub mod cli_plot;
 pub mod cli_simulate;
 pub mod fit;
+pub mod fit_datasets;
 pub mod import;
 pub mod info;
 pub mod pick;

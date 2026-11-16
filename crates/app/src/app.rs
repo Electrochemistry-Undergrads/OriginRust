@@ -4339,6 +4339,22 @@ impl SheafApp {
                     self.panels.reveal(PanelId::Results);
                     self.say(o.message);
                 }
+                FitMoreOutcome::CompareDatasets(o) => {
+                    self.fit_more = None;
+                    self.show_sheet(o.book, o.sheet);
+                    let mut lines = o.comparison.warnings.clone();
+                    lines.splice(0..0, o.reports.iter().flat_map(fit_report_lines));
+                    self.logs.result(o.message.clone(), lines);
+                    self.panels.reveal(PanelId::Results);
+                    self.say(o.message);
+                }
+                FitMoreOutcome::Implicit(o) => {
+                    self.fit_more = None;
+                    self.show_sheet(o.book, o.param_sheet);
+                    self.logs.result(o.message.clone(), fit_report_lines(&o.report));
+                    self.panels.reveal(PanelId::Results);
+                    self.say(o.message);
+                }
                 FitMoreOutcome::Rank(o) => {
                     self.fit_more = None;
                     self.show_sheet(o.book, o.sheet);

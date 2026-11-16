@@ -21,6 +21,7 @@ mod excel;
 mod export_themes;
 mod fill_inclusive;
 mod fill_sidelines;
+mod fit_datasets;
 mod format_bar_rest;
 mod format_clip;
 mod frozen_panes;

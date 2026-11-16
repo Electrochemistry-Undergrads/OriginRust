@@ -37,6 +37,12 @@ pub enum Command {
     /// Simulate Surface: XYZ data of a surface fit function (the 22 of Origin's window) for typed parameters on a
     /// grid, with optional noise. Writes X, Y and Z as delimited text or an Excel workbook, or adds them to a project.
     SimulateSurface(SimulateSurfaceArgs),
+    /// Nonlinear Implicit Curve Fit: a circle or an ellipse fitted to the points of two columns by orthogonal
+    /// distance regression. Prints the parameters and statistics.
+    FitImplicit(FitImplicitArgs),
+    /// Compare Datasets: the same model fitted to two Y columns and compared (Sheaf's F-test of one parameter set
+    /// for both). Prints the report.
+    CompareDatasets(CompareDatasetsArgs),
     /// Merge Graph Windows: copy graphs of a project into the cells of one new graph (Origin's
     /// merge_graph defaults), then write it as a figure and/or save the project with it.
     MergeGraphs(MergeGraphsArgs),
@@ -330,6 +336,99 @@ pub struct SimulateArgs {
     pub output: Option<PathBuf>,
     /// Save the project with the new sheet to this file: .opj (also when no extension is given, with a
     /// companion .opj.sheaf if the .opj cannot hold everything) or .sheaf.
+    #[arg(long, visible_alias = "project", value_name = "PROJECT")]
+    pub save: Option<PathBuf>,
+    #[command(flatten)]
+    pub read: ReadOptions,
+}
+
+/// `sheaf fit-implicit`: Analysis > Fitting > Nonlinear Implicit Curve Fit without a window.
+#[derive(Args, Debug)]
+pub struct FitImplicitArgs {
+    /// A data file, a .sheaf project or an Origin .opj or .opju project.
+    pub input: PathBuf,
+    /// The implicit function: Circle or Ellipse (Origin's PlaneMod is not available).
+    #[arg(short, long, default_value = "Circle")]
+    pub function: String,
+    /// The column with the X values of the points.
+    #[arg(short, long)]
+    pub x: String,
+    /// The column with the Y values of the points.
+    #[arg(short, long)]
+    pub y: String,
+    /// A starting value, for example --init xc=2 (repeat or separate with commas); the others are estimated.
+    #[arg(long, value_delimiter = ',', value_name = "NAME=VALUE", allow_hyphen_values = true)]
+    pub init: Vec<String>,
+    /// Fit only rows FROM:TO (counted from 1).
+    #[arg(long, value_name = "FROM:TO")]
+    pub rows: Option<String>,
+    /// Fit only the rows whose X lies between FROM and TO.
+    #[arg(long, value_name = "FROM:TO", conflicts_with = "rows", allow_hyphen_values = true)]
+    pub x_range: Option<String>,
+    /// Confidence level of the parameter limits (default 0.95).
+    #[arg(long)]
+    pub confidence: Option<f64>,
+    /// Most iterations (default 400).
+    #[arg(long)]
+    pub max_iterations: Option<usize>,
+    /// Convergence tolerance (default 1e-9).
+    #[arg(long)]
+    pub tolerance: Option<f64>,
+    /// The workbook (default: the first one).
+    #[arg(long)]
+    pub book: Option<String>,
+    /// The sheet (default: the active one).
+    #[arg(long)]
+    pub sheet: Option<String>,
+    /// Write the parameter sheet as delimited text or, for a .xlsx path, as an Excel workbook.
+    #[arg(short, long, visible_alias = "export", value_name = "FILE")]
+    pub output: Option<PathBuf>,
+    /// Save the project with the report sheets to this file: .opj or .sheaf.
+    #[arg(long, visible_alias = "project", value_name = "PROJECT")]
+    pub save: Option<PathBuf>,
+    #[command(flatten)]
+    pub read: ReadOptions,
+}
+
+/// `sheaf compare-datasets`: Analysis > Fitting > Compare Datasets without a window.
+#[derive(Args, Debug)]
+pub struct CompareDatasetsArgs {
+    /// A data file, a .sheaf project or an Origin .opj or .opju project.
+    pub input: PathBuf,
+    /// The model: linear, poly:N or a built-in function (see `sheaf fit --list`).
+    #[arg(short, long, default_value = "linear")]
+    pub model: String,
+    /// The Y column of the first dataset (its X column follows from the sheet).
+    #[arg(long)]
+    pub y1: String,
+    /// The Y column of the second dataset.
+    #[arg(long)]
+    pub y2: String,
+    /// A starting value for the fit of both, for example --init xc=2 (repeat or separate with commas).
+    #[arg(long, value_delimiter = ',', value_name = "NAME=VALUE", allow_hyphen_values = true)]
+    pub init: Vec<String>,
+    /// Origin's "1st Dataset Name" (default Data1).
+    #[arg(long)]
+    pub name1: Option<String>,
+    /// Origin's "2nd Dataset Name" (default Data2).
+    #[arg(long)]
+    pub name2: Option<String>,
+    /// Leave the fit parameters out of the report (Origin's Fit Parameters box).
+    #[arg(long)]
+    pub no_parameters: bool,
+    /// Leave the fit statistics out of the report (Origin's Fit Statistics box).
+    #[arg(long)]
+    pub no_statistics: bool,
+    /// The workbook (default: the first one).
+    #[arg(long)]
+    pub book: Option<String>,
+    /// The sheet (default: the active one).
+    #[arg(long)]
+    pub sheet: Option<String>,
+    /// Write the report sheet as delimited text or, for a .xlsx path, as an Excel workbook.
+    #[arg(short, long, visible_alias = "export", value_name = "FILE")]
+    pub output: Option<PathBuf>,
+    /// Save the project with the report sheet to this file: .opj or .sheaf.
     #[arg(long, visible_alias = "project", value_name = "PROJECT")]
     pub save: Option<PathBuf>,
     #[command(flatten)]

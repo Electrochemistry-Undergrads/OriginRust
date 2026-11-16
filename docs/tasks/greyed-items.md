@@ -9,7 +9,11 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
+<<<<<<< HEAD
 original inventory baseline. This is not a new runtime audit. **359 greyed items: 249 in the menu bar, 19 on the toolbars, 91 in context menus.**
+=======
+original inventory baseline. This is not a new runtime audit. **368 greyed items: 253 in the menu bar, 19 on the toolbars, 96 in context menus.**
+>>>>>>> origin/main
 
 ## How to read and keep this file
 
@@ -54,11 +58,17 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T78` | 0 |
 | `T79` | 0 |
 | `T80` | 0 |
+| `T82` | 0 |
 | `T83` | 0 |
 | `B2` | 33 |
 | `B3` | 19 |
+<<<<<<< HEAD
 | `B4` | 20 |
 | `B5` | 23 |
+=======
+| `B4` | 19 |
+| `B5` | 33 |
+>>>>>>> origin/main
 | `B6` | 31 |
 | `B7` | 8 |
 | `B8` | 16 |
@@ -72,7 +82,11 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
+<<<<<<< HEAD
 Briefs (`T`) hold 67 items, backlog packages (`B`) 272, not planned (`N`) 20.
+=======
+Briefs (`T`) hold 67 items, backlog packages (`B`) 281, not planned (`N`) 20.
+>>>>>>> origin/main
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -117,7 +131,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Plot
 - `T63` Line: Horizontal Step · Vertical Step · Spline Connected
-- `B4` Line + Symbol: Line Series
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface

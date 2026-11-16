@@ -4039,6 +4039,20 @@ grouped. Sheaf: `Template::VerticalDropLine` (scatter, `decor.drop.vertical` on,
 data labels of grouped columns and bars are now centred on their own bar. CLI `-t vertical-drop-line`, `-t
 column-label`.
 
+### 18.15 Line Series (T82, measured 2026-11-16)
+
+Origin 2016's Plot > Line + Symbol > Line Series makes the graph at once: every worksheet row of the
+selected Y columns is one line through its values at X = 1, 2, ..., k (k columns, column order); rows are
+not joined. It is one plot with the k-point segment connection (`get %C -l` 2 for two columns, 3 for
+three), filled black squares of size 8, the X axis labelled with the column names and titled "Series",
+the Y axis "Values" (X 0.75..2.25 for two columns, 0.5..3.5 for three); Origin keeps the rearranged
+data out of sight (lock icon). Sheaf: `Project::plot_line_series` adds a `LineSeries<n>` sheet to the
+workbook (positions and values row by row, and the column names), one Line + Symbol plot with
+`Connect::Segment2`/`Segment3`/`Segments(k)` (k >= 4, saved as `{"segments":k}`; `.opj` writes it
+straight with a note), all rows black, the names as X tick labels with a tick at every position, titles
+Series and Values; one undo step. Segment connections group the plot's rows by their index (rows
+1..n, n+1..2n, ...): a missing value breaks its group's line and never shifts later groups.
+
 ### 18.14 Column Scatter (T79, measured 2026-11-16)
 
 Origin 2016's Plot > Symbol > Column Scatter draws every selected Y column as points standing at its

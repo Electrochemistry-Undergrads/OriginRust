@@ -250,6 +250,10 @@ pub enum ProjectError {
     StackedHistogramsNeedNumbers,
     #[error("column '{0}' was not found")]
     NoSuchColumnName(String),
+    #[error("a Line Series needs two or more Y columns, not {0}")]
+    LineSeriesNeedsTwoColumns(usize),
+    #[error("the columns of a Line Series must all be of one sheet")]
+    LineSeriesOneSheet,
     #[error("the graph has no layer {0}")]
     NoSuchLayer(usize),
     #[error("the layer has no plot {0}")]

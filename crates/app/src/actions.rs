@@ -441,6 +441,11 @@ pub enum Action {
         columns: Vec<ColumnId>,
         template: Template,
     },
+    /// Plot > Line + Symbol > Line Series: one plot of the rows of the selected Y columns, k-point segments.
+    PlotLineSeries {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     /// Plot > Symbol > Y Error: a scatter plot of the Y columns that shows the error bars of
     /// their Y error columns; with `x` (XY Error) also those of their X error columns.
     PlotYError {

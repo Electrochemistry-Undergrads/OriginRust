@@ -1873,6 +1873,7 @@ impl SheafApp {
                 }
             }
             Action::PlotColumns { book, columns, template } => self.plot_columns(book, columns, template),
+            Action::PlotLineSeries { book, columns } => self.plot_line_series(book, columns),
             Action::PlotYError { book, columns, x } => self.plot_y_error(book, columns, x),
             Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
             Action::StackPanels { book, columns } => {
@@ -3147,6 +3148,16 @@ impl SheafApp {
                     Err(e) => m.set_error(e.to_string()),
                 },
             }
+        }
+    }
+
+    /// Plot > Line + Symbol > Line Series (T82): the selected Y columns (else the sheet's), two or more.
+    fn plot_line_series(&mut self, book: WindowId, columns: Vec<ColumnId>) {
+        let ys = self.plot_y_columns(book, columns, Template::LineSymbol);
+        let made = self.doc.edit("Line Series", |p| p.plot_line_series(&ys));
+        match made {
+            Ok(_) => self.say(format!("Line Series of {} column(s)", ys.len())),
+            Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
         }
     }
 

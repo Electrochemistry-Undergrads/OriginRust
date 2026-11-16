@@ -52,13 +52,14 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T75` | 0 |
 | `T76` | 0 |
 | `T78` | 0 |
+| `T81` | 3 |
 | `B2` | 33 |
 | `B3` | 22 |
 | `B4` | 23 |
 | `B5` | 33 |
 | `B6` | 31 |
 | `B7` | 8 |
-| `B8` | 16 |
+| `B8` | 13 |
 | `B9` | 13 |
 | `B11` | 10 |
 | `B12` | 12 |
@@ -69,7 +70,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 67 items, backlog packages (`B`) 288, not planned (`N`) 20.
+Briefs (`T`) hold 70 items, backlog packages (`B`) 285, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -149,8 +150,8 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B8` Peaks and Baseline: Multiple Peak Fit · Batch Peak Analysis Using Theme...
 
 ### Statistics
-- `B8` Descriptive Statistics: Partial Correlation Coefficient...
-- `B8` ANOVA: Three-Way ANOVA... · Repeated Measures ANOVA...
+- `T81` Descriptive Statistics: Partial Correlation Coefficient...
+- `T81` ANOVA: Three-Way ANOVA... · Repeated Measures ANOVA...
 
 ### Image
 - `B14` Adjustments: Brightness... · Contrast... · Gamma... · Levels...

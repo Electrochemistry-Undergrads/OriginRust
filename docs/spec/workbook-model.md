@@ -553,6 +553,37 @@ rule below is Sheaf's choice.
   warns ("N sheet(s) have cell formatting ..."). Excel export does not write them and says so in
   its warnings (per-cell fonts combined with column number formats are left).
 
+## 13c. Fill Column With patterns (T74, measured 2026-11-15, Origin 2016)
+
+Column > Fill Column With (and the column header's Fill Column with) > A set of Numbers..., A set of
+Date/Time values..., Arbitrary set of Text&Numeric values... are Origin's X-Functions `patternN`,
+`patternD`, `patternT`. Measured by running them from LabTalk (`tools/origin-ref/run-labtalk-lines.ps1`,
+`re-workspace/scratch/t74/f1` and `f2`, local only) and copied in `sheaf_core::fill_pattern`
+(tests `crates/core/src/fill_pattern/tests.rs` hold the measured cases):
+
+- **Run**: from `from` toward `to` by `inc`, `to` included when a step lands on it (1 to 10 by 3 is 1, 4,
+  7, 10; 1 to 2 by 0.25 has five values). An increment that points away from `to` writes nothing (5 to 1
+  by 1), by -1 it counts down.
+- **Repeat mode**: each value `onerepeat` times in a row, the run `seqrepeat` times (1 to 3, 2 and 3 gives
+  1, 1, 2, 2, 3, 3 three times, 18 rows); the set size is not used.
+- **Random mode**: `size` values drawn from the run with replacement (1 to 4, size 7 gave 4 3 3 1 2 2 1).
+  Random dates have no size: they fill as many rows as the sheet has (9 there).
+- **Dates and times**: the unit is a fixed length: a week is 7 days, a **month 31 days** (Jan 31 by one
+  month: Jan 31, Mar 3, Apr 3, May 4, Jun 4) and a **year 365 days** (2024-01-01 plus a year is
+  2024-12-31); seconds, minutes and hours as fractions of a day. The column becomes a Date column (Origin
+  format 4) or, for times, a Time column (format 3); a text fill leaves Text & Numeric (format 7).
+- **Rows**: the fill writes from the first row; rows below it keep their values (1 to 3 into a column of 1
+  to 8 leaves 4 to 8). Sheaf also drops the column's formula, since the values no longer follow it.
+- **Text items**: separated by white space; double quotes keep an item with spaces together (the hint of
+  Origin's window, `Boston "New York" Chicago`; Origin's own quote handling could not be checked from a
+  script). A number item is stored as a number.
+- **Window** (Sheaf's layout, Origin's window not opened): From, To, Increment (with the unit list for dates;
+  Date or Time), Mode Repeat or Random, the repeat counts or the set size. Defaults as the X-Functions: 1 to
+  10 by 1, each once, the run once, a set of 10; dates from today for ten days by a day; times 00:00 to
+  12:00 by an hour. OK fills every selected column, one undo step ("Fill column"); a refused fill (no
+  value, no text item) keeps the window open with the reason.
+- Row Numbers, Uniform and Normal Random Numbers in the same submenu are T63 group H.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

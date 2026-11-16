@@ -18,6 +18,7 @@
 use crate::actions::{Action, CellOp, CopyKind, DataTool, GraphOp, GraphTool, ImportPick, SheetOp, ViewOp};
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
+use crate::dialogs::fill_pattern::FillKind;
 use crate::dialogs::fit::FitKind;
 use crate::dialogs::fit_more::FitMoreKind;
 use crate::dialogs::graph_props::PropsTab;
@@ -78,6 +79,8 @@ pub enum Cmd {
     SaveTemplateAs,
     /// Plot > User Templates > Manage... (T56).
     ManageTemplates,
+    /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values (T74).
+    FillPattern(FillKind),
     /// File > Import > Single ASCII (Ctrl+K).
     Import,
     ImportMultiple,
@@ -1083,15 +1086,16 @@ fn column_menu() -> Vec<Entry> {
         keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q), Cmd::SetMultipleColumnsValues),
         // Origin has this as a toolbar button and in the column's right-click menu.
         item("Re&calculate", Cmd::Recalculate),
-        grey_sub(
+        sub(
             "Fill Column With",
-            &[
-                "Row Numbers",
-                "Uniform Random Numbers",
-                "Normal Random Numbers",
-                "A set of Numbers...",
-                "A set of Date/Time values...",
-                "Arbitrary set of Text&&Numeric values...",
+            vec![
+                // Row Numbers and the random fills are T63 group H; still grey here.
+                grey("Row Numbers"),
+                grey("Uniform Random Numbers"),
+                grey("Normal Random Numbers"),
+                item("A set of Numbers...", Cmd::FillPattern(FillKind::Numbers)),
+                item("A set of Date/Time values...", Cmd::FillPattern(FillKind::Dates)),
+                item("Arbitrary set of Text&&Numeric values...", Cmd::FillPattern(FillKind::Text)),
             ],
         ),
         sep(),
@@ -1686,15 +1690,16 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(item("Recalculate", Cmd::Recalculate));
     v.push(item("Add New Columns...", Cmd::AddColumns));
     v.push(sep());
-    v.push(grey_sub(
+    v.push(sub(
         "Fill Column with",
-        &[
-            "Row Numbers",
-            "Uniform Random Numbers",
-            "Normal Random Numbers",
-            "A set of Numbers...",
-            "A set of Date/Time values...",
-            "Arbitrary set of Text&&Numeric values...",
+        vec![
+            // Row Numbers and the random fills are T63 group H; still grey here.
+            grey("Row Numbers"),
+            grey("Uniform Random Numbers"),
+            grey("Normal Random Numbers"),
+            item("A set of Numbers...", Cmd::FillPattern(FillKind::Numbers)),
+            item("A set of Date/Time values...", Cmd::FillPattern(FillKind::Dates)),
+            item("Arbitrary set of Text&&Numeric values...", Cmd::FillPattern(FillKind::Text)),
         ],
     ));
     v.extend(greys(&["Set Sampling Interval...", "Show X Column...", "-"]));
@@ -2255,6 +2260,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SaveProject => Action::SaveProject,
         Cmd::SaveProjectAs => Action::SaveProjectAs,
         Cmd::SaveWindowAs => Action::SaveWindowAs(c.active.ok_or(NEED_WINDOW)?),
+        Cmd::FillPattern(kind) => Action::FillPattern { kind: *kind, columns: some()? },
         Cmd::SaveTemplateAs => {
             if !c.templates {
                 return Err(NO_TEMPLATE_FOLDER);

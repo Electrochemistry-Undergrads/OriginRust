@@ -785,7 +785,28 @@ target restrictions remain Sheaf UI choices; no native toolbar geometry or legen
 measurement is claimed. Extra choices use the original captured target/revision/generation,
 close both menus, preserve the selection, and have the same one-step Undo and unchanged/stale
 no-op rules. The public eight-colour palette constant and font/worksheet controls are unchanged.
-Custom object RGB, Auto, other lists and palette storage remain open.
+Auto, other lists and palette storage remain open.
+
+Custom object RGB follow-up (2026-11-16): five fresh private Origin 2016 controls set a named
+rectangle's fill/outline and a named straight line's colour with `color(r,g,b)`: 17/131/213,
+0/0/0, 255/255/255, 0/255/128 and 1/2/3. All commands and exports succeeded; all three getters
+retained the assigned internal RGB code. Every EMF has at least two exact matching pens and
+solid brushes. The asymmetric RGB export was inspected. The private `Origin.Application`
+instance and watchdog closed, with pre-existing process identities unchanged. Evidence:
+ignored `scratch/t58-object-rgb` (checked script/log, five EMFs, native-proof.json, native-rgb.png).
+These are property/value/rendering measurements, not a native picker-layout or legend-background
+measurement. The [Color function](https://docs.originlab.com/labtalk/ref/color-func/) documents
+RGB assignment; the existing target mapping above remains Sheaf policy.
+
+Fill Color and Line Color > Custom RGB... provide three integer fields (0 to 255), a preview
+and Apply/Cancel; valid unmodified Enter accepts from a channel field. Invalid, dismissed,
+unchanged and stale choices add no history. Reopening seeds the captured object's current
+property, independently for fill/line and each new target. An absent fill seeds white as a
+draft; opening or cancelling preserves None, while accepting white explicitly adds a fill.
+That seed and the compact numeric submenu are Sheaf choices. Presets retain all 24 Classic
+colours and Fill retains None; presets replace an unapplied RGB draft. Accepted colours use
+the same selection, history and native/companion save paths. Font/worksheet pickers, models,
+renderer/backends and the public basic-palette contract are unchanged.
 
 
 ---

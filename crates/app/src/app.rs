@@ -1588,6 +1588,17 @@ impl SheafApp {
         crate::text_format::Snapshot::graph(&self.doc, graph, layer, object)
     }
 
+    /// The selected object's non-font Format-bar controls (markup, Fill and Line Color), gated
+    /// like `text_format`.
+    fn object_format(&self) -> Option<crate::object_format::Snapshot> {
+        if self.dialog_open() || self.books.values().any(|b| b.editing.is_some() || b.editing_label.is_some()) {
+            return None;
+        }
+        let graph = self.active?;
+        let (layer, object) = self.graphs.get(&graph)?.selected?;
+        crate::object_format::Snapshot::graph(&self.doc, graph, layer, object)
+    }
+
     // ----- actions -------------------------------------------------------
 
     fn apply(&mut self, action: Action, ctx: &egui::Context) {
@@ -1650,6 +1661,11 @@ impl SheafApp {
             Action::FormatText(request) => {
                 if self.text_format().is_some_and(|state| state.target == request.target) {
                     crate::text_format::apply(&mut self.doc, request);
+                }
+            }
+            Action::FormatObject(request) => {
+                if self.object_format().is_some_and(|state| state.target == request.target) {
+                    crate::object_format::apply(&mut self.doc, request);
                 }
             }
             Action::NewWorkbook => {
@@ -4691,6 +4707,7 @@ impl eframe::App for SheafApp {
         if !full {
             let c = self.menu_context();
             let format = self.text_format();
+            let object = self.object_format();
             let tb = &self.toolbars;
             let bar_frame = || egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(3, 1));
             if tb.shown(Bar::Standard) {
@@ -4700,9 +4717,9 @@ impl eframe::App for SheafApp {
             }
             let second = [Bar::Edit, Bar::Format, Bar::Graph];
             if tb.any(&second) {
-                egui::TopBottomPanel::top("toolbar_second")
-                    .frame(bar_frame())
-                    .show(ctx, |ui| toolbar::show_row_with_format(ui, &second, tb, &c, format.as_ref(), &mut actions));
+                egui::TopBottomPanel::top("toolbar_second").frame(bar_frame()).show(ctx, |ui| {
+                    toolbar::show_row_with_format(ui, &second, tb, &c, format.as_ref(), object.as_ref(), &mut actions)
+                });
             }
             if !self.status_bar_hidden {
                 egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| self.status_bar(ui));

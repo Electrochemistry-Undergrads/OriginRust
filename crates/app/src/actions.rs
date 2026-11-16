@@ -234,6 +234,7 @@ pub enum Action {
     UndoAiChanges,
     /// A change captured by the shared Format toolbar.
     FormatText(crate::text_format::Request),
+    FormatObject(crate::object_format::Request),
     NewWorkbook,
     AddColumn(WindowId),
     DeleteColumns(Vec<ColumnId>),

@@ -20,6 +20,7 @@ mod excel;
 mod export_themes;
 mod fill_inclusive;
 mod fill_sidelines;
+mod format_bar_rest;
 mod frozen_panes;
 mod graph_data_tools;
 mod graph_scale;

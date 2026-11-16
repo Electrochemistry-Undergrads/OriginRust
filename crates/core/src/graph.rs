@@ -1508,6 +1508,10 @@ pub enum PlotKind {
     /// A box chart of the plot's Y column (Origin's plot type 206): one box per plot, standing at
     /// 1, 2, 3, ... in plot order, with the median, the mean, whiskers and outliers.
     Box,
+    /// Origin's Column Scatter (2016): each plot's Y column as points standing at 1, 2, 3, ... in plot
+    /// order like [`PlotKind::Box`], spread sideways by a small deterministic jitter so equal values do
+    /// not hide each other. Symbols only, no line, no box.
+    ColumnScatter,
     /// Origin's violin plot (2019, template Violin.otpu): each plot's Y column as a mirrored
     /// kernel density silhouette standing at 1, 2, 3, ... in plot order like [`PlotKind::Box`],
     /// with the median marked inside.
@@ -1678,7 +1682,7 @@ impl PlotKind {
     }
 
     pub fn has_symbols(&self) -> bool {
-        matches!(self, PlotKind::Scatter | PlotKind::LineSymbol)
+        matches!(self, PlotKind::Scatter | PlotKind::LineSymbol | PlotKind::ColumnScatter)
     }
 }
 
@@ -1762,6 +1766,9 @@ pub struct Plot {
     /// Indexed data of a column or box plot: the rows of `y` split by group columns (T76).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub indexed: Option<Indexed>,
+    /// Interval plot point or Pareto bars/curve computed from the Y column (T83).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stat: Option<StatPlot>,
     /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's
     /// Z column of a Bubble plot).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2718,6 +2725,7 @@ mod tests {
             parallel: Default::default(),
             treemap: Default::default(),
             indexed: None,
+            stat: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,
@@ -2764,6 +2772,7 @@ mod tests {
             parallel: Default::default(),
             treemap: Default::default(),
             indexed: None,
+            stat: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,
@@ -2887,6 +2896,7 @@ mod tests {
             parallel: Default::default(),
             treemap: Default::default(),
             indexed: None,
+            stat: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,
@@ -2910,6 +2920,7 @@ mod tests {
             y_error: None,
             rows: None,
             indexed: None,
+            stat: None,
             kind: PlotKind::Line,
             line: LineStyle::solid(color, 0.5),
             symbol: layer.default_symbol.clone(),
@@ -3136,6 +3147,7 @@ mod style_tests {
             parallel: Default::default(),
             treemap: Default::default(),
             indexed: None,
+            stat: None,
             sunburst: Default::default(),
             size_from: None,
             color_from: None,

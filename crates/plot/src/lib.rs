@@ -55,6 +55,8 @@ mod vector;
 mod violin;
 
 #[cfg(test)]
+mod column_scatter_tests;
+#[cfg(test)]
 mod dash_tests;
 #[cfg(test)]
 mod detail_tests;

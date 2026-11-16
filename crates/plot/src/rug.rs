@@ -51,6 +51,7 @@ fn selected<'a, 'b>(layer: &Layer, rug: &Rug, pds: &'a [PlotData<'b>]) -> Vec<&'
                 && pd.violin.is_none()
                 && pd.ridge.is_none()
                 && pd.hex.is_none()
+                && pd.column_at.is_none()
         })
         .filter(|pd| chosen.is_none_or(|c| std::ptr::eq(c, pd.plot)))
         .collect()

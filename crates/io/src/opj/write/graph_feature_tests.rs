@@ -735,6 +735,18 @@ fn hexbin_plots_are_written_as_scatter_plots_with_a_save_warning() {
 }
 
 #[test]
+fn column_scatter_plots_are_written_as_scatter_plots_with_a_save_warning() {
+    let mut p = source();
+    line_graph(&mut p, |l| l.plots[0].kind = sheaf_core::graph::PlotKind::ColumnScatter);
+    let (_, out) = round_trip(&p);
+    assert!(
+        out.warnings.iter().any(|w| w.contains("column scatter plots were written as scatter plots")),
+        "{:?}",
+        out.warnings
+    );
+}
+
+#[test]
 fn parallel_plots_are_written_as_line_plots_with_a_save_warning() {
     for kind in [sheaf_core::graph::PlotKind::Parallel, sheaf_core::graph::PlotKind::ParallelIndex] {
         let mut p = source();
@@ -786,6 +798,20 @@ fn grouped_indexed_plots_are_written_as_plain_plots_with_a_save_warning() {
     let (_, out) = round_trip(&p);
     assert!(
         out.warnings.iter().any(|w| w.contains("grouped columns and grouped box charts of indexed data were written")),
+        "{:?}",
+        out.warnings
+    );
+}
+
+#[test]
+fn interval_plots_and_pareto_charts_are_written_as_plain_plots_with_a_save_warning() {
+    let mut p = source();
+    line_graph(&mut p, |l| {
+        l.plots[0].stat = Some(sheaf_core::graph::StatPlot::Pareto);
+    });
+    let (_, out) = round_trip(&p);
+    assert!(
+        out.warnings.iter().any(|w| w.contains("interval plots and Pareto charts were written")),
         "{:?}",
         out.warnings
     );

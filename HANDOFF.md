@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **372 listed item locations** at the planning
-  baseline (257 menu bar, 19 toolbar, 96 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **369 listed item locations** at the planning
+  baseline (254 menu bar, 19 toolbar, 96 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -78,6 +78,9 @@ regressions and SVG/stroke PNG goldens cover standard-family and shared export b
 Combined scripts and special aliases remain open; editor and Format-toolbar claims remain
 with their owners.
 
+T79 (`column-scatter`, B4 slice): Plot > Symbol > Column Scatter as Origin 2016's (columns at 1, 2, ...,
+diamonds size 8, jitter within +-0.15, column-name ticks, Y title Range; graphing 18.14).
+
 T62 Origin measurements (2026-11-16, Claude Windows, docs only, graphing 13.16-13.17): Origin 2016's
 Stacked Histograms put the first column at the bottom, give each panel its own bins and X scale and draw
 every panel in the same red hatch on a portrait page with 5 % gaps; its Waterfall Y/Z Color Mapping colour
@@ -102,6 +105,12 @@ without Data... writes a copy with every value, mask, note, format, filter and f
 formulas and graphs kept), never over the open project's own file; Duplicate Project without Data offers to save,
 then opens that copy as an untitled project (as Origin's later Clone Project). New `core/without_data.rs`.
 Origin 2016's behaviour of the two items is undocumented; unmeasured choices in graphing 25 and project-file-format.
+
+T83 interval plot and Pareto (`interval-pareto`, macOS, no Origin; renumbered from T82, which `line-series` also took): Plot > Statistics > Interval Plot (mean of each Y
+column with a t-CI/SD/SE error bar; `sheaf plot -t interval-plot [--interval-error ci|sd|se]`) and Pareto (counts of one
+column, descending, with a cumulative-percent line on a 0-100 right axis; `-t pareto -y COL`). New `Plot.stat`
+(`StatPlot`), `Project::plot_interval`/`plot_pareto`. Origin's dialogs, binned Pareto and measured defaults are
+leftovers (graphing 14.29, unmeasured).
 
 T76 grouped indexed plots (`grouped-indexed`, macOS, no Origin; renumbered from T75): Plot > Column/Bar/Pie >
 Grouped Columns (indexed data) and Plot > Statistics > Grouped Box Charts split one data column by one or two
@@ -272,9 +281,8 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
 | `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
 | `b5-fill` | Claude Windows, "t30-origin" | B5 slice as new brief T74: Column > Fill Column With A set of Numbers / Date/Time values / Text&Numeric values (Origin patternN/D/T, measured), menus and column-header context menu | claimed 2026-11-15; worktree wf_c03644a9-997-1, build target/wf-excel; not Row Numbers/random fills (T63), no other B5 items |
-| `column-scatter` | Claude Windows, session fe4b37eb | B4 slice as new brief T79: Plot > Symbol > Column Scatter (Y columns as scatter by column position with Origin's offset/jitter, categorical X labels); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not Grouped Columns/T76, Line Series or statistics plots; no other sessions' scopes |
 | `stats-anova3` | Claude Windows, "continue all tasks" | B8 slice as new brief T81: Partial Correlation Coefficient, Three-Way ANOVA, Repeated Measures ANOVA; new calc modules, core tools, Statistics menu dialogs, ops analyze, statistics.md | claimed 2026-11-16; no Probability/Q-Q (T14), crosstab/dunnett/distfit, wavelets, fitting, peaks |
-| `interval-pareto` | Claude macOS, "mac-format-bar" | B4 slice as new brief T82: Plot > Statistics > Interval Plot and Pareto (Origin's ParetoRaw: sorted counts as columns plus a cumulative-percent line on a right axis) | claimed 2026-11-16; worktree `.claude/worktrees/interval-pareto`, `target/wt-interval`; core templates, plot drawing (reusing Graphical Summary's interval panel), Plot menu items, CLI/MCP template names, .opj warning, spec section, T82 brief. Built from Origin's documentation on macOS (no Origin). Not Column Scatter (T79), Histogram + Probabilities, marginal plots, 2D kernel density, QC chart, Scatter Matrix, stock/specialized plots or other sessions' scopes |
+| `line-series` | Claude Windows, session fe4b37eb | B4 slice as new brief T82: Plot > Line + Symbol > Line Series (each worksheet row of the selected Y columns as one line+symbol plot against column position); Origin 2016 measurements, core plot creation, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no other B4 items or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

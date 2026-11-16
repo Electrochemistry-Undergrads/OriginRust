@@ -912,7 +912,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("&Scatter", Cmd::Plot(Template::Scatter)),
                     item("Scatter + Rug", Cmd::Plot(Template::ScatterRug)),
                     item("Scatter Central", Cmd::Plot(Template::ScatterCentral)),
-                    grey("Column Scatter"),
+                    item("Column Scatter", Cmd::Plot(Template::ColumnScatter)),
                 ],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
                 vec![item("Vertical Drop Line", Cmd::Plot(Template::VerticalDropLine))],
@@ -1023,7 +1023,10 @@ fn plot_menu() -> Vec<Entry> {
             "S&tatistics",
             [
                 vec![item("Box Chart", Cmd::Plot(Template::BoxChart))],
-                vec![item("Grouped Box Charts", Cmd::Plot(Template::GroupedBox)), grey("Interval Plot")],
+                vec![
+                    item("Grouped Box Charts", Cmd::Plot(Template::GroupedBox)),
+                    item("Interval Plot", Cmd::Plot(Template::IntervalPlot)),
+                ],
                 vec![
                     item("Violin Plot", Cmd::Plot(Template::Violin)),
                     item("Violin with Box", Cmd::Plot(Template::ViolinBox)),
@@ -1038,12 +1041,12 @@ fn plot_menu() -> Vec<Entry> {
                     grey("Histogram + Probabilities"),
                     item("Stacked Histograms", Cmd::Plot(Template::StackedHistograms)),
                 ],
+                vec![item("Pareto", Cmd::Plot(Template::Pareto))],
                 greys(&[
                     "Marginal Histograms",
                     "Marginal Box Charts",
                     "2D Kernel Density",
                     "QC (X bar R) Chart",
-                    "Pareto",
                     "Scatter Matrix",
                     "Probability Plot",
                     "Q-Q Plot",

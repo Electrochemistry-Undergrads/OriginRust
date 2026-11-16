@@ -113,6 +113,8 @@ enum Pending {
     OpenFile,
     /// Open the newest recovery of an earlier run (the Recover button).
     Recover,
+    /// Duplicate Project without Data (it replaces the open project).
+    DuplicateNoData,
     Quit,
 }
 
@@ -1625,6 +1627,15 @@ impl SheafApp {
                     self.do_pending(Pending::New, ctx);
                 }
             }
+            Action::NewGraph => self.new_graph(),
+            Action::SaveProjectWithoutData => self.save_project_without_data(),
+            Action::DuplicateProjectWithoutData => {
+                if self.doc.dirty {
+                    self.pending = Some(Pending::DuplicateNoData);
+                } else {
+                    self.do_pending(Pending::DuplicateNoData, ctx);
+                }
+            }
             Action::OpenProject => {
                 // The chooser comes first: only a project replaces this one, so only a project asks.
                 if let Some(path) = self.choose_project_file() {
@@ -2470,6 +2481,7 @@ impl SheafApp {
                     }
                 }
             }
+            Pending::DuplicateNoData => self.duplicate_project_without_data(),
             Pending::Recover => self.recover_newest(),
             Pending::Quit => {
                 self.quit_confirmed = true;
@@ -4992,6 +5004,7 @@ fn panel_data<'a>(
     PanelData { project: doc.project(), active, project_name, props_plot, logs }
 }
 
+mod no_data;
 #[cfg(test)]
 mod ui_tests;
 

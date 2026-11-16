@@ -68,6 +68,9 @@ pub enum WindowKind {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Cmd {
     NewProject,
+    NewGraph,
+    SaveProjectNoData,
+    DuplicateProjectNoData,
     NewWorkbook,
     OpenProject,
     SaveProject,
@@ -604,8 +607,13 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         sub(
             "&New",
             [
-                vec![keyed("&Project", ctrl(Key::N), Cmd::NewProject), item("&Worksheet...", Cmd::NewWorkbook)],
-                greys(&["Matrix...", "Graph", "Image", "From Template", "Excel", "Layout", "Notes", "Function Plot"]),
+                vec![
+                    keyed("&Project", ctrl(Key::N), Cmd::NewProject),
+                    item("&Worksheet...", Cmd::NewWorkbook),
+                    grey("Matrix..."),
+                    item("&Graph", Cmd::NewGraph),
+                ],
+                greys(&["Image", "From Template", "Excel", "Layout", "Notes", "Function Plot"]),
             ]
             .concat(),
         ),
@@ -642,8 +650,8 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     }
     v.extend([
         sep(),
-        grey("Save Project without Data..."),
-        grey("Duplicate Project without Data"),
+        item("Save Project without Data...", Cmd::SaveProjectNoData),
+        item("Duplicate Project without Data", Cmd::DuplicateProjectNoData),
         sep(),
         keyed("&Print...", ctrl(Key::P), Cmd::Print),
         item("Print Pre&view", Cmd::PrintPreview),
@@ -2283,6 +2291,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
     let sorting = || if c.sorting_columns.is_empty() { Err(NEED_COLUMNS) } else { Ok(c.sorting_columns.clone()) };
     Ok(match cmd {
         Cmd::NewProject => Action::NewProject,
+        Cmd::NewGraph => Action::NewGraph,
+        Cmd::SaveProjectNoData => Action::SaveProjectWithoutData,
+        Cmd::DuplicateProjectNoData => Action::DuplicateProjectWithoutData,
         Cmd::NewWorkbook => Action::NewWorkbook,
         Cmd::OpenProject => Action::OpenProject,
         Cmd::SaveProject => Action::SaveProject,

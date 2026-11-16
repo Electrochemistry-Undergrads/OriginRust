@@ -34,6 +34,7 @@ mod legend_position;
 mod live;
 mod lollipop;
 mod multi_y;
+mod new_graph;
 mod offset_multipliers;
 mod parallel;
 mod recent;
@@ -2536,6 +2537,9 @@ fn every_command_of_a_workbook_is_reachable_from_its_origin_menu() {
     let paths: &[&[&str]] = &[
         &["File", "New", "Project"],
         &["File", "New", "Worksheet..."],
+        &["File", "New", "Graph"],
+        &["File", "Save Project without Data..."],
+        &["File", "Duplicate Project without Data"],
         &["File", "Open..."],
         &["File", "Save Project"],
         &["File", "Save Project As..."],

@@ -1,6 +1,6 @@
 # T102: Save Format as Theme and Theme Organizer
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `graph-themes`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 29): both windows measured; axis Save Format as Theme... and Theme Organizer (list, Apply Now to every axis of the current graph, Delete) with theme files in the settings folder. Left: the legend's item (needs a legend format, T72), system themes, other tabs, Formats to Save.
 **Size:** M. **Source:** greyed inventory package B11 (graph axis and legend menus: Save Format as
 Theme...; Tools > Theme Organizer... (F7)).
 **Spec:** `docs/spec/graphing.md` (with section 26, Copy Format and Paste Format).

@@ -306,6 +306,14 @@ pub enum Action {
     ExportWorksheetImage(WindowId),
     /// View > View Windows (T100).
     ViewWindows(sheaf_core::project::ViewWindows),
+    /// An axis's Save Format as Theme...: ask for a name and save the axis's format as a graph theme.
+    SaveAxisTheme {
+        graph: WindowId,
+        layer: usize,
+        y: bool,
+    },
+    /// Tools > Theme Organizer...: list the graph themes and apply one to the active graph.
+    ThemeOrganizer,
     /// Window > Folders: make this folder the Project Explorer's active one.
     GoToFolder(Vec<usize>),
     /// The explorer folder's Properties...: its name, comments and information.

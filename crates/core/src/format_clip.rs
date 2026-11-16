@@ -19,7 +19,7 @@ use crate::Color;
 use crate::graph::{Axis, BackgroundStyle, Font, Frame, Graph, Layer, LineStyle, SymbolStyle, TextLabel};
 
 /// One group of properties that a format holds.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Group {
     /// Layer width, left and top; page width.
     Dimensions,
@@ -80,7 +80,7 @@ pub enum AxisPart {
 }
 
 /// The values of one axis format (a whole axis is kept; the groups say what pastes).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AxisFormat {
     pub styles: bool,
     pub scales: bool,
@@ -88,7 +88,7 @@ pub struct AxisFormat {
 }
 
 /// The values of one layer of a graph format.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 struct LayerFormat {
     frame: Frame,
     /// The layer is validly linked: its frame is then relative to its parent, not to the page.
@@ -103,7 +103,7 @@ struct LayerFormat {
 }
 
 /// The values of a whole graph format.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GraphFormat {
     groups: Vec<Group>,
     page_width_pt: f64,
@@ -118,7 +118,8 @@ impl GraphFormat {
 }
 
 /// The format clipboard: a graph format or an axis format.
-#[derive(Clone, Debug, PartialEq)]
+/// Serializable so that it can be kept as a graph theme (T102).
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum FormatClip {
     Graph(GraphFormat),
     Axis(AxisFormat),

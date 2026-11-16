@@ -118,6 +118,13 @@ pub enum Cmd {
     BatchPlot(bool),
     /// View > View Windows (T100).
     ViewWindows(sheaf_core::project::ViewWindows),
+    /// An axis's Save Format as Theme... (T102).
+    SaveAxisTheme {
+        layer: usize,
+        y: bool,
+    },
+    /// Tools > Theme Organizer... (F7, T102).
+    ThemeOrganizer,
     /// Edit > Replace... (Ctrl+H) in a workbook.
     ReplaceInSheets,
     ExportGraph,
@@ -1673,7 +1680,7 @@ fn tools_menu() -> Vec<Entry> {
         sep(),
         grey_keyed("Fitting Function Builder...", plain_key(Key::F8)),
         grey_keyed("Fitting Function Organizer...", plain_key(Key::F9)),
-        grey_keyed("Theme Organizer...", plain_key(Key::F7)),
+        keyed("Theme Organizer...", plain_key(Key::F7), Cmd::ThemeOrganizer),
         grey("Import Filters Manager..."),
         grey("Package Manager..."),
         grey("Custom Menu Organizer..."),
@@ -2122,7 +2129,7 @@ pub fn graph_axis_menu(layer: usize, y: bool, grids: bool, page: (f64, f64)) -> 
         item("Center", Cmd::GraphEdit(GraphOp::AxisCenter { layer, y, page })),
         sep(),
         axis_copy_format_menu(layer, y),
-        grey("Save Format as Theme..."),
+        item("Save Format as Theme...", Cmd::SaveAxisTheme { layer, y }),
         sep(),
         item("Scale...", at.clone()),
         item("Tick Labels...", at.clone()),
@@ -2615,6 +2622,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ExportExcel => Action::ExportExcel(book?),
         Cmd::ExportWorksheetImage => Action::ExportWorksheetImage(book?),
         Cmd::ViewWindows(m) => Action::ViewWindows(*m),
+        Cmd::SaveAxisTheme { layer, y } => {
+            Action::SaveAxisTheme { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y }
+        }
+        Cmd::ThemeOrganizer => Action::ThemeOrganizer,
         Cmd::BatchPlot(columns) => Action::BatchPlot { graph: c.graph.ok_or(NEED_GRAPH)?, columns: *columns },
         Cmd::Reimport(choose) => {
             let book = book?;

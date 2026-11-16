@@ -16,7 +16,7 @@ fn sunburst_file(tag: &str) -> PathBuf {
 }
 
 fn make_sunburst(h: &mut Harness<'static, SheafApp>) -> sheaf_core::WindowId {
-    show_window(h, "Book1 - sample");
+    show_window(h, "Book1 - sample.csv");
     let before = project(h).graphs().count();
     menu_path(h, &["Plot"]);
     not_toolbar(h, "Categorical").into_iter().next().expect("the Categorical submenu").click();

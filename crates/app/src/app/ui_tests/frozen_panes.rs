@@ -22,7 +22,7 @@ fn wide_file(tag: &str) -> PathBuf {
 /// columns (84 + 2 * 67 points) is just under half of the 472 point wide window.
 fn start_wide(tag: &str) -> Harness<'static, SheafApp> {
     let mut h = start(vec![wide_file(tag)]);
-    show_window(&mut h, "Book1 - wide");
+    show_window(&mut h, "Book1 - wide.csv");
     h
 }
 

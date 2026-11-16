@@ -6,6 +6,7 @@ use crate::actions::{Action, CellOp, CopyKind, DataEdit, DataTool, GraphOp, Grap
 use crate::autosave::{Autosave, Due};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
+use crate::dialogs::cell_format::CellFormatDialog;
 use crate::dialogs::cell_note::CellNoteDialog;
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::comparison_plot::{ComparisonPlotDialog, Outcome as ComparisonPlotOutcome};
@@ -26,6 +27,7 @@ use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::label_panels::{LabelPanelsDialog, Outcome as LabelPanelsOutcome};
 use crate::dialogs::mask_condition::MaskConditionDialog;
 use crate::dialogs::multi_y::{MultiYDialog, Outcome as MultiYOutcome};
+use crate::dialogs::merge_graphs::{MergeGraphsDialog, Outcome as MergeGraphsOutcome};
 use crate::dialogs::power::{PowerDialog, PowerOutcome};
 use crate::dialogs::printing::{PageSetupDialog, PageSetupOutcome, PreviewOutcome, PrintPreview};
 use crate::dialogs::recovery::{RecoveryChoice, RecoveryOffer};
@@ -86,8 +88,8 @@ pub struct Startup {
     /// The file of the recent projects and imports (`recent.json`); `None` keeps no lists and writes
     /// nothing (the tests pass a temporary file).
     pub recent_path: Option<PathBuf>,
-    /// The folder of the saved import settings (`import-themes`: the Dialog Theme row of the import
-    /// windows); `None` hides the row and writes nothing (the tests pass a temporary folder).
+    /// The folder of saved dialog settings (`import-themes`: importer files and separate graph-export
+    /// files); `None` hides the theme rows and writes nothing (tests pass a temporary folder).
     pub themes_dir: Option<PathBuf>,
     /// Turn the AI link on at start (`--mcp`). It is never saved: a run starts with it off.
     pub mcp: bool,
@@ -144,10 +146,13 @@ pub struct SheafApp {
     import_wizard: Option<ImportWizard>,
     graph_props: Option<GraphPropsDialog>,
     layer_contents: Option<crate::dialogs::layer_contents::LayerContentsDialog>,
+    layer_management: Option<crate::dialogs::layer_management::LayerManagementDialog>,
+    fit_page: Option<crate::dialogs::fit_page::FitPageDialog>,
     plot_setup: Option<crate::dialogs::plot_setup::PlotSetupDialog>,
     error_bars: Option<ErrorBarsDialog>,
     trendline: Option<TrendlineDialog>,
     stack_panels: Option<StackPanelsDialog>,
+    merge_graphs: Option<MergeGraphsDialog>,
     label_panels: Option<LabelPanelsDialog>,
     simulate: Option<SimulateDialog>,
     column_props: Option<ColumnPropsDialog>,
@@ -165,6 +170,7 @@ pub struct SheafApp {
     mask_condition: Option<MaskConditionDialog>,
     cond_format: Option<CondFormatDialog>,
     pub(crate) cell_note: Option<CellNoteDialog>,
+    pub(crate) cell_format: Option<CellFormatDialog>,
     reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
@@ -245,10 +251,13 @@ impl SheafApp {
             import_wizard: None,
             graph_props: None,
             layer_contents: None,
+            layer_management: None,
+            fit_page: None,
             plot_setup: None,
             error_bars: None,
             trendline: None,
             stack_panels: None,
+            merge_graphs: None,
             label_panels: None,
             simulate: None,
             column_props: None,
@@ -266,6 +275,7 @@ impl SheafApp {
             mask_condition: None,
             cond_format: None,
             cell_note: None,
+            cell_format: None,
             reshape: None,
             export: None,
             export_sheet: None,
@@ -765,6 +775,9 @@ impl SheafApp {
         self.error_bars = None;
         self.trendline = None;
         self.stack_panels = None;
+        self.merge_graphs = None;
+        self.layer_management = None;
+        self.fit_page = None;
         self.label_panels = None;
         self.simulate = None;
         self.column_props = None;
@@ -781,6 +794,7 @@ impl SheafApp {
         self.mask_condition = None;
         self.cond_format = None;
         self.cell_note = None;
+        self.cell_format = None;
         self.reshape = None;
         self.sort = None;
         self.sheet_name = None;
@@ -1252,6 +1266,18 @@ impl SheafApp {
             self.doc.apply("Hide data plot", |p| objects::set_plot_visible(p, graph, layer, plot, false));
             return;
         }
+        if let GraphOp::SetStack { layer, stack } = op {
+            let same = self
+                .doc
+                .project()
+                .graph(graph)
+                .and_then(|g| g.layers.get(layer))
+                .is_none_or(|l| std::mem::discriminant(&l.stack) == std::mem::discriminant(&stack));
+            if !same {
+                self.doc.apply("Offset grouped data in layer", |p| graph_view::apply_op(p, graph, op, None));
+            }
+            return;
+        }
         let label = match op {
             GraphOp::SetPlotKind { .. } => "Change plot type",
             GraphOp::HideAxis { .. } => "Hide axis",
@@ -1277,7 +1303,7 @@ impl SheafApp {
             GraphOp::MovePlotToAxis { .. } => "Move plot to left Y axis",
             GraphOp::MovePlotToLayer { .. } => "Move plot to layer",
             GraphOp::RemoveTrendline { .. } => "Remove trendline",
-            GraphOp::HidePlot { .. } => unreachable!("handled above"),
+            GraphOp::HidePlot { .. } | GraphOp::SetStack { .. } => unreachable!("handled above"),
         };
         if let GraphOp::AddLayer { layer, kind } = op {
             self.add_layer(graph, layer, kind);
@@ -1748,6 +1774,13 @@ impl SheafApp {
                     self.warn("Select at least one numeric Y column to stack.");
                 }
             }
+            Action::MergeGraphs => {
+                if self.doc.project().graphs().count() < 2 {
+                    self.warn("Merge Graph Windows needs at least two graphs");
+                } else {
+                    self.merge_graphs = Some(MergeGraphsDialog::new(self.doc.project()));
+                }
+            }
             Action::LabelPanels { book, columns } => {
                 let columns = self.plot_y_columns(book, columns, Template::Line);
                 let rows = self.selected_sort_rows(book).map(|r| (r.start, r.end));
@@ -1871,6 +1904,10 @@ impl SheafApp {
                     Err(why) => self.warn(why),
                 }
             }
+            Action::FormatCellsDialog(book) => match self.format_target(book) {
+                Ok(target) => self.cell_format = CellFormatDialog::new(&self.doc, book, target),
+                Err(why) => self.warn(why),
+            },
             Action::NoteDialog(book) => match self.note_cell(book) {
                 Ok((column, row)) => self.cell_note = CellNoteDialog::new(&self.doc, book, column, row),
                 Err(why) => self.warn(why),
@@ -1951,6 +1988,32 @@ impl SheafApp {
                     Some(crate::dialogs::layer_contents::LayerContentsDialog::new(graph, layer, token));
                 self.focus(graph);
                 self.graphs.entry(graph).or_default().active_layer = layer;
+            }
+            Action::FitPageToLayers { graph, dialog } => {
+                if dialog {
+                    self.fit_page = Some(crate::dialogs::fit_page::FitPageDialog::new(graph));
+                    self.focus(graph);
+                } else {
+                    use sheaf_core::fit_page::{FitDirection, FitMargin};
+                    match crate::dialogs::fit_page::fit_page(
+                        &mut self.doc,
+                        graph,
+                        FitMargin::Border(5.0),
+                        FitDirection::Both,
+                    ) {
+                        Ok(()) => self.say("Fitted the page to the layers"),
+                        Err(e) => self.warn(e),
+                    }
+                }
+            }
+            Action::LayerManagement { graph, layer } => {
+                self.layer_management =
+                    crate::dialogs::layer_management::LayerManagementDialog::new(self.doc.project(), graph, layer);
+                if self.layer_management.is_some() {
+                    self.focus(graph);
+                } else {
+                    self.warn("Layer Management needs a graph with layers");
+                }
             }
             Action::GraphProperties { graph, layer, tab, plot } => {
                 let token = self.token();
@@ -2056,7 +2119,8 @@ impl SheafApp {
             Action::StartIntegrate { graph } => self.start_integrate(graph),
             Action::Gadget { graph, op } => self.gadget(graph, op),
             Action::ExportGraph(graph) => {
-                self.export = Some(ExportDialog::new(graph, self.folder()));
+                self.export =
+                    Some(ExportDialog::new(graph, self.folder()).with_themes(self.startup.themes_dir.clone()));
             }
             Action::ExportData(book) => self.export_data(book),
             Action::ExportExcel(book) => {
@@ -2537,6 +2601,7 @@ impl SheafApp {
                     }
                     copy.remap_cond_format_columns(&|c| renamed.get(&c).copied());
                     copy.remap_note_columns(&|c| renamed.get(&c).copied());
+                    copy.remap_format_columns(&|c| renamed.get(&c).copied());
                     if let Some(b) = p.workbook_mut(book) {
                         b.sheets.insert(active + 1, copy);
                         b.active_sheet = active + 1;
@@ -2846,6 +2911,12 @@ impl SheafApp {
         grid::cond_range(state, sheet)
     }
 
+    fn format_target(&self, book: WindowId) -> Result<sheaf_core::cellformat::FormatTarget, &'static str> {
+        let sheet = self.doc.project().workbook(book).map(|b| b.sheet()).ok_or("This workbook no longer exists")?;
+        let state = self.books.get(&book).ok_or("Select cells first")?;
+        grid::format_target(state, sheet)
+    }
+
     fn note_cell(&self, book: WindowId) -> Result<(ColumnId, usize), &'static str> {
         let sheet = self.doc.project().workbook(book).map(|b| b.sheet()).ok_or("This workbook no longer exists")?;
         let state = self.books.get(&book).ok_or("Select a cell first")?;
@@ -2912,6 +2983,14 @@ impl SheafApp {
             tool: graph.and_then(|g| self.graphs.get(&g)).map_or(GraphTool::Pointer, |s| s.tool()),
             curve: graph.and_then(|g| self.graph_curve(g)),
             layer_curves: graph.map(|g| self.graph_layer_curves(g)).unwrap_or_default(),
+            stack: graph.and_then(|g| {
+                let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
+                project.graph(g)?.layers.get(layer).map(|l| l.stack)
+            }),
+            can_cumulate: graph.is_some_and(|g| {
+                let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
+                project.graph(g).and_then(|gr| gr.layers.get(layer)).is_some_and(sheaf_core::stack::layer_cumulates)
+            }),
         }
     }
 
@@ -3054,10 +3133,13 @@ impl SheafApp {
             || self.import_wizard.is_some()
             || self.graph_props.is_some()
             || self.layer_contents.is_some()
+            || self.layer_management.is_some()
+            || self.fit_page.is_some()
             || self.plot_setup.is_some()
             || self.error_bars.is_some()
             || self.trendline.is_some()
             || self.stack_panels.is_some()
+            || self.merge_graphs.is_some()
             || self.label_panels.is_some()
             || self.simulate.is_some()
             || self.column_props.is_some()
@@ -3075,6 +3157,7 @@ impl SheafApp {
             || self.mask_condition.is_some()
             || self.cond_format.is_some()
             || self.cell_note.is_some()
+            || self.cell_format.is_some()
             || self.reshape.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
@@ -3350,6 +3433,39 @@ impl SheafApp {
                 }
             }
         }
+        if let Some(d) = &mut self.fit_page {
+            use crate::dialogs::fit_page::Outcome;
+            match d.show(ctx, &mut self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed => self.fit_page = None,
+                Outcome::Done => {
+                    self.fit_page = None;
+                    self.say("Fitted the page to the layers");
+                }
+            }
+        }
+        if let Some(d) = &mut self.layer_management {
+            use crate::dialogs::layer_management::Outcome;
+            match d.show(ctx, &mut self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed => self.layer_management = None,
+                Outcome::Applied => {
+                    self.layer_management = None;
+                    self.say("Updated the layers");
+                }
+            }
+        }
+        if let Some(d) = &mut self.merge_graphs {
+            match d.show(ctx, &mut self.doc) {
+                MergeGraphsOutcome::Open => {}
+                MergeGraphsOutcome::Closed => self.merge_graphs = None,
+                MergeGraphsOutcome::Created(graph) => {
+                    self.merge_graphs = None;
+                    self.focus(graph);
+                    self.say("Merged the graph windows");
+                }
+            }
+        }
         if let Some(d) = &mut self.label_panels {
             match d.show(ctx, &mut self.doc) {
                 LabelPanelsOutcome::Open => {}
@@ -3541,6 +3657,11 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.cell_note = None;
+        }
+        if let Some(d) = &mut self.cell_format
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.cell_format = None;
         }
         if let Some(d) = &mut self.row_filter
             && !d.show(ctx, &mut self.doc)
@@ -4010,6 +4131,23 @@ impl SheafApp {
                             .apply("Hide plot", |p| objects::set_plot_visible(p, graph, 0, n.saturating_sub(1), false));
                     }
                 }
+                "merge-graphs" if self.doc.project().graphs().count() >= 2 => {
+                    self.merge_graphs = Some(MergeGraphsDialog::new(self.doc.project()));
+                }
+                "layer-management" => {
+                    if let Some(graph) = first_graph {
+                        self.layer_management = crate::dialogs::layer_management::LayerManagementDialog::new(
+                            self.doc.project(),
+                            graph,
+                            None,
+                        );
+                    }
+                }
+                "fit-page" => {
+                    if let Some(graph) = first_graph {
+                        self.fit_page = Some(crate::dialogs::fit_page::FitPageDialog::new(graph));
+                    }
+                }
                 "autosave" => {
                     self.autosave_dialog =
                         Some(AutosaveDialog::new(self.autosave.settings, self.autosave.has_session()));
@@ -4222,7 +4360,7 @@ impl SheafApp {
                 }
                 "export" => {
                     if let Some(id) = first_graph {
-                        self.export = Some(ExportDialog::new(id, None));
+                        self.export = Some(ExportDialog::new(id, None).with_themes(self.startup.themes_dir.clone()));
                     }
                 }
                 "import-wizard" => {
@@ -4351,6 +4489,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
                     s.columns.retain(|c| !columns.contains(&c.id));
                     s.remap_cond_format_columns(&|c| (!columns.contains(&c)).then_some(c));
                     s.remap_note_columns(&|c| (!columns.contains(&c)).then_some(c));
+                    s.remap_format_columns(&|c| (!columns.contains(&c)).then_some(c));
                 }
             }
             Window::Graph(g) => {

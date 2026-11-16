@@ -34,6 +34,73 @@ pub enum Command {
     /// Simulate Curve: the values of a built-in fit function for typed parameters, at X values from a range
     /// or from a column. Writes X and Y as delimited text or an Excel workbook, or adds them to a project.
     Simulate(SimulateArgs),
+    /// Merge Graph Windows: copy graphs of a project into the cells of one new graph (Origin's
+    /// merge_graph defaults), then write it as a figure and/or save the project with it.
+    MergeGraphs(MergeGraphsArgs),
+}
+
+/// `sheaf merge-graphs`: Graph > Merge Graph Windows without a window (graphing spec 15.11).
+#[derive(Args, Debug)]
+pub struct MergeGraphsArgs {
+    /// A .sheaf project or an Origin .opj project with the graphs.
+    pub project: PathBuf,
+    /// A graph to merge, by name; repeat it for each graph, in the order the cells are filled (row by
+    /// row from the top left). At least two.
+    #[arg(long, value_name = "NAME", conflicts_with = "all_graphs")]
+    pub graph: Vec<String>,
+    /// Merge every graph of the project, in project order (Origin's "All in Project").
+    #[arg(long)]
+    pub all_graphs: bool,
+    /// Number of rows (default: as Origin, ceil(sqrt(n)) for n graphs, or as few as the columns allow).
+    #[arg(long)]
+    pub rows: Option<usize>,
+    /// Number of columns (default: as Origin, ceil(n / rows)).
+    #[arg(long)]
+    pub cols: Option<usize>,
+    /// Horizontal and vertical gap between cells, percent of the page (default 5,5 as Origin).
+    #[arg(long, value_delimiter = ',', value_name = "H,V", allow_hyphen_values = true)]
+    pub gap: Vec<f64>,
+    /// Left, right, top and bottom margins, percent of the page (default 15,10,10,15 as Origin).
+    #[arg(long, value_delimiter = ',', value_name = "L,R,T,B", allow_hyphen_values = true)]
+    pub margins: Vec<f64>,
+    /// A portrait page (the page's longer side upright).
+    #[arg(long)]
+    pub portrait: bool,
+    /// The page size in inches, WIDTH,HEIGHT (default Origin's 11.41,7.973; --portrait turns it).
+    #[arg(long, value_delimiter = ',', value_name = "W,H")]
+    pub page_size: Vec<f64>,
+    /// Keep each graph's layer aspect ratio, at the top left of its cell.
+    #[arg(long)]
+    pub keep_aspect: bool,
+    /// Link the layers of the later graphs to the first merged layer in position (Origin's "Link
+    /// Source Graphs").
+    #[arg(long)]
+    pub link: bool,
+    /// Also share the first layer's X scale (implies --link): a vertical stack with one X axis.
+    #[arg(long)]
+    pub share_x: bool,
+    /// Hide the X tick labels, title and ticks of a cell that touches the cell below it (with a
+    /// vertical gap of 0), and the Y ones of a cell touching one on its left (Origin's "Show Axes
+    /// Frame").
+    #[arg(long)]
+    pub hide_inner: bool,
+    /// Text size: auto (Origin's factor for smaller cells), keep (every point size as it is) or a
+    /// fixed factor such as 0.5.
+    #[arg(long, default_value = "auto", value_name = "auto|keep|FACTOR")]
+    pub text_scale: String,
+    /// Delete the merged graphs from the saved project (Origin's "Keep Source Graphs" off).
+    #[arg(long)]
+    pub remove_sources: bool,
+    /// Write the merged graph as a figure (.png, .tif, .jpg, .bmp, .gif, .tga, .pcx, .psd, .svg, .pdf,
+    /// .eps or .emf).
+    #[arg(short, long)]
+    pub output: Option<PathBuf>,
+    /// Resolution of raster output in dots per inch.
+    #[arg(long, default_value_t = 300.0)]
+    pub dpi: f64,
+    /// Save the project with the merged graph (.sheaf, or .opj with a companion for what it cannot hold).
+    #[arg(long, value_name = "FILE")]
+    pub save: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -570,7 +637,8 @@ pub struct StyleArgs {
     /// Hide the legend.
     #[arg(long)]
     pub no_legend: bool,
-    /// Move the curves apart: none; auto (each curve above the one before it with a gap of 10 %
+    /// Move the curves apart: none; cumulative (each curve is drawn at its Y plus the Y of the
+    /// curves before it at the same row); auto (each curve above the one before it with a gap of 10 %
     /// of the tallest curve); auto:GAP (gap in percent); step:STEP (curve k moved up by k * STEP
     /// axis units; write a negative step as --stack=step:-500).
     #[arg(long, value_name = "MODE", conflicts_with_all = ["offsets", "waterfall"])]

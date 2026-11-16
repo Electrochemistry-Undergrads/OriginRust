@@ -79,7 +79,7 @@ fn style_schema() -> Value {
             ("colors", strs("Plot colors in legend order: names or #RRGGBB.")),
             ("labels", strs("Legend text of the plots, in legend order.")),
             ("no_legend", t("boolean", "Hide the legend.")),
-            ("stack", t("string", "none, auto, auto:GAP or step:STEP.")),
+            ("stack", t("string", "none, cumulative, auto, auto:GAP or step:STEP.")),
             ("offsets", json!({"type": "array", "items": {"type": "number"}, "description": "Y offset of each plot."})),
             ("waterfall", json!({"type": "array", "items": {"type": "number"}, "description": "Waterfall offsets."})),
             ("no_y_tick_labels", t("boolean", "Hide the Y tick labels.")),

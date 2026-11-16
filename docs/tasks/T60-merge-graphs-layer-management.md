@@ -1,6 +1,12 @@
 # T60: Merge Graph Windows and Layer Management
 
-**Status:** open; recovered and refined 2026-11-15. **Size:** L, merge then management.
+**Status:** done 2026-11-15 (branch `merge-graphs`, Claude Windows). Origin 2016 measured (graphing
+15.7c, 15.7d; probes `tools/origin-ref/merge-graph-*.lines.txt`, `fit-page-to-layers.lines.txt`):
+Merge Graph Windows (core `merge.rs`, dialog, `sheaf merge-graphs`), Layer Management (Arrange,
+Size/Position, Link; core `layer_manage.rs`), Fit Page to Layers (dialog and Format item). Fit Layer to
+Graph did nothing measurable in Origin and is tagged `N`. Left: Merge's folder choices, extra layers
+for empty cells and Common Scale options, panel labels, the merge preview; Layer Management's Add
+(T61), Axes and Display tabs; MCP tool for merging. **Size:** L, merge then management.
 **Branch:** `merge-graphs`. **Priority:** P0, wave 2, owner's stacked-figure priority.
 **Spec:** [graphing](../spec/graphing.md) 15 (add Merge Graph Windows and Layer Management
 subsections); ADR 0009. **Inventory:** 7 locations tagged `T60`.

@@ -11,11 +11,13 @@
 //! sheaf fit --list
 //! sheaf import run1.txt run2.txt -o lab.opj
 //! sheaf export lab.sheaf --graph Graph1 -o fig.svg
+//! sheaf merge-graphs lab.sheaf --graph Graph1 --graph Graph2 --graph Graph3 --rows 3 --cols 1 --share-x -o stack.png
 //! ```
 
 mod analyze;
 mod commands;
 mod fit;
+mod merge;
 mod simulate;
 
 use clap::{ArgMatches, CommandFactory, FromArgMatches, parser::ValueSource};

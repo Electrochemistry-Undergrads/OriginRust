@@ -226,8 +226,18 @@ impl PlotSpec {
         if self.group.is_some() && (self.graph.is_some() || self.panels.is_some()) {
             bail!("--group cannot be combined with --graph or --panels");
         }
-        if !self.y2.is_empty() && self.template.as_deref().and_then(Template::from_name) == Some(Template::Waterfall) {
+        if !self.y2.is_empty()
+            && matches!(
+                self.template.as_deref().and_then(Template::from_name),
+                Some(Template::Waterfall | Template::WaterfallY | Template::WaterfallZ)
+            )
+        {
             bail!("a waterfall cannot have a right Y axis; leave out --y2 or choose another template");
+        }
+        if !self.y2.is_empty()
+            && self.template.as_deref().and_then(Template::from_name) == Some(Template::StackedHistograms)
+        {
+            bail!("stacked histograms cannot have a right Y axis; leave out --y2 or choose another template");
         }
         Ok(())
     }
@@ -747,12 +757,15 @@ fn stack_option(s: &Style) -> Result<Option<Stack>> {
     Ok(Some(Stack::Waterfall { dx_percent: dx, dy_percent: dy }))
 }
 
-/// Reads the value of `--stack`: `none`, `auto`, `auto:GAP` or `step:STEP`.
+/// Reads the value of `--stack`: `none`, `cumulative`, `auto`, `auto:GAP` or `step:STEP`.
 pub fn parse_stack(text: &str) -> Result<Stack> {
     let t = text.trim().to_ascii_lowercase();
     let number = |v: &str| v.trim().parse::<f64>().ok().filter(|v| v.is_finite());
     if t == "none" {
         return Ok(Stack::None);
+    }
+    if t == "cumulative" {
+        return Ok(Stack::Cumulative);
     }
     if t == "auto" {
         return Ok(STACK_AUTO_DEFAULT);
@@ -769,7 +782,7 @@ pub fn parse_stack(text: &str) -> Result<Stack> {
             None => bail!("--stack step:STEP needs a step that is a number (got '{step}')"),
         };
     }
-    bail!("--stack must be none, auto, auto:GAP or step:STEP (got '{text}')")
+    bail!("--stack must be none, cumulative, auto, auto:GAP or step:STEP (got '{text}')")
 }
 
 /// The Y columns that have a place of their own in a layer's stack, in plot order: every plotted
@@ -1023,7 +1036,16 @@ fn panel_layout(shape: PanelShape, panels: usize, template: Template, p: &Panels
 /// One graph with several panels (`--panels`), graphing spec section 15.6.
 fn panel_graph(project: &mut Project, template: Template, p: &PanelsSpec, a: &PlotSpec) -> Result<WindowId> {
     let shape = parse_panels(&p.shape)?;
-    if template.multi_y().is_some() || matches!(template, Template::DoubleY | Template::Waterfall | Template::Lollipop)
+    if template.multi_y().is_some()
+        || matches!(
+        template,
+        Template::DoubleY
+            | Template::Waterfall
+            | Template::WaterfallY
+            | Template::WaterfallZ
+            | Template::Lollipop
+            | Template::StackedHistograms
+    )
     {
         bail!("the {} template cannot be used with --panels; choose another template", template.name());
     }
@@ -1099,7 +1121,7 @@ fn require_two_axes(left: &[ColumnId], right: &[ColumnId]) -> Result<()> {
 /// The legend text of each column of one file in an overlay: the file name, plus the column when
 /// the file gives several curves.
 fn overlay_labels(project: &Project, book: WindowId, columns: &[ColumnId]) -> Vec<String> {
-    let file = project.workbook(book).map(|b| b.long_name.clone()).unwrap_or_default();
+    let file = project.workbook(book).map(|b| b.title_for_graph()).unwrap_or_default();
     columns
         .iter()
         .map(|y| {

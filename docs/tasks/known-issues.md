@@ -6,6 +6,23 @@ Update the relevant brief/spec when resolving one; the historical snapshot is in
 
 ## Integration after the archived snapshot
 
+- T62 stack and offset leftovers (2026-11-15, macOS, no Origin, branch `stack-leftovers`): Graph > Offset Grouped Data in
+  Layer is live (one undo step, tick, no-op on the current mode, synced with Plot Details); `Stack::Cumulative` sums
+  line/scatter/line+symbol plots pointwise by row (missing, filtered or out-of-range rows add 0; fits ride on the
+  leader's sum; `--stack cumulative`); Plot > Statistics > Stacked Histograms and `-t stacked-histograms` (one panel per
+  column from the top, linked X, bins from the union of all values); Plot > Y-offset/Waterfall Y/Z colour mapping
+  (`-t waterfall-y|waterfall-z`, segment colours by mean Y or curve colours by Z from the long name/comments/index, colour
+  scale beside the layer). `.opj` writes plain curves and warns; `.sheaf` keeps all. All unmeasured (graphing 13.15-13.17).
+
+- T59 worksheet cell formatting steps 1, 2 and 4 (2026-11-15, macOS, no Origin, branch `cell-format`):
+  `cellformat.rs` ranges (column ids, open-ended row spans, label rows; whole columns are one record) with
+  upkeep for row insert/delete, sorts (formats follow rows), column delete, duplicate/append and analysis
+  retirement; grid, frozen overlay, label rows, print, PDF and worksheet images draw bold/italic/underline/font/
+  size/colours/fill/alignment (conditional colours win); Format Cells window from the cell, column and row menus
+  and Format > Cell... (one undo per OK/Apply); `.sheaf` and companion keep formats, `.opj` and Excel export warn.
+  Format > Worksheet and Set Data Style stay grey; toolbar adapter waits for T58. All unmeasured (gui-look
+  "Cell formatting (T59)", workbook-model 13b).
+
 - T64 multiple comparisons plot (2026-11-15, macOS, no Origin): the report sheet of a one-way ANOVA with a means
   comparison or a two-sample t-test (button in the sheet tab strip, Statistics > Multiple Comparisons Plot...) makes a graph
   of the groups (bar, box, violin, scatter; SD, SEM or 95 % CI error bars) with significance brackets (asterisks or

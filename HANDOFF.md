@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **463 listed item locations** at the planning
-  baseline (319 menu bar, 47 toolbar, 97 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **428 listed item locations** at the planning
+  baseline (299 menu bar, 41 toolbar, 88 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -71,6 +71,42 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+T61 layers, insets and three/four Y axes (branch `layers-multi-y`, graphing 21, measured in Origin 2016): Graph >
+New Layer(Axes) with nine kinds and six Graph-toolbar buttons, Add Inset (with data), Delete Layer (children
+unlinked, keep their place and ranges), Layer Properties, displaced Y axes in margins and hit-testing, Move to
+Layer (Sheaf's own), 3Ys Y-YY / Y-Y-Y and 4Ys Y-YYY / YY-YY templates and Multiple Y Axes (`plot -t 3ys-y-yy` etc.).
+Left: Open Dialog..., three layer-icon items, Origin's legends in the templates. fmt, strict Clippy, full tests pass.
+
+T60 Merge Graph Windows and Layer Management (`merge-graphs`): Origin 2016's merge_graph measured in
+full (page, cells, automatic grid, text factor, links, Show Axes Frame, aspect, keep/rearrange) and
+copied in `sheaf_core::merge`, the Graph menu window and `sheaf merge-graphs`; Layer Management
+(Arrange, Size/Position, Link; `layer_manage.rs`) from the Graph menu, page and layer-icon menus; Fit
+Page to Layers as `pfit2l` (frames and objects plus a border). Fit Layer to Graph did nothing
+measurable in Origin and is tagged `N`. Graphing 15.7c and 15.7d; leftovers in the T60 brief.
+
+T63 F Duplicate entry points (`a7fd735`) now reuse the existing window-copy operation:
+Standard follows the active workbook/graph; Explorer's context item follows the clicked window,
+including a hidden one. Four new UI regressions cover target identity, empty books, cancellation
+and Undo/Redo; the existing duplicate tests and desktop captures also pass. Formatting, strict
+workspace all-target Clippy, 3,450 tests (eight existing ignored), frozen source/tree checks and
+the 457-item inventory validation pass on the combined T59/T19/T05 tree. T63 C's probability/Q-Q
+entries remain disabled and are deferred to B8/T14 with published score/confidence/axis prerequisites
+in the T63 brief; the existing statistics tools are unchanged.
+
+T05 export Dialog Themes (`21480e7`) now save/reload named settings, custom defaults/reset and
+last successful exports, with modified-name marking and confirmed deletion. Seven regressions,
+five isolated Origin sessions and an inspected desktop screenshot cover this scope. Formatting,
+strict workspace all-target Clippy and 3,443 tests pass (eight ignored); inventory 459 passes.
+Graph Theme, graph-specific settings and comparison/script tools remain (graphing 9.8).
+
+T02 Column Browser Exclude (`e606eef`) now temporarily hides selected upper-list columns,
+selects the first removed list position (or the final remaining row), and preserves original
+column ordinals and already-added ranges. Scope changes and reopening restore excluded columns;
+gapped original columns cannot form one block. Ten valid isolated Origin cases and seven new UI
+regressions cover this follow-up (46 focused Go To tests). Formatting, strict workspace all-target
+Clippy, 3,394 workspace tests (eight existing ignored) and inventory validation pass on the combined
+T48/T64 tree; incoming Windows MCP test fix `81765e8` is preserved. Saved browser preferences remain.
+
 T48 graph Data menu measured in Origin 2016 (branch `t48-origin`, graphing 20.4/20.5): Mask (a click masks,
 a drag masks every plot's Y cells, Tab active plot, Space freehand) and Remove Bad (pick, then Enter;
 `@YPR` 1 keeps the row) now follow Origin, with its undo texts and Esc/right-click ending a mode.
@@ -93,16 +129,14 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t58-text-editor` | Codex Windows, t58-text-editor | T58 slice 2 ONLY: graph Text window formatting/selection controls and live preview using published renderer capabilities | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` reused sequentially after completed T63 F; dialogs/text_object.rs + private helper, isolated UI tests/registration, existing text startup screenshot hook if needed, T58/graphing7; no markup/fonts/layout/renderers/backends (text-decorations), shared Format bar/dispatch/actions (t58-format-toolbar), core model fields, formula/parameter labels, graph_view/shapes/layers/axis menus, other dialogs, pending root/index/roadmap; unsupported formatting stays disabled until published renderer support |
+| `codex/t58-format-toolbar` | Codex Windows | T58 slice 3: shared Format toolbar dispatch and existing whole-object graph font controls; selected-target/undo/persistence tests and Origin measurement | claimed 2026-11-15; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points`; Format bar only, local actions/app dispatch + new helper/tests; no renderer/fonts/markup (text-decorations), editor slice 2, worksheet adapter/model, Graph/Standard/Explorer bars, layers/stack, graph_view or new model fields without refinement |
 | `codex/text-decorations` | Codex Windows, text-decorations | T58 GRAPH TEXT FORMATTING (`T58-graph-text-formatting.md`), first rendering slice: inline underline/strikethrough, markup/layout/rendering and isolated export tests | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; no toolbar/editor/model fields, significance-plot/brackets (separate T58 brief), shapes/data-tools/browser/export-dialog/import/stats/MCP/printing or other owners |
-| `codex/t02-browser-exclude` | Codex Windows, t02-browser-exclude | T02 Column Browser Exclude control: native behavior, upper-list filtering and own UI tests/docs; integration repair for the newly merged T64 SVG destination test on Windows | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog`, `target/wt-t01-error-bars-dialog`; go_to/browser, own go_to_browser tests, T02/gui-look/HANDOFF, and ONLY the `anova_draws_the_multiple_comparisons_plot_through_the_bridge` path assertion in mcp/tools.rs (canonical filesystem identity); no MCP production/analyze/disconnect changes, saved preferences, navigation, app/MRU/grid/core/history/plot/masks/stats/formulas or other owners; no priority/index/roadmap/parity edits |
-| `codex/t05-export-dialog-themes` | Codex Windows | T05 Dialog Theme row: Origin theme-list/save/reuse behavior, named export-settings themes and isolated persistence/UI regressions | claimed 2026-11-15; own `.claude/worktrees/codex-t13-skip-points`, `target/wt-t13-skip-points`; no Graph Theme, preview, renderers/formats, import behavior, recovery, priority docs or other scopes |
-| `t19-fntrim` | Claude Windows, session fe4b37eb | T19 file-name trimming on ASCII import (Origin's FNameToSht/Bk From/To rules) and the book long name keeping the file extension (owner's decision 2026-11-15); crates/io ascii naming, app import window, cli flags, import-ascii.md, title tests | claimed 2026-11-15 |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
-| `cell-format` | Claude macOS, "mac-multipdf" | T59 worksheet cell formatting, steps 1, 2 and 4 (model with range maintenance, grid/print/image drawing, Format Cells window, .sheaf/.opj); step 3 (toolbar adapter behind T58's dispatch) left for after T58 slice 3 | claimed 2026-11-15; new core cellformat.rs + Worksheet.cell_formats, sheetops upkeep, app grid.rs body_cell + new dialogs/cell_format.rs + menu items, plot sheet.rs/sheet_print.rs; no toolbar.rs Format bar (T58) or other sessions' scopes |
-| `merge-graphs` | Claude Windows, session fe4b37eb | T60 Merge Graph Windows and Layer Management (all four steps: core merge.rs + panels.rs arrange helpers, merge/layer-management dialogs, Fit Layer to Graph / Fit Page to Layers, CLI `merge-graphs`, Origin merge_graph/layarrange measurements, graphing 15) | claimed 2026-11-15; own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no adding/deleting layers or insets (T61), no Offset/stack items (T62), no text formatting (T58) or other sessions' scopes |
-| `layers-multi-y` | Claude Windows, "continue all tasks" | T61 layers, insets and 3/4 Y axes (all slices): core graph.rs layer add/delete + axis offset (local edits), template.rs 3Ys/4Ys, plot offset axes, app Add Layer buttons/layer icon/Layer Properties/Multiple Y Axes, ops template names, opj/companion | claimed 2026-11-15; no T60 merge/arrange (panels.rs, merge.rs), T58/T59 formatting, T62 stack/offset |
+| `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
+| `t63-add-plot` | Claude Windows, session fe4b37eb | T63 group J only: Graph > Add Plot to Layer > Line/Scatter/Line + Symbol/Column/Area (5): measure Origin 2016's item, wire it to the existing plot-adding code, UI tests, greyed-items | claimed 2026-11-15; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no other T63 groups (A,B,D,E,H,I,K are mac-multipdf's; G shape ordering), no T61 layer add/delete, no Format toolbar (T58) |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

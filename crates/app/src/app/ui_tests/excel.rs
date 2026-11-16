@@ -22,6 +22,7 @@ fn sheet_of(name: &str, columns: Vec<Column>) -> Worksheet {
         frozen: Default::default(),
         cond_formats: Vec::new(),
         notes: Vec::new(),
+        cell_formats: Vec::new(),
         comparison_source: None,
     }
 }
@@ -87,7 +88,7 @@ fn sheet_names(h: &Harness<'static, SheafApp>, book: usize) -> Vec<String> {
 #[test]
 fn the_import_and_export_items_are_on_and_open_excel_stays_grey() {
     let mut h = start(vec![data_file("excel-menu")]);
-    click(&mut h, "Title Book1 - sample");
+    click(&mut h, "Title Book1 - sample.csv");
     menu_entry(&h, "File").click();
     settle(&mut h);
     assert!(!entry_enabled(&h, "Open Excel..."), "Open Excel needs Excel itself and stays grey");
@@ -216,7 +217,7 @@ fn the_header_rows_page_shows_what_was_found_and_the_preview_names_each_row() {
 fn new_sheets_mode_adds_the_workbook_sheets_to_the_active_book() {
     let file = excel_file("newsheets");
     let mut h = start(vec![data_file("excel-newsheets")]);
-    click(&mut h, "Title Book1 - sample");
+    click(&mut h, "Title Book1 - sample.csv");
     h.state_mut().start_import(Some(vec![file]), ImportPick::Excel);
     settle(&mut h);
     click(&mut h, "Import Mode");

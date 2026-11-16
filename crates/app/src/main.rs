@@ -21,7 +21,7 @@
 //! a moment and quits, and `--show ITEM` opens a dialog first (`graph-settings:x`,
 //! `graph-settings:plots`, `panel:explorer` (also `-docked`, `-hidden`; `objects`, `messages`,
 //! `results`), `hide-plot:2`, `text:1` (the Text window of the first label), `shape:1` (the window of the first drawn object), `column`, `set-values-multiple` (or `set-values-multiple:B,C,D`; the columns of the first workbook, default all but the first), `export`, `import:FILE`, `import-excel:FILE` (with `import-excel-page:mode|header|columns|partial|misc`), `export-excel` (the first workbook), `import-wizard:FILE` (with `import-wizard-page:header|names|file|data|save`), `analysis:smooth`, `analysis-preview:smooth`, `focus:Book1`, `menu:Plot` to
-//! hold a top-level menu open (`menu:File>Recent Projects` also opens a submenu), `select-column:B` and `column-menu:B` for the first workbook, `autosave` for Tools > Autosave, `simulate` or `simulate:FUNCTION` for Analysis > Fitting > Simulate Curve).
+//! hold a top-level menu open (`menu:File>Recent Projects` also opens a submenu), `select-column:B` and `column-menu:B` for the first workbook, `autosave` for Tools > Autosave, `merge-graphs`, `layer-management` and `fit-page` for those windows (the first graph), `simulate` or `simulate:FUNCTION` for Analysis > Fitting > Simulate Curve).
 
 // In release builds on Windows, do not open a console window next to the app.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]

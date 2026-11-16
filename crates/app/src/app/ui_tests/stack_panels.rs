@@ -18,7 +18,7 @@ fn number(h: &mut Harness<'static, SheafApp>, name: &str, value: &str) {
 }
 
 fn all_columns(h: &mut Harness<'static, SheafApp>) {
-    show_window(h, "Book1 - sample");
+    show_window(h, "Book1 - sample.csv");
     ctrl(h, egui::Key::A);
 }
 
@@ -89,7 +89,7 @@ fn stack_assignment_scatter_order_and_legend_use_the_existing_panel_model() {
 #[test]
 fn stack_keeps_selected_rows_and_applies_gap_margin_and_independent_axes() {
     let mut h = start(vec![data_file("stack-rows")]);
-    show_window(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample.csv");
     select_block(&mut h, "4.5", "10.5");
     menu_path(&mut h, &["Plot", "Multi-Panel", "Stack..."]);
     click(&mut h, "Link Layers");

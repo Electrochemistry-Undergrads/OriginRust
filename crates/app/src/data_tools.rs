@@ -123,7 +123,9 @@ fn moved(
     let (sx, sy) = reader::shift(project, graph, geometry, p);
     let (dx, dy) = geometry.get(p.layer)?.page_to_data(px - sx, py - sy);
     let place = reader::placement(project, graph, p.layer, p.plot);
-    let (xv, yv) = (place.source_x(dx), place.source_y(dy));
+    // Cumulative stacking draws each row above the plots before it; take that share back too.
+    let lift = reader::cumulative_add(project, graph, p.layer, p.plot).and_then(|a| a.get(p.row).copied());
+    let (xv, yv) = (place.source_x(dx), place.source_y(dy) - lift.unwrap_or(0.0));
     if !yv.is_finite() || (x.is_some() && !xv.is_finite()) {
         return None;
     }

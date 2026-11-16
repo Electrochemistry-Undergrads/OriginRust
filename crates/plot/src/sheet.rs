@@ -56,9 +56,10 @@ fn scene_of(ops: &[PrintOp], size: (f64, f64), offset: (f64, f64), m: &dyn TextM
                 crate::scene::line_to(&mut d, x2 + dx, y2 + dy);
                 items.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(*color, *width)) });
             }
-            PrintOp::Text { x, y, max_w, text, align, bold, size } => {
-                let font =
-                    Font { family: FAMILY.into(), size_pt: *size, bold: *bold, italic: false, color: Color::BLACK };
+            PrintOp::Text { x, y, max_w, text, align, bold, size, fmt } => {
+                let family = fmt.family.as_deref().unwrap_or(FAMILY);
+                let color = fmt.color.unwrap_or(Color::BLACK);
+                let font = Font { family: family.into(), size_pt: *size, bold: *bold, italic: fmt.italic, color };
                 let text = cut(text, *max_w, &font, *size, m);
                 if text.is_empty() {
                     continue;
@@ -68,15 +69,29 @@ fn scene_of(ops: &[PrintOp], size: (f64, f64), offset: (f64, f64), m: &dyn TextM
                     Align::Center => Anchor::Middle,
                     Align::Right => Anchor::End,
                 };
+                if fmt.underline {
+                    // A line under the text, a little below its baseline.
+                    let w = m.width(&text, &font, *size);
+                    let x0 = match align {
+                        Align::Left => *x,
+                        Align::Center => x - w / 2.0,
+                        Align::Right => x - w,
+                    };
+                    let (ly, thick) = (y + dy + size * 0.12 + 0.6, (size / 16.0).max(0.4));
+                    let mut d = String::new();
+                    crate::scene::move_to(&mut d, x0 + dx, ly);
+                    crate::scene::line_to(&mut d, x0 + w + dx, ly);
+                    items.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(color, thick)) });
+                }
                 items.push(Item::Text(TextItem {
                     x: x + dx,
                     y: y + dy,
                     text,
-                    family: FAMILY.into(),
+                    family: family.into(),
                     size: *size,
                     bold: *bold,
-                    italic: false,
-                    color: Color::BLACK,
+                    italic: fmt.italic,
+                    color,
                     anchor,
                     rotate_ccw: 0.0,
                 }));
@@ -260,6 +275,79 @@ mod tests {
         assert_eq!((r.width, r.height), (468, 648));
         assert!(r.rgba.chunks(4).any(|p| p[0] < 100), "grid and text are drawn");
         assert!(render_sheet_raster(&sheet(), &setup(), 3, 1.0).is_err(), "no fourth page");
+    }
+
+    fn styled_sheet() -> Worksheet {
+        use sheaf_core::cellformat::{CellFormat, FormatTarget, HAlign};
+        let mut ws = sheet();
+        ws.apply_cell_format(
+            FormatTarget::cells(vec![ColumnId(3)], 0, Some(0)),
+            CellFormat {
+                bold: Some(true),
+                italic: Some(true),
+                underline: Some(true),
+                font: Some("Courier New".into()),
+                size_pt: Some(18.0),
+                text_color: Some(Color::rgb(200, 0, 0)),
+                fill: Some(Color::rgb(0, 200, 0)),
+                h_align: Some(HAlign::Center),
+            },
+        );
+        ws
+    }
+
+    #[test]
+    fn a_styled_cell_becomes_styled_text_an_underline_and_a_fill_in_the_scene() {
+        let ws = styled_sheet();
+        let table = SheetTable::new(&ws, PrintStyle::default());
+        let area = (468.0, 648.0);
+        let pages = table.pages(area.0, area.1);
+        let scene = scene_of(&table.draw_page(&pages[0], pages.len()), area, (0.0, 0.0), &crate::fonts::FixedMetrics);
+        let items = &scene.layers[0].plots;
+        let text = items
+            .iter()
+            .find_map(|i| match i {
+                Item::Text(t) if t.text == "row 1" => Some(t),
+                _ => None,
+            })
+            .expect("the formatted cell is drawn");
+        assert!(text.bold && text.italic);
+        assert_eq!(
+            (text.family.as_str(), text.color, text.anchor),
+            ("Courier New", Color::rgb(200, 0, 0), Anchor::Middle)
+        );
+        assert_eq!(text.size, 18.0 * 8.0 / 12.0);
+        let plain = items
+            .iter()
+            .find_map(|i| match i {
+                Item::Text(t) if t.text == "row 2" => Some(t),
+                _ => None,
+            })
+            .unwrap();
+        assert!(!plain.bold && !plain.italic && plain.family == FAMILY && plain.color == Color::BLACK);
+        // The underline is a red line just below the baseline, as wide as the text.
+        let line = items
+            .iter()
+            .find(|i| matches!(i, Item::Path { stroke: Some(s), .. } if s.color == Color::rgb(200, 0, 0)))
+            .expect("underline");
+        let Item::Path { d, .. } = line else { unreachable!() };
+        assert!(d.starts_with('M'), "{d}");
+        assert!(
+            items.iter().any(|i| matches!(i, Item::Rect { fill: Some(f), .. } if *f == Color::rgb(0, 200, 0))),
+            "the cell fill"
+        );
+    }
+
+    #[test]
+    fn a_styled_sheet_prints_to_pdf_and_a_preview_with_the_fill_in_it() {
+        let ws = styled_sheet();
+        let pdf = render_sheet_pdf(&ws, &setup()).unwrap();
+        assert!(pdf.starts_with(b"%PDF"));
+        let r = render_sheet_raster(&ws, &setup(), 0, 2.0).unwrap();
+        let green = r.rgba.chunks(4).filter(|p| p[0] < 10 && p[1] > 190 && p[2] < 10).count();
+        assert!(green > 100, "the green cell fill is in the preview ({green} pixels)");
+        let plain = render_sheet_raster(&sheet(), &setup(), 0, 2.0).unwrap();
+        assert_eq!(plain.rgba.chunks(4).filter(|p| p[0] < 10 && p[1] > 190 && p[2] < 10).count(), 0);
     }
 
     #[test]

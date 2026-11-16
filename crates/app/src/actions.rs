@@ -74,7 +74,7 @@ pub enum SheetOp {
 }
 
 /// An edit of one object of a graph, from the graph window (Origin's right-click menus).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GraphOp {
     /// Change Plot to: line, scatter, line + symbol, column.
     SetPlotKind { layer: usize, plot: usize, kind: PlotKind },
@@ -96,6 +96,9 @@ pub enum GraphOp {
     /// Exchange X-Y Axes: the settings of the two axes and the X and Y columns of every plot trade places.
     /// A layer with a plot against the row number (no X column) is left as it is.
     ExchangeAxes { layer: usize },
+    /// Graph > Offset Grouped Data in Layer: the layer's stack mode. Choosing the mode the layer
+    /// already has changes nothing and makes no undo step.
+    SetStack { layer: usize, stack: sheaf_core::graph::Stack },
     /// Axis Zoom In and Axis Zoom Out: the axis range shrinks or grows about its middle.
     AxisZoom { layer: usize, y: bool, zoom_in: bool },
     /// Delete on the legend: it is hidden.
@@ -357,6 +360,9 @@ pub enum Action {
     /// Worksheet > Conditional Formatting > Remove Conditional Format: removes the rules that
     /// touch the selection.
     RemoveCondFormat(WindowId),
+    /// Format Cells... (cell, column and row menus; Format > Cell...): the window for the
+    /// formats of the selection.
+    FormatCellsDialog(WindowId),
     /// Cell menu > Add Note... / Edit Note...: the note editor for the single selected cell.
     NoteDialog(WindowId),
     /// Cell menu > Delete Note: removes the note of the single selected cell.
@@ -389,6 +395,8 @@ pub enum Action {
         book: WindowId,
         columns: Vec<ColumnId>,
     },
+    /// Graph > Merge Graph Windows...
+    MergeGraphs,
     LabelPanels {
         book: WindowId,
         columns: Vec<ColumnId>,
@@ -427,6 +435,16 @@ pub enum Action {
     LayerContents {
         graph: WindowId,
         layer: usize,
+    },
+    /// Fit Page to Layers: opens its window (`dialog`) or fits the page with Origin's defaults at once.
+    FitPageToLayers {
+        graph: WindowId,
+        dialog: bool,
+    },
+    /// Opens Layer Management (arrange, size/position and link the layers) for a graph, with a layer selected when given.
+    LayerManagement {
+        graph: WindowId,
+        layer: Option<usize>,
     },
     /// Opens the graph settings on a tab, for one layer, with a plot chosen in the Plots tab.
     GraphProperties {

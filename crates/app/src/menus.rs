@@ -1197,7 +1197,12 @@ fn plot_menu() -> Vec<Entry> {
                 vec![item("Ternary", Cmd::Plot(Template::Ternary))],
                 greys(&["Piper", "Smith Chart"]),
                 vec![item("Radar", Cmd::Plot(Template::Radar))],
-                greys(&["High-Low-Close", "Vector XYAM", "Vector XYXY", "Zoom"]),
+                greys(&["High-Low-Close"]),
+                vec![
+                    item("Vector XYAM", Cmd::Plot(Template::VectorXyam)),
+                    item("Vector XYXY", Cmd::Plot(Template::VectorXyxy)),
+                ],
+                greys(&["Zoom"]),
             ]
             .concat(),
         ),

@@ -97,6 +97,8 @@ pub(crate) struct PlotData<'a> {
     pub hist_raw: Option<Vec<f64>>,
     /// The points a hexbin plot bins and their first binning; `None` for other kinds.
     pub hex: Option<crate::hexbin::HexData>,
+    /// The arrows of a vector plot (T107); `None` for other kinds.
+    pub vector: Option<crate::vector_plot::VectorData>,
     /// The lines and axes of a layer's parallel plots, held by the first of them; `None` for other plots.
     pub parallel: Option<Box<crate::parallel::ParallelData>>,
     /// What a treemap plot draws; `None` for other kinds.
@@ -671,6 +673,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             closing: None,
             hist_raw: None,
             hex: None,
+            vector: None,
             parallel: None,
             treemap: None,
             sunburst: None,
@@ -816,6 +819,11 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.xerr = None;
                 pd.base = None;
                 pd.ridge = Some(ridge);
+            }
+            PlotKind::VectorXyam | PlotKind::VectorXyxy => {
+                pd.vector = plot.decor.vector.map(|s| {
+                    crate::vector_plot::VectorData::new(project, s, plot.kind == PlotKind::VectorXyam, pd.y.len())
+                });
             }
             PlotKind::Hexbin => {
                 // The nominal frame is not known here (`collect_graph` refits it); a square one for now.
@@ -1077,6 +1085,16 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
         }
     };
     for pd in pds {
+        // Vector XYXY: the arrows' end points count for the axes too.
+        if let Some(v) = &pd.vector {
+            for &(ex, ey) in &v.ends()[pd.start.min(v.ends().len())..pd.end.min(v.ends().len())] {
+                if dim == Dim::X {
+                    add(pd.display_x(ex));
+                } else {
+                    add(pd.display_y(ey));
+                }
+            }
+        }
         if let Some(hex) = &pd.hex {
             if let Some((x0, x1, y0, y1)) = hex.extent() {
                 if dim == Dim::X {

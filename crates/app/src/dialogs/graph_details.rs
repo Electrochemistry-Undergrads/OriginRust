@@ -181,6 +181,8 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::HalfViolin => "Half Violin",
         PlotKind::Ridgeline => "Ridgeline Chart",
         PlotKind::Hexbin => "Hexbin",
+        PlotKind::VectorXyam => "XYAM Vector",
+        PlotKind::VectorXyxy => "XYXY Vector",
         PlotKind::Parallel => "Parallel Plot",
         PlotKind::ParallelIndex => "Parallel Index",
         PlotKind::Treemap => "Treemap",

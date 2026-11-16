@@ -9001,6 +9001,7 @@ mod system_templates;
 #[path = "ui_tests/trendline.rs"]
 mod trendline;
 mod user_templates;
+mod vector_plots;
 mod view_windows;
 mod wks_image;
 

@@ -784,6 +784,9 @@ impl Writer {
         if has(&|k| k.is_horizontal()) {
             notes.push("horizontal bars were written as vertical columns".into());
         }
+        if has(&|k| k.is_vector()) {
+            notes.push("vector plots were written as scatter plots of their start points".into());
+        }
         if has(&|k| matches!(k, PlotKind::FloatingColumn | PlotKind::FloatingBar)) {
             notes.push("floating columns were written as columns from zero".into());
         }
@@ -795,6 +798,8 @@ impl Writer {
             let kind = match p.kind {
                 PlotKind::Line | PlotKind::Parallel | PlotKind::ParallelIndex => CurveKind::Line,
                 PlotKind::Scatter | PlotKind::Hexbin | PlotKind::ColumnScatter => CurveKind::Scatter,
+                // The arrows are not written; the start points keep the data (named in the save warning).
+                PlotKind::VectorXyam | PlotKind::VectorXyxy => CurveKind::Scatter,
                 PlotKind::LineSymbol => CurveKind::LineSymbol,
                 PlotKind::Column
                 | PlotKind::StackedColumn

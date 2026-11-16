@@ -58,6 +58,7 @@ pub mod stack;
 pub mod straight_line;
 pub mod template;
 pub mod user_template;
+pub mod vector;
 pub mod without_data;
 pub mod worksheet;
 

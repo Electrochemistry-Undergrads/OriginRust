@@ -1540,6 +1540,11 @@ pub enum PlotKind {
     /// Origin's hexbin plot (2027, Hexbin.OTPU): the plot's X and Y columns binned into hexagons coloured by
     /// the number of points in each (graphing spec 14.24).
     Hexbin,
+    /// Origin's Vector XYAM (T107): an arrow at each (X, Y) with the angle and magnitude of the columns of
+    /// [`PlotDecor::vector`].
+    VectorXyam,
+    /// Origin's Vector XYXY (T107): an arrow from (X, Y) to the X and Y end columns of [`PlotDecor::vector`].
+    VectorXyxy,
     /// Origin's Parallel Plot (2019, Parallel.otpu): the plot's Y column is one vertical axis; every row is a
     /// line through the axes of all the layer's parallel plots, coloured by a numeric column (graphing spec 14.25).
     Parallel,
@@ -1589,6 +1594,10 @@ impl PlotKind {
     }
 
     /// True for [`PlotKind::Parallel`] and [`PlotKind::ParallelIndex`].
+    pub fn is_vector(&self) -> bool {
+        matches!(self, PlotKind::VectorXyam | PlotKind::VectorXyxy)
+    }
+
     pub fn is_parallel(&self) -> bool {
         matches!(self, PlotKind::Parallel | PlotKind::ParallelIndex)
     }
@@ -1812,6 +1821,9 @@ pub struct PlotDecor {
     /// added; each is recomputed from the plotted data when drawn.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trendlines: Vec<Trendline>,
+    /// The extra columns and arrow settings of a vector plot (T107).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vector: Option<crate::vector::VectorSpec>,
 }
 
 pub use sheaf_calc::trend::TrendKind;

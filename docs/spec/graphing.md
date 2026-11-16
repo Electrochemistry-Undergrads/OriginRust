@@ -5128,3 +5128,30 @@ saved themes (Name, Size, Path User, Date); Apply Now gives the current graph's 
 undo step, "Apply theme"); Delete removes a theme. Sheaf ships no system themes (Origin's are its own) and
 has no system theme, Worksheet/Dialog/Function tabs, Undo Apply button (Edit > Undo does it) or Formats to
 Save choice yet; the legend's Save Format as Theme stays grey until a legend format can be copied.
+
+## 30. Vector plots: Plot > Specialized > Vector XYAM and Vector XYXY (T107, measured 2026-11-16, Origin 2016)
+
+Measured with screenshots and LabTalk (`re-workspace/scratch/t107`, local only):
+
+- **Vector XYAM** with A(X), B(Y), C, D selected plots B at its X with C as the angle and D as the
+  magnitude (the plot is named `D(M), C(A), A(X), B(Y)`). Plot Details > Vector: Color Black, Width 0.5,
+  Arrowheads Length 45, Angle 30, Closed; Magnitude Multiplier (0.16 for magnitudes 50 to 100, 9.6 for 0.5
+  to 2), Magnitude in real world space off; Position Tail; Angle Units System, Convention Polar, CCW. The
+  "System" unit is radians: angles 0, 45 and 90 drew arrows at 0, 58.3 and 116.6 degrees (45 and 90
+  radians). The axes span the start points only (X 0.75 to 4.25 for X 1 to 4).
+- **Vector XYXY** needs the columns designated X, Y, X, Y (otherwise "To make this plot, you need to select
+  columns designated as 'XYXY'"); it draws an arrow from (X1, Y1) to (X2, Y2), and the axes take in both
+  ends (X 0.8 to 2.7 and Y 0.75 to 3.25 for ends up to 2.5 and 3). Plot Details > Vector: Color Black,
+  Width 0.5, Arrowheads Length 65, Angle 30, Closed; End Point X End, Y End.
+
+Sheaf (`sheaf_core::vector`, `sheaf-plot` `vector_plot.rs`): plot kinds `vector_xyam` and `vector_xyxy`
+with the extra columns and the arrow settings in `PlotDecor::vector` (saved in `.sheaf`). XYAM takes the
+selection's Y columns three at a time (Y, angle, magnitude), radians by default, length magnitude x
+multiplier points from the start; the multiplier is 16 points over the largest magnitude (Origin's 0.16 for
+100; Origin's rule for other data is not known: 9.6 for magnitudes up to 2 gives 19.2 points). XYXY takes the
+Y columns two at a time with the X column of each and refuses a selection without a second X column. Both
+draw a black 0.5 pt shaft and a closed 30-degree head, 4.5 pt (XYAM) or 6.5 pt (XYXY) long (Origin's 45 and
+65 read as tenths of a point, matching the size on screen). `sheaf plot -t vector-xyam` / `vector-xyxy`. The
+`.opj` writer saves them as scatter plots of their start points and says so. Not done: the Vector tab in
+Plot Details, Head and Midpoint positions, degree and meteorological angles from the user interface, legend
+arrows.

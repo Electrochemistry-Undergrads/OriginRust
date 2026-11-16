@@ -51,6 +51,10 @@ pub(crate) fn draw_plot(
     m: &dyn TextMeasurer,
 ) {
     let plot = pd.plot;
+    if plot.kind.is_vector() {
+        crate::vector_plot::draw_vectors(out, pd, geom);
+        return;
+    }
     if plot.kind.is_parallel() {
         crate::parallel::draw_parallel(out, pd, geom);
         return;

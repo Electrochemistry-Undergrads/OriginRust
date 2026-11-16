@@ -22,6 +22,9 @@ pub enum Template {
     /// Origin's Plot > Symbol > Column Scatter (2016): every Y column as filled diamonds (size 8) standing at
     /// 1, 2, 3, ... with a small jitter, the X axis named by the columns, the Y title "Range" (measured, T79).
     ColumnScatter,
+    /// Plot > Specialized > Vector XYAM and Vector XYXY (T107).
+    VectorXyam,
+    VectorXyxy,
     /// Line plot with a symbol on every point.
     LineSymbol,
     /// Cyclic voltammetry overlay: smooth lines without markers, no grid,
@@ -169,7 +172,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 62] = [
+    pub const ALL: [Template; 64] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -232,6 +235,8 @@ impl Template {
         Template::ScatterRug,
         Template::ScatterCentral,
         Template::ColumnScatter,
+        Template::VectorXyam,
+        Template::VectorXyxy,
     ];
 
     /// The name used on the command line and in menus.
@@ -241,6 +246,8 @@ impl Template {
             Template::Scatter => "scatter",
             Template::ScatterCentral => "scatter-central",
             Template::ColumnScatter => "column-scatter",
+            Template::VectorXyam => "vector-xyam",
+            Template::VectorXyxy => "vector-xyxy",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
@@ -308,6 +315,8 @@ impl Template {
             Template::Scatter => "Scatter",
             Template::ScatterCentral => "Scatter Central",
             Template::ColumnScatter => "Column Scatter",
+            Template::VectorXyam => "Vector XYAM",
+            Template::VectorXyxy => "Vector XYXY",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
@@ -418,6 +427,8 @@ impl Template {
                 g
             }
             Template::LineSymbol => general(id, name, PlotKind::LineSymbol),
+            Template::VectorXyam => general(id, name, PlotKind::VectorXyam),
+            Template::VectorXyxy => general(id, name, PlotKind::VectorXyxy),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
             Template::Multi3YYy | Template::Multi3YYY | Template::Multi4YYyy | Template::Multi4YyYy => {
@@ -1122,7 +1133,9 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 62);
+        assert_eq!(Template::ALL.len(), 64);
+        assert_eq!(Template::from_name("vector-xyam"), Some(Template::VectorXyam));
+        assert_eq!(Template::from_name("vector-xyxy"), Some(Template::VectorXyxy));
         assert_eq!(Template::from_name("column-scatter"), Some(Template::ColumnScatter));
         assert_eq!(Template::from_name("scatter-central"), Some(Template::ScatterCentral));
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));

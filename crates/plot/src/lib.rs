@@ -55,6 +55,7 @@ mod ticks_scales;
 mod treemap;
 pub(crate) mod trend;
 mod vector;
+mod vector_plot;
 mod violin;
 
 #[cfg(test)]
@@ -139,6 +140,8 @@ mod treemap_tests;
 mod trend_tests;
 #[cfg(test)]
 mod user_template_tests;
+#[cfg(test)]
+mod vector_plot_tests;
 #[cfg(test)]
 mod violin_tests;
 

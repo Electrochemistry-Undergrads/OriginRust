@@ -302,6 +302,8 @@ pub enum ProjectError {
     MultiY(#[from] MultiYError),
     #[error("the {0} template puts one Y column on each axis by itself; leave out --y2 and the left/right split")]
     MultiYNoRightAxis(&'static str),
+    #[error("{0}")]
+    VectorColumns(&'static str),
     #[error("a lollipop plot needs two or more Y columns (got {0}); select at least two Y columns")]
     LollipopNeedsTwoColumns(usize),
     #[error("a lollipop plot cannot have a right Y axis; use one Y axis or another template")]
@@ -980,6 +982,9 @@ impl Project {
         }
         if template == Template::StackedHistograms {
             return self.plot_stacked_histograms(ys);
+        }
+        if matches!(template, Template::VectorXyam | Template::VectorXyxy) {
+            return self.plot_vectors(template, ys);
         }
         if template == Template::Lollipop && ys.len() < 2 {
             return Err(ProjectError::LollipopNeedsTwoColumns(ys.len()));

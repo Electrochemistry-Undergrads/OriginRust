@@ -94,7 +94,8 @@ Backlog packages: write the brief first (step 3 above).
 
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
-| [ ] | B1 | Graph view: zoom in/out, whole page, pan, view modes, show/hide toggles, full screen | M | 27 |
+| [ ] | [T65](T65-graph-view-zoom-pan.md) | Graph view zoom and pan (B1 slice 1): Zoom In mode, Zoom Out, Whole Page, Pan | M | 9 |
+| [ ] | B1 | Graph view: view modes, show/hide toggles, Zoom All, Show Data Info, full screen (zoom and pan: T65) | M | 18 |
 | [ ] | B2 | Graph objects: cut/copy/paste, Copy/Paste Format, align, same size, group, order across object kinds, snap to grid | L | 51 |
 | [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 28 |
 | [ ] | B4 | More 2D plot types (continues T12): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 30 |

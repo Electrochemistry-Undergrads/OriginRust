@@ -41,7 +41,8 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T61` | 5 |
 | `T62` | 0 |
 | `T63` | 22 |
-| `B1` | 27 |
+| `T65` | 9 |
+| `B1` | 18 |
 | `B2` | 51 |
 | `B3` | 28 |
 | `B4` | 30 |
@@ -60,7 +61,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 47 items, backlog packages (`B`) 356, not planned (`N`) 20.
+Briefs (`T`) hold 56 items, backlog packages (`B`) 347, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -106,7 +107,8 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Quick Help · Smart Hint Log
 - `B12` View Windows: None · Windows in Active Folder · Active Folder and Subfolders
 - `B6` Actively Update Plots · Page Break Preview Lines [Workbook]
-- `B1` Print View · Page View · Window View · Draft View · Zoom In · Zoom Out · Whole Page · Zoom All [Graph]
+- `B1` Print View · Page View · Window View · Draft View · Zoom All [Graph]
+- `T65` Zoom In · Zoom Out · Whole Page [Graph]
 - `B1` Show: Layer Icons · Active Layer Indicator · Axis Layer Icons · Object Grid · Layer Grid · Frame · Labels · Data · Active Layer Only · Master Items on Screen [Graph]
 - `B1` Show Data Info [Graph]
 - `B1` Full Screen [Graph]
@@ -220,10 +222,10 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B12` Standard: New Graph
 - `B14` Standard: New Matrix · New Layout · New Notes
 - `T58` Format: Font name box · Font size box · Bold · Italic · Underline · Superscript · Subscript · Greek · Increase Font Size · Decrease Font Size · Font Color · Fill Color · Line Color
-- `B1` Graph: Zoom In · Zoom Out · Whole Page
+- `T65` Graph: Zoom In · Zoom Out · Whole Page
 - `T63` 2D Graphs: Bar · Stacked Area · Box Chart · Histogram · Bubble
 - `B4` 2D Graphs: High-Low-Close
-- `B1` Tools: Zoom In · Zoom Out · Pan
+- `T65` Tools: Zoom In · Zoom Out · Pan
 - `B2` Object Edit: Align Left · Align Right · Align Top · Align Bottom · Align Horizontal Center · Align Vertical Center · Make Same Width · Make Same Height · Group · Ungroup
 - `T63` Object Edit: Bring to Front · Send to Back
 

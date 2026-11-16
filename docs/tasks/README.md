@@ -70,6 +70,7 @@ All six are **open**. The older index below retains implementation history and p
 | [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Done 2026-11-15 (graphing 21): nine Add Layer kinds, insets, Delete Layer, Layer Properties, displaced Y axes and Move to Layer, 3Ys/4Ys templates and Multiple Y Axes (CLI `-t 3ys-y-yy` etc.); left: Open Dialog..., three layer-icon items, Origin's legend in the templates |
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
 | [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring; claim letters A–K independently |
+| [T65](T65-graph-view-zoom-pan.md) | 4 (B1), P1 | M | Graph view zoom and pan: Zoom In mode, Zoom Out, Whole Page, Pan; in progress 2026-11-15 (`graph-zoom`) |
 
 ## Index
 

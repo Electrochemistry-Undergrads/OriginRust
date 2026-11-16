@@ -91,6 +91,8 @@ pub enum CwtError {
     ScaleBelowOne(f64),
     /// No scales given.
     NoScales,
+    /// A scale above [`MAX_SCALE`]: the filter would be too long to compute.
+    ScaleTooLarge(f64),
     /// The wave number or order is outside the allowed range: `(wavelet, value, low, high)`.
     BadParameter(CwtWavelet, f64, u32, u32),
 }
@@ -101,6 +103,7 @@ impl std::fmt::Display for CwtError {
             CwtError::Empty => write!(f, "the signal is empty"),
             CwtError::NotFinite => write!(f, "the signal has a missing or infinite value"),
             CwtError::ScaleBelowOne(a) => write!(f, "scales must be at least 1, got {a}"),
+            CwtError::ScaleTooLarge(a) => write!(f, "scales above {MAX_SCALE} are refused, got {a}"),
             CwtError::NoScales => write!(f, "there is no scale to transform with"),
             CwtError::BadParameter(w, v, lo, hi) => {
                 let what = if *w == CwtWavelet::Morlet { "wave number" } else { "order" };
@@ -169,6 +172,10 @@ fn integrated(wavelet: CwtWavelet, m: u32) -> (Vec<f64>, f64) {
     (ip, step)
 }
 
+/// The largest scale accepted. Origin's upper limit was not measured; this bound only keeps the
+/// filter (`16 a` taps) and the `O(n taps)` convolution from exhausting memory or time.
+pub const MAX_SCALE: f64 = 10_000.0;
+
 /// The coefficients of `signal` at the scales in `scales` (one vector of `signal.len()` values per
 /// scale, in the order given). A scale is cut to its integer part, as Origin does; any scale below 1
 /// refuses the whole run.
@@ -184,6 +191,9 @@ pub fn cwt(signal: &[f64], scales: &[f64], wavelet: CwtWavelet, param: f64) -> R
     }
     if let Some(&a) = scales.iter().find(|a| !(**a >= 1.0 && a.is_finite())) {
         return Err(CwtError::ScaleBelowOne(a));
+    }
+    if let Some(&a) = scales.iter().find(|a| **a > MAX_SCALE) {
+        return Err(CwtError::ScaleTooLarge(a));
     }
     let m = whole_param(wavelet, param)?;
     let (ip, step) = integrated(wavelet, m);
@@ -253,6 +263,8 @@ mod tests {
         assert!(cwt(&x, &[2.0], CwtWavelet::DGauss, 0.0).is_err());
         assert!(cwt(&x, &[2.0], CwtWavelet::DGauss, 9.0).is_err());
         assert!(cwt(&x, &[2.0], CwtWavelet::DGauss, 8.9).is_ok());
+        assert_eq!(cwt(&x, &[1e12], CwtWavelet::Morlet, 5.0), Err(CwtError::ScaleTooLarge(1e12)));
+        assert_eq!(cwt(&x, &[f64::MAX], CwtWavelet::Morlet, 5.0), Err(CwtError::ScaleTooLarge(f64::MAX)));
         assert_eq!(cwt(&[], &[2.0], CwtWavelet::MexHat, 5.0), Err(CwtError::Empty));
     }
 }

@@ -35,7 +35,8 @@ pub enum WaveletThresholdKind {
     SqtwoLog,
 }
 
-/// What [`Tool::WaveletDenoise`] does (Origin's `wtdenoise`, measured; 19.4).
+/// What [`Tool::WaveletDenoise`] does (Origin's `wtdenoise`, measured; 19.4). The `sqtwolog` threshold
+/// is a fit measured for db2, level 1, periodic only.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WaveletDenoiseSpec {
     pub wavelet: Wavelet,
@@ -59,7 +60,8 @@ impl Default for WaveletDenoiseSpec {
     }
 }
 
-/// What [`Tool::WaveletSmooth`] does (Origin's `wtsmooth`, measured; 19.5).
+/// What [`Tool::WaveletSmooth`] does (Origin's `wtsmooth`; 19.5). Exact against Origin for
+/// periodic power-of-two lengths only (128 points measured); other lengths are approximate.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WaveletSmoothSpec {
     pub wavelet: Wavelet,

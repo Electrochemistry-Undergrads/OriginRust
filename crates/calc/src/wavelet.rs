@@ -442,10 +442,14 @@ pub enum Threshold {
 /// (db2, periodic, level 1): n = 128: 1.861 to 1.908; 256: 2.0526 to 2.0600; 512: 2.1847 to
 /// 2.1959; 1024: 2.3269 to 2.3302; 2048: 2.4377 to 2.4593; shorter lengths all contain 1.88.
 /// This is a fit to those brackets (`0.6592 sqrt(2 ln(n/2))` from 256 points, 1.885 below),
-/// not Origin's formula.
+/// not Origin's formula. Only db2, level 1, periodic was measured; for other wavelets, levels,
+/// extensions and lengths above 2048 the value is an extrapolation and may differ from Origin.
 pub fn sqtwolog_threshold(n: usize) -> f64 {
     if n < 256 { 1.885 } else { 0.6592 * (2.0 * (n as f64 / 2.0).ln()).sqrt() }
 }
+
+/// Origin's `level` option of Denoise runs from 1 to 7.
+pub const DENOISE_MAX_LEVEL: usize = 7;
 
 /// Wavelet denoising as Origin's `wtdenoise`: levels `1..=level` of the decomposition, hard
 /// threshold with one common `T` (`|d| >= T` stays), approximation untouched. The result has
@@ -467,7 +471,7 @@ pub fn denoise(
     if n >= 2 && ext == Extension::ZeroPadded && wavelet == Wavelet::Haar && n.is_power_of_two() {
         return Err(WaveletError::HaarZeroPaddedPowerOfTwo);
     }
-    let allowed = max_level(n, ext);
+    let allowed = max_level(n, ext).min(DENOISE_MAX_LEVEL);
     if level > allowed {
         return Err(WaveletError::LevelTooHigh(level, allowed));
     }
@@ -492,7 +496,8 @@ pub fn denoise(
 /// Exact against Origin for periodic power-of-two lengths (128 points, all cutoffs measured).
 /// Measured corner: 128 points with a cutoff of 0 or 1 zero 2 coefficients, not 0 or 1
 /// (periodic: Haar, DB2, DB4, Bior1.3, cutoff 0 and 1; zero-padded DB2, cutoff 0: 3).
-/// Zero-padded and other lengths are not reproduced exactly (spec 19.5).
+/// Zero-padded and other lengths are not reproduced exactly (spec 19.5): the depth and the `K`
+/// rule are fitted for power-of-two lengths only, and the 128-point corner is hard-coded.
 pub fn smooth(x: &[f64], wavelet: Wavelet, ext: Extension, cutoff: f64) -> Result<Vec<f64>, WaveletError> {
     let n = x.len();
     if n >= 2 && ext == Extension::ZeroPadded && wavelet == Wavelet::Haar && n.is_power_of_two() {
@@ -624,6 +629,12 @@ mod tests {
             Err(WaveletError::LevelTooHigh(6, 5))
         );
         assert!(denoise(&x, Wavelet::Db(2), Extension::ZeroPadded, 6, Threshold::Custom(50.0)).is_ok());
+        let long = signal(4096);
+        assert!(denoise(&long, Wavelet::Db(2), Extension::Periodic, 7, Threshold::Custom(50.0)).is_ok());
+        assert_eq!(
+            denoise(&long, Wavelet::Db(2), Extension::Periodic, 8, Threshold::Custom(50.0)),
+            Err(WaveletError::LevelTooHigh(8, 7))
+        );
         assert_eq!(
             denoise(&x, Wavelet::Haar, Extension::ZeroPadded, 1, Threshold::Custom(50.0)),
             Err(WaveletError::HaarZeroPaddedPowerOfTwo)

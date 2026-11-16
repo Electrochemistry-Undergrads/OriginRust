@@ -164,6 +164,8 @@ pub fn cwt_options(ui: &mut egui::Ui, (wavelet, param): &mut (CwtWavelet, f64)) 
         });
     }
     ui.weak(
-        "One column of coefficients per scale in a new sheet, one row per sample. Scales below 1 are refused and          fractional scales count as their integer part, as in Origin. Origin's pseudo-frequency option, the          coefficient matrix and the image plot are not available.",
+        "One column of coefficients per scale in a new sheet, one row per sample. Scales below 1 are refused and \
+         fractional scales count as their integer part, as in Origin. Origin's pseudo-frequency option, the \
+         coefficient matrix and the image plot are not available.",
     );
 }

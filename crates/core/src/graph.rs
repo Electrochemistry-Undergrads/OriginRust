@@ -23,6 +23,36 @@ pub struct Graph {
 }
 
 impl Graph {
+    /// Change X / Change Y: plot `index` of layer `layer` reads `column` as its X (`y` false) or Y
+    /// column. Nothing else changes, the axis limits included. Returns false for a plot that is not
+    /// there or is in a plot group (Origin greys the commands then).
+    pub fn set_plot_column(&mut self, layer: usize, index: usize, y: bool, column: ColumnId) -> bool {
+        let Some(p) = self.layers.get_mut(layer).and_then(|l| l.plots.get_mut(index)) else { return false };
+        if p.group.is_some() {
+            return false;
+        }
+        if y {
+            p.y = column;
+        } else {
+            p.x = Some(column);
+        }
+        true
+    }
+
+    /// Ungroup: every plot of the group of plot `index` leaves it. Each plot keeps the colours,
+    /// symbols and lines it is drawn with; a colour that came from the layer's palette becomes a
+    /// colour of its own, so that later recolouring does not move it. Returns false when the plot
+    /// is in no group.
+    pub fn ungroup_plots(&mut self, layer: usize, index: usize) -> bool {
+        let Some(l) = self.layers.get_mut(layer) else { return false };
+        let Some(group) = l.plots.get(index).and_then(|p| p.group) else { return false };
+        for p in l.plots.iter_mut().filter(|p| p.group == Some(group)) {
+            p.group = None;
+            p.auto_color = false;
+        }
+        true
+    }
+
     pub fn title(&self) -> String {
         if self.long_name.is_empty() {
             return self.name.clone();
@@ -2860,6 +2890,58 @@ mod tests {
         let back: Plot = serde_json::from_str(&json).unwrap();
         assert_eq!(back.group, Some(2));
         layer.plots.push(back);
+    }
+
+    #[test]
+    fn change_xy_sets_the_column_only_and_ungroup_keeps_the_drawn_colours() {
+        let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
+        let mk = |y: u64, color: Color, group: Option<u32>| Plot {
+            x: None,
+            y: ColumnId(y),
+            y_error: None,
+            rows: None,
+            kind: PlotKind::Line,
+            line: LineStyle::solid(color, 0.5),
+            symbol: layer.default_symbol.clone(),
+            label: None,
+            visible: true,
+            auto_color: true,
+            group,
+            x_error: None,
+            y_base: None,
+            error: ErrorStyle::default(),
+            hist: Default::default(),
+            ridge: Default::default(),
+            hexbin: Default::default(),
+            parallel: Default::default(),
+            treemap: Default::default(),
+            sunburst: Default::default(),
+            size_from: None,
+            color_from: None,
+            decor: Default::default(),
+        };
+        let red = Color::rgb(255, 0, 0);
+        layer.plots = vec![mk(1, Color::BLACK, Some(1)), mk(2, red, Some(1)), mk(3, red, None)];
+        layer.plots[2].auto_color = false;
+        let mut g = crate::template::Template::Line.new_graph(crate::ids::WindowId(1), "Graph1");
+        g.layers = vec![layer];
+        // A grouped plot keeps its columns; a plot outside a group takes them.
+        assert!(!g.set_plot_column(0, 0, true, ColumnId(9)));
+        assert_eq!(g.layers[0].plots[0].y, ColumnId(1));
+        assert!(g.set_plot_column(0, 2, true, ColumnId(9)));
+        assert!(g.set_plot_column(0, 2, false, ColumnId(8)));
+        assert_eq!((g.layers[0].plots[2].x, g.layers[0].plots[2].y), (Some(ColumnId(8)), ColumnId(9)));
+        assert!(!g.set_plot_column(0, 7, true, ColumnId(9)));
+        // Ungroup frees every plot of the group, with the colours as drawn.
+        let before: Vec<_> = g.layers[0].plots.iter().map(|p| (p.line.color, p.symbol.color)).collect();
+        assert!(!g.ungroup_plots(0, 2), "a plot in no group");
+        assert!(g.ungroup_plots(0, 1));
+        assert!(g.layers[0].plots.iter().all(|p| p.group.is_none()));
+        let after: Vec<_> = g.layers[0].plots.iter().map(|p| (p.line.color, p.symbol.color)).collect();
+        assert_eq!(before, after);
+        g.layers[0].recolor_automatic();
+        let again: Vec<_> = g.layers[0].plots.iter().map(|p| (p.line.color, p.symbol.color)).collect();
+        assert_eq!(before, again, "the colours are explicit now");
     }
 }
 

@@ -1337,6 +1337,9 @@ impl SheafApp {
             GraphOp::MovePlotToAxis { .. } => "Move plot to left Y axis",
             GraphOp::MovePlotToLayer { .. } => "Move plot to layer",
             GraphOp::RemoveTrendline { .. } => "Remove trendline",
+            GraphOp::SetPlotColumn { y: false, .. } => "Change X",
+            GraphOp::SetPlotColumn { .. } => "Change Y",
+            GraphOp::Ungroup { .. } => "Ungroup",
             GraphOp::HidePlot { .. } | GraphOp::SetStack { .. } => unreachable!("handled above"),
         };
         if let GraphOp::AddLayer { layer, kind } = op {

@@ -85,6 +85,11 @@ pub enum GraphOp {
     MovePlotToLayer { layer: usize, plot: usize, to: usize },
     /// Hide Data Plot.
     HidePlot { layer: usize, plot: usize },
+    /// Change X / Change Y: the plot reads another column of its sheet (`y` false for X). The axis
+    /// limits are not touched.
+    SetPlotColumn { layer: usize, plot: usize, y: bool, column: sheaf_core::ColumnId },
+    /// Ungroup: the plots of the plot's group become single plots, keeping their look.
+    Ungroup { layer: usize, plot: usize },
     /// Remove Trendline: the plot's last trendline goes.
     RemoveTrendline { layer: usize, plot: usize },
     /// Hide Axis (`y` false for the X axis).

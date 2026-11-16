@@ -48,6 +48,7 @@ const NEED_CELLS: &str = "Select cells, columns or rows first";
 const NEED_TWO_COLUMNS: &str = "Select two or more columns first";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
+const NO_TEMPLATE_FOLDER: &str = "There is no folder for user templates (the settings folder is missing)";
 const NO_UNDO: &str = "Nothing to undo";
 const NO_REDO: &str = "Nothing to redo";
 const NO_AI_UNDO: &str = "The latest change must be an AI change, with no edit or dialog open";
@@ -73,6 +74,10 @@ pub enum Cmd {
     SaveProjectAs,
     /// File > Save Window As...: the active workbook or graph to a window file of its own (T54).
     SaveWindowAs,
+    /// File > Save Template As... on a graph (T56).
+    SaveTemplateAs,
+    /// Plot > User Templates > Manage... (T56).
+    ManageTemplates,
     /// File > Import > Single ASCII (Ctrl+K).
     Import,
     ImportMultiple,
@@ -224,10 +229,10 @@ pub enum Cmd {
     AddPlotToLayer(PlotKind),
     /// Graph > Layer Management... (T60); the layer to select, if any.
     LayerManagement(Option<usize>),
-    /// Graph > Fit Page to Layers... (the window) and Format > Fit Page To Layers (Origin's defaults at once) (T60).
-    FitPageToLayers {
-        dialog: bool,
-    },
+    /// Graph > Fit Page to Layers... (the window) and Format > Fit Page To Layers... (T60).
+    FitPageToLayers,
+    /// Format > Fit Page To Printer: the page takes the printable size of the default printer (T70).
+    FitPageToPrinter,
     /// Graph > Plot Setup...: Origin's own window for the data of a layer's plots.
     PlotSetup(Option<usize>),
     /// The graph settings of a given layer, with a plot chosen (the graph's right-click menus).
@@ -269,12 +274,25 @@ pub enum Cmd {
     TextTool,
     /// The Slope tool of the Tools toolbar.
     SlopeTool,
+    /// Graph > Add Straight Line...
+    AddStraightLine,
+    /// Properties of a straight line.
+    EditStraightLine {
+        layer: usize,
+        line: usize,
+    },
     /// View > Zoom In (Ctrl+I): the mode in which the next click on the page zooms in.
     ZoomIn,
     /// View > Zoom Out (Ctrl+M).
     ZoomOut,
     /// View > Whole Page (Ctrl+W).
     WholePage,
+    /// View > Zoom All.
+    ZoomAll,
+    /// The Tools-bar Scale In tool.
+    ScaleIn,
+    /// The Tools-bar Scale Out tool.
+    ScaleOut,
     /// View > Print View, Page View, Window View, Draft View.
     SetViewMode(sheaf_core::project::ViewMode),
     /// View > Show > Layer Icons.
@@ -350,6 +368,8 @@ pub enum Entry {
     /// The entries of File > Recent Projects, Recent Books, Recent Graphs or File > Import > Recent
     /// Imports, from the context.
     Recent(RecentKind),
+    /// The saved user graph templates of Plot > User Templates (T56), from the context.
+    UserTemplates,
 }
 
 #[derive(Clone)]
@@ -408,6 +428,10 @@ pub struct MenuContext<'a> {
     pub recent_imports: &'a [PathBuf],
     pub recent_books: &'a [PathBuf],
     pub recent_graphs: &'a [PathBuf],
+    /// The saved user graph templates (Plot > User Templates), and whether there is a template
+    /// folder at all (File > Save Template As and Manage are greyed without one).
+    pub user_templates: &'a [String],
+    pub templates: bool,
     /// Which side panels are shown, in the order of `PanelId::ALL` (the ticks of the View menu).
     pub panels: [bool; 4],
     /// The AI link is on (the tick of Tools > AI Assistants (MCP)).
@@ -605,7 +629,11 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     if kind != WindowKind::None {
         v.push(sep());
         v.push(item("Save &Window As...", Cmd::SaveWindowAs));
-        v.push(grey("Save Template As..."));
+        if kind == WindowKind::Graph {
+            v.push(item("Save Temp&late As...", Cmd::SaveTemplateAs));
+        } else {
+            v.push(grey("Save Template As..."));
+        }
         if kind == WindowKind::Workbook {
             v.push(grey("Save Workbook As Analysis Template..."));
             v.push(grey("Add Word Bookmarks to Analysis Template..."));
@@ -781,7 +809,7 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
             v.push(keyed("Zoom In", ctrl(Key::I), Cmd::ZoomIn));
             v.push(keyed("Zoom Out", ctrl(Key::M), Cmd::ZoomOut));
             v.push(keyed("Whole Page", ctrl(Key::W), Cmd::WholePage));
-            v.push(grey("Zoom All"));
+            v.push(item("Zoom &All", Cmd::ZoomAll));
             v.push(sep());
             let mut show = vec![item("Layer Icons", Cmd::ToggleLayerIcons)];
             show.extend(greys(&[
@@ -823,7 +851,7 @@ fn plot_menu() -> Vec<Entry> {
                 vec![
                     item("&Scatter", Cmd::Plot(Template::Scatter)),
                     item("Scatter + Rug", Cmd::Plot(Template::ScatterRug)),
-                    grey("Scatter Central"),
+                    item("Scatter Central", Cmd::Plot(Template::ScatterCentral)),
                     grey("Column Scatter"),
                 ],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
@@ -840,8 +868,12 @@ fn plot_menu() -> Vec<Entry> {
         sub(
             "Line + S&ymbol",
             with(
-                vec![item("Line + &Symbol", Cmd::Plot(Template::LineSymbol))],
-                &["Line Series", "2 Point Segment", "3 Point Segment"],
+                vec![
+                    item("Line + &Symbol", Cmd::Plot(Template::LineSymbol)),
+                    item("2 Point Segment", Cmd::Plot(Template::Segment2)),
+                    item("3 Point Segment", Cmd::Plot(Template::Segment3)),
+                ],
+                &["Line Series"],
             ),
         ),
         sub(
@@ -1015,7 +1047,16 @@ fn plot_menu() -> Vec<Entry> {
         sep(),
         grey("System Templates..."),
         // Sheaf's own graph style is the one template that has no Origin counterpart.
-        sub("&User Templates", vec![item("Cyclic voltammetry overlay", Cmd::Plot(Template::CyclicVoltammetry))]),
+        sub(
+            "&User Templates",
+            vec![
+                item("Cyclic voltammetry overlay", Cmd::Plot(Template::CyclicVoltammetry)),
+                sep(),
+                Entry::UserTemplates,
+                sep(),
+                item("&Manage...", Cmd::ManageTemplates),
+            ],
+        ),
         sep(),
         grey("Most Recently Used"),
     ]
@@ -1393,7 +1434,7 @@ fn graph_menu() -> Vec<Entry> {
         item("Layer Management...", Cmd::LayerManagement(None)),
         item("Add Error Bars...", Cmd::AddErrorBars),
         grey("Add Function Graph..."),
-        grey("Add Straight Line..."),
+        item("Add Straight Line...", Cmd::AddStraightLine),
         item("Add Text...", Cmd::AddText),
         new_layer_menu(),
         item("Merge Graph Windows...", Cmd::MergeGraphs),
@@ -1413,7 +1454,7 @@ fn graph_menu() -> Vec<Entry> {
         grey("New Color Scale"),
         sep(),
         grey("Fit Layer to Graph"),
-        item("Fit Page to Layers...", Cmd::FitPageToLayers { dialog: true }),
+        item("Fit Page to Layers...", Cmd::FitPageToLayers),
         item("Exchange X-Y Axes", Cmd::ExchangeAxes),
         sub(
             "Offset Grouped Data in Layer",
@@ -1511,8 +1552,8 @@ fn format_menu(kind: WindowKind) -> Vec<Entry> {
             sep(),
             grey("Snap Layers to Grid"),
             grey("Snap Objects to Grid"),
-            item("Fit Page To Layers", Cmd::FitPageToLayers { dialog: false }),
-            grey("Fit Page To Printer"),
+            item("Fit Page To Layers...", Cmd::FitPageToLayers),
+            item("Fit Page To Printer", Cmd::FitPageToPrinter),
             sep(),
             item("&Axes...", Cmd::GraphProps(PropsTab::XAxis)),
             sub(
@@ -1778,6 +1819,16 @@ pub fn sheet_tab_menu() -> Vec<Entry> {
 
 // ----- graph window menus (gui-look.md section 4) ----------------------------------------------
 
+/// What Change X, Change Y and Ungroup of a plot's menu need: the columns of the plot's sheet
+/// (id and the label `[Book1]Sheet1!A(X)`), the plot's own columns and whether it is in a group.
+#[derive(Clone, Default)]
+pub struct PlotColumns {
+    pub list: Vec<(ColumnId, String)>,
+    pub x: Option<ColumnId>,
+    pub y: Option<ColumnId>,
+    pub grouped: bool,
+}
+
 /// The menu of a plot: what was picked, so the commands act on it. `book` is the workbook the
 /// plot's data is in, with its title.
 pub fn graph_plot_menu(
@@ -1788,7 +1839,30 @@ pub fn graph_plot_menu(
     book: Option<(WindowId, String)>,
     trendlines: usize,
     layers: usize,
+    cols: &PlotColumns,
 ) -> Vec<Entry> {
+    // Change X / Change Y: the sheet's columns, the plot's own ticked, the one it uses on the other
+    // axis greyed; a plot of a group offers none.
+    let change_col = |label: &str, y: bool| {
+        if cols.grouped || cols.list.is_empty() {
+            return grey(label);
+        }
+        let (own, other) = if y { (cols.y, cols.x) } else { (cols.x, cols.y) };
+        let entries = cols
+            .list
+            .iter()
+            .map(|(id, name)| {
+                let tick = if own == Some(*id) { "\u{2713} " } else { "" };
+                let text = format!("{tick}{name}");
+                if other == Some(*id) {
+                    grey(&text)
+                } else {
+                    item(&text, Cmd::GraphEdit(GraphOp::SetPlotColumn { layer, plot, y, column: *id }))
+                }
+            })
+            .collect();
+        sub(label, entries)
+    };
     let change = |label: &str, to: PlotKind| {
         if to == kind {
             grey(label)
@@ -1808,8 +1882,8 @@ pub fn graph_plot_menu(
                 change("Stacked Area", PlotKind::StackedArea),
             ],
         ),
-        grey("Change X"),
-        grey("Change Y"),
+        change_col("Change X", false),
+        change_col("Change Y", true),
         sep(),
         item(
             if on_right { "Move to Left Y Axis" } else { "Move to Right Y Axis" },
@@ -1837,7 +1911,7 @@ pub fn graph_plot_menu(
     }
     v.extend([
         sep(),
-        grey("Ungroup"),
+        if cols.grouped { item("Ungroup", Cmd::GraphEdit(GraphOp::Ungroup { layer, plot })) } else { grey("Ungroup") },
         sep(),
         item("Plot Details...", Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: Some(plot) }),
     ]);
@@ -1845,7 +1919,8 @@ pub fn graph_plot_menu(
 }
 
 /// The menu of an axis. `grids` tells whether the axis shows grid lines now.
-pub fn graph_axis_menu(layer: usize, y: bool, grids: bool) -> Vec<Entry> {
+/// `page` is the page point that was right-clicked (Center puts the value there in the middle).
+pub fn graph_axis_menu(layer: usize, y: bool, grids: bool, page: (f64, f64)) -> Vec<Entry> {
     let tab = if y { PropsTab::YAxis } else { PropsTab::XAxis };
     let at = Cmd::GraphPropsAt { layer, tab, plot: None };
     vec![
@@ -1855,7 +1930,7 @@ pub fn graph_axis_menu(layer: usize, y: bool, grids: bool) -> Vec<Entry> {
         keyed("Rescale To Show All", ctrl(Key::R), Cmd::GraphEdit(GraphOp::Rescale { layer })),
         item("Axis Zoom In", Cmd::GraphEdit(GraphOp::AxisZoom { layer, y, zoom_in: true })),
         item("Axis Zoom Out", Cmd::GraphEdit(GraphOp::AxisZoom { layer, y, zoom_in: false })),
-        grey("Center"),
+        item("Center", Cmd::GraphEdit(GraphOp::AxisCenter { layer, y, page })),
         sep(),
         grey_sub("Copy Format", &["All", "All Style Formats", "Axis"]),
         grey("Save Format as Theme..."),
@@ -1915,6 +1990,15 @@ pub fn graph_slope_menu(layer: usize, slope: usize) -> Vec<Entry> {
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteSlope { layer, slope })),
         sep(),
         item("Properties...", Cmd::EditSlope { layer, slope }),
+    ]
+}
+
+/// The menu of a straight line.
+pub fn graph_straight_line_menu(layer: usize, line: usize) -> Vec<Entry> {
+    vec![
+        keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteStraightLine { layer, line })),
+        sep(),
+        item("Properties...", Cmd::EditStraightLine { layer, line }),
     ]
 }
 
@@ -2055,7 +2139,7 @@ fn walk<'a>(entries: &'a [Entry], f: &mut dyn FnMut(&'a Item)) {
         match e {
             Entry::Item(i) => f(i),
             Entry::Submenu(s) => walk(&s.entries, f),
-            Entry::Separator | Entry::Windows | Entry::Recent(_) => {}
+            Entry::Separator | Entry::Windows | Entry::Recent(_) | Entry::UserTemplates => {}
         }
     }
 }
@@ -2204,6 +2288,18 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SaveProject => Action::SaveProject,
         Cmd::SaveProjectAs => Action::SaveProjectAs,
         Cmd::SaveWindowAs => Action::SaveWindowAs(c.active.ok_or(NEED_WINDOW)?),
+        Cmd::SaveTemplateAs => {
+            if !c.templates {
+                return Err(NO_TEMPLATE_FOLDER);
+            }
+            Action::SaveTemplateAs(c.graph.ok_or(NEED_GRAPH)?)
+        }
+        Cmd::ManageTemplates => {
+            if !c.templates {
+                return Err(NO_TEMPLATE_FOLDER);
+            }
+            Action::ManageTemplates
+        }
         Cmd::Import => Action::ImportPick(ImportPick::Single),
         Cmd::ImportMultiple => Action::ImportPick(ImportPick::Multiple),
         Cmd::ImportCsv => Action::ImportPick(ImportPick::Csv),
@@ -2431,9 +2527,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::LayerContents { graph: c.graph.ok_or(NEED_GRAPH)?, layer: layer.unwrap_or(c.layer) }
         }
         Cmd::LayerManagement(layer) => Action::LayerManagement { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer },
-        Cmd::FitPageToLayers { dialog } => {
-            Action::FitPageToLayers { graph: c.graph.ok_or(NEED_GRAPH)?, dialog: *dialog }
-        }
+        Cmd::FitPageToPrinter => Action::FitPageToPrinter { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::FitPageToLayers => Action::FitPageToLayers { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::GraphPropsAt { layer, tab, plot } => {
             Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, tab: *tab, plot: *plot }
         }
@@ -2480,6 +2575,13 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::PanTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pan },
         Cmd::ZoomOut => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::ZoomOut },
         Cmd::WholePage => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::WholePage },
+        Cmd::ZoomAll => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::ZoomAll },
+        Cmd::ScaleIn => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ScaleIn },
+        Cmd::ScaleOut => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ScaleOut },
+        Cmd::AddStraightLine => Action::AddStraightLine { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
+        Cmd::EditStraightLine { layer, line } => {
+            Action::EditStraightLine { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, line: *line }
+        }
         Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
         Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
         Cmd::FullScreen => Action::FullScreen(c.graph.ok_or(NEED_GRAPH)?),
@@ -2640,6 +2742,7 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                 }
             }
             Entry::Recent(kind) => show_recent(ui, *kind, c, actions),
+            Entry::UserTemplates => show_user_templates(ui, c, actions),
             Entry::Windows => {
                 for (n, (id, title)) in c.windows.iter().enumerate() {
                     let label = format!("&{} {title}", n + 1);
@@ -2740,6 +2843,25 @@ fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &m
                 RecentKind::Projects | RecentKind::Books | RecentKind::Graphs => Action::OpenRecent(path.clone(), kind),
                 RecentKind::Imports => Action::ImportRecent(path.clone()),
             });
+            ui.close();
+        }
+    }
+}
+
+/// The saved user templates: plotting the selected columns of the active workbook with one.
+fn show_user_templates(ui: &mut egui::Ui, c: &MenuContext, actions: &mut Vec<Action>) {
+    if c.user_templates.is_empty() {
+        ui.add_enabled(false, egui::Button::new(label_job(ui, "(no saved templates)", true)));
+        return;
+    }
+    for name in c.user_templates {
+        let can = c.book.is_some() && !c.selected.is_empty();
+        let response = ui.add_enabled(can, egui::Button::new(label_job(ui, name, true)));
+        let response = if can { response } else { response.on_disabled_hover_text(NEED_COLUMNS) };
+        if response.clicked()
+            && let Some(book) = c.book
+        {
+            actions.push(Action::PlotUserTemplate { book, columns: c.selected.to_vec(), name: name.clone() });
             ui.close();
         }
     }
@@ -2957,6 +3079,8 @@ mod tests {
             recent_imports: &[],
             recent_books: &[],
             recent_graphs: &[],
+            user_templates: &[],
+            templates: false,
             panels: [true; 4],
             ai_link: false,
             layer: 0,

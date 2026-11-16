@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **405 greyed items: 283 in the menu bar, 35 on the toolbars, 87 in context menus.**
+original inventory baseline. This is not a new runtime audit. **380 greyed items: 277 in the menu bar, 20 on the toolbars, 83 in context menus.**
 
 ## How to read and keep this file
 
@@ -35,7 +35,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 |---|---|
 | `T56` | 1 |
 | `T57` | 2 |
-| `T58` | 15 |
+| `T58` | 2 |
 | `T59` | 2 |
 | `T60` | 0 |
 | `T61` | 5 |
@@ -43,10 +43,15 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T63` | 20 |
 | `T65` | 0 |
 | `T66` | 10 |
-| `B1` | 3 |
+| `T67` | 0 |
+| `T69` | 0 |
+| `T70` | 0 |
+| `T71` | 0 |
+| `T73` | 0 |
+| `T75` | 0 |
 | `B2` | 51 |
-| `B3` | 28 |
-| `B4` | 28 |
+| `B3` | 22 |
+| `B4` | 25 |
 | `B5` | 33 |
 | `B6` | 31 |
 | `B7` | 8 |
@@ -62,7 +67,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 55 items, backlog packages (`B`) 330, not planned (`N`) 20.
+Briefs (`T`) hold 42 items, backlog packages (`B`) 318, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -108,14 +113,13 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Quick Help · Smart Hint Log
 - `B12` View Windows: None · Windows in Active Folder · Active Folder and Subfolders
 - `B6` Actively Update Plots · Page Break Preview Lines [Workbook]
-- `B1` Zoom All [Graph]
 - `T66` Show: Active Layer Indicator · Axis Layer Icons · Object Grid · Layer Grid · Frame · Labels · Data · Active Layer Only · Master Items on Screen [Graph]
 - `T66` Show Data Info [Graph]
 
 ### Plot
 - `T63` Line: Horizontal Step · Vertical Step · Spline Connected
-- `B4` Symbol: Scatter Central · Column Scatter
-- `B4` Line + Symbol: Line Series · 2 Point Segment · 3 Point Segment
+- `B4` Symbol: Column Scatter
+- `B4` Line + Symbol: Line Series
 - `B4` Column/Bar/Pie: Grouped Columns (indexed data)
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
@@ -166,7 +170,7 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Graph
 - `N` Fit Layer to Graph
-- `B3` Add Function Graph... · Add Straight Line... · New Table · New Color Scale · Convert to Standard Font Size
+- `B3` Add Function Graph... · New Table · New Color Scale · Convert to Standard Font Size
 - `T61` New Layer(Axes): Open Dialog...
 - `B3` Legend: Add Legend Title
 
@@ -195,7 +199,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B16` Programming Control...
 - `B2` Object Properties...
 - `B2` Snap Layers to Grid · Snap Objects to Grid [Graph]
-- `B3` Fit Page To Printer [Graph]
 - `B15` Axes: Z Axis... [Graph]
 - `T63` Axis Tick Labels: X Axis Tick Labels... · Y Axis Tick Labels... [Graph]
 - `T58` Axis Titles: X Axis Title... · Y Axis Title... [Graph]
@@ -220,10 +223,8 @@ changes. The baseline labels remain open until implementation or a documented re
 
 - `B12` Standard: New Graph
 - `B14` Standard: New Matrix · New Layout · New Notes
-- `T58` Format: Font name box · Font size box · Bold · Italic · Underline · Superscript · Subscript · Greek · Increase Font Size · Decrease Font Size · Font Color · Fill Color · Line Color
 - `T63` 2D Graphs: Bar · Stacked Area · Box Chart · Histogram · Bubble
 - `B4` 2D Graphs: High-Low-Close
-- `B1` Tools: Zoom In · Zoom Out
 - `B2` Object Edit: Align Left · Align Right · Align Top · Align Bottom · Align Horizontal Center · Align Vertical Center · Make Same Width · Make Same Height · Group · Ungroup
 
 ## Context menus
@@ -242,8 +243,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B6` Worksheet sheet tab > Sheet Name to Show: Short Name · Long Name · Both
 - `B6` Worksheet corner: Column Header · Row Header · Column Grid · Row Grid · Page Break Preview Lines
 - `B6` Worksheet corner > Row Labels for Column Label Rows: Long Name · Units · Comments · F(x)= · Sparklines · Parameters
-- `B3` Graph plot: Change X · Change Y · Ungroup
-- `B3` Graph axis: Center
 - `B11` Graph axis: Save Format as Theme...
 - `B2` Graph axis > Copy Format: All · All Style Formats · Axis
 - `B2` Graph axis title: Cut · Copy · Bring to the front · Push to the back

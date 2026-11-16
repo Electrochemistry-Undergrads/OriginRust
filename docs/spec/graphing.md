@@ -458,6 +458,13 @@ Line (200), scatter (201), line+symbol (202) are one plot object differing in co
 - **B-spline (8)** is a uniform cubic B-spline over the points with the first and last point repeated three times, so it starts and ends at the end points and winds around the others: rms 0.4 px. It is parametric, so any X order works (loops appear when X goes back).
 - **Bezier (15)** is a cubic Bezier over points 0-3, then 3-6, 6-9 and so on (groups share their end point); leftover points are not drawn (5 and 6 points draw only the first group, 8 points end at the 7th point, 10 points at the 10th). Standard cubic Bezier formula, rms 1.5 px, largest error 3.8 px at the cusp where two groups meet (Origin draws fewer chords). Fewer than 4 points: not measured, Sheaf draws straight.
 - Raw probes and images: `re-workspace/scratch/spline-connect/` (local). Not measured: SplineStep resolution dependence, 900 limit for B-spline and Bezier (Sheaf applies none), the `.opj` file codes of 8/9/15 (Sheaf reads 8 as B-spline, 15 as Bezier, 5 to 10 else as Spline, writes 5, 8, 15).
+- **2 and 3 Point Segment (2, 3)** (measured 2026-11-15, T71): Plot > Line + Symbol > 2 Point Segment and
+  3 Point Segment make a line + symbol graph whose plot has line connection 2 (3): points 1-2, 3-4, ...
+  (1-2-3, 4-5-6, ...) are joined and the groups are not; with 9 points the 9th stands alone (2) and the
+  three groups fill exactly (3). Sheaf: `Connect::Segment2`/`Segment3`, templates `segment2`/`segment3`,
+  the Plot Details and plot-settings connect lists, groups counted from the first point of each piece of
+  line (missing data starts a new piece); `.opj` codes 2 and 3 (LabTalk's codes; the file field is
+  taken to use the same codes, not checked in a file).
 Also: connect begin and end (closes; off), connect within subset (on for line plots), Akima/modified Bezier (later versions).
 
 ### 5.3 Line options
@@ -584,8 +591,8 @@ decoration paths: screen/PNG/PDF through SVG, and direct EPS/EMF. Tests cover ne
 anchors, rotation, script scaling, font style/colour, title/legend/label/tick placement and
 export. The SVG golden includes text; the PNG golden isolates stroke geometry so font
 installation differences do not change it. This slice adds no model fields. Per-run font
-switching is covered by 7.6; combined scripts, editor/toolbar formatting and whole-object
-underline remain open in the graph-text brief.
+switching, combined scripts, editor/toolbar formatting and whole-object underline
+remain open in the graph-text brief.
 
 ### 7.2 Indexed text colours (T58 graph text)
 
@@ -668,6 +675,62 @@ is opaque, while text outside the span retains its parent's alpha. Seven focused
 cover the measured values, boundaries, nesting, glyph placement and EPS/EMF/PDF/SVG output;
 new SVG and font-independent stroke PNG goldens also check the channel values directly.
 
+### 7.4 Whole-object Format toolbar (T58 slice 3)
+
+The shared Format bar now targets a selected free label, legend, X title or Y title in the
+active graph, including automatically generated titles. Font family lists installed families;
+size, Bold, Italic, Increase/Decrease Font Size and Font Color change the existing object's
+`Font`. Text, escapes, worksheet values and other objects are preserved. One action is one
+Undo step. Undo/Redo and `.sheaf` / `.opj` with its companion retain all five font fields.
+The same scene carries the chosen face, style and colour into the screen and exports.
+
+OriginPro 2016 whole-object controls (2026-11-15, local `scratch/t58-format-toolbar/`): a
+single-selected legend shows 22 pt and `Default: Arial`. Selecting Times New Roman changes its
+font index to 325 on this installation; clicking the red swatch changes its colour index to 2.
+Neither operation rewrites `legend.text$`. Entering 18 in the size box changes `legend.fsize`
+to 18. Increase/decrease from 10 gives 12/8; from 14, 17/12; from 18, 22/15; from 30, 36/25.
+From 22, Increase gives 26 and Decrease returns 26 to 22. Sheaf uses `round(size * 1.2)` and
+`round(size / 1.2)`, matching these controls. Screenshots with selection handles and property
+reads establish the target; stale export snapshots and attempts obscured by tooltips or missing
+the smaller legend are excluded. The final refreshed Original-theme EMF contains Times New Roman.
+
+The tested native single-selected legend did **not** change style on Bold/Italic clicks;
+its text stayed unchanged. Sheaf deliberately exposes whole-object Bold/Italic through its
+existing font flags to meet this brief's whole-object goal. Their native whole-object parity
+is **unestablished**; this is not evidence of Origin's internal style storage. The current
+[Format toolbar reference](https://docs.originlab.com/origin-help/format-toolbar/) documents
+font controls on graph annotations; it does not settle that 2016 selection-state difference.
+
+Sheaf choices: the size box accepts finite 1 to 1000 pt values and commits on Enter; Escape or
+leaving the box cancels the draft. Font Color offers eight named basic RGB colours (black, red,
+green, blue, cyan, magenta, yellow, white). Origin's Auto, full system/custom palettes and palette
+management remain open. Family selection is restricted to installed families; fallback rendering
+retains its existing behaviour. Text-window selection controls and the T59 worksheet adapter
+are separate slices.
+
+`text_format::{Snapshot, Target, Change, Request}` separates widget changes from target application.
+T59 can add its cell target behind the same toolbar. Requests capture graph/layer/object plus
+document generation and revision. Dispatch rechecks active selection and dialog/cell editing state;
+invalid, unchanged or stale requests add no history. Open family/colour lists retain their original
+target rather than following a later selection. No model or file-format fields were added.
+
+Underline, Superscript, Subscript, Greek, Fill Color and Line Color (`object_format`, same
+request/staleness rules, own `Action::FormatObject`). Origin's online
+[Format toolbar help](https://docs.originlab.com/origin-help/format-toolbar/) [W] describes the first
+four as acting on selected characters and does not document whole-object behaviour. Fill and
+line/border colour are described on Origin's
+[Style toolbar](https://docs.originlab.com/origin-help/style-toolbar) as setting the fill or line
+colour of the selected object; Sheaf shows them in the Format row (gui-look.md, Format and Style toolbar description). Sheaf choices,
+all **unmeasured** (Origin 2016 measurement remains open): the four text buttons wrap the whole
+text in one `\u(`, `\+(`, `\-(` or `\g(` group, or remove that group when the text is exactly one
+such group (nesting counted as the parser does; `\u(a)b` is wrapped, not unwrapped; a group may
+span lines, so multi-line text is one group) and show pressed when wrapped; they apply to free
+labels and to X/Y titles with their own non-empty text, not to the legend or automatic titles.
+Fill Color (palette: None plus the eight basic colours) sets a rectangle's or circle's fill and a
+visible legend's background; Line Color sets a drawn object's or straight line's colour. Both are
+disabled with a hover reason elsewhere (the legend frame has no colour field). The selection
+survives; undo labels are "Format graph text" and "Format graph object". No model fields added.
+
 
 ### 7.6 Inline font families (T58 graph text)
 
@@ -718,6 +781,38 @@ goldens use deliberately different deterministic test-family metrics; those synt
 metrics are not Origin measurements or installed-font rasterization fixtures.
 
 ---
+
+### 7.5 Text label selection editor (T58)
+
+Origin's [Text Object Properties, Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/)
+documents selection/caret formatting buttons above a raw text box and a formatted preview below.
+The buttons insert commands around selected text or insert an empty command group at the caret.
+This is a documentation reference, not a fresh measurement of Origin's dialog geometry.
+
+Sheaf's free-label Text window now offers Normal, bold, italic, underline, strikethrough,
+superscript, subscript and Greek. A button keeps the raw characters outside the selected range
+and returns focus to the selected body. With no selection, typing enters the empty group.
+Selecting `-2` in `cm-2` and choosing superscript produces `cm\+(-2)`; Unicode cursor offsets
+are characters, not UTF-8 bytes. Applying the same format to its complete selected body removes
+that wrapper. Normal removes complete inline formatting wrappers from the selection and its
+immediate surrounding wrappers, preserving literal `\v(...)`, substitution and Unicode escapes.
+These toggle/Normal details are Sheaf choices, not measured Origin rules. The existing whole-label
+Bold/Italic checkboxes still change the base font; Normal affects inline markup only.
+
+The preview uses the public graph export renderer with an isolated one-label graph. It therefore
+shares the published parser, glyphs, script layout, colours, decorations and rotation with exports.
+Its cache changes with text, font, rotation or display scale. It fits large text into a bounded
+preview and reports text over 8,192 characters or excessive dimensions without truncating the
+stored text. Size and base styles also update the preview. Buttons and preview do not mutate the
+project: OK/Apply performs the existing single history operation; Cancel discards the draft.
+A new draft containing only empty formatting groups adds no invisible label.
+
+The button labels, compact layout and Ctrl+B/I/U/G and Ctrl+= / Ctrl+Shift+= bindings are
+Sheaf choices based on the published command forms and existing shortcut map; their behaviour
+inside Origin's properties dialog has not been measured. Font/colour selection for an inline
+range, combined-script insertion and reuse for titles/legend remain open. The shared Format
+bar remains a separate target-dispatch implementation. No renderer/model/persistence changes
+are introduced by this editor slice.
 
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
 
@@ -2784,10 +2879,29 @@ no dialog. What it acts on (a selected object, perhaps) is unknown, so Sheaf lea
 
 **Sheaf's Fit Page to Layers** (`Graph::fit_page_to_content`, `sheaf_plot::fit_content_bounds`): Graph
 > Fit Page to Layers... opens Margin Control (Border, Tight), Border Width (5) and Adjust Direction
-(Height and Width, Height Only, Width Only); Format > Fit Page To Layers applies the defaults at once
-(Sheaf choice; whether Origin's Format item asks was not measured). The content box is the layer
+(Height and Width, Height Only, Width Only); Format > Fit Page To Layers... opens the same window, as
+Origin's Format item does (measured 2026-11-15, T70). The content box is the layer
 frames and the boxes of legends, text labels, drawn shapes and slope annotations; Tight leaves
 1.56 pt (13 dots at 600 dpi). One undo step.
+
+**Fit Page To Printer** (Format menu, T70, measured 2026-11-15): acts at once; the page becomes the
+default printer's printable area for the Page Setup paper in the page's orientation (the stock 10.72 x
+8.205 in page became 10.667 x 8.0 in on landscape Letter: 1/6 in less on the left and right, 1/4 in on
+top and bottom); the layers keep their frames in percent of the page. Sheaf asks the default printer
+(Windows) and otherwise uses the paper less those measured edges (12 pt, 18 pt). One undo step.
+
+**Change X, Change Y, Ungroup** (plot right-click menu, T73, measured 2026-11-15): Change X and Change Y
+list the plot's sheet's columns (`[Book1]Sheet1!A(X)`, ...) in column order, the current one ticked and
+the one the plot uses on the other axis greyed; choosing one replaces that column, the legend and axis
+title follow, and the axis keeps the range it was drawn with (Sheaf fixes an automatic range at its
+drawn values). On a plot of a group Change X/Y are greyed and Ungroup ends the group with every plot
+keeping its drawn colour (Sheaf makes those colours explicit); on a plot in no group Ungroup is greyed.
+One undo step each.
+
+**Axis Center** (axis right-click menu, after Axis Zoom In/Out; T70, measured): the axis keeps its span
+and its range moves so that the value under the right-click becomes the middle (X 0..11 at 5.42 gave
+-0.08..10.92); only that axis changes and its range becomes fixed. Sheaf works in the axis' own scale
+(decades on a log axis) and keeps an axis reversed by its limits reversed (Axis Zoom too).
 
 ### 15.8 Origin project files
 
@@ -2833,7 +2947,7 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 **Desktop app.**
 - Graph > Add Text... and the page's right-click "Add Text...": open the Text window for a new label in the active layer, placed in the middle of its frame (`0.5, 0.5`).
 - The Text tool of the Tools toolbar: a click on the page places the label at that point in the layer under the click (a click outside every frame uses the active layer) and opens the Text window. The tool ends after one label, or with Esc.
-- The Text window has the text (several lines; escapes allowed), Size, Bold, Italic and Rotation, and OK, Apply and Cancel. A new label is in the project only after OK or Apply; Cancel, or OK with no text, adds none. OK or Apply on an existing label with no text is refused with a message (Delete removes a label).
+- The Text window has inline formatting buttons, text (several lines; escapes allowed), Size, Bold, Italic, Rotation and a rendered preview (7.5), and OK, Apply and Cancel. A new label is in the project only after OK or Apply; Cancel, or OK with no text, adds none. OK or Apply on an existing label with no text is refused with a message (Delete removes a label).
 - Double click on a label, or its right-click "Properties...", opens the window for it. A click selects it; dragging it moves it (the selection handles follow the pointer; the label moves when the button is let go). Delete removes it.
 - Each of Add text, Edit text, Move text and Delete text is one undo step.
 - `sheaf-app --show text:N` opens the Text window of the N-th label of the first graph (for pictures).
@@ -2945,6 +3059,32 @@ the moved shape). They are enabled only when a drawn shape is selected and the m
 (already frontmost / backmost greys the matching button); text, legend and axis-title selections keep
 them disabled (broader object ordering is B2). Not measured in Origin 2016 yet; the greyed-without-
 selection behaviour follows Origin's convention for Object Edit buttons.
+
+### 17.7 Straight lines (T67, measured 2026-11-15)
+
+Origin 2016's Graph > Add Straight Line (`addline`; probes `tools/origin-ref/addline-*.lines.txt`):
+Type Vertical (default) or Horizontal, At Value (0), Color (black), Style (Solid, Dash, Dot, Dash
+Dot, Dash Dot Dot, Short Dash, Short Dot, Short Dash Dot), Label Display Format (auto: the axis'
+tick label format; ".2" gives two decimals), Label Location Top (default), Bottom, Left or Right,
+Selectable and Moveable (on), Name. It makes the line (`vline`, `vline1`, ..., `hline`, ... or the
+name) and its label (`<name>Text`), 0.5 pt wide, attached to the layer's scales; a vertical line
+runs from the Y axis' from to its to at X = value, and these ends stay where they were after a
+rescale. The label is the value, in the line's colour and the layer's text size, its centre 5 % of
+the axis span from the line: a vertical line's Top label above the frame, Bottom below it, Left and
+Right beside the line half-way up; a horizontal line's Top label above the line at the middle of
+the X range, Bottom below it, Left and Right outside the frame's edges at the line's Y.
+
+**Sheaf** (`sheaf_core::straight_line::StraightLine` in `Layer::straight_lines`; drawn by
+`plot/src/straight_line.rs`): the same options and names, label placement and formats (the 5 % is
+taken of the frame, which is the axis span on linear axes; on log axes in the frame too, unmeasured);
+a line whose value is outside the axis range is not drawn; `span` keeps the ends the app's dialog saw
+(None, as the command line makes them, runs across the frame). Graph > Add Straight Line... opens the
+window; OK adds the line in one undo step; a click on the line or its label selects it (after axes
+and plots, which a line across the frame would otherwise hide), Delete removes it, a double click or
+Properties edits it ("Straight Line"). A line that is not Selectable lets clicks through. Moveable is
+stored but dragging a line is not built (shown disabled). `sheaf plot --vline X[,top|bottom|left|right]`
+and `--hline Y` add lines to the first layer. `.sheaf` keeps them; `.opj` leaves them out with a
+warning and the companion keeps them.
 
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
@@ -3818,6 +3958,17 @@ grouped. Sheaf: `Template::VerticalDropLine` (scatter, `decor.drop.vertical` on,
 data labels of grouped columns and bars are now centred on their own bar. CLI `-t vertical-drop-line`, `-t
 column-label`.
 
+### 18.13 Scatter Central (T75, measured 2026-11-15)
+
+Origin 2016's Plot > Symbol > Scatter Central is the scatter graph with both axes crossing in the middle
+of a boxed frame: `layer.x.position` and `layer.y.position` -50 with `posType` 1 (percent), against 0
+for Scatter. The Y title stands horizontally above the frame at the Y axis' x, the X title rotated left
+of the frame at the X axis' height. Sheaf: template `scatter-central` (menu, `sheaf plot -t
+scatter-central`) with `Axis::offset_pct` -50 on both axes (the X offset is new here: percent of the
+frame height, "% From Bottom/Top" in the axis window), the frame drawn as a box, and the titles of any
+axis moved into the frame placed at its end as above; offsets 0 and outward (T61) are unchanged. New
+layers start at offset 0. `.opj` notes a lost X offset as it does a Y one.
+
 ### 20.1 Sheaf's rules
 
 **Superseded in part by 20.4 and 20.6** (Origin measured, Sheaf changed to follow it): the click in Mask mode,
@@ -4343,3 +4494,76 @@ Ctrl+Shift+J (View > Full Screen; the page right-click item "View Full Screen" h
 ### 22.6 What Sheaf took from this (T66, plan)
 
 Page View as Sheaf's current picture and the default; Window View (page stretched to the window, aspect not kept) and Draft View (the same with plain text) as in 22.2; modes saved in the `.sheaf` file; the Layer Icons tick; Full Screen with Esc and the reminder; leave the unmeasured Show items and Show Data Info grey until they are measured.
+
+## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
+
+Measured in OriginPro 2016 on our own synthetic data (X = 1 to 10, Y = 2X+1 and 20-X, Line + Symbol graph; one run with a right-Y layer from `layadd type:=righty`; one with both axes logarithmic; a 4-graph project), a 1024x768 Origin window, drags and clicks sent by `tools/origin-ref/origin-dialog.ps1 -NoDialog` with `-AfterFile` (`@DRAG`, `@CLICK`, `@DCLICK`, `@KEYDOWN`, `@SHOT`, `@CURSOR`) and the axis ends read after each action with `?layer.x.from` / `.to` / `layer.y.from` / `.to` (raw outputs and pictures are local: `re-workspace/scratch/t69/`, `*.out.txt`, `*.png`). Anything not listed is **unmeasured**.
+
+### 23.1 Correction: Zoom All is not a presentation
+
+gui-look 4.x and T65 recorded "Zoom All = a presentation of all graphs with a reminder". That was wrong: the reminder text ("Hit ESC to exit", arrow keys, Home and End) is the **Full Screen** dialog (22.4), which probably came from a click that landed on Full Screen in the collapsed View menu (in this study the same mis-click happened once: the short form of View changes between runs). **View > Zoom All is a zoom of the active graph window.**
+
+### 23.2 View > Zoom All
+
+- It sits in the View menu between Whole Page and Show (full form: Zoom In, Zoom Out, Whole Page, **Zoom All**). No key is listed. It was not in the collapsed form of View until it had been used once (then it joined the short form, as 22.1 says of other items).
+- **It zooms the active graph window so that everything fits, including objects that lie outside the page.** With a text label placed far outside the page (x = 30 on an axis that ends at 11) the view went to 48 % (zoom combo of the Standard toolbar), the page drawn small at the top-left corner of the window and the outside label visible near the right edge of the window. The same click again changed nothing (idempotent). **Ctrl+W (Whole Page) returned to 100 %** with the page fitted to the window as before; the outside label is out of view again.
+- On a graph with nothing outside the page the zoom combo read **115 %** and the page was drawn smaller than Whole Page (about 0.87 of its size, 347 x 276 px against 401 x 307 px in the 1024x768 window) at the top-left corner with a small gap, and a horizontal scroll bar appeared under the page. How the combo's percentage relates to the drawn size (it does not follow a single ratio: 115 % for 0.87 and 48 % for 0.56) is **unmeasured**, as is the exact margin around the bounding box (about 10 px was seen).
+- **It does not touch other windows and is not a mode.** With four graph windows in the project, Zoom All changed only the active graph (Graph4); `%H` still named Graph4. No dialog or reminder appeared, and Enter, Right, Home and Esc afterwards changed nothing (the 115 % view stayed). `page.viewmode` stayed 2.
+- Unmeasured: Zoom All in a maximized window, from a zoomed (200 %) view (Whole Page undoes a zoom, so Zoom All probably replaces it), whether it counts hidden objects, whether it is saved, the page context menu (no such item was looked for), the Undo text (none looked at).
+
+### 23.3 The Tools-bar magnifiers are axis Scale In and Scale Out
+
+- Tools toolbar, second and third buttons (the first is the Pointer). Tool tip of the first: "**Scale In**: Axes magnification, double-click to restore, ctrl-drag to create zoom graph"; the second is **Scale Out** (its tip was not read separately).
+- **Scale In is a rectangle tool.** After choosing it (the button stays pressed and the pointer over the page is a custom magnifier cursor), a left-button drag draws a dotted rectangle (a plain rubber band) and on release the active layer's axes are rescaled **exactly to the rectangle**: x from the left to the right edge of the rectangle, y from its bottom to its top edge, both axes at once. Example (layer shown from x 0 to 11, y 1 to 23, plot frame 165 to 439 px by 206 to 407 px): a drag from (250,260) to (350,340) gave x 3.402 to 7.437 and y 8.727 to 16.735, which is the rectangle in axis units. Ticks were recalculated for the new range, and the data are clipped to the layer frame.
+- **The tool ends after one drag**: the Pointer tool is selected again (the Pointer button pressed, the cursor an arrow). To zoom again, choose Scale In again. Choosing a button that is already active unselects it.
+- A rectangle can run outside the layer frame: it is not clipped, the range is extended by the same scale (a drag starting at x = 100 px, left of the 165 px frame edge, gave x from -2.650). A drag of 3 x 2 px changed nothing. A plain click with the tool changed nothing and appears to end the tool (the next drag acted as a Pointer drag).
+- Scale In steps nest: three rectangles in a row gave three successively smaller ranges; each rectangle is read against the current view (x 3.402 to 7.437, then 3.910 to 6.870, then 4.826 to 5.911).
+- **Scale Out does not zoom out by a factor. It steps back**: with the tool chosen, **one click** (anywhere on the page) or **one drag of any rectangle** restores the axis ends of the layer from before the last Scale In, and the tool ends. Three Scale In steps then three Scale Out clicks passed through 3.910 to 6.870, then 3.402 to 7.437, then 0 to 11 (the original range); a further Scale Out at the original range changed nothing. So Origin keeps a stack of previous scales for Scale In and Scale Out takes one off per use.
+- **Which axes change:** only the **active layer** (the layer chosen with `page.active`, shown highlighted among the layer icons). With a right-Y layer linked to layer 1 in X: Scale In on layer 1 changed layer 1's x and y and layer 2's x (linked) but **not layer 2's y** (9 to 20 stayed); Scale In with layer 2 active mapped the rectangle through layer 2's own right y axis (12.86 to 16.87 for the same rectangle) and rescaled layer 1's x (linked) but not layer 1's y (1 to 23 stayed). Scale Out restored both layers.
+- **Log axes:** the rectangle is applied in the axis's scale: with x logarithmic 0.5 to 20 and y logarithmic 2.5E-9 to 2500, the rectangle (250,260 to 350,340) gave x 1.565 to 6.055 and y 4.10E-5 to 0.956 (a linear map in log10 of the end values, as the pixel positions predict), the axes stayed logarithmic, and Scale Out restored 0.5 to 20 and 2.5E-9 to 2500.
+- **Undo:** the Edit menu reads **"Undo Zoom In/Out"** (Ctrl+Z) after a Scale In, and also after a Scale Out. Ctrl+Z after three Scale In steps undid them one at a time (4.826 to 5.911, then 3.910 to 6.870, then 3.402 to 7.437).
+- **Ctrl+drag with Scale In creates a new graph window named "Enlarged"** (the "zoom graph" of the tool tip; the source graph's scale did not change). Its content, link to the source and layout were not studied: **unmeasured**.
+- **Double-click "to restore"** (tool tip) did not restore anything in two runs (a double-click on the plot right after choosing the tool left the zoomed range as it was, and with the tool unselected it opened Plot Details > Layer Properties, as a double-click on a layer does). What the double-click needs (the axis? a longer gap between the clicks?) is **unmeasured**; Scale Out is the measured way back.
+- Not measured: Esc during the drag, a drag starting on an axis or outside the layer area, Scale In on a graph with an axis break, 3D or polar axes, the status-bar text during the drag, the cursor shape of Scale Out (the cursor over the page was a custom cursor for both), whether a LabTalk or dialog change of the scale clears the Scale Out stack, whether the stack is saved with the project.
+
+### 23.4 What Sheaf takes from this (T69, built 2026-11-15)
+
+- Zoom All: a command on the active graph view only (no reminder, no keys, no mode). It sets the T65 view transform so that the bounding box of the page and every object drawn outside it fits in the window, page at the top-left, with a small margin; with all objects inside the page it shows the page with the same margin. The percentage Origin shows for it is not reproduced (the zoom combo is T65's leftover). Whole Page is the way back.
+- Scale In: a one-shot tool on the Tools bar that maps the dragged rectangle (screen to page to axis units, linear or log10 like the axis) to the active layer's x and y ends, linked layers following in the linked axis only; one undo step named "Zoom In/Out"; the tool ends after the drag; a click or a tiny drag does nothing. Scale Out: a one-shot tool whose click or drag pops the last Scale In of the active layer from a per-window stack (nothing when empty). Ctrl+drag (the "Enlarged" graph) and the double-click restore stay unbuilt.
+- Built in `crates/app/src/graph_scale.rs` (pure `rect_to_ends`, `zoom_all`; the stack steps check that the axes still hold the ends the step wrote, so a step undone with Ctrl+Z is dropped, not replayed). Choices that were not measured: a tiny drag (under 4 px on a side) ends Scale In without a change, as a click does in Origin (measured, 23.3); Scale Out ends after one click even with an empty stack; layers with axis breaks, polar and ternary layers are refused (a status hint); Ctrl+drag with Scale In does nothing but a hint; Zoom All centres the page (T65's layout; Origin puts it at the top-left, a known departure) with a 10 px margin and the factor never above 1, and what lies outside the page is not drawn (the raster is the page), so only the fitting is built, not the view of the outside objects.
+
+## 24. User templates: Save Template As and Plot > User Templates (T56)
+
+Sheaf's own file kind and rules; Origin's `.otp`/`.otpu` templates are never read or written, and nothing
+here is measured in Origin (to measure on Windows: what an Origin template keeps, how extra or fewer
+datasets are styled, the default folder and name).
+
+- **Saving** (File > Save Template As..., graphs only; greyed without a template folder): a name prompt
+  filled with the graph's short name; OK saves the graph's look as `<name>.sheaftemplate` in the folder
+  `templates` of the settings folder (`sheaf_io::user_templates::default_dir`; `--templates-dir DIR` and
+  `--no-templates` at start). A template of the same name (letter case ignored) is replaced, and the prompt
+  says so before OK. Names are cleaned for the file system (`clean_name`: control characters dropped, white
+  space collapsed, `/ \ : * ? " < > |` to `_`, device names such as `CON` get `_`, at most 60 characters).
+- **What is kept** (`UserTemplate::from_graph`): the whole graph without data: page, layers and their
+  placement and links, axes (fixed ranges stay fixed, automatic ones rescale to the new data), each plot's
+  style in order, legend and text objects (with `%(...)` substitutions, re-evaluated on the new data), drawn
+  objects and straight lines. Each plot becomes a numbered slot; columns, row ranges, data-label and
+  tick-label columns are dropped. Refused: treemaps, sunbursts, parallel plots, floating bars and fills
+  between two curves, whose look is made of their data. The file is a `.sheaf` archive with the marker
+  `"template": "graph"` and no workbook.
+- **Plotting** (Plot > User Templates > a saved name, on a workbook with Y columns selected; `sheaf plot -t
+  NAME`): column `i` takes slot `i mod n`; columns beyond the slots repeat the styles and take colours from
+  the layer's palette in plot order, and the layer's group increments apply; with fewer columns the extra
+  slots are left out, and a linked layer left without plots (the right Y of a double-Y template given one
+  column) is removed. The new graph's long name is that of the first column's workbook. One undo step.
+- **Managing** (Plot > User Templates > Manage...): the saved names with Rename (refused onto another
+  template's name) and Delete, and the folder shown. The list is read from the folder at start and after
+  every change, so templates survive a restart and two running copies agree.
+- **Command line**: `sheaf plot -t NAME` looks a name that is no built-in template up among the user
+  templates in `--templates-dir`, else `$SHEAF_TEMPLATES_DIR`, else the settings folder; an unknown name
+  lists the built-in templates and points to Save Template As. A user template plots one sheet's Y columns
+  (not with `--panels`, `--y2`, `--group` or several input files). MCP's `plot` never reads user templates
+  (the folder is outside its allowed roots).
+- Tests: `crates/core/src/user_template/tests.rs`, `crates/io/src/user_templates/tests.rs`,
+  `crates/plot/src/user_template_tests.rs`, `crates/app/src/app/ui_tests/user_templates.rs`,
+  `crates/cli/tests/user_templates.rs`.

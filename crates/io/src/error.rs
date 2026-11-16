@@ -67,6 +67,14 @@ pub enum IoError {
     #[error("'{}' is not a Sheaf window file (it is a project, or has no window marker in its manifest)", path.display())]
     NotAWindowFile { path: PathBuf },
 
+    /// A user template file (File > Save Template As) was given where a project is needed.
+    #[error("'{}' is a graph template file, not a project; Plot > User Templates uses it", path.display())]
+    IsATemplateFile { path: PathBuf },
+
+    /// A file that is not a user template file was given where one is needed.
+    #[error("'{}' is not a Sheaf template file (it has no template marker in its manifest)", path.display())]
+    NotATemplateFile { path: PathBuf },
+
     /// The window to save is not in the project.
     #[error("cannot save the window: the project has no window with id {id}")]
     NoSuchWindow { id: u64 },

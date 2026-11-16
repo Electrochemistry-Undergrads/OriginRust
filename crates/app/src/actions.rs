@@ -85,6 +85,11 @@ pub enum GraphOp {
     MovePlotToLayer { layer: usize, plot: usize, to: usize },
     /// Hide Data Plot.
     HidePlot { layer: usize, plot: usize },
+    /// Change X / Change Y: the plot reads another column of its sheet (`y` false for X). The axis
+    /// limits are not touched.
+    SetPlotColumn { layer: usize, plot: usize, y: bool, column: sheaf_core::ColumnId },
+    /// Ungroup: the plots of the plot's group become single plots, keeping their look.
+    Ungroup { layer: usize, plot: usize },
     /// Remove Trendline: the plot's last trendline goes.
     RemoveTrendline { layer: usize, plot: usize },
     /// Hide Axis (`y` false for the X axis).
@@ -101,6 +106,9 @@ pub enum GraphOp {
     SetStack { layer: usize, stack: sheaf_core::graph::Stack },
     /// Axis Zoom In and Axis Zoom Out: the axis range shrinks or grows about its middle.
     AxisZoom { layer: usize, y: bool, zoom_in: bool },
+    /// Axis Center: the axis keeps its span and moves so that the value at `page` (the right-clicked
+    /// page point, in points) becomes the middle of its range. The range becomes fixed.
+    AxisCenter { layer: usize, y: bool, page: (f64, f64) },
     /// Delete on the legend: it is hidden.
     HideLegend { layer: usize },
     /// Reconstruct Legend: the legend text is made again from the plots (the automatic text).
@@ -116,6 +124,8 @@ pub enum GraphOp {
     DeleteShape { layer: usize, shape: usize },
     /// Delete on a slope annotation.
     DeleteSlope { layer: usize, slope: usize },
+    /// Delete on a straight line.
+    DeleteStraightLine { layer: usize, line: usize },
     /// Move a drawn object to the top or bottom of its own layer's shape stack.
     OrderShape { layer: usize, shape: usize, front: bool },
     /// Hide Layer (every plot of the layer is hidden).
@@ -147,6 +157,10 @@ pub enum GraphTool {
     ZoomIn,
     /// The Pan tool: a drag on the page moves the view.
     Pan,
+    /// The Tools-bar Scale In: a rectangle drag rescales the active layer's axes (T69).
+    ScaleIn,
+    /// The Tools-bar Scale Out: a click or drag steps back to the previous scale (T69).
+    ScaleOut,
 }
 
 /// A change of a graph window's view (screen-only; the graph is not changed).
@@ -156,6 +170,8 @@ pub enum ViewOp {
     ZoomOut,
     /// Whole Page: the page fits the window.
     WholePage,
+    /// Zoom All: the page and all objects fit the window (T69).
+    ZoomAll,
 }
 
 /// The tools of a graph's Data menu that act on the points of a plot.
@@ -203,6 +219,16 @@ pub enum Action {
     /// File > Save Window As...: ask for a name and write this window (a workbook, or a graph with
     /// the workbooks it reads) to a window file.
     SaveWindowAs(WindowId),
+    /// File > Save Template As...: ask for a name and save the graph's look as a user template.
+    SaveTemplateAs(WindowId),
+    /// Plot > User Templates > Manage...: rename and delete the saved templates.
+    ManageTemplates,
+    /// Plot > User Templates > a saved one: plot the columns in its look.
+    PlotUserTemplate {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+        name: String,
+    },
     /// Ask for files and open the import dialog; with a path, skip the file chooser.
     Import(Option<PathBuf>),
     /// File > Import > Single ASCII, Multiple ASCII or Comma Delimited: the file chooser for that item.
@@ -221,6 +247,9 @@ pub enum Action {
     Redo,
     /// Owner-only: undo consecutive completed AI calls, stopping at a manual history entry.
     UndoAiChanges,
+    /// A change captured by the shared Format toolbar.
+    FormatText(crate::text_format::Request),
+    FormatObject(crate::object_format::Request),
     NewWorkbook,
     AddColumn(WindowId),
     DeleteColumns(Vec<ColumnId>),
@@ -455,10 +484,13 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
     },
-    /// Fit Page to Layers: opens its window (`dialog`) or fits the page with Origin's defaults at once.
+    /// Fit Page to Layers...: opens its window.
     FitPageToLayers {
         graph: WindowId,
-        dialog: bool,
+    },
+    /// Format > Fit Page To Printer: the page takes the default printer's printable size at once.
+    FitPageToPrinter {
+        graph: WindowId,
     },
     /// Opens Layer Management (arrange, size/position and link the layers) for a graph, with a layer selected when given.
     LayerManagement {
@@ -498,6 +530,18 @@ pub enum Action {
     GraphView {
         graph: WindowId,
         op: ViewOp,
+    },
+    /// Scale In finished: the new ends of the active layer's axes.
+    ScaleIn {
+        graph: WindowId,
+        layer: usize,
+        x: (f64, f64),
+        y: (f64, f64),
+    },
+    /// Scale Out: back to the previous scale of the active layer.
+    ScaleOut {
+        graph: WindowId,
+        layer: usize,
     },
     /// A change that a Data menu tool made to the cells of a plot's worksheet.
     DataEdit(DataEdit),
@@ -547,6 +591,17 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
         slope: usize,
+    },
+    /// Graph > Add Straight Line...: opens the window for a new line in `layer`.
+    AddStraightLine {
+        graph: WindowId,
+        layer: usize,
+    },
+    /// Opens the window of a straight line (double click, Properties).
+    EditStraightLine {
+        graph: WindowId,
+        layer: usize,
+        line: usize,
     },
     /// Writes a hint on the status bar.
     Hint(String),

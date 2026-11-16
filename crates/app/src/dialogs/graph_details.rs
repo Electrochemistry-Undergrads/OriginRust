@@ -452,6 +452,8 @@ fn plot_tab_body(
                             Connect::Bezier,
                             Connect::StepHorizontal,
                             Connect::StepVertical,
+                            Connect::Segment2,
+                            Connect::Segment3,
                         ] {
                             ui.selectable_value(&mut plot.line.connect, c, connect_name(c));
                         }

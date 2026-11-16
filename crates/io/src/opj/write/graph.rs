@@ -805,6 +805,8 @@ impl Writer {
                 Connect::Bezier => 15,
                 Connect::StepHorizontal => 11,
                 Connect::StepVertical => 12,
+                Connect::Segment2 => 2,
+                Connect::Segment3 => 3,
             };
             let line_color = if kind == CurveKind::Scatter { p.symbol.color } else { p.line.color };
             let spec = CurveSpec {
@@ -1101,6 +1103,16 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
             if layer.slopes.len() == 1 { "it" } else { "them" },
         ));
     }
+    if !layer.straight_lines.is_empty() {
+        let n = layer.straight_lines.len();
+        notes.push(format!(
+            "layer {} has {n} straight line{} that an Origin project file written here cannot hold; {} not written (the .opj.sheaf companion keeps {})",
+            index + 1,
+            if n == 1 { "" } else { "s" },
+            if n == 1 { "it was" } else { "they were" },
+            if n == 1 { "it" } else { "them" },
+        ));
+    }
     if !layer.brackets.is_empty() {
         let n = layer.brackets.len();
         notes.push(format!(
@@ -1162,6 +1174,12 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
     if layer.y_axis.offset_pct != 0.0 {
         notes.push(
             "the position of a Y axis away from the frame (3Ys/4Ys, Multiple Y Axes) was not written; the axis              reopens at the frame (the .opj.sheaf companion keeps the offset)"
+                .into(),
+        );
+    }
+    if layer.x_axis.offset_pct != 0.0 {
+        notes.push(
+            "the position of an X axis away from the frame (Scatter Central) was not written; the axis reopens at the frame (the .opj.sheaf companion keeps the offset)"
                 .into(),
         );
     }

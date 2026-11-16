@@ -39,6 +39,12 @@ To measure later on Windows with `tools/origin-ref` (files and screenshots to `r
    order (T38 measured Recent Books for projects: same form as Recent Projects).
 8. Whether a window file opened twice makes two windows.
 
+Attempt on 2026-11-15 (Windows, Origin 2016, `re-workspace/scratch/t54`, local only): from a script,
+`save -i` (Save Window As) waited on a dialog both for a graph (`graph1.ogg`) and for a workbook
+(`book1.ogw`), so no window file was written and the questions above stay open; they need the window
+driven through File > Save Window As with `tools/origin-ref/origin-dialog.ps1` (the T30 probe of 2026-11-14
+did get `save -i` to write a `.ogw` once, with a file name that had another extension).
+
 Until then every choice below is Sheaf's own.
 
 ## 3. Sheaf's choices (labelled as such; none measured)

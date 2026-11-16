@@ -733,6 +733,15 @@ pub struct StyleArgs {
     /// option for more slopes; they all apply to the first plot.
     #[arg(long, value_name = "ROW_A,ROW_B")]
     pub slope: Vec<String>,
+    /// Draw a vertical straight line at an X value on the first layer, with a label that shows the value:
+    /// "VALUE" or "VALUE,LOCATION" with LOCATION top (the default), bottom, left or right (for example
+    /// --vline 0.5 or --vline 0.5,bottom). The line runs across the whole frame in black, 0.5 pt. Repeat
+    /// the option for more lines. A value outside the axis range draws nothing.
+    #[arg(long, value_name = "VALUE[,LOCATION]", allow_hyphen_values = true)]
+    pub vline: Vec<String>,
+    /// Draw a horizontal straight line at a Y value on the first layer: like --vline.
+    #[arg(long, value_name = "VALUE[,LOCATION]", allow_hyphen_values = true)]
+    pub hline: Vec<String>,
 }
 
 /// Which part of the page a figure shows (Origin's export margin settings).
@@ -790,8 +799,14 @@ pub struct PlotArgs {
     /// the text columns) with areas proportional to the last numeric Y column (see the --treemap-* options); sunburst
     /// draws the same hierarchy as concentric rings, the first category innermost, angles proportional to the last
     /// numeric Y column, coloured by value (see the --sunburst-* options).
+    /// A name that is none of these plots with the user template of that name (File > Save Template As in
+    /// the desktop app; see --templates-dir).
     #[arg(short, long)]
     pub template: Option<String>,
+    /// The folder of the user graph templates (default: `$SHEAF_TEMPLATES_DIR`, else `templates` in the
+    /// settings folder). Only read when -t names no built-in template.
+    #[arg(long, value_name = "DIR")]
+    pub templates_dir: Option<std::path::PathBuf>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).
     #[arg(short, long, value_delimiter = ',')]
     pub y: Vec<String>,

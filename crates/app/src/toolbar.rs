@@ -9,11 +9,16 @@
 //! command the menu entry of that name sends: a click is resolved with [`menus::resolve`], so it
 //! does exactly what the menu does, and is greyed for the same reasons (wrong window type, nothing
 //! selected). A button without a command is a feature Sheaf lacks; it is drawn greyed and does
-//! nothing. The one exception is the Pointer of the Tools bar, which is always the tool in use.
+//! nothing. The Pointer of the Tools bar is always the tool in use. The Format bar uses
+//! its own selected-target dispatch for supported whole-object controls: `text_format` for fonts and
+//! `object_format` for Underline, Superscript, Subscript, Greek, Fill Color and Line Color (each
+//! greyed with a reason when the selection has no such target).
 //!
 //! The icons are our own: simple shapes drawn with egui's painter in a 16 by 16 pixel box and two
 //! colours. They are recognisable by meaning (a grid for a workbook, a polyline for Line, dots
 //! for Scatter) and are not copies of Origin's pictures.
+
+mod format;
 
 use crate::actions::{Action, GraphTool};
 use crate::dialogs::analysis::AnalysisKind;
@@ -218,7 +223,7 @@ pub enum Item {
     Button(Button),
     /// A thin gap between groups.
     Gap,
-    /// The font name box of the Format bar (Sheaf cannot apply fonts to objects yet).
+    /// The font name box of the Format bar.
     FontBox,
     /// The font size box.
     SizeBox,
@@ -237,7 +242,17 @@ fn tool(icon: Icon, tip: &'static str, cmd: Cmd) -> Item {
 /// True for the commands of tools (no menu entry; pressed while on).
 #[cfg(test)]
 fn is_tool(cmd: &Cmd) -> bool {
-    matches!(cmd, Cmd::Pointer | Cmd::DataReader | Cmd::TextTool | Cmd::SlopeTool | Cmd::PanTool | Cmd::ShapeTool(_))
+    matches!(
+        cmd,
+        Cmd::Pointer
+            | Cmd::DataReader
+            | Cmd::TextTool
+            | Cmd::SlopeTool
+            | Cmd::PanTool
+            | Cmd::ScaleIn
+            | Cmd::ScaleOut
+            | Cmd::ShapeTool(_)
+    )
 }
 
 #[cfg(test)]
@@ -379,9 +394,9 @@ fn build(bar: Bar) -> Vec<Item> {
         Bar::Tools => vec![
             tool(Pointer, "Pointer", Cmd::Pointer),
             // Origin's Tools-bar magnifiers are "Scale In" and "Scale Out" (axis magnification, measured
-            // 2026-11-15), not the page zoom of the View menu: they stay grey (B1).
-            g(ZoomIn, "Zoom In"),
-            g(ZoomOut, "Zoom Out"),
+            // 2026-11-15), not the page zoom of the View menu (T69).
+            tool(ZoomIn, "Scale In", Cmd::ScaleIn),
+            tool(ZoomOut, "Scale Out", Cmd::ScaleOut),
             b(Rescale, "Rescale", Cmd::Rescale, "Rescale to Show All"),
             tool(DataReader, "Data Reader", Cmd::DataReader),
             gap(),
@@ -418,6 +433,18 @@ const CELL: f32 = 22.0;
 
 /// A row of bars side by side, each with a grip at its left end.
 pub fn show_row(ui: &mut Ui, bars: &[Bar], tb: &Toolbars, c: &MenuContext, actions: &mut Vec<Action>) {
+    show_row_with_format(ui, bars, tb, c, None, None, actions);
+}
+
+pub fn show_row_with_format(
+    ui: &mut Ui,
+    bars: &[Bar],
+    tb: &Toolbars,
+    c: &MenuContext,
+    format: Option<&crate::text_format::Snapshot>,
+    object: Option<&crate::object_format::Snapshot>,
+    actions: &mut Vec<Action>,
+) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
         let mut first = true;
@@ -426,7 +453,11 @@ pub fn show_row(ui: &mut Ui, bars: &[Bar], tb: &Toolbars, c: &MenuContext, actio
                 ui.add_space(8.0);
             }
             first = false;
-            show_bar(ui, *bar, c, actions);
+            if *bar == Bar::Format {
+                format::show(ui, c, format, object, actions);
+            } else {
+                show_bar(ui, *bar, c, actions);
+            }
         }
     });
 }
@@ -477,8 +508,12 @@ fn gap(ui: &mut Ui) {
     }
 }
 
-/// A box like the font name and size lists, greyed: Sheaf cannot format objects yet.
+/// A disabled font/size placeholder for a bar without a formatting target.
 fn text_box(ui: &mut Ui, text: &str, width: f32, name: &str) {
+    disabled_text_box(ui, text, width, name, NOT_YET);
+}
+
+fn disabled_text_box(ui: &mut Ui, text: &str, width: f32, name: &str, reason: &str) {
     let (rect, response) = ui.allocate_exact_size(vec2(width, 20.0), Sense::hover());
     let rect = rect.shrink2(vec2(1.0, 0.0));
     let grey = Color32::from_rgb(170, 172, 178);
@@ -498,7 +533,7 @@ fn text_box(ui: &mut Ui, text: &str, width: f32, name: &str) {
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, false, name));
     response.on_hover_ui(|ui| {
         ui.label(name);
-        ui.weak(NOT_YET);
+        ui.weak(reason);
     });
 }
 
@@ -511,6 +546,8 @@ fn draw_button(ui: &mut Ui, bar: Bar, button: &Button, c: &MenuContext, actions:
         Some(Cmd::SlopeTool) => c.tool == GraphTool::Slope,
         Some(Cmd::PanTool) => c.tool == GraphTool::Pan,
         Some(Cmd::ZoomIn) => c.tool == GraphTool::ZoomIn,
+        Some(Cmd::ScaleIn) => c.tool == GraphTool::ScaleIn,
+        Some(Cmd::ScaleOut) => c.tool == GraphTool::ScaleOut,
         Some(Cmd::ShapeTool(kind)) => c.tool == GraphTool::Draw(kind),
         _ => button.on,
     };
@@ -1225,7 +1262,7 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(&tips(Bar::Graphs2D)[..5], ["Line", "Scatter", "Line + Symbol", "Column", "Bar"]);
-        assert_eq!(&tips(Bar::Tools)[..4], ["Pointer", "Zoom In", "Zoom Out", "Rescale"]);
+        assert_eq!(&tips(Bar::Tools)[..4], ["Pointer", "Scale In", "Scale Out", "Rescale"]);
         assert_eq!(
             &tips(Bar::Tools)[4..],
             ["Data Reader", "Text", "Arrow", "Line", "Rectangle", "Circle", "Slope", "Pan"]

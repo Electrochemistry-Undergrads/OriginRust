@@ -52,6 +52,8 @@ pub fn style_spec(s: &StyleArgs) -> Style {
         label: s.label.clone(),
         draw: s.draw.clone(),
         slope: s.slope.clone(),
+        vline: s.vline.clone(),
+        hline: s.hline.clone(),
     }
 }
 
@@ -84,5 +86,11 @@ pub fn plot_spec(a: &PlotArgs) -> PlotSpec {
         overlay_books: Vec::new(),
         group: a.group.clone(),
         style: style_spec(&a.style),
+        templates_dir: user_templates_dir(a),
     }
+}
+
+/// The user template folder of a command-line request (never of an MCP one: see `PlotSpec::templates_dir`).
+fn user_templates_dir(a: &PlotArgs) -> Option<std::path::PathBuf> {
+    crate::plot::templates_dir(a.templates_dir.as_deref())
 }

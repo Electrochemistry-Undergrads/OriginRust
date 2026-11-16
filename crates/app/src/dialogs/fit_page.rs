@@ -26,8 +26,7 @@ pub struct FitPageDialog {
     problem: Option<String>,
 }
 
-/// Fits the page of `graph` with these settings as one undo step. Used by the dialog and by Format >
-/// Fit Page To Layers, which applies Origin's defaults (Border 5, height and width).
+/// Fits the page of `graph` with these settings as one undo step. Used by the dialog.
 pub fn fit_page(doc: &mut Document, graph: WindowId, margin: FitMargin, direction: FitDirection) -> Result<(), String> {
     let content = sheaf_plot::fit_content_bounds(doc.project(), graph)
         .map_err(|e| e.to_string())?

@@ -17,6 +17,7 @@
 use crate::actions::{Action, DataTool, GraphOp, GraphTool};
 use crate::dialogs::graph_props::PropsTab;
 use crate::gadget::Integrator;
+use crate::graph_scale::{self, ScaleState};
 use crate::graph_zoom::{self, Zoom};
 use crate::menus::{self, MenuContext, WindowKind};
 use crate::{data_tools, reader, view_modes};
@@ -91,6 +92,8 @@ pub struct GraphUi {
     pub selected: Option<(usize, ObjectKind)>,
     /// What the open right-click menu is about.
     menu_on: Option<MenuTarget>,
+    /// The page point (in points) that opened the right-click menu: Axis Center needs it.
+    menu_page: (f64, f64),
     /// Where the page was drawn in the last frame (screen rectangle) and UI points per page point.
     view: Option<(Rect, f32)>,
     /// The open Integrate gadget, if any.
@@ -115,6 +118,8 @@ pub struct GraphUi {
     pub zoom_in_tool: bool,
     /// The Pan tool is on: a drag on the page moves the view.
     pub pan_tool: bool,
+    /// The Scale In / Scale Out tools and the Scale Out stack (T69).
+    pub scale: ScaleState,
     /// The zoom and scroll of this window (view state only; not saved with the project).
     pub zoom: Zoom,
     /// The window rectangle and the page size (points) of the last frame, for the view commands.
@@ -190,6 +195,11 @@ impl GraphUi {
             GraphTool::ZoomIn
         } else if self.pan_tool {
             GraphTool::Pan
+        } else if let Some(tool) = self.scale.tool {
+            match tool {
+                graph_scale::ScaleTool::In => GraphTool::ScaleIn,
+                graph_scale::ScaleTool::Out => GraphTool::ScaleOut,
+            }
         } else {
             GraphTool::Pointer
         }
@@ -202,6 +212,14 @@ impl GraphUi {
             self.zoom = graph_zoom::zoom_about(window, page, self.zoom, self.zoom.factor / 2.0, window.center());
         } else {
             self.zoom = Zoom::default();
+        }
+    }
+
+    /// Zoom All: the page and all objects fit the window (T69).
+    pub fn zoom_all(&mut self) {
+        if let Some((window, page)) = self.frame {
+            let bounds = self.texture.as_ref().map(|t| graph_scale::scene_bounds(&t.scene)).unwrap_or_default();
+            self.zoom = graph_scale::zoom_all(window, page, &bounds);
         }
     }
 
@@ -262,6 +280,7 @@ impl GraphUi {
             ObjectKind::Label(label) => GraphOp::DeleteLabel { layer, label },
             ObjectKind::Shape(shape) => GraphOp::DeleteShape { layer, shape },
             ObjectKind::Slope(slope) => GraphOp::DeleteSlope { layer, slope },
+            ObjectKind::StraightLine(line) => GraphOp::DeleteStraightLine { layer, line },
             _ => return None,
         };
         self.selected = None;
@@ -346,7 +365,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     // The view input: Zoom In mode, Pan, the wheel and the scroll bars. They change the zoom
     // before the page is placed, from the layout the user saw in the last frame.
     // Zoom In mode and Origin's Zoom-Panning tool take the clicks: a click with the hand changes nothing.
-    let zoom_took_input = state.zoom_in_tool || state.pan_tool;
+    let zoom_took_input = state.zoom_in_tool || state.pan_tool || state.scale.tool.is_some();
     view_input(ui, &response, rect, page_size, state);
 
     // UI points per page point (zoom 1: the whole page fits in the window, "fit page to window"),
@@ -416,6 +435,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     };
     let to_page = |p: Pos2| (f64::from((p.x - image_rect.left()) / fit), f64::from((p.y - image_rect.top()) / fit));
     let to_screen = |(x, y): (f64, f64)| image_rect.min + egui::vec2(x as f32 * fit, y as f32 * fit);
+    // (a straight line that is not Selectable has no hit object, so clicks pass through it)
     let pick = |p: Pos2| hit_test(&t.scene, to_page(p), f64::from(PICK_TOLERANCE / fit));
 
     // The selection, drawn over the picture.
@@ -561,6 +581,19 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             state.data = data_tools::State::default();
         }
     }
+
+    // Scale In / Scale Out (T69).
+    graph_scale::show(
+        ui,
+        &painter,
+        &response,
+        &t.geometry,
+        &to_page,
+        graph_id,
+        state.active_layer,
+        &mut state.scale,
+        actions,
+    );
 
     // The Text tool: a click places a label there, in the layer under the click.
     if state.text_tool {
@@ -780,6 +813,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                 ObjectKind::Label(label) => Some(Action::EditText { graph: graph_id, layer, label }),
                 ObjectKind::Shape(shape) => Some(Action::EditShape { graph: graph_id, layer, shape }),
                 ObjectKind::Slope(slope) => Some(Action::EditSlope { graph: graph_id, layer, slope }),
+                ObjectKind::StraightLine(line) => Some(Action::EditStraightLine { graph: graph_id, layer, line }),
             },
             Hit::Layer(layer) => Some(open(layer, PropsTab::Plots, None)),
             Hit::Page => Some(open(state.active_layer, PropsTab::Page, None)),
@@ -791,6 +825,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     {
         let hit = pick(pos);
         state.menu_on = Some(MenuTarget::Hit(hit));
+        state.menu_page = to_page(pos);
         if let Some(layer) = layer_of(hit) {
             state.active_layer = layer;
             actions.push(Action::ActivateLayer { graph: graph_id, layer });
@@ -851,7 +886,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
 
     // The right-click menus.
     let c = graph_context(graph_id, state.active_layer, state.tool());
-    let entries = |target: MenuTarget| menu_for(doc.project(), graph_id, target, state.selected);
+    let entries = |target: MenuTarget| menu_for(doc.project(), graph_id, target, state.selected, state.menu_page);
     let target = state.menu_on;
     let mut shown = response.context_menu(|ui| {
         if let Some(t @ MenuTarget::Hit(_)) = target {
@@ -1055,6 +1090,8 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         recent_projects: &[],
         recent_books: &[],
         recent_graphs: &[],
+        user_templates: &[],
+        templates: false,
         recent_imports: &[],
         panels: [true; 4],
         ai_link: false,
@@ -1092,6 +1129,7 @@ fn menu_for(
     graph_id: WindowId,
     target: MenuTarget,
     selected: Option<(usize, ObjectKind)>,
+    page: (f64, f64),
 ) -> Vec<menus::Entry> {
     let Some(graph) = project.graph(graph_id) else {
         return Vec::new();
@@ -1116,6 +1154,7 @@ fn menu_for(
                 };
                 let book = project.locate(plot.y).map(|(b, _, _)| (b.id, b.name.clone()));
                 let on_right = graph.right_y_member(layer) == Some(layer);
+                let cols = plot_columns(project, plot);
                 menus::graph_plot_menu(
                     layer,
                     p,
@@ -1124,6 +1163,7 @@ fn menu_for(
                     book,
                     plot.decor.trendlines.len(),
                     graph.layers.len(),
+                    &cols,
                 )
             }
             ObjectKind::XAxis | ObjectKind::YAxis => {
@@ -1132,7 +1172,7 @@ fn menu_for(
                     let a = if y { &l.y_axis } else { &l.x_axis };
                     a.major_grid.is_some() || a.minor_grid.is_some()
                 });
-                menus::graph_axis_menu(layer, y, grids)
+                menus::graph_axis_menu(layer, y, grids, page)
             }
             ObjectKind::XTitle => menus::graph_title_menu(layer, false),
             ObjectKind::YTitle => menus::graph_title_menu(layer, true),
@@ -1140,10 +1180,26 @@ fn menu_for(
             ObjectKind::Label(k) => menus::graph_label_menu(layer, k),
             ObjectKind::Shape(k) => menus::graph_shape_menu(layer, k),
             ObjectKind::Slope(k) => menus::graph_slope_menu(layer, k),
+            ObjectKind::StraightLine(k) => menus::graph_straight_line_menu(layer, k),
         },
         MenuTarget::Hit(Hit::Layer(layer)) => menus::graph_page_menu(layer),
         MenuTarget::Hit(Hit::Page) => menus::graph_page_menu(0),
     }
+}
+
+/// The columns of a plot's sheet as Change X and Change Y list them: `[Book1]Sheet1!A(X)`.
+fn plot_columns(project: &Project, plot: &sheaf_core::graph::Plot) -> menus::PlotColumns {
+    let list = project
+        .locate(plot.y)
+        .map(|(book, sheet, _)| {
+            sheet
+                .columns
+                .iter()
+                .map(|c| (c.id, format!("[{}]{}!{}({})", book.name, sheet.name, c.short_name, c.designation.tag())))
+                .collect()
+        })
+        .unwrap_or_default();
+    menus::PlotColumns { list, x: plot.x, y: Some(plot.y), grouped: plot.group.is_some() }
 }
 
 /// Handles round the selected object: small squares on the data points of a plot (at most about
@@ -1206,6 +1262,14 @@ fn draw_selection(
     }
 }
 
+/// The range an axis gets from Axis Center: the span is kept, in the axis' own scale (decades on a
+/// log axis), and the value at unit position `u` (0 at the axis' low end, 1 at its high end, as
+/// drawn) becomes the middle. `None` when the position or the result is not a number.
+fn centered_range(axis: &sheaf_plot::ticks::ResolvedAxis, u: f64) -> Option<(f64, f64)> {
+    let (a, b) = (axis.from_unit(u - 0.5), axis.from_unit(u + 0.5));
+    (u.is_finite() && a.is_finite() && b.is_finite() && a != b).then(|| (a.min(b), a.max(b)))
+}
+
 /// Applies a change made from the graph window to the project. `resolved` is the present layout
 /// of the graph (its axes' ranges), used by the axis zoom.
 pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: Option<&[LayerGeometry]>) {
@@ -1224,6 +1288,8 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
     let layer_index = match op {
         GraphOp::SetPlotKind { layer, .. }
         | GraphOp::HidePlot { layer, .. }
+        | GraphOp::SetPlotColumn { layer, .. }
+        | GraphOp::Ungroup { layer, .. }
         | GraphOp::RemoveTrendline { layer, .. }
         | GraphOp::MovePlotToAxis { layer, .. }
         | GraphOp::MovePlotToLayer { layer, .. }
@@ -1233,6 +1299,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::ExchangeAxes { layer }
         | GraphOp::SetStack { layer, .. }
         | GraphOp::AxisZoom { layer, .. }
+        | GraphOp::AxisCenter { layer, .. }
         | GraphOp::HideLegend { layer }
         | GraphOp::ReconstructLegend { layer }
         | GraphOp::UpdateLegend { layer }
@@ -1240,6 +1307,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::DeleteLabel { layer, .. }
         | GraphOp::DeleteShape { layer, .. }
         | GraphOp::DeleteSlope { layer, .. }
+        | GraphOp::DeleteStraightLine { layer, .. }
         | GraphOp::OrderShape { layer, .. }
         | GraphOp::HideLayer { layer }
         | GraphOp::HideOtherLayers { layer }
@@ -1247,6 +1315,25 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::DeleteLayer { layer } => layer,
     };
     if layer_index >= layers {
+        return;
+    }
+    if let GraphOp::SetPlotColumn { layer, plot, y, column } = op {
+        // Origin keeps the axis as drawn (measured: Y stayed -25..125): an automatic range is fixed
+        // at its present values before the column changes.
+        let drawn = resolved.and_then(|r| r.get(layer)).map(|r| if y { r.y.clone() } else { r.x.clone() });
+        let grouped = g.layers.get(layer).and_then(|l| l.plots.get(plot)).is_some_and(|p| p.group.is_some());
+        if let (Some(ra), false, Some(l)) = (drawn, grouped, g.layers.get_mut(layer)) {
+            let a = if y { &mut l.y_axis } else { &mut l.x_axis };
+            let (lo, hi) = (ra.from_unit(0.0), ra.from_unit(1.0));
+            if a.min.is_none() && a.max.is_none() && lo.is_finite() && hi.is_finite() && lo != hi {
+                set_limits(a, lo.min(hi), lo.max(hi), ra.reversed);
+            }
+        }
+        g.set_plot_column(layer, plot, y, column);
+        return;
+    }
+    if let GraphOp::Ungroup { layer, plot } = op {
+        g.ungroup_plots(layer, plot);
         return;
     }
     if let GraphOp::MovePlotToAxis { layer, plot, right } = op {
@@ -1339,9 +1426,22 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             let (u0, u1) = if zoom_in { (0.25, 0.75) } else { (-0.5, 1.5) };
             let (lo, hi) = (ra.from_unit(u0), ra.from_unit(u1));
             if lo.is_finite() && hi.is_finite() && lo != hi {
+                let by_limits = ra.reversed;
                 let a = if y { &mut l.y_axis } else { &mut l.x_axis };
-                a.min = Some(lo.min(hi));
-                a.max = Some(lo.max(hi));
+                set_limits(a, lo.min(hi), lo.max(hi), by_limits);
+            }
+        }
+        GraphOp::AxisCenter { y, page, .. } => {
+            let Some(r) = resolved.and_then(|r| r.get(layer_index)) else { return };
+            let f = r.frame;
+            if !(f.w > 0.0 && f.h > 0.0) {
+                return;
+            }
+            let (ra, u) = if y { (&r.y, 1.0 - (page.1 - f.y) / f.h) } else { (&r.x, (page.0 - f.x) / f.w) };
+            if let Some((lo, hi)) = centered_range(ra, u) {
+                let by_limits = ra.reversed;
+                let a = if y { &mut l.y_axis } else { &mut l.x_axis };
+                set_limits(a, lo, hi, by_limits);
             }
         }
         GraphOp::HideLegend { .. } => l.legend.visible = false,
@@ -1365,6 +1465,11 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
                 l.slopes.remove(slope);
             }
         }
+        GraphOp::DeleteStraightLine { line, .. } => {
+            if line < l.straight_lines.len() {
+                l.straight_lines.remove(line);
+            }
+        }
         GraphOp::OrderShape { shape, front, .. } => {
             let len = l.shapes.len();
             if shape < len && ((front && shape + 1 < len) || (!front && shape > 0)) {
@@ -1382,6 +1487,8 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::DeleteLayer { .. }
         | GraphOp::MovePlotToAxis { .. }
         | GraphOp::MovePlotToLayer { .. }
+        | GraphOp::SetPlotColumn { .. }
+        | GraphOp::Ungroup { .. }
         | GraphOp::UpdateLegend { .. } => {
             unreachable!("handled above")
         }
@@ -1435,6 +1542,19 @@ const GRID_COLOR: sheaf_core::Color = sheaf_core::Color { r: 204, g: 204, b: 204
 
 fn short(v: f64) -> String {
     sheaf_core::format::format_general(v, 5)
+}
+
+/// Writes a new range (`lo` below `hi`) as fixed limits, keeping the axis' direction: an axis drawn
+/// reversed (`drawn_reversed`) without its Reverse switch is reversed by its limits (min above max),
+/// so they are written that way round again.
+fn set_limits(a: &mut sheaf_core::graph::Axis, lo: f64, hi: f64, drawn_reversed: bool) {
+    if drawn_reversed && !a.reverse {
+        a.min = Some(hi);
+        a.max = Some(lo);
+    } else {
+        a.min = Some(lo);
+        a.max = Some(hi);
+    }
 }
 
 #[cfg(test)]

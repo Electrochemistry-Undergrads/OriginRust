@@ -5,7 +5,7 @@ First renderer slice (`codex/text-decorations`): inline underline/strikethrough 
 run styles and shared paths, with resolved-face OpenType metrics, script/rotation/anchor and
 export regressions, plus SVG and font-independent stroke PNG goldens. Six Origin 2016 Arial
 controls are recorded in graphing 7.1. This leaves the rest of step 1 and steps 2-4 open;
-all 15 UI inventory locations still await wiring. This rendering work is separate from the multiple-comparisons plot
+all 15 UI inventory locations still awaited wiring at that slice. This rendering work is separate from the multiple-comparisons plot
 (`T64-significance-plot.md`). Formatting, strict workspace all-target Clippy and the combined
 3,624-test suite pass (eight existing ignored); the 421-item inventory and eight Python tooling
 tests also pass.
@@ -24,6 +24,27 @@ exports. Font-family switches, combined scripts and other special colour tags re
 editor/toolbar work stays with its owners.
 Formatting, strict workspace all-target Clippy and 3,677 combined tests pass (eight existing
 ignored); inventory 407 and all eight Python tooling tests pass.
+Editor slice (`codex/t58-text-editor`): free-label Text window selection/caret buttons and
+live export-renderer preview are implemented; Unicode selections, nested/toggled formats,
+Normal, empty drafts, Cancel/Apply/history and saved-project preservation are covered.
+Origin's documented Text-tab workflow and explicitly unmeasured choices are recorded in
+graphing 7.5. Title/legend editor reuse, the two title menu entries, inline font/colour
+selection and combined-script insertion remain open; the separate Format/renderer claims
+retain their scopes. This does not complete all of step 2 or the whole brief.
+Formatting, strict workspace all-target Clippy and 3,725 combined tests pass (eight
+existing ignored); inventory validation, eight Python tooling tests and the inspected native
+app capture also pass. All twelve owned UI/helper/preview tests pass in the complete suite.
+Whole-object toolbar slice (`codex/t58-format-toolbar`): shared target/snapshot/dispatch;
+installed family, size, Bold/Italic, measured 1.2 size scaling and eight basic font colours for
+selected labels/legends/titles. Seven toolbar locations enabled; the six other toolbar controls
+and two title-menu entries remain. Graphing 7.4 records measured controls and the native legend
+Bold/Italic difference; Sheaf's whole-font flags are explicit choices. No renderer/editor,
+worksheet adapter or new model/file-format fields in this slice. UI regressions cover selection,
+Undo/Redo, validation, stale actions/palettes, SVG and native/companion saves. Remaining steps are
+still open; the renderer and text-editor results above are preserved.
+Formatting, strict workspace all-target Clippy and the combined 3,713-test suite pass
+(8 existing ignored), with all seven toolbar UI regressions, source-hash checks,
+the 397-item inventory and eight Python tooling tests; a desktop capture was inspected.
 Fourth renderer slice (`codex/text-run-fonts`): full-name inline font-family switches now
 reach run measurement, glyphs and decoration metrics, including nested restoration,
 styles/scripts/Greek and rotation. Graphing 7.6 records nineteen native family/name controls
@@ -34,9 +55,15 @@ Format toolbar work stay with their owners.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;
 [command map](../spec/ui-command-map.md) toolbar and shortcut tables.
-**Inventory:** 15 locations tagged `T58` in [greyed-items](greyed-items.md).
+**Inventory:** 8 locations tagged `T58` in [greyed-items](greyed-items.md).
 **Ownership:** graph text model/rendering/editor; Format toolbar dispatch. T59 owns its worksheet
 adapter. Coordinate shared `graph.rs`, `toolbar.rs`, actions and menus with other claims.
+
+Format-bar remainder slice (format-bar-rest): Underline, Superscript, Subscript, Greek, Fill Color and Line Color
+are enabled for their graph targets (new `object_format` module, graphing 7.4): whole-text markup on labels and
+explicit axis titles, Fill on rectangles/circles and the legend background, Line on drawn objects and straight lines.
+Whole-text wrapping, target limits and palettes are unmeasured Sheaf choices; Origin 2016 measurement, the title
+menu items and the editor remain open.
 
 ## Goal
 
@@ -56,7 +83,7 @@ layout. Record unmeasured choices explicitly; do not describe them as measured O
 
 ## Where
 
-- `crates/plot/src/markup.rs`: `Run` carries bold/italic/underline/strikeout/colour/scale/rise.
+- `crates/plot/src/markup.rs`: `Run` carries bold/italic/underline/strikeout/colour/family/scale/rise.
   `\u`, `\s`, indexed/RGB `\cN` and full-name `\f:Name` render through shared text placement.
   Keep nesting limits, Greek mapping and `plain()` while extending runs.
 - `crates/plot/src/text.rs`, `scene.rs` and backends (`svg.rs`, `eps.rs`, `emf.rs`, raster/PDF):

@@ -10,6 +10,7 @@ use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
 mod autosave;
+mod axis_center;
 mod cell_format;
 mod cell_notes;
 mod comparison_plot;
@@ -19,8 +20,10 @@ mod excel;
 mod export_themes;
 mod fill_inclusive;
 mod fill_sidelines;
+mod format_bar_rest;
 mod frozen_panes;
 mod graph_data_tools;
+mod graph_scale;
 mod graph_zoom;
 mod hexbin;
 mod import_themes;
@@ -42,11 +45,14 @@ mod simulate;
 mod skip_points;
 mod slope;
 mod sort_x;
+mod straight_line;
 mod sunburst;
 mod surface_fit;
 mod switcher;
 mod symbol_line_gaps;
 mod symbol_line_order;
+mod text_editor;
+mod text_format_toolbar;
 mod toolbar_print;
 mod treemap;
 mod view_modes;
@@ -3702,7 +3708,7 @@ fn greyed_toolbar_buttons_do_nothing_and_enabled_ones_follow_the_selection() {
     // Set as X is enabled only with columns selected; Pointer is on.
     assert!(!bar_button!(h, "Standard", "Set as X").accesskit_node().is_disabled());
     assert!(!bar_button!(h, "Tools", "Pointer").accesskit_node().is_disabled());
-    assert!(bar_button!(h, "Tools", "Zoom In").accesskit_node().is_disabled());
+    assert!(bar_button!(h, "Tools", "Scale In").accesskit_node().is_disabled());
 }
 
 #[test]
@@ -6338,6 +6344,7 @@ mod clipboard_origin;
 mod clipboard_formats;
 
 mod add_plot_to_layer;
+mod change_xy;
 mod find_replace;
 mod find_selection;
 mod fit_page;
@@ -6348,6 +6355,7 @@ mod label_panels;
 mod layer_management;
 #[path = "ui_tests/merge_graphs.rs"]
 mod merge_graphs;
+mod segments;
 #[path = "ui_tests/stack_panels.rs"]
 mod stack_panels;
 
@@ -8860,3 +8868,4 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
 
 #[path = "ui_tests/trendline.rs"]
 mod trendline;
+mod user_templates;

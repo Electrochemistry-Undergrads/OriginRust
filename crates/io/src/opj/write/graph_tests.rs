@@ -215,6 +215,8 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
         Connect::StepVertical,
         Connect::BSpline,
         Connect::Bezier,
+        Connect::Segment2,
+        Connect::Segment3,
     ]
     .iter()
     .enumerate()
@@ -227,7 +229,7 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
     let (imp, warnings) = round_trip(&p);
     assert!(warnings.is_empty(), "{warnings:?}");
     assert!(imp.warnings.is_empty(), "{:?}", imp.warnings);
-    assert_eq!(imp.graphs.len(), 5 + 8 + 8 + 6);
+    assert_eq!(imp.graphs.len(), 5 + 8 + 8 + 8);
     let by_name = |n: &str| imp.graphs.iter().find(|g| g.name == n).unwrap().layers[0].plots[0].clone();
     for (k, kind) in kinds.iter().enumerate() {
         let got = by_name(&format!("K{k}"));
@@ -263,6 +265,8 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
         Connect::StepVertical,
         Connect::BSpline,
         Connect::Bezier,
+        Connect::Segment2,
+        Connect::Segment3,
     ]
     .iter()
     .enumerate()
@@ -536,6 +540,21 @@ fn slope_annotations_are_named_in_a_warning_and_not_written() {
     assert!(imp.graphs[0].layers[0].slopes.is_empty());
     let (_, quiet) = round_trip(&source());
     assert!(!quiet.iter().any(|w| w.contains("slope annotation")));
+}
+
+#[test]
+fn straight_lines_are_named_in_a_warning_and_not_written() {
+    use sheaf_core::straight_line::StraightLine;
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.layers[0].straight_lines = vec![StraightLine::new(true, 1.0), StraightLine::new(false, 2.0)];
+    });
+    let (imp, warnings) = round_trip(&p);
+    let w = warnings.iter().find(|w| w.contains("straight line")).unwrap_or_else(|| panic!("{warnings:?}"));
+    assert!(w.contains("layer 1 has 2 straight lines") && w.contains(".opj.sheaf"), "{w}");
+    assert!(imp.graphs[0].layers[0].straight_lines.is_empty());
+    let (_, quiet) = round_trip(&source());
+    assert!(!quiet.iter().any(|w| w.contains("straight line")));
 }
 
 #[test]

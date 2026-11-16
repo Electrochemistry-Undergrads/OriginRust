@@ -114,6 +114,8 @@ pub enum Cmd {
     ExportWorksheetImage,
     /// File > Import > Re-Import Directly (false) and Re-Import... (true, choose the file) (T98).
     Reimport(bool),
+    /// Window > Duplicate (Batch Plotting) > with New Sheets/Books (false) or New Columns (true) (T99).
+    BatchPlot(bool),
     /// Edit > Replace... (Ctrl+H) in a workbook.
     ReplaceInSheets,
     ExportGraph,
@@ -1728,9 +1730,13 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
         item("&Duplicate", Cmd::DuplicateWindow),
     ];
     match kind {
-        WindowKind::Graph => {
-            v.push(grey_sub("Duplicate (&Batch Plotting)", &["With New Sheets/Books", "With New Columns"]))
-        }
+        WindowKind::Graph => v.push(sub(
+            "Duplicate (&Batch Plotting)",
+            vec![
+                item("Duplicate with New Sheets/Books...", Cmd::BatchPlot(false)),
+                item("Duplicate with New Columns...", Cmd::BatchPlot(true)),
+            ],
+        )),
         WindowKind::Workbook => v.push(grey("Sp&lit")),
         WindowKind::None => {}
     }
@@ -2294,7 +2300,14 @@ pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
             ],
         ),
         page_paste_format_entry(),
-        grey_sub("Duplicate (Batch Plotting)", &["Duplicate"]),
+        sub(
+            "Duplicate (Batch Plotting)",
+            vec![
+                item("Duplicate", Cmd::DuplicateWindow),
+                item("Duplicate with New Sheets/Books...", Cmd::BatchPlot(false)),
+                item("Duplicate with New Columns...", Cmd::BatchPlot(true)),
+            ],
+        ),
     ]
 }
 
@@ -2583,6 +2596,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::ExportExcel => Action::ExportExcel(book?),
         Cmd::ExportWorksheetImage => Action::ExportWorksheetImage(book?),
+        Cmd::BatchPlot(columns) => Action::BatchPlot { graph: c.graph.ok_or(NEED_GRAPH)?, columns: *columns },
         Cmd::Reimport(choose) => {
             let book = book?;
             c.imported.then_some(()).ok_or(NOT_IMPORTED)?;

@@ -1,6 +1,6 @@
 # T99: Duplicate (Batch Plotting)
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `batch-plot`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 28): both Origin windows measured and built (copies named "<graph> - Copy", columns matched by position/short/long name or the chosen Y with its X, axes rescaled), one undo step. Left: the Graph Short/Long Name fields.
 **Size:** M. **Source:** greyed inventory package B11 (Window > Duplicate (Batch Plotting) > With New
 Sheets/Books and With New Columns on a graph; the graph page menu's Duplicate (Batch Plotting) >
 Duplicate).

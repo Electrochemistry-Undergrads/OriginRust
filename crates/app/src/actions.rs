@@ -304,6 +304,11 @@ pub enum Action {
     FindInProject,
     /// File > Export > Worksheet as Image...: save the active sheet as a picture.
     ExportWorksheetImage(WindowId),
+    /// Window > Duplicate (Batch Plotting): open the window that picks sheets or columns.
+    BatchPlot {
+        graph: WindowId,
+        columns: bool,
+    },
     /// File > Import > Re-Import Directly / Re-Import...: read the book's source file again.
     Reimport {
         book: WindowId,

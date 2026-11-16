@@ -213,6 +213,8 @@ pub struct SheafApp {
     /// Edit > Find in Project, and the settings of the last search (Origin keeps them).
     find_project: Option<crate::dialogs::find_project::FindProjectDialog>,
     find_spec: crate::project_find::FindSpec,
+    /// Window > Duplicate (Batch Plotting).
+    batch_plot: Option<crate::dialogs::batch_plot::BatchPlotDialog>,
     show_x: Option<crate::dialogs::sampling::ShowXDialog>,
     /// The saved user templates as last read from the folder (at start and after a change).
     user_templates: Vec<String>,
@@ -340,6 +342,7 @@ impl SheafApp {
             sheet_navigate: None,
             find_project: None,
             find_spec: Default::default(),
+            batch_plot: None,
             show_x: None,
             user_templates: startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default(),
             power: None,
@@ -1804,6 +1807,12 @@ impl SheafApp {
             }
             Action::ExportWorksheetImage(book) => self.export_worksheet_image(book),
             Action::Reimport { book, choose } => self.reimport(book, choose),
+            Action::BatchPlot { graph, columns } => {
+                match crate::dialogs::batch_plot::BatchPlotDialog::new(self.doc.project(), graph, columns) {
+                    Some(d) => self.batch_plot = Some(d),
+                    None => self.warn("The graph plots no worksheet column"),
+                }
+            }
             Action::FindInProject => {
                 self.find_project = Some(crate::dialogs::find_project::FindProjectDialog::new(self.find_spec.clone()));
             }
@@ -3163,6 +3172,35 @@ impl SheafApp {
         }
     }
 
+    /// Duplicate (Batch Plotting): OK makes the copies, one undo step, and brings the last forward.
+    fn show_batch_plot(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::batch_plot::BatchOutcome;
+        let Some(d) = &mut self.batch_plot else { return };
+        let made = match d.show(ctx) {
+            BatchOutcome::Open => return,
+            BatchOutcome::Closed => {
+                self.batch_plot = None;
+                return;
+            }
+            BatchOutcome::Sheets { graph, sheets, by } => {
+                self.doc.edit("Duplicate (batch plotting)", |p| p.batch_plot_sheets(graph, &sheets, by))
+            }
+            BatchOutcome::Columns { graph, columns, associated_x } => {
+                self.doc.edit("Duplicate (batch plotting)", |p| p.batch_plot_columns(graph, &columns, associated_x))
+            }
+        };
+        self.batch_plot = None;
+        match made {
+            Ok(ids) => {
+                for id in &ids {
+                    self.focus(*id);
+                }
+                self.say(format!("Made {} graph(s)", ids.len()));
+            }
+            Err(e) => self.warn(e.to_string()),
+        }
+    }
+
     /// Find in Project: a hit brings its window forward (its sheet, and its column selected). The
     /// window stays open, as Origin's.
     fn show_find_project(&mut self, ctx: &egui::Context) {
@@ -4012,6 +4050,7 @@ impl SheafApp {
             || self.copy_columns.is_some()
             || self.sheet_navigate.is_some()
             || self.find_project.is_some()
+            || self.batch_plot.is_some()
             || self.show_x.is_some()
             || self.power.is_some()
             || self.find.is_some()
@@ -4702,6 +4741,7 @@ impl SheafApp {
         self.show_copy_columns(ctx);
         self.show_sheet_navigate(ctx);
         self.show_find_project(ctx);
+        self.show_batch_plot(ctx);
         if let Some(d) = &mut self.find {
             let book = d.book;
             match d.show(ctx) {

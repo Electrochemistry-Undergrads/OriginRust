@@ -8915,6 +8915,7 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
     assert_eq!(h.state().doc.undo_label(), Some("K-means cluster analysis"));
 }
 
+mod batch_plot;
 mod copy_columns;
 mod copy_variants;
 mod corner_menu;

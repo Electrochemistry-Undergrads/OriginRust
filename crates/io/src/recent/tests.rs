@@ -483,3 +483,78 @@ fn a_damaged_books_entry_is_skipped_and_the_other_lists_are_kept() {
     assert!(list.books.is_empty());
     assert_eq!(names(&list.graphs), ["a.sheafgraph"]);
 }
+
+fn export(path: &Path, window: &str) -> ExportEntry {
+    ExportEntry { path: path.to_path_buf(), kind: ExportKind::Graph, window: window.to_string() }
+}
+
+#[test]
+fn commands_are_newest_first_without_repeats_and_cut_to_ten() {
+    let mut list = RecentList::default();
+    for n in 0..12 {
+        list.push_command("plot", &format!("Plot > {n}"));
+    }
+    list.push_command("plot", "Plot > 5");
+    let keys = list.command_keys("plot");
+    assert_eq!(keys.len(), MAX_COMMANDS);
+    assert_eq!(keys[0], "Plot > 5");
+    assert_eq!(keys.iter().filter(|k| *k == "Plot > 5").count(), 1);
+    assert_eq!(keys[1], "Plot > 11");
+    assert!(list.command_keys("analysis").is_empty());
+}
+
+#[test]
+fn commands_and_exports_survive_a_round_trip() {
+    let dir = scratch("mru-round");
+    let file = dir.join("recent.json");
+    let png = touch(&dir, "a.png");
+    record_command(&file, "plot", "Plot > Line").unwrap();
+    record_command(&file, "analysis", "Analysis > Fitting > Linear Fit").unwrap();
+    record_export(&file, export(&png, "Graph1")).unwrap();
+    let back = RecentList::load(&file);
+    assert_eq!(back.command_keys("plot"), ["Plot > Line"]);
+    assert_eq!(back.command_keys("analysis"), ["Analysis > Fitting > Linear Fit"]);
+    assert_eq!(back.exports, vec![export(&png, "Graph1")]);
+}
+
+#[test]
+fn an_export_listed_again_moves_to_the_top_and_clear_empties_the_list() {
+    let dir = scratch("exports");
+    let (a, b) = (touch(&dir, "a.png"), touch(&dir, "b.png"));
+    let mut list = RecentList::default();
+    list.push_export(export(&a, "G1"));
+    list.push_export(export(&b, "G2"));
+    list.push_export(export(&a, "G3"));
+    assert_eq!(list.exports.iter().map(|e| e.window.as_str()).collect::<Vec<_>>(), ["G3", "G2"]);
+    list.remove(&b);
+    assert_eq!(list.exports.len(), 1);
+    list.clear_exports();
+    assert!(list.exports.is_empty());
+}
+
+#[test]
+fn damaged_commands_and_exports_are_skipped_and_an_older_file_loads_empty() {
+    let dir = scratch("mru-damaged");
+    let file = dir.join("recent.json");
+    let good = touch(&dir, "g.png");
+    let json = serde_json::json!({
+        "projects": [],
+        "commands": { "plot": ["A", 3, "A", "B"], "worksheet": "oops" },
+        "exports": [
+            { "path": good.to_str().unwrap(), "kind": "graph", "window": "G" },
+            { "path": "relative.png", "kind": "graph", "window": "G" },
+            { "path": good.to_str().unwrap(), "kind": "nope", "window": "G" },
+            7
+        ]
+    });
+    std::fs::write(&file, json.to_string()).unwrap();
+    let list = RecentList::load(&file);
+    assert_eq!(list.command_keys("plot"), ["A", "B"]);
+    assert!(list.command_keys("worksheet").is_empty());
+    assert_eq!(list.exports, vec![export(&good, "G")]);
+    std::fs::write(&file, r#"{"projects": []}"#).unwrap();
+    let old = RecentList::load(&file);
+    assert!(old.exports.is_empty() && old.commands.is_empty());
+    std::fs::write(&file, "not json").unwrap();
+    assert_eq!(RecentList::load(&file), RecentList::default());
+}

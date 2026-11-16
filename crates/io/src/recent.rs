@@ -14,6 +14,7 @@ use crate::window_file::WindowFileKind;
 use crate::{recovery, save};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::fs::{OpenOptions, TryLockError};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -21,6 +22,9 @@ use std::time::{Duration, Instant};
 /// The most entries each list keeps (Sheaf's choice, not measured in Origin).
 /// Origin 2016 shows 15 recent projects, numbered 1 to 9 and A to F (measured, recent-files.md 2).
 pub const MAX_ENTRIES: usize = 15;
+/// The most commands each Most Recently Used menu keeps. Origin's FAQ-873 says "up to 10 items"
+/// (docs/spec/recent-lists.md 1).
+pub const MAX_COMMANDS: usize = 10;
 /// The name of the file in the settings folder.
 pub const FILE_NAME: &str = "recent.json";
 
@@ -49,6 +53,45 @@ pub struct RecentList {
     pub graphs: Vec<PathBuf>,
     /// Data files imported, as canonical paths.
     pub imports: Vec<PathBuf>,
+    /// Files written by successful exports, newest first (Sheaf's choice, docs/spec/recent-lists.md 3).
+    pub exports: Vec<ExportEntry>,
+    /// The Most Recently Used commands of the Plot, Worksheet, Analysis and Statistics menus: menu
+    /// name to command keys, newest first (docs/spec/recent-lists.md 2).
+    pub commands: BTreeMap<String, Vec<String>>,
+}
+
+/// What an export wrote.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExportKind {
+    /// A graph as an image, PDF or SVG file.
+    Graph,
+    /// A worksheet as an ASCII file.
+    Sheet,
+    /// A workbook as an Excel file.
+    Excel,
+}
+
+impl ExportKind {
+    fn name(self) -> &'static str {
+        match self {
+            ExportKind::Graph => "graph",
+            ExportKind::Sheet => "sheet",
+            ExportKind::Excel => "excel",
+        }
+    }
+
+    fn from_name(name: &str) -> Option<ExportKind> {
+        [ExportKind::Graph, ExportKind::Sheet, ExportKind::Excel].into_iter().find(|k| k.name() == name)
+    }
+}
+
+/// One recent export: the file written, what kind of export wrote it and the title of the window
+/// that was exported (to find it again).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExportEntry {
+    pub path: PathBuf,
+    pub kind: ExportKind,
+    pub window: String,
 }
 
 impl RecentList {
@@ -77,6 +120,8 @@ impl RecentList {
             books: read("books"),
             graphs: read("graphs"),
             imports: read("imports"),
+            exports: read_exports(map.get("exports")),
+            commands: read_commands(map.get("commands")),
         }
     }
 
@@ -92,6 +137,19 @@ impl RecentList {
         map.insert("books".into(), entries(&self.books));
         map.insert("graphs".into(), entries(&self.graphs));
         map.insert("imports".into(), entries(&self.imports));
+        let exports = self.exports.iter().map(|e| {
+            let mut o = serde_json::Map::new();
+            o.insert("path".into(), Entry::from_path(&e.path).to_value());
+            o.insert("kind".into(), Value::String(e.kind.name().into()));
+            o.insert("window".into(), Value::String(e.window.clone()));
+            Value::Object(o)
+        });
+        map.insert("exports".into(), Value::Array(exports.collect()));
+        let commands = self
+            .commands
+            .iter()
+            .map(|(k, v)| (k.clone(), Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())));
+        map.insert("commands".into(), Value::Object(commands.collect()));
         let json = serde_json::to_vec_pretty(&Value::Object(map)).map_err(|e| IoError::Json {
             path: path.to_path_buf(),
             member: "recent files".into(),
@@ -123,6 +181,29 @@ impl RecentList {
         }
     }
 
+    /// Puts an export at the top of the exports. The path is made canonical; an earlier entry for
+    /// the same file goes away.
+    pub fn push_export(&mut self, entry: ExportEntry) {
+        let path = normalize(&entry.path);
+        self.exports.retain(|e| !same(&e.path, &path));
+        self.exports.insert(0, ExportEntry { path, ..entry });
+        self.exports.truncate(MAX_ENTRIES);
+    }
+
+    /// Puts a command key at the top of one menu's Most Recently Used list; an earlier entry for the
+    /// same key goes away and the list is cut to [`MAX_COMMANDS`].
+    pub fn push_command(&mut self, menu: &str, key: &str) {
+        let list = self.commands.entry(menu.to_string()).or_default();
+        list.retain(|k| k != key);
+        list.insert(0, key.to_string());
+        list.truncate(MAX_COMMANDS);
+    }
+
+    /// The command keys of one menu, newest first.
+    pub fn command_keys(&self, menu: &str) -> &[String] {
+        self.commands.get(menu).map_or(&[], Vec::as_slice)
+    }
+
     /// Removes a file from every list, however it is spelled.
     pub fn remove(&mut self, path: &Path) {
         let given = absolute(path);
@@ -130,6 +211,12 @@ impl RecentList {
         for list in [&mut self.projects, &mut self.books, &mut self.graphs, &mut self.imports] {
             list.retain(|q| !same(q, &given) && !same(q, &canonical));
         }
+        self.exports.retain(|e| !same(&e.path, &given) && !same(&e.path, &canonical));
+    }
+
+    /// Empties the exports.
+    pub fn clear_exports(&mut self) {
+        self.exports.clear();
     }
 
     /// Empties the projects.
@@ -202,9 +289,61 @@ pub fn clear_graphs(file: &Path) -> Result<RecentList, IoError> {
     update(file, RecentList::clear_graphs)
 }
 
+/// Records an export: [`RecentList::push_export`] through [`update`].
+pub fn record_export(file: &Path, entry: ExportEntry) -> Result<RecentList, IoError> {
+    update(file, |l| l.push_export(entry))
+}
+
+/// Records a command used from a menu: [`RecentList::push_command`] through [`update`].
+pub fn record_command(file: &Path, menu: &str, key: &str) -> Result<RecentList, IoError> {
+    update(file, |l| l.push_command(menu, key))
+}
+
+/// Empties the exports: [`RecentList::clear_exports`] through [`update`].
+pub fn clear_exports(file: &Path) -> Result<RecentList, IoError> {
+    update(file, RecentList::clear_exports)
+}
+
 /// Empties the imports: [`RecentList::clear_imports`] through [`update`].
 pub fn clear_imports(file: &Path) -> Result<RecentList, IoError> {
     update(file, RecentList::clear_imports)
+}
+
+/// The exports of the file: damaged, repeated or non-absolute entries are skipped.
+fn read_exports(value: Option<&Value>) -> Vec<ExportEntry> {
+    let mut out: Vec<ExportEntry> = Vec::new();
+    let Some(Value::Array(items)) = value else { return out };
+    for item in items {
+        let Value::Object(o) = item else { continue };
+        let path =
+            o.get("path").and_then(|v| serde_json::from_value::<Entry>(v.clone()).ok()).and_then(Entry::into_path);
+        let kind = o.get("kind").and_then(Value::as_str).and_then(ExportKind::from_name);
+        let window = o.get("window").and_then(Value::as_str);
+        let (Some(path), Some(kind), Some(window)) = (path, kind, window) else { continue };
+        if path.is_absolute() && !out.iter().any(|e| same(&e.path, &path)) {
+            out.push(ExportEntry { path, kind, window: window.to_string() });
+        }
+    }
+    out.truncate(MAX_ENTRIES);
+    out
+}
+
+/// The command lists of the file: only text entries are kept, repeats are dropped, each list is cut.
+fn read_commands(value: Option<&Value>) -> BTreeMap<String, Vec<String>> {
+    let mut out = BTreeMap::new();
+    let Some(Value::Object(map)) = value else { return out };
+    for (menu, list) in map {
+        let Value::Array(items) = list else { continue };
+        let mut keys: Vec<String> = Vec::new();
+        for k in items.iter().filter_map(Value::as_str) {
+            if !keys.iter().any(|q| q == k) {
+                keys.push(k.to_string());
+            }
+        }
+        keys.truncate(MAX_COMMANDS);
+        out.insert(menu.clone(), keys);
+    }
+    out
 }
 
 /// The path in the form the lists store: absolute and, as far as the disk allows, canonical (links

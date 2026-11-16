@@ -1,11 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-<<<<<<< HEAD
-agents work through the 359 greyed items of [greyed-items.md](greyed-items.md) and the other open
-=======
-agents work through the 368 greyed items of [greyed-items.md](greyed-items.md) and the other open
->>>>>>> origin/main
+agents work through the 358 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities

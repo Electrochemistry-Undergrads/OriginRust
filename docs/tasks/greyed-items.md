@@ -9,11 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-<<<<<<< HEAD
-original inventory baseline. This is not a new runtime audit. **359 greyed items: 249 in the menu bar, 19 on the toolbars, 91 in context menus.**
-=======
-original inventory baseline. This is not a new runtime audit. **368 greyed items: 253 in the menu bar, 19 on the toolbars, 96 in context menus.**
->>>>>>> origin/main
+original inventory baseline. This is not a new runtime audit. **358 greyed items: 248 in the menu bar, 19 on the toolbars, 91 in context menus.**
 
 ## How to read and keep this file
 
@@ -62,13 +58,8 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T83` | 0 |
 | `B2` | 33 |
 | `B3` | 19 |
-<<<<<<< HEAD
-| `B4` | 20 |
-| `B5` | 23 |
-=======
 | `B4` | 19 |
-| `B5` | 33 |
->>>>>>> origin/main
+| `B5` | 23 |
 | `B6` | 31 |
 | `B7` | 8 |
 | `B8` | 16 |
@@ -82,11 +73,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-<<<<<<< HEAD
-Briefs (`T`) hold 67 items, backlog packages (`B`) 272, not planned (`N`) 20.
-=======
-Briefs (`T`) hold 67 items, backlog packages (`B`) 281, not planned (`N`) 20.
->>>>>>> origin/main
+Briefs (`T`) hold 67 items, backlog packages (`B`) 271, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership

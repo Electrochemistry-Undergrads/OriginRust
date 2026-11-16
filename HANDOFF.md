@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **356 listed item locations** at the planning
-  baseline (246 menu bar, 19 toolbar, 91 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **353 listed item locations** at the planning
+  baseline (245 menu bar, 19 toolbar, 89 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -281,12 +281,20 @@ planning; both claims are released. T52 slope annotation also landed (`33c4d246`
 its implementation and unmeasured Origin defaults are recorded in graphing 17.6 and T52. Results and recorded checks are preserved in
 [known issues/recent results](docs/tasks/known-issues.md).
 
+**T58 axis-title and legend editors (2026-11-16, Codex):** Format > Axis Titles and existing
+title/legend Edit Text routes use the shared selection editor and actual-object preview
+(graphing 7.7). Automatic metadata, legend symbols/name references, fonts, visibility,
+Cancel/Apply/Undo and native/Origin-companion saves are covered. Read-only plot facades
+reuse existing title and raster rules. Remaining T58 inline family/colour pickers and
+combined-script controls remain in the brief. Formatting, strict all-target Clippy and
+3,957 workspace tests pass (eight existing ignored), including all 21 related tests;
+inventory validation, eight Python tooling tests and three inspected desktop captures pass.
+
 ## In flight (check for recent edits before claiming)
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
 | `codex/t59-worksheet-controls` | Codex Windows | T59 slice 2: worksheet Underline and Ctrl+B/I/U; Fill Color only if enabled in Native worksheet toolbar; Native control/shortcut measurements and UI/Undo/persistence | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` reused after shipped 0a3c8ab4; worksheet_format/text_format ephemeral worksheet flags/requests, toolbar/format worksheet branch, bounded app keyboard dispatch/new private helper and own new UI tests; existing cell-format fields only, no persistent model changes. No graph object_format/editor/title/legend, renderer/fonts/markup (text-run-fonts), worksheet-wide/dialog/menu leftovers, clipboard/sampling interval, printer workflow, calc/stats/MCP/IO writer or other scopes |
-| `codex/t58-title-editors` | Codex Windows, t58-title-editors | T58 slice 2 remainder: reuse selection editor/preview for existing X/Y axis titles and existing legend content; wire the two title entries | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` reused after completed 7bf66f6f; TextDialog/helpers, narrow graph-properties text hooks and existing-target menus/actions/app dispatch, own UI tests; read-only plot/lib.rs axis-title facade and layout::first_title visibility only, forwarding existing rules without render changes; graphing 7.7. Read-only plot/lib axis-title and cropped-scene facades reuse existing resolvers/SVG/raster; layout first_title visibility only, no rendering behaviour changes or font-owner registration edits. No T70 new legend title, shared Format/T59 adapter/toolbar/grid, renderer/fonts/markup (text-run-fonts), new core model fields, formula/parameter labels, graph_view/shape/layer/view tools, stats/other dialogs or pending root/index/roadmap  Requested final product integration window 2026-11-16 03:03 through 03:23 Central Standard Time, conditional on T84 releasing its current window first; otherwise defer. Please batch other product pushes outside this bounded window so combined checks can finish; docs-only claims remain fine. Releases on T58 push or deadline. |
 | `codex/text-run-fonts` | Codex Windows, text-run-fonts | T58 step 1 renderer remainder: per-run `\f:Name(text)` family switching, nested/restored metrics and glyph/stroke/export tests, preserving Greek/Symbol behaviour | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; markup/text + private tests, fonts only if necessary; graphing 7.6 (Format 7.4/editor 7.5 reserved); no combined scripts, other colour tags, app/editor/toolbar/dispatch, model/core/IO/backends or global font settings  Requested final main PRODUCT-push integration window 2026-11-16 02:18 through 02:43 Central Standard Time; please batch product pushes after this window so one full combined font validation can finish; documentation-only claims are fine; releases on font push or deadline. |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
@@ -294,7 +302,7 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
 | `stats-anova3` | Claude Windows, "continue all tasks" | B8 slice as new brief T81: Partial Correlation Coefficient, Three-Way ANOVA, Repeated Measures ANOVA; new calc modules, core tools, Statistics menu dialogs, ops analyze, statistics.md | claimed 2026-11-16; no Probability/Q-Q (T14), crosstab/dunnett/distfit, wavelets, fitting, peaks |
 | `hist-prob` | Claude Windows, session fe4b37eb | B4 slice as new brief T85: Plot > Statistics > Histogram + Probabilities (histogram with the cumulative probability curve on a right axis); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no other B4 plots (T83 interval/Pareto is done) or other sessions' scopes |
-| `swap-transpose` | Claude Windows, "t30-origin" | B5 slice as new brief T86: column header Swap Columns..., Edit > Paste Transpose and the data cell Paste Transpose (Origin measured), core sheet op, clipboard paste, menus | claimed 2026-11-16; worktree swap-transpose, build target/wf-excel; no other B5 items (not Paste Link, Copy Columns to, Remove Links, Set as Begin/End) |
+| `data-range` | Claude Windows, "t30-origin" | B5 slice as new brief T87: Edit > Set As Begin / Set As End / Reset to Full Range and the data cell Set as Begin / Set as End (Origin measured), column data range field, plots, menus | claimed 2026-11-16; worktree swap-transpose, build target/wf-excel; not Remove Links, Paste Link, Copy Columns to |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

@@ -33,6 +33,8 @@ pub enum CellOp {
     Cut,
     /// Paste what is on the clipboard: asks the system for the text, which comes back as `PasteText`.
     Paste,
+    /// Edit > Paste Transpose: as `Paste`, and the text that comes back is pasted transposed.
+    PasteTranspose,
     PasteText(String),
     /// Empty the cells (the Delete key).
     Clear,
@@ -281,6 +283,8 @@ pub enum Action {
         columns: Vec<ColumnId>,
         to: sheaf_core::sheetops::MoveTo,
     },
+    /// The column header's Swap Columns...: the two columns exchange places.
+    SwapColumns(ColumnId, ColumnId),
     /// Column > Hide/Unhide Columns > Hide Selected.
     HideColumns(Vec<ColumnId>),
     /// Column > Hide/Unhide Columns > Unhide All, on the active sheet of the workbook.

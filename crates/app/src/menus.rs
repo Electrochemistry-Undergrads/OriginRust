@@ -50,6 +50,7 @@ const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
 const NEED_CELLS: &str = "Select cells, columns or rows first";
 const NEED_TWO_COLUMNS: &str = "Select two or more columns first";
+const NEED_EXACTLY_TWO_COLUMNS: &str = "Select exactly two columns to swap";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
 const NO_TEMPLATE_FOLDER: &str = "There is no folder for user templates (the settings folder is missing)";
@@ -122,6 +123,10 @@ pub enum Cmd {
     DeleteColumns,
     /// Column > Move Columns.
     MoveColumns(MoveTo),
+    /// The column header's Swap Columns... (T86): the two selected columns exchange places.
+    SwapColumns,
+    /// Edit > Paste Transpose and the data cell's Paste Transpose (T86).
+    PasteTranspose,
     /// Column > Hide/Unhide Columns > Hide Selected.
     HideColumns,
     /// Column > Hide/Unhide Columns > Unhide All.
@@ -804,7 +809,8 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
             ],
         ));
         v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
-        v.extend(greys(&["Paste Transpose", "Paste Link", "Paste Link Transpose", "Paste Special", "-", "Select..."]));
+        v.push(item("Paste Transpose", Cmd::PasteTranspose));
+        v.extend(greys(&["Paste Link", "Paste Link Transpose", "Paste Special", "-", "Select..."]));
         v.push(keyed("C&lear", plain_key(Key::Delete), Cmd::Clear));
         v.push(item("Insert", Cmd::InsertCells));
         v.push(item("&Delete", Cmd::DeleteCells));
@@ -1824,7 +1830,7 @@ pub fn column_header_menu() -> Vec<Entry> {
             item("To Last", Cmd::MoveColumns(MoveTo::Last)),
         ],
     ));
-    v.push(grey("Swap Columns..."));
+    v.push(item("Swap Columns...", Cmd::SwapColumns));
     v.push(item("Column Width...", Cmd::ColumnProperties));
     v.extend(greys(&["-", "Slide Show of Dependent Graphs"]));
     v.extend(greys(&["Add or Update Sparklines...", "-"]));
@@ -1848,7 +1854,8 @@ pub fn cell_menu_for(noted: bool) -> Vec<Entry> {
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
     v.extend(copy_entries());
     v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
-    v.extend(greys(&["Paste Transpose", "Paste Link", "Paste Link Transpose", "-"]));
+    v.push(item("Paste Transpose", Cmd::PasteTranspose));
+    v.extend(greys(&["Paste Link", "Paste Link Transpose", "-"]));
     v.push(item("Insert", Cmd::InsertCells));
     v.push(item("Delete", Cmd::DeleteCells));
     v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
@@ -2534,6 +2541,13 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             book?;
             Action::MoveColumns { columns: some()?, to: *to }
         }
+        Cmd::SwapColumns => {
+            book?;
+            match c.selected {
+                [a, b] => Action::SwapColumns(*a, *b),
+                _ => return Err(NEED_EXACTLY_TWO_COLUMNS),
+            }
+        }
         Cmd::HideColumns => {
             book?;
             Action::HideColumns(some()?)
@@ -2544,12 +2558,19 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             Action::Cells { book, op: CellOp::Copy(*kind) }
         }
-        Cmd::Cut | Cmd::Paste | Cmd::Clear | Cmd::InsertCells | Cmd::DeleteCells | Cmd::Mask(_) => {
+        Cmd::Cut
+        | Cmd::Paste
+        | Cmd::PasteTranspose
+        | Cmd::Clear
+        | Cmd::InsertCells
+        | Cmd::DeleteCells
+        | Cmd::Mask(_) => {
             let book = book?;
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             let op = match cmd {
                 Cmd::Cut => CellOp::Cut,
                 Cmd::Paste => CellOp::Paste,
+                Cmd::PasteTranspose => CellOp::PasteTranspose,
                 Cmd::InsertCells => CellOp::Insert,
                 Cmd::Mask(m) => CellOp::Mask(*m),
                 Cmd::DeleteCells => CellOp::Delete,
@@ -3419,8 +3440,13 @@ mod tests {
         assert_eq!(resolve(&Cmd::ExportGraph, &c).unwrap_err(), NEED_GRAPH);
         // Several columns need two or more.
         assert_eq!(resolve(&Cmd::SetMultipleColumnsValues, &c).unwrap_err(), NEED_TWO_COLUMNS);
+        assert_eq!(resolve(&Cmd::SwapColumns, &c).unwrap_err(), NEED_EXACTLY_TWO_COLUMNS);
+        let three = [ColumnId(7), ColumnId(8), ColumnId(9)];
+        let c3 = MenuContext { selected: &three, ..c.clone() };
+        assert_eq!(resolve(&Cmd::SwapColumns, &c3).unwrap_err(), NEED_EXACTLY_TWO_COLUMNS);
         let two = [ColumnId(7), ColumnId(8)];
         let c = MenuContext { selected: &two, ..c };
+        assert!(matches!(resolve(&Cmd::SwapColumns, &c), Ok(Action::SwapColumns(ColumnId(7), ColumnId(8)))));
         assert!(
             matches!(resolve(&Cmd::SetMultipleColumnsValues, &c), Ok(Action::SetMultipleColumnsValues(x)) if x == two)
         );

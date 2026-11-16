@@ -3498,7 +3498,8 @@ fn the_cell_and_row_menus_copy_and_clear_and_grey_what_sheaf_lacks() {
         &["Cut", "Copy", "Paste", "Paste Transpose", "Insert", "Clear", "Insert Graph...", "Format Cells..."],
     );
     assert!(entry_enabled(&h, "Copy"));
-    assert!(!entry_enabled(&h, "Paste Transpose"));
+    assert!(entry_enabled(&h, "Paste Transpose"), "T86");
+    assert!(!entry_enabled(&h, "Paste Link"));
     assert!(!entry_enabled(&h, "Insert Graph..."));
     click_containing(&mut h, "Clear");
     assert!(column(&h, "B")[2].is_nan());
@@ -8878,6 +8879,7 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
 
 mod fill_pattern;
 mod sampling;
+mod swap_transpose;
 #[path = "ui_tests/trendline.rs"]
 mod trendline;
 mod user_templates;

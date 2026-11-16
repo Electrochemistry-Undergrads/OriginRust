@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **356 greyed items: 246 in the menu bar, 19 on the toolbars, 91 in context menus.**
+original inventory baseline. This is not a new runtime audit. **353 greyed items: 245 in the menu bar, 19 on the toolbars, 89 in context menus.**
 
 ## How to read and keep this file
 
@@ -59,7 +59,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B2` | 33 |
 | `B3` | 19 |
 | `B4` | 19 |
-| `B5` | 23 |
+| `B5` | 20 |
 | `B6` | 31 |
 | `B7` | 8 |
 | `B8` | 16 |
@@ -73,7 +73,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 65 items, backlog packages (`B`) 271, not planned (`N`) 20.
+Briefs (`T`) hold 65 items, backlog packages (`B`) 268, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -98,7 +98,7 @@ changes. The baseline labels remain open until implementation or a documented re
 ### Edit
 - `B5` Copy: Copy formula · Copy label rows · Copy formula and label rows · Copy All [Workbook]
 - `B5` Paste Link · Paste Special [Workbook, Graph]
-- `B5` Paste Transpose · Paste Link Transpose · Select... [Workbook]
+- `B5` Paste Link Transpose · Select... [Workbook]
 - `B5` Remove Links · Set As Begin · Set As End · Reset to Full Range [Workbook]
 - `B7` Find in Project... [Workbook]
 - `B16` Button Edit Mode [Workbook, Graph]
@@ -218,11 +218,11 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ## Context menus
 
-- `B5` Worksheet column header: Copy Columns to... · Remove Links · Swap Columns... · Slide Show of Dependent Graphs
+- `B5` Worksheet column header: Copy Columns to... · Remove Links · Slide Show of Dependent Graphs
 - `T63` Worksheet column header: Frequency Count...
 - `B6` Worksheet column header: Add or Update Sparklines...
 - `T63` Worksheet column header > Fill Column with: Row Numbers · Uniform Random Numbers · Normal Random Numbers
-- `B5` Worksheet data cell: Paste Transpose · Paste Link · Paste Link Transpose · Remove Links · Set as Begin · Set as End
+- `B5` Worksheet data cell: Paste Link · Paste Link Transpose · Remove Links · Set as Begin · Set as End
 - `B6` Worksheet data cell: Insert Graph... · Insert Images from Files... · Insert Sparklines... · Insert Variables...
 - `B6` Worksheet data cell > Insert Arrow: Arrow · Double Arrow
 - `T59` Worksheet data cell > Set Data Style: Default

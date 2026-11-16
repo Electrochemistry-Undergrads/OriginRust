@@ -621,6 +621,22 @@ Name) and `colshowx` (Clear Sampling Interval, default off). Measured from LabTa
   interval ...", and the companion keeps it for Sheaf. Not read from Origin's `.opj` files yet. Sheaf's
   analysis tools (fits, statistics) still take the X column or the row number, not the interval.
 
+## 13e. Swap Columns and Paste Transpose (T86, 2026-11-16)
+
+- **Swap Columns...** (the column header's menu) is Origin 2016's `colswap`, measured from LabTalk
+  (`re-workspace/scratch/t86/w1`, local only; `crates/core/tests/swap_transpose.rs`): with exactly two
+  columns selected they exchange places, each taking everything of its own along (B and D of A..E give A,
+  D, C, B, E; D keeps its long name, units, Y-error designation and width, B its width of 12). With one or
+  three columns selected `colswap` fails and nothing changes; Sheaf says "Select exactly two columns to
+  swap". One undo step ("Swap columns"). Origin opened no window from LabTalk; Sheaf opens none.
+- **Paste Transpose** (Edit menu and the data cell's menu) pastes the clipboard's block with its rows as
+  columns and its columns as rows, at the active cell, by the rules of an ordinary paste (section 13.3:
+  columns added at the right when needed, an empty column takes the type of what is pasted, a number
+  column with data keeps its type, columns a formula keeps up to date are left alone). Short rows of the
+  text give empty cells. One undo step ("Paste transpose"); the next ordinary paste is not transposed.
+  Sheaf's rule, not measured in Origin (a menu-only command that a script cannot reach with the
+  clipboard).
+
 ## 14. Suggested Rust data model (P0)
 
 ```

@@ -50,9 +50,10 @@ title/legend Edit Text routes use the shared selection editor and actual-object 
 Automatic text, raw metadata/legend notation, base fonts, visibility, draft cancellation and
 history are preserved; read-only title/region facades reuse existing rendering rules (7.7).
 The two title-menu entries are enabled. Inline family/colour pickers, combined-script insertion
-and remaining renderer gaps still need their separate slices. Initial integrated validation passed formatting, strict workspace all-target Clippy and
-3,932 tests (eight existing ignored), including all 21 related editor tests. Inventory and
-eight Python tooling tests pass; X-title, Y-title and legend desktop captures were inspected.
+and remaining renderer gaps still need their separate slices. Final combined validation passed formatting, strict workspace all-target Clippy and
+3,957 tests (eight existing ignored), including all 21 related editor tests. Inventory
+and eight Python tooling tests pass; X-title, Y-title and legend desktop captures were
+inspected, and their four editor/test source files remain unchanged on the combined tree.
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

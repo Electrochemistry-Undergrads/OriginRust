@@ -220,6 +220,20 @@ the default project format.
         clipboard full-precision copying and text-field round trips covered by UI tests
         (Origin clipboard parity remains open)
 
+## Owner's priorities of 2026-11-15 (they come before the rest of milestone 6)
+
+The owner listed every menu item greyed "Not available in Sheaf yet" (463 items,
+[tasks/greyed-items.md](tasks/greyed-items.md)) and set the order. The full plan, with the later
+waves, is [tasks/PLAN.md](tasks/PLAN.md).
+
+- [ ] Basic formatting on graphs: live Format toolbar, underline and colour escapes, formatting
+      buttons in the text window (T58)
+- [ ] Basic formatting in worksheets: Format Cells and the Format toolbar on cells (T59)
+- [ ] Stacked figures from existing graphs: Merge Graph Windows, Layer Management (T60)
+- [ ] Adding layers and insets; three and four Y axes (T61)
+- [ ] Offset Grouped Data in Layer menu, Stacked Histograms, waterfall colour mapping (T62)
+- [ ] Greyed items whose feature already exists, second round (T63)
+
 ## Milestone 6: breadth
 
 - [ ] More 2D graph types (T12). Present in the app and CLI, with regression fixtures:

@@ -1,7 +1,7 @@
 # Task briefs
 
-Each `Txx-*.md` file is one self-contained piece of work: read HANDOFF.md, this file and **one**
-brief, then start. Do not read `docs/audit/origin-differences-2026-11-12.md` or whole specs up front;
+Each `Txx-*.md` file is one self-contained piece of work: read HANDOFF.md, [PLAN.md](PLAN.md) (what
+to do next, in which order), this file and **one** brief, then start. Do not read `docs/audit/origin-differences-2026-11-12.md` or whole specs up front;
 a brief names the exact spec section and audit letter to open only when you need detail.
 
 ## How to work a task (applies to every brief)
@@ -32,10 +32,15 @@ a brief names the exact spec section and audit letter to open only when you need
 7. **Merge** one branch at a time: `git fetch`, merge `main` into the branch, re-run the checks, then
    merge into `main` and push. Delete the build folder with `tools/clean-target.sh wt-<branch>`.
    Tick `docs/ROADMAP.md` and the rows of `docs/spec/feature-parity.md` you closed (recount with
-   `python tools/parity-count.py`). Update the brief's **Status** line and the HANDOFF tables.
+   `python tools/parity-count.py`). Delete the menu items you enabled from
+   [greyed-items.md](greyed-items.md) (recount with `python tools/greyed-count.py`) and tick the
+   package in [PLAN.md](PLAN.md). Update the brief's **Status** line and the index below, and
+   release your claim in HANDOFF. Merge notes go in the Status line, not in HANDOFF.
 8. **Commits:** Conventional Commits subjects. **Never** add a `Co-Authored-By: Claude` or
    "Generated with Claude Code" line (owner rule); repeat this rule in every subagent prompt.
-9. **Subagents:** Sonnet for building, research and review; Haiku for running tests and checking
+9. **Then go on.** Do not end your turn after a merge: pick the next package and start it
+   ([PLAN.md](PLAN.md) "Continuous run"; it ends only at the STOP CHECK).
+10. **Subagents:** Sonnet for building, research and review; Haiku for running tests and checking
    outputs. Give each its own worktree, build folder and named files.
 
 ## Brief format
@@ -46,8 +51,15 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 
 ## Index
 
-[Origin 2016 to 2026–2027 functionality gaps](origin-2026-2027-gaps.md) lists newer capabilities
-that are missing from Sheaf and have no existing brief or handoff entry.
+- [PLAN.md](PLAN.md): the order of work (waves), set by the owner's priorities of 2026-11-15, and
+  the backlog packages (`B1` to `B16`) that still need a brief.
+- [greyed-items.md](greyed-items.md): every menu item greyed "Not available in Sheaf yet", tagged
+  with the package that will enable it.
+- [Origin 2016 to 2026–2027 functionality gaps](origin-2026-2027-gaps.md): newer capabilities that
+  are missing from Sheaf and have no greyed item or brief.
+
+Open briefs of the owner's priorities, in order: T58, T59 (formatting), T60, T61, T62 (stacked and
+multi-layer graphs), T63 (wire-ups). The table is in number order.
 
 | Brief | Area | Size | Status |
 |---|---|---|---|
@@ -106,8 +118,15 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T53](T53-set-multiple-columns.md) | Set Multiple Columns Values (Ctrl+Shift+Q): one formula over the selected columns with `j` | M | done, merged 2026-11-15 (expression-language 7); Origin's window and `j` measured 2026-11-15 (7.1); left: non-adjacent, locked and text columns in Origin |
 | [T54](T54-save-window-as.md) | Save Window As (`.sheafbook`/`.sheafgraph` window files opened by appending) and Recent Books / Recent Graphs | M | done, merged 2026-11-15 (window-files.md); left: Origin measurements, Save Template As |
 | [T55](T55-iir-fir-filters.md) | IIR Filter (Butterworth, Chebyshev I/II, elliptic) and FIR Filter (window, least squares) design and application | L | done, merged 2026-11-15 (analysis-tools 17, `iir-filter`/`fir-filter`, macOS); left: Origin measurements, SOS/ZPK/state-space/coefficient output sheets, preview panels, custom FIR window, `dfilterapply`; Bessel is not an Origin method |
-| [T57](T57-deconvolution-stft.md) | Deconvolution and STFT (Signal Processing) | M | claimed 2026-11-15 (`deconv-stft`, Claude macOS "violin") |
 | [T56](T56-user-graph-templates.md) | Save Template As and Plot > User Templates (a graph's look without data, applied to new columns; CLI `--template`) | M | open; stopped 2026-11-15: unverified core/io start on remote branch `user-templates` (`449ef7b`), free to continue or restart |
+| [T57](T57-deconvolution-stft.md) | Deconvolution and STFT (Signal Processing) | M | claimed 2026-11-15 (`deconv-stft`, Claude macOS "violin") |
+| [T58](T58-graph-text-formatting.md) | Text formatting on graphs: live Format toolbar (bold, italic, underline, superscript, subscript, Greek, font, size, colours), underline/strikethrough/colour escapes drawn, formatting buttons and preview in the text window | L | open; **owner's priority 1** (PLAN wave 1) |
+| [T59](T59-worksheet-cell-formatting.md) | Worksheet cell formatting: Format Cells window, font style, colours and alignment per cell, Format toolbar on a cell selection | L | open; **owner's priority 1** (PLAN wave 1), toolbar part after T58 slice 3 |
+| [T60](T60-merge-graphs-layer-management.md) | Merge Graph Windows (a stacked figure from existing graphs), Layer Management, Fit Layer to Graph, Fit Page to Layers | L | open; **owner's priority 2** (PLAN wave 2) |
+| [T61](T61-layers-and-multi-y.md) | Add Layer buttons, inset, delete layer, layer icon menu, 3Ys/4Ys templates and Multiple Y Axes | L | open; **owner's priority 2** (PLAN wave 2) |
+| [T62](T62-stack-offset-leftovers.md) | Graph > Offset Grouped Data in Layer (with Cumulative), Stacked Histograms, waterfall colour mapping | M | open; **owner's priority 2** (PLAN wave 2) |
+| [T63](T63-greyed-items-with-code-2.md) | Second round of T01: 31 greyed items whose feature exists (toolbar plot buttons, step lines, Probability/Q-Q plots, Duplicate, Fill Column With, ...) | M | open; parallel lane, claim by group (PLAN wave 3) |
 
-In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
-2026-11-12 are merged or turned into briefs (T20, T21).
+In flight (do not start these without the owner's word): matrices/contour/heatmaps (`originrust-3a`,
+unpushed, session offline since 2026-11-12; PLAN wave 8). Current claims are in the HANDOFF "In
+flight" table.

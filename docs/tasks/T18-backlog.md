@@ -3,6 +3,12 @@
 Large or later items. Before starting one, write a proper brief (see README "Brief format") from
 the audit section named and the parity table row.
 
+Since 2026-11-15 the order of this backlog is set in [PLAN.md](PLAN.md): its packages B11 to B16
+cover the rows below that have greyed menu items (templates and themes B11, Options and the fit
+function tools B13, new window types and matrices B14, 3D B15, scripting B16; drawing-tool leftovers
+are B2, inset is T61). The importers and the `.opju`/`.opj` reading rows have no greyed item and
+stay here.
+
 | Item | Audit | Notes |
 |---|---|---|
 | Matrices, contour, heatmaps | E, C | owned by `originrust-3a`; do not start |

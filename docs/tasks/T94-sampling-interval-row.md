@@ -1,6 +1,6 @@
 # T94: Sampling Interval label row
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `interval-row`).
+**Status:** open; measured 2026-11-16 (workbook-model.md 13i, "Sampling Interval row"), not built: the row needs a new label-row kind in `worksheet_layout.rs` and `cellformat::LabelKind`, which the T59 sessions are changing; claim it after T59's worksheet slices land. Claim withdrawn by Claude Windows "t30-origin".
 **Size:** S. **Source:** greyed inventory package B6 (the worksheet corner menu's Sampling Interval), with
 T84's sampling interval.
 **Spec:** `docs/spec/workbook-model.md` 13d and 13i.

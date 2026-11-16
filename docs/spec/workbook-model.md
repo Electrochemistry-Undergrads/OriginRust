@@ -763,6 +763,13 @@ Sampling Interval (the interval of T84 has no label row yet), Sparklines, Filter
 Row Header and Page Break Preview Lines. User parameter rows show whenever a column has one. The `.opj`
 written here does not hold the switches (the save warning names the sheets).
 
+**Sampling Interval row (measured 2026-11-16 for T94, not built):** after `colint` gave B x0 = 0, inc =
+0.5, units s, Origin 2016 showed a "Sampling Interval" label row on its own (the switch turned on), below
+F(x)=, with "0.5 (s)" in B (the increment and the units in parentheses) and empty cells in A and C; the
+corner switch hides it again. The column heads also changed: B became "B(Y#)" with a small icon, A "A(X1)"
+and C "C(Y1)" (designation numbers appear once a column has its own X). Building it needs a new label-row
+kind in the worksheet layout and cell formats (T59's area), so it waits for that work.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

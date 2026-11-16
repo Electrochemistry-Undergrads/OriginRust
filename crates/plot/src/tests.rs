@@ -4611,3 +4611,33 @@ fn stacked_histogram_bins_ignore_masked_and_filtered_outliers() {
     p.hide_masked = true;
     assert_eq!(end_of(&mut p), normal);
 }
+
+/// Origin's Column + Label writes each value centred above its own column, also when two columns share a
+/// category (graphing 18.12).
+#[test]
+fn column_labels_are_centred_on_their_own_bar_in_a_group() {
+    use sheaf_core::{ColumnData, Designation};
+    let mut p = Project::new();
+    let book = p.add_workbook("C");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+    let y1 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 5.0, 2.0])).unwrap();
+    let y2 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 1.0, 4.0])).unwrap();
+    let g = p.plot_columns(Template::ColumnLabel, &[y1, y2]).unwrap();
+    let bars = bars_of(&p, g);
+    assert_eq!(bars.len(), 6);
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let labels: Vec<&scene::TextItem> = scene.layers[0]
+        .plots
+        .iter()
+        .filter_map(|it| match it {
+            scene::Item::Text(t) => Some(t),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(labels.len(), 6, "a value over every column");
+    for (rect, _, _) in &bars {
+        let centre = rect.x + rect.w / 2.0;
+        let over = labels.iter().filter(|t| (t.x - centre).abs() < 1e-6 && t.y < rect.y).count();
+        assert_eq!(over, 1, "one label centred over the bar at {centre}");
+    }
+}

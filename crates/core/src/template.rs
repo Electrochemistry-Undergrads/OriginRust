@@ -102,6 +102,13 @@ pub enum Template {
     /// exchanged and vertical drop lines that go from each plot to the next data plot. Needs two
     /// or more Y columns ([`Project::plot_columns`] refuses fewer).
     Lollipop,
+    /// Origin's Plot > Symbol > Vertical Drop Line (template `DROPLINE`): the scatter template with a
+    /// vertical drop line from every point down to the bottom axis, in the plot's colour, 0.5 pt (measured,
+    /// graphing 18.12).
+    VerticalDropLine,
+    /// Origin's Plot > Column/Bar/Pie > Column + Label (template `ColumnLabel`): the column template with
+    /// each column's value written above it in Arial 22 (measured, graphing 18.12).
+    ColumnLabel,
     /// Scatter plot with a rug on the bottom and left axes (Origin's "Scatter + Rug", 2019b): one short
     /// line per point beside each axis, all plots overlapping in one strip (graphing spec 18.10).
     ScatterRug,
@@ -139,7 +146,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 52] = [
+    pub const ALL: [Template; 54] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -191,6 +198,8 @@ impl Template {
         Template::StackedLines,
         Template::Waterfall,
         Template::Lollipop,
+        Template::VerticalDropLine,
+        Template::ColumnLabel,
         Template::ScatterRug,
     ];
 
@@ -236,6 +245,8 @@ impl Template {
             Template::Radar => "radar",
             Template::Ternary => "ternary",
             Template::Lollipop => "lollipop",
+            Template::VerticalDropLine => "vertical-drop-line",
+            Template::ColumnLabel => "column-label",
             Template::ScatterRug => "scatter-rug",
             Template::Violin => "violin",
             Template::ViolinBox => "violin-box",
@@ -293,6 +304,8 @@ impl Template {
             Template::Radar => "Radar",
             Template::Ternary => "Ternary",
             Template::Lollipop => "Lollipop Plot",
+            Template::VerticalDropLine => "Vertical Drop Line",
+            Template::ColumnLabel => "Column + Label",
             Template::ScatterRug => "Scatter + Rug",
             Template::Violin => "Violin Plot",
             Template::ViolinBox => "Violin with Box",
@@ -392,6 +405,8 @@ impl Template {
             Template::Radar => radar(id, name),
             Template::Ternary => ternary(id, name),
             Template::Lollipop => general(id, name, PlotKind::Scatter),
+            Template::VerticalDropLine => general(id, name, PlotKind::Scatter),
+            Template::ColumnLabel => from_red(column(id, name, PlotKind::Column)),
             Template::ScatterRug => scatter_rug(id, name),
             Template::Violin => from_red(general(id, name, PlotKind::Violin)),
             Template::ViolinBox => from_red(general(id, name, PlotKind::ViolinBox)),
@@ -1215,6 +1230,36 @@ mod tests {
         }
         assert_eq!(p.plot_label(&l.plots[0]), p.column(y1).unwrap().display_name());
         assert_eq!(Template::Lollipop.label(), "Lollipop Plot");
+    }
+
+    /// Origin 2016's DROPLINE and ColumnLabel templates (graphing 18.12).
+    #[test]
+    fn vertical_drop_line_and_column_label_templates() {
+        use crate::{ColumnData, Designation, Project};
+        let mut p = Project::new();
+        let book = p.add_workbook("T");
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        let y1 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 5.0, 2.0])).unwrap();
+        let y2 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 1.0, 4.0])).unwrap();
+        let g = p.plot_columns(Template::VerticalDropLine, &[y1, y2]).unwrap();
+        let layer = &p.graph(g).unwrap().layers[0];
+        assert!(layer.plots.iter().all(|q| q.kind == PlotKind::Scatter && q.decor.drop.vertical.on));
+        let drop = &layer.plots[0].decor.drop.vertical;
+        assert_eq!(
+            (drop.width_pt, drop.color, drop.target),
+            (0.5, None, DropTarget::Axis),
+            "0.5 pt in the plot's colour"
+        );
+        assert!(!layer.plots[0].decor.drop.horizontal.on);
+        assert_ne!(layer.plots[0].symbol.shape, layer.plots[1].symbol.shape, "square, then circle");
+        let g = p.plot_columns(Template::ColumnLabel, &[y1, y2]).unwrap();
+        let layer = &p.graph(g).unwrap().layers[0];
+        assert!(layer.plots.iter().all(|q| q.kind == PlotKind::Column && q.decor.labels.enable));
+        assert_eq!(layer.plots[0].decor.labels.position, LabelPosition::Above);
+        assert_eq!(layer.plots[0].decor.labels.font.size_pt, 22.0);
+        assert_eq!(Template::from_name("vertical-drop-line"), Some(Template::VerticalDropLine));
+        assert_eq!(Template::from_name("column-label"), Some(Template::ColumnLabel));
+        assert_eq!(Template::ColumnLabel.label(), "Column + Label");
     }
 
     #[test]

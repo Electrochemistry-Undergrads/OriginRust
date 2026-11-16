@@ -815,7 +815,7 @@ fn plot_menu() -> Vec<Entry> {
                     grey("Column Scatter"),
                 ],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
-                greys(&["Vertical Drop Line"]),
+                vec![item("Vertical Drop Line", Cmd::Plot(Template::VerticalDropLine))],
                 vec![item("Lollipop Plot", Cmd::Plot(Template::Lollipop))],
                 vec![
                     item("Bubble", Cmd::Plot(Template::Bubble)),
@@ -836,7 +836,8 @@ fn plot_menu() -> Vec<Entry> {
             "Column/Bar/&Pie",
             [
                 vec![item("&Column", Cmd::Plot(Template::Column))],
-                greys(&["Column + Label", "Grouped Columns (indexed data)"]),
+                vec![item("Column + Label", Cmd::Plot(Template::ColumnLabel))],
+                greys(&["Grouped Columns (indexed data)"]),
                 vec![
                     item("Bar", Cmd::Plot(Template::Bar)),
                     item("Stacked Column", Cmd::Plot(Template::StackedColumn)),

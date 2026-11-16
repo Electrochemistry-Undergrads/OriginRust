@@ -280,8 +280,13 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m:
     let gap = size * 0.25;
     // From the baseline to the middle of a line of digits.
     let mid = size * 0.35;
+    // A column or bar of a group stands in its own slot beside the category: its label is centred on the bar,
+    // as Origin's Column + Label draws grouped columns (graphing 18.12).
+    let shift = pd.bar.map_or(0.0, |slot| slot.left + slot.width / 2.0);
     for i in pd.point_rows() {
-        let Some((px, py)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
+        let (lx, ly) =
+            if pd.transposed() { (pd.x_at(i), pd.y_at(i) + shift) } else { (pd.x_at(i) + shift, pd.y_at(i)) };
+        let Some((px, py)) = geom.checked_data_to_page(lx, ly) else { continue };
         let (xv, yv) = (pd.source_x_at(i), pd.y.get(i).copied().unwrap_or(f64::NAN));
         if !labels.labels_row(i) {
             continue;

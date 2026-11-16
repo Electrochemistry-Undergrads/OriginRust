@@ -71,6 +71,13 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+T62 Origin measurements (2026-11-16, Claude Windows, docs only, graphing 13.16-13.17): Origin 2016's
+Stacked Histograms put the first column at the bottom, give each panel its own bins and X scale and draw
+every panel in the same red hatch on a portrait page with 5 % gaps; its Waterfall Y/Z Color Mapping colour
+from red (low) to blue (high), the reverse of Sheaf, on Origin's oblique waterfall. The differences are listed
+in the spec and the T62 Status for a code slice. No build this run: the disk had 836 MB free, so the idle
+build folder `target/wf-autosave` was deleted (23 GB free after) and no new one was made.
+
 T72 Copy Format / Paste Format (B2 slice 1, branch `copy-format`, graphing 26, Origin 2016 measured): Edit,
 page and axis menus copy a graph or axis format (All, All Style Formats, Colors, Fonts, Background, Dimensions,
 Scales; axis All) and paste it as one "Apply Theme" undo step; Edit > Paste Format... opens Apply Formats (its
@@ -251,7 +258,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `t62-origin` | Claude Windows, "axis-breaks" | T62 leftovers, docs only: Origin 2016 measurements of Stacked Histograms (graphing 13.16) and Waterfall Y/Z Color Mapping (13.17); differences recorded for a later code slice | claimed 2026-11-16; spec and brief text only, no code; no other sessions' scopes |
 | `codex/t58-title-editors` | Codex Windows, t58-title-editors | T58 slice 2 remainder: reuse selection editor/preview for existing X/Y axis titles and existing legend content; wire the two title entries | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` reused after completed 7bf66f6f; TextDialog/helpers, narrow graph-properties text hooks and existing-target menus/actions/app dispatch, own UI tests; read-only plot/lib.rs axis-title facade and layout::first_title visibility only, forwarding existing rules without render changes; graphing 7.7. Read-only plot/lib axis-title and cropped-scene facades reuse existing resolvers/SVG/raster; layout first_title visibility only, no rendering behaviour changes or font-owner registration edits. No T70 new legend title, shared Format/T59 adapter/toolbar/grid, renderer/fonts/markup (text-run-fonts), new core model fields, formula/parameter labels, graph_view/shape/layer/view tools, stats/other dialogs or pending root/index/roadmap |
 | `codex/t59-format-toolbar` | Codex Windows | T59 step 3 first slice: worksheet Format toolbar target, mixed-state/Undo/persistence/UI tests and Origin measurements; measured font drawing and font-derived row geometry dependency fixes | claimed/refined 2026-11-15; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points`; app/grid + new worksheet-font/geometry helpers, bounded core sheet_print + plot/sheet styled-cell font/geometry and plot/lib helper export as needed; existing cell-format fields only/no new persistent model fields; no graph fonts/markup/text/layout/backends (text-run-fonts), graph editor (t58-text-editor), printer dialogs/page/range/workflows, T69/T70/T54 or other scopes |
 | `codex/text-run-fonts` | Codex Windows, text-run-fonts | T58 step 1 renderer remainder: per-run `\f:Name(text)` family switching, nested/restored metrics and glyph/stroke/export tests, preserving Greek/Symbol behaviour | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; markup/text + private tests, fonts only if necessary; graphing 7.6 (Format 7.4/editor 7.5 reserved); no combined scripts, other colour tags, app/editor/toolbar/dispatch, model/core/IO/backends or global font settings |

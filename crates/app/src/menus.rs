@@ -915,7 +915,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("&Scatter", Cmd::Plot(Template::Scatter)),
                     item("Scatter + Rug", Cmd::Plot(Template::ScatterRug)),
                     item("Scatter Central", Cmd::Plot(Template::ScatterCentral)),
-                    grey("Column Scatter"),
+                    item("Column Scatter", Cmd::Plot(Template::ColumnScatter)),
                 ],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
                 vec![item("Vertical Drop Line", Cmd::Plot(Template::VerticalDropLine))],

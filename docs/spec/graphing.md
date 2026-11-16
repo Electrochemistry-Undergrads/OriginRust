@@ -3991,6 +3991,17 @@ grouped. Sheaf: `Template::VerticalDropLine` (scatter, `decor.drop.vertical` on,
 data labels of grouped columns and bars are now centred on their own bar. CLI `-t vertical-drop-line`, `-t
 column-label`.
 
+### 18.14 Column Scatter (T79, measured 2026-11-16)
+
+Origin 2016's Plot > Symbol > Column Scatter draws every selected Y column as points standing at its
+position 1, 2, ... in plot order: filled diamonds of size 8 coloured by the group (black, red, ...), no
+line, the points of a column spread sideways by a jitter (within about +-0.15), the X axis from 0.5 to
+n + 0.5 with one tick per column labelled with its name, the Y title "Range", the usual legend. Sheaf:
+`PlotKind::ColumnScatter` and template `column-scatter` (menu, `sheaf plot -t column-scatter`), placed
+by the box chart's category axis; the jitter is a fixed golden-ratio sequence within +-0.15 (Sheaf's
+choice: Origin's rule was not measured). Trendlines, rugs and slopes do not use the jittered X. `.opj`
+writes a scatter of the data with a warning.
+
 ### 18.13 Scatter Central (T75, measured 2026-11-15)
 
 Origin 2016's Plot > Symbol > Scatter Central is the scatter graph with both axes crossing in the middle

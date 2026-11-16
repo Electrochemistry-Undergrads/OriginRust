@@ -1508,6 +1508,10 @@ pub enum PlotKind {
     /// A box chart of the plot's Y column (Origin's plot type 206): one box per plot, standing at
     /// 1, 2, 3, ... in plot order, with the median, the mean, whiskers and outliers.
     Box,
+    /// Origin's Column Scatter (2016): each plot's Y column as points standing at 1, 2, 3, ... in plot
+    /// order like [`PlotKind::Box`], spread sideways by a small deterministic jitter so equal values do
+    /// not hide each other. Symbols only, no line, no box.
+    ColumnScatter,
     /// Origin's violin plot (2019, template Violin.otpu): each plot's Y column as a mirrored
     /// kernel density silhouette standing at 1, 2, 3, ... in plot order like [`PlotKind::Box`],
     /// with the median marked inside.
@@ -1678,7 +1682,7 @@ impl PlotKind {
     }
 
     pub fn has_symbols(&self) -> bool {
-        matches!(self, PlotKind::Scatter | PlotKind::LineSymbol)
+        matches!(self, PlotKind::Scatter | PlotKind::LineSymbol | PlotKind::ColumnScatter)
     }
 }
 

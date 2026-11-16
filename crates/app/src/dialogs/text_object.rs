@@ -93,6 +93,7 @@ impl TextDialog {
         let mut close = false;
         egui::Window::new("Text")
             .id(egui::Id::new("text_object"))
+            .default_pos(ctx.content_rect().center() - egui::vec2(200.0, 180.0))
             .open(&mut open)
             .collapsible(false)
             .resizable(false)

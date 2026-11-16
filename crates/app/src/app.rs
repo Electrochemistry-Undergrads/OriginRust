@@ -44,6 +44,7 @@ use crate::dialogs::stack_panels::{Outcome as StackPanelsOutcome, StackPanelsDia
 use crate::dialogs::straight_line::StraightLineDialog;
 use crate::dialogs::text_object::TextDialog;
 use crate::dialogs::trendline::{Outcome as TrendlineOutcome, TrendlineDialog};
+use crate::graph_scale::{self, ScaleTool};
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi, Sel};
 use crate::live::{self, Live, Note};
@@ -2080,6 +2081,11 @@ impl SheafApp {
                 state.slope_first = None;
                 state.zoom_in_tool = tool == GraphTool::ZoomIn;
                 state.pan_tool = tool == GraphTool::Pan;
+                state.scale.tool = match tool {
+                    GraphTool::ScaleIn => Some(ScaleTool::In),
+                    GraphTool::ScaleOut => Some(ScaleTool::Out),
+                    _ => None,
+                };
                 state.shape_tool = match tool {
                     GraphTool::Draw(kind) => Some(kind),
                     _ => None,
@@ -2101,6 +2107,8 @@ impl SheafApp {
                     GraphTool::Data(tool) => self.say(crate::data_tools::hint(tool)),
                     GraphTool::ZoomIn => self.say("Zoom In: click the page where to zoom; Esc ends"),
                     GraphTool::Pan => self.say("Pan: drag the page to move the view; Esc ends"),
+                    GraphTool::ScaleIn => self.say("Scale In: drag a rectangle to magnify the axes; Esc ends"),
+                    GraphTool::ScaleOut => self.say("Scale Out: click to step back to the previous axes; Esc ends"),
                     GraphTool::Pointer => {}
                 }
             }
@@ -2109,9 +2117,24 @@ impl SheafApp {
                 match op {
                     ViewOp::ZoomOut => state.zoom_out(),
                     ViewOp::WholePage => state.whole_page(),
+                    ViewOp::ZoomAll => state.zoom_all(),
                 }
                 let percent = (state.zoom.factor * 100.0).round();
                 self.say(format!("Zoom {percent}%"));
+            }
+            Action::ScaleIn { graph, layer, x, y } => {
+                let state = &mut self.graphs.entry(graph).or_default().scale;
+                if graph_scale::scale_in(&mut self.doc, state, graph, layer, x, y) {
+                    self.say("Scale In");
+                }
+            }
+            Action::ScaleOut { graph, layer } => {
+                let state = &mut self.graphs.entry(graph).or_default().scale;
+                if graph_scale::scale_out(&mut self.doc, state, graph, layer) {
+                    self.say("Scale Out");
+                } else {
+                    self.say("Scale Out: no earlier scale to go back to");
+                }
             }
             Action::SetViewMode { graph, mode } => {
                 if self.doc.project().graph(graph).is_some() && self.doc.project().view_mode(graph) != mode {

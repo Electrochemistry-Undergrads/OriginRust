@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 393 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 390 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -96,7 +96,7 @@ Backlog packages: write the brief first (step 3 above).
 |---|---|---|---|---|
 | [x] | [T65](T65-graph-view-zoom-pan.md) | Graph view zoom and pan (B1 slice 1): Zoom In mode, Zoom Out, Whole Page, Pan | M | 0 |
 | [ ] | [T66](T66-graph-view-modes.md) | Graph view modes (Print, Page, Window, Draft), Show > Layer Icons and Full Screen done; the nine other Show items and Show Data Info wait for measurement (B1 slice 2) | M | 10 |
-| [ ] | B1 | Graph view: Zoom All (the rest of B1: T65, T66) | S | 3 |
+| [x] | [T69](T69-zoom-all-scale-tools.md) | Graph view, the rest of B1: View > Zoom All and the Tools-bar Scale In / Scale Out (measured in graphing 23) | S | 0 |
 | [ ] | B2 | Graph objects: cut/copy/paste, Copy/Paste Format, align, same size, group, order across object kinds, snap to grid | L | 51 |
 | [x] | [T67](T67-add-straight-line.md) | Add Straight Line (B3 slice 1) | M | 0 |
 | [x] | [T70](T70-axis-center-fit-page-to-printer.md) | Axis Center and Fit Page To Printer (B3 slice 2) | S | 0 |
@@ -107,7 +107,7 @@ Backlog packages: write the brief first (step 3 above).
 - **B1.** The graph view draws the page to fit the window. Add a view transform (zoom factor and
   scroll offset) in `crates/app/src/graph_view.rs` so hit-testing (`sheaf_plot::hit`) still works,
   then the Zoom In/Out tools, Whole Page, mouse-wheel zoom and Pan. Zoom and pan are T65 (done). The view modes, View > Show toggles, Show Data Info and Full Screen
-  are T66 (measured in graphing 22); only Zoom All is left under B1.
+  are T66 (measured in graphing 22); Zoom All and the Tools-bar magnifiers (Scale In / Scale Out) are T69 (measured in graphing 23).
 - **B2.** Continues T24 (drawn shapes; ordering inside one layer and resize handles are done or in
   flight). Needs one ordering for all objects of a page (labels, legend, shapes, axis titles), an
   object clipboard, the nine Copy Format choices with Paste Format, and the Object Edit toolbar on

@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **393 greyed items: 279 in the menu bar, 28 on the toolbars, 86 in context menus.**
+original inventory baseline. This is not a new runtime audit. **390 greyed items: 278 in the menu bar, 26 on the toolbars, 86 in context menus.**
 
 ## How to read and keep this file
 
@@ -44,9 +44,9 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T65` | 0 |
 | `T66` | 10 |
 | `T67` | 0 |
+| `T69` | 0 |
 | `T70` | 0 |
 | `T71` | 0 |
-| `B1` | 3 |
 | `B2` | 51 |
 | `B3` | 25 |
 | `B4` | 26 |
@@ -65,7 +65,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 48 items, backlog packages (`B`) 325, not planned (`N`) 20.
+Briefs (`T`) hold 48 items, backlog packages (`B`) 322, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -111,7 +111,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Quick Help · Smart Hint Log
 - `B12` View Windows: None · Windows in Active Folder · Active Folder and Subfolders
 - `B6` Actively Update Plots · Page Break Preview Lines [Workbook]
-- `B1` Zoom All [Graph]
 - `T66` Show: Active Layer Indicator · Axis Layer Icons · Object Grid · Layer Grid · Frame · Labels · Data · Active Layer Only · Master Items on Screen [Graph]
 - `T66` Show Data Info [Graph]
 
@@ -225,7 +224,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T58` Format: Underline · Superscript · Subscript · Greek · Fill Color · Line Color
 - `T63` 2D Graphs: Bar · Stacked Area · Box Chart · Histogram · Bubble
 - `B4` 2D Graphs: High-Low-Close
-- `B1` Tools: Zoom In · Zoom Out
 - `B2` Object Edit: Align Left · Align Right · Align Top · Align Bottom · Align Horizontal Center · Align Vertical Center · Make Same Width · Make Same Height · Group · Ungroup
 
 ## Context menus

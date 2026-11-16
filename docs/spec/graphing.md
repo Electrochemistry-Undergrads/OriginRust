@@ -3805,6 +3805,19 @@ Masked Points. Nothing of the graph tools themselves has been measured. Every ch
 **[Sheaf choice]** (made without Origin, change it when measured) or **[?]** (not known). The mechanism, the
 core edits, is independent of those choices.
 
+### 18.12 Vertical Drop Line and Column + Label (T68, measured)
+
+Origin 2016's Plot > Symbol > Vertical Drop Line and Plot > Column/Bar/Pie > Column + Label are its `DROPLINE`
+and `ColumnLabel` templates, measured 2026-11-15 by plotting through them and exporting 1600 px PNGs
+(`re-workspace/scratch/t68`): DROPLINE draws the scatter's symbols and a 0.5 pt vertical drop line in each plot's
+colour from every point to the bottom of the frame (the axis, not zero); with two plots the symbols go square,
+circle (the plain scatter keeps squares). ColumnLabel draws the column plot (red, green, ...) with each value
+written above its own column in Arial 22 pt, about 5.8 pt above the top, centred on the bar also when columns are
+grouped. Sheaf: `Template::VerticalDropLine` (scatter, `decor.drop.vertical` on, symbol type By One) and
+`Template::ColumnLabel` (column, data labels on, position Above, a quarter of the font size, 5.5 pt, above);
+data labels of grouped columns and bars are now centred on their own bar. CLI `-t vertical-drop-line`, `-t
+column-label`.
+
 ### 20.1 Sheaf's rules
 
 **Superseded in part by 20.4 and 20.6** (Origin measured, Sheaf changed to follow it): the click in Mask mode,

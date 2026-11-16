@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **398 listed item locations** at the planning
-  baseline (283 menu bar, 28 toolbar, 87 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **397 listed item locations** at the planning
+  baseline (282 menu bar, 28 toolbar, 87 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -70,6 +70,10 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## Latest integration
+
+T67 Add Straight Line (`straight-line`, B3 slice 1): Origin 2016's addline measured (names, ends,
+label text and its 5 % placement) and copied: `Layer::straight_lines`, drawing, the Graph menu
+window, select/Delete/edit, `sheaf plot --vline/--hline`, `.opj` warning (graphing 17.7).
 
 T68 (B4 slice 1, `plot-types-b4`, Claude Windows): Plot > Symbol > Vertical Drop Line and Plot >
 Column/Bar/Pie > Column + Label as Origin 2016's DROPLINE and ColumnLabel templates (measured,
@@ -180,8 +184,9 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
 | `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
-| `straight-line` | Claude Windows, session fe4b37eb | B3 slice 1 as new brief T67: Graph > Add Straight Line (Origin's addline: vertical/horizontal line at an axis value with colour, style and value label): core layer model (new module), plot drawing, the dialog, .sheaf/.opj (warn), CLI flag, Origin 2016 measurements | claimed 2026-11-15; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not the other B3 items (function graph, table, colour scale, legend title, display range/markers, Change X/Y), no shape-resize/graph_view drag code beyond selecting/deleting the new object, no T58/T66 scopes |
 | `b1-rest` | Claude Windows, "continue all tasks" | rest of B1 as new brief T69: View > Zoom All presentation and Tools-bar Scale In / Scale Out axis tools; app view_modes.rs, new scale tool module, toolbar Tools items | claimed 2026-11-15; no T65 transform changes, shape-resize, T58, T67, T68 |
+| `t29-roc-low` | Claude Windows, "t30-origin" | T29 ROC leftovers ONLY: Origin 2016 measurements of "Positive v.s. Low", text state values and Speed Mode (statistics.md 19.5), copied into crates/calc/src/roc.rs and the ROC tool/dialog where Sheaf differs; fixtures in crates/calc/tests/origin_roc.rs | claimed 2026-11-15; worktree wf_c03644a9-997-1, build target/wf-excel; no other statistics, PCA/k-means/KM or MCP |
+| `b3-small` | Claude Windows, session fe4b37eb | B3 slice 2 as new brief T70: Legend > Add Legend Title (Graph menu and legend context menu), Format > Fit Page To Printer, axis context menu Center; Origin 2016 measurements, core/plot/app, tests | claimed 2026-11-15; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not Add Function Graph, tables, colour/bubble scales, display range/markers, Change X/Y (rest of B3), no T58/T69/shape-resize scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

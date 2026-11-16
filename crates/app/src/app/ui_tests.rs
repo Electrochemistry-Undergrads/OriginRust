@@ -42,6 +42,7 @@ mod simulate;
 mod skip_points;
 mod slope;
 mod sort_x;
+mod straight_line;
 mod sunburst;
 mod surface_fit;
 mod switcher;

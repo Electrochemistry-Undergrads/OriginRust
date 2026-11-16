@@ -43,6 +43,7 @@ pub mod shape;
 pub mod sheet_print;
 pub mod sheetops;
 pub mod stack;
+pub mod straight_line;
 pub mod template;
 pub mod worksheet;
 

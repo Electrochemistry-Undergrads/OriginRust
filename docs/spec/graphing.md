@@ -2938,6 +2938,32 @@ the moved shape). They are enabled only when a drawn shape is selected and the m
 them disabled (broader object ordering is B2). Not measured in Origin 2016 yet; the greyed-without-
 selection behaviour follows Origin's convention for Object Edit buttons.
 
+### 17.7 Straight lines (T67, measured 2026-11-15)
+
+Origin 2016's Graph > Add Straight Line (`addline`; probes `tools/origin-ref/addline-*.lines.txt`):
+Type Vertical (default) or Horizontal, At Value (0), Color (black), Style (Solid, Dash, Dot, Dash
+Dot, Dash Dot Dot, Short Dash, Short Dot, Short Dash Dot), Label Display Format (auto: the axis'
+tick label format; ".2" gives two decimals), Label Location Top (default), Bottom, Left or Right,
+Selectable and Moveable (on), Name. It makes the line (`vline`, `vline1`, ..., `hline`, ... or the
+name) and its label (`<name>Text`), 0.5 pt wide, attached to the layer's scales; a vertical line
+runs from the Y axis' from to its to at X = value, and these ends stay where they were after a
+rescale. The label is the value, in the line's colour and the layer's text size, its centre 5 % of
+the axis span from the line: a vertical line's Top label above the frame, Bottom below it, Left and
+Right beside the line half-way up; a horizontal line's Top label above the line at the middle of
+the X range, Bottom below it, Left and Right outside the frame's edges at the line's Y.
+
+**Sheaf** (`sheaf_core::straight_line::StraightLine` in `Layer::straight_lines`; drawn by
+`plot/src/straight_line.rs`): the same options and names, label placement and formats (the 5 % is
+taken of the frame, which is the axis span on linear axes; on log axes in the frame too, unmeasured);
+a line whose value is outside the axis range is not drawn; `span` keeps the ends the app's dialog saw
+(None, as the command line makes them, runs across the frame). Graph > Add Straight Line... opens the
+window; OK adds the line in one undo step; a click on the line or its label selects it (after axes
+and plots, which a line across the frame would otherwise hide), Delete removes it, a double click or
+Properties edits it ("Straight Line"). A line that is not Selectable lets clicks through. Moveable is
+stored but dragging a line is not built (shown disabled). `sheaf plot --vline X[,top|bottom|left|right]`
+and `--hline Y` add lines to the first layer. `.sheaf` keeps them; `.opj` leaves them out with a
+warning and the companion keeps them.
+
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
 Measured on 2026-11-13 by opening Origin's Plot Details on a line plot (`tools/origin-ref/origin-dialog.ps1`,

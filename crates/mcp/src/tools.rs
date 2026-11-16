@@ -1188,9 +1188,12 @@ fn plot(s: &mut Ctx, a_raw: &Value) -> Res {
         overlay_books: Vec::new(),
         group: a.group.clone(),
         style: style_from(a.style, a.size.as_ref())?,
+        templates_dir: None,
     };
     if let Some(mut parsed) = bridged {
         parsed.book = book_name(s.project, parsed.book.as_deref())?;
+        // User graph templates live in the settings folder, outside the allowed roots: never read here.
+        parsed.templates_dir = None;
         parsed.overlay = !a.overlay_files.is_empty();
         spec = parsed;
     }

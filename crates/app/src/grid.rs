@@ -418,6 +418,8 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         recent_projects: &[],
         recent_books: &[],
         recent_graphs: &[],
+        user_templates: &[],
+        templates: false,
         recent_imports: &[],
         panels: [true; 4],
         ai_link: false,

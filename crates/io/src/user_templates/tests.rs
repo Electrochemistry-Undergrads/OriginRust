@@ -29,9 +29,7 @@ impl Drop for Scratch {
 fn book(p: &mut Project, long: &str, n: usize) -> Vec<ColumnId> {
     let b = p.add_workbook(long);
     p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
-    (0..n)
-        .map(|i| p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![i as f64, 2.0, 5.0])).unwrap())
-        .collect()
+    (0..n).map(|i| p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![i as f64, 2.0, 5.0])).unwrap()).collect()
 }
 
 /// A template of a graph with a look that differs from every default.
@@ -81,7 +79,8 @@ fn the_file_holds_no_worksheet_data_and_no_workbook() {
     let dir = scratch.folder();
     let saved = save(&dir, &sample("look")).unwrap();
     let mut zip = zip::ZipArchive::new(std::fs::File::open(&saved.path).unwrap()).unwrap();
-    let mut members: Vec<String> = (0..zip.len()).map(|i| zip.by_index(i).unwrap().name().unwrap().to_string()).collect();
+    let mut members: Vec<String> =
+        (0..zip.len()).map(|i| zip.by_index(i).unwrap().name().unwrap().to_string()).collect();
     members.sort();
     assert_eq!(members, ["manifest.json", "project.json"]);
     let mut manifest = String::new();

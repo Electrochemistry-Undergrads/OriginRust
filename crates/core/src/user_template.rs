@@ -5,7 +5,7 @@
 //! the plot's whole style; where the plot read bubble sizes or colours from the Z column the slot
 //! says so with a number too. [`Project::plot_with_user_template`] plots columns into a copy of the
 //! template: the first column takes the first slot, and so on, round and round when there are more
-//! columns than slots. The rules are in `docs/spec/graphing.md` (section 21).
+//! columns than slots. The rules are in `docs/spec/graphing.md` (section 24).
 
 use crate::graph::{Graph, LabelForm, PlotKind, TickLabelSource};
 use crate::ids::{ColumnId, WindowId};
@@ -91,7 +91,8 @@ impl UserTemplate {
                 slot += 1;
             }
             // Offsets belong to the first plot of their column; the rest are dropped.
-            let slot_of_column = |c: ColumnId| columns.iter().position(|y| *y == c).map(|i| placeholder(first_slot + i));
+            let slot_of_column =
+                |c: ColumnId| columns.iter().position(|y| *y == c).map(|i| placeholder(first_slot + i));
             layer.plot_offsets = layer
                 .plot_offsets
                 .iter()
@@ -115,12 +116,7 @@ impl UserTemplate {
 
     /// The plots of the template as `(layer, plot)` pairs, layer by layer: slot `k` is the `k`-th pair.
     pub fn slots(&self) -> Vec<(usize, usize)> {
-        self.graph
-            .layers
-            .iter()
-            .enumerate()
-            .flat_map(|(li, l)| (0..l.plots.len()).map(move |pi| (li, pi)))
-            .collect()
+        self.graph.layers.iter().enumerate().flat_map(|(li, l)| (0..l.plots.len()).map(move |pi| (li, pi))).collect()
     }
 
     /// How many plots the template has (its slots).
@@ -170,7 +166,8 @@ impl Project {
             };
             let proto = &template.graph.layers[li].plots[pi];
             let ternary = matches!(template.graph.layers[li].coords, crate::graph::Coords::Ternary(_));
-            let size_z = proto.size_from.and_then(|_| if ternary { self.ternary_z_for(*y) } else { self.z_column_for(*y) });
+            let size_z =
+                proto.size_from.and_then(|_| if ternary { self.ternary_z_for(*y) } else { self.z_column_for(*y) });
             let color_z = proto.color_from.and_then(|_| self.z_column_for(*y));
             self.add_plot(id, li, *y)?;
             let layer = &mut self.graph_mut(id).expect("the graph was just added").layers[li];

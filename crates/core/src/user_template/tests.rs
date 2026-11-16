@@ -11,9 +11,8 @@ fn book(p: &mut Project, long: &str, n: usize) -> Vec<ColumnId> {
     p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
     (0..n)
         .map(|i| {
-            let y = p
-                .add_column(b, 0, Designation::Y, ColumnData::numeric(vec![i as f64, 1.0 + i as f64, 5.0]))
-                .unwrap();
+            let y =
+                p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![i as f64, 1.0 + i as f64, 5.0])).unwrap();
             p.column_mut(y).unwrap().long_name = format!("{long}{i}");
             y
         })
@@ -131,8 +130,8 @@ fn a_two_plot_template_styles_two_three_and_five_datasets_in_turn() {
         }
         // Extra plots take the colours of the layer's palette in plot order.
         let layer = &p.graph(h).unwrap().layers[0];
-        for i in 2..n {
-            assert_eq!(plots[i].line.color, layer.palette.color(i, n), "plot {i} of {n}");
+        for (i, plot) in plots.iter().enumerate().skip(2) {
+            assert_eq!(plot.line.color, layer.palette.color(i, n), "plot {i} of {n}");
         }
     }
 }
@@ -308,10 +307,7 @@ fn a_missing_column_is_an_error_and_adds_no_window() {
     let g = p.plot_columns(Template::Line, &ys).unwrap();
     let t = template_of(&p, g);
     let windows = p.windows.len();
-    assert_eq!(
-        p.plot_with_user_template(&t, &[ys[0], ColumnId(777)]),
-        Err(ProjectError::NoSuchColumn(ColumnId(777)))
-    );
+    assert_eq!(p.plot_with_user_template(&t, &[ys[0], ColumnId(777)]), Err(ProjectError::NoSuchColumn(ColumnId(777))));
     assert_eq!(p.windows.len(), windows);
 }
 
@@ -324,7 +320,10 @@ fn graphs_made_of_their_data_structure_cannot_be_templates() {
     let tree = p.plot_treemap(&[cat], val).unwrap();
     assert!(matches!(UserTemplate::from_graph("t", p.graph(tree).unwrap()), Err(UserTemplateError::Unsupported(_))));
     let floating = p.plot_columns(Template::FloatingColumn, &[val, val]).unwrap();
-    assert!(matches!(UserTemplate::from_graph("t", p.graph(floating).unwrap()), Err(UserTemplateError::Unsupported(_))));
+    assert!(matches!(
+        UserTemplate::from_graph("t", p.graph(floating).unwrap()),
+        Err(UserTemplateError::Unsupported(_))
+    ));
 }
 
 #[test]

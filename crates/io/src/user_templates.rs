@@ -9,7 +9,7 @@
 //!
 //! A file that is damaged, from a newer version or not a template is left out of [`list`] when its
 //! manifest cannot be read and reported by [`load`] otherwise; one such file never hides the others.
-//! The rules are in `docs/spec/graphing.md`, section 21. Origin's own templates (`.otp`, `.otpu`)
+//! The rules are in `docs/spec/graphing.md`, section 24. Origin's own templates (`.otp`, `.otpu`)
 //! are never read or written.
 
 use crate::error::IoError;
@@ -228,8 +228,8 @@ pub fn load(dir: &Path, name: &str) -> Result<UserTemplate, TemplateError> {
 /// Renames a template (the file). Returns the new name as stored. Changing only the letter case is
 /// allowed; a name that another template has is refused with [`TemplateError::Exists`].
 pub fn rename(dir: &Path, old: &str, new: &str) -> Result<String, TemplateError> {
-    let entry = find(dir, old)
-        .ok_or_else(|| TemplateError::Unknown { name: old.trim().to_string(), available: names(dir) })?;
+    let entry =
+        find(dir, old).ok_or_else(|| TemplateError::Unknown { name: old.trim().to_string(), available: names(dir) })?;
     let new = clean_name(new)?;
     if find(dir, &new).is_some_and(|other| fold(&other.name) != fold(&entry.name)) {
         return Err(TemplateError::Exists { name: new });

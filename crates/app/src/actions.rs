@@ -219,6 +219,16 @@ pub enum Action {
     /// File > Save Window As...: ask for a name and write this window (a workbook, or a graph with
     /// the workbooks it reads) to a window file.
     SaveWindowAs(WindowId),
+    /// File > Save Template As...: ask for a name and save the graph's look as a user template.
+    SaveTemplateAs(WindowId),
+    /// Plot > User Templates > Manage...: rename and delete the saved templates.
+    ManageTemplates,
+    /// Plot > User Templates > a saved one: plot the columns in its look.
+    PlotUserTemplate {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+        name: String,
+    },
     /// Ask for files and open the import dialog; with a path, skip the file chooser.
     Import(Option<PathBuf>),
     /// File > Import > Single ASCII, Multiple ASCII or Comma Delimited: the file chooser for that item.
@@ -239,6 +249,7 @@ pub enum Action {
     UndoAiChanges,
     /// A change captured by the shared Format toolbar.
     FormatText(crate::text_format::Request),
+    FormatObject(crate::object_format::Request),
     NewWorkbook,
     AddColumn(WindowId),
     DeleteColumns(Vec<ColumnId>),

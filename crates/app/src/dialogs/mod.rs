@@ -53,3 +53,4 @@ pub mod stack_panels;
 pub mod straight_line;
 pub mod text_object;
 pub mod trendline;
+pub mod user_templates;

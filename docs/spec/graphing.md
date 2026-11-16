@@ -705,15 +705,31 @@ Sheaf choices: the size box accepts finite 1 to 1000 pt values and commits on En
 leaving the box cancels the draft. Font Color offers eight named basic RGB colours (black, red,
 green, blue, cyan, magenta, yellow, white). Origin's Auto, full system/custom palettes and palette
 management remain open. Family selection is restricted to installed families; fallback rendering
-retains its existing behaviour. Underline, scripts, Greek and Fill/Line Color remain disabled
-in this toolbar until their own whole-object semantics/model support are implemented. Text-window
-selection controls and the T59 worksheet adapter are separate slices.
+retains its existing behaviour. Text-window selection controls and the T59 worksheet adapter
+are separate slices.
 
 `text_format::{Snapshot, Target, Change, Request}` separates widget changes from target application.
 T59 can add its cell target behind the same toolbar. Requests capture graph/layer/object plus
 document generation and revision. Dispatch rechecks active selection and dialog/cell editing state;
 invalid, unchanged or stale requests add no history. Open family/colour lists retain their original
 target rather than following a later selection. No model or file-format fields were added.
+
+Underline, Superscript, Subscript, Greek, Fill Color and Line Color (`object_format`, same
+request/staleness rules, own `Action::FormatObject`). Origin's online
+[Format toolbar help](https://docs.originlab.com/origin-help/format-toolbar/) [W] describes the first
+four as acting on selected characters and does not document whole-object behaviour. Fill and
+line/border colour are described on Origin's
+[Style toolbar](https://docs.originlab.com/origin-help/style-toolbar) as setting the fill or line
+colour of the selected object; Sheaf shows them in the Format row (gui-look.md, Format and Style toolbar description). Sheaf choices,
+all **unmeasured** (Origin 2016 measurement remains open): the four text buttons wrap the whole
+text in one `\u(`, `\+(`, `\-(` or `\g(` group, or remove that group when the text is exactly one
+such group (nesting counted as the parser does; `\u(a)b` is wrapped, not unwrapped; a group may
+span lines, so multi-line text is one group) and show pressed when wrapped; they apply to free
+labels and to X/Y titles with their own non-empty text, not to the legend or automatic titles.
+Fill Color (palette: None plus the eight basic colours) sets a rectangle's or circle's fill and a
+visible legend's background; Line Color sets a drawn object's or straight line's colour. Both are
+disabled with a hover reason elsewhere (the legend frame has no colour field). The selection
+survives; undo labels are "Format graph text" and "Format graph object". No model fields added.
 
 
 ---
@@ -4456,3 +4472,39 @@ gui-look 4.x and T65 recorded "Zoom All = a presentation of all graphs with a re
 - Zoom All: a command on the active graph view only (no reminder, no keys, no mode). It sets the T65 view transform so that the bounding box of the page and every object drawn outside it fits in the window, page at the top-left, with a small margin; with all objects inside the page it shows the page with the same margin. The percentage Origin shows for it is not reproduced (the zoom combo is T65's leftover). Whole Page is the way back.
 - Scale In: a one-shot tool on the Tools bar that maps the dragged rectangle (screen to page to axis units, linear or log10 like the axis) to the active layer's x and y ends, linked layers following in the linked axis only; one undo step named "Zoom In/Out"; the tool ends after the drag; a click or a tiny drag does nothing. Scale Out: a one-shot tool whose click or drag pops the last Scale In of the active layer from a per-window stack (nothing when empty). Ctrl+drag (the "Enlarged" graph) and the double-click restore stay unbuilt.
 - Built in `crates/app/src/graph_scale.rs` (pure `rect_to_ends`, `zoom_all`; the stack steps check that the axes still hold the ends the step wrote, so a step undone with Ctrl+Z is dropped, not replayed). Choices that were not measured: a tiny drag (under 4 px on a side) ends Scale In without a change, as a click does in Origin (measured, 23.3); Scale Out ends after one click even with an empty stack; layers with axis breaks, polar and ternary layers are refused (a status hint); Ctrl+drag with Scale In does nothing but a hint; Zoom All centres the page (T65's layout; Origin puts it at the top-left, a known departure) with a 10 px margin and the factor never above 1, and what lies outside the page is not drawn (the raster is the page), so only the fitting is built, not the view of the outside objects.
+
+## 24. User templates: Save Template As and Plot > User Templates (T56)
+
+Sheaf's own file kind and rules; Origin's `.otp`/`.otpu` templates are never read or written, and nothing
+here is measured in Origin (to measure on Windows: what an Origin template keeps, how extra or fewer
+datasets are styled, the default folder and name).
+
+- **Saving** (File > Save Template As..., graphs only; greyed without a template folder): a name prompt
+  filled with the graph's short name; OK saves the graph's look as `<name>.sheaftemplate` in the folder
+  `templates` of the settings folder (`sheaf_io::user_templates::default_dir`; `--templates-dir DIR` and
+  `--no-templates` at start). A template of the same name (letter case ignored) is replaced, and the prompt
+  says so before OK. Names are cleaned for the file system (`clean_name`: control characters dropped, white
+  space collapsed, `/ \ : * ? " < > |` to `_`, device names such as `CON` get `_`, at most 60 characters).
+- **What is kept** (`UserTemplate::from_graph`): the whole graph without data: page, layers and their
+  placement and links, axes (fixed ranges stay fixed, automatic ones rescale to the new data), each plot's
+  style in order, legend and text objects (with `%(...)` substitutions, re-evaluated on the new data), drawn
+  objects and straight lines. Each plot becomes a numbered slot; columns, row ranges, data-label and
+  tick-label columns are dropped. Refused: treemaps, sunbursts, parallel plots, floating bars and fills
+  between two curves, whose look is made of their data. The file is a `.sheaf` archive with the marker
+  `"template": "graph"` and no workbook.
+- **Plotting** (Plot > User Templates > a saved name, on a workbook with Y columns selected; `sheaf plot -t
+  NAME`): column `i` takes slot `i mod n`; columns beyond the slots repeat the styles and take colours from
+  the layer's palette in plot order, and the layer's group increments apply; with fewer columns the extra
+  slots are left out, and a linked layer left without plots (the right Y of a double-Y template given one
+  column) is removed. The new graph's long name is that of the first column's workbook. One undo step.
+- **Managing** (Plot > User Templates > Manage...): the saved names with Rename (refused onto another
+  template's name) and Delete, and the folder shown. The list is read from the folder at start and after
+  every change, so templates survive a restart and two running copies agree.
+- **Command line**: `sheaf plot -t NAME` looks a name that is no built-in template up among the user
+  templates in `--templates-dir`, else `$SHEAF_TEMPLATES_DIR`, else the settings folder; an unknown name
+  lists the built-in templates and points to Save Template As. A user template plots one sheet's Y columns
+  (not with `--panels`, `--y2`, `--group` or several input files). MCP's `plot` never reads user templates
+  (the folder is outside its allowed roots).
+- Tests: `crates/core/src/user_template/tests.rs`, `crates/io/src/user_templates/tests.rs`,
+  `crates/plot/src/user_template_tests.rs`, `crates/app/src/app/ui_tests/user_templates.rs`,
+  `crates/cli/tests/user_templates.rs`.

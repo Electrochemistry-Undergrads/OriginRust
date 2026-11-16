@@ -10,7 +10,9 @@
 //! does exactly what the menu does, and is greyed for the same reasons (wrong window type, nothing
 //! selected). A button without a command is a feature Sheaf lacks; it is drawn greyed and does
 //! nothing. The Pointer of the Tools bar is always the tool in use. The Format bar uses
-//! its own selected-target dispatch (`text_format`) for supported whole-object font controls.
+//! its own selected-target dispatch for supported whole-object controls: `text_format` for fonts and
+//! `object_format` for Underline, Superscript, Subscript, Greek, Fill Color and Line Color (each
+//! greyed with a reason when the selection has no such target).
 //!
 //! The icons are our own: simple shapes drawn with egui's painter in a 16 by 16 pixel box and two
 //! colours. They are recognisable by meaning (a grid for a workbook, a polyline for Line, dots
@@ -431,7 +433,7 @@ const CELL: f32 = 22.0;
 
 /// A row of bars side by side, each with a grip at its left end.
 pub fn show_row(ui: &mut Ui, bars: &[Bar], tb: &Toolbars, c: &MenuContext, actions: &mut Vec<Action>) {
-    show_row_with_format(ui, bars, tb, c, None, actions);
+    show_row_with_format(ui, bars, tb, c, None, None, actions);
 }
 
 pub fn show_row_with_format(
@@ -440,6 +442,7 @@ pub fn show_row_with_format(
     tb: &Toolbars,
     c: &MenuContext,
     format: Option<&crate::text_format::Snapshot>,
+    object: Option<&crate::object_format::Snapshot>,
     actions: &mut Vec<Action>,
 ) {
     ui.horizontal(|ui| {
@@ -451,7 +454,7 @@ pub fn show_row_with_format(
             }
             first = false;
             if *bar == Bar::Format {
-                format::show(ui, c, format, actions);
+                format::show(ui, c, format, object, actions);
             } else {
                 show_bar(ui, *bar, c, actions);
             }

@@ -48,6 +48,7 @@ const NEED_CELLS: &str = "Select cells, columns or rows first";
 const NEED_TWO_COLUMNS: &str = "Select two or more columns first";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
+const NO_TEMPLATE_FOLDER: &str = "There is no folder for user templates (the settings folder is missing)";
 const NO_UNDO: &str = "Nothing to undo";
 const NO_REDO: &str = "Nothing to redo";
 const NO_AI_UNDO: &str = "The latest change must be an AI change, with no edit or dialog open";
@@ -73,6 +74,10 @@ pub enum Cmd {
     SaveProjectAs,
     /// File > Save Window As...: the active workbook or graph to a window file of its own (T54).
     SaveWindowAs,
+    /// File > Save Template As... on a graph (T56).
+    SaveTemplateAs,
+    /// Plot > User Templates > Manage... (T56).
+    ManageTemplates,
     /// File > Import > Single ASCII (Ctrl+K).
     Import,
     ImportMultiple,
@@ -363,6 +368,8 @@ pub enum Entry {
     /// The entries of File > Recent Projects, Recent Books, Recent Graphs or File > Import > Recent
     /// Imports, from the context.
     Recent(RecentKind),
+    /// The saved user graph templates of Plot > User Templates (T56), from the context.
+    UserTemplates,
 }
 
 #[derive(Clone)]
@@ -421,6 +428,10 @@ pub struct MenuContext<'a> {
     pub recent_imports: &'a [PathBuf],
     pub recent_books: &'a [PathBuf],
     pub recent_graphs: &'a [PathBuf],
+    /// The saved user graph templates (Plot > User Templates), and whether there is a template
+    /// folder at all (File > Save Template As and Manage are greyed without one).
+    pub user_templates: &'a [String],
+    pub templates: bool,
     /// Which side panels are shown, in the order of `PanelId::ALL` (the ticks of the View menu).
     pub panels: [bool; 4],
     /// The AI link is on (the tick of Tools > AI Assistants (MCP)).
@@ -618,7 +629,11 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     if kind != WindowKind::None {
         v.push(sep());
         v.push(item("Save &Window As...", Cmd::SaveWindowAs));
-        v.push(grey("Save Template As..."));
+        if kind == WindowKind::Graph {
+            v.push(item("Save Temp&late As...", Cmd::SaveTemplateAs));
+        } else {
+            v.push(grey("Save Template As..."));
+        }
         if kind == WindowKind::Workbook {
             v.push(grey("Save Workbook As Analysis Template..."));
             v.push(grey("Add Word Bookmarks to Analysis Template..."));
@@ -1032,7 +1047,16 @@ fn plot_menu() -> Vec<Entry> {
         sep(),
         grey("System Templates..."),
         // Sheaf's own graph style is the one template that has no Origin counterpart.
-        sub("&User Templates", vec![item("Cyclic voltammetry overlay", Cmd::Plot(Template::CyclicVoltammetry))]),
+        sub(
+            "&User Templates",
+            vec![
+                item("Cyclic voltammetry overlay", Cmd::Plot(Template::CyclicVoltammetry)),
+                sep(),
+                Entry::UserTemplates,
+                sep(),
+                item("&Manage...", Cmd::ManageTemplates),
+            ],
+        ),
         sep(),
         grey("Most Recently Used"),
     ]
@@ -2115,7 +2139,7 @@ fn walk<'a>(entries: &'a [Entry], f: &mut dyn FnMut(&'a Item)) {
         match e {
             Entry::Item(i) => f(i),
             Entry::Submenu(s) => walk(&s.entries, f),
-            Entry::Separator | Entry::Windows | Entry::Recent(_) => {}
+            Entry::Separator | Entry::Windows | Entry::Recent(_) | Entry::UserTemplates => {}
         }
     }
 }
@@ -2264,6 +2288,18 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SaveProject => Action::SaveProject,
         Cmd::SaveProjectAs => Action::SaveProjectAs,
         Cmd::SaveWindowAs => Action::SaveWindowAs(c.active.ok_or(NEED_WINDOW)?),
+        Cmd::SaveTemplateAs => {
+            if !c.templates {
+                return Err(NO_TEMPLATE_FOLDER);
+            }
+            Action::SaveTemplateAs(c.graph.ok_or(NEED_GRAPH)?)
+        }
+        Cmd::ManageTemplates => {
+            if !c.templates {
+                return Err(NO_TEMPLATE_FOLDER);
+            }
+            Action::ManageTemplates
+        }
         Cmd::Import => Action::ImportPick(ImportPick::Single),
         Cmd::ImportMultiple => Action::ImportPick(ImportPick::Multiple),
         Cmd::ImportCsv => Action::ImportPick(ImportPick::Csv),
@@ -2706,6 +2742,7 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                 }
             }
             Entry::Recent(kind) => show_recent(ui, *kind, c, actions),
+            Entry::UserTemplates => show_user_templates(ui, c, actions),
             Entry::Windows => {
                 for (n, (id, title)) in c.windows.iter().enumerate() {
                     let label = format!("&{} {title}", n + 1);
@@ -2806,6 +2843,25 @@ fn show_recent(ui: &mut egui::Ui, kind: RecentKind, c: &MenuContext, actions: &m
                 RecentKind::Projects | RecentKind::Books | RecentKind::Graphs => Action::OpenRecent(path.clone(), kind),
                 RecentKind::Imports => Action::ImportRecent(path.clone()),
             });
+            ui.close();
+        }
+    }
+}
+
+/// The saved user templates: plotting the selected columns of the active workbook with one.
+fn show_user_templates(ui: &mut egui::Ui, c: &MenuContext, actions: &mut Vec<Action>) {
+    if c.user_templates.is_empty() {
+        ui.add_enabled(false, egui::Button::new(label_job(ui, "(no saved templates)", true)));
+        return;
+    }
+    for name in c.user_templates {
+        let can = c.book.is_some() && !c.selected.is_empty();
+        let response = ui.add_enabled(can, egui::Button::new(label_job(ui, name, true)));
+        let response = if can { response } else { response.on_disabled_hover_text(NEED_COLUMNS) };
+        if response.clicked()
+            && let Some(book) = c.book
+        {
+            actions.push(Action::PlotUserTemplate { book, columns: c.selected.to_vec(), name: name.clone() });
             ui.close();
         }
     }
@@ -3023,6 +3079,8 @@ mod tests {
             recent_imports: &[],
             recent_books: &[],
             recent_graphs: &[],
+            user_templates: &[],
+            templates: false,
             panels: [true; 4],
             ai_link: false,
             layer: 0,

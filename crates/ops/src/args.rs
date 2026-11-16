@@ -799,8 +799,14 @@ pub struct PlotArgs {
     /// the text columns) with areas proportional to the last numeric Y column (see the --treemap-* options); sunburst
     /// draws the same hierarchy as concentric rings, the first category innermost, angles proportional to the last
     /// numeric Y column, coloured by value (see the --sunburst-* options).
+    /// A name that is none of these plots with the user template of that name (File > Save Template As in
+    /// the desktop app; see --templates-dir).
     #[arg(short, long)]
     pub template: Option<String>,
+    /// The folder of the user graph templates (default: `$SHEAF_TEMPLATES_DIR`, else `templates` in the
+    /// settings folder). Only read when -t names no built-in template.
+    #[arg(long, value_name = "DIR")]
+    pub templates_dir: Option<std::path::PathBuf>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).
     #[arg(short, long, value_delimiter = ',')]
     pub y: Vec<String>,

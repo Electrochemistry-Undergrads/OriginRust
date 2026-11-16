@@ -302,6 +302,8 @@ pub enum Action {
     SwapColumns(ColumnId, ColumnId),
     /// Edit > Find in Project (F3): open the Find window.
     FindInProject,
+    /// File > Export > Worksheet as Image...: save the active sheet as a picture.
+    ExportWorksheetImage(WindowId),
     /// The column header's Copy Columns to...: open its window for these columns.
     CopyColumnsTo(Vec<ColumnId>),
     /// Edit > Reset to Full Range: every column of the workbook's active sheet uses all its rows.

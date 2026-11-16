@@ -1802,6 +1802,7 @@ impl SheafApp {
                     self.say("Every column already uses all its rows");
                 }
             }
+            Action::ExportWorksheetImage(book) => self.export_worksheet_image(book),
             Action::FindInProject => {
                 self.find_project = Some(crate::dialogs::find_project::FindProjectDialog::new(self.find_spec.clone()));
             }
@@ -3649,6 +3650,27 @@ impl SheafApp {
             }
         }
         self.focus(id);
+    }
+
+    /// File > Export > Worksheet as Image (T97): the active sheet as PNG (300 dpi), PDF or SVG.
+    fn export_worksheet_image(&mut self, book: WindowId) {
+        let Some(b) = self.doc.project().workbook(book) else { return };
+        let sheet = b.sheet();
+        let stem = if b.long_name.is_empty() { b.name.clone() } else { b.long_name.clone() };
+        let mut chooser = rfd::FileDialog::new()
+            .set_title("Export worksheet as image")
+            .add_filter("PNG image", &["png"])
+            .add_filter("PDF", &["pdf"])
+            .add_filter("SVG", &["svg"])
+            .set_file_name(format!("{stem}_{}.png", sheet.name));
+        if let Some(dir) = self.folder() {
+            chooser = chooser.set_directory(dir);
+        }
+        let Some(path) = chooser.save_file() else { return };
+        match write_worksheet_image(sheet, &path) {
+            Ok(path) => self.say(format!("Exported the sheet to {}", path.display())),
+            Err(e) => self.message = Some(("Could not export the sheet".to_string(), e)),
+        }
     }
 
     fn export_data(&mut self, book: WindowId) {
@@ -5619,6 +5641,26 @@ fn panel_data<'a>(
         .unwrap_or_else(|| "UNTITLED".to_string());
     let props_plot = props.as_ref().filter(|d| Some(d.graph) == active).map(GraphPropsDialog::selected_plot);
     PanelData { project: doc.project(), active, project_name, props_plot, logs }
+}
+
+/// Writes the worksheet picture of File > Export > Worksheet as Image to `path`, the kind chosen by
+/// its extension (PNG at 300 dpi when there is none). Returns the path written.
+pub(crate) fn write_worksheet_image(sheet: &sheaf_core::Worksheet, path: &Path) -> Result<PathBuf, String> {
+    let mut path = path.to_path_buf();
+    let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
+    let bytes = match ext.as_deref() {
+        Some("pdf") => sheaf_plot::sheet_image_pdf(sheet),
+        Some("svg") => sheaf_plot::sheet_image_svg(sheet).map(String::into_bytes),
+        Some("png") => sheaf_plot::sheet_image_png(sheet, 300.0),
+        None => {
+            path.set_extension("png");
+            sheaf_plot::sheet_image_png(sheet, 300.0)
+        }
+        Some(other) => return Err(format!("Sheaf writes worksheet pictures as PNG, PDF or SVG, not .{other}")),
+    }
+    .map_err(|e| e.to_string())?;
+    std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path)
 }
 
 #[cfg(test)]

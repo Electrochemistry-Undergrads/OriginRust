@@ -8928,3 +8928,4 @@ mod swap_transpose;
 #[path = "ui_tests/trendline.rs"]
 mod trendline;
 mod user_templates;
+mod wks_image;

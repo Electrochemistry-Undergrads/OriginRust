@@ -800,6 +800,24 @@ replaced by the plots' names, and text labels by their text. Clicking a hit brin
 its sheet, with the column selected); the window stays open and keeps its settings for the session.
 Double-clicking a hit in Origin was not measured.
 
+## 13k. Export > Worksheet as Image (T97, measured 2026-11-16, Origin 2016)
+
+File > Export > Worksheet as Image... is Origin's `expWks` (Image Type AI, BMP, CGM, DXF, EMF, EPS, GIF,
+JPG, PCX, PDF, PNG, PSD, TGA, TIF, WMF; Select Sheet(s) Current Sheet / Sheets in Book / Sheets in Folder
+/ ... / Specified; File Name(s); Path; Overwrite Existing Auto Rename / Replace / Skip / Ask; Use Tools
+Options; Keep Original Size; Image Size and Image Settings). Measured from LabTalk
+(`re-workspace/scratch/t97`, local only): the picture of a sheet holds the **label rows filled light
+yellow** (long name and units centred) and the **cells** (numbers right-aligned), **without** the column
+heads, the row numbers or grid lines, and runs down all the sheet's rows (691 x 1863 px for three columns
+of the default 32-row sheet, about 300 dpi). With no file name the script wrote ".png"; a token such as
+`<short>` in the name was not replaced.
+
+Sheaf: one picture of the active sheet (its data rows, not empty spare rows), drawn from the printed table
+(`sheaf_core::sheet_print`) with the heads, row numbers and grid left out (`sheaf_plot::sheet_image_svg`).
+The save window offers PNG (300 dpi), PDF and SVG; the name defaults to `<book long name or name>_<sheet>.png`
+in the project's folder (Sheaf's choice). Not done: the other image types, several sheets at once, the size
+and overwrite options.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

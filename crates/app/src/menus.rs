@@ -109,6 +109,8 @@ pub enum Cmd {
     FindInSheets,
     /// Edit > Find in Project (F3, T95).
     FindInProject,
+    /// File > Export > Worksheet as Image... (T97).
+    ExportWorksheetImage,
     /// Edit > Replace... (Ctrl+H) in a workbook.
     ReplaceInSheets,
     ExportGraph,
@@ -786,7 +788,9 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                     item("&Worksheet as ASCII...", Cmd::ExportWorksheet),
                     item("Worksheet as E&xcel...", Cmd::ExportExcel),
                 ],
-                greys(&["Graph as Image...", "Worksheet as Image...", "Multi-Page PDF..."]),
+                greys(&["Graph as Image..."]),
+                vec![item("Worksheet as Image...", Cmd::ExportWorksheetImage)],
+                greys(&["Multi-Page PDF..."]),
                 vec![exports_submenu()],
             ]
             .concat(),
@@ -2569,6 +2573,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::ExportExcel => Action::ExportExcel(book?),
+        Cmd::ExportWorksheetImage => Action::ExportWorksheetImage(book?),
         Cmd::Print => Action::Print(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
         Cmd::PrintPreview => Action::PrintPreview(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
         Cmd::PageSetup => Action::PageSetup,

@@ -194,12 +194,86 @@ pub fn render_sheet_raster(
     raster::rasterise(&svg::write_svg(&scene), pixels_per_point, fonts)
 }
 
+/// File > Export > Worksheet as Image (T97): the sheet as Origin 2016's `expWks` draws it, measured
+/// 2026-11-16 (`docs/spec/workbook-model.md` 13k): the label rows filled light yellow and the cells,
+/// without the column heads, the row numbers or grid lines, one picture for the whole sheet. Built from
+/// the printed table (one page holding every row and column) with those parts left out.
+pub fn sheet_image_svg(sheet: &Worksheet) -> Result<String, PlotError> {
+    let fonts = SystemFonts::shared();
+    let table = sheet_table(sheet);
+    let style = PrintStyle::default();
+    let pages = table.pages(1.0e9, 1.0e9);
+    let slot = pages.first().ok_or_else(|| PlotError::Size("the sheet has nothing to draw".into()))?;
+    let (dx, dy) = (style.rownum_w, style.row_h);
+    let head_fill = Color::rgb(222, 222, 222);
+    let mut ops = Vec::new();
+    let (mut w, mut h) = (0.0_f64, 0.0_f64);
+    for op in table.draw_page(slot, 1) {
+        match op {
+            PrintOp::Line { .. } => {}
+            PrintOp::Fill { color, .. } if color == head_fill => {}
+            PrintOp::Fill { x, y, w: fw, h: fh, color } => {
+                w = w.max(x + fw - dx);
+                h = h.max(y + fh - dy);
+                ops.push(PrintOp::Fill { x: x - dx, y: y - dy, w: fw, h: fh, color });
+            }
+            // Row numbers and label row titles stand left of the first column; the head names on its row.
+            PrintOp::Text { x, y, .. } if x <= dx || y <= dy => {}
+            PrintOp::Text { x, y, max_w, text, align, bold, size, fmt } => {
+                h = h.max(y - dy + size * 0.4);
+                ops.push(PrintOp::Text { x: x - dx, y: y - dy, max_w, text, align, bold, size, fmt });
+            }
+        }
+    }
+    let width = w.max(table.column_widths().iter().sum::<f64>()).max(1.0);
+    let height = h.max(table.head_height() - dy).max(1.0);
+    Ok(svg::write_svg(&scene_of(&ops, (width, height), (0.0, 0.0), fonts)))
+}
+
+/// The worksheet image as PNG at `dpi` (the resolution is recorded in the file).
+pub fn sheet_image_png(sheet: &Worksheet, dpi: f64) -> Result<Vec<u8>, PlotError> {
+    let svg = sheet_image_svg(sheet)?;
+    let r = raster::rasterise(&svg, dpi / 72.0, SystemFonts::shared())?;
+    raster::encode_png(&r, dpi)
+}
+
+/// The worksheet image as a one-page vector PDF.
+pub fn sheet_image_pdf(sheet: &Worksheet) -> Result<Vec<u8>, PlotError> {
+    raster::to_pdf(&sheet_image_svg(sheet)?, SystemFonts::shared())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use sheaf_core::column::{Column, ColumnData, Designation};
     use sheaf_core::ids::ColumnId;
     use sheaf_core::page_setup::{Margins, Orientation, Paper};
+
+    #[test]
+    fn the_worksheet_image_has_the_labels_and_cells_but_no_heads_numbers_or_grid() {
+        // Origin's expWks picture: label rows (yellow) and cells; no "A(X)" heads, row numbers or lines.
+        let mut ws = Worksheet::new("Sheet1");
+        let mut b = Column::new(ColumnId(2), "B", Designation::Y, ColumnData::numeric(vec![10.0, 20.0]));
+        b.long_name = "Bee".into();
+        b.units = "mA".into();
+        ws.columns.push(Column::new(ColumnId(1), "A", Designation::X, ColumnData::numeric(vec![7.0, 8.0])));
+        ws.columns.push(b);
+        let svg = sheet_image_svg(&ws).unwrap();
+        for want in [">Bee<", ">mA<", ">10<", ">20<", ">7<"] {
+            assert!(svg.contains(want), "{want} missing");
+        }
+        for not in [">A(X)<", ">B(Y)<", ">Long Name<", ">Units<", ">1<", ">2<"] {
+            assert!(!svg.contains(not), "{not} drawn");
+        }
+        assert!(!svg.contains("<line") && !svg.contains("<path"), "no grid lines");
+        assert!(
+            svg.contains("#FFFFD6") || svg.contains("#ffffd6") || svg.contains("255,255,214"),
+            "the yellow label fill"
+        );
+        let png = sheet_image_png(&ws, 96.0).unwrap();
+        assert_eq!(&png[1..4], b"PNG");
+        assert!(sheet_image_pdf(&ws).unwrap().starts_with(b"%PDF"));
+    }
 
     #[test]
     fn cut_keeps_the_longest_prefix_that_fits() {

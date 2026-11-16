@@ -1,6 +1,6 @@
 # T97: Export > Worksheet as Image...
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `wks-image`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13k): `expWks` options and picture measured; Sheaf exports the active sheet as PNG/PDF/SVG in Origin's look (label rows and cells, no heads, numbers or grid). Left: other image types, several sheets, size and overwrite options.
 **Size:** S. **Source:** greyed inventory package B12 (File > Export > Worksheet as Image... with a workbook
 active).
 **Spec:** `docs/spec/workbook-model.md` (a new section).

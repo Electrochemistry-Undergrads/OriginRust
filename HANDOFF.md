@@ -24,10 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **412 listed item locations** at the planning
-  baseline (289 menu bar, 35 toolbar, 88 context menu). Run `python3 tools/greyed-count.py --check`
-- [Greyed inventory](docs/tasks/greyed-items.md): **407 listed item locations** at the planning
-  baseline (285 menu bar, 35 toolbar, 87 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **405 listed item locations** at the planning
+  baseline (283 menu bar, 35 toolbar, 87 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -76,9 +74,7 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 T68 (B4 slice 1, `plot-types-b4`, Claude Windows): Plot > Symbol > Vertical Drop Line and Plot >
 Column/Bar/Pie > Column + Label as Origin 2016's DROPLINE and ColumnLabel templates (measured,
 graphing 18.12); data labels of grouped columns are now centred on their own bar, as Origin draws
-them. Formatting, strict all-target Clippy and 3,654 workspace tests pass (8 ignored) on c9c92ce0; two MCP
-link timing tests (crates/mcp/tests/link.rs) failed under full-suite load and passed 3 of 3 runs alone
-(pre-existing, not touched here).
+them. Tests: see the merge note below.
 T58 RGB text colours: numeric `\cN(text)` escapes now follow the measured one-based
 RGB encoding, including channel borrows and the white boundary. Nested palette/RGB spans
 restore their surroundings; glyphs and decoration paths use the same colour. Graphing 7.3

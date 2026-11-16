@@ -69,8 +69,8 @@ impl Format {
         }
     }
 
-    fn prefix(self) -> &'static str {
-        match self {
+    fn prefix(self) -> String {
+        let prefix = match self {
             Self::Normal => "",
             Self::Bold => r"\b(",
             Self::Italic => r"\i(",
@@ -79,8 +79,9 @@ impl Format {
             Self::Superscript => r"\+(",
             Self::Subscript => r"\-(",
             Self::Greek => r"\g(",
-            Self::Color(color) => color.prefix(),
-        }
+            Self::Color(color) => return color.prefix(),
+        };
+        prefix.to_string()
     }
 }
 
@@ -334,6 +335,44 @@ pub(super) fn apply_legend(text: &mut String, cursor: CCursorRange, format: Form
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn custom_rgb_preserves_paired_scripts_and_font_family_groups() {
+        let mut text = r"\f:Courier New(P\=(\c4(i),\c2(2))Q)".to_string();
+        let plain = sheaf_plot::markup::plain(&text);
+        let end = text.chars().count();
+        apply(
+            &mut text,
+            CCursorRange::two(CCursor::new(0), CCursor::new(end)),
+            Format::Color(TextColor::Rgb([13, 99, 201])),
+        );
+        assert_eq!(sheaf_plot::markup::plain(&text), plain);
+        assert!(text.contains(r"\f:Courier New(P\=(i,2)Q)"), "{text}");
+        assert!(sheaf_plot::markup::parse(&text).iter().all(|r| r.color == Some(sheaf_core::Color::rgb(13, 99, 201))));
+    }
+
+    #[test]
+    fn custom_rgb_recolors_styles_and_literals_without_growing_repeated_groups() {
+        let mut text = r"\b(\c4(\g(m))) cm\+(-2) \v(\c2(raw))".to_string();
+        let plain = sheaf_plot::markup::plain(&text);
+        let end = text.chars().count();
+        let cursor = apply(
+            &mut text,
+            CCursorRange::two(CCursor::new(end), CCursor::new(0)),
+            Format::Color(TextColor::Rgb([17, 34, 51])),
+        );
+        let applied = text.clone();
+        let cursor = apply(&mut text, cursor, Format::Color(TextColor::Rgb([17, 34, 51])));
+        assert_eq!(text, applied);
+        assert_eq!(sheaf_plot::markup::plain(&text), plain);
+        assert!(text.contains(r"\v(\c2(raw))"));
+        let runs = sheaf_plot::markup::parse(&text);
+        assert!(runs.iter().all(|r| r.color == Some(sheaf_core::Color::rgb(17, 34, 51))));
+        assert!(runs.iter().any(|r| r.text == "μ" && r.bold));
+        assert!(runs.iter().any(|r| r.text == "-2" && r.scale < 1.0));
+        apply(&mut text, cursor, Format::Color(TextColor::Blue));
+        assert!(sheaf_plot::markup::parse(&text).iter().all(|r| r.color == Some(sheaf_core::Color::BLUE)));
+    }
 
     #[test]
     fn recoloring_preserves_nested_styles_and_literal_blocks() {

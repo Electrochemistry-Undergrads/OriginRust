@@ -37,6 +37,7 @@ pub struct TextDialog {
     focus: bool,
     selection: CCursorRange,
     preview: preview::Preview,
+    colors: palette::Picker,
 }
 
 impl TextDialog {
@@ -53,6 +54,7 @@ impl TextDialog {
             generation: doc.generation(),
             at,
             size: font.size_pt,
+            colors: palette::Picker::new(font.color),
             bold: font.bold,
             italic: font.italic,
             font,
@@ -78,6 +80,7 @@ impl TextDialog {
             generation: doc.generation(),
             at: (l.x, l.y),
             font: l.font.clone(),
+            colors: palette::Picker::new(l.font.color),
             text: l.text.clone(),
             size: l.font.size_pt,
             bold: l.font.bold,
@@ -131,6 +134,7 @@ impl TextDialog {
         dialog.bold = font.bold;
         dialog.italic = font.italic;
         dialog.font = font;
+        dialog.colors = palette::Picker::new(dialog.font.color);
         Some(dialog)
     }
 
@@ -226,16 +230,19 @@ impl TextDialog {
                             command = Some(format);
                         }
                     }
-                    ui.menu_button("Text color", |ui| {
-                        for color in palette::TextColor::ALL {
-                            if ui.button(color.label()).clicked() {
+                    egui::containers::menu::MenuButton::new("Text color")
+                        .config(
+                            egui::containers::menu::MenuConfig::new()
+                                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+                        )
+                        .ui(ui, |ui| {
+                            if let Some(color) = self.colors.show(ui) {
                                 command = Some(Format::Color(color));
                                 ui.close();
                             }
-                        }
-                    })
-                    .response
-                    .on_hover_text("Color selected text, or insert colored text at the caret");
+                        })
+                        .0
+                        .on_hover_text("Color selected text, or insert colored text at the caret");
                 });
                 if let Some(format) = command {
                     let before = self.text.clone();

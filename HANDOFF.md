@@ -26,6 +26,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
 - [Greyed inventory](docs/tasks/greyed-items.md): **412 listed item locations** at the planning
   baseline (289 menu bar, 35 toolbar, 88 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **407 listed item locations** at the planning
+  baseline (285 menu bar, 35 toolbar, 87 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -77,6 +79,20 @@ graphing 18.12); data labels of grouped columns are now centred on their own bar
 them. Formatting, strict all-target Clippy and 3,654 workspace tests pass (8 ignored) on c9c92ce0; two MCP
 link timing tests (crates/mcp/tests/link.rs) failed under full-suite load and passed 3 of 3 runs alone
 (pre-existing, not touched here).
+T58 RGB text colours: numeric `\cN(text)` escapes now follow the measured one-based
+RGB encoding, including channel borrows and the white boundary. Nested palette/RGB spans
+restore their surroundings; glyphs and decoration paths use the same colour. Graphing 7.3
+records native scalar/vector controls and new SVG/stroke PNG goldens. Font-family switching,
+combined scripts and special colour tags remain open; editor and Format-bar work retain
+their separate claims.
+Formatting, strict workspace all-target Clippy and 3,677 combined tests pass (eight existing
+ignored); the 407-item inventory and eight Python tooling tests also pass.
+
+T66 graph view modes (B1 slice 2, branch `graph-view-modes`, graphing 22, Origin 2016 measured): View > Print View
+(Ctrl+2), Page View (Ctrl+1, default), Window View, Draft View (Ctrl+0), saved per graph in `.sheaf`; View > Show >
+Layer Icons; Full Screen (Ctrl+Shift+J, reminder, Esc ends, arrows/Home/End switch graphs). Nine Show items and Show Data
+Info stay grey (unmeasured: Origin's collapsing menu). fmt, strict Clippy, full tests pass.
+
 T58 indexed text colours: `\cN(text)` now uses the original 24-colour list, with measured
 positive-index byte selection and black fallback. Nested spans restore their surrounding
 colour; glyphs and underline/strikeout strokes share the run colour. Exact Origin 2016 EMF
@@ -161,15 +177,14 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/text-run-rgb` | Codex Windows, text-run-rgb | T58 step 1 renderer colour remainder: numeric RGB-tagged `\cN(text)` values returned by Origin Color(r,g,b), measured controls and nested glyph/stroke/export fixtures | claimed 2026-11-15; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels`; markup/text + own tests only; no signed Auto/None or other tags, font-family/combined-script changes, editor/Format toolbar/dispatch, model/global palettes/settings, worksheet/core/IO/backends or other scopes |
 | `codex/t58-text-editor` | Codex Windows, t58-text-editor | T58 slice 2 ONLY: graph Text window formatting/selection controls and live preview using published renderer capabilities | claimed 2026-11-15; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` reused sequentially after completed T63 F; dialogs/text_object.rs + private helper, isolated UI tests/registration, existing text startup screenshot hook if needed, T58/graphing7; no markup/fonts/layout/renderers/backends (text-decorations), shared Format bar/dispatch/actions (t58-format-toolbar), core model fields, formula/parameter labels, graph_view/shapes/layers/axis menus, other dialogs, pending root/index/roadmap; unsupported formatting stays disabled until published renderer support |
 | `codex/t58-format-toolbar` | Codex Windows | T58 slice 3: shared Format toolbar dispatch and existing whole-object graph font controls; selected-target/undo/persistence tests and Origin measurement | claimed 2026-11-15; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points`; Format bar only, local actions/app dispatch + new helper/tests; no renderer/fonts/markup (text-decorations), editor slice 2, worksheet adapter/model, Graph/Standard/Explorer bars, layers/stack, graph_view or new model fields without refinement |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
 | `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
-| `graph-view-modes` | Claude Windows, "continue all tasks" | B1 slice 2 as new brief T66: graph view modes (Print/Page/Window/Draft View), View > Show toggles, Show Data Info, Full Screen; new app view_modes.rs, small graph_view.rs drawing hooks, View menu items | claimed 2026-11-15; no zoom/pan (T65, fe4b37eb), shape-resize, T58, T63 |
 | `straight-line` | Claude Windows, session fe4b37eb | B3 slice 1 as new brief T67: Graph > Add Straight Line (Origin's addline: vertical/horizontal line at an axis value with colour, style and value label): core layer model (new module), plot drawing, the dialog, .sheaf/.opj (warn), CLI flag, Origin 2016 measurements | claimed 2026-11-15; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not the other B3 items (function graph, table, colour scale, legend title, display range/markers, Change X/Y), no shape-resize/graph_view drag code beyond selecting/deleting the new object, no T58/T66 scopes |
+| `b1-rest` | Claude Windows, "continue all tasks" | rest of B1 as new brief T69: View > Zoom All presentation and Tools-bar Scale In / Scale Out axis tools; app view_modes.rs, new scale tool module, toolbar Tools items | claimed 2026-11-15; no T65 transform changes, shape-resize, T58, T67, T68 |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

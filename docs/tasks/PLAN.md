@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 412 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 407 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -95,16 +95,16 @@ Backlog packages: write the brief first (step 3 above).
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
 | [x] | [T65](T65-graph-view-zoom-pan.md) | Graph view zoom and pan (B1 slice 1): Zoom In mode, Zoom Out, Whole Page, Pan | M | 0 |
-| [ ] | B1 | Graph view: view modes, show/hide toggles, Zoom All, Show Data Info, full screen (zoom and pan: T65) | M | 20 |
+| [ ] | [T66](T66-graph-view-modes.md) | Graph view modes (Print, Page, Window, Draft), Show > Layer Icons and Full Screen done; the nine other Show items and Show Data Info wait for measurement (B1 slice 2) | M | 10 |
+| [ ] | B1 | Graph view: Zoom All (the rest of B1: T65, T66) | S | 3 |
 | [ ] | B2 | Graph objects: cut/copy/paste, Copy/Paste Format, align, same size, group, order across object kinds, snap to grid | L | 51 |
 | [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 28 |
 | [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 28 |
 
 - **B1.** The graph view draws the page to fit the window. Add a view transform (zoom factor and
   scroll offset) in `crates/app/src/graph_view.rs` so hit-testing (`sheaf_plot::hit`) still works,
-  then the Zoom In/Out tools, Whole Page, mouse-wheel zoom and Pan. Origin's four view modes (Print,
-  Page, Window, Draft) and the View > Show toggles need a measurement of what each changes. Do the
-  zoom and pan first; they are what a person misses.
+  then the Zoom In/Out tools, Whole Page, mouse-wheel zoom and Pan. Zoom and pan are T65 (done). The view modes, View > Show toggles, Show Data Info and Full Screen
+  are T66 (measured in graphing 22); only Zoom All is left under B1.
 - **B2.** Continues T24 (drawn shapes; ordering inside one layer and resize handles are done or in
   flight). Needs one ordering for all objects of a page (labels, legend, shapes, axis titles), an
   object clipboard, the nine Copy Format choices with Paste Format, and the Object Edit toolbar on

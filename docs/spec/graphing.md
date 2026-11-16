@@ -533,7 +533,7 @@ Frame tab (none, line, shadow...), position by anchor corner, size, arrange vert
 | `\=(sub,sup)` | sub and superscript together (`\v(,)` for literal comma) |
 | `\g(text)` | Greek letters (`\g(a)` alpha, `\g(m)` mu) |
 | `\f:Name(text)` | font by name |
-| `\cN(text)` | colour by palette position N (base U12) |
+| `\cN(text)` | indexed or RGB-tagged colour (7.2-7.3) |
 | `\pN(text)` | size as percent of current (200 doubles) |
 | `\xHHHH(...)` | Unicode by hex code, e.g. `\x(03b8)` |
 | `\(code)` | character by ASCII code |
@@ -584,7 +584,7 @@ decoration paths: screen/PNG/PDF through SVG, and direct EPS/EMF. Tests cover ne
 anchors, rotation, script scaling, font style/colour, title/legend/label/tick placement and
 export. The SVG golden includes text; the PNG golden isolates stroke geometry so font
 installation differences do not change it. This slice adds no model fields. Per-run font
-switching, tagged RGB codes, combined scripts, editor/toolbar formatting and whole-object underline
+switching, combined scripts, editor/toolbar formatting and whole-object underline
 remain open in the graph-text brief.
 
 ### 7.2 Indexed text colours (T58 graph text)
@@ -610,8 +610,9 @@ For positive untagged numeric indices, Origin uses the low byte as a one-based p
 position; byte values outside 1-24 give black. Independent vector controls confirm 258 red,
 280 dark gray, 9999 orange, and black for 25, 99, 255, 256, 257, 281, 512, 1000 and 65535.
 Leading zeros work (`\c0002` is red). Sheaf accepts at most ten decimal digits, checks u32
-overflow and handles values below 0x01000000 as palette indices. Tagged RGB/special-colour
-encodings and signed codes remain literal text pending separate support.
+overflow. Untagged values through 0x01000000 use the palette lookup; the boundary itself
+is black. RGB-tagged values follow 7.3; other special-colour encodings and signed codes
+remain literal text pending separate support.
 
 Zero retains Sheaf's previous neutral style and preserves its enclosed text. Origin's `\c0`
 and `\c00` controls instead displayed only a literal `\c` fragment; that invalid-index
@@ -621,6 +622,51 @@ fields are added. The `text_color_tests` cover the native palette and boundary f
 restoration, inherited opacity, style/script combinations, anchors, rotation, decoration
 colours, overflow/literal cases, SVG/PNG goldens and EPS/EMF/PDF output. The PNG golden isolates
 decoration strokes from installed glyph fonts and checks every RGB value directly.
+
+
+### 7.3 RGB text colours (T58 graph text)
+
+`codex/text-run-rgb` (2026-11-15) extends `\cN(text)` to RGB codes without adding
+model fields or changing global palettes. The [Color function reference](https://docs.originlab.com/labtalk/ref/color-func/)
+distinguishes internal colour codes from plain RGB decimals. OriginPro 2016 scalar controls
+confirm `Color(r,g,b) = 0x01000000 + r + 256*g + 65536*b`. Text escapes use a **one-based**
+colour code: add one to that return value to reproduce exactly the requested RGB. Using the
+return value verbatim instead subtracts one from the entire 24-bit colour, including borrows
+between channels; it does not merely clamp the red channel.
+
+The independent native captures in `scratch/text-run-rgb/` (`rgb.lines.txt` and
+`rgb-boundaries.lines.txt`, their scalar outputs and EMF exports) establish these cases:
+
+| Escape N | EMF text RGB |
+|---|---|
+| 16777216 | (0,0,0), palette/tag boundary |
+| 16777471 | (254,0,0) |
+| 16842496 | (255,254,0) |
+| 33488896 | (255,255,254) |
+| 33554431 | (254,255,255) |
+| 25249549 | (12,71,129) |
+| 22426642 | (17,52,86) |
+| 22352368 | (239,17,85) |
+| 16974337 | (0,2,3) |
+| 18890880 | (127,64,32) |
+| 16777217 / 16777218 | (0,0,0) / (1,0,0) |
+| 16842497 / 33488897 | (0,255,0) / (0,0,255) |
+| 33554432 | (255,255,255) |
+| 25249550 / 22426643 / 22352369 | (13,71,129) / (18,52,86) / (240,17,85) |
+
+Thus the supported RGB range is 0x01000001 through 0x02000000 inclusive: subtract one,
+then decode the low three bytes as R, G and B. The preceding 0x01000000 control is black;
+0x02000001 produced black natively but belongs to another tag and stays literal in Sheaf.
+Signed Auto/None and other special tags remain unsupported. Existing decimal-digit/overflow,
+literal-wrapper and nesting limits apply. Native reference coordinates identify each control;
+EMF creation order is reversed and PNG quantization is excluded from these numeric fixtures.
+
+The native `\c25249549(a\c2(b)c)d` control returns to (12,71,129) after red `b`, and to
+the label's (200,100,20) for `d`. Sheaf uses the same existing run-colour path for glyphs,
+underline and strikeout, including nested font/script styles and rotated text. Explicit RGB
+is opaque, while text outside the span retains its parent's alpha. Seven focused regressions
+cover the measured values, boundaries, nesting, glyph placement and EPS/EMF/PDF/SVG output;
+new SVG and font-independent stroke PNG goldens also check the channel values directly.
 
 ---
 
@@ -4211,3 +4257,40 @@ Implemented in `crates/core/src/multi_y.rs` (plans, options), `Template::Multi3Y
 - **Multiple Y Axes...** follows 21.6: Plot Type (Line, Scatter, Line + Symbol; Custom is not offered), Number of Left/Right Y Axes with Auto (floor(N/2) left, rest right), Add Middle Y Axis (-50 %), Number of Plots in Each Layer (the sum must equal the number of columns, a layer cannot be empty), Link Axis Color to Plot, Show Y Title, Show Top X Axis (line and ticks only; tick labels on the top axis are not drawn), Y Axes Gap (Auto 10, and 14 when Y titles or the top X axis are on: which of the options causes it is **unmeasured**, Sheaf uses titles or top X; `axiscolor:=0` alone is unmeasured). The first frame is centred with the outward offsets by the formula of 21.6; one Y column makes an ordinary graph with a left axis and the frame at 17.91 %. A count of axes that does not fit the number of layers is reported in the dialog and nothing is made. The Preview button and `hide` are not built.
 - **Files**: `.sheaf` keeps `offset_pct` and the layer links. The `.opj` writer writes one ordinary layer per Y axis but no axis position; the save names "the position of a Y axis away from the frame" so the `.opj.sheaf` companion keeps it (ADR 0008). CLI and MCP have the four template names only; the Multiple Y Axes options are in the app.
 - Goldens: `crates/plot/tests/golden/multi-y-3ys-y-yy.svg`, `-3ys-y-y-y`, `-4ys-y-yyy`, `-4ys-yy-yy` and `multi-y-multiple-axes.svg`.
+
+## 22. Graph view modes, Show toggles and Full Screen (T66, measured 2026-11-15, Origin 2016)
+
+Measured in OriginPro 2016 on our own synthetic data (a workbook with X = 1 to 10, Y = 2X+1 and 20-X, a Line + Symbol graph, once with an extra right-Y layer), a 1024x768 Origin window, menus and keys driven through `tools/origin-ref/origin-dialog.ps1 -NoDialog` with `-AfterFile` (`@CLICK`, `@KEY`, `@SHOT`) and `page.viewmode` read through LabTalk. Pictures and raw outputs are local (`re-workspace/scratch/t66/`). Anything not listed is **unmeasured**.
+
+### 22.1 View menu of a graph window
+
+Origin collapses its menus: the short form of View shows Toolbars..., Apps, Project Explorer, Object Manager, Zoom In, Zoom Out, Whole Page and Full Screen, and a chevron; the short form changes after items are used (a ticked or used mode joins it), so the chevron moves. The full form is: Menu >, | Toolbars... (Ctrl+T), Status Bar (ticked), | Command Window (Alt+3), Code Builder (Alt+4), Quick Help (Alt+5), | Apps (Alt+9, ticked), Project Explorer (Alt+1), Object Manager (Alt+8), View Windows >, | Results Log (Alt+2), View Mode >, | Messages Log (Alt+6), Smart Hint Log (Alt+7), | **Print View (Ctrl+2), Page View (Ctrl+1), Window View, Draft View (Ctrl+0)**, | Zoom In (Ctrl+I), Zoom Out (Ctrl+M), Whole Page (Ctrl+W), Zoom All, | Show >, Show Data Info, Full Screen (Ctrl+Shift+J). Page View is ticked on a new graph; the four modes are mutually exclusive (one tick).
+
+### 22.2 The four modes
+
+LabTalk `page.viewmode` is 1 Print, 2 Page (default of a new graph), 3 Window, 4 Draft; writing 0 or 5 left the value unchanged. Ctrl+2, Ctrl+1 and Ctrl+0 set 1, 2 and 4 (read back 1, 4, 2 in order). Evidence: the step script and the screenshots of each value are in the local scratch folder (`re-workspace/scratch/t66/a5.txt`, `a5-m0.png` to `a5-m5.png`; 0 and 5 show a `PAGE.VIEWMODE: object property not found!` toast), but the raw stdout of the `?page.viewmode` queries was not saved, so the read-back numbers (and the .opj reopen read-back in the last bullet) come from the session notes and should be re-measured before anything depends on them.
+- **Print and Page View** looked the same in both window sizes tried (a maximized graph window and a small one): the page is drawn at its own size from the top-left with the grey window colour to the right where the page is narrower than the window. A difference (print-size fonts? margins?) was not found: **unmeasured**.
+- **Window View and Draft View** stretch the page over the whole window (no grey area; in the small window the layer grew with the window and the axes moved). Window View draws the text with different smoothing from Print and Page View (the rotated axis title looks coarse); Draft View draws the plot like Page View with crisper, unsmoothed text and the same lines and symbols. Whether Draft hides other items (fills, images, patterns) **unmeasured**.
+- `page.width` and `layer.width` were not compared between modes: **unmeasured**.
+- **Saved with the project:** set to 3, saved as `.opj` (`save` with an unquoted path; a quoted path produced an error dialog), set to 1, reopened: the graph reported 3 again.
+
+### 22.3 Show submenu
+
+In order, with separators after the third, fifth and ninth item: Layer Icons, Active Layer Indicator, Axis Layer Icons | Object Grid, Layer Grid | Frame, Labels, Data, Active Layer Only | Master Items on Screen. Ticks of a new graph: **Layer Icons, Labels and Data**; the other seven are off. Show Data Info (below the submenu) is ticked on a new graph.
+- **Layer Icons** unticked: the numbered layer icons ("1", "2" in the top-left corner of the page) disappear; no dialog.
+- Active Layer Indicator, Axis Layer Icons, Object Grid, Layer Grid, Frame, Labels, Data, Active Layer Only, Master Items on Screen and Show Data Info: **unmeasured** (the effect of switching each; every attempt to click them hit a different item because the collapsed View menu changed between clicks). To measure: open View, click the chevron, take a shot to confirm the full menu, then open Show, click the item once, shot, and finish the session (do one item per session); or untick Tools > Options > Miscellaneous > Enable Collapsible Menus (the hint text of the menu names that box; the dialog was opened with Ctrl+U but the tab was not reached).
+
+### 22.4 Full Screen
+
+Ctrl+Shift+J (View > Full Screen; the page right-click item "View Full Screen" has the same key, as listed in gui-look.md; its own click was not run in Origin: **unmeasured**, Sheaf wires it to the same Full Screen): the graph page covers the whole screen, with no menu bar, toolbars, status bar or window frame, and fits its aspect to the screen height (white page, no grey). A "Reminder Message" dialog appears in the middle when it starts (text: "Hit ESC to exit", "Arrow Keys to shift to different graphs.", "Home and End key to first and last graph.", a "Do not show this message in the future" tick and OK; Enter confirms it). **Esc ends it** and the normal window comes back as it was. With a single graph a Right arrow did not leave a visible change before Esc (the window was already back in the next picture: unclear whether Right ended it; **unmeasured**). Switching between several graphs with the arrow keys, Home and End: **unmeasured**.
+
+### 22.5 What Sheaf does (T66, built)
+
+- The mode is per graph window and kept in `Project::view_modes` (Page View, the default, is not stored); it is saved in the `.sheaf` file, is not an undo step (undo and redo keep the mode now in effect), and is not written to `.opj` (the `page.viewmode` block of the OPJ format was not located: unmeasured).
+- Print View and Page View draw the same picture (as measured). Window View and Draft View give the page the window's aspect with its own width (layers grow with the window, text keeps its size, no grey border; the zoom layout works over the window grown by its 12 px margin). Draft View rasterises without anti-aliasing of the text (the lines and symbols stay as they were), as measured. **Not reproduced:** Origin's Window View smooths text differently from Page View (coarser, 22.2); Sheaf's Window View uses the normal rasteriser, so its text looks like Page View's. `page.width`/`layer.width` per mode is unmeasured, so Sheaf does not change the stored page size.
+- Show > Layer Icons toggles the existing page setting (`Plot Details > Miscellaneous > Show the layer icons`; one undo step). The other Show items and Show Data Info are grey.
+- Full Screen: Sheaf's window goes to the whole screen and shows the page only (white ground, page fitted into the screen, no menu, toolbars, panels or status bar), the Reminder Message first (Enter or OK ends it; the tick is kept for the run only, Sheaf has no settings file yet), Esc ends it; Left/Right/Home/End switch between the graphs in window order as the reminder says (not measured beyond the reminder text; Right on the last graph does nothing).
+
+### 22.6 What Sheaf took from this (T66, plan)
+
+Page View as Sheaf's current picture and the default; Window View (page stretched to the window, aspect not kept) and Draft View (the same with plain text) as in 22.2; modes saved in the `.sheaf` file; the Layer Icons tick; Full Screen with Esc and the reminder; leave the unmeasured Show items and Show Data Info grey until they are measured.

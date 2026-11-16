@@ -1410,7 +1410,7 @@ fn analysis_menu() -> Vec<Entry> {
                         item("Reconstruction...", Cmd::Analyze(AnalysisKind::WaveletReconstruct)),
                         item("Denoise...", Cmd::Analyze(AnalysisKind::WaveletDenoise)),
                         item("Smooth...", Cmd::Analyze(AnalysisKind::WaveletSmooth)),
-                        grey("Continuous Wavelet..."),
+                        item("Continuous Wavelet...", Cmd::Analyze(AnalysisKind::ContinuousWavelet)),
                     ],
                 ),
             ],

@@ -1470,24 +1470,35 @@ editable; 3 was refused, 5 and 8 work), `upf` 0, `plot` 1. Output `rcoef` defaul
 book: one row per signal sample, one column per scale in the order of the scale column, real numbers, no X column**; the first column
 is named `Coefficient`, the next ones `A`, `B`, ... (long names empty), the comment of every column is `cwt of A, B` (the signal's
 and the scale column's names). A script call made no graph and no matrix (`plot:=1` and `mcoef:=<new>` did nothing), and
-`pf:=<new>` with `upf:=1` wrote no column; with `upf:=1` the coefficients change (the scale column then holds frequencies), how is
-not worked out.
+`pf:=<new>` with `upf:=1` wrote no column; with `upf:=1` the coefficients are the same.
 
-What the numbers are (a unit impulse at row `m`, 64 points, scales 1 to 8; `cwt1.out`, `cwt2.out`):
+**What the numbers are** (formula found and verified against 43 Origin runs (fixture keys `cwt` and `cwt_more` of `t96-origin.json`, test
+`crates/calc/tests/origin_cwt.rs`, agreement 1e-14). The runs: unit impulses at several rows and amplitudes, a generic signal of 65 and 64
+samples, signals of 1, 2, 3, 17, 30, 31 samples, Morlet wave numbers 5 to 20, DGauss orders 1 to 8, MexHat, scales 1 to 12.3.
 
-- The response is shift invariant and linear (an impulse of 2 at row 20 gives twice the response of 1 at row 32, moved by 12 rows).
-- **Every response is centred half a sample after the impulse**: symmetric (Morlet, MexHat, DGauss with an even `param`) or
-  antisymmetric (DGauss, `param` 5) about row `m + 0.5`, never about `m`.
-- Morlet (real part): `A(a) cos(5 d / a) exp(-d^2 / (2 a^2))`, `d = row - (m + 0.5)`, up to a sign that alternates with the
-  half-sample offset, `a` the scale; fitted for `a` = 2, 4, 8 with the Gaussian width exactly `a` and `A(a) sqrt(a)` = 0.756, 0.935,
-  0.984, which is `1 - 1/a^2` (to 0.01). Scale 1 does not fit (the carrier is above the Nyquist rate).
-- MexHat: `A(a) (1 - t^2) exp(-t^2/2)`, `t = d / a`, fitted to 1e-4 at `a` = 1.5 to 8, with `A(a) sqrt(a)` rising to 0.8673
-  (= `2 / (sqrt(3) pi^(1/4))`, the usual normalisation) from below: 0.8415, 0.8614, 0.8651, 0.8665 at `a` = 2, 4, 6, 8.
-- DGauss: the parity follows `param` (odd antisymmetric, even symmetric); the shape is not a plain Hermite function of `d / a`
-  (fit errors 0.2 to 0.5 for orders 1 to 5); not identified.
+- Origin's coefficients are computed the way the classic discrete CWT on a sampled, integrated wavelet is: the mother wavelet `psi`
+  is sampled at `N = 1024` points `x_i = -R + i step`, `step = 2R / (N - 1)`, with `R = 8` for Morlet and MexHat and `R = 5` for DGauss,
+  and `ip[i] = step * sum_{k <= i} psi(x_k)` (running sum times the step).
+- A scale `a` is **cut to its integer part** (scale 1.5 gives exactly the column of scale 1, with `sqrt(1)`; 2.9 gives 2, 12.3 gives 12).
+  Any scale below 1 refuses the whole run (0.5, 0.9 and 0.99999 each did; the output sheet is not made).
+- The filter has `floor(2R a) + 1` taps `f[i] = ip[floor(i / (a step))]`, `i = 0 .. 2R a`, applied reversed. The coefficients are
+  `-sqrt(a)` times the first difference of `conv(signal, f)`, keeping the middle `n` values (the first `floor((taps - 2) / 2)` of the
+  difference skipped). The first difference of an integrated wavelet is why every impulse response is centred half a sample after the
+  impulse (the earlier measurement). Shift invariance, linearity, zero padding at the ends and signals shorter than the filter all follow.
+- Morlet: `psi = exp(-x^2/2) cos(w x)` with `w` the wave number cut to an integer. Origin allows 5 to 20 (1 to 4 and 21, 25, 50, 100 refused;
+  non-integer values such as 5.5, 6.5, 19.9 are accepted and give the column of 5, 6, 19).
+- MexHat: `psi = 2 / (sqrt(3) pi^(1/4)) (1 - x^2) exp(-x^2/2)`; the parameter is not used.
+- DGauss of order `m` (the `param`, cut to an integer, 1 to 8; 0 and 9 to 12 refused, 8.5 gives 8, 1.5 gives 1):
+  `psi = sigma_m H_m(x) exp(-x^2) / sqrt(sqrt(pi/2) (2m-1)!!)`, `H_m` the physicists' Hermite polynomial, `sigma_m = -1` for `m` = 1, 2 (mod 4)
+  and `+1` for `m` = 3, 0 (mod 4), i.e. the `m`-th derivative of `exp(-x^2)` scaled to unit L2 norm with a sign that follows that pattern
+  (all eight orders checked).
+- `upf:=1` gives exactly the same coefficients (CM against CMP, difference 0); it only adds the pseudo-frequency output, which a script
+  call does not write, so it is not measured. The earlier note that the coefficients differ was wrong.
+- Columns come in the order of the scale column; the sheet has `n` rows and one column per scale, no X column.
 
-So the **continuous wavelets are measured as tables (fixture), not derived**. The closed form with its half-sample offset and the
-small-scale deficit (probably the wavelet sampled and normalised on the sample grid) is the first open point.
+Sheaf: `sheaf_calc::cwt::cwt`, `Tool::ContinuousWavelet`, `sheaf analyze cwt --with <scale column> --wavelet morlet|dgauss|mexhat --param N`.
+Differences kept: the short names are A, B, ... (Origin's first column is named `Coefficient`), the coefficient matrix, the image
+plot and the pseudo-frequency are not made, and the scale column must be a Y column of the project.
 
 ### 19.7 The windows
 
@@ -1512,7 +1523,7 @@ is the inventory's (greyed-items.md).
 The comment spelling for Haar in Decompose, what `Recalculate` does for these five, the preview pane's drawing, the Results Log
 lines, missing values in the input (a blank cell in Denoise: the call succeeded, the output was not read), the menu itself, the
 image plot and the coefficient matrix of `cwt` (no script route; the window's "Coefficient Matrix" check and the plot made after
-OK), the pseudo-frequency output, `mdwt`, `dwt2`, `idwt2`, whether `cwt` refuses scales below 1, non-uniform X, and the open
+OK), the pseudo-frequency output, `mdwt`, `dwt2`, `idwt2`, missing values in the `cwt` signal, several signal columns in one `cwt` call, and the open
 rules of 19.4 (boundary samples, `sqtwolog` threshold) and 19.5 (non-power-of-two lengths, `K` at cutoff 0 and 1).
 
 ## Files

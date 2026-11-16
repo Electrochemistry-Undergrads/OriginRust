@@ -6,8 +6,8 @@
 
 use eframe::egui::{self, DragValue};
 use sheaf_core::analysis::{
-    Tool, Wavelet, WaveletDecomposeSpec, WaveletDenoiseSpec, WaveletExtension, WaveletReconstructSpec,
-    WaveletSmoothSpec, WaveletThresholdKind,
+    CwtSpec, CwtWavelet, Tool, Wavelet, WaveletDecomposeSpec, WaveletDenoiseSpec, WaveletExtension,
+    WaveletReconstructSpec, WaveletSmoothSpec, WaveletThresholdKind,
 };
 use sheaf_core::ids::ColumnId;
 
@@ -22,6 +22,8 @@ pub struct WaveletOptions {
     pub reconstruct: (Wavelet, WaveletExtension),
     pub denoise: WaveletDenoiseSpec,
     pub smooth: WaveletSmoothSpec,
+    /// Mother wavelet and its wave number or order for Continuous Wavelet; the scale column comes from the window.
+    pub cwt: (CwtWavelet, f64),
 }
 
 impl Default for WaveletOptions {
@@ -31,6 +33,7 @@ impl Default for WaveletOptions {
             reconstruct: (Wavelet::Haar, WaveletExtension::Periodic),
             denoise: WaveletDenoiseSpec::default(),
             smooth: WaveletSmoothSpec::default(),
+            cwt: (CwtWavelet::Morlet, 5.0),
         }
     }
 }
@@ -54,6 +57,10 @@ impl WaveletOptions {
 
     pub fn smooth_tool(&self) -> Tool {
         Tool::WaveletSmooth(self.smooth)
+    }
+
+    pub fn cwt_tool(&self, scales: ColumnId) -> Tool {
+        Tool::ContinuousWavelet(CwtSpec { scales, wavelet: self.cwt.0, param: self.cwt.1 })
     }
 }
 
@@ -136,5 +143,27 @@ pub fn smooth_options(ui: &mut egui::Ui, spec: &mut WaveletSmoothSpec) {
         "Decomposes to the deepest level and zeroes the last cutoff % of the detail coefficients (finest level \
          first). Exact against Origin for periodic power-of-two lengths; other lengths and the zero-padded mode \
          can differ.",
+    );
+}
+
+/// Continuous Wavelet: Wavelet Type (Morlet, DGauss, MexHat) and Wave Number (Morlet 5 to 20, DGauss order 1 to
+/// 8; Origin's box is an editable list that starts at 5). The scale column is chosen above.
+pub fn cwt_options(ui: &mut egui::Ui, (wavelet, param): &mut (CwtWavelet, f64)) {
+    ui.horizontal(|ui| {
+        ui.label("Wavelet Type");
+        egui::ComboBox::from_id_salt("cwt_type").selected_text(wavelet.name()).show_ui(ui, |ui| {
+            for c in CwtWavelet::ALL {
+                ui.selectable_value(wavelet, c, c.name());
+            }
+        });
+    });
+    if let Some((lo, hi)) = wavelet.param_range() {
+        ui.horizontal(|ui| {
+            ui.label(if *wavelet == CwtWavelet::Morlet { "Wave Number" } else { "Order" });
+            ui.add(DragValue::new(param).range(f64::from(lo)..=f64::from(hi)).speed(0.1));
+        });
+    }
+    ui.weak(
+        "One column of coefficients per scale in a new sheet, one row per sample. Scales below 1 are refused and          fractional scales count as their integer part, as in Origin. Origin's pseudo-frequency option, the          coefficient matrix and the image plot are not available.",
     );
 }

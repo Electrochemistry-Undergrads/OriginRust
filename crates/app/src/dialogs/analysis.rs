@@ -82,6 +82,8 @@ pub enum AnalysisKind {
     WaveletDenoise,
     /// Signal Processing > Wavelet > Smooth (Origin's `wtsmooth`).
     WaveletSmooth,
+    /// Signal Processing > Wavelet > Continuous Wavelet (Origin's `cwt`).
+    ContinuousWavelet,
     /// Mathematics > Trace Interpolation (Origin's `interp1trace`).
     TraceInterp,
     Interpolate,
@@ -165,7 +167,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 30] = [
+    pub const ALL: [AnalysisKind; 31] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -191,6 +193,7 @@ impl AnalysisKind {
         AnalysisKind::WaveletReconstruct,
         AnalysisKind::WaveletDenoise,
         AnalysisKind::WaveletSmooth,
+        AnalysisKind::ContinuousWavelet,
         AnalysisKind::TraceInterp,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
@@ -226,6 +229,7 @@ impl AnalysisKind {
             AnalysisKind::WaveletReconstruct => "Reconstruction...",
             AnalysisKind::WaveletDenoise => "Denoise...",
             AnalysisKind::WaveletSmooth => "Smooth...",
+            AnalysisKind::ContinuousWavelet => "Continuous Wavelet...",
             AnalysisKind::TraceInterp => "Trace Interpolation...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
@@ -312,6 +316,7 @@ impl AnalysisKind {
             "wavelet-reconstruct" => AnalysisKind::WaveletReconstruct,
             "wavelet-denoise" => AnalysisKind::WaveletDenoise,
             "wavelet-smooth" => AnalysisKind::WaveletSmooth,
+            "cwt" => AnalysisKind::ContinuousWavelet,
             "trace-interp" => AnalysisKind::TraceInterp,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
@@ -1175,6 +1180,7 @@ impl AnalysisDialog {
                 | AnalysisKind::Ifft
                 | AnalysisKind::Coherence
                 | AnalysisKind::WaveletReconstruct
+                | AnalysisKind::ContinuousWavelet
         );
         let reference_choices = reference_choices(project, if signal { &[] } else { &columns });
         // IFFT: the column right after the (first) input is the imaginary part, as an FFT sheet has it.
@@ -1628,6 +1634,14 @@ impl AnalysisDialog {
             }
             AnalysisKind::WaveletDenoise => self.wavelet.denoise_tool(),
             AnalysisKind::WaveletSmooth => self.wavelet.smooth_tool(),
+            AnalysisKind::ContinuousWavelet => {
+                let scales = self
+                    .reference_choices
+                    .get(self.reference)
+                    .map(|(id, _)| *id)
+                    .ok_or("there is no other column with numbers to use as the scales")?;
+                self.wavelet.cwt_tool(scales)
+            }
             AnalysisKind::TraceInterp => Tool::TraceInterp(self.trace_interp),
             AnalysisKind::Ifft => {
                 let imaginary = if self.use_reference {
@@ -1946,6 +1960,7 @@ impl AnalysisDialog {
             AnalysisKind::Convolution => "Response",
             AnalysisKind::SignalCorrelation | AnalysisKind::Coherence => "Second signal",
             AnalysisKind::WaveletReconstruct => "Detail Coefficients",
+            AnalysisKind::ContinuousWavelet => "Scale",
             AnalysisKind::Ifft => "Imaginary",
             _ => "Reference",
         };
@@ -1974,6 +1989,7 @@ impl AnalysisDialog {
                 | AnalysisKind::Ifft
                 | AnalysisKind::Coherence
                 | AnalysisKind::WaveletReconstruct
+                | AnalysisKind::ContinuousWavelet
         ) {
             return;
         }
@@ -2037,6 +2053,10 @@ impl AnalysisDialog {
             }
             AnalysisKind::WaveletDenoise => super::wavelet::denoise_options(ui, &mut self.wavelet.denoise),
             AnalysisKind::WaveletSmooth => super::wavelet::smooth_options(ui, &mut self.wavelet.smooth),
+            AnalysisKind::ContinuousWavelet => {
+                self.reference_options(ui);
+                super::wavelet::cwt_options(ui, &mut self.wavelet.cwt);
+            }
             AnalysisKind::TraceInterp => trace_interp_options(ui, &mut self.trace_interp),
             AnalysisKind::Ifft => {
                 ui.add_enabled_ui(!self.reference_choices.is_empty(), |ui| {
@@ -2940,6 +2960,7 @@ impl AnalysisDialog {
             AnalysisKind::WaveletReconstruct => "idwt",
             AnalysisKind::WaveletDenoise => "wtdenoise",
             AnalysisKind::WaveletSmooth => "wtsmooth",
+            AnalysisKind::ContinuousWavelet => "cwt",
             AnalysisKind::TraceInterp => "interp1trace",
             AnalysisKind::Ifft => "ifft1",
             AnalysisKind::Interpolate => "interp1",
@@ -3032,6 +3053,9 @@ impl AnalysisDialog {
             AnalysisKind::WaveletReconstruct => "Rebuild a signal from approximation and detail coefficients",
             AnalysisKind::WaveletDenoise => "Remove noise from the input signals by thresholding wavelet coefficients",
             AnalysisKind::WaveletSmooth => "Smooth the input signals by dropping wavelet detail coefficients",
+            AnalysisKind::ContinuousWavelet => {
+                "The continuous wavelet transform of the input signals at the given scales"
+            }
             AnalysisKind::TraceInterp => {
                 "Resample curves whose X is not monotonic at evenly spaced points along the path"
             }
@@ -3122,6 +3146,9 @@ impl AnalysisDialog {
             AnalysisKind::Decimate => "The kept points of each input, with their X, in a new sheet",
             AnalysisKind::WaveletDecompose => "The approximation and detail coefficients of each input in a new sheet",
             AnalysisKind::WaveletReconstruct => "The rebuilt signal in a new sheet",
+            AnalysisKind::ContinuousWavelet => {
+                "One column of coefficients per scale (rows are the samples) in a new sheet"
+            }
             AnalysisKind::WaveletDenoise | AnalysisKind::WaveletSmooth => {
                 "The processed signal of each input, with its X, in a new sheet"
             }
@@ -3253,6 +3280,7 @@ impl AnalysisDialog {
                 | AnalysisKind::Ifft
                 | AnalysisKind::Coherence
                 | AnalysisKind::WaveletReconstruct
+                | AnalysisKind::ContinuousWavelet
         );
         self.reference_choices = reference_choices(project, if signal { &[] } else { &columns });
         self.reference = self.reference.min(self.reference_choices.len().saturating_sub(1));

@@ -65,6 +65,12 @@ pub enum Job {
         wavelet: sheaf_core::analysis::Wavelet,
         extension: sheaf_core::analysis::WaveletExtension,
     },
+    /// Continuous wavelet; the scale column is looked up once the project is loaded.
+    ContinuousWavelet {
+        scales: String,
+        wavelet: sheaf_core::analysis::CwtWavelet,
+        param: f64,
+    },
     /// Curve math; the reference column is looked up once the project is loaded.
     Math {
         op: analysis::CurveOp,
@@ -263,6 +269,10 @@ pub fn run_job_to(project: &mut Project, target: &Target, job: Job, output: &ana
         Job::WaveletReconstruct { detail, wavelet, extension } => {
             let detail = named_columns(project, book, sheet, std::slice::from_ref(&detail))?[0];
             Tool::WaveletReconstruct(analysis::WaveletReconstructSpec { detail, wavelet, extension })
+        }
+        Job::ContinuousWavelet { scales, wavelet, param } => {
+            let scales = named_columns(project, book, sheet, std::slice::from_ref(&scales))?[0];
+            Tool::ContinuousWavelet(analysis::CwtSpec { scales, wavelet, param })
         }
         Job::Ifft { imaginary, options, auto_interval } => {
             let imaginary = match imaginary {

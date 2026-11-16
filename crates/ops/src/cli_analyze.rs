@@ -203,6 +203,14 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::WaveletReconstruct { target, detail, wavelet, ext } => {
             (target, Job::WaveletReconstruct { detail, wavelet: wavelet_arg(&wavelet)?, extension: wavelet_ext(ext) })
         }
+        AnalyzeTool::ContinuousWavelet { target, scales, wavelet, param } => {
+            let wavelet = match wavelet {
+                CwtWaveletArg::Morlet => analysis::CwtWavelet::Morlet,
+                CwtWaveletArg::Dgauss => analysis::CwtWavelet::DGauss,
+                CwtWaveletArg::Mexhat => analysis::CwtWavelet::MexHat,
+            };
+            (target, Job::ContinuousWavelet { scales, wavelet, param })
+        }
         AnalyzeTool::WaveletDenoise { target, wavelet, ext, threshold, level, percent } => {
             let threshold = match threshold {
                 WaveletThresholdArg::Custom => analysis::WaveletThresholdKind::Custom,

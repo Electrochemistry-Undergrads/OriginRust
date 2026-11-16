@@ -1868,3 +1868,49 @@ fn wavelet_denoise_and_smooth_run_and_refuse_what_origin_refuses() {
     assert!(ok, "stderr: {stderr}");
     assert!(stdout.contains("Wavelet smoothing"), "{stdout}");
 }
+
+#[test]
+fn cwt_writes_one_column_per_scale_and_refuses_what_origin_refuses() {
+    let dir = scratch("cwt");
+    // A unit impulse at row 8 of 16, and the scales 1, 2.9, 4.
+    let mut text = String::from(
+        "t,sig,scale
+",
+    );
+    for i in 0..16 {
+        let s = ["1", "2.9", "4"].get(i).copied().unwrap_or("");
+        text.push_str(&format!(
+            "{i},{},{s}
+",
+            if i == 8 { 1 } else { 0 }
+        ));
+    }
+    let data = dir.join("cwt.csv");
+    std::fs::write(&data, text).unwrap();
+    let out = dir.join("cwt-out.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "cwt",
+        data.to_str().unwrap(),
+        "--y",
+        "sig",
+        "--with",
+        "scale",
+        "--wavelet",
+        "mexhat",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Continuous wavelet") && stdout.contains("CWTResults1"), "{stdout}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    let rows = numeric_rows(&text);
+    assert_eq!(rows.len(), 16);
+    assert_eq!(rows[0].len(), 3);
+    // Scale 2.9 is cut to 2, so its column differs from scale 4 and both are centred half a sample after the impulse.
+    assert!((rows[8][1] - rows[9][1]).abs() < 1e-12 && (rows[7][1] - rows[10][1]).abs() < 1e-12, "{rows:?}");
+    assert!(text.contains("cwt of B, C"), "{text}");
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "cwt", data.to_str().unwrap(), "--y", "sig", "--with", "scale", "--param", "3"]);
+    assert!(!ok && stderr.contains("wave number"), "{stderr}");
+}

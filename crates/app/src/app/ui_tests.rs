@@ -1833,6 +1833,18 @@ fn wavelet_denoise_and_smooth_open_from_signal_processing_and_write_their_sheets
 }
 
 #[test]
+fn continuous_wavelet_opens_from_signal_processing_and_writes_its_coefficient_sheet() {
+    // The first Y column of the sample sheet (2.5, 4.5, 6.5, 8.5; scales 2, 4, 6, 8) serves as the scales.
+    let h = run_wavelet_item("Continuous Wavelet...");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name == "CWTResults1").expect("Origin's result sheet");
+    assert_eq!(sheet.columns.len(), 8, "four scales for each of the two inputs");
+    assert!(sheet.columns.iter().all(|c| c.numeric().unwrap().len() == 4));
+    assert!(sheet.columns[0].comments.starts_with("cwt of "), "{}", sheet.columns[0].comments);
+    assert_eq!(h.state().doc.undo_label(), Some("Continuous wavelet transform"));
+}
+
+#[test]
 fn fft_filters_open_from_signal_processing_and_add_a_column_per_input() {
     let mut h = start(vec![data_file("fftfilter")]);
     show_window(&mut h, "Book1 - sample.csv");

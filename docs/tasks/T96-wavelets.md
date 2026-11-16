@@ -1,10 +1,13 @@
 # T96: Wavelets (B8 slice): Decompose, Reconstruction, Denoise, Smooth, Continuous Wavelet
 
-**Status:** open (4 of 5 items built); claimed 2026-11-16 (Claude Windows, branch `wavelets`, worktree `.claude/worktrees/wavelets`). Origin 2016 measured
-the same day (`docs/spec/analysis-tools.md` section 19, fixture `tools/origin-ref/t96/t96-origin.json`). Built: Decompose, Reconstruction, Denoise and Smooth
+**Status:** done 2026-11-16 (all five items built; Claude Windows, branch `wavelets`, worktree `.claude/worktrees/wavelets`, not merged). Origin 2016 measured
+the same day (`docs/spec/analysis-tools.md` section 19, fixtures `tools/origin-ref/t96/t96-origin.json`). Built: Decompose, Reconstruction, Denoise, Smooth
 (`crates/calc/src/wavelet.rs`, `crates/core/src/analysis/wavelet.rs`, `crates/app/src/dialogs/wavelet.rs`, `sheaf analyze wavelet-decompose | wavelet-reconstruct |
-wavelet-denoise | wavelet-smooth`, MCP `wavelet_decompose | wavelet_denoise | wavelet_smooth`; tests `crates/calc/tests/origin_wavelet.rs`). Continuous Wavelet
-stays grey (steps 4 and 5). Open corners kept visible in the windows: `sqtwolog` is a fit to Origin's brackets, Denoise's first and last `L - 2` samples can
+wavelet-denoise | wavelet-smooth`, MCP `wavelet_decompose | wavelet_denoise | wavelet_smooth`; tests `crates/calc/tests/origin_wavelet.rs`) and Continuous Wavelet
+(`crates/calc/src/cwt.rs`, `Tool::ContinuousWavelet` in the same core module, `sheaf analyze cwt --with <scale column> --wavelet morlet|dgauss|mexhat --param N`,
+the window in `dialogs/wavelet.rs`; test `crates/calc/tests/origin_cwt.rs`: 43 Origin runs, all three wavelets, 1e-12; the formula is the integrated, sampled mother
+wavelet of 19.6). Not built, no script route in Origin and not measured: Continuous Wavelet's pseudo-frequency output, coefficient matrix and image plot, and the MCP
+tool for `cwt` and `wavelet_reconstruct` (they need a second column). Open corners kept visible in the windows: `sqtwolog` is a fit to Origin's brackets, Denoise's first and last `L - 2` samples can
 differ, Smooth is exact for periodic power-of-two lengths only, odd intermediate lengths of a periodic multi-level run are refused (Origin accepts n = 100).
 **Size:** L. **Spec:** `docs/spec/analysis-tools.md` section 19 (19.1 wavelets, 19.2 `dwt`, 19.3 `idwt`, 19.4 `wtdenoise`,
 19.5 `wtsmooth`, 19.6 `cwt`, 19.7 windows, 19.8 not measured).
@@ -20,7 +23,7 @@ when it matches the spec:
 
 1. **Decompose** and **Reconstruction** (exact, simplest).
 2. **Smooth** (position rule, one open corner) and **Denoise** (custom threshold exact, `sqtwolog` and boundary open).
-3. **Continuous Wavelet** (measured as tables; the closed form is open).
+3. **Continuous Wavelet** (closed form found, 19.6).
 
 ## Origin facts (measured 2026-11-16, `re-workspace/scratch/t96/`, local only; generators in `tools/origin-ref/t96/`)
 
@@ -38,9 +41,10 @@ when it matches the spec:
 - **`wtsmooth`**: decomposition to the deepest level, detail coefficients laid out coarsest first, **the last
   `floor(cutoff/100 * N)` set to 0** (position rule, finest level first), approximation kept. Corners: `K = 2` at cutoff 0 and 1
   for `n = 128`; zero-padded and non-power-of-two lengths not exact (19.5).
-- **`cwt`**: output sheet `CWTResults1`, rows = samples, columns = scales (real numbers); Morlet (wave number 5, 6..20), DGauss,
-  MexHat; every response is centred half a sample after the impulse; Morlet envelope `exp(-d^2/2a^2)`, MexHat `(1-t^2)exp(-t^2/2)`;
-  amplitudes only partly resolved (19.6). Matrix output, image plot and pseudo-frequency are not reachable from a script.
+- **`cwt`** (closed form, 19.6): output sheet `CWTResults1`, rows = samples, columns = scales in the given order (real numbers); the mother
+  wavelet sampled at 1024 points on [-8, 8] (Morlet, MexHat) or [-5, 5] (DGauss), running integral, scale cut to its integer part
+  (scales below 1 refused), filter `ip[floor(i / (a step))]`, `-sqrt(a)` times the first difference of the convolution, the middle `n` values;
+  wave number cut to an integer, Morlet 5 to 20, DGauss order 1 to 8. Matrix output, image plot and pseudo-frequency are not reachable from a script.
 - **Windows** (19.7): titles `Decompose: dwt`, `Reconstruction: idwt`, `Denoise: wtdenoise`, `Smooth: wtsmooth`, `Continuous
   Wavelet: cwt`, fields and defaults in the table there; Denoise and Smooth have a preview pane.
 
@@ -76,9 +80,9 @@ when it matches the spec:
    zero-padded refusal as measured. Try to find the boundary rule from `denoise_boundary` (the model is exact in the interior; the
    first and last `L-2` samples differ when the wrap-around coefficients are involved); if it stays unknown, document and mark the
    test with the interior range.
-4. Continuous Wavelet: take the table in the fixture as ground truth, find the closed form (start with the half-sample centre and
-   the amplitude law of 19.6), test to 1e-9 on the impulse responses; the DGauss shape is open. Output sheet `CWTResults1`
-   in the input book with the column names of 19.6. Without a closed form that matches, do not enable the item.
+4. Continuous Wavelet (done): found by recognising the half-sample centre as the first difference of an integrated, sampled
+   wavelet; tested to 1e-12 on 43 Origin runs; output sheet `CWTResults1` in the input book (short names A, B, ... where Origin
+   names the first column `Coefficient`).
 5. Measure what 19.8 lists when cheap (Results Log lines, missing values, the matrix output and the image plot through the
    window, the pseudo-frequency), update section 19.
 6. Each tool: one undo step, ordinary sheets, delete the five lines from `docs/tasks/greyed-items.md`, `python

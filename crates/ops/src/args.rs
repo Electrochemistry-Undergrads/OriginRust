@@ -1528,6 +1528,15 @@ pub enum WaveletExtArg {
     Pad0,
 }
 
+/// Mother wavelet of Continuous Wavelet (Origin's `type`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum CwtWaveletArg {
+    Morlet,
+    /// Derivative of Gaussian.
+    Dgauss,
+    Mexhat,
+}
+
 /// Wavelet threshold rule of Denoise (Origin's `thrt`).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum WaveletThresholdArg {
@@ -2042,6 +2051,21 @@ pub enum AnalyzeTool {
         wavelet: String,
         #[arg(long, value_enum, default_value_t = WaveletExtArg::Periodic)]
         ext: WaveletExtArg,
+    },
+    /// Continuous wavelet transform (Origin's Wavelet > Continuous Wavelet, `cwt`): one column of
+    /// coefficients per scale in a new sheet CWTResults1.
+    #[command(name = "cwt")]
+    ContinuousWavelet {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The column of scales (each cut to its integer part, 1 or more).
+        #[arg(long = "with")]
+        scales: String,
+        #[arg(long, value_enum, default_value_t = CwtWaveletArg::Morlet)]
+        wavelet: CwtWaveletArg,
+        /// Wave number of the Morlet (5 to 20) or order of the DGauss (1 to 8).
+        #[arg(long, default_value_t = 5.0)]
+        param: f64,
     },
     /// Wavelet denoising (Origin's Wavelet > Denoise, `wtdenoise`): hard threshold of the detail
     /// coefficients of levels 1 to LEVEL, X and the denoised Y in a new sheet.

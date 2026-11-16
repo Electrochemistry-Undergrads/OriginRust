@@ -75,6 +75,7 @@ All six are **open**. The older index below retains implementation history and p
 | [T67](T67-add-straight-line.md) | 4 (B3), P1 | M | Done 2026-11-15: Add Straight Line (Origin's addline), dialog, CLI --vline/--hline; left: dragging (Moveable) |
 | [T70](T70-axis-center-fit-page-to-printer.md) | 4 (B3), P1 | S | Done 2026-11-15: axis Center, Fit Page To Printer, Format > Fit Page To Layers... opens its window |
 | [T71](T71-point-segments.md) | 4 (B4), P1 | S | Done 2026-11-15: Plot > Line + Symbol > 2 and 3 Point Segment (line connections 2 and 3) |
+| [T75](T75-grouped-indexed-plots.md) | Plot > Column/Bar/Pie > Grouped Columns (indexed data), Plot > Statistics > Grouped Box Charts (B4 slice) | M | built 2026-11-16 (`grouped-indexed`, graphing 14.28, Origin docs only, unmeasured); left: dialog, raw-data statistics, stacking, table tick labels, more than two groups |
 | [T74](T74-fill-column-patterns.md) | Fill Column With: A set of Numbers, Date/Time values, Text & Numeric values (Origin patternN/D/T) | M | claimed 2026-11-15 (`b5-fill`, Claude Windows) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |

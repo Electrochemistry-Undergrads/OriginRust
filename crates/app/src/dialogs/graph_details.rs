@@ -126,7 +126,8 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             if plot.kind.is_bar() {
                 tabs.push((DetailTab::Spacing, "Spacing", true));
             }
-            if plot.y_error.is_some() || plot.x_error.is_some() {
+            let grouped_columns = plot.kind == PlotKind::Column && plot.indexed.is_some();
+            if plot.y_error.is_some() || plot.x_error.is_some() || grouped_columns {
                 tabs.push((DetailTab::ErrorBar, "Error Bar", true));
             }
             // Origin shows Offset for the members of a group (here: a layer of several plots).
@@ -811,6 +812,36 @@ fn plot_tab_body(
                 ui.end_row();
             });
             ui.weak("Gap, overlap and width are shared by all column plots of the layer; a width replaces the gap.");
+        }
+        DetailTab::ErrorBar if graph.layers[l].plots[p].indexed.is_some() => {
+            // Grouped columns of indexed data: the error bar is computed from the rows of each group. It is one
+            // choice for every plot of the layer (the subgroups).
+            let mut error = graph.layers[l].plots[p].indexed.as_ref().map(|i| i.error).unwrap_or_default();
+            let before = error;
+            grid(ui, "plot_indexed_error", |ui| {
+                ui.label("Error Bar");
+                egui::ComboBox::from_id_salt("indexed_error")
+                    .selected_text(match error {
+                        IndexedError::None => "None",
+                        IndexedError::Sd => "Standard Deviation",
+                        IndexedError::Se => "Standard Error",
+                    })
+                    .width(170.0)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut error, IndexedError::None, "None");
+                        ui.selectable_value(&mut error, IndexedError::Sd, "Standard Deviation");
+                        ui.selectable_value(&mut error, IndexedError::Se, "Standard Error");
+                    });
+                ui.end_row();
+            });
+            if error != before {
+                for plot in &mut graph.layers[l].plots {
+                    if let Some(i) = plot.indexed.as_mut() {
+                        i.error = error;
+                    }
+                }
+            }
+            ui.weak("Computed from the rows of each group: the bar is their mean.");
         }
         DetailTab::ErrorBar => {
             let plot = &mut graph.layers[l].plots[p];

@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **390 greyed items: 278 in the menu bar, 26 on the toolbars, 86 in context menus.**
+original inventory baseline. This is not a new runtime audit. **388 greyed items: 276 in the menu bar, 26 on the toolbars, 86 in context menus.**
 
 ## How to read and keep this file
 
@@ -47,9 +47,10 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T69` | 0 |
 | `T70` | 0 |
 | `T71` | 0 |
+| `T75` | 0 |
 | `B2` | 51 |
 | `B3` | 25 |
-| `B4` | 26 |
+| `B4` | 24 |
 | `B5` | 33 |
 | `B6` | 31 |
 | `B7` | 8 |
@@ -65,7 +66,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 48 items, backlog packages (`B`) 322, not planned (`N`) 20.
+Briefs (`T`) hold 48 items, backlog packages (`B`) 320, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -118,13 +119,12 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T63` Line: Horizontal Step · Vertical Step · Spline Connected
 - `B4` Symbol: Scatter Central · Column Scatter
 - `B4` Line + Symbol: Line Series
-- `B4` Column/Bar/Pie: Grouped Columns (indexed data)
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
 - `B15` 3D Symbol/Bar/Vector: 3D Bars · 3D Scatter · 3D Trajectory · 3D Scatter + Error Bar · 3D Vector XYZ XYZ · 3D Vector XYZ dXdYdZ
 - `B8` Statistics: Probability Plot · Q-Q Plot
-- `B4` Statistics: Grouped Box Charts · Interval Plot · Histogram + Probabilities · Marginal Histograms · Marginal Box Charts · 2D Kernel Density · QC (X bar R) Chart · Pareto · Scatter Matrix
+- `B4` Statistics: Interval Plot · Histogram + Probabilities · Marginal Histograms · Marginal Box Charts · 2D Kernel Density · QC (X bar R) Chart · Pareto · Scatter Matrix
 - `B14` Contour/Heat Map: Color Fill · B/W Lines + Labels · Gray Scale Map · Heat Map · Polar Contour theta(X) r(Y) · Polar Contour r(X) theta(Y) · Ternary Contour
 - `B14` Profile: Contour Profiles · Image Profiles
 - `B4` Specialized: Wind Rose · Piper · Smith Chart · High-Low-Close · Vector XYAM · Vector XYXY · Zoom

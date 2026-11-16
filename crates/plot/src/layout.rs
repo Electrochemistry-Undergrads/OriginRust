@@ -1425,7 +1425,7 @@ fn draw_y_labels(
 /// The title of an axis without a title of its own, from the layer's first plot: its Y column for
 /// a Y axis; for an X axis its X column (numbers or text), else the column that labels the ticks,
 /// else `Row`.
-fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
+pub(crate) fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
     let Some(pd) = pds.first() else { return String::new() };
     if pd.plot.kind == PlotKind::Histogram {
         // The counts up the page, the binned column along it.

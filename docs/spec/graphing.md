@@ -766,6 +766,39 @@ range, combined-script insertion and reuse for titles/legend remain open. The sh
 bar remains a separate target-dispatch implementation. No renderer/model/persistence changes
 are introduced by this editor slice.
 
+### 7.7 Axis-title and legend text editors (T58)
+
+The existing X/Y axis titles and legend content now use the selection editor from 7.5.
+Format > Axis Titles opens the active layer's X or Y title; each title's context menu has
+Edit Text. A legend's context menu has Edit Text, and Graph > Legend > Edit Legend Text
+also reaches a hidden or off-page legend. A multi-layer graph names the layer in the window.
+These entry points and compact window layout are Sheaf choices, not newly measured Origin UI.
+
+Origin documents axis titles and legends as text objects and shares its Text tab between
+common text and legends: [graph annotations](https://docs.originlab.com/user-guide/customizing-graphs/),
+[Text tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/) and
+[manual legend control](https://docs.originlab.com/origin-help/legend-manualcontrol/).
+The editor preserves raw column-metadata escapes, legend sample codes and name references.
+Automatic text is retained on unchanged OK, Cancel and base-font-only edits; editing raw text
+chooses custom text. Automatic text restores the existing generated title or legend, and
+Show on graph controls the existing visibility flag. Base font sizes through 1,000 points
+are preserved, matching the published Format toolbar's supported range. Titles/legend have
+no invented label-rotation property. OK or Apply writes one history step when values change;
+Cancel discards only the unapplied draft. A replaced project closes a stale editor.
+
+Generated titles come from a read-only facade over the renderer's existing resolver, including
+histogram, category and transposed-plot rules. Preview uses the actual selected scene object's
+glyphs, decorations and legend samples, with the project's data-name substitutions. A read-only
+cropped-scene facade reuses the existing SVG/raster path and supports negative off-page bounds;
+no glyph, layout or export rules change. Only the selected object is shown on the preview canvas.
+
+A selected literal parenthesis is safely encoded when necessary to preserve the text.
+Whole-legend formatting keeps symbol codes and row boundaries outside text-format groups;
+name substitutions remain raw, so formatting does not freeze their data links. This is a Sheaf
+editing choice using the published renderer, not a measured Origin command-rewrite algorithm.
+The existing screenshot hooks accept `--show text:x`, `text:y` and `text:legend` for the first
+layer of the first graph, alongside the existing `text:N` label hook.
+
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
 
 | Group | Plots | Priority |

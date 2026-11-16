@@ -143,8 +143,39 @@ fn clear(chars: &[char], depth: usize) -> String {
     out
 }
 
+/// Escape unmatched parentheses in a selected raw-text fragment. Unclosed markup stays untouched.
+fn safe_body(chars: &[char]) -> Option<String> {
+    let mut opens = Vec::new();
+    let mut escape = vec![false; chars.len()];
+    for (index, ch) in chars.iter().enumerate() {
+        match ch {
+            '(' => opens.push(index),
+            ')' if opens.pop().is_none() => escape[index] = true,
+            _ => {}
+        }
+    }
+    for index in opens {
+        if (0..index).any(|i| prefix_end(chars, i) == Some(index + 1))
+            || (index >= 2 && chars[index - 2] == '\\' && matches!(chars[index - 1], 'v' | 'x'))
+        {
+            return None;
+        }
+        escape[index] = true;
+    }
+    let mut out = String::new();
+    for (index, ch) in chars.iter().enumerate() {
+        match (*ch, escape[index]) {
+            ('(', true) => out.push_str(r"\x(0028)"),
+            (')', true) => out.push_str(r"\x(0029)"),
+            _ => out.push(*ch),
+        }
+    }
+    Some(out)
+}
+
 /// Apply or remove one complete wrapper. Returned cursors select the body, not its markup.
 pub(super) fn apply(text: &mut String, cursor: CCursorRange, format: Format) -> CCursorRange {
+    let original = text.clone();
     let mut chars: Vec<char> = text.chars().collect();
     let backwards = cursor.primary.index < cursor.secondary.index;
     let range = cursor.as_sorted_char_range();
@@ -182,21 +213,98 @@ pub(super) fn apply(text: &mut String, cursor: CCursorRange, format: Format) -> 
             body_len = replacement.chars().count();
             body_start = start;
         } else {
-            body_len = end - start;
-            replacement = format!("{}{})", format.prefix(), chars[start..end].iter().collect::<String>());
+            let Some(body) = safe_body(&chars[start..end]) else { return cursor };
+            body_len = body.chars().count();
+            replacement = format!("{}{body})", format.prefix());
             body_start = start + prefix.len();
         }
     }
     chars.splice(start..end, replacement.chars());
-    *text = chars.into_iter().collect();
+    let candidate: String = chars.into_iter().collect();
+    if !matches!(format, Format::Normal | Format::Greek)
+        && sheaf_plot::markup::plain(&candidate) != sheaf_plot::markup::plain(&original)
+    {
+        return cursor;
+    }
+    *text = candidate;
     let (anchor, caret) =
         if backwards { (body_start + body_len, body_start) } else { (body_start, body_start + body_len) };
+    CCursorRange { primary: CCursor::new(caret), secondary: CCursor::new(anchor), h_pos: None }
+}
+
+/// Legend symbols and row boundaries are outside text-format groups. Name substitutions stay raw.
+pub(super) fn apply_legend(text: &mut String, cursor: CCursorRange, format: Format) -> CCursorRange {
+    let chars: Vec<char> = text.chars().collect();
+    let selected = cursor.as_sorted_char_range();
+    let (start, end) = (selected.start.min(chars.len()), selected.end.min(chars.len()));
+    if start == end {
+        return apply(text, cursor, format);
+    }
+    let mut protected = vec![false; chars.len()];
+    let mut i = 0;
+    while i < chars.len() {
+        if matches!(chars[i], '\n' | '\r') {
+            protected[i] = true;
+        }
+        if chars[i] == '\\'
+            && chars.get(i + 1).is_some_and(|c| matches!(c, 'l' | 'L'))
+            && chars.get(i + 2) == Some(&'(')
+            && let Some(offset) = chars[i + 3..].iter().position(|c| *c == ')')
+        {
+            let close = i + 3 + offset;
+            let raw: String = chars[i + 3..close].iter().collect();
+            let id = raw.split(',').next().unwrap_or_default().trim();
+            if !id.is_empty() && id.chars().all(|c| c.is_ascii_digit() || c == '.') {
+                let mut after = close + 1;
+                while after < chars.len() && matches!(chars[after], ' ' | '\t') {
+                    after += 1;
+                }
+                protected[i..after].fill(true);
+                i = after;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    if !protected[start..end].iter().any(|p| *p) {
+        return apply(text, cursor, format);
+    }
+    let mut ranges = Vec::new();
+    let mut i = start;
+    while i < end {
+        if protected[i] {
+            i += 1;
+            continue;
+        }
+        let begin = i;
+        while i < end && !protected[i] {
+            i += 1;
+        }
+        ranges.push(begin..i);
+    }
+    for range in ranges.into_iter().rev() {
+        apply(text, CCursorRange::two(CCursor::new(range.start), CCursor::new(range.end)), format);
+    }
+    let new_len = text.chars().count();
+    let end = new_len.saturating_sub(chars.len() - end);
+    let start = start.min(new_len);
+    let backwards = cursor.primary.index < cursor.secondary.index;
+    let (caret, anchor) = if backwards { (start, end) } else { (end, start) };
     CCursorRange { primary: CCursor::new(caret), secondary: CCursor::new(anchor), h_pos: None }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selected_parenthesis_formatting_preserves_the_rendered_text() {
+        for range in [3..4, 5..6] {
+            let mut text = "cm (V)".to_string();
+            apply(&mut text, CCursorRange::two(CCursor::new(range.start), CCursor::new(range.end)), Format::Bold);
+            assert_eq!(sheaf_plot::markup::plain(&text), "cm (V)", "{text}");
+        }
+    }
 
     #[test]
     fn scripts_use_character_indices_and_retain_a_backwards_selection() {

@@ -17,6 +17,7 @@
 use crate::actions::{Action, DataTool, GraphOp, GraphTool};
 use crate::dialogs::graph_props::PropsTab;
 use crate::gadget::Integrator;
+use crate::graph_zoom::{self, Zoom};
 use crate::menus::{self, MenuContext, WindowKind};
 use crate::{data_tools, reader};
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, TextureHandle, TextureOptions, Vec2};
@@ -107,6 +108,14 @@ pub struct GraphUi {
     pub shape_tool: Option<ShapeKind>,
     /// The Data menu tool in use (Mask, Move, Remove Bad Data Points).
     pub data_tool: Option<DataTool>,
+    /// The Zoom In mode is on: the next click on the page zooms in there, then the mode ends.
+    pub zoom_in_tool: bool,
+    /// The Pan tool is on: a drag on the page moves the view.
+    pub pan_tool: bool,
+    /// The zoom and scroll of this window (view state only; not saved with the project).
+    pub zoom: Zoom,
+    /// The window rectangle and the page size (points) of the last frame, for the view commands.
+    frame: Option<(Rect, Vec2)>,
     /// What the Data menu tool is dragging.
     data: data_tools::State,
     /// An object being drawn.
@@ -174,9 +183,27 @@ impl GraphUi {
             GraphTool::Draw(kind)
         } else if let Some(tool) = self.data_tool {
             GraphTool::Data(tool)
+        } else if self.zoom_in_tool {
+            GraphTool::ZoomIn
+        } else if self.pan_tool {
+            GraphTool::Pan
         } else {
             GraphTool::Pointer
         }
+    }
+
+    /// Zoom Out: half the zoom, never below 1; the window centre's page point stays centred.
+    pub fn zoom_out(&mut self) {
+        if let Some((window, page)) = self.frame {
+            self.zoom = graph_zoom::zoom_about(window, page, self.zoom, self.zoom.factor / 2.0, window.center());
+        } else {
+            self.zoom = Zoom::default();
+        }
+    }
+
+    /// Whole Page: zoom 1, scroll 0.
+    pub fn whole_page(&mut self) {
+        self.zoom = Zoom::default();
     }
 
     /// Drops the open menu and the drags, which name layers by index, after layers were renumbered.
@@ -286,20 +313,38 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
 
     let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
     ui.painter().rect_filled(rect, 0.0, GROUND);
-    let margin = 12.0;
+    let margin = graph_zoom::MARGIN;
     let page_w = graph.page.width_pt as f32;
     let page_h = graph.page.height_pt as f32;
     if page_w <= 0.0 || page_h <= 0.0 || rect.width() <= 2.0 * margin || rect.height() <= 2.0 * margin {
         return;
     }
-    // UI points per page point, so that the whole page fits in the window ("fit page to window").
-    let fit = ((rect.width() - 2.0 * margin) / page_w).min((rect.height() - 2.0 * margin) / page_h).max(0.05);
-    let image_rect = Rect::from_center_size(rect.center(), egui::vec2(page_w * fit, page_h * fit));
+    // Nothing outside the window is drawn or clicked (the page is larger than it when zoomed).
+    ui.set_clip_rect(ui.clip_rect().intersect(rect));
+    let page_size = egui::vec2(page_w, page_h);
+    state.frame = Some((rect, page_size));
+
+    // The view input: Zoom In mode, Pan, the wheel and the scroll bars. They change the zoom
+    // before the page is placed, from the layout the user saw in the last frame.
+    let zoom_took_input = state.zoom_in_tool;
+    view_input(ui, &response, rect, page_size, state);
+
+    // UI points per page point (zoom 1: the whole page fits in the window, "fit page to window"),
+    // and the page rectangle; every conversion below, and the hit-testing, go through these two.
+    let lay = graph_zoom::layout(rect, page_size, state.zoom);
+    state.zoom.scroll = lay.scroll;
+    let (image_rect, fit) = (lay.image, lay.scale);
     state.view = Some((image_rect, fit));
 
-    // Raster pixels per page point.
-    let pixel_scale = fit * ui.ctx().pixels_per_point();
-    let scale_key = (pixel_scale * 50.0).round() as u32;
+    // Raster pixels per page point, capped (the texture is then stretched over the page).
+    let max_side = ui.input(|i| i.max_texture_side);
+    let pixel_scale = graph_zoom::raster_scale(fit, ui.ctx().pixels_per_point(), page_size, max_side);
+    let mut key = (pixel_scale * 50.0).round();
+    // Rounding up must not push a side over the limit.
+    if key / 50.0 * page_w.max(page_h) > graph_zoom::max_raster(max_side) {
+        key = (pixel_scale * 50.0).floor();
+    }
+    let scale_key = key.max(1.0) as u32;
     let stale = state.texture.as_ref().is_none_or(|t| t.revision != doc.revision() || t.scale_key != scale_key);
     if stale {
         let scale = f64::from(scale_key) / 50.0;
@@ -329,6 +374,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         painter.image(t.texture.id(), image_rect, uv, Color32::WHITE);
     }
     painter.rect_stroke(image_rect, 0.0, Stroke::new(1.0_f32, Color32::from_gray(120)), egui::StrokeKind::Outside);
+    paint_scroll_bars(&painter, rect, page_size, state.zoom);
     if let Some(e) = &state.error {
         painter.text(
             rect.center(),
@@ -504,6 +550,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && state.shape_tool.is_none()
         && !state.slope_tool
         && state.data_tool.is_none()
+        && !state.pan_tool
+        && !zoom_took_input
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Label(label) } = pick(pos)
         && let Some(l) = graph.layers.get(layer).and_then(|l| l.labels.get(label))
@@ -581,6 +629,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && state.shape_tool.is_none()
         && !state.slope_tool
         && state.data_tool.is_none()
+        && !state.pan_tool
+        && !zoom_took_input
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Shape(shape) } = pick(pos)
     {
@@ -615,6 +665,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && state.shape_tool.is_none()
         && !state.slope_tool
         && state.data_tool.is_none()
+        && !state.pan_tool
+        && !zoom_took_input
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Legend } = pick(pos)
         && let Some(f) = t.geometry.get(layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0)
@@ -670,6 +722,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     } else if response.clicked()
         && !state.reader
         && !slope_took_input
+        && !zoom_took_input
         && state.data_tool.is_none()
         && let Some(pos) = response.interact_pointer_pos()
     {
@@ -685,6 +738,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     if response.double_clicked()
         && !state.reader
         && !slope_took_input
+        && !zoom_took_input
         && state.data_tool.is_none()
         && let Some(pos) = response.interact_pointer_pos()
     {
@@ -787,6 +841,130 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     }
     if shown.is_none() && !response.secondary_clicked() {
         state.menu_on = None;
+    }
+}
+
+/// The width of a scroll bar, in UI points.
+const BAR: f32 = 10.0;
+/// Sheaf's choice (not measured in Origin): Ctrl+wheel zooms by egui's zoom delta, about 1.2 per
+/// wheel notch, about the pointer.
+///
+/// The view input of a graph window: Esc ends Zoom In and Pan; a click in the Zoom In mode zooms
+/// by [`graph_zoom::CLICK_FACTOR`] about the click and ends the mode (Origin's measured behaviour
+/// is a mode; ending it after one click is Sheaf's choice); a drag with the Pan tool moves the
+/// view; the wheel scrolls (Shift+wheel sideways, a Sheaf choice); the scroll bars drag.
+fn view_input(ui: &mut egui::Ui, response: &egui::Response, rect: Rect, page: Vec2, state: &mut GraphUi) {
+    let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
+    if escape {
+        state.zoom_in_tool = false;
+        state.pan_tool = false;
+    }
+    if state.zoom_in_tool {
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ZoomIn);
+        }
+        if response.clicked()
+            && let Some(pos) = response.interact_pointer_pos()
+        {
+            let factor = state.zoom.factor * graph_zoom::CLICK_FACTOR;
+            state.zoom = graph_zoom::zoom_about(rect, page, state.zoom, factor, pos);
+            state.zoom_in_tool = false;
+        }
+    }
+    if state.pan_tool {
+        if response.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            state.zoom = graph_zoom::pan(rect, page, state.zoom, response.drag_delta());
+        } else if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+        }
+    }
+    if response.hovered() {
+        let (scroll, zoom_delta, pointer) =
+            ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.pointer.hover_pos()));
+        if (zoom_delta - 1.0).abs() > f32::EPSILON
+            && let Some(at) = pointer
+        {
+            let factor = state.zoom.factor * zoom_delta;
+            state.zoom = graph_zoom::zoom_about(rect, page, state.zoom, factor, at);
+        }
+        if scroll != Vec2::ZERO && state.zoom.factor > 1.0 {
+            state.zoom = graph_zoom::pan(rect, page, state.zoom, scroll);
+            ui.input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
+        }
+    }
+    // The scroll bars.
+    let lay = graph_zoom::layout(rect, page, state.zoom);
+    let content = graph_zoom::content(rect);
+    let (show_x, show_y) = bars_shown(rect, &lay);
+    for vertical in [false, true] {
+        if !(if vertical { show_y } else { show_x }) {
+            continue;
+        }
+        let track = bar_track(rect, vertical, show_x && show_y);
+        let id = ui.id().with(("graph_scroll_bar", vertical));
+        let resp = ui.interact(track, id, Sense::click_and_drag());
+        if let Some(pos) = resp.interact_pointer_pos().filter(|_| resp.dragged() || resp.clicked()) {
+            let (len, total, view, from) = if vertical {
+                (track.height(), lay.image.height(), content.height(), track.top())
+            } else {
+                (track.width(), lay.image.width(), content.width(), track.left())
+            };
+            let at = if vertical { pos.y } else { pos.x } - from;
+            let scroll = graph_zoom::scroll_for_thumb(len, total, view, at) / lay.scale;
+            if vertical {
+                state.zoom.scroll.y = scroll;
+            } else {
+                state.zoom.scroll.x = scroll;
+            }
+        }
+    }
+}
+
+/// Whether the horizontal and the vertical scroll bar show: the page is larger than the content
+/// area on that axis.
+fn bars_shown(rect: Rect, lay: &graph_zoom::Layout) -> (bool, bool) {
+    let content = graph_zoom::content(rect);
+    (lay.image.width() > content.width() + 0.01, lay.image.height() > content.height() + 0.01)
+}
+
+/// The track of a scroll bar along the right (vertical) or bottom edge of the window.
+fn bar_track(rect: Rect, vertical: bool, both: bool) -> Rect {
+    let corner = if both { BAR } else { 0.0 };
+    if vertical {
+        Rect::from_min_max(egui::pos2(rect.right() - BAR, rect.top()), egui::pos2(rect.right(), rect.bottom() - corner))
+    } else {
+        Rect::from_min_max(
+            egui::pos2(rect.left(), rect.bottom() - BAR),
+            egui::pos2(rect.right() - corner, rect.bottom()),
+        )
+    }
+}
+
+/// The scroll bars, drawn over the window's right and bottom edges while the page is larger than
+/// the window.
+fn paint_scroll_bars(painter: &egui::Painter, rect: Rect, page: Vec2, zoom: Zoom) {
+    let lay = graph_zoom::layout(rect, page, zoom);
+    let content = graph_zoom::content(rect);
+    let (show_x, show_y) = bars_shown(rect, &lay);
+    for vertical in [false, true] {
+        if !(if vertical { show_y } else { show_x }) {
+            continue;
+        }
+        let track = bar_track(rect, vertical, show_x && show_y);
+        painter.rect_filled(track, 0.0, Color32::from_gray(225));
+        let (len, total, view, scroll) = if vertical {
+            (track.height(), lay.image.height(), content.height(), lay.scroll.y * lay.scale)
+        } else {
+            (track.width(), lay.image.width(), content.width(), lay.scroll.x * lay.scale)
+        };
+        let (start, size) = graph_zoom::thumb(len, total, view, scroll);
+        let thumb = if vertical {
+            Rect::from_min_size(egui::pos2(track.left(), track.top() + start), egui::vec2(BAR, size))
+        } else {
+            Rect::from_min_size(egui::pos2(track.left() + start, track.top()), egui::vec2(size, BAR))
+        };
+        painter.rect_filled(thumb.shrink(1.5), 2.0, Color32::from_gray(130));
     }
 }
 

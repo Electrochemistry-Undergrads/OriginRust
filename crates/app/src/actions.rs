@@ -143,6 +143,19 @@ pub enum GraphTool {
     Slope,
     /// One of the Data menu's tools (Mask, Move, Remove Bad Data Points).
     Data(DataTool),
+    /// Zoom In (a mode): the next click on the page zooms in at that point.
+    ZoomIn,
+    /// The Pan tool: a drag on the page moves the view.
+    Pan,
+}
+
+/// A change of a graph window's view (screen-only; the graph is not changed).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewOp {
+    /// Zoom Out: half the zoom, never below the whole page.
+    ZoomOut,
+    /// Whole Page: the page fits the window.
+    WholePage,
 }
 
 /// The tools of a graph's Data menu that act on the points of a plot.
@@ -468,6 +481,11 @@ pub enum Action {
     GraphTool {
         graph: WindowId,
         tool: GraphTool,
+    },
+    /// Zoom Out or Whole Page of a graph window.
+    GraphView {
+        graph: WindowId,
+        op: ViewOp,
     },
     /// A change that a Data menu tool made to the cells of a plot's worksheet.
     DataEdit(DataEdit),

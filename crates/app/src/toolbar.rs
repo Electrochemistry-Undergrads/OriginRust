@@ -237,7 +237,7 @@ fn tool(icon: Icon, tip: &'static str, cmd: Cmd) -> Item {
 /// True for the commands of tools (no menu entry; pressed while on).
 #[cfg(test)]
 fn is_tool(cmd: &Cmd) -> bool {
-    matches!(cmd, Cmd::Pointer | Cmd::DataReader | Cmd::TextTool | Cmd::SlopeTool | Cmd::ShapeTool(_))
+    matches!(cmd, Cmd::Pointer | Cmd::DataReader | Cmd::TextTool | Cmd::SlopeTool | Cmd::PanTool | Cmd::ShapeTool(_))
 }
 
 /// A Graph toolbar button that adds a layer of `kind` (the same command as Graph > New Layer(Axes)).
@@ -335,9 +335,9 @@ fn build(bar: Bar) -> Vec<Item> {
             g(LineColor, "Line Color"),
         ],
         Bar::Graph => vec![
-            g(ZoomIn, "Zoom In"),
-            g(ZoomOut, "Zoom Out"),
-            g(WholePage, "Whole Page"),
+            b(ZoomIn, "Zoom In", Cmd::ZoomIn, "Zoom In"),
+            b(ZoomOut, "Zoom Out", Cmd::ZoomOut, "Zoom Out"),
+            b(WholePage, "Whole Page", Cmd::WholePage, "Whole Page"),
             b(Rescale, "Rescale to Show All", Cmd::Rescale, "Rescale to Show All"),
             b(Exchange, "Exchange X-Y Axes", Cmd::ExchangeAxes, "Exchange X-Y Axes"),
             gap(),
@@ -368,8 +368,8 @@ fn build(bar: Bar) -> Vec<Item> {
         ],
         Bar::Tools => vec![
             tool(Pointer, "Pointer", Cmd::Pointer),
-            g(ZoomIn, "Zoom In"),
-            g(ZoomOut, "Zoom Out"),
+            b(ZoomIn, "Zoom In", Cmd::ZoomIn, "Zoom In"),
+            b(ZoomOut, "Zoom Out", Cmd::ZoomOut, "Zoom Out"),
             b(Rescale, "Rescale", Cmd::Rescale, "Rescale to Show All"),
             tool(DataReader, "Data Reader", Cmd::DataReader),
             gap(),
@@ -379,7 +379,7 @@ fn build(bar: Bar) -> Vec<Item> {
             tool(Rectangle, "Rectangle", Cmd::ShapeTool(ShapeKind::Rectangle)),
             tool(Circle, "Circle", Cmd::ShapeTool(ShapeKind::Ellipse)),
             tool(Slope, "Slope", Cmd::SlopeTool),
-            g(Hand, "Pan"),
+            tool(Hand, "Pan", Cmd::PanTool),
         ],
         Bar::ObjectEdit => vec![
             g(AlignLeft, "Align Left"),
@@ -497,6 +497,8 @@ fn draw_button(ui: &mut Ui, bar: Bar, button: &Button, c: &MenuContext, actions:
         Some(Cmd::DataReader) => c.tool == GraphTool::Reader,
         Some(Cmd::TextTool) => c.tool == GraphTool::Text,
         Some(Cmd::SlopeTool) => c.tool == GraphTool::Slope,
+        Some(Cmd::PanTool) => c.tool == GraphTool::Pan,
+        Some(Cmd::ZoomIn) => c.tool == GraphTool::ZoomIn,
         Some(Cmd::ShapeTool(kind)) => c.tool == GraphTool::Draw(kind),
         _ => button.on,
     };

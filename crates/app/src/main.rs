@@ -33,6 +33,7 @@ mod data_tools;
 mod dialogs;
 mod gadget;
 mod graph_view;
+mod graph_zoom;
 mod grid;
 mod live;
 #[cfg(target_os = "macos")]

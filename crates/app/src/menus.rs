@@ -15,7 +15,7 @@
 //! underlined, and Alt plus the letter of a top-level menu opens that menu. Letters inside the
 //! open menus are not handled (egui has no way to pick an item by letter).
 
-use crate::actions::{Action, CellOp, CopyKind, DataTool, GraphOp, GraphTool, ImportPick, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, DataTool, GraphOp, GraphTool, ImportPick, SheetOp, ViewOp};
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
@@ -268,6 +268,14 @@ pub enum Cmd {
     TextTool,
     /// The Slope tool of the Tools toolbar.
     SlopeTool,
+    /// View > Zoom In (Ctrl+I): the mode in which the next click on the page zooms in.
+    ZoomIn,
+    /// View > Zoom Out (Ctrl+M).
+    ZoomOut,
+    /// View > Whole Page (Ctrl+W).
+    WholePage,
+    /// The Pan tool of the Tools toolbar.
+    PanTool,
     /// Properties of a slope annotation.
     EditSlope {
         layer: usize,
@@ -752,9 +760,9 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
             v.push(grey("Window View"));
             v.push(grey_keyed("Draft View", ctrl(Key::Num0)));
             v.push(sep());
-            v.push(grey_keyed("Zoom In", ctrl(Key::I)));
-            v.push(grey_keyed("Zoom Out", ctrl(Key::M)));
-            v.push(grey_keyed("Whole Page", ctrl(Key::W)));
+            v.push(keyed("Zoom In", ctrl(Key::I), Cmd::ZoomIn));
+            v.push(keyed("Zoom Out", ctrl(Key::M), Cmd::ZoomOut));
+            v.push(keyed("Whole Page", ctrl(Key::W), Cmd::WholePage));
             v.push(grey("Zoom All"));
             v.push(sep());
             v.push(grey_sub(
@@ -2438,6 +2446,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::TextTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Text },
         Cmd::ShapeTool(kind) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Draw(*kind) },
         Cmd::SlopeTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Slope },
+        Cmd::ZoomIn => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ZoomIn },
+        Cmd::PanTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pan },
+        Cmd::ZoomOut => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::ZoomOut },
+        Cmd::WholePage => Action::GraphView { graph: c.graph.ok_or(NEED_GRAPH)?, op: ViewOp::WholePage },
         Cmd::EditSlope { layer, slope } => {
             Action::EditSlope { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, slope: *slope }
         }
@@ -2878,7 +2890,9 @@ mod tests {
         assert_eq!(find(ctrl(Key::N)), Some(Cmd::NewProject));
         assert_eq!(find(ctrl(Key::O)), Some(Cmd::OpenProject));
         assert_eq!(find(ctrl(Key::S)), Some(Cmd::SaveProject));
-        assert_eq!(find(ctrl(Key::I)), None, "Ctrl+I is Zoom In in Origin, no longer Import");
+        assert_eq!(find(ctrl(Key::I)), Some(Cmd::ZoomIn), "Ctrl+I is Zoom In in Origin, no longer Import");
+        assert_eq!(find(ctrl(Key::M)), Some(Cmd::ZoomOut));
+        assert_eq!(find(ctrl(Key::W)), Some(Cmd::WholePage));
         assert_eq!(find(plain_key(Key::F2)), Some(Cmd::GraphProps(PropsTab::Page)));
         assert_eq!(find(alt(Key::Enter)), Some(Cmd::WindowProperties));
     }

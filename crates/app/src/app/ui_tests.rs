@@ -21,6 +21,7 @@ mod fill_inclusive;
 mod fill_sidelines;
 mod frozen_panes;
 mod graph_data_tools;
+mod graph_zoom;
 mod hexbin;
 mod import_themes;
 mod label_frames;

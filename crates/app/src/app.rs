@@ -2,7 +2,9 @@
 //! workbook and graph child windows, dialogs, and the one place where user actions change the
 //! project.
 
-use crate::actions::{Action, CellOp, CopyKind, DataEdit, DataTool, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp};
+use crate::actions::{
+    Action, CellOp, CopyKind, DataEdit, DataTool, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp, ViewOp,
+};
 use crate::autosave::{Autosave, Due};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
@@ -2042,6 +2044,8 @@ impl SheafApp {
                 state.text_tool = tool == GraphTool::Text;
                 state.slope_tool = tool == GraphTool::Slope;
                 state.slope_first = None;
+                state.zoom_in_tool = tool == GraphTool::ZoomIn;
+                state.pan_tool = tool == GraphTool::Pan;
                 state.shape_tool = match tool {
                     GraphTool::Draw(kind) => Some(kind),
                     _ => None,
@@ -2061,8 +2065,19 @@ impl SheafApp {
                         self.say(format!("{}: drag on the graph (Shift constrains); Esc ends", kind.name()))
                     }
                     GraphTool::Data(tool) => self.say(crate::data_tools::hint(tool)),
+                    GraphTool::ZoomIn => self.say("Zoom In: click the page where to zoom; Esc ends"),
+                    GraphTool::Pan => self.say("Pan: drag the page to move the view; Esc ends"),
                     GraphTool::Pointer => {}
                 }
+            }
+            Action::GraphView { graph, op } => {
+                let state = self.graphs.entry(graph).or_default();
+                match op {
+                    ViewOp::ZoomOut => state.zoom_out(),
+                    ViewOp::WholePage => state.whole_page(),
+                }
+                let percent = (state.zoom.factor * 100.0).round();
+                self.say(format!("Zoom {percent}%"));
             }
             Action::DataEdit(edit) => self.data_edit(edit),
             Action::AddText { graph, layer, at } => {

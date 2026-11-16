@@ -1,6 +1,6 @@
 # T67: Add Straight Line (B3, slice 1)
 
-**Status:** in progress 2026-11-15 (branch `straight-line`, Claude Windows, session fe4b37eb).
+**Status:** done 2026-11-15 (branch `straight-line`, Claude Windows, session fe4b37eb; graphing 17.7). Left: dragging a line (Moveable; belongs with the shape drags of T24), the automatic label format does not round to the tick step.
 **Size:** M. **Priority:** wave 4 (B3). **Spec:** [graphing](../spec/graphing.md), new section
 "Straight lines" next to slope annotations (17.6). **Inventory:** Graph > Add Straight Line... (1).
 

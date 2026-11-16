@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **414 listed item locations** at the planning
-  baseline (291 menu bar, 35 toolbar, 88 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **413 listed item locations** at the planning
+  baseline (290 menu bar, 35 toolbar, 88 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -70,6 +70,10 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## Latest integration
+
+T67 Add Straight Line (`straight-line`, B3 slice 1): Origin 2016's addline measured (names, ends,
+label text and its 5 % placement) and copied: `Layer::straight_lines`, drawing, the Graph menu
+window, select/Delete/edit, `sheaf plot --vline/--hline`, `.opj` warning (graphing 17.7).
 
 T65 graph view zoom and pan (`graph-zoom`, B1 slice 1): Origin 2016's View Zoom In mode (x2,
 re-centred on the click), Zoom Out by halves to 25 %, Whole Page and the Tools-bar Zoom-Panning tool,
@@ -154,7 +158,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
 | `greyed-2-abdehik` | Claude macOS, "mac-multipdf" | T63 groups A (toolbar plot buttons), B (step/spline templates), D (Open Excel: reassign to B14), E (Graph as Image / Multi-Page PDF with no graph active), H (Row Numbers/Uniform/Normal fills), I (X/Y Axis Tick Labels), K (column-header Frequency Count) | claimed 2026-11-15; only these groups' dispatch/state/tests in menus.rs and toolbar.rs (not the Format bar, T58), greyed-items.md; no G (shape ordering), J (layer contents, T60/T61) or other sessions' scopes |
 | `graph-view-modes` | Claude Windows, "continue all tasks" | B1 slice 2 as new brief T66: graph view modes (Print/Page/Window/Draft View), View > Show toggles, Show Data Info, Full Screen; new app view_modes.rs, small graph_view.rs drawing hooks, View menu items | claimed 2026-11-15; no zoom/pan (T65, fe4b37eb), shape-resize, T58, T63 |
-| `straight-line` | Claude Windows, session fe4b37eb | B3 slice 1 as new brief T67: Graph > Add Straight Line (Origin's addline: vertical/horizontal line at an axis value with colour, style and value label): core layer model (new module), plot drawing, the dialog, .sheaf/.opj (warn), CLI flag, Origin 2016 measurements | claimed 2026-11-15; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not the other B3 items (function graph, table, colour scale, legend title, display range/markers, Change X/Y), no shape-resize/graph_view drag code beyond selecting/deleting the new object, no T58/T66 scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

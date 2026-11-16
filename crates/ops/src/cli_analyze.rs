@@ -829,6 +829,47 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
+        AnalyzeTool::Anova3 {
+            target,
+            no_ab,
+            no_ac,
+            no_bc,
+            no_abc,
+            comparison,
+            comparison_alpha,
+            levene,
+            power,
+            power_sizes,
+            power_alpha,
+            no_descriptive,
+            alpha,
+        } => {
+            no_x_range(&target, "the three-way ANOVA")?;
+            if target.y.len() != 4 {
+                bail!("the three-way ANOVA needs --y FACTOR_A,FACTOR_B,FACTOR_C,DATA (four columns)");
+            }
+            let comparisons: Vec<analysis::MeansComparison> =
+                comparison.into_iter().filter_map(comparison_of).collect();
+            if comparisons.contains(&analysis::MeansComparison::Dunnett) {
+                bail!("Dunnett's test is not part of the three-way ANOVA");
+            }
+            let defaults = analysis::ThreeWayAnovaSpec::default();
+            (
+                target,
+                Job::Tool(Tool::ThreeWayAnova(analysis::ThreeWayAnovaSpec {
+                    terms: analysis::ThreeWayTerms { ab: !no_ab, ac: !no_ac, bc: !no_bc, abc: !no_abc },
+                    levene,
+                    descriptive: if no_descriptive { Vec::new() } else { defaults.descriptive },
+                    descriptive_overall: !no_descriptive,
+                    comparisons,
+                    comparison_alpha,
+                    power_actual: power,
+                    power_sizes,
+                    power_alpha,
+                    alpha,
+                })),
+            )
+        }
         AnalyzeTool::PartialCorr { target, control, listwise, one_tailed, show_significance, flag_significant } => {
             no_x_range(&target, "the partial correlation")?;
             (

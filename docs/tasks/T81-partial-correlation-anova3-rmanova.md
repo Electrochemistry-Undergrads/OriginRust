@@ -1,6 +1,6 @@
 # T81: Partial Correlation, Three-Way ANOVA, Repeated Measures ANOVA (B8 slice)
 
-**Status:** partial correlation done (calc, core, dialog, menu, `sheaf analyze partial-corr`, Origin fixtures `crates/calc/tests/origin_t81.rs`); three-way and repeated measures ANOVA open. Origin 2016 measured 2026-11-16 (branch `stats-anova3`, Claude Windows; `docs/spec/statistics.md` 24-26).
+**Status:** partial correlation and three-way ANOVA done (calc, core, dialogs, menu, `sheaf analyze partial-corr | anova3`, Origin fixtures `crates/calc/tests/origin_t81.rs`); repeated measures ANOVA open. Origin 2016 measured 2026-11-16 (branch `stats-anova3`, Claude Windows; `docs/spec/statistics.md` 24-26).
 **Size:** L. **Branch:** `stats-anova3`. **Spec:** `docs/spec/statistics.md` sections 24 (partial correlation), 25 (three-way ANOVA),
 26 (repeated measures ANOVA).
 **Inventory:** Statistics > Descriptive Statistics > Partial Correlation Coefficient...; Statistics > ANOVA > Three-Way ANOVA...;
@@ -50,7 +50,7 @@ Three statistics tools that work as Origin 2016's, with their reports, dialogs, 
 ## Steps
 
 1. [done] `partcorr`: the calc function (pairwise and listwise), the tool, report, dialog, CLI. Test the 9 measured runs.
-2. `anova3`: type III table by dummy-variable regression for balanced and unbalanced data; descriptive blocks; means comparison
+2. [done] `anova3`: type III table by dummy-variable regression for balanced and unbalanced data; descriptive blocks; means comparison
    blocks (reuse the two-way ones: cells for the interactions); Levene; power (noncentral F; check the two measured values);
    report and dialog (all seven tabs; Mean Plot only with the graphs, as the two-way tool does: leave unchecked until built).
 3. `rmanova1`: within and between tables, Mauchly, epsilons, corrections, multivariate tests, descriptive limits, means

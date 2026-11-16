@@ -1417,7 +1417,7 @@ fn statistics_menu() -> Vec<Entry> {
             vec![
                 item("One-Way ANOVA...", Cmd::Analyze(AnalysisKind::Anova)),
                 item("Two-Way ANOVA...", Cmd::Analyze(AnalysisKind::Anova2)),
-                grey("Three-Way ANOVA..."),
+                item("Three-Way ANOVA...", Cmd::Analyze(AnalysisKind::Anova3)),
                 grey("Repeated Measures ANOVA..."),
             ],
         ),

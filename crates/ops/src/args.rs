@@ -2339,6 +2339,50 @@ pub enum AnalyzeTool {
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
     },
+    /// Three-way ANOVA of indexed data: --y FACTOR_A,FACTOR_B,FACTOR_C,DATA names four columns, the first
+    /// three holding the levels (text or numbers) of each row. Type III sums of squares as Origin's. The
+    /// tables (descriptive statistics, ANOVA, means comparisons of A, B, C and A*B, optional Levene and power)
+    /// go to a new sheet.
+    Anova3 {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Leave the interaction A*B out of the model.
+        #[arg(long)]
+        no_ab: bool,
+        /// Leave the interaction A*C out of the model.
+        #[arg(long)]
+        no_ac: bool,
+        /// Leave the interaction B*C out of the model.
+        #[arg(long)]
+        no_bc: bool,
+        /// Leave the interaction A*B*C out of the model.
+        #[arg(long)]
+        no_abc: bool,
+        /// Means comparison methods (comma-separated; `none` for no comparison). Dunnett is not offered.
+        #[arg(long, value_enum, value_delimiter = ',', default_values_t = [ComparisonArg::Tukey])]
+        comparison: Vec<ComparisonArg>,
+        /// Significance level of the means comparisons.
+        #[arg(long, default_value_t = 0.05)]
+        comparison_alpha: f64,
+        /// Levene's test of equal variances.
+        #[arg(long)]
+        levene: bool,
+        /// Power of the F tests for the actual sample size.
+        #[arg(long)]
+        power: bool,
+        /// Power for these hypothetical sample sizes (comma-separated, for example 50,100,200).
+        #[arg(long, value_delimiter = ',')]
+        power_sizes: Vec<f64>,
+        /// Significance level of the power analysis.
+        #[arg(long, default_value_t = 0.05)]
+        power_alpha: f64,
+        /// Leave the descriptive statistics out.
+        #[arg(long)]
+        no_descriptive: bool,
+        /// Significance level of the F tests.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
     /// Partial correlation coefficients (Pearson) of the --y columns, controlling for the --control columns.
     /// A table of pairs and the matrices go to a new sheet.
     PartialCorr {

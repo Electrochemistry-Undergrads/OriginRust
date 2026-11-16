@@ -1543,6 +1543,30 @@ likely one), the Raw layout, empty cells, rows with missing values, the mean plo
 comparison lists, the Levene numbers on a design with spread (the run used 2 numbers per cell, which makes it degenerate) and the
 two unidentified descriptive values.
 
+**What Sheaf does (T81; `crates/calc/src/anova3.rs`, `crates/core/src/analysis/anova3.rs`, `dialogs/stats3_options.rs`,
+`sheaf analyze anova3`).** Reproduced to the printed digits from the report sheet (`crates/calc/tests/origin_t81.rs`): both type III
+tables (balanced and unbalanced, Error and Total rows included), the descriptive statistics of A, A*B, A*B*C and all data, the
+means comparisons (Tukey, Bonferroni, LSD, Scheffe of A and B; the first eight Tukey pairs of A*B), Levene's DF, SS and MS, and the
+power of all seven effects at the actual and the three hypothetical sizes. Findings from reading the sheet cell by cell, all
+implemented:
+- The standard error of every means comparison is `sqrt(MSE / 2 (1/ni + 1/nj))`, not the textbook `sqrt(MSE (1/ni + 1/nj))` (A: 0.19737,
+  A*B: 0.34186; t, q, p and the limits all follow from it). Tukey's q is `sqrt 2` times that t, with p from the studentized range for
+  the number of levels or cells. The difference is `mean(i) - mean(j)` (the first level minus the later one), the statistics carry its
+  sign, and Scheffe prints the signed t (its p comes from F = t^2 / (k - 1)).
+- Pairs run `(1,2), (1,3), ..., (1,k), (2,3), ...` (the first level changes slowest) for the cells of A*B; the means comparison lists
+  A, B, C and A*B only (the dump holds no block for A*C, B*C or A*B*C).
+- Power: the noncentrality is `df1 * F * N / n` (n = the number of data), the denominator degrees of freedom `N - rank` (rank = the
+  model's parameters, 12 here), and the "actual" size of an effect is `n` times the number of factors in it (24, 48 and 72); this
+  fits all 28 printed values, but it is one design, so it is Sheaf's reading of the rule.
+- Levene: a one-way ANOVA of the absolute deviations from the finest cell means over the cells (the run's DF 11 and 12 and SS 1.04913).
+**Not reproduced, labelled:** Origin's Dunn-Sidak block of the three-way ANOVA prints a "Prob" column above 1 and swapped limits
+(it looks broken), and its Holm blocks pair each p with a threshold in a rotated order; Sheaf prints the correct Dunn-Sidak p and
+lists the Holm methods by increasing p as in the one-way ANOVA. Not built: the Mean Plot tab and graphs, the Raw layout, the Output
+tab (Plot Data, optional tables). **Sheaf's own, unmeasured:** the sheet layout (one block per table, the long-format comparison
+blocks), the defaults of the dialog (all descriptive statistics, Tukey, Levene and power off), models with an interaction switched
+off (computed by the same type III rule), empty cells (refused), and Levene on a design with spread (the formula is the standard one,
+checked only by hand).
+
 ## 26 Repeated measures ANOVA, one-way and two-way (T81, measured against Origin 2016 through its dialogs)
 
 Origin 2016's Statistics > ANOVA menu has **One-Way Repeated Measures ANOVA** (submenu "1 <Last used>", "Open Dialog..."),

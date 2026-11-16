@@ -1590,3 +1590,81 @@ fn partial_corr_reproduces_an_origin_run_and_explains_its_refusals() {
     let (ok, _, err) = sheaf(&["analyze", "partial-corr", file, "--y", "a,b", "--control", "c", "--x-range", "1:3"]);
     assert!(!ok, "{err}");
 }
+
+#[test]
+fn anova3_reports_origins_type_three_table_and_options() {
+    let dir = scratch("anova3");
+    let file = dir.join("a3.csv");
+    // The balanced 2 x 3 x 2 design of the Origin run (24 numbers): A has F = 43.28302, p = 2.61651E-5.
+    std::fs::write(
+        &file,
+        "a,b,c,y
+lo,b1,c1,15.814
+lo,b2,c2,15.4569
+hi,b1,c2,17.6589
+hi,b3,c1,16.2762
+lo,b2,c1,14.8436
+lo,b3,c2,15.9664
+hi,b2,c2,20.2379
+lo,b1,c1,16.4812
+lo,b3,c1,14.5347
+hi,b1,c2,17.82
+hi,b3,c2,15.9952
+lo,b2,c1,13.867
+hi,b1,c1,17.812
+hi,b2,c2,20.4605
+lo,b1,c2,17.4733
+lo,b3,c1,15.7478
+hi,b2,c1,16.2572
+hi,b3,c2,15.4057
+lo,b2,c2,14.5925
+hi,b1,c1,16.4532
+hi,b3,c1,17.6181
+lo,b1,c2,16.3418
+lo,b3,c2,16.499
+hi,b2,c1,17.66
+",
+    )
+    .unwrap();
+    let file = file.to_str().unwrap();
+    let export = dir.join("a3-out.csv");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "anova3",
+        file,
+        "--y",
+        "a,b,c,y",
+        "--levene",
+        "--power",
+        "--power-sizes",
+        "50,100",
+        "--comparison",
+        "tukey,bonferroni",
+        "--export",
+        export.to_str().unwrap(),
+    ]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("20.234") && out.contains("43.283") && out.contains("a*b*c") && out.contains("Model"),
+        "{out}"
+    );
+    assert!(out.contains("type III") && out.contains("ANOVA3Way1"), "{out}");
+    assert!(out.contains("Tukey means comparison") && out.contains("Bonferroni means comparison"), "{out}");
+    assert!(out.contains("Levene's test"), "{out}");
+    let exported = std::fs::read_to_string(&export).unwrap();
+    assert!(exported.contains("Sum of Squares") && exported.contains("a: lo"), "{exported}");
+
+    // Interactions can be left out; the F tests then use the pooled error.
+    let (ok, out, err) =
+        sheaf(&["analyze", "anova3", file, "--y", "a,b,c,y", "--no-abc", "--no-ac", "--comparison", "none"]);
+    assert!(ok, "{err}");
+    assert!(!out.contains("a*b*c") && !out.contains("a*c") && out.contains("a*b"), "{out}");
+
+    // Three columns are too few, Dunnett is not offered, an X range has nothing to limit.
+    let (ok, _, err) = sheaf(&["analyze", "anova3", file, "--y", "a,b,y"]);
+    assert!(!ok && err.contains("FACTOR_A,FACTOR_B,FACTOR_C,DATA"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "anova3", file, "--y", "a,b,c,y", "--comparison", "dunnett"]);
+    assert!(!ok && err.contains("Dunnett"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "anova3", file, "--y", "a,b,c,y", "--x-range", "1:3"]);
+    assert!(!ok, "{err}");
+}

@@ -74,7 +74,7 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 T68 (B4 slice 1, `plot-types-b4`, Claude Windows): Plot > Symbol > Vertical Drop Line and Plot >
 Column/Bar/Pie > Column + Label as Origin 2016's DROPLINE and ColumnLabel templates (measured,
 graphing 18.12); data labels of grouped columns are now centred on their own bar, as Origin draws
-them. Tests: see the merge note below.
+them. Formatting, strict all-target Clippy and 3679 workspace tests pass (8 ignored) on 91c8d3b2.
 T58 RGB text colours: numeric `\cN(text)` escapes now follow the measured one-based
 RGB encoding, including channel borrows and the white boundary. Nested palette/RGB spans
 restore their surroundings; glyphs and decoration paths use the same colour. Graphing 7.3

@@ -601,8 +601,19 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   uses format intervals, not one record per data row. Derived heights can shrink with the font;
   Origin retains enlarged row heights, which the current model cannot persist.
 - **Files.** `.sheaf` and the `.opj` companion keep everything. The `.opj` writer holds none and
-  warns ("N sheet(s) have cell formatting ..."). Excel export does not write them and says so in
-  its warnings (per-cell fonts combined with column number formats are left).
+  warns ("N sheet(s) have cell formatting ..."). Excel export combines resolved manual styles
+  with each column's numeric/date/time code. Fonts use the worksheet default Arial 9 pt,
+  explicit sizes use the same 4..96 pt clamp, and bold/italic/underline, RGB text/fill and
+  horizontal alignment are retained. Number values stay numeric and mixed/text cells stay text;
+  pre-1900 dates retain the existing plain-number fallback and warning, with their cell style.
+  Long-name/units/comments styles follow the label rows actually requested by the export;
+  short names use the default style. Blank styled cells inside the existing data rectangle are
+  included. Open-ended ranges do not create extra rows; explicit formatting outside that rectangle
+  and omitted label-row formatting generate warnings. Future-cell styling is not exported.
+  Conditional colours use the existing effective precedence as a static snapshot, with a warning
+  that rules are not written. Transparent resets remain resets; partial alpha is written as
+  opaque RGB with a warning. These are Sheaf export choices, not new Origin measurements.
+  The Excel importer still reads data/column number formats rather than cell styles.
 
 ## 13c. Fill Column With patterns (T74, measured 2026-11-15, Origin 2016)
 

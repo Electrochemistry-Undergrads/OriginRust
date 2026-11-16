@@ -139,3 +139,92 @@ fn golden_three_y_axes_with_an_offset_axis() {
     let (p, g) = three_axes(12.0);
     super::tests::compare_golden("multi-y-offset-axis", &super::tests::svg_of(&p, g));
 }
+
+/// The Y of every horizontal straight line (axis lines, not ticks) of a layer's overlay.
+fn horizontal_lines(items: &[scene::Item], width: f64) -> Vec<f64> {
+    items
+        .iter()
+        .filter_map(|it| match it {
+            scene::Item::Path { d, stroke: Some(s), .. } if s.width == width => {
+                let pts = hit::path_points(d);
+                (pts.len() == 2 && (pts[0].1 - pts[1].1).abs() < 1e-9 && (pts[0].0 - pts[1].0).abs() > 10.0)
+                    .then_some(pts[0].1)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn scatter_central_draws_both_axes_in_the_middle_of_a_boxed_frame() {
+    let (x, shape) = super::tests::golden_data();
+    let (p, g) = super::tests::project(Template::ScatterCentral, x, vec![shape(1.0)]);
+    let layer = &p.graph(g).unwrap().layers[0];
+    assert_eq!((layer.x_axis.offset_pct, layer.y_axis.offset_pct), (-50.0, -50.0));
+    let f = geoms(&p, g)[0].frame;
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let width = layer.x_axis.line_width_pt;
+    let ys = horizontal_lines(&scene.layers[0].overlay, width);
+    let xs = vertical_lines(&scene.layers[0].overlay, width);
+    let near = |v: &[f64], t: f64| v.iter().any(|a| (a - t).abs() < 1e-2);
+    assert!(near(&ys, f.y + 0.5 * f.h), "X axis at the vertical middle: {ys:?} {f:?}");
+    assert!(near(&xs, f.x + 0.5 * f.w), "Y axis at the horizontal middle: {xs:?} {f:?}");
+    // The frame is a box: the four edges are drawn too.
+    assert!(near(&ys, f.y) && near(&ys, f.y + f.h), "{ys:?}");
+    assert!(near(&xs, f.x) && near(&xs, f.x + f.w), "{xs:?}");
+}
+
+#[test]
+fn an_x_axis_offset_moves_line_labels_and_title_and_its_hit_box() {
+    let (x, shape) = super::tests::golden_data();
+    let (mut p, g) = super::tests::project(Template::Scatter, x, vec![shape(1.0)]);
+    let base = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    p.graph_mut(g).unwrap().layers[0].x_axis.offset_pct = -50.0;
+    let f = geoms(&p, g)[0].frame;
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let width = p.graph(g).unwrap().layers[0].x_axis.line_width_pt;
+    let ys = horizontal_lines(&scene.layers[0].overlay, width);
+    assert!(ys.iter().any(|y| (y - (f.y + 0.5 * f.h)).abs() < 1e-2), "{ys:?}");
+    assert!(!ys.iter().any(|y| (y - (f.y + f.h)).abs() < 1e-2), "the bottom edge has no line: {ys:?}");
+    // Tick labels and title move up with the axis: none of the horizontal text is below the frame.
+    let below = scene.layers[0]
+        .overlay
+        .iter()
+        .filter(|i| matches!(i, scene::Item::Text(t) if t.rotate_ccw == 0.0 && t.y > f.y + f.h))
+        .count();
+    let was_below = base.layers[0]
+        .overlay
+        .iter()
+        .filter(|i| matches!(i, scene::Item::Text(t) if t.rotate_ccw == 0.0 && t.y > f.y + f.h))
+        .count();
+    assert!(was_below > 0 && below < was_below, "{below} {was_below}");
+    // A click on the moved axis line selects the X axis.
+    match hit::hit_test(&scene, (f.x + 0.5 * f.w, f.y + 0.5 * f.h), 3.0) {
+        hit::Hit::Object { layer: 0, kind: scene::ObjectKind::XAxis } => {}
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn scatter_central_titles_stand_at_the_ends_of_the_moved_axes() {
+    let (x, shape) = super::tests::golden_data();
+    let (p, g) = super::tests::project(Template::ScatterCentral, x, vec![shape(1.0)]);
+    let f = geoms(&p, g)[0].frame;
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let texts: Vec<&scene::TextItem> = scene.layers[0]
+        .overlay
+        .iter()
+        .filter_map(|i| match i {
+            scene::Item::Text(t) => Some(t),
+            _ => None,
+        })
+        .collect();
+    // Y title: unrotated, above the frame top, at the Y axis line's x (the horizontal middle).
+    let y_title = texts.iter().find(|t| {
+        t.rotate_ccw == 0.0 && t.y < f.y && (t.x - (f.x + 0.5 * f.w)).abs() < 1e-2 && t.anchor == scene::Anchor::Middle
+    });
+    assert!(y_title.is_some(), "no horizontal title above the frame: {f:?}");
+    // X title: rotated, left of the frame, at the X axis line's y (the vertical middle).
+    let x_title = texts.iter().find(|t| t.rotate_ccw != 0.0 && t.x < f.x && (t.y - (f.y + 0.5 * f.h)).abs() < 1e-2);
+    assert!(x_title.is_some(), "no rotated title left of the frame: {f:?}");
+}

@@ -2462,6 +2462,58 @@ Origin's documented facts (Origin 2022 help, not measured; no Origin was at hand
   the Radius/Center settings, tangential labels for thin rings, a colour-by-category-palette option, a label font setting, reading
   Origin's sunburst from .opj.
 
+### 14.28 Grouped Columns (indexed data) and Grouped Box Charts (T76)
+
+Origin's documented facts (documentation only, **not measured**; no Origin was at hand; paraphrased;
+[W:docs.originlab.com/x-function/ref/plot_gindexed], [W:docs.originlab.com/origin-help/grouped-column-index-data],
+[W:docs.originlab.com/x-function/ref/plot_gboxindexed], [W:docs.originlab.com/origin-help/groupedboxcharts-indexeddata],
+[W:docs.originlab.com/tutorials/grouped-box-plot]):
+
+- The two items run the X-Functions `plot_gindexed` and `plot_gboxindexed`, available since Origin 9.1 SR0 (so in 2016). Both
+  open a dialog: the data form (summarized or raw), the bar and error-bar statistics, stacking, themes, panels or pages
+  split by a group column. Plot > Column/Bar/Pie > Grouped Columns (indexed data) is the greyed name in Sheaf's menu; in
+  newer help the same function sits under Plot > Categorical.
+- Indexed data: one or more group columns label the rows of the data column. The order of the group columns is the
+  hierarchy: the first is the main group on the axis, the next one nested inside. Groups sort alphabetically by default.
+- The result is one grouped plot (not one plot per group). With two or more group columns the X tick labels are a table
+  of rows, one per level. The fill colour is indexed by the subgroup by default.
+- Not documented on the pages read: the default bar statistic and error bar, the spacing and gap numbers, the legend,
+  the maximum number of group levels.
+
+**What Sheaf does** (everything below that is not in the list above is Sheaf's choice, **unmeasured**):
+
+- Items: Plot > Column/Bar/Pie > Grouped Columns (indexed data) (`Template::GroupedColumns`, CLI `grouped-columns`) and
+  Plot > Statistics > Grouped Box Charts (`Template::GroupedBox`, `grouped-box`). They plot straight from the selection
+  with no dialog (Origin's dialog is a leftover).
+- Selection: the data is the one selected numeric column designated Y; every other selected column is a group column, in
+  selection order, one or two (a numeric group column such as a scan number must be designated X or Group first). Anything else
+  is a status-bar warning, "Select one or two group columns and one data column (a numeric group column must be designated X or Group)", and no graph. More than two group
+  columns and a right Y axis are refused with a message. CLI: `sheaf plot -t grouped-columns|grouped-box -y DATA --group
+  G1[,G2]` (`--group` required; the data is the last numeric `--y` column, designation is not checked) and `--group-error none|sd|se` for the columns; panels, overlay, graph styling and
+  `--y2` are refused. MCP's `plot` takes the same names and `group_error`.
+- Model: the plots stay `PlotKind::Column` and `PlotKind::Box`; the new per-plot field `Plot.indexed` holds the group column,
+  for two group columns the second column and this plot's level, and the error bar. One group column gives one plot; two
+  give one plot per level of the second column, labelled with the level, so the legend names the subgroups and the colours
+  follow the layer's palette. The X axis shows the levels of the main group only (single-row labels) and takes the group
+  column's title. `.sheaf` round-trips the field; `.opj` export writes plain plots of the data column with a save warning;
+  user templates refuse these graphs.
+- Levels: the sorted distinct values of a group column (numbers numerically when every level is a number, otherwise plain
+  case-sensitive text order). Rows with a missing data value or an empty group cell are dropped. The main-group levels are
+  those of all rows with data, so every subgroup plot shares the positions 1..K.
+- Columns: the bar is the mean of the rows of the category (and subgroup); a category with no rows in a subgroup has no
+  bar. The error bar is None by default, or the SD (n-1) or the SE of those rows (a single row has none); Plot Details >
+  Error Bar sets it for every plot of the layer, one undo step. Bars side by side come from the layer's gap and overlap.
+- Boxes: the existing box statistics (Hazen quartiles, 1.5 IQR whiskers, outliers, mean) of the rows of the category and
+  subgroup. S subgroups share the 0.8 box band, each box 0.8/S wide; one subgroup keeps the plain box width. The Y range
+  covers whiskers, outliers and error bar ends. No significance brackets on grouped boxes.
+- Tests: `crates/core/src/template.rs`, `crates/core/src/indexed.rs`, `crates/plot/src/grouped_tests.rs` (goldens
+  `grouped-box.svg`, `grouped-columns.svg`), `crates/app/src/app/ui_tests/grouped_indexed.rs`,
+  `crates/cli/tests/grouped_indexed.rs`, `crates/io/src/opj/write/graph_feature_tests.rs`.
+
+**Leftovers:** Origin's dialog and data forms, raw-data bar statistics and the other error-bar statistics (CI, percentile
+ranges, MAD), stacking, two-row table tick labels, more than two group levels, Grouped Scatter, panels or pages split by a
+group, themes (half box, violin, ...), colour indexed by the main group, and a measurement of all of it in Origin 2016.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.
@@ -3909,6 +3961,17 @@ grouped. Sheaf: `Template::VerticalDropLine` (scatter, `decor.drop.vertical` on,
 `Template::ColumnLabel` (column, data labels on, position Above, a quarter of the font size, 5.5 pt, above);
 data labels of grouped columns and bars are now centred on their own bar. CLI `-t vertical-drop-line`, `-t
 column-label`.
+
+### 18.13 Scatter Central (T75, measured 2026-11-15)
+
+Origin 2016's Plot > Symbol > Scatter Central is the scatter graph with both axes crossing in the middle
+of a boxed frame: `layer.x.position` and `layer.y.position` -50 with `posType` 1 (percent), against 0
+for Scatter. The Y title stands horizontally above the frame at the Y axis' x, the X title rotated left
+of the frame at the X axis' height. Sheaf: template `scatter-central` (menu, `sheaf plot -t
+scatter-central`) with `Axis::offset_pct` -50 on both axes (the X offset is new here: percent of the
+frame height, "% From Bottom/Top" in the axis window), the frame drawn as a box, and the titles of any
+axis moved into the frame placed at its end as above; offsets 0 and outward (T61) are unchanged. New
+layers start at offset 0. `.opj` notes a lost X offset as it does a Y one.
 
 ### 20.1 Sheaf's rules
 

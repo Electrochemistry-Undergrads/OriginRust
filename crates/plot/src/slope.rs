@@ -56,6 +56,7 @@ pub(crate) struct Slope {
 fn usable(pd: &PlotData) -> bool {
     pd.pie.is_none()
         && pd.boxed.is_none()
+        && pd.gboxes.is_empty()
         && pd.violin.is_none()
         && pd.ridge.is_none()
         && pd.hex.is_none()

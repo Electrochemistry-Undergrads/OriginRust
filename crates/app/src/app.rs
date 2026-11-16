@@ -2847,6 +2847,25 @@ impl SheafApp {
         } else {
             Vec::new()
         };
+        // Grouped columns / grouped box charts of indexed data: the one numeric Y column is the data, the other
+        // selected columns (one or two) are the groups, in selection order.
+        if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
+            let project = self.doc.project();
+            let is_data = |id: &ColumnId| {
+                project.column(*id).is_some_and(|c| c.data.is_numeric() && c.designation == Designation::Y)
+            };
+            let data = columns.iter().filter(|id| is_data(id)).count();
+            let groups = columns.len() - data;
+            if data != 1 || groups == 0 {
+                self.warn("Select one or two group columns and one data column (a numeric group column must be designated X or Group)".to_string());
+                return;
+            }
+            match self.doc.edit("Plot columns", |p| p.plot_columns(template, &columns)) {
+                Ok(_) => self.say(format!("Plotted {} by {} group column(s)", data, groups)),
+                Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+            }
+            return;
+        }
         let ys = self.plot_y_columns(book, columns, template);
         if ys.is_empty() {
             let what = if matches!(template, Template::Treemap | Template::Sunburst) {

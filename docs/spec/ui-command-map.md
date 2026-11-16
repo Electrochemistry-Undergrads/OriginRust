@@ -141,14 +141,14 @@ exist; deliberately not studied.)
 | | Vertical Drop Line | line from each point to the axis |
 | | Bubble, Color Mapped, Bubble + Color Mapped | third column controls size and/or colour |
 | Line + Symbol | Line + Symbol, Line Series, 2 Point Segment, 3 Point Segment | symbols with connecting lines; segment types join point pairs/triples |
-| Column/Bar/Pie | Column, Column + Label, Grouped Columns (indexed data), Bar, Stacked Column, Stacked Bar, 100% Stacked Column/Bar, Floating Column/Bar, 3D Color Pie, 2D B&W Pie | vertical/horizontal bars and pies |
+| Column/Bar/Pie | Column, Column + Label, Grouped Columns (indexed data; Sheaf plots from the selection, no dialog), Bar, Stacked Column, Stacked Bar, 100% Stacked Column/Bar, Floating Column/Bar, 3D Color Pie, 2D B&W Pie | vertical/horizontal bars and pies |
 | Multi-Y | Double-Y, 3Ys Y-YY, 3Ys Y-Y-Y, 4Ys Y-YYY, 4Ys YY-YY, Multiple Y Axes... | several Y axes in one layer |
 | Y-offset/Waterfall | Stacked Lines by Y Offsets, Waterfall, Waterfall Y:Color Mapping, Waterfall Z:Color Mapping, 3D Waterfall and its two colour-mapped variants | curves shifted against each other |
 | Multi-Panel | Vertical 2 Panel, Horizontal 2 Panel, 4 Panel, 9 Panel, Stack..., Multiple Panels by Label... | several layers on one page |
 | 3D XYY | XYY 3D Bars, 3D Ribbons, 3D Walls, 3D Waterfall (+2 colour variants) | |
 | 3D Surface | Color Fill Surface, X Constant with Base, Y Constant with Base, Color Map Surface, Colormap Surface with Projection, Wire Frame, Wire Surface, 3D Ternary Colormap Surface | |
 | 3D Symbol/Bar/Vector | 3D Bars, 3D Scatter, 3D Trajectory, 3D Scatter + Error Bar, 3D Vector XYZ XYZ, 3D Vector XYZ dXdYdZ | |
-| Statistics | Box Chart, Grouped Box Charts (indexed or raw), Interval Plot, Violin Plot and its variants (Violin with Box, Point, Quartile, Stick, Split Violin, Half Violin; Sheaf has all but Split Violin), Ridgeline Chart, Histogram, Histogram + Probabilities, Stacked Histograms, Marginal Histograms, Marginal Box Charts, 2D Kernel Density, QC (X bar R) Chart, Pareto (binned or raw), Scatter Matrix, Probability Plot, Q-Q Plot | |
+| Statistics | Box Chart, Grouped Box Charts (indexed or raw; Sheaf has indexed only, no dialog), Interval Plot, Violin Plot and its variants (Violin with Box, Point, Quartile, Stick, Split Violin, Half Violin; Sheaf has all but Split Violin), Ridgeline Chart, Histogram, Histogram + Probabilities, Stacked Histograms, Marginal Histograms, Marginal Box Charts, 2D Kernel Density, QC (X bar R) Chart, Pareto (binned or raw), Scatter Matrix, Probability Plot, Q-Q Plot | |
 | Area | Area, Stacked Area, Fill Area | |
 | Contour/Heat Map | Color Fill, B/W Lines + Labels, Gray Scale Map, Heat Map, Polar Contour theta(X)r(Y), Polar Contour r(X)theta(Y), Ternary Contour | |
 | Profile | Contour Profiles, Image Profiles | |

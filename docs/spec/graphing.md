@@ -4163,3 +4163,33 @@ Implemented in `crates/core/src/multi_y.rs` (plans, options), `Template::Multi3Y
 - **Multiple Y Axes...** follows 21.6: Plot Type (Line, Scatter, Line + Symbol; Custom is not offered), Number of Left/Right Y Axes with Auto (floor(N/2) left, rest right), Add Middle Y Axis (-50 %), Number of Plots in Each Layer (the sum must equal the number of columns, a layer cannot be empty), Link Axis Color to Plot, Show Y Title, Show Top X Axis (line and ticks only; tick labels on the top axis are not drawn), Y Axes Gap (Auto 10, and 14 when Y titles or the top X axis are on: which of the options causes it is **unmeasured**, Sheaf uses titles or top X; `axiscolor:=0` alone is unmeasured). The first frame is centred with the outward offsets by the formula of 21.6; one Y column makes an ordinary graph with a left axis and the frame at 17.91 %. A count of axes that does not fit the number of layers is reported in the dialog and nothing is made. The Preview button and `hide` are not built.
 - **Files**: `.sheaf` keeps `offset_pct` and the layer links. The `.opj` writer writes one ordinary layer per Y axis but no axis position; the save names "the position of a Y axis away from the frame" so the `.opj.sheaf` companion keeps it (ADR 0008). CLI and MCP have the four template names only; the Multiple Y Axes options are in the app.
 - Goldens: `crates/plot/tests/golden/multi-y-3ys-y-yy.svg`, `-3ys-y-y-y`, `-4ys-y-yyy`, `-4ys-yy-yy` and `multi-y-multiple-axes.svg`.
+
+## 22. Graph view modes, Show toggles and Full Screen (T66, measured 2026-11-15, Origin 2016)
+
+Measured in OriginPro 2016 on our own synthetic data (a workbook with X = 1 to 10, Y = 2X+1 and 20-X, a Line + Symbol graph, once with an extra right-Y layer), a 1024x768 Origin window, menus and keys driven through `tools/origin-ref/origin-dialog.ps1 -NoDialog` with `-AfterFile` (`@CLICK`, `@KEY`, `@SHOT`) and `page.viewmode` read through LabTalk. Pictures and raw outputs are local (`re-workspace/scratch/t66/`). Anything not listed is **unmeasured**.
+
+### 22.1 View menu of a graph window
+
+Origin collapses its menus: the short form of View shows Toolbars..., Apps, Project Explorer, Object Manager, Zoom In, Zoom Out, Whole Page and Full Screen, and a chevron; the short form changes after items are used (a ticked or used mode joins it), so the chevron moves. The full form is: Menu >, | Toolbars... (Ctrl+T), Status Bar (ticked), | Command Window (Alt+3), Code Builder (Alt+4), Quick Help (Alt+5), | Apps (Alt+9, ticked), Project Explorer (Alt+1), Object Manager (Alt+8), View Windows >, | Results Log (Alt+2), View Mode >, | Messages Log (Alt+6), Smart Hint Log (Alt+7), | **Print View (Ctrl+2), Page View (Ctrl+1), Window View, Draft View (Ctrl+0)**, | Zoom In (Ctrl+I), Zoom Out (Ctrl+M), Whole Page (Ctrl+W), Zoom All, | Show >, Show Data Info, Full Screen (Ctrl+Shift+J). Page View is ticked on a new graph; the four modes are mutually exclusive (one tick).
+
+### 22.2 The four modes
+
+LabTalk `page.viewmode` is 1 Print, 2 Page (default of a new graph), 3 Window, 4 Draft; writing 0 or 5 left the value unchanged. Ctrl+2, Ctrl+1 and Ctrl+0 set 1, 2 and 4 (read back 1, 4, 2 in order).
+- **Print and Page View** looked the same in both window sizes tried (a maximized graph window and a small one): the page is drawn at its own size from the top-left with the grey window colour to the right where the page is narrower than the window. A difference (print-size fonts? margins?) was not found: **unmeasured**.
+- **Window View and Draft View** stretch the page over the whole window (no grey area; in the small window the layer grew with the window and the axes moved). Window View draws the text with different smoothing from Print and Page View (the rotated axis title looks coarse); Draft View draws the plot like Page View with crisper, unsmoothed text and the same lines and symbols. Whether Draft hides other items (fills, images, patterns) **unmeasured**.
+- `page.width` and `layer.width` were not compared between modes: **unmeasured**.
+- **Saved with the project:** set to 3, saved as `.opj` (`save` with an unquoted path; a quoted path produced an error dialog), set to 1, reopened: the graph reported 3 again.
+
+### 22.3 Show submenu
+
+In order, with separators after the third, fifth and ninth item: Layer Icons, Active Layer Indicator, Axis Layer Icons | Object Grid, Layer Grid | Frame, Labels, Data, Active Layer Only | Master Items on Screen. Ticks of a new graph: **Layer Icons, Labels and Data**; the other seven are off. Show Data Info (below the submenu) is ticked on a new graph.
+- **Layer Icons** unticked: the numbered layer icons ("1", "2" in the top-left corner of the page) disappear; no dialog.
+- Active Layer Indicator, Axis Layer Icons, Object Grid, Layer Grid, Frame, Labels, Data, Active Layer Only, Master Items on Screen and Show Data Info: **unmeasured** (the effect of switching each; every attempt to click them hit a different item because the collapsed View menu changed between clicks). To measure: open View, click the chevron, take a shot to confirm the full menu, then open Show, click the item once, shot, and finish the session (do one item per session); or untick Tools > Options > Miscellaneous > Enable Collapsible Menus (the hint text of the menu names that box; the dialog was opened with Ctrl+U but the tab was not reached).
+
+### 22.4 Full Screen
+
+Ctrl+Shift+J (View > Full Screen; the page right-click item "View Full Screen" has the same key): the graph page covers the whole screen, with no menu bar, toolbars, status bar or window frame, and fits its aspect to the screen height (white page, no grey). A "Reminder Message" dialog appears in the middle when it starts (text: "Hit ESC to exit", "Arrow Keys to shift to different graphs.", "Home and End key to first and last graph.", a "Do not show this message in the future" tick and OK; Enter confirms it). **Esc ends it** and the normal window comes back as it was. With a single graph a Right arrow did not leave a visible change before Esc (the window was already back in the next picture: unclear whether Right ended it; **unmeasured**). Switching between several graphs with the arrow keys, Home and End: **unmeasured**.
+
+### 22.5 What Sheaf takes from this (T66)
+
+Page View as Sheaf's current picture and the default; Window View (page stretched to the window, aspect not kept) and Draft View (the same with plain text) as in 22.2; modes saved in the `.sheaf` file; the Layer Icons tick; Full Screen with Esc and the reminder; leave the unmeasured Show items and Show Data Info grey until they are measured.

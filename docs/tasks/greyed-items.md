@@ -42,7 +42,8 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T62` | 0 |
 | `T63` | 20 |
 | `T65` | 0 |
-| `B1` | 20 |
+| `T66` | 17 |
+| `B1` | 3 |
 | `B2` | 51 |
 | `B3` | 28 |
 | `B4` | 30 |
@@ -61,7 +62,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 45 items, backlog packages (`B`) 349, not planned (`N`) 20.
+Briefs (`T`) hold 62 items, backlog packages (`B`) 332, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -107,10 +108,11 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Quick Help · Smart Hint Log
 - `B12` View Windows: None · Windows in Active Folder · Active Folder and Subfolders
 - `B6` Actively Update Plots · Page Break Preview Lines [Workbook]
-- `B1` Print View · Page View · Window View · Draft View · Zoom All [Graph]
-- `B1` Show: Layer Icons · Active Layer Indicator · Axis Layer Icons · Object Grid · Layer Grid · Frame · Labels · Data · Active Layer Only · Master Items on Screen [Graph]
-- `B1` Show Data Info [Graph]
-- `B1` Full Screen [Graph]
+- `T66` Print View · Page View · Window View · Draft View [Graph]
+- `B1` Zoom All [Graph]
+- `T66` Show: Layer Icons · Active Layer Indicator · Axis Layer Icons · Object Grid · Layer Grid · Frame · Labels · Data · Active Layer Only · Master Items on Screen [Graph]
+- `T66` Show Data Info [Graph]
+- `T66` Full Screen [Graph]
 
 ### Plot
 - `T63` Line: Horizontal Step · Vertical Step · Spline Connected
@@ -256,7 +258,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B3` Graph legend > Legend: Add Legend Title
 - `B2` Graph legend > Copy Format: All · All Style Formats · Text
 - `B12` Graph page: Add Shortcut to Favorites
-- `B1` Graph page: View Full Screen
+- `T66` Graph page: View Full Screen
 - `T61` Graph page > New Layer(Axes): Open Dialog...
 - `B2` Graph page > Copy Format: All · All Style Formats
 - `B11` Graph page > Duplicate (Batch Plotting): Duplicate

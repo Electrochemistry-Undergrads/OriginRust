@@ -142,3 +142,89 @@ fn the_descriptive_menu_runs_a_partial_correlation_with_two_controls() {
     assert!((b[0] - 0.3195).abs() < 6e-5 && b[1] == 1.0, "{b:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Partial correlation"));
 }
+
+/// The one-way repeated measures run of Origin: 8 subjects by 4 levels as indexed rows `level,y,subject`.
+fn rm_one_way_csv() -> String {
+    let table = [
+        [22.5244, 23.5244, 24.5244, 25.5244],
+        [18.138, 19.677, 22.5219, 24.6265],
+        [17.0564, 21.0059, 19.8137, 22.3672],
+        [23.5919, 22.9043, 26.4075, 24.4996],
+        [19.4001, 19.1614, 18.8032, 21.3784],
+        [20.3396, 22.2064, 23.9391, 25.4933],
+        [21.2722, 21.8676, 23.4055, 25.5475],
+        [15.6833, 19.3813, 19.8708, 19.163],
+    ];
+    let mut text = String::from("level,y,subject\n");
+    for (s, row) in table.iter().enumerate() {
+        for (l, v) in row.iter().enumerate() {
+            text.push_str(&format!("L{},{v},S{}\n", l + 1, s + 1));
+        }
+    }
+    text
+}
+
+#[test]
+fn the_anova_menu_runs_a_one_way_repeated_measures_anova() {
+    let mut h = start(vec![csv_file("rm1", "rmdata", &rm_one_way_csv())]);
+    show_window(&mut h, "Book1 - rmdata.csv");
+    menu_path(&mut h, &["Statistics", "ANOVA", "One-Way Repeated Measures ANOVA..."]);
+    assert!(h.state().analysis.is_some(), "the repeated measures window is open");
+    for label in ["Input", "Means Comparison", "Factor", "Data", "Subject", "Descriptive Statistics"] {
+        assert!(has_label(&h, label), "{label} is missing");
+    }
+    assert!(!has_label(&h, "Interactions"), "the interaction belongs to the two-way window");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    let (sheet, ms) = result_column(&h, "Mean Square");
+    assert!(sheet.starts_with("ANOVAOneWayRM"), "{sheet}");
+    assert!((ms[0] - 21.46344).abs() < 1e-5, "{ms:?}");
+    // The multivariate block comes first: its F is 9.86391.
+    let (_, f) = result_column(&h, "F Value");
+    assert!((f[0] - 9.86391).abs() < 1e-4, "{f:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("One-way repeated measures ANOVA"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+}
+
+#[test]
+fn the_two_way_repeated_measures_window_has_interactions_and_no_comparison_methods() {
+    let mut h = start(vec![csv_file(
+        "rm2",
+        "rm2data",
+        "a,b,y,s
+A1,B1,1.0,S1
+A1,B2,2.5,S1
+A2,B1,2.0,S1
+A2,B2,3.0,S1
+A1,B1,1.5,S2
+A1,B2,2.0,S2
+A2,B1,2.5,S2
+A2,B2,4.5,S2
+A1,B1,0.5,S3
+A1,B2,2.2,S3
+A2,B1,2.9,S3
+A2,B2,3.1,S3
+A1,B1,1.1,S4
+A1,B2,1.9,S4
+A2,B1,2.1,S4
+A2,B2,3.8,S4
+",
+    )]);
+    show_window(&mut h, "Book1 - rm2data.csv");
+    menu_path(&mut h, &["Statistics", "ANOVA", "Two-Way Repeated Measures ANOVA..."]);
+    for label in ["Input", "Descriptive Statistics", "Means Comparison", "Factor A", "Factor B", "Interactions"] {
+        assert!(has_label(&h, label), "{label} is missing");
+    }
+    click(&mut h, "Interactions");
+    click(&mut h, "Means Comparison");
+    assert!(!has_label(&h, "Tukey"), "the two-way comparisons are not built");
+    click(&mut h, "OK");
+    let (sheet, df) = result_column(&h, "DF");
+    assert!(sheet.starts_with("ANOVATwoWayRM"), "{sheet}");
+    // Interactions on: A, B and A*B, each with its error term, in the first block of the sheet.
+    assert!(df.len() >= 6, "{df:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Two-way repeated measures ANOVA"));
+}

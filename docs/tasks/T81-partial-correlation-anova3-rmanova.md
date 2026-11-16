@@ -1,6 +1,6 @@
 # T81: Partial Correlation, Three-Way ANOVA, Repeated Measures ANOVA (B8 slice)
 
-**Status:** partial correlation and three-way ANOVA done (calc, core, dialogs, menu, `sheaf analyze partial-corr | anova3`, Origin fixtures `crates/calc/tests/origin_t81.rs`); repeated measures ANOVA open. Origin 2016 measured 2026-11-16 (branch `stats-anova3`, Claude Windows; `docs/spec/statistics.md` 24-26).
+**Status:** done 2026-11-16: partial correlation, three-way ANOVA and one- and two-way repeated measures ANOVA (calc, core, dialogs, menu, `sheaf analyze partial-corr | anova3 | rmanova`, Origin fixtures `crates/calc/tests/origin_t81.rs`). Origin 2016 measured 2026-11-16 (branch `stats-anova3`, Claude Windows; `docs/spec/statistics.md` 24-26). Left (unmeasured or not built): see the end of section 26.
 **Size:** L. **Branch:** `stats-anova3`. **Spec:** `docs/spec/statistics.md` sections 24 (partial correlation), 25 (three-way ANOVA),
 26 (repeated measures ANOVA).
 **Inventory:** Statistics > Descriptive Statistics > Partial Correlation Coefficient...; Statistics > ANOVA > Three-Way ANOVA...;
@@ -53,10 +53,10 @@ Three statistics tools that work as Origin 2016's, with their reports, dialogs, 
 2. [done] `anova3`: type III table by dummy-variable regression for balanced and unbalanced data; descriptive blocks; means comparison
    blocks (reuse the two-way ones: cells for the interactions); Levene; power (noncentral F; check the two measured values);
    report and dialog (all seven tabs; Mean Plot only with the graphs, as the two-way tool does: leave unchecked until built).
-3. `rmanova1`: within and between tables, Mauchly, epsilons, corrections, multivariate tests, descriptive limits, means
+3. [done] `rmanova1`: within and between tables, Mauchly, epsilons, corrections, multivariate tests, descriptive limits, means
    comparisons (Dunnett on the control level); `rmanova2` with its own error term per effect.
-4. Menu: enable the items, delete them from `greyed-items.md` and run `python3 tools/greyed-count.py --write`.
-5. Tests, spec sections updated with what the Rust does where it differs, README row status.
+4. [done] Menu: enable the items, delete them from `greyed-items.md` and run `python3 tools/greyed-count.py --write`.
+5. [done] Tests, spec sections updated with what the Rust does where it differs, README row status.
 
 ## Done when
 

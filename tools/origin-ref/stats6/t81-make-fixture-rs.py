@@ -1,5 +1,5 @@
 """Writes crates/calc/tests/fixtures/origin_t81_data.rs: the data and Origin 2016's numbers of the partial correlation and
-three-way ANOVA runs (T81), taken from t81-origin.compact.json. usage: python t81-make-fixture-rs.py OUT.rs"""
+three-way and repeated measures ANOVA runs (T81), taken from t81-origin.compact.json. usage: python t81-make-fixture-rs.py OUT.rs"""
 import json, sys
 
 d = json.load(open(__file__.replace('t81-make-fixture-rs.py', 't81-origin.compact.json')))
@@ -65,4 +65,17 @@ for k, v in d['anova3'].items():
     out.append(f'        table: vec![{", ".join(tab)}] }}')
     out.append('}')
     out.append('')
+out.append('/// The one-way repeated measures run: 8 subjects (rows) by 4 levels.')
+out.append('pub fn rm1_data() -> Vec<Vec<f64>> {')
+out.append('    vec![' + ', '.join('vec!' + str([float(x) for x in r]) for r in d['rmanova1']['table']) + ']')
+out.append('}')
+out.append('')
+subj = {}
+for a, b, y, s in d['rmanova2']['rows_A_B_data_subject']:
+    subj.setdefault(s, {})[(a, b)] = y
+out.append('/// The two-way repeated measures run: 6 subjects (rows) by the 2 x 3 cells, factor A slowest.')
+out.append('pub fn rm2_data() -> Vec<Vec<f64>> {')
+out.append('    vec![' + ', '.join('vec!' + str([subj[s][(a, b)] for a in (1, 2) for b in (1, 2, 3)]) for s in sorted(subj)) + ']')
+out.append('}')
+out.append('')
 open(sys.argv[1], 'w', encoding='utf8').write('\n'.join(out))

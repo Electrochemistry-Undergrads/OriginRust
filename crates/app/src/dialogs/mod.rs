@@ -43,6 +43,7 @@ pub mod power;
 pub mod printing;
 pub mod recovery;
 pub mod reshape;
+pub mod rm_options;
 pub mod row_filter;
 pub mod set_values;
 pub mod shape_object;

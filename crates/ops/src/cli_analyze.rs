@@ -870,6 +870,43 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
+        AnalyzeTool::Rmanova { target, two_way, interaction, comparison, comparison_alpha, no_descriptive, alpha } => {
+            no_x_range(&target, "the repeated measures ANOVA")?;
+            let wanted = if two_way { 4 } else { 3 };
+            if target.y.len() != wanted {
+                bail!(
+                    "the {} repeated measures ANOVA needs --y {} ({wanted} columns)",
+                    if two_way { "two-way" } else { "one-way" },
+                    if two_way { "FACTOR_A,FACTOR_B,DATA,SUBJECT" } else { "FACTOR,DATA,SUBJECT" }
+                );
+            }
+            let given = !comparison.is_empty();
+            let comparisons: Vec<analysis::MeansComparison> =
+                comparison.into_iter().filter_map(comparison_of).collect();
+            if comparisons.contains(&analysis::MeansComparison::Dunnett) {
+                bail!("Dunnett's test is not part of the repeated measures ANOVA");
+            }
+            let mut spec = analysis::RmAnovaSpec::new(two_way);
+            if two_way {
+                if !comparisons.is_empty() {
+                    bail!("the two-way repeated measures ANOVA has no means comparisons (not measured in Origin)");
+                }
+            } else if given {
+                spec.comparisons = comparisons;
+            }
+            if interaction && !two_way {
+                bail!("--interaction belongs to the two-way design (--two-way)");
+            }
+            spec.interaction = interaction;
+            if no_descriptive {
+                spec.descriptive = Vec::new();
+            } else if interaction {
+                spec.descriptive.push(analysis::RmTerm::Ab);
+            }
+            spec.comparison_alpha = comparison_alpha;
+            spec.alpha = alpha;
+            (target, Job::Tool(Tool::RmAnova(spec)))
+        }
         AnalyzeTool::PartialCorr { target, control, listwise, one_tailed, show_significance, flag_significant } => {
             no_x_range(&target, "the partial correlation")?;
             (

@@ -1595,8 +1595,9 @@ significance level. Descriptive Statistics: FactorA, FactorB, Interaction.
   numbers, not by labels).
 - Between subjects: Intercept SS 15121.48321, DF 1, MS the same, F 804.75036, p 1.73883E-8; Subjects SS 131.53195, DF 7, MS
   18.79028.
-- Descriptive statistics per level: Mean, SE, 95 % confidence limits (SE 0.96025 for the first level; not SD/sqrt(n), the rule was
-  not worked out). Means comparisons in blocks of ten columns (as sections 2 and 25) with SE `sqrt(2 MSE / n)` = 0.58513 and DF the
+- Descriptive statistics per level: Mean, SE, 95 % confidence limits (SE 0.96025 for the first level; worked out later from the
+  numbers: the standard deviation of the subjects' values over the square root of their number, limits with t of n - 1 degrees of
+  freedom). Means comparisons in blocks of ten columns (as sections 2 and 25) with SE `sqrt(2 MSE / n)` = 0.58513 and DF the
   error DF 21: all six pairs for Tukey (q 3.54149, p 0.08833 for levels 1 and 2), Bonferroni (p 0.12354), Dunn-Sidak, Fisher LSD
   (p 0.02059), Scheffe; Holm-Bonferroni and Holm-Sidak list the pairs by p with step alpha 0.05/6 = 0.00833 and 0.00851.
 
@@ -1608,6 +1609,34 @@ DF has the four sphericity rows of the one-way table (B: Mauchly W 0.96832, chi-
 Greenhouse-Geisser 0.96929, Huynh-Feldt 1, Lower-bound 0.5; corrected DFs of B 1.93858 and 9.6929). Intercept SS 39236.00333,
 DF 1, F 2181.60088, p 8.4964E-8; Subjects SS 89.9248, DF 5, MS 17.98496. Descriptive statistics per level of A, B and per
 cell (Mean, SE, 95 % limits).
+
+Two-way descriptive statistics follow the same rule on the subjects' values averaged over the other factor (levels of A, of B) or
+taken as they are (cells): A level 1 mean 32.11473, SE 0.7067, limits 30.2981 / 33.93137 (t of 5 degrees of freedom); cell 1 SE
+0.67432.
+
+**What Sheaf does (T81, `sheaf_calc::rm_anova`, core `analysis/rmanova.rs`, `sheaf analyze rmanova`).** Menu items
+Statistics > ANOVA > One-Way Repeated Measures ANOVA... and Two-Way Repeated Measures ANOVA... (the single greyed "Repeated
+Measures ANOVA..." is gone). Indexed data only: columns factor, data, subject (one-way) or factor A, factor B, data, subject
+(two-way); levels and subjects may be text, levels are numbered in order of appearance. Each effect is tested on the subjects'
+scores of its orthonormal (Helmert) contrasts: SS = n times the squared length of the mean score vector, error SS = (n - 1) tr(S)
+with DF (n - 1) d, S the covariance matrix of the scores; Mauchly's W = det(S) / (tr(S) / d)^d, the chi-square and epsilons as above
+(epsilon of an effect with one DF is 1 and has no Mauchly row), the multivariate tests from the one non-zero eigenvalue
+`T^2 / (n - 1)` (Pillai lambda/(1+lambda), Wilks 1/(1+lambda), Hotelling and Roy lambda, F = (n - d) lambda / d). Intercept SS =
+n K grand-mean^2 against the Subjects mean square. The one-way means comparisons use `sqrt(2 MSE / n)` with the table's error DF,
+pairs row by row (1,2), (1,3), ..., difference mean(i) - mean(j), the statistic unsigned (q for Tukey, |t| for the others including
+Scheffe), Holm and Holm-Sidak listed by increasing p with the significance flag 1, then 0 for the first failure and -1 after it and
+the alpha column 0 after the first failure. The result sheet `ANOVAOneWayRM1` / `ANOVATwoWayRM1` has the blocks Multivariate Tests
+(one-way), Mauchly's Test of Sphericity with the epsilons, Within Subjects (effect and error rows under each of the four ways),
+Between Subjects, Descriptive Statistics, and the comparison blocks, in the order of the measured sheet; each block is a column
+group with its own label column, as for the three-way ANOVA. Every number of both measured runs, all five single-step comparison
+blocks (to the printed digits; Tukey limits to 3e-4 relative) and the Holm orders and thresholds are reproduced by
+`crates/calc/tests/origin_t81.rs`.
+
+Sheaf's own, unmeasured: Interactions off in the two-way design simply leaves the A*B rows out (the error terms of A and B stay
+those of the full design); a subject without a number in every cell is left out with a note, a repeated number in one subject
+and cell is refused; the two-way multivariate tests and the two-way means comparisons are not offered (the Means Comparison tab of
+the two-way window only says so); Dunnett is not offered (it belongs to the Dunnett work); the confidence limits use the Input
+tab's significance level.
 
 Unmeasured: the reports as drawn (no picture of either), the Raw layout, missing values or unequal numbers of observations per
 subject, the Dunnett and Holm blocks in the two-way run, the Plots and Output tabs' graphs, the rule of the means' standard
@@ -1652,8 +1681,8 @@ Not verified or not done:
   distribution curve on the histogram, normal probability plot) are not copied.
 - No test of equal variance (Levene, F test) next to the two-sample t-test, no t-test from summary data, no row-wise t-tests.
 - Power and sample size: only the t tests and the one-way ANOVA (section 12); no tests of proportions or variances, no power curve.
-- Three-way and repeated measures ANOVA and means plots of the
-  ANOVA, partial correlation, scatter matrices and confidence ellipses, outlier tests other than Grubbs and
+- Means plots of the
+  ANOVA (three-way and repeated measures ANOVA and partial correlation are sections 24 to 26), scatter matrices and confidence ellipses, outlier tests other than Grubbs and
   Dixon, Chen-Shapiro and Cramer-von Mises are not built (the Friedman, median, sign and two-sample
   Kolmogorov-Smirnov tests and the Grubbs and Dixon tests are in section 10).
 - Mann-Whitney and Kruskal-Wallis take one column per sample; Origin's indexed form (a group column and a

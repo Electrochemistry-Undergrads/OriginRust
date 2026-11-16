@@ -2383,6 +2383,33 @@ pub enum AnalyzeTool {
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
     },
+    /// Repeated measures ANOVA of indexed data. One-way: --y FACTOR,DATA,SUBJECT. With --two-way:
+    /// --y FACTOR_A,FACTOR_B,DATA,SUBJECT. Every subject needs one number in every cell. Within-subjects table
+    /// with the Greenhouse-Geisser, Huynh-Feldt and lower-bound corrections, Mauchly's test, the one-way
+    /// multivariate tests, the between-subjects rows and descriptive statistics go to a new sheet.
+    Rmanova {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Two repeated factors (Origin's Two-Way Repeated Measures ANOVA).
+        #[arg(long)]
+        two_way: bool,
+        /// The A*B interaction of the two-way design (off by default, as in Origin).
+        #[arg(long)]
+        interaction: bool,
+        /// One-way means comparison methods (comma-separated; `none` for no comparison; Tukey when not given).
+        /// Not offered for the two-way design. Dunnett is not offered.
+        #[arg(long, value_enum, value_delimiter = ',')]
+        comparison: Vec<ComparisonArg>,
+        /// Significance level of the means comparisons.
+        #[arg(long, default_value_t = 0.05)]
+        comparison_alpha: f64,
+        /// Leave the descriptive statistics out.
+        #[arg(long)]
+        no_descriptive: bool,
+        /// Significance level (confidence limits of the descriptive statistics and the verdicts).
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
     /// Partial correlation coefficients (Pearson) of the --y columns, controlling for the --control columns.
     /// A table of pairs and the matrices go to a new sheet.
     PartialCorr {

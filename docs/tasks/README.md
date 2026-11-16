@@ -151,7 +151,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T64](T64-significance-plot.md) | Multiple comparisons plot with significance brackets | M | done 2026-11-15 (statistics 23, `significance-plot`, macOS); left: two-way ANOVA, paired and one-sample, Origin measurements, editable brackets |
 | [T77](T77-new-graph-and-project-without-data.md) | File > New > Graph and Standard New Graph (empty graph from the default template), Save Project without Data... and Duplicate Project without Data (B12 slice) | M | done 2026-11-16 (`new-graph-nodata`, graphing.md 25, project-file-format.md); Origin behaviour of the two project items unmeasured |
 | [T72](T72-copy-paste-format.md) | Copy Format and Paste Format on graph, axis and legend (B2 slice 1) | M | open; Origin 2016 measured (graphing 26), Rust built (core module, menus, Apply Formats window) |
-| [T81](T81-partial-correlation-anova3-rmanova.md) | Partial Correlation Coefficient, Three-Way ANOVA, One-Way and Two-Way Repeated Measures ANOVA (B8 slice) | L | partial correlation and three-way ANOVA done; repeated measures ANOVA open (Origin 2016 measured, statistics.md 24-26) |
+| [T81](T81-partial-correlation-anova3-rmanova.md) | Partial Correlation Coefficient, Three-Way ANOVA, One-Way and Two-Way Repeated Measures ANOVA (B8 slice) | L | done 2026-11-16 (`partial-corr`, `anova3`, `rmanova`, statistics.md 24-26, Origin 2016 runs reproduced); left: Raw layout, missing values, two-way means comparisons, mean/plot graphs |
 
 For every active claim (including matrices/contour/heatmaps), read the current
 [HANDOFF table](../../HANDOFF.md). This index is not a second claims ledger. Older branches and

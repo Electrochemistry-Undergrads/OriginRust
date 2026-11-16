@@ -1,6 +1,7 @@
 //! Colour scales and bubble scales of a layer (T80, graphing spec 27).
 
 use super::*;
+use crate::layer_scale::bubble_levels;
 use crate::tests::{doc, svg_of, texts};
 use sheaf_core::layer_scale::{LayerScale, LayerScaleKind};
 use sheaf_core::template::Template;
@@ -64,13 +65,37 @@ fn a_bubble_scale_shows_four_circles_from_the_smallest_to_the_largest_value() {
     let (mut p, g) = graph(false, true);
     add(&mut p, g, LayerScaleKind::Bubble);
     let t = texts(&doc(&svg_of(&p, g)));
-    for label in ["1.00", "3.67", "6.33", "9.00", "Depth"] {
+    for label in ["1.00", "3.66", "6.32", "8.98", "Depth"] {
         assert!(t.iter().any(|s| s == label), "{label} in {t:?}");
     }
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     let o = scene.layers[0].objects.iter().find(|o| o.kind == scene::ObjectKind::Scale(0)).unwrap();
     let f = frame(&p, g);
     assert!(o.bounds.x >= f.x + f.w && o.bounds.x + o.bounds.w < scene.width);
+}
+
+fn assert_levels(got: &[f64], want: &[f64]) {
+    assert_eq!(got.len(), want.len(), "{got:?} vs {want:?}");
+    for (g, w) in got.iter().zip(want) {
+        assert!((g - w).abs() < 1e-9, "{got:?} vs {want:?}");
+    }
+}
+
+#[test]
+fn bubble_levels_truncate_the_step_to_two_decimals_as_origin_does() {
+    // Z 1..9: step 8 / 3 = 2.6667 truncates to 2.66, so 1, 3.66, 6.32, 8.98.
+    assert_levels(&bubble_levels(1.0, 9.0), &[1.0, 3.66, 6.32, 8.98]);
+}
+
+#[test]
+fn bubble_levels_fall_back_to_the_exact_step_when_truncation_gives_zero() {
+    // 0.01 / 3 = 0.00333 truncates to 0.00, so the exact thirds are used.
+    assert_levels(&bubble_levels(0.0, 0.01), &[0.0, 0.01 / 3.0, 0.02 / 3.0, 0.01]);
+}
+
+#[test]
+fn bubble_levels_are_one_value_when_all_values_are_equal() {
+    assert_levels(&bubble_levels(5.0, 5.0), &[5.0]);
 }
 
 #[test]

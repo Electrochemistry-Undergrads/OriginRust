@@ -4649,8 +4649,8 @@ Pasted into an untouched graph of the same data and read back (changed propertie
 
 Not measured: Origin 2016 is on Windows only and this slice was built on macOS from Origin's help, so everything
 below that is not a quoted fact is an unmeasured Sheaf choice. The one measured fact is in 14.16 (the bubble size
-legend: four circles at the smallest Z and three equal steps up to the largest, labelled 1.00, 3.66, 6.32, 8.98 for
-Z 1..9, titled with the Z column).
+legend: four circles at the smallest Z and three equal steps up to the largest, the step truncated to two decimals,
+labelled 1.00, 3.66, 6.32, 8.98 for Z 1..9, titled with the Z column).
 
 Origin's documentation [W] (https://www.originlab.com/doc/origin-help/colorscale,
 https://www.originlab.com/doc/origin-help/bubblescale):
@@ -4674,8 +4674,10 @@ Sheaf (this slice):
   nice ticks from `sunburst::scale_ticks` over `plots::z_range`, the smallest to the largest finite Z of the
   plot's rows). Title: the Z column's name.
 - Bubble scale: four circles of the plot's symbol style, sized as the symbols are (`BUBBLE_MIN_PT` to
-  `BUBBLE_MAX_PT`, linear in Z) at Z = lo + k (hi - lo) / 3, smallest at the top, labels with two decimals in the Y
-  tick font, titled with the Z column; one circle when all values are equal.
+  `BUBBLE_MAX_PT`, linear in Z) at Z = lo + k * step, smallest at the top, labels with two decimals in the Y tick font,
+  titled with the Z column; one circle when all values are equal. The step follows the measured 14.16 rule: `(hi -
+  lo) / 3` truncated to two decimals (Z 1..9 gives 2.66 and labels 1.00, 3.66, 6.32, 8.98), and the exact step when
+  that truncation gives zero. The truncation rule is inferred from that one measurement, not confirmed on other ranges.
 - Items: Graph > New Color Scale (active layer) is enabled when the active layer has a colour mapped plot, else
   grey with a reason; the legend context menu's Add Color Scale / Add Bubble Scale are enabled when the layer has a
   colour (size) mapped plot. One undo step each ("Add color scale", "Add bubble scale"). Graph > New Bubble Scale

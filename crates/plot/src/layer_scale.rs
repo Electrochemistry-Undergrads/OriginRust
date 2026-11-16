@@ -101,6 +101,19 @@ pub(crate) fn draw(
     }
 }
 
+/// The values of a bubble scale's circles, smallest first. Origin labels them `lo + k * step`, where the step is
+/// `(hi - lo) / 3` truncated to two decimals (measured on Z 1..9: 1.00, 3.66, 6.32, 8.98; graphing spec 14.16).
+/// When that truncation gives zero, the exact step is used. All values equal: one circle at `lo`.
+pub(crate) fn bubble_levels(lo: f64, hi: f64) -> Vec<f64> {
+    if hi <= lo {
+        return vec![lo];
+    }
+    let exact = (hi - lo) / (BUBBLES - 1) as f64;
+    let truncated = (exact * 100.0).trunc() / 100.0;
+    let step = if truncated > 0.0 { truncated } else { exact };
+    (0..BUBBLES).map(|k| lo + step * k as f64).collect()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn draw_bubbles(
     out: &mut Vec<Item>,
@@ -118,10 +131,8 @@ fn draw_bubbles(
     let x0 = f.x + f.w + offset + BAR_GAP_PT;
     text::place(out, m, title, &ya.title_font, title_size, (x0, f.y + ASCENT * title_size), Anchor::Start, 0.0);
     let mut y = f.y + (ASCENT + DESCENT) * title_size + 0.4 * title_size;
-    // All values equal: one circle at the middle size.
-    let n = if hi > lo { BUBBLES } else { 1 };
-    for k in 0..n {
-        let v = if n == 1 { lo } else { lo + (hi - lo) * k as f64 / (BUBBLES - 1) as f64 };
+    // Sized from the label values themselves; all values equal gives one circle.
+    for v in bubble_levels(lo, hi) {
         let mut style = pd.plot.symbol.clone();
         style.size_pt = BUBBLE_MIN_PT + (BUBBLE_MAX_PT - BUBBLE_MIN_PT) * z_fraction((lo, hi), v);
         // A row is as tall as its circle or its label, so that small circles do not crowd the labels.

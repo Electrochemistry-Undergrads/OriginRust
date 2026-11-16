@@ -334,6 +334,9 @@ pub struct Layer {
     /// waterfall). Only the drawing moves; the data stay as they are.
     #[serde(default, skip_serializing_if = "Stack::is_none")]
     pub stack: Stack,
+    /// Colour mapping of the curves of a [`Stack::Waterfall`] layer (graphing spec 13.17).
+    #[serde(default, skip_serializing_if = "WaterfallColor::is_none")]
+    pub waterfall_color: WaterfallColor,
     /// Settings of single curves for [`Layer::stack`], found by the curve's Y column: the offsets
     /// of [`Stack::Individual`] mode and which curve a fitted curve moves with.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -649,10 +652,34 @@ pub enum Stack {
     Constant { step: f64 },
     /// Each member is moved by its own offset from [`Layer::plot_offsets`].
     Individual,
+    /// Each member's drawn Y is its Y plus the sum of the Y values of all members before it at the
+    /// same row (graphing spec 13.15). Pointwise by row index, so it is not a pair of offsets: see
+    /// [`crate::stack::cumulative_add`]. Lines, scatter and line + symbol plots only.
+    Cumulative,
     /// A simple two-dimensional waterfall: member k is drawn moved right by `k * dx_percent` and
     /// up by `k * dy_percent` percent of the front frame, which shrinks to make room. Drawn only
     /// for a layer that is not linked to another and has no linked layers.
     Waterfall { dx_percent: f64, dy_percent: f64 },
+}
+
+/// How the curves of a waterfall layer are coloured (Origin's Waterfall Y:Color Mapping and Waterfall Z:Color
+/// Mapping). Sheaf's rules are in graphing spec 13.17.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WaterfallColor {
+    /// Each curve has the colour of its plot.
+    #[default]
+    None,
+    /// Each curve is coloured along its points by their Y values through the colour ramp.
+    Y,
+    /// Each curve is coloured as a whole by its Z value (see [`crate::stack::waterfall_z`]).
+    Z,
+}
+
+impl WaterfallColor {
+    pub fn is_none(&self) -> bool {
+        *self == WaterfallColor::None
+    }
 }
 
 impl Stack {
@@ -2490,12 +2517,24 @@ mod tests {
     }
 
     #[test]
+    fn waterfall_colour_mapping_is_saved_with_the_layer_and_defaults_to_none() {
+        let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
+        assert_eq!(layer.waterfall_color, WaterfallColor::None);
+        assert!(!serde_json::to_string(&layer).unwrap().contains("waterfall_color"));
+        layer.waterfall_color = WaterfallColor::Z;
+        let json = serde_json::to_string(&layer).unwrap();
+        assert!(json.contains(r#""waterfall_color":"z""#), "{json}");
+        assert_eq!(serde_json::from_str::<Layer>(&json).unwrap().waterfall_color, WaterfallColor::Z);
+    }
+
+    #[test]
     fn stack_modes_are_written_with_a_kind_and_read_back() {
         let cases = [
             (Stack::None, r#"{"kind":"none"}"#),
             (Stack::Auto { gap_percent: 10.0 }, r#"{"kind":"auto","gap_percent":10.0}"#),
             (Stack::Constant { step: -500.0 }, r#"{"kind":"constant","step":-500.0}"#),
             (Stack::Individual, r#"{"kind":"individual"}"#),
+            (Stack::Cumulative, r#"{"kind":"cumulative"}"#),
             (
                 Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 },
                 r#"{"kind":"waterfall","dx_percent":5.0,"dy_percent":10.0}"#,

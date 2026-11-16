@@ -109,6 +109,22 @@ bold [seen]. The horizontal divider can be dragged. Context menus [spec F].
   size of 22 for the default text [seen 2, `ax-title.png`, `opts-numfmt.png`]; the older note of 18
   pt in graphing.md is not what this installation shows. Tick label size was not read.
 
+### Existing command entry points (T63)
+
+Sheaf's Standard Duplicate button uses the active workbook or graph, even when a different
+Explorer row is selected, and is state-disabled without an active window. Explorer's window
+context Duplicate uses that clicked window, including a hidden one. Both call the existing
+Window > Duplicate operation, show and activate the copy, and create one undo step. Four UI
+regressions cover target identity, copies of empty/populated books and graphs, hidden windows,
+context cancellation and Undo/Redo; the existing Explorer and Window-menu tests also pass.
+
+The Plot > Statistics Probability Plot and Q-Q Plot entries remain unavailable, assigned to
+B8/T14 after the T63 C review. The published [plot_prob defaults](https://docs.originlab.com/x-function/ref/plot_prob/)
+include Blom scores and a 95% confidence band; Sheaf's existing descriptive-statistics tools
+use Filliben positions and lack that band control. Their dispatch cannot establish equivalent
+Plot-menu behavior. The existing tools remain documented in statistics section 16; no new
+Origin 2016 numeric measurement was made by this entry-point review.
+
 ## 2. Child windows
 
 Pictures: `gr-plain.png`, `grc-page.png`, `rc-titlebar.png`; second study `graph2-plain.png`,

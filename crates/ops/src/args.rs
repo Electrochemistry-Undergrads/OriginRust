@@ -637,7 +637,8 @@ pub struct StyleArgs {
     /// Hide the legend.
     #[arg(long)]
     pub no_legend: bool,
-    /// Move the curves apart: none; auto (each curve above the one before it with a gap of 10 %
+    /// Move the curves apart: none; cumulative (each curve is drawn at its Y plus the Y of the
+    /// curves before it at the same row); auto (each curve above the one before it with a gap of 10 %
     /// of the tallest curve); auto:GAP (gap in percent); step:STEP (curve k moved up by k * STEP
     /// axis units; write a negative step as --stack=step:-500).
     #[arg(long, value_name = "MODE", conflicts_with_all = ["offsets", "waterfall"])]

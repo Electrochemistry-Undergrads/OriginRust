@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **453 greyed items: 314 in the menu bar, 47 on the toolbars, 92 in context menus.**
+original inventory baseline. This is not a new runtime audit. **443 greyed items: 306 in the menu bar, 46 on the toolbars, 91 in context menus.**
 
 ## How to read and keep this file
 
@@ -39,8 +39,8 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T59` | 2 |
 | `T60` | 0 |
 | `T61` | 20 |
-| `T62` | 8 |
-| `T63` | 31 |
+| `T62` | 0 |
+| `T63` | 27 |
 | `B1` | 27 |
 | `B2` | 51 |
 | `B3` | 28 |
@@ -48,7 +48,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B5` | 33 |
 | `B6` | 31 |
 | `B7` | 8 |
-| `B8` | 14 |
+| `B8` | 16 |
 | `B9` | 13 |
 | `B10` | 6 |
 | `B11` | 10 |
@@ -60,7 +60,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 79 items, backlog packages (`B`) 354, not planned (`N`) 20.
+Briefs (`T`) hold 67 items, backlog packages (`B`) 356, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -117,13 +117,11 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B4` Line + Symbol: Line Series · 2 Point Segment · 3 Point Segment
 - `B4` Column/Bar/Pie: Column + Label · Grouped Columns (indexed data)
 - `T61` Multi-Y: 3Ys Y-YY · 3Ys Y-Y-Y · 4Ys Y-YYY · 4Ys YY-YY · Multiple Y Axes...
-- `T62` Y-offset/Waterfall: Waterfall Y:Color Mapping · Waterfall Z:Color Mapping
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
 - `B15` 3D Symbol/Bar/Vector: 3D Bars · 3D Scatter · 3D Trajectory · 3D Scatter + Error Bar · 3D Vector XYZ XYZ · 3D Vector XYZ dXdYdZ
-- `T62` Statistics: Stacked Histograms
-- `T63` Statistics: Probability Plot · Q-Q Plot
+- `B8` Statistics: Probability Plot · Q-Q Plot
 - `B4` Statistics: Grouped Box Charts · Interval Plot · Histogram + Probabilities · Marginal Histograms · Marginal Box Charts · 2D Kernel Density · QC (X bar R) Chart · Pareto · Scatter Matrix
 - `B14` Contour/Heat Map: Color Fill · B/W Lines + Labels · Gray Scale Map · Heat Map · Polar Contour theta(X) r(Y) · Polar Contour r(X) theta(Y) · Ternary Contour
 - `B14` Profile: Contour Profiles · Image Profiles
@@ -172,7 +170,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B3` Add Function Graph... · Add Straight Line... · New Table · New Color Scale · Convert to Standard Font Size
 - `T61` New Layer(Axes): Horizontal Axis Layer... · Vertical Axis Layer...
 - `B3` Legend: Add Legend Title
-- `T62` Offset Grouped Data in Layer: None · Cumulative · Constant · Auto · Individual
 
 ### Data
 - `B3` Set Display Range · Reset to Full Range · Mark Data Range · Clear Data Markers
@@ -225,7 +222,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 - `B12` Standard: New Graph
 - `B14` Standard: New Matrix · New Layout · New Notes
-- `T63` Standard: Duplicate
 - `T58` Format: Font name box · Font size box · Bold · Italic · Underline · Superscript · Subscript · Greek · Increase Font Size · Decrease Font Size · Font Color · Fill Color · Line Color
 - `B1` Graph: Zoom In · Zoom Out · Whole Page
 - `T61` Graph: Add Layer (Bottom-X Left-Y) · Add Layer (Top-X Left-Y) · Add Layer (Bottom-X Right-Y) · Add Layer (Top-X Right-Y) · Add Inset Graph
@@ -271,6 +267,5 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B11` Graph page > Duplicate (Batch Plotting): Duplicate
 - `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Delete Layer · Double click to open Plot Setup · Layer Properties...
 - `B12` Explorer folder: Properties...
-- `T63` Explorer window: Duplicate
 
 No greyed item was found in the label-cell menu or the Integrate gadget menu.

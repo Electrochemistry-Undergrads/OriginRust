@@ -6,6 +6,14 @@ Update the relevant brief/spec when resolving one; the historical snapshot is in
 
 ## Integration after the archived snapshot
 
+- T62 stack and offset leftovers (2026-11-15, macOS, no Origin, branch `stack-leftovers`): Graph > Offset Grouped Data in
+  Layer is live (one undo step, tick, no-op on the current mode, synced with Plot Details); `Stack::Cumulative` sums
+  line/scatter/line+symbol plots pointwise by row (missing, filtered or out-of-range rows add 0; fits ride on the
+  leader's sum; `--stack cumulative`); Plot > Statistics > Stacked Histograms and `-t stacked-histograms` (one panel per
+  column from the top, linked X, bins from the union of all values); Plot > Y-offset/Waterfall Y/Z colour mapping
+  (`-t waterfall-y|waterfall-z`, segment colours by mean Y or curve colours by Z from the long name/comments/index, colour
+  scale beside the layer). `.opj` writes plain curves and warns; `.sheaf` keeps all. All unmeasured (graphing 13.15-13.17).
+
 - T59 worksheet cell formatting steps 1, 2 and 4 (2026-11-15, macOS, no Origin, branch `cell-format`):
   `cellformat.rs` ranges (column ids, open-ended row spans, label rows; whole columns are one record) with
   upkeep for row insert/delete, sorts (formats follow rows), column delete, duplicate/append and analysis

@@ -1214,6 +1214,18 @@ impl SheafApp {
             self.doc.apply("Hide data plot", |p| objects::set_plot_visible(p, graph, layer, plot, false));
             return;
         }
+        if let GraphOp::SetStack { layer, stack } = op {
+            let same = self
+                .doc
+                .project()
+                .graph(graph)
+                .and_then(|g| g.layers.get(layer))
+                .is_none_or(|l| std::mem::discriminant(&l.stack) == std::mem::discriminant(&stack));
+            if !same {
+                self.doc.apply("Offset grouped data in layer", |p| graph_view::apply_op(p, graph, op, None));
+            }
+            return;
+        }
         let label = match op {
             GraphOp::SetPlotKind { .. } => "Change plot type",
             GraphOp::HideAxis { .. } => "Hide axis",
@@ -1236,7 +1248,7 @@ impl SheafApp {
             GraphOp::MovePlotToAxis { right: true, .. } => "Move plot to right Y axis",
             GraphOp::MovePlotToAxis { .. } => "Move plot to left Y axis",
             GraphOp::RemoveTrendline { .. } => "Remove trendline",
-            GraphOp::HidePlot { .. } => unreachable!("handled above"),
+            GraphOp::HidePlot { .. } | GraphOp::SetStack { .. } => unreachable!("handled above"),
         };
         // The present axis ranges, for the zoom (an automatic axis has no stored limits).
         let resolved = sheaf_plot::layout_geometry(self.doc.project(), graph).ok();
@@ -2900,6 +2912,14 @@ impl SheafApp {
             tool: graph.and_then(|g| self.graphs.get(&g)).map_or(GraphTool::Pointer, |s| s.tool()),
             curve: graph.and_then(|g| self.graph_curve(g)),
             layer_curves: graph.map(|g| self.graph_layer_curves(g)).unwrap_or_default(),
+            stack: graph.and_then(|g| {
+                let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
+                project.graph(g)?.layers.get(layer).map(|l| l.stack)
+            }),
+            can_cumulate: graph.is_some_and(|g| {
+                let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
+                project.graph(g).and_then(|gr| gr.layers.get(layer)).is_some_and(sheaf_core::stack::layer_cumulates)
+            }),
         }
     }
 

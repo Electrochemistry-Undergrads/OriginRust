@@ -14,6 +14,7 @@ mod cell_format;
 mod cell_notes;
 mod comparison_plot;
 mod cond_format;
+mod duplicate_entries;
 mod excel;
 mod export_themes;
 mod fill_inclusive;
@@ -650,7 +651,7 @@ fn the_stack_tab_has_origins_offset_choices_and_auto_gap() {
     {
         assert!(has_label(&h, label), "{label}");
     }
-    assert!(is_disabled(&h, "Cumulative") && is_disabled(&h, "Show Connect Line on Stacked Column/Bar"));
+    assert!(!is_disabled(&h, "Cumulative") && is_disabled(&h, "Show Connect Line on Stacked Column/Bar"));
     h.get(By::new().role(egui::accesskit::Role::RadioButton).label("Auto")).click();
     settle(&mut h);
     click(&mut h, "OK");
@@ -3864,7 +3865,7 @@ fn the_window_menu_of_the_explorer_has_origins_commands_and_the_live_ones_work()
     for name in ["Show", "Hide", "Rename...", "Delete", "Duplicate", "Properties..."] {
         assert!(h.query_by_label(name).is_some(), "{name}");
     }
-    assert!(h.get_by_label("Duplicate").accesskit_node().is_disabled(), "Sheaf cannot duplicate a window yet");
+    assert!(!h.get_by_label("Duplicate").accesskit_node().is_disabled(), "the window can be duplicated");
     click(&mut h, "Hide");
     assert!(!h.state().workspace.is_shown(book));
     assert_eq!(project(&h).workbooks().count(), 1, "hiding keeps the data");
@@ -6212,6 +6213,48 @@ fn multi_panel_items_make_one_panel_per_selected_column() {
 }
 
 #[test]
+fn stacked_histograms_item_makes_one_shared_bin_panel_per_selected_column() {
+    let mut h = start(vec![data_file("stackhist")]);
+    let (b, c) = select_b_and_c(&mut h);
+    // The bar has a Statistics menu of its own further right; the submenu of Plot is the leftmost.
+    menu_entry(&h, "Plot").click();
+    settle(&mut h);
+    let inner = h
+        .query_all_by_label_contains("Statistics")
+        .filter(|n| n.accesskit_node().label().unwrap_or_default().trim_end_matches(" \u{23f5}") == "Statistics")
+        .min_by(|a, b| a.rect().min.x.total_cmp(&b.rect().min.x))
+        .expect("the Statistics submenu of Plot");
+    inner.click();
+    settle(&mut h);
+    menu_entry(&h, "Stacked Histograms").click();
+    settle(&mut h);
+    assert_eq!(project(&h).graphs().count(), 2);
+    let g = project(&h).graphs().last().unwrap();
+    assert_eq!(g.layers.len(), 2);
+    assert_eq!(g.layers[0].plots[0].y, b, "the first column is the top panel");
+    assert_eq!(g.layers[1].plots[0].y, c);
+    assert_eq!(g.layers[0].plots[0].hist, g.layers[1].plots[0].hist);
+    assert!(g.layers[0].plots[0].hist.bin_size.is_some());
+    assert!(g.page_frame(0).top < g.page_frame(1).top);
+}
+
+#[test]
+fn waterfall_colour_mapping_items_make_colour_mapped_waterfalls() {
+    use sheaf_core::graph::WaterfallColor;
+    for (item, want) in
+        [("Waterfall Y:Color Mapping", WaterfallColor::Y), ("Waterfall Z:Color Mapping", WaterfallColor::Z)]
+    {
+        let mut h = start(vec![data_file("wfmap")]);
+        select_b_and_c(&mut h);
+        menu_path(&mut h, &["Plot", "Y-offset/Waterfall", item]);
+        let g = project(&h).graphs().last().unwrap();
+        assert_eq!(g.layers[0].waterfall_color, want, "{item}");
+        assert_eq!(g.layers[0].plots.len(), 2);
+        assert!(matches!(g.layers[0].stack, Stack::Waterfall { .. }));
+    }
+}
+
+#[test]
 fn y_error_plots_a_scatter_with_the_error_bars_of_the_error_column() {
     let mut h = start(vec![data_file("yerr")]);
     let book = project(&h).workbooks().next().unwrap().id;
@@ -6818,6 +6861,104 @@ fn exchange_axes_swaps_the_columns_and_the_axis_settings_in_one_undo_step() {
     assert_eq!(h.state().doc.undo_label(), Some("Exchange X-Y axes"));
     menu(&mut h, "Edit", "Undo Exchange X-Y axes");
     assert_eq!(graph(&h).layers[0], before);
+}
+
+const OFFSET_MENU: &str = "Offset Grouped Data in Layer";
+
+#[test]
+fn offset_grouped_data_menu_sets_the_stack_mode_through_history_and_ticks_the_current_one() {
+    let mut h = start(vec![data_file("offset-menu")]);
+    assert_eq!(h.state().menu_context().stack, Some(Stack::None), "None is ticked at the start");
+    let undo_before = h.state().doc.undo_label().map(str::to_string);
+    for (entry, want) in [
+        ("Cumulative", Stack::Cumulative),
+        ("Constant", Stack::Constant { step: 1.0 }),
+        ("Auto", Stack::Auto { gap_percent: 8.0 }),
+        ("Individual", Stack::Individual),
+        ("None", Stack::None),
+    ] {
+        menu_path(&mut h, &["Graph", OFFSET_MENU, entry]);
+        assert_eq!(graph(&h).layers[0].stack, want, "{entry}");
+        assert_eq!(h.state().menu_context().stack, Some(want), "the tick follows {entry}");
+    }
+    assert_ne!(h.state().doc.undo_label().map(str::to_string), undo_before);
+    // One undo step per change.
+    menu_path(&mut h, &["Graph", OFFSET_MENU, "Cumulative"]);
+    assert_eq!(h.state().doc.undo_label(), Some("Offset grouped data in layer"));
+    menu(&mut h, "Edit", "Undo Offset grouped data in layer");
+    assert_eq!(graph(&h).layers[0].stack, Stack::None);
+    menu(&mut h, "Edit", "Redo Offset grouped data in layer");
+    assert_eq!(graph(&h).layers[0].stack, Stack::Cumulative);
+}
+
+#[test]
+fn choosing_the_current_offset_mode_is_a_no_op_that_keeps_its_settings() {
+    let mut h = start(vec![data_file("offset-noop")]);
+    h.state_mut().doc.apply("Test", |p| {
+        p.graph_mut(window_ids_of(p)).unwrap().layers[0].stack = Stack::Auto { gap_percent: 25.0 };
+    });
+    let label = h.state().doc.undo_label().map(str::to_string);
+    menu_path(&mut h, &["Graph", OFFSET_MENU, "Auto"]);
+    assert_eq!(graph(&h).layers[0].stack, Stack::Auto { gap_percent: 25.0 }, "the stored gap is kept");
+    assert_eq!(h.state().doc.undo_label().map(str::to_string), label, "no undo step");
+}
+
+#[test]
+fn cumulative_is_disabled_on_a_layer_without_a_line_scatter_or_symbol_plot() {
+    let mut h = start(vec![data_file("offset-cumulative-column")]);
+    assert!(h.state().menu_context().can_cumulate, "a line plot cumulates");
+    menu_path(&mut h, &["Graph", OFFSET_MENU]);
+    assert!(!menu_entry(&h, "Cumulative").accesskit_node().is_disabled());
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    edit_graph(&mut h, |g| g.layers[0].plots.iter_mut().for_each(|p| p.kind = PlotKind::Column));
+    assert!(!h.state().menu_context().can_cumulate);
+    let undo = h.state().doc.undo_label().map(str::to_string);
+    menu_path(&mut h, &["Graph", OFFSET_MENU]);
+    assert!(menu_entry(&h, "Cumulative").accesskit_node().is_disabled());
+    assert!(!menu_entry(&h, "Constant").accesskit_node().is_disabled(), "the other modes still work");
+    menu_entry(&h, "Cumulative").click();
+    settle(&mut h);
+    assert_eq!(graph(&h).layers[0].stack, Stack::None);
+    assert_eq!(h.state().doc.undo_label().map(str::to_string), undo, "no undo step");
+    // The same in Plot Details.
+    assert!(!sheaf_core::stack::layer_cumulates(&graph(&h).layers[0]));
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Stack");
+    assert!(is_disabled(&h, "Cumulative"));
+    assert!(!is_disabled(&h, "Constant"));
+}
+
+fn window_ids_of(p: &Project) -> WindowId {
+    p.graphs().next().unwrap().id
+}
+
+#[test]
+fn the_offset_menu_and_plot_details_stay_in_sync() {
+    let mut h = start(vec![data_file("offset-sync")]);
+    menu_path(&mut h, &["Graph", OFFSET_MENU, "Cumulative"]);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Stack");
+    let radio = |h: &Harness<'static, SheafApp>, label: &str| {
+        h.get(By::new().role(egui::accesskit::Role::RadioButton).label(label)).accesskit_node().toggled()
+    };
+    assert_eq!(radio(&h, "Cumulative"), Some(egui::accesskit::Toggled::True));
+    h.get(By::new().role(egui::accesskit::Role::RadioButton).label("Constant")).click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(h.state().menu_context().stack, Some(Stack::Constant { step: 1.0 }));
+    // And the other way: Plot Details can switch to Cumulative.
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Stack");
+    h.get(By::new().role(egui::accesskit::Role::RadioButton).label("Cumulative")).click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(graph(&h).layers[0].stack, Stack::Cumulative);
 }
 
 #[test]

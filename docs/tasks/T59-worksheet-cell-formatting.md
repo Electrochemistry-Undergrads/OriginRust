@@ -13,6 +13,18 @@ independent openpyxl file review pass. No UI, renderer or project-model changes.
 GUI, toolbar or print changes. Six independent output regressions and all 50 existing Excel
 tests pass. Combined workspace validation follows before publication.
 
+Vertical-alignment measurement slice (`codex/t59-cell-vertical-align`, 2026-11-16):
+selected A1 and Worksheet Properties Data Format/Size controls were inspected in Origin
+2016. No vertical text-alignment choice was found in these routes; another supported
+route and its mutation semantics remain unestablished (GUI 3). No model/UI field was
+added from that negative evidence. Successful captures and identity-guard cleanup are
+hashed locally; failed/unselected/early-paint attempts are excluded.
+Formatting, strict workspace all-target Clippy and 4,205 combined tests pass
+(8 existing ignored); inventory, eight Python tooling tests and frozen source/golden
+hashes pass. Six Native actors and their owned instances/guards/helpers are terminal;
+accepted screenshots/control lists were inspected and hashed. This is a measurement
+slice; supported per-range vertical alignment remains unestablished.
+
 **Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry), `codex/t59-worksheet-controls` (underline/fill/keys), `codex/t59-worksheet-dialog` (dialog measurements/More entry), `codex/t59-custom-colors` (one-off RGB chooser), `codex/t59-classic-colors` (24 Classic worksheet presets), `codex/t59-xlsx-formats` (Excel cell styles). **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;
 [GUI](../spec/gui-look.md) 3. **Inventory:** 1 remaining location tagged `T59` (worksheet-wide scope); the three unsupported text-control choices are B5.

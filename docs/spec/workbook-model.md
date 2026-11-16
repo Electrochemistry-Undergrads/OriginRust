@@ -579,6 +579,10 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   unsupported text controls (B5). Its Worksheet Properties Format tab instead has category
   defaults (Data > Standard, plus headers and label categories); the current range model does
   not implement that layer, so F4 stays disabled (GUI 3, measurements 2026-11-16).
+- **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
+  Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
+  inspected routes. Other routes and mutation semantics remain unestablished; this probe
+  does not justify adding a new per-range field. Existing placement remains in use.
 - **Conditional formats.** Conditional fill and text colour override manual ones; bold, italic,
   underline, font, size and alignment stay manual.
 - **Maintenance.** Row insert/delete shift, grow, shrink or drop spans of the affected columns

@@ -8995,6 +8995,7 @@ mod find_project;
 mod fit_organizer;
 mod graph_themes;
 mod new_from_template;
+mod qc_chart;
 mod reimport;
 mod sampling;
 mod sheet_navigate;

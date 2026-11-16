@@ -45,6 +45,7 @@ mod slope;
 mod straight_line;
 pub use slope::{NOT_USABLE as SLOPE_NOT_USABLE, check_point as slope_check_point};
 mod marginal_plot;
+mod qc_plot;
 mod stack;
 mod stock_plot;
 mod sunburst;

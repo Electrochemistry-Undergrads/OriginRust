@@ -45,6 +45,7 @@ pub mod notes;
 pub mod page_setup;
 pub mod panels;
 pub mod project;
+pub mod qc;
 pub mod reimport;
 pub mod reshape;
 pub mod rowfilter;

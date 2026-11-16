@@ -1141,7 +1141,9 @@ fn plot_menu() -> Vec<Entry> {
                     item("Marginal Histograms", Cmd::Plot(Template::MarginalHistograms)),
                     item("Marginal Box Charts", Cmd::Plot(Template::MarginalBoxCharts)),
                 ],
-                greys(&["2D Kernel Density", "QC (X bar R) Chart", "Scatter Matrix", "Probability Plot", "Q-Q Plot"]),
+                greys(&["2D Kernel Density"]),
+                vec![item("QC (X bar R) Chart", Cmd::Plot(Template::QcXbarR))],
+                greys(&["Scatter Matrix", "Probability Plot", "Q-Q Plot"]),
             ]
             .concat(),
         ),

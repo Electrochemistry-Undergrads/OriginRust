@@ -1558,6 +1558,11 @@ pub enum PlotKind {
     /// A marginal box chart (T110): the box of the plot's Y column, lying in the top margin or standing in the
     /// right one.
     MarginalBox,
+    /// The subgroup means of an X bar R chart (T111): squares with a line to the centre line
+    /// [`PlotDecor::qc_center`].
+    QcMeans,
+    /// The subgroup ranges of an X bar R chart (T111): bars from the centre line [`PlotDecor::qc_center`].
+    QcRanges,
     /// Origin's Parallel Plot (2019, Parallel.otpu): the plot's Y column is one vertical axis; every row is a
     /// line through the axes of all the layer's parallel plots, coloured by a numeric column (graphing spec 14.25).
     Parallel,
@@ -1607,6 +1612,10 @@ impl PlotKind {
     }
 
     /// True for [`PlotKind::Parallel`] and [`PlotKind::ParallelIndex`].
+    pub fn is_qc(&self) -> bool {
+        matches!(self, PlotKind::QcMeans | PlotKind::QcRanges)
+    }
+
     pub fn is_marginal(&self) -> bool {
         matches!(self, PlotKind::MarginalHistogram | PlotKind::MarginalBox)
     }
@@ -1851,6 +1860,9 @@ pub struct PlotDecor {
     /// The margin a marginal histogram or box stands in (T110).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marginal: Option<crate::marginal::MarginalSide>,
+    /// The centre line of an X bar R chart's means or ranges (T111).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub qc_center: Option<f64>,
 }
 
 pub use sheaf_calc::trend::TrendKind;

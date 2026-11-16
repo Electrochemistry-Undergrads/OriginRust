@@ -51,6 +51,10 @@ pub(crate) fn draw_plot(
     m: &dyn TextMeasurer,
 ) {
     let plot = pd.plot;
+    if plot.kind.is_qc() {
+        crate::qc_plot::draw_qc(out, pd, geom);
+        return;
+    }
     if plot.kind.is_marginal() {
         crate::marginal_plot::draw_marginal(out, pd, geom);
         return;

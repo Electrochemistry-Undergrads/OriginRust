@@ -49,6 +49,7 @@ pub mod multivariate_options;
 pub mod plot_setup;
 pub mod power;
 pub mod printing;
+pub mod qc_chart;
 pub mod recovery;
 pub mod reshape;
 pub mod rm_options;

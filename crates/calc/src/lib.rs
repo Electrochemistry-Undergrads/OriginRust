@@ -49,6 +49,7 @@ pub mod pca;
 pub mod peakchain;
 pub mod peaks;
 pub mod power;
+pub mod qc;
 pub mod rmanova;
 pub mod roc;
 pub mod signal;

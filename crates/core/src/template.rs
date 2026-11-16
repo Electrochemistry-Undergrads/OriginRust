@@ -36,6 +36,8 @@ pub enum Template {
     /// Plot > Statistics > Marginal Histograms and Marginal Box Charts (T110).
     MarginalHistograms,
     MarginalBoxCharts,
+    /// Plot > Statistics > QC (X bar R) Chart (T111): the range chart and, linked above it, the mean chart.
+    QcXbarR,
     /// Line plot with a symbol on every point.
     LineSymbol,
     /// Cyclic voltammetry overlay: smooth lines without markers, no grid,
@@ -183,7 +185,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 71] = [
+    pub const ALL: [Template; 72] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -255,6 +257,7 @@ impl Template {
         Template::StockLine,
         Template::MarginalHistograms,
         Template::MarginalBoxCharts,
+        Template::QcXbarR,
     ];
 
     /// The name used on the command line and in menus.
@@ -273,6 +276,7 @@ impl Template {
             Template::StockLine => "stock-line",
             Template::MarginalHistograms => "marginal-histograms",
             Template::MarginalBoxCharts => "marginal-box-charts",
+            Template::QcXbarR => "qc-xbar-r",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
@@ -349,6 +353,7 @@ impl Template {
             Template::StockLine => "Stock Line",
             Template::MarginalHistograms => "Marginal Histograms",
             Template::MarginalBoxCharts => "Marginal Box Charts",
+            Template::QcXbarR => "QC (X bar R) Chart",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
@@ -468,6 +473,7 @@ impl Template {
             Template::StockLine => themed(general(id, name, PlotKind::Line)),
             Template::MarginalHistograms => marginal(id, name, PlotKind::MarginalHistogram),
             Template::MarginalBoxCharts => marginal(id, name, PlotKind::MarginalBox),
+            Template::QcXbarR => qc_xbar_r(id, name),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
             Template::Multi3YYy | Template::Multi3YYY | Template::Multi4YYyy | Template::Multi4YyYy => {
@@ -1045,6 +1051,33 @@ fn marginal(id: WindowId, name: &str, kind: PlotKind) -> Graph {
     g
 }
 
+/// Origin's X bar R chart (T111, measured): the range chart at 13.99 %, 47.95 %, 65.01 % x 37 % of the
+/// page, and the mean chart linked above it (top -107 %, the same size) sharing its X scale. No legends.
+fn qc_xbar_r(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::QcRanges);
+    let range = &mut g.layers[0];
+    range.frame = Frame { left: 0.1399, top: 0.4795, width: 0.6501, height: 0.37 };
+    range.legend.visible = false;
+    range.x_axis.title = Some("Subgroup Number".into());
+    range.y_axis.title = Some("Range".into());
+    for axis in [&mut range.x_axis, &mut range.y_axis] {
+        axis.show_opposite = true;
+        axis.opposite_ticks = false;
+    }
+    let mut mean = right_y_layer(range, 0);
+    mean.frame = Frame { left: 0.0, top: -1.07, width: 1.0, height: 1.0 };
+    mean.default_kind = PlotKind::QcMeans;
+    mean.x_axis.side = AxisSide::Normal;
+    mean.x_axis.show_tick_labels = false;
+    mean.x_axis.show_title = false;
+    mean.x_axis.show_opposite = true;
+    mean.y_axis.side = AxisSide::Normal;
+    mean.y_axis.show_opposite = true;
+    mean.y_axis.title = Some("Subgroup Mean (XBAR)".into());
+    g.layers.push(mean);
+    g
+}
+
 fn double_y(id: WindowId, name: &str) -> Graph {
     let mut g = general(id, name, PlotKind::Line);
     let layer = &mut g.layers[0];
@@ -1250,7 +1283,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 71);
+        assert_eq!(Template::ALL.len(), 72);
+        assert_eq!(Template::from_name("qc-xbar-r"), Some(Template::QcXbarR));
         assert_eq!(Template::from_name("marginal-histograms"), Some(Template::MarginalHistograms));
         assert_eq!(Template::from_name("marginal-box-charts"), Some(Template::MarginalBoxCharts));
         assert_eq!(Template::from_name("ohlc-volume"), Some(Template::OhlcVolume));

@@ -308,6 +308,8 @@ pub enum ProjectError {
     StockColumns(&'static str),
     #[error("{0}")]
     MarginalColumns(&'static str),
+    #[error("an X bar R chart takes subgroups of 2 to 10 values and a column with numbers (asked for {0})")]
+    QcSubgroup(usize),
     #[error("a lollipop plot needs two or more Y columns (got {0}); select at least two Y columns")]
     LollipopNeedsTwoColumns(usize),
     #[error("a lollipop plot cannot have a right Y axis; use one Y axis or another template")]
@@ -996,6 +998,11 @@ impl Project {
         }
         if matches!(template, Template::MarginalHistograms | Template::MarginalBoxCharts) {
             return self.plot_marginal(template, ys);
+        }
+        // An X bar R chart of the first column in Origin's default subgroups of 3 (the app asks for the size).
+        if template == Template::QcXbarR {
+            let y = *ys.first().ok_or(ProjectError::QcSubgroup(crate::qc::DEFAULT_GROUP))?;
+            return self.plot_qc_xbar_r(y, crate::qc::DEFAULT_GROUP).map(|(_, g)| g);
         }
         if template == Template::Lollipop && ys.len() < 2 {
             return Err(ProjectError::LollipopNeedsTwoColumns(ys.len()));

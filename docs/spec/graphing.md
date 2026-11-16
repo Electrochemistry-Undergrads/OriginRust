@@ -5312,3 +5312,44 @@ Probed with twelve (X, Y) points selected as A(X), B(Y).
     axes keep Sheaf's usual end margins.
   - The .opj writer saves the margins as scatter plots of their values, with a warning.
 
+## 33. QC (X bar R) chart: Plot > Statistics > QC (X bar R) Chart (T111, measured 2026-11-16, Origin 2016)
+
+Probed with 20 values in column B, selected alone.
+
+- Origin first asks "Please specify subgroup size for Book1_B" (window "X bar R chart", default 3).
+- It writes a new workbook `QC1`:
+  - columns Mean(Y), R(Y) and Sigma(Y), one row per subgroup;
+  - a "Make QC Chart" panel (Worksheet, Group Size, Num Sigma 3.0, Column 1, Column 2, Graph Window).
+- It then plots a graph `XbarR1`.
+- Subgroups are taken in row order, and a short last subgroup is kept: 20 values in groups of 3 gave 7
+  subgroups, the last of 2. Sigma is the subgroup's sample standard deviation.
+- Statistics (graph table "X bar R chart"):
+  - X Bar is the mean of the means; R Bar is the mean of the ranges.
+  - Sigma = R Bar / (d2 sqrt(n)), with the exact d2 (1.692569 for n = 3; the rounded 1.693 does not match).
+  - UCL and LCL = X Bar +- 3 Sigma.
+  - Range UCL = D4 R Bar with the table D4 (2.575 for n = 3); Range LCL = D3 R Bar (0 for n < 7).
+  - Probe: X Bar 10.13095, R Bar 0.6714, Sigma 0.2290, UCL 10.81804, LCL 9.443862, Range UCL 1.728929,
+    Range LCL 0.
+- Layers:
+  - Layer 1 (range chart) sits at left 13.99 %, top 47.95 %, width 65.01 %, height 37 % of the page.
+  - Layer 2 (mean chart) is linked at left 0, top -107 %, width 100 %, height 100 % (in units of layer 1).
+  - X runs 0 to subgroups + 1 with step 1, shared.
+  - The mean chart's Y axis runs from LCL - 0.3 (UCL - LCL) to UCL + 0.3 (UCL - LCL); the range chart's
+    from 0 to 1.5 Range UCL. Tick labels have two decimals.
+  - Titles: "Subgroup Mean (XBAR)", "Range" and "Subgroup Number"; the mean chart has no X tick labels.
+    No legends.
+- Drawing:
+  - The means are small black squares, each with a line to the centre line.
+  - The ranges are red, black-edged bars from the centre line, 0.8 of the spacing wide.
+  - Each chart has a blue centre line and red limit lines, labelled right of the frame in their colours:
+    "UCL = 10.82", "CL = 10.13", "LCL = 9.444", "UCL = 1.729", "CL = 0.6714", "LCL = 0" (four
+    significant digits).
+  - A hatched band fills the gap between the layers. The statistics table stands right of the page.
+- Sheaf (`sheaf_calc::qc`, `Project::plot_qc_xbar_r`, plot kinds `qc_means` / `qc_ranges` with
+  `PlotDecor::qc_center`, template `qc-xbar-r`):
+  - Same workbook, statistics, layers, ranges, lines and labels. The lines are the layers' straight lines;
+    the labels are free text labels.
+  - Subgroup sizes are 2 to 10, at 3 sigma.
+  - Left out: the hatched band, the statistics table, the "Make QC Chart" panel, and a Num Sigma setting.
+  - `plot_columns` with the template (the CLI) uses subgroups of 3.
+

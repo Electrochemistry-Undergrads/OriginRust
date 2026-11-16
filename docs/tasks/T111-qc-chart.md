@@ -1,6 +1,6 @@
 # T111: QC (X bar R) Chart
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `qc-chart`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 33): measured (subgroup prompt, QC1 workbook, statistics with the exact d2 and table D3/D4, layers, axis ranges, lines and labels) and built: calc `qc`, `Project::plot_qc_xbar_r`, plot kinds qc_means/qc_ranges, the prompt. Left: the hatched band, the statistics table, the Make QC Chart panel, Num Sigma, subgroups over 10.
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Statistics > QC (X bar R) Chart).
 **Spec:** `docs/spec/graphing.md` (a new section).
 

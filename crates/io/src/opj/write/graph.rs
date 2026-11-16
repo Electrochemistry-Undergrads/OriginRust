@@ -808,6 +808,8 @@ impl Writer {
                 PlotKind::VectorXyam | PlotKind::VectorXyxy => CurveKind::Scatter,
                 PlotKind::HighLowClose | PlotKind::Candlestick | PlotKind::OhlcBar => CurveKind::Scatter,
                 PlotKind::MarginalHistogram | PlotKind::MarginalBox => CurveKind::Scatter,
+                PlotKind::QcMeans => CurveKind::Scatter,
+                PlotKind::QcRanges => CurveKind::Column,
                 PlotKind::LineSymbol => CurveKind::LineSymbol,
                 PlotKind::Column
                 | PlotKind::StackedColumn

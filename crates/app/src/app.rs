@@ -217,6 +217,7 @@ pub struct SheafApp {
     find_spec: crate::project_find::FindSpec,
     /// Window > Duplicate (Batch Plotting).
     batch_plot: Option<crate::dialogs::batch_plot::BatchPlotDialog>,
+    qc_chart: Option<crate::dialogs::qc_chart::QcDialog>,
     /// The explorer folder's Properties....
     folder_props: Option<crate::dialogs::folder_props::FolderPropsDialog>,
     /// Save Format as Theme (with the copied axis format) and the Theme Organizer (T102).
@@ -359,6 +360,7 @@ impl SheafApp {
             find_project: None,
             find_spec: Default::default(),
             batch_plot: None,
+            qc_chart: None,
             folder_props: None,
             save_theme: None,
             theme_organizer: None,
@@ -3168,6 +3170,17 @@ impl SheafApp {
         } else {
             Vec::new()
         };
+        // An X bar R chart asks for the subgroup size of the one selected numeric column first (T111).
+        if template == Template::QcXbarR {
+            let project = self.doc.project();
+            let numeric: Vec<ColumnId> =
+                columns.iter().copied().filter(|id| project.column(*id).is_some_and(|c| c.data.is_numeric())).collect();
+            match numeric[..] {
+                [column] => self.qc_chart = crate::dialogs::qc_chart::QcDialog::new(project, column),
+                _ => self.warn("Select one numeric column for the X bar R chart".to_string()),
+            }
+            return;
+        }
         // A Pareto chart counts the cells of the one selected column, text or numbers.
         if template == Template::Pareto {
             let [column] = columns[..] else {
@@ -3371,6 +3384,28 @@ impl SheafApp {
     }
 
     /// Duplicate (Batch Plotting): OK makes the copies, one undo step, and brings the last forward.
+    /// Plot > Statistics > QC (X bar R) Chart's subgroup prompt (T111).
+    fn show_qc_chart(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::qc_chart::QcOutcome;
+        let Some(d) = &mut self.qc_chart else { return };
+        let (column, size) = match d.show(ctx) {
+            QcOutcome::Open => return,
+            QcOutcome::Closed => {
+                self.qc_chart = None;
+                return;
+            }
+            QcOutcome::Make { column, size } => (column, size),
+        };
+        self.qc_chart = None;
+        match self.doc.edit("QC (X bar R) Chart", |p| p.plot_qc_xbar_r(column, size)) {
+            Ok((_, graph)) => {
+                self.focus(graph);
+                self.say(format!("Made an X bar R chart in subgroups of {size}"));
+            }
+            Err(e) => self.warn(e.to_string()),
+        }
+    }
+
     fn show_batch_plot(&mut self, ctx: &egui::Context) {
         use crate::dialogs::batch_plot::BatchOutcome;
         let Some(d) = &mut self.batch_plot else { return };
@@ -4957,6 +4992,7 @@ impl SheafApp {
         self.show_sheet_navigate(ctx);
         self.show_find_project(ctx);
         self.show_batch_plot(ctx);
+        self.show_qc_chart(ctx);
         self.show_folder_props(ctx);
         self.show_graph_themes(ctx);
         if let Some(o) = &mut self.fit_organizer

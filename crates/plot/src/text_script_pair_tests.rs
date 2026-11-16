@@ -236,3 +236,46 @@ fn paired_positions_survive_vector_and_pdf_exports() {
     let pdf = crate::raster::to_pdf(&svg, crate::SystemFonts::shared()).unwrap();
     assert!(pdf.starts_with(b"%PDF-") && pdf.trim_ascii_end().ends_with(b"%%EOF"));
 }
+
+#[test]
+fn legend_tick_labels_and_rotated_axis_title_use_the_shared_pair_columns() {
+    let (mut project, graph) =
+        crate::tests::project(sheaf_core::template::Template::Line, vec![0.0, 1.0], vec![vec![0.0, 1.0]]);
+    let layer = &mut project.graph_mut(graph).unwrap().layers[0];
+    layer.legend.text = Some(r"L\=(1234,5)R".into());
+    layer.legend.font = Font::new("Arial", 20.0);
+    layer.legend.frame = true;
+    layer.x_axis.min = Some(0.0);
+    layer.x_axis.max = Some(1.0);
+    layer.x_axis.major_step = Some(1.0);
+    layer.x_axis.tick_font = Font::new("Arial", 20.0);
+    layer.x_axis.tick_prefix = r"X\=(i,j)Z".into();
+    layer.y_axis.title = Some(r"Y\=(k,LM)N".into());
+    layer.y_axis.title_font = Font::new("Arial", 20.0);
+    let scene = crate::layout::build_scene(&project, graph, &FixedMetrics).unwrap();
+    let ts = texts(&scene.layers[0].overlay);
+    let at = ts.iter().position(|t| t.text == "L").unwrap();
+    assert_eq!(ts[at..at + 4].iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), ["L", "5", "1234", "R"]);
+    near(ts[at + 1].x, ts[at + 2].x);
+    near(ts[at + 3].x - ts[at + 1].x, 26.4);
+    let geom = &crate::layout_geometry(&project, graph).unwrap()[0];
+    let ticks: Vec<_> = ts.windows(4).filter(|t| t[0].text == "X").collect();
+    assert_eq!(ticks.len(), 2);
+    for (tick, value) in ticks.iter().zip([0.0, 1.0]) {
+        assert_eq!((tick[1].text.as_str(), tick[2].text.as_str()), ("j", "i"));
+        near(tick[1].x, tick[2].x);
+        near(tick[3].x - tick[1].x, 6.6);
+        assert!(tick[1].y < tick[0].y && tick[2].y > tick[0].y);
+        let total = 11.0 + 6.6 + tick[3].text.chars().count() as f64 * 11.0;
+        near(tick[0].x + total / 2.0, geom.data_to_page(value, 0.0).0);
+    }
+    let at = ts.iter().position(|t| t.text == "Y").unwrap();
+    assert_eq!(ts[at..at + 4].iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), ["Y", "LM", "k", "N"]);
+    assert!(ts[at..at + 4].iter().all(|t| t.rotate_ccw == 90.0));
+    near(ts[at + 1].y, ts[at + 2].y);
+    near(ts[at + 1].y - ts[at + 3].y, 13.2);
+    assert!(ts[at + 1].x < ts[at].x && ts[at + 2].x > ts[at].x);
+    let svg = crate::svg::write_svg(&scene);
+    assert!(!svg.contains(r"\=("));
+    assert!(crate::tests::texts(&crate::tests::doc(&svg)).iter().any(|t| t == "1234"));
+}

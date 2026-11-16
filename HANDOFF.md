@@ -71,6 +71,15 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+T58 paired sub/superscript columns: `\=(sub,sup)` now uses Origin-measured shared left
+columns and maximum branch advance, with nested style/font/colour/Greek restoration,
+60% script size and 49% up / 35% down baselines (graphing 7.10). Twenty native controls
+and four size checks, ten regressions, SVG/stroke PNG goldens and actual legend/tick/
+rotated-title layout cover the shared export path. Editor insertion remains separate.
+Formatting, strict workspace/all-target Clippy and 4,047 tests pass (eight existing ignored),
+with four test threads and frozen source/golden hashes. Inventory 340 and eight Python
+tooling tests pass. No editor, model, IO or general backend changes in this slice.
+
 T83 Origin measurements (2026-11-16, Claude Windows, docs only, graphing 14.29): Origin 2016's Interval Plot
 uses the same Student-t 95 % interval as Sheaf but a two-entry legend and the Y title "Range"; its Pareto
 (raw data) puts the cumulative points at the bar centres, labels them, and scales the count axis to 1.1 x
@@ -335,7 +344,6 @@ captures pass with source hashes unchanged.
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `codex/text-script-pairs` | Codex Windows, text-script-pairs | T58 step 1 renderer remainder: paired sub/superscript escape, measured shared-column placement, nested styles and glyph/stroke/export regressions | claimed 2026-11-16; own `.claude/worktrees/codex-formula-parameter-labels` + `target/wt-formula-parameter-labels` reused after b964/font release; markup/text, new private tests/lib registration and own goldens; graphing 7.10 (custom RGB 7.9 reserved). No editor/picker/toolbar/menus/dispatch, fonts/core/model/IO/general backends, worksheet/stats/MCP/shape/layers, reserved tasks or other scopes. |
 | `codex/t58-custom-text-colors` | Codex Windows | T58 step 2 custom RGB text-colour choice in shared label/title/legend editor | claimed 2026-11-16; own `.claude/worktrees/codex-t01-error-bars-dialog` + `target/wt-t01-error-bars-dialog` sequentially reused after shipped b701ca20/all actors terminal; private palette/picker, editor prefix adapter and ephemeral TextDialog RGB state, new own UI/helper tests and registration, graphing 7.9/T58. Existing published RGB markup only; no Core/model/IO/renderer/fonts/parser/backends (text-run-fonts), full Classic24 expansion, worksheet/shared Format controller (T59), general menus/actions/dispatch, graph_view/shapes/layers, legend title, stats/calc/MCP, formula/parameter labels, reserved T26/T27/T29/T16 item6 or pending ROOT files. |
 | `codex/t59-worksheet-dialog` | Codex Windows | T59 slice 3: Origin worksheet-format/category measurements and measured Set Data Style > More... path to existing selected-range Format Cells; correct unsupported text-control placeholders | claimed 2026-11-16; own `.claude/worktrees/codex-t13-skip-points` + `target/wt-t13-skip-points` sequentially reused after shipped b79d6e99 and all actors terminal; existing/new private worksheet formatting dialog/helpers, bounded Format/cell-menu entries/actions/dispatch, own UI tests and registration, GUI 3/workbook 13b/T59. Existing cell-format model first. No clipboard/Copy variants (T88), sampling/data range, graph text/editor/toolbar/renderer/fonts/markup, general grid/layout/print (T27) or IO writer, calc/stats/MCP/formula-parameter labels, reserved T26/T29/T16 item6 or ROOT pending files. Requested final main PRODUCT-push integration window 2026-11-16 05:05 through 05:30 Central Standard Time, after T89 release; please batch other product pushes outside it so one combined validation can finish. Docs-only claims are fine. Releases on publication, failure or deadline. |
 | `shape-resize` | Codex macOS, continuous-mac | T24 selected drawn-shape endpoint/corner resize handles; app graph_view/actions/shape edits, interaction safety and focused tests | claimed 2026-11-15; worktree `.claude/worktrees/shape-resize`; no clipboard, slope-tool behavior, file-format/model changes or other sessions’ scope |

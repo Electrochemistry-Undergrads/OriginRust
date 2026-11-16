@@ -13,9 +13,17 @@ Second renderer slice (`codex/text-run-colors`): indexed `\cN(text)` colours com
 nested font/script styles and underline/strikeout strokes. The 24-colour Classic list and
 numeric boundaries are measured from Origin 2016 EMF records (graphing 7.2); independent
 glyph/stroke/export fixtures and new colour SVG/PNG goldens cover them. Font switching,
-combined scripts, tagged RGB/special colour syntax and the separately claimed editor/toolbar
+combined scripts, other special colour syntax and the separately claimed editor/toolbar
 work remain open. Formatting, strict workspace all-target Clippy and 3,654 combined tests
 pass (eight existing ignored), as do the 414-item inventory and eight Python tooling tests.
+Third renderer slice (`codex/text-run-rgb`): RGB-tagged numeric colour escapes use the
+measured one-based text-code convention, including channel borrows, black/white boundaries
+and nested restoration. Graphing 7.3 records ten native RGB and twelve boundary controls;
+seven regressions and new SVG/stroke PNG goldens cover glyphs, strokes and vector/raster
+exports. Font-family switches, combined scripts and other special colour tags remain open;
+editor/toolbar work stays with its owners.
+Formatting, strict workspace all-target Clippy and 3,677 combined tests pass (eight existing
+ignored); inventory 407 and all eight Python tooling tests pass.
 Whole-object toolbar slice (`codex/t58-format-toolbar`): shared target/snapshot/dispatch;
 installed family, size, Bold/Italic, measured 1.2 size scaling and eight basic font colours for
 selected labels/legends/titles. Seven toolbar locations enabled; the six other toolbar controls
@@ -50,8 +58,8 @@ layout. Record unmeasured choices explicitly; do not describe them as measured O
 
 ## Where
 
-- `crates/plot/src/markup.rs`: `Run` carries bold/italic/scale/rise. `\u`, `\s` and `\cN` retain
-  text without the requested style. `\f:Name` currently changes Symbol/Greek mapping, **not the
+- `crates/plot/src/markup.rs`: `Run` carries bold/italic/underline/strikeout/colour/scale/rise.
+  `\u`, `\s` and indexed/RGB `\cN` render through shared text placement. `\f:Name` currently changes Symbol/Greek mapping, **not the
   font family**. Keep nesting limits and `plain()` while extending runs.
 - `crates/plot/src/text.rs`, `scene.rs` and backends (`svg.rs`, `eps.rs`, `emf.rs`, raster/PDF):
   carry run font/colour and decoration geometry, including rotation.

@@ -495,7 +495,7 @@ fn gap(ui: &mut Ui) {
     }
 }
 
-/// A box like the font name and size lists, greyed: Sheaf cannot format objects yet.
+/// A disabled font/size placeholder for a bar without a formatting target.
 fn text_box(ui: &mut Ui, text: &str, width: f32, name: &str) {
     disabled_text_box(ui, text, width, name, NOT_YET);
 }

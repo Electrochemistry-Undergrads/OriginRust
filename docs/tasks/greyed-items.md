@@ -44,9 +44,10 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T65` | 0 |
 | `T66` | 10 |
 | `T67` | 0 |
+| `T70` | 2 |
 | `B1` | 3 |
 | `B2` | 51 |
-| `B3` | 27 |
+| `B3` | 25 |
 | `B4` | 28 |
 | `B5` | 33 |
 | `B6` | 31 |
@@ -63,7 +64,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 55 items, backlog packages (`B`) 329, not planned (`N`) 20.
+Briefs (`T`) hold 57 items, backlog packages (`B`) 327, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -196,7 +197,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B16` Programming Control...
 - `B2` Object Properties...
 - `B2` Snap Layers to Grid · Snap Objects to Grid [Graph]
-- `B3` Fit Page To Printer [Graph]
+- `T70` Fit Page To Printer [Graph]
 - `B15` Axes: Z Axis... [Graph]
 - `T63` Axis Tick Labels: X Axis Tick Labels... · Y Axis Tick Labels... [Graph]
 - `T58` Axis Titles: X Axis Title... · Y Axis Title... [Graph]
@@ -244,7 +245,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B6` Worksheet corner: Column Header · Row Header · Column Grid · Row Grid · Page Break Preview Lines
 - `B6` Worksheet corner > Row Labels for Column Label Rows: Long Name · Units · Comments · F(x)= · Sparklines · Parameters
 - `B3` Graph plot: Change X · Change Y · Ungroup
-- `B3` Graph axis: Center
+- `T70` Graph axis: Center
 - `B11` Graph axis: Save Format as Theme...
 - `B2` Graph axis > Copy Format: All · All Style Formats · Axis
 - `B2` Graph axis title: Cut · Copy · Bring to the front · Push to the back

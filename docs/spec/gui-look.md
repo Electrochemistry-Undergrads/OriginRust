@@ -572,8 +572,24 @@ Cancel, Escape and the close box discard the draft. Starting from the current ma
 choice changes only the captured range and property, preserving other styles and data, with
 one Undo for an effective change. Selection, project-generation or revision changes invalidate
 the request. Text and fill survive native project and `.opj` companion reopen through the
-existing fields. Full Classic, palette storage, HSL and eyedropper controls remain open; graph
-Format controls and the separate T58 text editor retain their own behaviour.
+existing fields. Palette storage, HSL and eyedropper controls remain open; graph Format controls and the
+separate T58 text editor retain their own behaviour.
+
+**Classic worksheet presets (Origin 2016, measured 2026-11-16).** Both worksheet palettes
+show the original 24 Classic colours above the additional colour lists. All 24 swatch-centre
+RGB triples were measured from each palette and agree with the published [Classic list](https://docs.originlab.com/labtalk/ref/list-of-colors/).
+Selecting Dark Yellow text, Dark Cyan fill and Royal text affected only A1; Fill None cleared
+that fill while retaining Royal text, with neighbouring cells and source values unchanged.
+Captures and RGB measurements remain local in `re-workspace/scratch/t59-classic-colors/`.
+Dark Yellow is RGB 128/128/0, Olive is 0/128/0 and Royal is 0/0/160; Green remains 0/255/0.
+
+Sheaf keeps the eight existing named choices and adds **More Classic colors** with the other
+16 to worksheet Font Color and Fill Color. The compact text-submenu grouping is a Sheaf UI
+choice; Origin uses swatches. These choices use the existing captured range requests, effective
+no-op checks and one-step Undo, including independent labels and compact whole columns. Both
+menu levels close after a choice; the separate Custom... RGB chooser remains available. Graph
+palettes and the T58 text editor keep their own lists. Other native colour lists and palette
+storage remain open.
 
 Cells use installed regular/bold/italic faces with UI glyph fallbacks; missing styles use the
 existing synthetic fallback. The default is Arial 9 pt (12 logical pixels at 96 dpi). Explicit

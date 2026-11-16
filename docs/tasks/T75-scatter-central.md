@@ -1,6 +1,6 @@
 # T75: Scatter Central (B4, slice 3)
 
-**Status:** in progress 2026-11-15 (branch `scatter-central`, Claude Windows, session fe4b37eb).
+**Status:** done 2026-11-16 (branch `scatter-central`, Claude Windows, session fe4b37eb; graphing 18.13).
 **Size:** S-M. **Inventory:** Plot > Symbol > Scatter Central (1).
 
 ## Origin facts (measured 2026-11-15, Origin 2016, scratch `re-workspace/scratch/t71`)

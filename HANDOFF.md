@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **381 listed item locations** at the planning
-  baseline (278 menu bar, 20 toolbar, 83 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **380 listed item locations** at the planning
+  baseline (277 menu bar, 20 toolbar, 83 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -70,6 +70,9 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## Latest integration
+
+T75 (`scatter-central`, B4 slice 3): Plot > Symbol > Scatter Central as Origin 2016's (both axes at
+-50 %, boxed frame, titles at the axis ends); `Axis::offset_pct` now works for X (graphing 18.13).
 
 T73 (`change-xy`, B3 slice 3): plot right-click Change X, Change Y and Ungroup as measured in Origin
 2016 (column lists, greying, no rescale, colours kept on Ungroup; graphing 15.7d).
@@ -229,7 +232,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `copy-format` | Claude Windows, "continue all tasks" | B2 slice 1 as new brief T72: Copy Format (All, style groups) and Paste Format on graph, axis, legend and page; new core format_clip.rs, menu items, Paste Format dialog | claimed 2026-11-15; no shape selection/resize, object align/group/order, object cut/copy/paste, T58/T59 toolbar |
 | `b5-fill` | Claude Windows, "t30-origin" | B5 slice as new brief T74: Column > Fill Column With A set of Numbers / Date/Time values / Text&Numeric values (Origin patternN/D/T, measured), menus and column-header context menu | claimed 2026-11-15; worktree wf_c03644a9-997-1, build target/wf-excel; not Row Numbers/random fills (T63), no other B5 items |
 | `grouped-indexed` | Claude macOS, "mac-format-bar" | B4 slice as new brief T75: Plot > Column/Bar/Pie > Grouped Columns (indexed data) and Plot > Statistics > Grouped Box Charts (data grouped by an index/category column) | claimed 2026-11-15; worktree `.claude/worktrees/grouped-indexed`, `target/wt-grouped`; core template/plot grouping, plot drawing, Plot menu items, ops/mcp template names, graphing spec section, T75 brief. Built from Origin's documentation on macOS (no Origin), unmeasured choices labelled. Not Line Series, Column Scatter, other statistics/stock/specialized plots, T71 segments or other sessions' scopes |
-| `scatter-central` | Claude Windows, session fe4b37eb | B4 slice 3 as new brief T75: Plot > Symbol > Scatter Central (both axes at 50 % of the frame): X axis offset like the Y axis offset_pct of T61 (core axis field use, plot layout/hit-testing of an inner X axis), template, menu, Origin 2016 measurements | claimed 2026-11-15; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; not Line Series, Column Scatter or other B4 items; no T72/T74/grouped-indexed scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

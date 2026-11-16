@@ -3910,6 +3910,17 @@ grouped. Sheaf: `Template::VerticalDropLine` (scatter, `decor.drop.vertical` on,
 data labels of grouped columns and bars are now centred on their own bar. CLI `-t vertical-drop-line`, `-t
 column-label`.
 
+### 18.13 Scatter Central (T75, measured 2026-11-15)
+
+Origin 2016's Plot > Symbol > Scatter Central is the scatter graph with both axes crossing in the middle
+of a boxed frame: `layer.x.position` and `layer.y.position` -50 with `posType` 1 (percent), against 0
+for Scatter. The Y title stands horizontally above the frame at the Y axis' x, the X title rotated left
+of the frame at the X axis' height. Sheaf: template `scatter-central` (menu, `sheaf plot -t
+scatter-central`) with `Axis::offset_pct` -50 on both axes (the X offset is new here: percent of the
+frame height, "% From Bottom/Top" in the axis window), the frame drawn as a box, and the titles of any
+axis moved into the frame placed at its end as above; offsets 0 and outward (T61) are unchanged. New
+layers start at offset 0. `.opj` notes a lost X offset as it does a Y one.
+
 ### 20.1 Sheaf's rules
 
 **Superseded in part by 20.4 and 20.6** (Origin measured, Sheaf changed to follow it): the click in Mask mode,

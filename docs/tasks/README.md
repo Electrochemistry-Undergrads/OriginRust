@@ -117,6 +117,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T116](T116-kernel-density-2d.md) | Plot > Statistics > 2D Kernel Density | M | done 2026-11-16 (graphing 38), not measured (Origin COM unregistered); left: measure and match |
 | [T117](T117-piper.md) | Plot > Specialized > Piper | M | done 2026-11-16 (graphing 39), not measured (Origin COM unregistered); left: measure and match |
 | [T118](T118-data-markers.md) | Graph Data menu: Set Display Range, Reset to Full Range, Mark Data Range, Clear Data Markers (B3 slice) | M | done 2026-11-16 (graphing 40), not measured (Origin COM unregistered); left: measure and match |
+| [T119](T119-add-function-graph.md) | Graph > Add Function Graph... (B3 slice) | S | claimed 2026-11-16 (`function-graph`, Claude Windows) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: Origin measured (graphing 24); Copy Format and Paste Format on graph, axis and legend, Apply Formats window; left: object cut/copy/paste, align, group, order (rest of B2) |

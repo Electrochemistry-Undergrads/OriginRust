@@ -71,6 +71,16 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+**T124 Pivot Table (`pivot-table`, 2026-11-17, Windows, scheduled Claude session):** Worksheet >
+Pivot Table... after Origin's `wpivot` (in Origin 2016, but COM was unavailable, so not measured):
+one or more row sources, a column source, Count/Sum/Mean/Min/Max of a data column, Row Totals and
+Column Totals, the five row and five column sorts, Normalize (fraction/percent), Show Missing as
+0, and the column-label position; a new sheet `Pivot1` as one undo step. Core `pivot.rs`, window
+`dialogs/pivot.rs` (Combine/Others, extra values and the user-parameter position shown disabled).
+Choices in workbook-model.md 13n. With it package B7 is complete. Fmt, strict all-target Clippy,
+full workspace 4,435 passed / 0 failed / 8 ignored, inventory 275. Worth measuring against Origin
+2016 when COM works again.
+
 **T123 Conditional Highlight (`cond-highlight`, 2026-11-17, Windows, scheduled Claude session):**
 the last grey item of Worksheet > Conditional Formatting. Conditions are Origin's `wcolor` codes
 0-8 (from the X-Function's TreeNode reference, which lists them in text where the help page only
@@ -802,7 +812,6 @@ is released; other sessions' claims are preserved.
 | `function-graph` | Claude Windows, "t30-origin" | B3 slice as new brief T119: Graph > Add Function Graph... (curve of y = f(x) in the active layer) | claimed 2026-11-16; worktree swap-transpose, build target/wf-excel |
 | `hist-prob` | Claude Windows, session fe4b37eb | B4 slice as new brief T85: Plot > Statistics > Histogram + Probabilities (histogram with the cumulative probability curve on a right axis); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no other B4 plots (T83 interval/Pareto is done) or other sessions' scopes |
 | `gadgets-1` | Claude Windows, "continue all tasks" | B9 slice 1 as new brief T101: Gadgets > Statistics, Quick Fit, Differentiate, Interpolate, Vertical Cursor on the Integrate gadget's ROI framework; new app gadget modules, small graph_view.rs hooks, Gadgets menu | claimed 2026-11-16; no other gadgets, shape-resize, T58/T59, multi-Y legends |
-| `pivot-table` | Claude Windows, scheduled "cond-heatmap" | B7 slice as new brief T124: Worksheet > Pivot Table; new core pivot.rs, new dialog, menu item, workbook-model spec | claimed 2026-11-17; worktree `.claude/worktrees/small-diffs`, build `target/wt-small-diffs`; no reshape.rs changes, no other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

@@ -71,6 +71,20 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+**Scheduled Claude session of 2026-11-17 (T120-T124), decisions and next step:** B7 is complete
+(Conditional Formatting T120-T123, Pivot Table T124; inventory 283 -> 275). It reused worktree
+`.claude/worktrees/small-diffs` with a new build folder `target/wt-small-diffs` (every older build
+folder belonged to an active session; C: had 154 GB free), which is free for reuse now. Looked at and
+left on purpose: B6 corner Column Header / Row Header (they change the grid's fixed row-header width
+and header strip across frozen panes in `grid.rs`, next to active T59 work; do them with T59's owner
+or after it), B12 Arrange Icons (Sheaf always lays minimised windows out in a bottom strip, so the
+item would do nothing), B8 Probability/Q-Q Plot entries (wait for the `stats-origin` T14 work).
+Suggested next: B8 Multiple Peak Fit (Origin's `nlfitpeaks`: Peak Function, Get Points by double-click
+or Enter, Fit / Open NLFit; docs.originlab.com/origin-help/fit-multipeakfit-tool), reusing the Data
+Reader's point picking (`crates/app/src/reader.rs`) and the Peak Analyzer's multi-peak fit; coordinate
+with `gadgets-1` before touching `graph_view.rs`. Pivot Table and the conditional rules should be
+measured against Origin 2016 when its COM registration works again (Pivot Table exists there).
+
 **T124 Pivot Table (`pivot-table`, 2026-11-17, Windows, scheduled Claude session):** Worksheet >
 Pivot Table... after Origin's `wpivot` (in Origin 2016, but COM was unavailable, so not measured):
 one or more row sources, a column source, Count/Sum/Mean/Min/Max of a data column, Row Totals and

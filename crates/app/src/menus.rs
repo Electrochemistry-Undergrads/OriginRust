@@ -180,6 +180,8 @@ pub enum Cmd {
     SetCategorical,
     /// Worksheet > Transpose, Stack, Unstack, Split Columns, Reduce Rows.
     Reshape(ReshapeKind),
+    /// Worksheet > Pivot Table.
+    PivotTable,
     /// Column > Filter > Add or Remove Filter, Enable/Disable Filter, Reapply Filter.
     RowFilterDialog,
     ToggleRowFilter,
@@ -1366,7 +1368,7 @@ fn worksheet_menu() -> Vec<Entry> {
         cond_format_menu(),
         item("Clear Worksheet...", Cmd::ClearWorksheet),
         item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
-        grey("Pivot Table..."),
+        item("Pivot Table...", Cmd::PivotTable),
         item("Reduce Rows...", Cmd::Reshape(ReshapeKind::Reduce)),
         item("Transpose...", Cmd::Reshape(ReshapeKind::Transpose)),
         item("Stack Columns...", Cmd::Reshape(ReshapeKind::Stack)),
@@ -2802,6 +2804,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SetCategorical(some()?)
         }
         Cmd::Reshape(kind) => Action::Reshape { book: book?, columns: c.selected.to_vec(), kind: *kind },
+        Cmd::PivotTable => Action::PivotTable { book: book?, columns: c.selected.to_vec() },
         Cmd::ReverseOrder => {
             book?;
             Action::ReverseColumns(some()?)

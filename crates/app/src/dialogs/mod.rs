@@ -47,6 +47,7 @@ pub mod math_curves;
 pub mod merge_graphs;
 pub mod multi_y;
 pub mod multivariate_options;
+pub mod pivot;
 pub mod plot_setup;
 pub mod power;
 pub mod printing;

@@ -476,6 +476,11 @@ pub enum Action {
         columns: Vec<ColumnId>,
         kind: crate::dialogs::reshape::ReshapeKind,
     },
+    /// Worksheet > Pivot Table: open the window; the table goes to a new sheet.
+    PivotTable {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     /// Column > Reverse Order: turn the values of each selected column round.
     ReverseColumns(Vec<ColumnId>),
     /// Empty every column of the active sheet of this workbook (one undo step).

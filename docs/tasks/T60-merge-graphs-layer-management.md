@@ -37,6 +37,15 @@ frozen source/goldens, current desktop lists/merged view and independent five-pa
 An initial MCP socket reset passed its exact target and the full retry without MCP edits.
 All owned actors are terminal; remaining T60 gaps are not marked complete.
 
+Dialog-width correction (`codex/t60-merge-dialog-viewport`, 2026-11-16): the vertical viewport
+uses the dialog width so short source choices no longer clip longer option labels. Only scroll
+sizing changes; source modes, selection/order, merge options, history and saves are retained.
+Before/after current-desktop captures establish the layout correction: the scrollbar moves
+from x284/x300 to x528 in the same 968-pixel client view. Fmt, strict workspace/all-target Clippy,
+all 4,360 tests (eight ignored), all 12 existing merge UI regressions, inventory283, eight Python
+tests and frozen source/goldens pass. Fresh owned accessibility captures and independent PNG
+export pass; all owned actors are terminal. No new behavior tests or enabled items were added.
+
 **Branch:** `merge-graphs`. **Priority:** P0, wave 2, owner's stacked-figure priority.
 **Spec:** [graphing](../spec/graphing.md) 15 (add Merge Graph Windows and Layer Management
 subsections); ADR 0009. **Inventory:** 0 locations tagged `T60`.

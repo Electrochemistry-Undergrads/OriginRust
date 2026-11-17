@@ -3294,6 +3294,11 @@ multilayer grouping, layout, Undo and native/companion saves reuse the existing 
 New-graph destination placement and visibility/open-only handling retain their existing scope;
 these filters add no folder mutations, model fields, IO format or CLI/MCP options.
 
+The Merge dialog's vertical scroll viewport fills the available dialog width. Short source
+choices no longer shrink its clipping rectangle around the narrow top controls, so longer
+option labels remain readable. The existing height limit, source choices and footer remain.
+This is a Sheaf layout correction, checked against desktop captures, not a new Origin measurement.
+
 **Command line:** `sheaf merge-graphs PROJECT (--graph NAME ... | --all-graphs) [--rows N]
 [--cols N] [--gap H,V] [--margins L,R,T,B] [--portrait] [--page-size W,H] [--keep-aspect]
 [--link] [--share-x] [--hide-inner] [--text-scale auto|keep|FACTOR] [--remove-sources] [-o FIGURE]

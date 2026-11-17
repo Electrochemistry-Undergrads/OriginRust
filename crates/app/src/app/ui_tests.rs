@@ -79,6 +79,7 @@ mod treemap;
 mod view_modes;
 mod violin;
 mod worksheet_classic_colors;
+mod worksheet_color_wells;
 mod worksheet_controls;
 mod worksheet_custom_colors;
 mod worksheet_fonts;

@@ -141,55 +141,52 @@ pub fn menu(ui: &mut egui::Ui, prefix: &str) -> Option<Color> {
     let mut chosen = None;
     let response = ui
         .add_enabled_ui(enabled, |ui| {
-            egui::containers::menu::SubMenuButton::new(format!("{prefix}: Custom colors"))
-                .config(
-                    egui::containers::menu::MenuConfig::new()
-                        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
-                )
-                .ui(ui, |ui| {
-                    let mut removed = None;
-                    egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
-                        for color in values {
-                            let response = ui
-                                .horizontal(|ui| {
-                                    let (rect, _) =
-                                        ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-                                    ui.painter().rect_filled(
-                                        rect,
-                                        0.0,
-                                        egui::Color32::from_rgb(color.r, color.g, color.b),
-                                    );
-                                    ui.button(format!("{prefix}: Custom {},{},{}", color.r, color.g, color.b))
-                                })
-                                .inner;
-                            if response.clicked() {
-                                chosen = Some(color);
-                                ui.close();
-                            }
-                            // A memory-backed context popup replaces the toolbar's root popup.
-                            // Keep this child open locally so its parent continues to be drawn.
-                            let context_id = response.id.with("custom_color_remove");
-                            let mut context_open = ui.data_mut(|d| d.get_temp::<bool>(context_id)).unwrap_or(false);
-                            context_open |= response.secondary_clicked();
-                            egui::Popup::context_menu(&response)
-                                .open_bool(&mut context_open)
-                                .at_position(response.rect.right_top())
-                                .show(|ui| {
-                                    if ui.button("Remove custom color").clicked() {
-                                        removed = Some(color);
-                                        ui.close();
-                                    }
-                                });
-                            ui.data_mut(|d| d.insert_temp(context_id, context_open));
+            let contents = |ui: &mut egui::Ui| {
+                let mut removed = None;
+                egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
+                    for color in values {
+                        let response = ui
+                            .horizontal(|ui| {
+                                let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+                                ui.painter().rect_filled(rect, 0.0, egui::Color32::from_rgb(color.r, color.g, color.b));
+                                ui.button(format!("{prefix}: Custom {},{},{}", color.r, color.g, color.b))
+                            })
+                            .inner;
+                        if response.clicked() {
+                            chosen = Some(color);
+                            ui.close();
                         }
-                    });
-                    if let Some(color) = removed {
-                        remove(color);
-                        ui.close();
+                        // A memory-backed context popup replaces the toolbar's root popup.
+                        // Keep this child open locally so its parent continues to be drawn.
+                        let context_id = response.id.with("custom_color_remove");
+                        let mut context_open = ui.data_mut(|d| d.get_temp::<bool>(context_id)).unwrap_or(false);
+                        context_open |= response.secondary_clicked();
+                        egui::Popup::context_menu(&response)
+                            .open_bool(&mut context_open)
+                            .at_position(response.rect.right_top())
+                            .show(|ui| {
+                                if ui.button("Remove custom color").clicked() {
+                                    removed = Some(color);
+                                    ui.close();
+                                }
+                            });
+                        ui.data_mut(|d| d.insert_temp(context_id, context_open));
                     }
-                    error(ui);
-                })
-                .0
+                });
+                if let Some(color) = removed {
+                    remove(color);
+                    ui.close();
+                }
+                error(ui);
+            };
+            let label = format!("{prefix}: Custom colors");
+            let config =
+                egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
+            if egui::containers::menu::is_in_menu(ui) {
+                egui::containers::menu::SubMenuButton::new(label).config(config).ui(ui, contents).0
+            } else {
+                egui::containers::menu::MenuButton::new(label).config(config).ui(ui, contents).0
+            }
         })
         .inner;
     response.widget_info(|| {

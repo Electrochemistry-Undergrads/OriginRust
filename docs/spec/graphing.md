@@ -1122,7 +1122,7 @@ deferred under 7.6; accents, conditional spaces, wrapping and line separation
 remain separate work. Regressions compare styles, placement, rotation, vector/
 raster output and actual legend/title/tick scenes with explicit Unicode controls.
 
-### 7.12 Reusable Custom RGB wells (T58, documented contract)
+### 7.12 Reusable Custom RGB wells (T58/T59, documented contract)
 
 Origin's [FAQ130](https://docs.originlab.com/quick-help/define-custom-colors/)
 documents custom wells in the font-colour chooser and, for 2016 onward, adding
@@ -1140,7 +1140,8 @@ offers the pool in all three graph pickers; choosing a well uses their existing
 captured target/revision/generation checks, no-op handling and one-step Undo.
 An entry's context menu removes it from the pool without changing any applied
 object colour. The 24 Classic presets, None and numeric Apply/Cancel remain.
-Worksheet controls retain their separate pickers. The shared graph text editor
+Worksheet controls use this same pool through their existing draft dialogs (GUI3,
+workbook13b). The shared graph text editor
 also offers Add to Custom in its numeric picker and the same Custom colors pool.
 Adding stores only the preference and leaves the selected raw-text draft, caret,
 automatic-text state and document unchanged. Choosing a well maps its channels to
@@ -1166,8 +1167,8 @@ next startup. An explicit absent startup path keeps tests memory-only.
 
 Applied colours use existing project fields and export paths; unused wells are
 profile-only and are not embedded as a project palette. Named lists, OTH/PAL
-import/export, incremental plot lists, Color Manager and worksheet picker reuse
-remain deferred. No Core, renderer, font resolution or project/IO schema changes
+import/export, incremental plot lists and Color Manager remain deferred.
+No Core, renderer, font resolution or project/IO schema changes
 are part of this slice.
 
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]

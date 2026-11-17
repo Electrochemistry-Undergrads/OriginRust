@@ -673,7 +673,8 @@ Each key press is one Undo step; multiple presses in a frame retain their order.
 capture their opening selection/revision and cannot follow a changed target. Manual fills keep
 the existing conditional-colour precedence (still unmeasured). The palette is the basic eight
 colours plus None, with the custom RGB choice described below; native custom/system/recent
-palette storage is not implemented.
+system/recent palette storage is not implemented. Explicit reusable Custom wells
+use the separate profile policy below.
 
 **Custom worksheet colours (Origin 2016, measured 2026-11-16).** Both Font Color and Fill Color
 palettes have custom slots. Double-clicking an empty slot opens Colors on its Custom tab, with
@@ -690,8 +691,29 @@ Cancel, Escape and the close box discard the draft. Starting from the current ma
 choice changes only the captured range and property, preserving other styles and data, with
 one Undo for an effective change. Selection, project-generation or revision changes invalidate
 the request. Text and fill survive native project and `.opj` companion reopen through the
-existing fields. Palette storage, HSL and eyedropper controls remain open; graph Format controls and the
+existing fields. Named lists/project palettes, HSL and eyedropper controls remain open; graph Format controls and the
 separate T58 text editor retain their own behaviour.
+
+**Reusable worksheet Custom wells (T59, documented contract, 2026-11-17).**
+[FAQ130](https://docs.originlab.com/quick-help/define-custom-colors/) includes
+Format Cells and documents reusable chooser colours, with Add to Custom for2016+.
+No fresh Native measurement is claimed. Worksheet toolbar Custom... dialogs now
+offer the graph/editor pool from graphing7.12: Add stores a valid opaque numeric
+draft without formatting the sheet, and a saved choice seeds the numeric fields.
+The dialog remains open until its existing OK/valid numeric-field Enter or Cancel.
+Captured range/revision/generation, no-op and history rules are unchanged.
+
+Format Cells offers the same pool beside each optional text/fill colour. Choosing
+a well enables that colour in the dialog draft; only its existing Apply/OK commits
+changed properties. Add saves a present opaque draft colour, without changing the
+draft or document. None and nonopaque drafts cannot be added. The existing RGBA
+control and optional-colour checkbox retain their behavior. Cancel keeps added
+preferences and discards unapplied formatting. Context removal edits only the
+pool, preserving drafts and applied colours. Compact menu layout, shared profile,
+capacity/order, atomic storage and failure behavior are explicit Sheaf policies,
+not measured Native2016 layout or file formats. Category defaults/families, model,
+grid, print/export and IO engines are unchanged; existing fields preserve applied
+colours. Unused wells remain profile-only, with no project palette or new list format.
 
 **Classic worksheet presets (Origin 2016, measured 2026-11-16).** Both worksheet palettes
 show the original 24 Classic colours above the additional colour lists. All 24 swatch-centre
@@ -800,7 +822,7 @@ retains its existing manual-style subset: Font, Size (0 = Default), Bold/Italic/
 text/fill colour, horizontal alignment, Clear Formats, OK, Cancel and Apply. It starts from the
 first selected cell and applies only changed properties. The layout and choices of that subset
 remain Sheaf's policy; Origin's text-control and per-cell numeric-display features are not supplied
-by this window. Vertical alignment, full/custom palettes and remaining dialog/precedence
+by this window. Vertical alignment, named/project palettes and remaining dialog/precedence
 measurements remain open.
 **Vertical alignment probe (Origin 2016, 2026-11-16).** A numeric data cell A1 was
 selected before Format > Cell; the dialog reported `[Book1]Sheet1!A[1:1]`. Its Text

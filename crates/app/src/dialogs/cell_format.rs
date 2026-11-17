@@ -229,5 +229,10 @@ fn optional_color(ui: &mut egui::Ui, value: &mut Option<Color>, label: &str, def
         if let Some(c) = value {
             color_button(ui, c);
         }
+        let prefix = if label == "Use color" { "Cell text color" } else { "Cell fill color" };
+        if let Some(color) = crate::custom_colors::menu(ui, prefix) {
+            *value = Some(color);
+        }
+        crate::custom_colors::add_button(ui, *value, prefix);
     });
 }

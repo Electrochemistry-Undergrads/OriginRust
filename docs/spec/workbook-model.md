@@ -570,6 +570,15 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   a Sheaf policy; drafts do not mutate the project. Existing range/request fields preserve
   independent labels/data, compact whole columns, other styles and `.sheaf`/companion saves.
   Stale selection/generation/revision and effective no-ops create no history entry.
+- **Reusable custom wells.** The toolbar's numeric text/fill chooser and Format Cells
+  share the graph/editor profile pool (graphing7.12; GUI3). Add saves only a present
+  opaque draft colour; a stored choice seeds the numeric toolbar draft or optional
+  dialog colour. Existing OK/Apply commits formats; Cancel discards uncommitted
+  changes while retaining preferences. Removing a well changes no draft or applied
+  format. Existing range/label/whole-column/history/stale and save/export paths
+  remain unchanged. This is a documented reusable-chooser contract with explicit
+  Sheaf menu/profile policies, not a new Native2016 measurement. No model fields
+  or project palette are added; unused wells stay profile-only.
 - **Classic presets.** The worksheet Font Color and Fill Color menus include all 24 native
   Classic RGB colours (GUI 3, measurements 2026-11-16). The additional 16 names are grouped in a
   submenu, a Sheaf UI choice. They reuse the same captured range changes and persistence as

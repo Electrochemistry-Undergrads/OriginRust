@@ -71,6 +71,16 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+**T123 Conditional Highlight (`cond-highlight`, 2026-11-17, Windows, scheduled Claude session):**
+the last grey item of Worksheet > Conditional Formatting. Conditions are Origin's `wcolor` codes
+0-8 (from the X-Function's TreeNode reference, which lists them in text where the help page only
+has a screenshot): equal/not equal, greater/less (or equal), between, text that contains, custom;
+Join None/And/Or; Origin's default colours. Custom is a Sheaf expression in `x` (the cell's number),
+checked before OK. Core `condformat/highlight.rs`. Not measured; left: Date/Time names and date
+entry, statistics values, whole-row extend, text values in custom conditions. B7 now holds only
+Pivot Table and Find in Project. Fmt, strict all-target Clippy, full workspace 4,428 passed / 0
+failed / 8 ignored, inventory 276.
+
 **T122 Conditional Format Manager (`cond-manager`, 2026-11-17, Windows, scheduled Claude session):**
 Worksheet > Conditional Formatting > Conditional Format Manager... lists the active sheet's formats
 (top rule first) with Name, Range and a short Rule text; double-click renames, Edit Rule reopens the
@@ -792,7 +802,6 @@ is released; other sessions' claims are preserved.
 | `function-graph` | Claude Windows, "t30-origin" | B3 slice as new brief T119: Graph > Add Function Graph... (curve of y = f(x) in the active layer) | claimed 2026-11-16; worktree swap-transpose, build target/wf-excel |
 | `hist-prob` | Claude Windows, session fe4b37eb | B4 slice as new brief T85: Plot > Statistics > Histogram + Probabilities (histogram with the cumulative probability curve on a right axis); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no other B4 plots (T83 interval/Pareto is done) or other sessions' scopes |
 | `gadgets-1` | Claude Windows, "continue all tasks" | B9 slice 1 as new brief T101: Gadgets > Statistics, Quick Fit, Differentiate, Interpolate, Vertical Cursor on the Integrate gadget's ROI framework; new app gadget modules, small graph_view.rs hooks, Gadgets menu | claimed 2026-11-16; no other gadgets, shape-resize, T58/T59, multi-Y legends |
-| `cond-highlight` | Claude Windows, scheduled "cond-heatmap" | B7 slice as new brief T123: Conditional Highlight; core condformat highlight rule, cond_format dialog, menu item, gui-look spec | claimed 2026-11-17; worktree `.claude/worktrees/small-diffs`, build `target/wt-small-diffs`; no row filter, T59 or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

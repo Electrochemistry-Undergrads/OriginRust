@@ -296,3 +296,87 @@ fn conditional_pareto_takes_its_rule_and_the_least_frequent_colours() {
     assert!(!most && percent && n == condformat::DEFAULT_N);
     assert_eq!(colours.fill, Some(condformat::BOTTOM_FILL), "least frequent takes the bottom colours");
 }
+
+fn open_manager(h: &mut Harness<'static, SheafApp>) {
+    menu_path(h, &["Worksheet", "Conditional Formatting", "Conditional Format Manager..."]);
+}
+
+/// Two rules on column B: Min Max (column-wise) under Top Bottom (the newer, on top).
+fn two_rules(tag: &str) -> Harness<'static, SheafApp> {
+    let mut h = start_book(tag);
+    apply_column_wise(&mut h);
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Highlight Top Bottom..."]);
+    click(&mut h, "OK");
+    h
+}
+
+#[test]
+fn the_manager_lists_moves_and_removes_formats_each_as_one_undo_step() {
+    let mut h = two_rules("cf-manager");
+    open_manager(&mut h);
+    assert!(h.state().cond_manager.is_some());
+    // The rule column says what each format does, the top rule first.
+    let _ = h.get_by_label("Top 10 Items");
+    let _ = h.get_by_label("Highlight Min Max, column-wise");
+    assert!(matches!(rules(&h)[0].rule, Rule::TopBottom { .. }));
+    // The first row is selected: move it down.
+    click(&mut h, "Move Down");
+    assert_eq!(h.state().doc.undo_label(), Some("Move conditional format down"));
+    assert!(matches!(rules(&h)[0].rule, Rule::MinMax { .. }));
+    assert!(matches!(rules(&h)[1].rule, Rule::TopBottom { .. }));
+    // The moved row stays selected: remove it.
+    click(&mut h, "Remove");
+    assert_eq!(h.state().doc.undo_label(), Some("Remove conditional format"));
+    assert_eq!(rules(&h).len(), 1);
+    assert!(matches!(rules(&h)[0].rule, Rule::MinMax { .. }));
+    // Undo brings it back, and the list follows.
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Z);
+    settle(&mut h);
+    assert_eq!(rules(&h).len(), 2);
+    let _ = h.get_by_label("Top 10 Items");
+    click(&mut h, "Close");
+    assert!(h.state().cond_manager.is_none());
+}
+
+#[test]
+fn the_manager_renames_a_format_by_double_click() {
+    let mut h = two_rules("cf-manager-rename");
+    open_manager(&mut h);
+    let name = rules(&h)[0].name.clone();
+    let at = h.query_all_by_label(&name).next().unwrap().rect().center();
+    double_click_at(&mut h, at);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text("Peaks".to_string()));
+    settle(&mut h);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert_eq!(rules(&h)[0].name, "Peaks");
+    assert_eq!(h.state().doc.undo_label(), Some("Rename conditional format"));
+    assert!(matches!(rules(&h)[0].rule, Rule::TopBottom { .. }), "only the name changed");
+}
+
+#[test]
+fn edit_rule_reopens_the_rules_window_filled_in_and_replaces_it_in_place() {
+    let mut h = two_rules("cf-manager-edit");
+    open_manager(&mut h);
+    click(&mut h, "Edit Rule");
+    assert!(h.state().cond_format.is_some(), "the Highlight Top Bottom window opens");
+    // Its settings are the rule's: switch the mode and keep everything else.
+    h.get_by_value("Top N Items").click();
+    settle(&mut h);
+    click(&mut h, "Bottom N%");
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Edit conditional format"));
+    let r = rules(&h);
+    assert_eq!(r.len(), 2, "replaced, not added");
+    assert!(matches!(r[0].rule, Rule::TopBottom { top: false, percent: true, .. }), "{:?}", r[0].rule);
+    assert!(matches!(r[1].rule, Rule::MinMax { .. }));
+    let _ = h.get_by_label("Bottom 10%");
+    // OK with nothing changed adds no undo step.
+    click(&mut h, "Edit Rule");
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Edit conditional format"));
+    h.state_mut().doc.undo();
+    assert!(matches!(rules(&h)[0].rule, Rule::TopBottom { top: true, percent: false, .. }));
+}

@@ -190,6 +190,8 @@ pub enum Cmd {
     CondFormat(crate::dialogs::cond_format::CondKind),
     /// Worksheet > Conditional Formatting > Remove Conditional Format.
     RemoveCondFormat,
+    /// Worksheet > Conditional Formatting > Conditional Format Manager.
+    CondFormatManager,
     /// Format Cells... for the selected cells, rows, columns or label cell.
     FormatCells,
     /// Format > Worksheet (F4): worksheet-wide Data font defaults.
@@ -1300,7 +1302,7 @@ fn mask_menu() -> Entry {
 }
 
 /// Worksheet > Conditional Formatting (also in the right-click menu of selected cells). Conditional
-/// Highlight and the Manager are greyed.
+/// Highlight is greyed.
 fn cond_format_menu() -> Entry {
     use crate::dialogs::cond_format::CondKind;
     let mut entries = vec![
@@ -1313,7 +1315,7 @@ fn cond_format_menu() -> Entry {
     ];
     entries.extend(greys(&["-"]));
     entries.push(item("Remove Conditional Format", Cmd::RemoveCondFormat));
-    entries.push(grey("Conditional Format Manager..."));
+    entries.push(item("Conditional Format Manager...", Cmd::CondFormatManager));
     sub("Conditional Formatting", entries)
 }
 
@@ -2850,6 +2852,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             Action::RemoveCondFormat(book?)
         }
+        Cmd::CondFormatManager => Action::CondFormatManager(book?),
         // On a graph the tools take the active data plot, as Origin's Analysis menu does; the
         // results go to its workbook (ADR 0005), and a fit draws its curve on the graph (ADR 0006).
         Cmd::Analyze(kind) => match (c.book, c.curve) {

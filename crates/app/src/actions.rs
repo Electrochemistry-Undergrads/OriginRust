@@ -508,6 +508,9 @@ pub enum Action {
         book: WindowId,
         kind: crate::dialogs::cond_format::CondKind,
     },
+    /// Worksheet > Conditional Formatting > Conditional Format Manager: the list of the active
+    /// sheet's rules.
+    CondFormatManager(WindowId),
     /// Worksheet > Conditional Formatting > Remove Conditional Format: removes the rules that
     /// touch the selection.
     RemoveCondFormat(WindowId),

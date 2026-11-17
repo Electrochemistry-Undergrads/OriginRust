@@ -32,6 +32,15 @@ pub enum Mode {
 impl Mode {
     const ALL: [Mode; 4] = [Mode::TopItems, Mode::TopPercent, Mode::BottomItems, Mode::BottomPercent];
 
+    fn from_parts(top: bool, percent: bool) -> Mode {
+        match (top, percent) {
+            (true, false) => Mode::TopItems,
+            (true, true) => Mode::TopPercent,
+            (false, false) => Mode::BottomItems,
+            (false, true) => Mode::BottomPercent,
+        }
+    }
+
     fn label(self) -> &'static str {
         match self {
             Mode::TopItems => "Top N Items",
@@ -68,6 +77,16 @@ struct ClassEdit {
 impl ClassEdit {
     fn new(fill: Color, font: Color) -> Self {
         ClassEdit { use_fill: true, fill, use_font: true, font }
+    }
+
+    /// The edit of a rule's colours; a part that is off keeps `default` in its colour button.
+    fn of(colours: Colours, default: (Color, Color)) -> Self {
+        ClassEdit {
+            use_fill: colours.fill.is_some(),
+            fill: colours.fill.unwrap_or(default.0),
+            use_font: colours.font.is_some(),
+            font: colours.font.unwrap_or(default.1),
+        }
     }
 
     fn colours(&self) -> Colours {
@@ -148,6 +167,41 @@ impl HeatEdit {
             use_above: false,
             above: condformat::MAX_FILL,
         }
+    }
+
+    /// The settings of an existing heatmap rule.
+    fn of(heat: &Heatmap, extent: Option<(f64, f64)>) -> Self {
+        let mut e = HeatEdit::new(extent);
+        e.auto_rescale = heat.limits.is_none();
+        if let Some((from, to)) = heat.limits {
+            (e.from, e.to) = (from, to);
+        }
+        e.scale = heat.scale;
+        match heat.step {
+            LevelStep::Count(n) => (e.by_count, e.count) = (true, n),
+            LevelStep::Increment(d) => (e.by_count, e.increment) = (false, d),
+        }
+        e.use_first = heat.first_level.is_some();
+        e.first = heat.first_level.unwrap_or(e.from);
+        e.target = heat.target;
+        e.contrast_text = heat.contrast_text || heat.target == Target::Text;
+        match heat.mixing {
+            Mixing::Limited { from, to } => (e.three, e.from_c, e.to_c) = (false, from, to),
+            Mixing::ThreeColor { from, middle, to, position } => {
+                (e.three, e.from_c, e.middle_c, e.to_c) = (true, from, middle, to);
+                (e.middle_mode, e.middle) = match position {
+                    MiddlePosition::Percentile(v) => (MiddleMode::Percentile, v),
+                    MiddlePosition::Percent(v) => (MiddleMode::Percent, v),
+                    MiddlePosition::Value(v) => (MiddleMode::Value, v),
+                };
+            }
+        }
+        e.flip = heat.flip;
+        e.use_below = heat.below.is_some();
+        e.below = heat.below.unwrap_or(e.below);
+        e.use_above = heat.above.is_some();
+        e.above = heat.above.unwrap_or(e.above);
+        e
     }
 
     fn rule(&self) -> Heatmap {
@@ -271,6 +325,38 @@ impl HeatEdit {
     }
 }
 
+/// A number as the windows write it (`10`, `1.5`).
+fn num(v: f64) -> String {
+    format!("{v}")
+}
+
+/// What a rule does, in a few words (the Rule column of the Conditional Format Manager).
+pub fn rule_text(rule: &Rule) -> String {
+    match rule {
+        Rule::MinMax { dir: Direction::RowWise, .. } => "Highlight Min Max, row-wise".into(),
+        Rule::MinMax { dir: Direction::ColumnWise, .. } => "Highlight Min Max, column-wise".into(),
+        Rule::TopBottom { top, n, percent, .. } => Mode::from_parts(*top, *percent).label().replacen('N', &num(*n), 1),
+        Rule::Pareto { most, n, percent, .. } => {
+            Mode::from_parts(*most, *percent).pareto_label().replacen(" N", &format!(" {}", num(*n)), 1)
+        }
+        Rule::Heatmap(heat) => match heat.step {
+            LevelStep::Count(n) => format!("Heatmap, {n} levels"),
+            LevelStep::Increment(d) => format!("Heatmap, increment {}", num(d)),
+        },
+        Rule::Outliers { method: OutlierMethod::Iqr, coef, .. } => format!("Outliers, IQR x {}", num(*coef)),
+        Rule::Outliers { method: OutlierMethod::Sd, coef, .. } => format!("Outliers, SD x {}", num(*coef)),
+    }
+}
+
+/// A rule's cells in words: the columns' short names in sheet order and the rows (1-based), for
+/// example `B, C; rows 1 to end`.
+pub fn range_text(sheet: &sheaf_core::Worksheet, range: &CondRange) -> String {
+    let names: Vec<&str> =
+        sheet.columns.iter().filter(|c| range.columns.contains(&c.id)).map(|c| c.short_name.as_str()).collect();
+    let last = range.last_row.map_or_else(|| "end".to_string(), |l| (l + 1).to_string());
+    format!("{}; rows {} to {}", names.join(", "), range.first_row + 1, last)
+}
+
 /// The smallest and largest number in the range's cells (masked and text cells left out).
 fn range_extent(doc: &Document, book: WindowId, sheet: usize, range: &CondRange) -> Option<(f64, f64)> {
     let s = doc.project().workbook(book)?.sheets.get(sheet)?;
@@ -308,6 +394,9 @@ pub struct CondFormatDialog {
     extent: Option<(f64, f64)>,
     method: OutlierMethod,
     coef: f64,
+    /// Conditional Format Manager > Edit Rule: the rule's place in the list and the rule as it was,
+    /// so OK replaces it in place, and does nothing when the list has changed meanwhile.
+    editing: Option<(usize, CondFormat)>,
 }
 
 impl CondFormatDialog {
@@ -332,7 +421,46 @@ impl CondFormatDialog {
             extent,
             method: OutlierMethod::Iqr,
             coef: condformat::rank::DEFAULT_COEF,
+            editing: None,
         })
+    }
+
+    /// The window of an existing rule (sheet `sheet`, place `index`), filled with its settings.
+    pub fn edit(doc: &Document, book: WindowId, sheet: usize, index: usize) -> Option<Self> {
+        let original = doc.project().workbook(book)?.sheets.get(sheet)?.cond_formats.get(index)?.clone();
+        let kind = match original.rule {
+            Rule::MinMax { .. } => CondKind::MinMax,
+            Rule::TopBottom { .. } => CondKind::TopBottom,
+            Rule::Heatmap(_) => CondKind::Heatmap,
+            Rule::Pareto { .. } => CondKind::Pareto,
+            Rule::Outliers { .. } => CondKind::Outliers,
+        };
+        let mut d = CondFormatDialog::new(doc, book, kind, original.range.clone())?;
+        d.sheet = sheet;
+        d.extent = range_extent(doc, book, sheet, &original.range);
+        d.name = original.name.clone();
+        let top = (condformat::TOP_FILL, condformat::TOP_FONT);
+        let bottom = (condformat::BOTTOM_FILL, condformat::BOTTOM_FONT);
+        match &original.rule {
+            Rule::MinMax { dir, max, min } => {
+                d.dir = *dir;
+                d.max = ClassEdit::of(*max, (condformat::MAX_FILL, condformat::MAX_FONT));
+                d.min = ClassEdit::of(*min, (condformat::MIN_FILL, condformat::MIN_FONT));
+            }
+            Rule::TopBottom { top: t, n, percent, colours } | Rule::Pareto { most: t, n, percent, colours } => {
+                d.mode = Mode::from_parts(*t, *percent);
+                d.n = *n;
+                d.hit = ClassEdit::of(*colours, if *t { top } else { bottom });
+            }
+            Rule::Heatmap(heat) => d.heat = HeatEdit::of(heat, d.extent),
+            Rule::Outliers { method, coef, colours } => {
+                d.method = *method;
+                d.coef = *coef;
+                d.hit = ClassEdit::of(*colours, top);
+            }
+        }
+        d.editing = Some((index, original));
+        Some(d)
     }
 
     fn rule(&self) -> Rule {
@@ -492,6 +620,28 @@ impl CondFormatDialog {
                     CondKind::Pareto => "Conditional pareto",
                     CondKind::Outliers => "Conditional outliers",
                 };
+                if let Some((index, original)) = self.editing.take() {
+                    let current = doc.project().workbook(book).and_then(|b| b.sheets.get(sheet));
+                    if current.and_then(|s| s.cond_formats.get(index)) != Some(&original) {
+                        return false;
+                    }
+                    let mut edited = CondFormat { rule, ..original };
+                    if !name.is_empty() {
+                        edited.name = name;
+                    }
+                    if current.and_then(|s| s.cond_formats.get(index)) != Some(&edited) {
+                        doc.apply("Edit conditional format", |p| {
+                            if let Some(slot) = p
+                                .workbook_mut(book)
+                                .and_then(|b| b.sheets.get_mut(sheet))
+                                .and_then(|s| s.cond_formats.get_mut(index))
+                            {
+                                *slot = edited;
+                            }
+                        });
+                    }
+                    return false;
+                }
                 doc.apply(label, |p| {
                     if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet)) {
                         let mut rule = CondFormat::new(s, range, rule);

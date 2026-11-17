@@ -138,7 +138,7 @@ pub use partcorr::{PartialCorr, PartialCorrError, partial_correlation};
 pub use pca::{EigenTest, Pca, PcaError, PcaOptions, pca};
 pub use peakchain::{
     BaselineStat, ChainBaseline, ChainError, ChainOptions, ChainResult, FindMethod, FindOptions, LimitMode, PeakInfo,
-    analyze_peaks, auto_minima_anchors, find_peak_indices, integrate_peaks,
+    analyze_peaks, analyze_peaks_at, auto_minima_anchors, find_peak_indices, integrate_peaks,
 };
 pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};
 pub use power::{

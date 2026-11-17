@@ -714,6 +714,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 (
                     target,
                     Job::Tool(Tool::PeakChain(analysis::PeakChainSpec {
+                        centers: Vec::new(),
                         chain: analysis::ChainOptions { baseline, find, limits },
                         integrate,
                         fit,

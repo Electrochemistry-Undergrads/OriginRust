@@ -451,6 +451,18 @@ pub enum ChainError {
 /// rows, as the multi-peak fit also skips them); the indices in the result are row indices of
 /// the input. The areas are positive for a positive peak whichever way X runs.
 pub fn analyze_peaks(x: &[f64], y: &[f64], opts: &ChainOptions) -> Result<ChainResult, ChainError> {
+    chain(x, y, opts, None)
+}
+
+/// [`analyze_peaks`] with the peaks given by their X instead of searched (Origin's Multiple Peak
+/// Fit, where the user picks the centres): each centre becomes the data point nearest to it (two
+/// centres on one point give one peak), the search, its filter and the width filter are skipped,
+/// and heights, widths and limits are measured above the lowest point of the corrected curve.
+pub fn analyze_peaks_at(x: &[f64], y: &[f64], opts: &ChainOptions, centers: &[f64]) -> Result<ChainResult, ChainError> {
+    chain(x, y, opts, Some(centers))
+}
+
+fn chain(x: &[f64], y: &[f64], opts: &ChainOptions, centers: Option<&[f64]>) -> Result<ChainResult, ChainError> {
     let len = x.len().min(y.len());
     let rows: Vec<usize> = (0..len).filter(|&i| x[i].is_finite() && y[i].is_finite()).collect();
     if rows.len() < 2 {
@@ -465,12 +477,31 @@ pub fn analyze_peaks(x: &[f64], y: &[f64], opts: &ChainOptions) -> Result<ChainR
     }
     let method = baseline_method(&xv, &yv, &opts.baseline).ok_or(ChainError::NoBaseline)?;
     let (corrected, baseline) = subtract_baseline(&xv, &yv, &method);
-    let mut idx = find_peak_indices(&xv, &corrected, &opts.find);
-    let mut peaks = integrate_peaks(&xv, &corrected, &idx, opts.limits);
-    if opts.find.min_fwhm > 0.0 && peaks.iter().any(|p| p.fwhm < opts.find.min_fwhm) {
-        idx = peaks.iter().filter(|p| p.fwhm >= opts.find.min_fwhm).map(|p| p.index).collect();
-        peaks = integrate_peaks(&xv, &corrected, &idx, opts.limits);
-    }
+    let mut peaks = match centers {
+        Some(centers) => {
+            let nearest = |c: f64| {
+                (0..xv.len())
+                    .min_by(|&a, &b| (xv[a] - c).abs().total_cmp(&(xv[b] - c).abs()))
+                    .expect("two rows or more")
+            };
+            let mut idx: Vec<usize> = centers.iter().filter(|c| c.is_finite()).map(|&c| nearest(c)).collect();
+            idx.sort_unstable();
+            idx.dedup();
+            let floor = corrected.iter().copied().fold(f64::INFINITY, f64::min);
+            let lifted: Vec<f64> = corrected.iter().map(|v| v - floor).collect();
+            integrate_peaks(&xv, &lifted, &idx, opts.limits)
+        }
+        None => {
+            let idx = find_peak_indices(&xv, &corrected, &opts.find);
+            let peaks = integrate_peaks(&xv, &corrected, &idx, opts.limits);
+            if opts.find.min_fwhm > 0.0 && peaks.iter().any(|p| p.fwhm < opts.find.min_fwhm) {
+                let idx: Vec<usize> = peaks.iter().filter(|p| p.fwhm >= opts.find.min_fwhm).map(|p| p.index).collect();
+                integrate_peaks(&xv, &corrected, &idx, opts.limits)
+            } else {
+                peaks
+            }
+        }
+    };
     for p in peaks.iter_mut() {
         p.index = rows[p.index];
         p.left_index = rows[p.left_index];
@@ -681,5 +712,23 @@ mod tests {
         let total = 1.4838624273683825 / 0.35292138167211256;
         assert!((a.area_percent / 100.0 * total - a.area).abs() < 1e-3, "{} {}", a.area_percent, a.area);
         assert!((a.right_x - 6.8).abs() < 1e-9 && (b.left_x - 6.8).abs() < 1e-9, "the valley between them");
+    }
+
+    #[test]
+    fn given_centres_replace_the_search() {
+        let x = grid();
+        // Two peaks on an offset of 3: the search would find both; give only the second, and a
+        // centre between points, which snaps to the nearest one.
+        let y: Vec<f64> = x.iter().map(|&x| 3.0 + gauss(x, 5.0, 0.4, 1.0) + gauss(x, 14.0, 0.6, 0.5)).collect();
+        let r = analyze_peaks_at(&x, &y, &ChainOptions::default(), &[14.01, 13.99, f64::NAN]).unwrap();
+        assert_eq!(r.peaks.len(), 1, "two centres on one point are one peak");
+        assert_eq!(r.peaks[0].center, 14.0);
+        // Measured above the lowest point (about 3), not above zero.
+        assert!((r.peaks[0].height - 0.5).abs() < 1e-3, "{}", r.peaks[0].height);
+        assert!((r.peaks[0].fwhm - 0.6 * 2.354_820).abs() < 0.02, "{}", r.peaks[0].fwhm);
+        // A small bump that the height filter would drop is kept when given.
+        let r = analyze_peaks_at(&x, &y, &ChainOptions::default(), &[5.0, 14.0]).unwrap();
+        assert_eq!(r.peaks.iter().map(|p| p.center).collect::<Vec<_>>(), vec![5.0, 14.0]);
+        assert!(analyze_peaks_at(&x, &y, &ChainOptions::default(), &[]).unwrap().peaks.is_empty());
     }
 }

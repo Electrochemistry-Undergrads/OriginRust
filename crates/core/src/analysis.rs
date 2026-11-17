@@ -99,6 +99,8 @@ pub struct PeakChainSpec {
     pub integrate: bool,
     /// Fit all found peaks together and add the fit columns.
     pub fit: Option<PeakFitSpec>,
+    /// Peak centres (X) given by the user instead of the search (Multiple Peak Fit); empty: search.
+    pub centers: Vec<f64>,
 }
 
 /// Which rows of the chosen columns a tool works on.
@@ -1746,7 +1748,12 @@ fn run_peak_chain(
     let mut t = ResultTable::new(&headers);
     for inp in inputs {
         let (xs, ys) = (inp.xs(), inp.ys());
-        let result = calc::analyze_peaks(xs, ys, &spec.chain).map_err(|e| match e {
+        let result = if spec.centers.is_empty() {
+            calc::analyze_peaks(xs, ys, &spec.chain)
+        } else {
+            calc::analyze_peaks_at(xs, ys, &spec.chain, &spec.centers)
+        }
+        .map_err(|e| match e {
             calc::ChainError::NoBaseline => AnalysisError::BadOption(format!(
                 "column {}: the baseline could not be made (anchor points need at least two different X values, and the data at least two points)",
                 inp.short
@@ -4578,6 +4585,7 @@ mod tests {
 
     fn chain(integrate: bool, fit: Option<PeakFitSpec>) -> Tool {
         Tool::PeakChain(PeakChainSpec {
+            centers: Vec::new(),
             chain: ChainOptions {
                 baseline: ChainBaseline::AutoMinima(4),
                 find: FindOptions { filter: PeakFilter::Height(0.3), ..FindOptions::default() },
@@ -4626,6 +4634,31 @@ mod tests {
     }
 
     #[test]
+    fn multiple_peak_fit_starts_at_the_given_centres() {
+        // Multiple Peak Fit: no baseline, Gauss peaks with a constant y0, the centres picked a
+        // little off the true ones. The sloped background is taken up by y0 only, so the fitted
+        // centres are close, not exact.
+        let (mut p, book, y) = two_peaks();
+        let tool = Tool::PeakChain(PeakChainSpec {
+            chain: ChainOptions { baseline: ChainBaseline::None, ..ChainOptions::default() },
+            integrate: false,
+            fit: Some(PeakFitSpec::of(PeakShape::Gauss, FitBaseline::Constant)),
+            centers: vec![12.8, 6.1],
+        });
+        let r = p.analyze(&request(&[y], tool)).unwrap();
+        let t = r.table.unwrap();
+        assert_eq!(t.rows.len(), 2, "one row per picked centre, in X order");
+        let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
+        assert!((t.rows[0].1[h("Fit center")] - 6.0).abs() < 0.05, "{}", t.rows[0].1[h("Fit center")]);
+        assert!((t.rows[1].1[h("Fit center")] - 13.0).abs() < 0.05);
+        // The found centre is the picked point, and only the fit column goes beside the data.
+        assert!((t.rows[0].1[1] - 6.1).abs() < 1e-9);
+        let ws = &p.workbook(book).unwrap().sheets;
+        assert_eq!(ws[0].columns.len(), 3, "the fit curve beside the source, no baseline column");
+        assert!(ws[0].columns[2].long_name.starts_with("Peak fit of"));
+    }
+
+    #[test]
     fn peak_chain_voigt_fit_of_gauss_peaks_gives_their_center_width_and_area() {
         // Gaussian peaks: the Voigt's Lorentzian width goes to its bound 0 and the Voigt FWHM
         // (0.5346 wL + sqrt(0.2166 wL^2 + wG^2)) is the Gaussian one.
@@ -4666,6 +4699,7 @@ mod tests {
         let (mut p, _, y) = two_peaks();
         let before = p.clone();
         let none = Tool::PeakChain(PeakChainSpec {
+            centers: Vec::new(),
             chain: ChainOptions {
                 find: FindOptions { filter: PeakFilter::Height(50.0), ..FindOptions::default() },
                 ..ChainOptions::default()
@@ -4675,6 +4709,7 @@ mod tests {
         });
         assert!(matches!(p.analyze(&request(&[y], none)), Err(AnalysisError::BadOption(m)) if m.contains("no peaks")));
         let bad = Tool::PeakChain(PeakChainSpec {
+            centers: Vec::new(),
             chain: ChainOptions {
                 baseline: ChainBaseline::Anchors(vec![(1.0, 0.0)], InterpMethod::Linear),
                 ..ChainOptions::default()
@@ -4694,6 +4729,7 @@ mod tests {
         y0[0] = f64::NAN;
         y0[120] = f64::NAN; // inside the first peak
         let end = Tool::PeakChain(PeakChainSpec {
+            centers: Vec::new(),
             chain: ChainOptions {
                 baseline: ChainBaseline::EndPoints,
                 find: FindOptions { filter: PeakFilter::Height(0.3), ..FindOptions::default() },

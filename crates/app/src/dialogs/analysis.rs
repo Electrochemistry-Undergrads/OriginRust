@@ -1740,6 +1740,7 @@ impl AnalysisDialog {
                 ..self.peaks
             }),
             AnalysisKind::PeakChain => Tool::PeakChain(PeakChainSpec {
+                centers: Vec::new(),
                 chain: ChainOptions {
                     baseline: match self.chain_baseline {
                         ChainBaselineKind::Constant => match self.chain_const {

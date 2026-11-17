@@ -467,9 +467,47 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
 - **Cost.** The styles are computed once per change of the document (not per frame or per cell) and
   read per drawn cell; a 1,000,000-row column takes about 3 ms (Min Max) to 10 ms (Top N %) in a
   release build.
-- **Left out.** Conditional Highlight, Heatmap, Pareto, Outliers and the Manager (greyed); renaming a
+- **Left out.** Conditional Highlight, Pareto, Outliers and the Manager (greyed); renaming a
   rule after creation. The `.opj` writer cannot store the rules: saving to `.opj` warns and the
   companion keeps them.
+
+#### Conditional Heatmap (T120)
+
+Origin facts (docs.originlab.com/origin-help/conditional-format, read 2026-11-17, not measured: Origin
+2016 has no Conditional Formatting). Level: **Auto Rescale** (checked by default, the range's minimum
+and maximum), else **From** and **To**, **Find Min/Max**, scale **Type**, levels **By Increment** or
+**By Count**, **First Level** ("larger than or equal to the default value of the first level").
+Colors: **Format Type** Fill Background or Color Text, **Contrast Color for Text**, **Color
+Generation** (Limited Mixing, 3-Color Limited Mixing with **Middle Position** By Percentile, By
+Percent or By Value, Introducing Other Colors in Mixing, Load Palette), **Flip**, **Below** and
+**Above** colours for values outside From..To. A new rule goes on top; the upper rule wins.
+
+Sheaf's choices, all **unmeasured**:
+
+- **Scope.** One set of levels over the whole range (all its columns and rows together); the same
+  numbers count as for the other rules (text, empty, NaN and masked cells are left out). Each level
+  is a palette class of the rule, at most 250 levels.
+- **Levels.** In scale units (log10 of the value for Log10, where numbers at or below zero get no
+  colour). By Count n cuts First Level..To into n equal levels; By Increment d gives
+  ceil((To - First Level) / d) levels (one decade is 1 on Log10). A level holds its lower bound;
+  To belongs to the last level. First Level defaults to From and is clamped into From..To; numbers
+  between From and First Level take the first level. Auto Rescale with one distinct number gives
+  that number the first level; set limits that are equal, reversed or not finite colour nothing.
+- **Colours.** Level k of n gets t = k / (n - 1) (0 for one level), mixed in RGB from From to To;
+  3-colour mixing goes From to Middle up to the middle's place and Middle to To after it. The
+  middle's place along the levels is the percent itself (By Percent), the value's place (By Value),
+  or the place of that percentile of the range's numbers (By Percentile, linear between order
+  statistics), clamped to 0..1. Flip swaps From and To (Middle keeps its place). Below and Above
+  apply only with Auto Rescale off; switched off, numbers outside From..To stay plain.
+- **Text.** Fill Background with Contrast Color for Text puts black or white text on each fill,
+  whichever has more contrast (BT.601 luma below 128 gives white); Color Text colours the text and
+  leaves the fill.
+- **Defaults** (Origin's are not documented): Auto Rescale, Linear, By Count 10, Fill Background
+  with contrast text, Limited Mixing from white RGB(255,255,255) to RGB(248,105,107); Middle
+  RGB(255,235,132) at 50 %. Introducing Other Colors in Mixing and Load Palette are shown disabled.
+- **Files.** `.sheaf` and the `.opj.sheaf` companion keep the rule; `.opj` warns as for the other
+  rules; XLSX writes the current colours as a snapshot, with the same warning.
+- One undo step, "Conditional heatmap"; Remove Conditional Format removes it like the other rules.
 
 ### Cell notes (T36)
 

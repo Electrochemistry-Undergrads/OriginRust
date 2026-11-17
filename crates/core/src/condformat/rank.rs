@@ -69,7 +69,7 @@ impl Item {
 /// cumulative frequency is at least 100 - N % (Origin's wording), so it always takes the least
 /// frequent item for N > 0. N of 0 or less (or not a number) takes nothing.
 pub fn pareto_selection(items: &[Item], most: bool, n: f64, percent: bool) -> Vec<Item> {
-    if !(n > 0.0) || items.is_empty() {
+    if n.is_nan() || n <= 0.0 || items.is_empty() {
         return Vec::new();
     }
     let mut order: Vec<(Item, usize)> = Vec::new();
@@ -84,7 +84,7 @@ pub fn pareto_selection(items: &[Item], most: bool, n: f64, percent: bool) -> Ve
         }
     }
     // Stable: equal counts keep their order of first appearance.
-    order.sort_by(|a, b| b.1.cmp(&a.1));
+    order.sort_by_key(|o| std::cmp::Reverse(o.1));
     let total = items.len() as f64;
     if percent {
         let mut cum = 0.0;

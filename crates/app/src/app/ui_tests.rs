@@ -76,6 +76,7 @@ mod text_format_toolbar;
 mod title_editors;
 mod toolbar_print;
 mod treemap;
+mod view_active_layer_only;
 mod view_modes;
 mod violin;
 mod worksheet_classic_colors;

@@ -4138,6 +4138,14 @@ impl SheafApp {
             }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
+            active_layer_only: graph.and_then(|id| {
+                let g = project.graph(id)?;
+                let layer = self.graphs.get(&id).map_or(0, |s| s.active_layer);
+                if g.layers.len() < 2 || layer >= g.layers.len() {
+                    return None;
+                }
+                Some(g.layers.iter().enumerate().all(|(i, l)| l.display.hidden == (i != layer)))
+            }),
             can_color_scale: graph.is_some_and(|g| {
                 let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
                 project.graph(g).and_then(|gr| gr.layers.get(layer)).is_some_and(|l| {

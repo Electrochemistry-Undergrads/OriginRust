@@ -363,6 +363,8 @@ pub enum Cmd {
     SetViewMode(sheaf_core::project::ViewMode),
     /// View > Show > Layer Icons.
     ToggleLayerIcons,
+    /// View > Show > Active Layer Only uses the existing Hide Other Layers toggle.
+    ToggleActiveLayerOnly,
     /// View > Full Screen (Ctrl+Shift+J) and the page's "View Full Screen".
     FullScreen,
     /// The Pan tool of the Tools toolbar.
@@ -578,6 +580,8 @@ pub struct MenuContext<'a> {
     pub view_mode: sheaf_core::project::ViewMode,
     /// The active graph shows its layer icons (the tick of View > Show > Layer Icons).
     pub layer_icons: bool,
+    /// None without a valid multi-layer target; otherwise the derived isolation check.
+    pub active_layer_only: Option<bool>,
 }
 
 impl<'a> MenuContext<'a> {
@@ -987,10 +991,10 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
                 "Frame",
                 "Labels",
                 "Data",
-                "Active Layer Only",
-                "-",
-                "Master Items on Screen",
             ]));
+            show.push(keyed("Active Layer Only", ctrl_alt(Key::D), Cmd::ToggleActiveLayerOnly));
+            show.push(sep());
+            show.push(grey("Master Items on Screen"));
             v.push(sub("Show", show));
             v.push(grey("Show Data Info"));
             v.push(keyed("Full Screen", ctrl_shift(Key::J), Cmd::FullScreen));
@@ -2984,6 +2988,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
         Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
+        Cmd::ToggleActiveLayerOnly => {
+            let graph = c.graph.ok_or(NEED_GRAPH)?;
+            c.active_layer_only.ok_or("Needs a valid active layer in a graph with at least two layers")?;
+            Action::GraphEdit { graph, op: GraphOp::HideOtherLayers { layer: c.layer } }
+        }
         Cmd::FullScreen => Action::FullScreen(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::EditSlope { layer, slope } => {
             Action::EditSlope { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, slope: *slope }
@@ -3246,6 +3255,9 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleLayerIcons)) && c.layer_icons {
+                    tick(ui, &response);
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleActiveLayerOnly)) && c.active_layer_only == Some(true) {
                     tick(ui, &response);
                 }
                 if let Some(Cmd::SetViewMode(mode)) = &it.cmd
@@ -3629,6 +3641,7 @@ mod tests {
             selected_shape: None,
             view_mode: Default::default(),
             layer_icons: true,
+            active_layer_only: None,
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);

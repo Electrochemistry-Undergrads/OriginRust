@@ -1118,6 +1118,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         selected_shape: None,
         view_mode: Default::default(),
         layer_icons: true,
+        active_layer_only: None,
     }
 }
 

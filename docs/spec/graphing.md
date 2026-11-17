@@ -5245,12 +5245,54 @@ Ctrl+Shift+J (View > Full Screen; the page right-click item "View Full Screen" h
 
 - The mode is per graph window and kept in `Project::view_modes` (Page View, the default, is not stored); it is saved in the `.sheaf` file, is not an undo step (undo and redo keep the mode now in effect), and is not written to `.opj` (the `page.viewmode` block of the OPJ format was not located: unmeasured).
 - Print View and Page View draw the same picture (as measured). Window View and Draft View give the page the window's aspect with its own width (layers grow with the window, text keeps its size, no grey border; the zoom layout works over the window grown by its 12 px margin). Draft View rasterises without anti-aliasing of the text (the lines and symbols stay as they were), as measured. **Not reproduced:** Origin's Window View smooths text differently from Page View (coarser, 22.2); Sheaf's Window View uses the normal rasteriser, so its text looks like Page View's. `page.width`/`layer.width` per mode is unmeasured, so Sheaf does not change the stored page size.
-- Show > Layer Icons toggles the existing page setting (`Plot Details > Miscellaneous > Show the layer icons`; one undo step). The other Show items and Show Data Info are grey.
+- Show > Layer Icons toggles the existing page setting (`Plot Details > Miscellaneous > Show the layer icons`; one undo step). Active Layer Only later shares the existing Hide Other Layers engine under22.7; the remaining Show items and Show Data Info are grey.
 - Full Screen: Sheaf's window goes to the whole screen and shows the page only (white ground, page fitted into the screen, no menu, toolbars, panels or status bar), the Reminder Message first (Enter or OK ends it; the tick is kept for the run only, Sheaf has no settings file yet), Esc ends it; Left/Right/Home/End switch between the graphs in window order as the reminder says (not measured beyond the reminder text; Right on the last graph does nothing).
 
 ### 22.6 What Sheaf took from this (T66, plan)
 
 Page View as Sheaf's current picture and the default; Window View (page stretched to the window, aspect not kept) and Draft View (the same with plain text) as in 22.2; modes saved in the `.sheaf` file; the Layer Icons tick; Full Screen with Esc and the reminder; leave the unmeasured Show items and Show Data Info grey until they are measured.
+
+### 22.7 Remaining Show contract audit and Active Layer Only wire-up (2026-11-17)
+
+The current official [hiding guide](https://docs.originlab.com/origin-help/labels-data-layer-hide/)
+explicitly gives View > Show > Active Layer Only and layer-icon Hide Other Layers
+as equivalent isolation/show-all routes. Hidden elements are excluded from output.
+The [hotkey reference](https://docs.originlab.com/origin-help/hotkey-in-origin/)
+assigns Ctrl+Alt+D with a multi-layer graph active. This supports wiring the menu
+and shortcut to the already-published21.14 engine without a second visibility model.
+The2016 menu label/default check observations in22.3 remain separate from this
+documentation contract; no new live2016 effect, shortcut or edge measurement is claimed.
+
+Sheaf resolves the current graph and active layer at command activation and calls
+the existing HideOtherLayers action. The check is derived from exactly that layer
+being visible and every other layer hidden. Toggling off shows all layers. A hidden
+target is shown when isolated; all-hidden is unchecked; fewer than two layers or
+an invalid active index disables the menu/shortcut. These are existing Sheaf21.14
+policies, including one history step, no-op guards and companion-only native layer
+visibility. Individual plot/axis flags, data, geometry and zoom/view mode are kept.
+Changing which layer is active does not introduce a persistent follow-active mode;
+that Native edge remains unmeasured. Only menu dispatch/check and read-only context
+data change. Two context-menu constructors supply an inert absent value; their
+graph/grid behavior and the visibility/render/IO engines are unchanged.
+
+The other nine entries remain disabled. The audit records these distinctions for
+their future implementation rather than treating them as equivalent toggles:
+
+- The [layer reference](https://docs.originlab.com/labtalk/ref/layer-obj/) defines
+  showData separately from showLabel. Hiding text/graphic labels through showLabel
+  retains their selectability, unlike deleting objects or hiding a whole layer.
+  Exact2016 menu scope, hit behavior, history and persistence remain unmeasured.
+- [Data Info](https://docs.originlab.com/origin-help/data-info-tool/) is a window
+  associated with reader/cursor data and worksheet metadata. The guide distinguishes
+  it from configurable hover tooltips introduced in2019. A generic hover tooltip
+  does not establish the2016 Show Data Info window/lifecycle contract.
+- The [system-variable reference](https://docs.originlab.com/labtalk/ref/sys-var-list/)
+  notes that Object Grid became Layer Grid in2020. Modern naming does not establish
+  which of the two distinct2016 menu entries controls the same overlay or settings.
+- [Master Page Layout](https://docs.originlab.com/origin-help/master-page-layout/)
+  describes a saved workspace-display toggle whose hidden master items still appear
+  in copy/print/export. The option depends on Use Master Items. This differs from
+  ordinary layer hiding; master-page state/rendering is not supplied in this slice.
 
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
 

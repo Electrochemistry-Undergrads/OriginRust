@@ -107,6 +107,8 @@ pub(crate) struct PlotData<'a> {
     pub wind_rose: Option<crate::wind_rose::WindRoseData>,
     /// The density grid of a 2D kernel density plot (T116); `None` for other kinds.
     pub kde2d: Option<crate::kde2d::Kde2dData>,
+    /// The samples of a Piper diagram (T117); `None` for other kinds.
+    pub piper: Option<crate::piper_plot::PiperData>,
     /// The lines and axes of a layer's parallel plots, held by the first of them; `None` for other plots.
     pub parallel: Option<Box<crate::parallel::ParallelData>>,
     /// What a treemap plot draws; `None` for other kinds.
@@ -686,6 +688,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             marginal: None,
             wind_rose: None,
             kde2d: None,
+            piper: None,
             parallel: None,
             treemap: None,
             sunburst: None,
@@ -831,6 +834,15 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.xerr = None;
                 pd.base = None;
                 pd.ridge = Some(ridge);
+            }
+            PlotKind::Piper => {
+                pd.piper = plot.decor.piper.map(|s| crate::piper_plot::PiperData::new(project, &pd, s));
+                // The diagram's axes are fixed; the samples are not points of the axes.
+                pd.end = pd.start;
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
             }
             PlotKind::Kde2d => {
                 pd.kde2d = crate::kde2d::Kde2dData::new(&pd);

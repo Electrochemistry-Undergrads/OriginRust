@@ -1,6 +1,6 @@
 # T117: Plot > Specialized > Piper
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `piper`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 39), **not measured** (Origin COM unregistered): the standard Piper construction (core `piper`: percentages, triangles, diamond projection), plot kind piper with grid, outlines and three points per sample, equal X/Y units, corner labels, template piper. Left: measure Origin's column rules and look and match them.
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Specialized > Piper), the last unclaimed
 B4 item.
 **Spec:** `docs/spec/graphing.md` (a new section).

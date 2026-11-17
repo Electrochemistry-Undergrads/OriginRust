@@ -46,6 +46,7 @@ mod straight_line;
 pub use slope::{NOT_USABLE as SLOPE_NOT_USABLE, check_point as slope_check_point};
 mod kde2d;
 mod marginal_plot;
+mod piper_plot;
 mod qc_plot;
 pub mod smith;
 mod stack;

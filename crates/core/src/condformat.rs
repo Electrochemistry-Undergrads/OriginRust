@@ -15,7 +15,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub mod heatmap;
+pub mod rank;
 pub use heatmap::Heatmap;
+pub use rank::OutlierMethod;
 
 /// Origin's Highlight Min Max defaults (`wcolorbycr`, RGB ints 30067455, 20132812, 33085116,
 /// 26692113).
@@ -64,6 +66,10 @@ pub enum Rule {
     TopBottom { top: bool, n: f64, percent: bool, colours: Colours },
     /// Conditional Heatmap: every number of the range coloured by its level (see [`heatmap`]).
     Heatmap(Heatmap),
+    /// Conditional Outliers: the numbers outside the fences of each column of the range.
+    Outliers { method: OutlierMethod, coef: f64, colours: Colours },
+    /// Conditional Pareto: the most (or least) frequent items of the whole range, numbers and text.
+    Pareto { most: bool, n: f64, percent: bool, colours: Colours },
 }
 
 impl Rule {
@@ -79,6 +85,25 @@ impl Rule {
     /// Conditional Heatmap with Sheaf's defaults (see [`heatmap::Heatmap::default`]).
     pub fn heatmap() -> Rule {
         Rule::Heatmap(Heatmap::default())
+    }
+
+    /// Conditional Outliers with Origin's default IQR and Coef 1.5, Sheaf's colours.
+    pub fn outliers() -> Rule {
+        Rule::Outliers {
+            method: OutlierMethod::Iqr,
+            coef: rank::DEFAULT_COEF,
+            colours: Colours { fill: Some(TOP_FILL), font: Some(TOP_FONT) },
+        }
+    }
+
+    /// Conditional Pareto with Sheaf's defaults: Most Frequent 10 Items.
+    pub fn pareto() -> Rule {
+        Rule::Pareto {
+            most: true,
+            n: DEFAULT_N,
+            percent: false,
+            colours: Colours { fill: Some(TOP_FILL), font: Some(TOP_FONT) },
+        }
     }
 
     /// Highlight Top Bottom with Sheaf's defaults: Top 10 Items.
@@ -308,6 +333,48 @@ pub fn evaluate(sheet: &Worksheet, rules: &[CondFormat]) -> CellStyles {
                         if let Some(c) = colour {
                             painter.paint(col.0, r, index, class, heat.style(c));
                         }
+                    }
+                }
+            }
+            Rule::Outliers { method, coef, colours } => {
+                for col in &columns {
+                    let values: Vec<f64> = rows.clone().filter_map(|r| value(col, r)).collect();
+                    let Some((lo, hi)) = rank::fences(&values, *method, *coef) else { continue };
+                    for r in rows.clone() {
+                        if let Some(v) = value(col, r)
+                            && (v < lo || v > hi)
+                        {
+                            painter.paint(col.0, r, index, 0, *colours);
+                        }
+                    }
+                }
+            }
+            Rule::Pareto { most, n, percent, colours } => {
+                // Every column of the range, text ones too: each non-empty, unmasked cell is an item.
+                let cells: Vec<(ColumnId, usize, rank::Item)> = sheet
+                    .columns
+                    .iter()
+                    .filter(|c| rule.range.columns.contains(&c.id))
+                    .flat_map(|c| {
+                        let mask = c.active_mask();
+                        rows.clone().filter_map(move |r| {
+                            if mask.is_some_and(|m| m.contains(&r)) {
+                                return None;
+                            }
+                            let item = match c.data.text_cell(r) {
+                                Some(t) => rank::Item::Text(t.to_string()),
+                                None => rank::Item::number(*c.numeric()?.get(r).filter(|v| !v.is_nan())?),
+                            };
+                            Some((c.id, r, item))
+                        })
+                    })
+                    .collect();
+                let items: Vec<rank::Item> = cells.iter().map(|c| c.2.clone()).collect();
+                let chosen: std::collections::HashSet<rank::Item> =
+                    rank::pareto_selection(&items, *most, *n, *percent).into_iter().collect();
+                for (column, r, item) in &cells {
+                    if chosen.contains(item) {
+                        painter.paint(*column, *r, index, 0, *colours);
                     }
                 }
             }
@@ -801,5 +868,63 @@ mod tests {
         // The first rule wins every cell; the palette stops growing at its limit.
         assert_eq!(fill_of(&st, 1, 0), Some(heatmap::DEFAULT_FROM));
         assert!(st.palette.len() <= usize::from(u16::MAX) + 1);
+    }
+
+    #[test]
+    fn outliers_are_coloured_per_column() {
+        let s = sheet(&[&[4.0, 4.0, 5.0, 5.0, 5.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 30.0], &[30.0, 31.0, 32.0]]);
+        let st = evaluate(&s, &[rule(&s, Rule::outliers())]);
+        assert_eq!(fill_of(&st, 1, 11), Some(TOP_FILL));
+        assert!((0..11).all(|r| fill_of(&st, 1, r).is_none()));
+        // 30 is ordinary in column B.
+        assert!((0..3).all(|r| fill_of(&st, 2, r).is_none()));
+    }
+
+    #[test]
+    fn pareto_counts_items_over_the_whole_range_text_included() {
+        let mut s = sheet(&[&[1.0, 2.0, 1.0], &[1.0, 3.0, f64::NAN]]);
+        s.columns[1].data = ColumnData::mixed(vec![1.0, 3.0, f64::NAN], [(2, "x".to_string())].into_iter().collect());
+        let one =
+            Rule::Pareto { most: true, n: 1.0, percent: false, colours: Colours { fill: Some(MAX_FILL), font: None } };
+        let st = evaluate(&s, &[rule(&s, one)]);
+        // 1 appears three times over both columns.
+        assert_eq!(fill_of(&st, 1, 0), Some(MAX_FILL));
+        assert_eq!(fill_of(&st, 1, 2), Some(MAX_FILL));
+        assert_eq!(fill_of(&st, 2, 0), Some(MAX_FILL));
+        assert_eq!(fill_of(&st, 1, 1), None);
+        // Least frequent 1 item: 2, 3 and "x" each appear once (ties all come).
+        let least =
+            Rule::Pareto { most: false, n: 1.0, percent: false, colours: Colours { fill: Some(MIN_FILL), font: None } };
+        let st = evaluate(&s, &[rule(&s, least)]);
+        assert_eq!(fill_of(&st, 1, 1), Some(MIN_FILL));
+        assert_eq!(fill_of(&st, 2, 1), Some(MIN_FILL));
+        assert_eq!(fill_of(&st, 2, 2), Some(MIN_FILL));
+        assert_eq!(fill_of(&st, 1, 0), None);
+        // Masked cells are not items.
+        s.columns[0].mask.insert(0);
+        s.columns[0].mask.insert(2);
+        let st = evaluate(
+            &s,
+            &[rule(
+                &s,
+                Rule::Pareto {
+                    most: true,
+                    n: 1.0,
+                    percent: false,
+                    colours: Colours { fill: Some(MAX_FILL), font: None },
+                },
+            )],
+        );
+        assert_eq!(fill_of(&st, 1, 0), None);
+    }
+
+    #[test]
+    fn outliers_and_pareto_round_trip_through_serde() {
+        let s = sheet(&[&[1.0]]);
+        for r in [Rule::outliers(), Rule::pareto()] {
+            let r = rule(&s, r);
+            let json = serde_json::to_string(&r).unwrap();
+            assert_eq!(serde_json::from_str::<CondFormat>(&json).unwrap(), r);
+        }
     }
 }

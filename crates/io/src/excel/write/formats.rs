@@ -104,7 +104,9 @@ impl<'a> Formats<'a> {
             let colours = match &rule.rule {
                 condformat::Rule::MinMax { max, min, .. } => vec![*max, *min],
                 condformat::Rule::TopBottom { colours, .. } => vec![*colours],
-                condformat::Rule::Outliers { colours, .. } | condformat::Rule::Pareto { colours, .. } => {
+                condformat::Rule::Outliers { colours, .. }
+                | condformat::Rule::Pareto { colours, .. }
+                | condformat::Rule::Highlight { colours, .. } => {
                     vec![*colours]
                 }
                 condformat::Rule::Heatmap(heat) => {

@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub mod heatmap;
+pub mod highlight;
 pub mod rank;
 pub use heatmap::Heatmap;
 pub use rank::OutlierMethod;
@@ -70,6 +71,13 @@ pub enum Rule {
     Outliers { method: OutlierMethod, coef: f64, colours: Colours },
     /// Conditional Pareto: the most (or least) frequent items of the whole range, numbers and text.
     Pareto { most: bool, n: f64, percent: bool, colours: Colours },
+    /// Conditional Highlight: the cells that meet a condition (or two, joined by And or Or).
+    Highlight {
+        first: highlight::Cond,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        second: Option<(highlight::Join, highlight::Cond)>,
+        colours: Colours,
+    },
 }
 
 impl Rule {
@@ -93,6 +101,16 @@ impl Rule {
             method: OutlierMethod::Iqr,
             coef: rank::DEFAULT_COEF,
             colours: Colours { fill: Some(TOP_FILL), font: Some(TOP_FONT) },
+        }
+    }
+
+    /// Conditional Highlight with Origin's defaults: equal to 0, no second condition, the Min Max
+    /// maximum colours (`wcolor`'s Background 30067455 and Text Color 20132812).
+    pub fn highlight() -> Rule {
+        Rule::Highlight {
+            first: highlight::Cond::default(),
+            second: None,
+            colours: Colours { fill: Some(MAX_FILL), font: Some(MAX_FONT) },
         }
     }
 
@@ -345,6 +363,28 @@ pub fn evaluate(sheet: &Worksheet, rules: &[CondFormat]) -> CellStyles {
                             && (v < lo || v > hi)
                         {
                             painter.paint(col.0, r, index, 0, *colours);
+                        }
+                    }
+                }
+            }
+            Rule::Highlight { first, second, colours } => {
+                let mut tester = highlight::Tester::new(first, second.as_ref().map(|(j, c)| (*j, c)));
+                let text = tester.needs_text();
+                for c in sheet.columns.iter().filter(|c| rule.range.columns.contains(&c.id)) {
+                    let mask = c.active_mask();
+                    let numbers = c.numeric();
+                    for r in rows.clone() {
+                        if mask.is_some_and(|m| m.contains(&r)) {
+                            continue;
+                        }
+                        let number = if c.data.text_cell(r).is_some() {
+                            None
+                        } else {
+                            numbers.and_then(|v| v.get(r).copied()).filter(|v| !v.is_nan())
+                        };
+                        let shown = if text { c.shown_text(r) } else { String::new() };
+                        if tester.matches(highlight::Cell { number, text: &shown }) {
+                            painter.paint(c.id, r, index, 0, *colours);
                         }
                     }
                 }
@@ -922,6 +962,75 @@ mod tests {
     fn outliers_and_pareto_round_trip_through_serde() {
         let s = sheet(&[&[1.0]]);
         for r in [Rule::outliers(), Rule::pareto()] {
+            let r = rule(&s, r);
+            let json = serde_json::to_string(&r).unwrap();
+            assert_eq!(serde_json::from_str::<CondFormat>(&json).unwrap(), r);
+        }
+    }
+
+    #[test]
+    fn highlight_colours_the_cells_that_meet_the_conditions() {
+        use highlight::{Cond, Join};
+        let mut s = sheet(&[&[1.0, 5.0, 3.0, f64::NAN], &[4.0, 0.0, 2.0, 9.0]]);
+        s.columns[1].data =
+            ColumnData::mixed(vec![4.0, 0.0, 2.0, f64::NAN], [(3, "Japan".to_string())].into_iter().collect());
+        let between = Rule::Highlight {
+            first: Cond::Greater(1.0),
+            second: Some((Join::And, Cond::LessOrEqual(4.0))),
+            colours: Colours { fill: Some(MAX_FILL), font: None },
+        };
+        let st = evaluate(&s, &[rule(&s, between)]);
+        let marked = |col: u64| (0..4).filter(|r| fill_of(&st, col, *r).is_some()).collect::<Vec<_>>();
+        assert_eq!(marked(1), vec![2]);
+        assert_eq!(marked(2), vec![0, 2]);
+        // Text that contains reads text cells; the default (equal to 0) finds the zero.
+        let st = evaluate(
+            &s,
+            &[rule(
+                &s,
+                Rule::Highlight {
+                    first: Cond::Contains("pan".into()),
+                    second: None,
+                    colours: Colours { fill: Some(MIN_FILL), font: None },
+                },
+            )],
+        );
+        assert_eq!(fill_of(&st, 2, 3), Some(MIN_FILL));
+        assert_eq!(fill_of(&st, 2, 0), None);
+        let st = evaluate(&s, &[rule(&s, Rule::highlight())]);
+        assert_eq!(fill_of(&st, 2, 1), Some(MAX_FILL));
+        assert_eq!(st.get(ColumnId(2), 1).unwrap().font, Some(MAX_FONT));
+        // Masked cells are never coloured.
+        s.columns[1].mask.insert(1);
+        assert!(evaluate(&s, &[rule(&s, Rule::highlight())]).is_empty());
+        // A custom condition in x.
+        let st = evaluate(
+            &s,
+            &[rule(
+                &s,
+                Rule::Highlight {
+                    first: Cond::Custom("x >= 5".into()),
+                    second: None,
+                    colours: Colours { fill: Some(MAX_FILL), font: None },
+                },
+            )],
+        );
+        assert_eq!(fill_of(&st, 1, 1), Some(MAX_FILL));
+        assert_eq!(fill_of(&st, 1, 0), None);
+    }
+
+    #[test]
+    fn highlight_rules_round_trip_through_serde() {
+        use highlight::{Cond, Join};
+        let s = sheet(&[&[1.0]]);
+        for r in [
+            Rule::highlight(),
+            Rule::Highlight {
+                first: Cond::Between(1.0, 2.0),
+                second: Some((Join::Or, Cond::Custom("x < 0".into()))),
+                colours: Colours::default(),
+            },
+        ] {
             let r = rule(&s, r);
             let json = serde_json::to_string(&r).unwrap();
             assert_eq!(serde_json::from_str::<CondFormat>(&json).unwrap(), r);

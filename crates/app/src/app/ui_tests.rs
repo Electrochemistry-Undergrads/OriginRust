@@ -35,6 +35,7 @@ mod hexbin;
 mod import_themes;
 mod label_frames;
 mod label_whiteout;
+mod layer_visibility;
 mod layers;
 mod legend_position;
 mod live;
@@ -6476,6 +6477,9 @@ mod label_panels;
 mod layer_management;
 #[path = "ui_tests/merge_graphs.rs"]
 mod merge_graphs;
+
+#[path = "ui_tests/merge_folders.rs"]
+mod merge_folders;
 mod segments;
 #[path = "ui_tests/stack_panels.rs"]
 mod stack_panels;
@@ -8991,6 +8995,7 @@ mod batch_plot;
 mod copy_columns;
 mod copy_variants;
 mod corner_menu;
+mod data_markers;
 mod data_range;
 mod fill_pattern;
 mod filter_manager;
@@ -9001,6 +9006,7 @@ mod new_from_template;
 mod qc_chart;
 mod reimport;
 mod sampling;
+mod scatter_matrix;
 mod sheet_navigate;
 mod sheet_tab;
 mod stats3;

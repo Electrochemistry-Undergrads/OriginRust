@@ -98,6 +98,14 @@ pub struct Style {
     pub interval_error: Option<String>,
     /// Interval plots: the confidence level in percent for ci, above 0 and below 100 (default 95).
     pub interval_level: Option<f64>,
+    /// Scatter matrices: the cells shown, square (default), upper or lower.
+    pub matrix_display: Option<String>,
+    /// Scatter matrices: what the diagonal cells show, none (default) or histogram.
+    pub matrix_diagonal: Option<String>,
+    /// Scatter matrices: the gap between cells in percent of the page, 0 to 10 (default 0).
+    pub matrix_gap: Option<f64>,
+    /// Scatter matrices: false leaves the column names out of the diagonal cells (default true).
+    pub matrix_names: Option<bool>,
     /// Sunburst plots: the start angle in degrees counter-clockwise from 3 o'clock (default 90).
     pub sunburst_start: Option<f64>,
     /// Sunburst plots: the hole as a percentage of the radius, 0 to 90 (default 30).
@@ -283,6 +291,22 @@ impl PlotSpec {
         if (st.interval_error.is_some() || st.interval_level.is_some()) && special != Some(Template::IntervalPlot) {
             bail!("--interval-error and --interval-level need -t interval-plot");
         }
+        let matrix_option = st.matrix_display.is_some()
+            || st.matrix_diagonal.is_some()
+            || st.matrix_gap.is_some()
+            || st.matrix_names.is_some();
+        if special == Some(Template::ScatterMatrix) {
+            if !self.y2.is_empty() {
+                bail!("a scatter matrix cannot have a --y2 axis; leave it out");
+            }
+            if self.panels.is_some() || self.graph.is_some() || self.overlay {
+                bail!(
+                    "a scatter matrix cannot be made in panels, as an overlay or by styling a graph; leave those options out"
+                );
+            }
+        } else if matrix_option {
+            bail!("--matrix-display, --matrix-diagonal, --matrix-gap and --matrix-no-names need -t scatter-matrix");
+        }
         let sunburst_option = st.sunburst_start.is_some()
             || st.sunburst_hole.is_some()
             || st.sunburst_gap.is_some()
@@ -364,6 +388,8 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
             grouped_graph(project, book, sheet, template, &ys, a.group.as_deref(), &a.style)?
         } else if template == Template::IntervalPlot {
             interval_graph(project, &ys, &a.style)?
+        } else if template == Template::ScatterMatrix {
+            scatter_matrix_graph(project, &ys, &a.style)?
         } else if a.group.is_some() {
             bail!(
                 "--group needs -t parallel, -t parallel-index, -t treemap, -t sunburst, -t grouped-columns or -t grouped-box"
@@ -376,6 +402,7 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         }
     };
     apply_style(project, graph, &a.style, a.panels.is_some())?;
+    sheaf_plot::place_zoom_regions(project, graph);
     Ok(graph)
 }
 
@@ -500,6 +527,28 @@ fn interval_graph(project: &mut Project, ys: &[ColumnId], style: &Style) -> Resu
         }
     }
     Ok(graph)
+}
+
+/// A scatter matrix of the columns `ys`, with the display, diagonal, names and gap the style names.
+fn scatter_matrix_graph(project: &mut Project, ys: &[ColumnId], style: &Style) -> Result<WindowId> {
+    use sheaf_core::scatter_matrix::{MatrixDiagonal, MatrixDisplay, ScatterMatrixOptions};
+    let mut options = ScatterMatrixOptions::default();
+    if let Some(d) = style.matrix_display.as_deref().map(str::trim) {
+        options.display = MatrixDisplay::from_name(d)
+            .ok_or_else(|| anyhow!("--matrix-display {d}: choose square, upper or lower"))?;
+    }
+    if let Some(d) = style.matrix_diagonal.as_deref().map(str::trim) {
+        options.diagonal =
+            MatrixDiagonal::from_name(d).ok_or_else(|| anyhow!("--matrix-diagonal {d}: choose none or histogram"))?;
+    }
+    if let Some(g) = style.matrix_gap {
+        if !(0.0..=sheaf_core::scatter_matrix::MAX_GAP_PCT).contains(&g) {
+            bail!("--matrix-gap {g}: the gap is 0 to 10 percent of the page");
+        }
+        options.gap_pct = g;
+    }
+    options.names = style.matrix_names.unwrap_or(true);
+    Ok(project.plot_scatter_matrix(ys, &options)?)
 }
 
 /// Grouped columns or grouped box charts of indexed data: the last numeric column among `ys` is the data, the one or

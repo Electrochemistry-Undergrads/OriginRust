@@ -38,6 +38,19 @@ pub enum Template {
     MarginalBoxCharts,
     /// Plot > Statistics > QC (X bar R) Chart (T111): the range chart and, linked above it, the mean chart.
     QcXbarR,
+    /// Plot > Statistics > Scatter Matrix (T114): every pair of the selected columns in an n x n grid of layers.
+    ScatterMatrix,
+    /// Plot > Specialized > Zoom (T112): the whole curve with a region rectangle, and the region enlarged below.
+    Zoom,
+    /// Plot > Specialized > Wind Rose - Binned Data and Wind Rose - Raw Data (T113).
+    WindRoseBinned,
+    WindRoseRaw,
+    /// Plot > Specialized > Smith Chart (T115).
+    SmithChart,
+    /// Plot > Statistics > 2D Kernel Density (T116): the density colour map with the points on top.
+    Kde2d,
+    /// Plot > Specialized > Piper (T117).
+    Piper,
     /// Line plot with a symbol on every point.
     LineSymbol,
     /// Cyclic voltammetry overlay: smooth lines without markers, no grid,
@@ -185,7 +198,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 72] = [
+    pub const ALL: [Template; 79] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -258,6 +271,13 @@ impl Template {
         Template::MarginalHistograms,
         Template::MarginalBoxCharts,
         Template::QcXbarR,
+        Template::ScatterMatrix,
+        Template::Zoom,
+        Template::WindRoseBinned,
+        Template::WindRoseRaw,
+        Template::SmithChart,
+        Template::Kde2d,
+        Template::Piper,
     ];
 
     /// The name used on the command line and in menus.
@@ -277,6 +297,13 @@ impl Template {
             Template::MarginalHistograms => "marginal-histograms",
             Template::MarginalBoxCharts => "marginal-box-charts",
             Template::QcXbarR => "qc-xbar-r",
+            Template::ScatterMatrix => "scatter-matrix",
+            Template::Zoom => "zoom",
+            Template::WindRoseBinned => "wind-rose-binned",
+            Template::WindRoseRaw => "wind-rose-raw",
+            Template::SmithChart => "smith-chart",
+            Template::Kde2d => "kde-2d",
+            Template::Piper => "piper",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
@@ -354,6 +381,13 @@ impl Template {
             Template::MarginalHistograms => "Marginal Histograms",
             Template::MarginalBoxCharts => "Marginal Box Charts",
             Template::QcXbarR => "QC (X bar R) Chart",
+            Template::ScatterMatrix => "Scatter Matrix",
+            Template::Zoom => "Zoom",
+            Template::WindRoseBinned => "Wind Rose - Binned Data",
+            Template::WindRoseRaw => "Wind Rose - Raw Data",
+            Template::SmithChart => "Smith Chart",
+            Template::Kde2d => "2D Kernel Density",
+            Template::Piper => "Piper",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
@@ -474,6 +508,20 @@ impl Template {
             Template::MarginalHistograms => marginal(id, name, PlotKind::MarginalHistogram),
             Template::MarginalBoxCharts => marginal(id, name, PlotKind::MarginalBox),
             Template::QcXbarR => qc_xbar_r(id, name),
+            Template::ScatterMatrix => {
+                let mut g = general(id, name, PlotKind::Scatter);
+                crate::scatter_matrix::template_layer(&mut g);
+                g
+            }
+            Template::Zoom => zoom(id, name),
+            Template::WindRoseBinned | Template::WindRoseRaw => wind_rose(id, name),
+            Template::SmithChart => smith(id, name),
+            Template::Piper => piper(id, name),
+            Template::Kde2d => {
+                let mut g = general(id, name, PlotKind::Kde2d);
+                g.layers[0].legend.visible = false;
+                g
+            }
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
             Template::Multi3YYy | Template::Multi3YYY | Template::Multi4YYyy | Template::Multi4YyYy => {
@@ -813,6 +861,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             },
             default_kind: kind,
             link: None,
+            zoom: None,
             stack: Stack::None,
             waterfall_color: WaterfallColor::None,
             plot_offsets: Vec::new(),
@@ -1078,6 +1127,92 @@ fn qc_xbar_r(id: WindowId, name: &str) -> Graph {
     g
 }
 
+/// The fill of a Zoom graph's region rectangle and of its zoomed layer (measured cyan; the rectangle's edge blue).
+pub const ZOOM_FILL: Color = Color::rgb(0, 255, 255);
+
+/// Origin's Zoom graph (T112, measured): the whole curve at 16 %, 8 %, 75 % x 30 % of the page in a closed
+/// box with grey major grid lines, and below it a layer linked to it (left -5.979 %, top 127.1 %, width
+/// 106 %, height 152 % of the first) with a cyan background whose ranges are the region rectangle's
+/// (`Layer::zoom`). No axis titles, no legends. The rectangle is placed when the data are plotted
+/// (`Project::plot_zoom`).
+fn zoom(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::Line);
+    let whole = &mut g.layers[0];
+    whole.frame = Frame { left: 0.16, top: 0.08, width: 0.75, height: 0.30 };
+    whole.legend.visible = false;
+    for axis in [&mut whole.x_axis, &mut whole.y_axis] {
+        axis.show_opposite = true;
+        axis.opposite_ticks = false;
+        axis.show_title = false;
+        axis.major_grid = Some(LineStyle::solid(Color::rgb(128, 128, 128), 0.5));
+    }
+    let mut zoomed = right_y_layer(whole, 0);
+    zoomed.link = Some(LayerLink { parent: 0, x: ScaleLink::None, y: ScaleLink::None });
+    zoomed.frame = Frame { left: -0.05979, top: 1.271, width: 1.06, height: 1.52 };
+    zoomed.background = Some(ZOOM_FILL);
+    zoomed.zoom = Some(0);
+    zoomed.palette = whole.palette.clone();
+    for axis in [&mut zoomed.x_axis, &mut zoomed.y_axis] {
+        axis.side = AxisSide::Normal;
+        axis.show_opposite = false;
+        axis.show_title = false;
+        axis.major_grid = None;
+        axis.show_tick_labels = true;
+    }
+    g.layers.push(zoomed);
+    g
+}
+
+/// A wind rose (T113, from Origin's documentation, not measured): the polar page with north up and the
+/// angles running clockwise in degrees, ticks every 45 degrees, the legend listing the speed bands.
+fn wind_rose(id: WindowId, name: &str) -> Graph {
+    let mut g = polar_of(id, name, RadiusColumn::Y, PlotKind::WindRose);
+    let l = &mut g.layers[0];
+    l.coords = Coords::Polar(PolarCoords { zero_deg: 90.0, clockwise: true, ..PolarCoords::default() });
+    l.x_axis.min = Some(0.0);
+    l.x_axis.max = Some(360.0);
+    l.x_axis.major_step = Some(45.0);
+    g
+}
+
+/// A Smith chart (T115, from Origin's documentation, not measured): line + symbol plots in a square layer
+/// of the polar page whose axes run from -1 to 1 and are not drawn; the layer draws the Smith grid.
+fn smith(id: WindowId, name: &str) -> Graph {
+    let mut g = polar_of(id, name, RadiusColumn::Y, PlotKind::LineSymbol);
+    let l = &mut g.layers[0];
+    l.coords = Coords::Smith(SmithCoords::default());
+    for a in [&mut l.x_axis, &mut l.y_axis] {
+        a.min = Some(-1.0);
+        a.max = Some(1.0);
+        a.side = AxisSide::Hidden;
+        a.show_opposite = false;
+        a.major_grid = None;
+        a.minor_grid = None;
+    }
+    g
+}
+
+/// A Piper diagram (T117, from the standard construction, not measured): one layer with hidden axes over the
+/// diagram's extent, one X unit as long as one Y unit, the corner labels, no legend.
+fn piper(id: WindowId, name: &str) -> Graph {
+    use crate::piper::{X_RANGE, Y_RANGE, corner_labels};
+    let mut g = general(id, name, PlotKind::Piper);
+    let page = (g.page.width_pt, g.page.height_pt);
+    let l = &mut g.layers[0];
+    l.legend.visible = false;
+    for (a, (lo, hi)) in [(&mut l.x_axis, X_RANGE), (&mut l.y_axis, Y_RANGE)] {
+        a.min = Some(lo);
+        a.max = Some(hi);
+        a.side = AxisSide::Hidden;
+        a.show_opposite = false;
+        a.major_grid = None;
+        a.minor_grid = None;
+    }
+    l.fit_xy_ratio(1.0, page, X_RANGE.1 - X_RANGE.0, Y_RANGE.1 - Y_RANGE.0);
+    l.labels = corner_labels(&l.x_axis.tick_font);
+    g
+}
+
 fn double_y(id: WindowId, name: &str) -> Graph {
     let mut g = general(id, name, PlotKind::Line);
     let layer = &mut g.layers[0];
@@ -1180,6 +1315,7 @@ fn column(id: WindowId, name: &str, kind: PlotKind) -> Graph {
 /// first right curve differs from the first left one.
 pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
     let mut l = parent.clone();
+    l.display.hidden = false;
     l.plots.clear();
     l.labels.clear();
     l.shapes.clear();
@@ -1283,8 +1419,14 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 72);
+        assert_eq!(Template::ALL.len(), 79);
+        assert_eq!(Template::from_name("piper"), Some(Template::Piper));
+        assert_eq!(Template::from_name("kde-2d"), Some(Template::Kde2d));
+        assert_eq!(Template::from_name("smith-chart"), Some(Template::SmithChart));
+        assert_eq!(Template::from_name("wind-rose-raw"), Some(Template::WindRoseRaw));
+        assert_eq!(Template::from_name("zoom"), Some(Template::Zoom));
         assert_eq!(Template::from_name("qc-xbar-r"), Some(Template::QcXbarR));
+        assert_eq!(Template::from_name("scatter-matrix"), Some(Template::ScatterMatrix));
         assert_eq!(Template::from_name("marginal-histograms"), Some(Template::MarginalHistograms));
         assert_eq!(Template::from_name("marginal-box-charts"), Some(Template::MarginalBoxCharts));
         assert_eq!(Template::from_name("ohlc-volume"), Some(Template::OhlcVolume));

@@ -77,6 +77,9 @@ pub fn hint(tool: DataTool) -> &'static str {
             "Mask Data Points: drag a rectangle over the points or click one; Tab: active plot, Space: freehand, U: unmask; Esc or right-click ends"
         }
         DataTool::Move => "Move Data Points: drag a point to its new place; Esc or right-click ends",
+        DataTool::MarkRange => {
+            "Mark Data Range: click a point to move the nearer marker there; Data > Set Display Range plots the rows between the markers; Esc or right-click ends"
+        }
         DataTool::RemoveBad => {
             "Remove Bad Data Points: click a point (or Left/Right), Enter makes its Y value missing; Esc or right-click ends"
         }
@@ -210,7 +213,7 @@ pub fn show(
             DataTool::Move => {
                 near(origin).map(|p| Drag::Point(p, screen_of(p).map_or(egui::Vec2::ZERO, |at| origin - at)))
             }
-            DataTool::RemoveBad => None,
+            DataTool::RemoveBad | DataTool::MarkRange => None,
         };
     }
     let pointer = response.interact_pointer_pos();
@@ -297,6 +300,22 @@ pub fn show(
             // A click only picks the point (as the Data Reader does); Enter removes it.
             DataTool::RemoveBad => state.picked = Some(p),
             DataTool::Move => {}
+            // The nearer marker of the clicked point's plot moves to its row.
+            DataTool::MarkRange => {
+                let markers = project
+                    .graph(graph)
+                    .and_then(|g| g.layers.get(p.layer))
+                    .and_then(|l| l.plots.get(p.plot))
+                    .and_then(|pl| pl.decor.markers);
+                let (a, b) = match markers {
+                    Some((lo, hi)) if p.row.abs_diff(lo) <= p.row.abs_diff(hi) => (p.row, hi),
+                    Some((lo, _)) => (lo, p.row),
+                    None => (p.row, p.row),
+                };
+                let op = crate::actions::MarkerOp::Move { plot: p.plot, a, b };
+                actions
+                    .push(Action::GraphEdit { graph, op: crate::actions::GraphOp::DataMarkers { layer: p.layer, op } });
+            }
         }
     }
 

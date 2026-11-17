@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 293 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 283 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -103,14 +103,15 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T70](T70-axis-center-fit-page-to-printer.md) | Axis Center and Fit Page To Printer (B3 slice 2) | S | 0 |
 | [x] | [T73](T73-change-xy-ungroup.md) | Change X, Change Y, Ungroup on a plot (B3 slice 3) | S | 0 |
 | [x] | [T80](T80-color-and-bubble-scale.md) | New Color Scale, legend Add Color Scale and Add Bubble Scale (B3 slice 4) | M | 0 |
-| [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 19 |
+| [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 15 |
 | [x] | [T71](T71-point-segments.md) | 2 and 3 Point Segment plots (B4 slice 2) | S | 0 |
 | [x] | [T75](T75-scatter-central.md) | Scatter Central (B4 slice 3) | S | 0 |
 | [x] | [T79](T79-column-scatter.md) | Column Scatter (B4 slice) | S | 0 |
 | [x] | [T76](T76-grouped-indexed-plots.md) | Grouped Columns (indexed data), Grouped Box Charts (B4 slice) | M | 0 |
 | [x] | [T82](T82-line-series.md) | Line Series (B4 slice) | S | 0 |
 | [x] | [T83](T83-interval-and-pareto.md) | Interval Plot, Pareto (B4 slice) | M | 0 |
-| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label; Grouped Columns (indexed data) and Grouped Box Charts done as [T76](T76-grouped-indexed-plots.md); Interval Plot and Pareto done as [T83](T83-interval-and-pareto.md)): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 7 |
+| [x] | [T114](T114-scatter-matrix.md) | Scatter Matrix (B4 slice) | M | 0 |
+| [ ] | B4 | More 2D plot types (continues T12; slice 1 done as [T68](T68-drop-line-and-column-label.md): Vertical Drop Line, Column + Label; Grouped Columns (indexed data) and Grouped Box Charts done as [T76](T76-grouped-indexed-plots.md); Interval Plot and Pareto done as [T83](T83-interval-and-pareto.md); Scatter Matrix done as [T114](T114-scatter-matrix.md)): symbol and segment variants, statistics plots, stock, vector, wind rose, Piper, Smith | L | 1 |
 
 - **B1.** The graph view draws the page to fit the window. Add a view transform (zoom factor and
   scroll offset) in `crates/app/src/graph_view.rs` so hit-testing (`sheaf_plot::hit`) still works,
@@ -129,7 +130,7 @@ Backlog packages: write the brief first (step 3 above).
 - **B4.** One commit per type as in T12. Order by use in the owner's field: Vertical Drop Line,
   Column + Label, Grouped Columns (indexed data), Grouped Box Charts, Interval Plot (done as T83), Histogram +
   Probabilities, Marginal Histograms and Box Charts (two extra layers: do after T61), Pareto (done as T83), QC
-  chart, Scatter Matrix, 2D Kernel Density, vectors, stock charts, wind rose, Piper, Smith, Zoom.
+  chart, Scatter Matrix (done as T114), 2D Kernel Density, vectors, stock charts, wind rose, Piper, Smith, Zoom.
   Line Series and 2/3 Point Segment are line-connection variants: check `Connect` first.
 
 ## Wave 5: everyday worksheet work
@@ -138,7 +139,8 @@ Backlog packages: write the brief first (step 3 above).
 |---|---|---|---|---|
 | [ ] | B5 | Worksheet editing: copy variants, Paste Transpose/Link/Special, cell links, Set As Begin/End, fill with a set of numbers/dates/text, sampling interval, Copy Columns to, Swap Columns | L | 13 |
 | [ ] | B6 | Worksheet view and sheets: header and grid toggles, row label rows, sheet-tab items, Split, objects in cells (graphs, images, sparklines, variables), Merge cells | L | 23 |
-| [ ] | B7 | Worksheet tools: rest of Conditional Formatting (T35 leftovers), Pivot Table, Find in Project | M | 6 |
+| [ ] | B7 | Worksheet tools: rest of Conditional Formatting (T35 leftovers), Pivot Table, Find in Project | M | 5 |
+| [ ] | [T120](T120-conditional-heatmap.md) | Conditional Heatmap (B7 slice; claimed 2026-11-16) | M | 1 |
 
 - **B5 worksheet text controls.** Origin 2016 Set Data Style has Rich Text, Wrap Text, Float
   and More... (GUI 3, measured 2026-11-16), with no Default item. More reuses Format Cells (T59);

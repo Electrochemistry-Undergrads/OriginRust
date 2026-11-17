@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **293 greyed items: 198 in the menu bar, 18 on the toolbars, 77 in context menus.**
+original inventory baseline. This is not a new runtime audit. **283 greyed items: 188 in the menu bar, 18 on the toolbars, 77 in context menus.**
 
 ## How to read and keep this file
 
@@ -59,12 +59,14 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T83` | 0 |
 | `T91` | 0 |
 | `T96` | 0 |
+| `T114` | 0 |
+| `T120` | 1 |
 | `B2` | 33 |
-| `B3` | 19 |
-| `B4` | 7 |
+| `B3` | 15 |
+| `B4` | 1 |
 | `B5` | 13 |
 | `B6` | 23 |
-| `B7` | 6 |
+| `B7` | 5 |
 | `B8` | 4 |
 | `B9` | 13 |
 | `B11` | 3 |
@@ -76,7 +78,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 63 items, backlog packages (`B`) 210, not planned (`N`) 20.
+Briefs (`T`) hold 64 items, backlog packages (`B`) 199, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -119,16 +121,16 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
 - `B15` 3D Symbol/Bar/Vector: 3D Bars · 3D Scatter · 3D Trajectory · 3D Scatter + Error Bar · 3D Vector XYZ XYZ · 3D Vector XYZ dXdYdZ
 - `B8` Statistics: Probability Plot · Q-Q Plot
-- `B4` Statistics: Histogram + Probabilities · 2D Kernel Density · Scatter Matrix
+- `B4` Statistics: Histogram + Probabilities
 - `B14` Contour/Heat Map: Color Fill · B/W Lines + Labels · Gray Scale Map · Heat Map · Polar Contour theta(X) r(Y) · Polar Contour r(X) theta(Y) · Ternary Contour
 - `B14` Profile: Contour Profiles · Image Profiles
-- `B4` Specialized: Wind Rose · Piper · Smith Chart · Zoom
 
 ### Column
 - `T63` Fill Column With: Row Numbers · Uniform Random Numbers · Normal Random Numbers
 
 ### Worksheet
-- `B7` Conditional Formatting: Conditional Highlight... · Conditional Heatmap... · Conditional Pareto... · Conditional Outliers... · Conditional Format Manager...
+- `T120` Conditional Formatting: Conditional Heatmap...
+- `B7` Conditional Formatting: Conditional Highlight... · Conditional Pareto... · Conditional Outliers... · Conditional Format Manager...
 - `B7` Pivot Table...
 - `B14` Convert to Matrix: Direct · XYZ Gridding · Extract
 - `B16` Worksheet Script...
@@ -153,7 +155,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B3` Legend: Add Legend Title
 
 ### Data
-- `B3` Set Display Range · Reset to Full Range · Mark Data Range · Clear Data Markers
 - `B3` Analysis Markers: Hide · Show Partial Ranges · Show All · Tiny · Small · Medium · Large
 - `B3` Lock Position: Layer Icon · First Point · Last Point
 

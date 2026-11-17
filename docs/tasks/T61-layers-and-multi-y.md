@@ -1,6 +1,6 @@
 # T61: Layers, insets and three/four Y axes
 
-**Status:** in progress; recovered and refined 2026-11-15. Step 0 (Origin measurements, graphing 21) and slice 1 (add/delete layers, inset, icon Delete and Layer Properties) are done; slice 2 (axis offsets, Move to Layer) and slice 3 (3Ys/4Ys templates, Multiple Y Axes, CLI/MCP names, .sheaf/.opj handling) are done. Open: Open Dialog..., Show Active Layer Only and Set Active Layer By Layer Icon Only (unmeasured), Hide Layer hiding axes, Double click to open Plot Setup. Hide Layer should also hide axes; Open Dialog... and two icon-menu items stay grey (unmeasured). **Size:** L, three slices.
+**Status:** in progress; recovered and refined 2026-11-15. Step 0 (Origin measurements, graphing 21) and slice 1 (add/delete layers, inset, icon Delete and Layer Properties) are done; slice 2 (axis offsets, Move to Layer) and slice 3 (3Ys/4Ys templates, Multiple Y Axes, CLI/MCP names, .sheaf/.opj handling) are done. Open: Open Dialog..., Show Active Layer Only and Set Active Layer By Layer Icon Only (unmeasured), Double click to open Plot Setup and whole-layer Hide Other Layers. Hide Layer is a reversible whole-layer toggle (graphing 21.13); Open Dialog... and the unsupported icon-menu items stay grey. **Size:** L, three slices.
 Legend-anchor follow-up (`codex/multi-y-template-legends`): the four stock templates use
 measured top-left positions above the frame, Arial 22 pt (YY-YY: 20 pt), and no frame or background.
 A compatible top-left position variant keeps the left edge fixed when labels grow; existing
@@ -11,6 +11,16 @@ Fmt, strict workspace/all-target Clippy and all 4,214 workspace tests pass (eigh
 including seven anchor/layout/editor/persistence regressions. Four updated SVG goldens and
 fresh CLI PNGs were reviewed; inventory 310 and eight Python tooling tests pass. Source and
 goldens stayed frozen through validation, with four test threads.
+
+Hide Layer follow-up (`codex/t61-hide-layer-axes`, 2026-11-16): a compatible
+visibility flag suppresses curves, axes and owned objects without changing plot
+visibility or axis settings; the checked icon-menu entry toggles it back. Linked
+geometry remains fixed and hidden points cannot be read/picked. Five private
+Origin2016 controls confirm unchanged element flags/ranges/frames and identical
+restore PNGs (graphing21.13). Native project saves warn that the unmeasured OPJ
+visibility bit is omitted; the companion preserves it. Seven new regressions cover
+rendering/geometry/picking, legacy records, menu history, readers and save/reopen.
+Formatting, strict workspace/all-target Clippy and all 4,336 tests pass (eight existing ignored), including all seven new regressions, on integrated T112/T113/T114 source. The 290-location inventory, eight Python tooling tests and frozen source/fixture/asset hashes pass. Current desktop baseline/hidden/restored captures and PNG/SVG exports were inspected; owned Native/app/helper actors are closed. Other T61 leftovers remain open.
 
 **Branch:** `layers-multi-y`. **Priority:** P0, wave 2.
 **Spec:** [graphing](../spec/graphing.md) 1.3 and 12; ADR 0009.

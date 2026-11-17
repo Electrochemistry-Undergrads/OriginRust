@@ -63,7 +63,8 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
     // A legend that lists the plots of every layer drawn in its frame (a layer and its right Y
     // layer) is drawn after all layers, so that no layer's curves cover it.
     for (i, layer) in g.layers.iter().enumerate() {
-        if layer.legend.scope == LegendScope::Graph
+        if !layer.display.hidden
+            && layer.legend.scope == LegendScope::Graph
             && let Some(last) = layers.last_mut()
         {
             let entries: Vec<&PlotData> = g.same_frame(i).into_iter().flat_map(|j| pds[j].plots.iter()).collect();
@@ -382,6 +383,22 @@ fn group_geometry(
                 own(i, Dim::X, &l.x_axis)
             };
             let y = if shares(i, Dim::Y) { root_y.clone() } else { own(i, Dim::Y, &l.y_axis) };
+            // A zoom layer (T112) shows the extent of the root's region rectangle.
+            if i != root
+                && let Some(r) = l.zoom.and_then(|k| rl.shapes.get(k))
+            {
+                let span = |a: &ResolvedAxis, u1: f64, u2: f64| {
+                    let (v1, v2) = (a.from_unit(u1), a.from_unit(u2));
+                    (v1.min(v2), v1.max(v2))
+                };
+                let (x0, x1) = span(&root_x, r.x1, r.x2);
+                // Frame fractions run down from the top; axis units run up from the bottom.
+                let (y0, y1) = span(&root_y, 1.0 - r.y1, 1.0 - r.y2);
+                if x1 > x0 && y1 > y0 && [x0, x1, y0, y1].iter().all(|v| v.is_finite()) {
+                    let fixed = |a: &Axis, lo: f64, hi: f64| Axis { min: Some(lo), max: Some(hi), ..a.clone() };
+                    return (own(i, Dim::X, &fixed(&l.x_axis, x0, x1)), own(i, Dim::Y, &fixed(&l.y_axis, y0, y1)));
+                }
+            }
             (x, y)
         })
         .collect();
@@ -751,6 +768,12 @@ fn layer_scene(
         underlay_len: 0,
         objects: Vec::new(),
     };
+    if layer.display.hidden {
+        // Keep scene indices and the resolved geometry of linked layers stable, but expose no
+        // drawing or pickable frame. A zero-sized clip is valid in each export backend.
+        scene.clip = Rect { x: geom.clip.x, y: geom.clip.y, w: 0.0, h: 0.0 };
+        return scene;
+    }
     // The layer's Background colour fills the frame behind the grid and the data.
     fill::draw_background(&mut scene.grid, layer.background, &layer.background_style, geom.frame);
     let background_items = scene.grid.len();
@@ -770,6 +793,8 @@ fn layer_scene(
             polar::draw_grid(&mut scene.grid, layer, geom);
         } else if geom.ternary.is_some() {
             ternary::draw_grid(&mut scene.grid, layer, geom);
+        } else if layer.coords.smith().is_some() {
+            crate::smith::draw_grid(&mut scene.grid, geom);
         } else {
             draw_grid(&mut scene.grid, layer, geom);
         }
@@ -1821,7 +1846,7 @@ fn draw_legend(
                             },
                             Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
                         );
-                    } else if plot.kind.is_bar() || plot.kind.is_area() {
+                    } else if plot.kind.is_bar() || plot.kind.is_area() || plot.kind == PlotKind::WindRose {
                         // A small bar: as long as a line sample, one font size high, filled and
                         // outlined like the bars (an area plot is shown the same way).
                         fill::fill_rect(

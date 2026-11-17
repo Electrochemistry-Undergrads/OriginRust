@@ -44,8 +44,11 @@ pub use worksheet_font::{WorksheetFont, worksheet_font};
 mod slope;
 mod straight_line;
 pub use slope::{NOT_USABLE as SLOPE_NOT_USABLE, check_point as slope_check_point};
+mod kde2d;
 mod marginal_plot;
+mod piper_plot;
 mod qc_plot;
+pub mod smith;
 mod stack;
 mod stock_plot;
 mod sunburst;
@@ -60,6 +63,7 @@ pub(crate) mod trend;
 mod vector;
 mod vector_plot;
 mod violin;
+mod wind_rose;
 
 #[cfg(test)]
 mod column_scatter_tests;
@@ -85,6 +89,8 @@ mod label_frame_tests;
 mod label_whiteout_tests;
 #[cfg(test)]
 mod layer_scale_tests;
+#[cfg(test)]
+mod layer_visibility_tests;
 #[cfg(test)]
 mod layers_tests;
 #[cfg(test)]
@@ -151,6 +157,10 @@ mod user_template_tests;
 mod vector_plot_tests;
 #[cfg(test)]
 mod violin_tests;
+#[cfg(test)]
+mod wind_rose_tests;
+#[cfg(test)]
+mod zoom_tests;
 
 pub use eps::EpsOutput;
 pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextLineMetrics, TextMeasurer};
@@ -432,6 +442,38 @@ pub struct Raster {
 /// to another one has its frame placed relative to its parent's (the same frame for the right Y
 /// axis of a double-Y graph, its own place for a panel of a stack) and, when its X scale is
 /// linked, its parent's X axis.
+/// Centres the region rectangle of each zoom layer (T112, `Layer::zoom`) of `graph` on the first point of the
+/// root layer's first plot, on the root's resolved axes, as Origin places it when it makes the graph. Graphs
+/// without zoom layers are left as they are.
+pub fn place_zoom_regions(project: &mut Project, graph: WindowId) {
+    let Some(g) = project.graph(graph) else { return };
+    let regions: Vec<usize> = g.layers.iter().filter_map(|l| l.zoom).collect();
+    if regions.is_empty() {
+        return;
+    }
+    let Ok(geoms) = layout_geometry(project, graph) else { return };
+    let pds = data::collect_graph(project, g);
+    let first = pds
+        .first()
+        .and_then(|l| l.plots.first())
+        .and_then(|pd| pd.rows().map(|r| (pd.x_at(r), pd.y_at(r))).find(|(x, y)| x.is_finite() && y.is_finite()));
+    let (Some((x, y)), Some(geom)) = (first, geoms.first()) else { return };
+    let (fx, fy) = (geom.x.to_unit(x), 1.0 - geom.y.to_unit(y));
+    if !(fx.is_finite() && fy.is_finite()) {
+        return;
+    }
+    let Some(g) = project.graph_mut(graph) else { return };
+    for k in regions {
+        if let Some(r) = g.layers[0].shapes.get_mut(k) {
+            let (w, h) = ((r.x2 - r.x1).abs(), (r.y2 - r.y1).abs());
+            r.x1 = fx - w / 2.0;
+            r.x2 = fx + w / 2.0;
+            r.y1 = fy - h / 2.0;
+            r.y2 = fy + h / 2.0;
+        }
+    }
+}
+
 pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGeometry>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
     let pds = data::collect_graph(project, g);

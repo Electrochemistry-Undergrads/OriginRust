@@ -152,6 +152,8 @@ pub enum GraphOp {
     HideLayer { layer: usize },
     /// Hide Other Layers.
     HideOtherLayers { layer: usize },
+    /// The Data menu's data markers and display range (T118); `layer` is the active layer.
+    DataMarkers { layer: usize, op: MarkerOp },
     /// Graph > New Layer(Axes) and the Graph toolbar: a layer of `kind` next to the active layer `layer`.
     AddLayer { layer: usize, kind: sheaf_core::layers::NewLayerKind },
     /// Delete Layer of the layer icon: the layer goes, its children become independent.
@@ -204,6 +206,23 @@ pub enum DataTool {
     Move,
     /// Data > Remove Bad Data Points: a click sets the Y cell of a point missing.
     RemoveBad,
+    /// Data > Mark Data Range: a click on a point moves the nearer data marker of its plot there (T118).
+    MarkRange,
+}
+
+/// A change of the data markers or the display range of a graph (T118).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkerOp {
+    /// Mark Data Range: markers at the ends of plot `plot` of the layer.
+    Mark { plot: usize },
+    /// A marker moved: the plot's markers are now on rows `a` and `b`.
+    Move { plot: usize, a: usize, b: usize },
+    /// Clear Data Markers.
+    Clear,
+    /// Set Display Range.
+    SetRange,
+    /// Reset to Full Range.
+    ResetRange,
 }
 
 /// A change of worksheet cells made from a graph's Data menu tools (one undo step each).

@@ -3247,13 +3247,52 @@ adds **Share X** (`share_x`, `--share-x`): the linked layers also follow the fir
 to one, the vertical shared-X figure of the brief. Linking needs Rearrange Layout (the dialog greys
 it with Arrange Settings). A typed page size is used as given. The text factor also scales the
 plots' data labels (unmeasured) and a Fixed Factor applies without rearranging (unmeasured; Auto then
-gives 1 as measured). The app's Merge choice is "All in Project" (default) or "Specified" (a
-checklist with Up and Down): Sheaf has no active folder, so Origin's folder choices and its default
-are not offered.
+gives 1 as measured). The app's Merge choice offers "All in Project" (the retained Sheaf default),
+"Specified" (a checklist with Up and Down), "All in Active Folder" and
+"All in Active Folder (Recursive)". The folder modes are measured below; the existing project
+and manual-list order is retained.
 Duplicate, missing or non-graph sources, fewer than two graphs, too few cells, a factor outside 0.05
 to 20 and a page side outside 0.5 to 200 in are refused without changing the project. Not built:
-Add Extra Layer(s) for Grid, Set Layer Width/Height by Common Scale, panel labels, the folder
-choices of Merge (Sheaf has no active folder), "Treat Each Source Graph as a Unit" off.
+Add Extra Layer(s) for Grid, Set Layer Width/Height by Common Scale, panel labels, Active Page,
+Open/embedded-only source filters, the merge preview and "Treat Each Source Graph as a Unit" off.
+
+**Folder source choices** (Origin 2016, T60 follow-up measured 2026-11-16): fresh
+standard Line graphs were placed using public Project Explorer commands. RootZ/RootA remain
+at the root, LocalZ/LocalA are direct members of Scope, ChildZ is in Scope/Zulu, OtherZ is in
+Outside, ChildA is in Scope/Alpha and DeepA is in Scope/Alpha/Deep. Graphs were created in that
+order; Zulu was created before Alpha, and LocalA was active for the Scope controls.
+`merge_graph option:=folder keep:=1` selected LocalZ then LocalA; `recursive` selected LocalZ,
+LocalA, ChildA, DeepA, ChildZ; root `folder` selected RootZ then RootA. Every source was
+validated as a one-layer graph and its folder path read back independently. Layer-by-layer
+plot dataset names establish membership/order; checked 800-pixel PNG exports establish two,
+five and two panels. The earlier three-member recursive control agrees. These direct-graph controls agree with creation order, and recursive traversal visits named
+child folders depth first;
+the measured ASCII folder names sort Alpha before Zulu despite folder creation order.
+
+The project-wide Native control selected root graphs, Outside, then Scope and its descendants.
+Sheaf keeps its existing All in Project/manual-list order; changing that separate contract is
+outside this source-filter slice. Current documentation describes the folder/recursive modes:
+[merge_graph](https://docs.originlab.com/x-function/ref/merge_graph/).
+Accepted command/readback/image hashes and owned-instance cleanup are in ignored scratch
+`t60-merge-folder-choices/native-proof.json`. Two initial shared-workbook probes used an
+unusable short-name reference and are excluded before any merge result. The accepted runs
+used independently validated active-workbook plots; all owned instances/guards closed,
+with foreign process identities preserved. Additional reverse-arrival controls could not start
+because COM reported Class Not Registered in both client architectures; no registration was
+changed. Native order after reversing folder arrival remains unestablished.
+
+Sheaf captures the Explorer folder when the dialog opens through either the menu or `--show`.
+Folder lists exclude workbook windows, respect implicit root membership, and show graphs in
+the order that will be merged. Direct graphs use existing Project creation order, matching the
+accepted fixture. Recursive child-folder sorting uses case-folded names (Unicode
+and equal-name tie behavior are Sheaf policy; Native controls covered distinct ASCII names).
+Changing only the Explorer selection keeps the captured source folder. Any folder-tree edit
+requires reopening before a folder-mode merge, preventing index paths from silently targeting
+another folder. All in Project/Specified keep their existing live graph-list behavior, ticks
+and manual ordering. Empty/one-graph choices are refused without history; source removal,
+multilayer grouping, layout, Undo and native/companion saves reuse the existing core merge.
+New-graph destination placement and visibility/open-only handling retain their existing scope;
+these filters add no folder mutations, model fields, IO format or CLI/MCP options.
 
 **Command line:** `sheaf merge-graphs PROJECT (--graph NAME ... | --all-graphs) [--rows N]
 [--cols N] [--gap H,V] [--margins L,R,T,B] [--portrait] [--page-size W,H] [--keep-aspect]
@@ -4953,7 +4992,7 @@ Implemented in `crates/core/src/layers.rs` (`Graph::add_layer`, `Graph::delete_l
 - Delete follows 21.4: children are unlinked and keep their place on the page (the parent's rectangle for a layer that covers it; for an inset the inset's own place, **unmeasured**), later links are renumbered, no confirmation, undo text "Undelete frame". Deleting the **only** layer is refused (Origin's behaviour unmeasured). After a delete the active layer is the one before the deleted layer (or the first), a selection in a later layer moves up, a selection in the deleted layer is cleared, and Plot Details, Layer Contents, Plot Setup and the drawn-object window of that graph close.
 - Add makes the new layer active and clears the selection; one undo step each ("Create", "Undelete frame").
 - Layer Properties... (Format menu and layer icon) opens Plot Details on the layer's node with the Background tab. Sheaf's layer node keeps its Layer Contents and Legend tabs as well.
-- Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer still hides only the plots, not the axes (Origin hides both; a later slice).
+- Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer is a reversible whole-layer toggle (21.13); Hide Other Layers still only hides plots and awaits a separate behavior check.
 
 ### 21.10 How Sheaf draws a displaced Y axis (slice 2)
 
@@ -5030,6 +5069,48 @@ but the five-column export showed additional labels not explained by the raw tex
 extra-column legend membership and empty-layer row translation remain follow-ups. The
 existing automatic graph-wide legend contents are unchanged. No layer assignment, axes,
 links, dialog-plan defaults or worksheet behavior is changed here.
+
+### 21.13 Reversible layer visibility (T61 follow-up, 2026-11-16)
+
+Fresh Origin 2016 controls use our own X = 0, 0.5, ..., 10 and three Y columns
+(X squared, 0.05 sin(X), 10+X), plotted with the stock 3Ys Y-YY template. The
+private COM runner held the reference mutex, verified a newly created process,
+and closed its own instance and watchdog; pre-existing process identities were
+preserved. Five accepted 800 x 612 PNG exports and per-layer readbacks are local
+in `re-workspace/scratch/t61-hide-layer-axes/native-1/`.
+
+Origin's [layer command reference](https://docs.originlab.com/labtalk/ref/layer_options_for_layer/)
+provides `layer -h 1` and `layer -h 0`; its
+[layer properties reference](https://docs.originlab.com/labtalk/ref/layer-obj/)
+also exposes `layer.show`. The installed 2016 controls confirm:
+
+- Hiding layer 2 changes only its `layer.show` from 1 to 0. Its curve and right
+  axis disappear; the other two curves and axes retain their positions. The
+  graph legend, owned by layer 1, keeps the hidden curve's entry.
+- Hiding layer 1 through `layer.show=0` removes its curve, X/left-Y axes, titles
+  and graph legend. Layers 2 and 3 still draw their curves and right axes.
+- `layer.showData`, `layer.showx`, `layer.showy`, frames, links and both axis
+  ranges remain unchanged in all three layers. Hiding layers 2 and 1 changes
+  3,985 and 8,347 pixels respectively; each corresponding restore export has
+  zero different pixels from the original.
+
+Sheaf stores a compatible `LayerDisplay.hidden` flag (false when absent),
+independent of individual plot visibility and Display-tab switches. Newly added
+layers start visible even when their parent is hidden (Sheaf creation policy;
+the follow-up native creation probe failed before COM activation and is excluded). The icon
+menu checks Hide Layer while hidden and uses the same entry to show it again.
+Hidden layers contribute no drawing or pickable frame; reader/edit tools ignore
+their points. Geometry, scale resolution and layer indices remain intact so
+linked visible layers do not move. A graph-scoped legend follows its owner's
+visibility and retains sibling entries, matching the controls above. Other
+layer-owned annotations are suppressed too; specific annotation types beyond
+the native legend/title controls have not been measured separately.
+
+Each toggle uses one existing "Hide layer" Undo step (Sheaf policy; Origin's
+Undo behavior remains weakly established in 21.3). `.sheaf` and `.opj.sheaf`
+companions retain visibility; the native `.opj` hidden bit remains unmeasured,
+so saves explicitly warn that bare Origin files show the layer. Hide Other
+Layers and the two disabled icon-mode commands are separate follow-ups.
 
 ## 22. Graph view modes, Show toggles and Full Screen (T66, measured 2026-11-15, Origin 2016)
 
@@ -5457,4 +5538,206 @@ Probed with 20 values in column B, selected alone.
   - Subgroup sizes are 2 to 10, at 3 sigma.
   - Left out: the hatched band, the statistics table, the "Make QC Chart" panel, and a Num Sigma setting.
   - `plot_columns` with the template (the CLI) uses subgroups of 3.
+
+## 34. Zoom graph: Plot > Specialized > Zoom (T112, measured 2026-11-16, Origin 2016)
+
+Probed with X = 1..50 and Y = 10 sin(X/5), B selected.
+
+- Two layers:
+  - **Layer 1** (the whole curve) sits at left 16 %, top 8 %, width 75 %, height 30 % of the page. It is a
+    closed box with grey (128, 128, 128) major grid lines, and has no axis titles or legend. Its axes ran
+    -10 to 60 and -15.4 to 15.4.
+  - **Layer 2** (the zoom) is linked at left -5.979 %, top 127.1 %, width 106 %, height 152 % (in units of
+    layer 1), so it sits below it, a little wider. It has a cyan (0, 255, 255) background and bottom and
+    left axes only.
+- Layer 1 holds a cyan rectangle with a blue edge: the region. Layer 2's X and Y ranges are exactly the
+  region's (-5.7125 to 7.704 and -2.759 to 6.716). Dragging the rectangle in Origin moves the zoom.
+- The region starts centred on the first data point. Its size is 0.19167 of layer 1's width and 0.30764
+  of its height.
+- Sheaf (`Project::plot_zoom`, template `zoom`):
+  - **Zoom field:** `Layer::zoom` names the rectangle among the root layer's shapes, and the layout gives the
+    zoom layer that rectangle's extent in the root's data. Moving or resizing the rectangle like any other
+    shape moves the zoom.
+  - **Placing the region:** `sheaf_plot::place_zoom_regions` centres the region on the first point on the
+    resolved axes. The app and the CLI call it after plotting.
+  - **Differences from Origin:** shapes are drawn over the data, so the region hides the curve under it
+    (Origin draws the curve on top). The axes keep Sheaf's automatic ranges.
+
+## 35. Scatter matrix: Plot > Statistics > Scatter Matrix (T114, 2026-11-16, Origin's documentation, not measured)
+
+Built on macOS without Origin. The behaviour follows OriginLab's published pages for the menu item and its
+`plot_matrix` X-Function (option names and defaults). Nothing was measured in Origin 2016, which may have had
+the older, simpler `plotmatrix`.
+
+- Input:
+  - Origin takes two or more selected columns, every one of them a variable whatever its designation.
+  - Sheaf takes 2 to 8 numeric columns (8 x 8 = 64 layers, the most a grid has), in selection order. With no
+    selection it takes the sheet's numeric Y columns, whatever their units.
+  - A selection that includes a text column is refused.
+- Layout: one graph, one layer per cell of an n x n grid, the cells row by row from the top left.
+  - The cell in row r, column c plots column c (X) against column r (Y).
+  - So a grid column shares its X variable and a grid row its Y variable. Cells (r, c) and (c, r) are the same
+    pair either way round.
+- Options (Origin's names, its defaults first):
+  - **Matrix Display:** Square (every cell), Upper Triangular (the diagonal and the cells right of it), or
+    Lower Triangular (the diagonal and the cells left of it). Cells left out get no layer.
+  - **Show in Diagonal Cells:** None, or Histogram (the variable's histogram with automatic bins, counts from
+    0).
+  - **Variables in Diagonal Cells:** on. The column's long name (else its short name) is written in its
+    diagonal cell, in the middle, or near the top above a histogram.
+  - **Gap:** 0 to 10 % of the page between neighbouring cells, 0 by default.
+  - Origin's Mixed display, box chart and distribution curves on the diagonal, Show Tick and Label modes,
+    confidence ellipse, linear fit with Pearson's r / adjusted R² / equation labels, significance marks,
+    grouping and listwise missing values are not built. The dialog shows the ellipse, the fit and the
+    listwise switch disabled.
+- Sheaf's own choices (unmeasured):
+  - **Page and cells:** a square page as tall as the default page (8.205 in). The grid sits inside margins of
+    14 % (left), 4 % (right and top) and 12 % (bottom). An upper matrix mirrors them: 4 % left, 14 % right,
+    12 % top and 4 % bottom.
+  - **Tick labels:** only the outer cells carry tick labels. In a square or lower matrix that is the bottom
+    row (X) and the left column (Y). In an upper matrix it is the top row and the right column, with both
+    axes of every cell moved to those sides. A diagonal histogram never labels its counts.
+  - **Axes and marks:** no axis titles and no legends. Each cell is a closed box with inward ticks and no minor
+    ticks. The symbols are filled black squares.
+  - **Sizes:** symbols (6 pt), tick labels (18 pt) and tick lengths shrink by 2/n from three variables on.
+    Symbols stop at 2.5 pt, labels at 9 pt, and ticks at half length.
+  - **Ranges:** every cell gets its X variable's limits and step on X, and its Y variable's on Y, so a grid
+    column or row lines up even with missing values. A diagonal histogram's counts are the exception: they
+    start at 0 on an automatic scale.
+    - The limits are the automatic range of the variable's finite values (T20's rule, the limits a scatter
+      of it gets alone). A constant variable gets one unit either side.
+    - The step is the automatic one, widened along 1, 2, 5, 10 until the range has at most 5 steps, so that
+      the labels of small cells do not run together.
+  - **Diagonal names:** each is written at 1.25 times the tick-label size. A long name is made smaller so that
+    it takes at most 80 % of the cell's width, assuming an average glyph of 0.55 em. It is centred across the
+    cell, at mid-height, or 10 % from the top above a histogram, where a tall bar can run under it.
+  - **Recalculation:** the graph is not recalculated from the dialog's settings, as Origin's lock icon does.
+    The limits are fixed when the graph is made and stay as they are when the data changes.
+- Sheaf:
+  - `Project::plot_scatter_matrix(columns, &ScatterMatrixOptions)` in `core/scatter_matrix.rs`, with the
+    template `scatter-matrix`. Plot > Statistics > Scatter Matrix opens the options window. OK makes the graph
+    in one undo step.
+  - CLI: `sheaf plot -t scatter-matrix [--matrix-display square|upper|lower] [--matrix-diagonal
+    none|histogram] [--matrix-gap PCT] [--matrix-no-names]`.
+  - MCP: the `plot` tool's `matrix_*` options.
+  - The graph is ordinary scatter, histogram and empty layers with text labels, so `.sheaf` and `.opj` save it
+    with no new fields.
+
+## 36. Wind rose: Plot > Specialized > Wind Rose - Binned Data, Wind Rose - Raw Data (T113, 2026-11-16, **not measured**)
+
+Origin 2016 lists both items under Plot > Specialized (seen in the menu on 2026-11-16). The probes could
+not run: Origin's COM class was unregistered on the test machine (REGDB_E_CLASSNOTREG). This section
+therefore describes Sheaf's version, built from Origin's documented behaviour. Measure it when
+automation works again.
+
+- **Layer:** a wind rose is a polar layer on the polar page (graphing 14.18). North (0 degrees) points up,
+  the angles run clockwise in degrees, and the radius is the frequency.
+- **Plots:** one plot per speed band, so the legend lists the bands with filled swatches. In each direction
+  sector a band is a wedge, piled on the bands plotted before it in the same layer.
+- **Colours:** bands are blue, cyan, green, yellow, orange and red, with black 0.5 pt edges.
+- **Binned Data:**
+  - The X column holds the sector directions in degrees. A text X column, such as N, NNE, ..., spreads
+    its rows evenly round the circle.
+  - Each selected Y column is one band's frequencies, piled in selection order.
+  - Sectors are 360 / rows wide.
+- **Raw Data:**
+  - The X column holds directions in degrees; the one selected Y column holds the speeds.
+  - There are 16 sectors of 22.5 degrees, centred on 0, 22.5, ... (a direction goes to the nearest
+    centre).
+  - The bands are 0 to s, s to 2s, ..., up to 6 of them. s is the smallest 1-2-5 step of which 6 cover the
+    top speed, and only as many bands as the top speed needs are made. The top band includes its upper
+    edge.
+  - A wedge is the percentage of all rows (with a direction and a speed) that fall in its sector and band.
+- **Sheaf internals:** plot kind `wind_rose` with `PlotDecor::wind_rose` (sectors, the band's speed range);
+  templates `wind-rose-binned` and `wind-rose-raw`. The .opj writer saves the columns as scatter plots,
+  with a warning.
+- **To measure:**
+  - Origin's dialogs, if any.
+  - Its default sector count and speed bins.
+  - Its colours, and whether it shows percent or counts.
+  - Its angle labels: degrees or compass names.
+
+## 37. Smith chart: Plot > Specialized > Smith Chart (T115, 2026-11-16, **not measured**)
+
+Origin 2016 lists the item under Plot > Specialized (seen in the menu on 2026-11-16). The probes could not
+run because Origin's COM class was unregistered (see 36), so this is Sheaf's version, built from the
+standard Smith chart and Origin's documented behaviour. Measure it when automation works again.
+
+- **Layer:** a Smith chart is a square layer on the polar page (graphing 14.18) with `Coords::Smith`. It
+  holds ordinary line + symbol plots.
+- **Data mapping:** each plot's X column is the resistance and its Y column the reactance of an impedance,
+  divided by the layer's characteristic impedance `z0` (1 by default: the data are already normalised).
+  The point drawn is the reflection coefficient gamma = (z - 1) / (z + 1):
+  - a matched load (1 + 0j) is the centre;
+  - a short circuit is the left end and an open circuit the right end;
+  - pure +j is the top.
+- **Axes:** they run from -1 to 1 and are not drawn.
+- **Grid:** light grey (204, 204, 204) 0.5 pt circles of constant resistance and arcs of constant
+  reactance (+-) at 0.2, 0.5, 1, 2 and 5, and the real axis. The unit circle is a black 1 pt edge.
+- **Templates:** `smith-chart`.
+- **To measure:** Origin's grid values and labels, its Z0 setting, its page, its plot type, and whether
+  it takes impedance or reflection data.
+
+## 38. 2D kernel density: Plot > Statistics > 2D Kernel Density... (T116, 2026-11-16, **not measured**)
+
+Origin 2016 lists the item under Plot > Statistics (seen in the menu on 2026-11-16). The probes could not
+run because Origin's COM class was unregistered (see 36), so this is Sheaf's version, built from Origin's
+documented behaviour. Measure Origin's dialog and plot when automation works again.
+
+- **Input:** one Y column with its X column.
+- **Density:** the bivariate Gaussian product-kernel density (`sheaf_calc::kde::density_2d`).
+  - Bandwidths come from Scott's bivariate rule, sd * n^(-1/6) along each axis.
+  - It is evaluated on a 64 x 64 grid that reaches 3 bandwidths beyond the data.
+- **Drawing:** the grid is drawn as cells in Sheaf's shared colour map, from 0 to the highest density.
+  The points are drawn on top as 3 pt black dots (a second, scatter plot). The axes take in the grid.
+  No legend.
+- **Sheaf internals:** plot kind `kde2d`, template `kde-2d`.
+- **To measure:** Origin's dialog (bandwidth and grid options), its output (matrix, contour or image), its
+  colour map and colour scale, and whether it shows the points.
+
+## 39. Piper diagram: Plot > Specialized > Piper (T117, 2026-11-16, **not measured**)
+
+Origin 2016 lists the item under Plot > Specialized (seen in the menu on 2026-11-16). The probes could not
+run because Origin's COM class was unregistered (see 36), so this is Sheaf's version of the standard Piper
+(trilinear) diagram. Measure Origin's input rules and look when automation works again.
+
+- **Input:** six Y columns, in order Ca, Mg, Na+K, Cl, SO4, HCO3+CO3, in any unit (meq/L or percent).
+  Each row's cation triple and anion triple are turned into percentages of their sums. Rows with an empty
+  or non-positive triple are left out.
+- **Geometry:** in one layer with equal X and Y units (`Layer::fit_xy_ratio(1)`), with sides of length 1:
+  - **Cation triangle:** Ca at (0, 0), Na+K at (1, 0), Mg at the top (0.5, 0.866).
+  - **Anion triangle:** 0.2 to its right, with HCO3+CO3 at the bottom left, Cl at the bottom right and SO4
+    at the top.
+  - **Diamond:** above them. Each sample sits where the line from its cation point, parallel to the cation
+    triangle's right side, meets the line from its anion point, parallel to the anion triangle's left
+    side. Pure Ca + HCO3 water is the diamond's left corner, Na + Cl its right corner, Na + HCO3 its
+    bottom.
+- **Drawing:**
+  - Black 1 pt outlines, light grey grid lines every 20 %.
+  - Each sample as a red dot with a black edge in all three figures.
+  - Corner labels as free labels; hidden axes; no legend.
+- **Sheaf internals:** plot kind `piper` with `PlotDecor::piper` (the five columns after Ca), template
+  `piper`.
+- **To measure:** Origin's column rules (it may take 8 columns with K, CO3 apart), its labels, ticks, colours
+  and symbols.
+
+## 40. Data markers and display range: graph Data menu (T118, 2026-11-16, **not measured**)
+
+Origin 2016's graph Data menu has Set Display Range, Reset to Full Range, Mark Data Range (Ctrl+Alt+M) and
+Clear Data Markers (Ctrl+Alt+N). They could not be probed (Origin's COM class unregistered, see 36), so
+this follows Origin's documented behaviour.
+
+- **Mark Data Range** puts two data markers on the active layer's first plot, at its first and last plotted
+  rows (inside its display range when it has one).
+  - The markers are drawn as 24 pt black I-beams at the points.
+  - A Data tool then runs: a click on a point moves the nearer marker of that point's plot to its row.
+    Each move is one undo step. Esc or a right-click ends the tool; the markers stay.
+- **Set Display Range** gives every plot with markers the rows between them, both included
+  (`Plot::rows`), and removes the markers.
+- **Reset to Full Range** plots every row of every plot again.
+- **Clear Data Markers** removes every marker of the graph.
+- **Sheaf internals:** core `data_markers` (`Project::mark_data_range`, `Graph::set_data_markers`,
+  `clear_data_markers`, `set_display_range`, `reset_full_range`); markers in `PlotDecor::markers`.
+- **To measure:** Origin's marker look, whether markers are per plot or per layer, and how markers are
+  moved (drag or click).
 

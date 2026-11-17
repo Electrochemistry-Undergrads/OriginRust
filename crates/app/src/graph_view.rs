@@ -455,9 +455,13 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     // Data read-out under the pointer, in the layer under it.
     if let Some(pos) = response.hover_pos() {
         let (px, py) = to_page(pos);
-        if let Some(g) = t.geometry.iter().rev().find(|g| {
+        if let Some((_, g)) = t.geometry.iter().enumerate().rev().find(|(i, g)| {
             let f = &g.frame;
-            px >= f.x && px <= f.x + f.w && py >= f.y && py <= f.y + f.h
+            doc.project().graph(graph_id).and_then(|g| g.layers.get(*i)).is_some_and(|l| !l.display.hidden)
+                && px >= f.x
+                && px <= f.x + f.w
+                && py >= f.y
+                && py <= f.y + f.h
         }) {
             let (x, y) = g.page_to_data(px, py);
             painter.text(
@@ -1155,7 +1159,13 @@ fn menu_for(
                 Some((l, ObjectKind::Plot(p))) if l == layer => Some(p),
                 _ => None,
             };
-            menus::layer_icon_menu(layer, graph.layers.len(), &plots, active)
+            let mut entries = menus::layer_icon_menu(layer, graph.layers.len(), &plots, active);
+            if graph.layers.get(layer).is_some_and(|l| l.display.hidden)
+                && let Some(menus::Entry::Item(item)) = entries.first_mut()
+            {
+                item.label = "\u{2713} Hide Layer".into();
+            }
+            entries
         }
         MenuTarget::Hit(Hit::Object { layer, kind }) => match kind {
             ObjectKind::Plot(p) => {
@@ -1332,6 +1342,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::OrderShape { layer, .. }
         | GraphOp::HideLayer { layer }
         | GraphOp::HideOtherLayers { layer }
+        | GraphOp::DataMarkers { layer, .. }
         | GraphOp::AddLayer { layer, .. }
         | GraphOp::DeleteLayer { layer } => layer,
     };
@@ -1377,6 +1388,29 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             g.freeze_linked_ranges(layer, &ranges);
         }
         let _ = g.delete_layer(layer);
+        return;
+    }
+    if let GraphOp::DataMarkers { layer, op } = op {
+        use crate::actions::MarkerOp;
+        match op {
+            MarkerOp::Mark { plot } => {
+                project.mark_data_range(graph, layer, plot);
+            }
+            MarkerOp::Move { plot, a, b } => {
+                if let Some(g) = project.graph_mut(graph) {
+                    g.set_data_markers(layer, plot, a, b);
+                }
+            }
+            MarkerOp::Clear => {
+                project.graph_mut(graph).map(|g| g.clear_data_markers());
+            }
+            MarkerOp::SetRange => {
+                project.graph_mut(graph).map(|g| g.set_display_range());
+            }
+            MarkerOp::ResetRange => {
+                project.graph_mut(graph).map(|g| g.reset_full_range());
+            }
+        }
         return;
     }
     if let GraphOp::HideOtherLayers { layer } = op {
@@ -1513,8 +1547,9 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
                 }
             }
         }
-        GraphOp::HideLayer { .. } => l.plots.iter_mut().for_each(|p| p.visible = false),
+        GraphOp::HideLayer { .. } => l.display.hidden = !l.display.hidden,
         GraphOp::HideOtherLayers { .. }
+        | GraphOp::DataMarkers { .. }
         | GraphOp::AddLayer { .. }
         | GraphOp::DeleteLayer { .. }
         | GraphOp::MovePlotToAxis { .. }

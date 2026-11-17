@@ -5618,3 +5618,20 @@ standard Smith chart and Origin's documented behaviour. Measure it when automati
 - **To measure:** Origin's grid values and labels, its Z0 setting, its page, its plot type, and whether
   it takes impedance or reflection data.
 
+## 38. 2D kernel density: Plot > Statistics > 2D Kernel Density... (T116, 2026-11-16, **not measured**)
+
+Origin 2016 lists the item under Plot > Statistics (seen in the menu on 2026-11-16). The probes could not
+run because Origin's COM class was unregistered (see 36), so this is Sheaf's version, built from Origin's
+documented behaviour. Measure Origin's dialog and plot when automation works again.
+
+- **Input:** one Y column with its X column.
+- **Density:** the bivariate Gaussian product-kernel density (`sheaf_calc::kde::density_2d`).
+  - Bandwidths come from Scott's bivariate rule, sd * n^(-1/6) along each axis.
+  - It is evaluated on a 64 x 64 grid that reaches 3 bandwidths beyond the data.
+- **Drawing:** the grid is drawn as cells in Sheaf's shared colour map, from 0 to the highest density.
+  The points are drawn on top as 3 pt black dots (a second, scatter plot). The axes take in the grid.
+  No legend.
+- **Sheaf internals:** plot kind `kde2d`, template `kde-2d`.
+- **To measure:** Origin's dialog (bandwidth and grid options), its output (matrix, contour or image), its
+  colour map and colour scale, and whether it shows the points.
+

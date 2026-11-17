@@ -105,6 +105,8 @@ pub(crate) struct PlotData<'a> {
     pub marginal: Option<crate::marginal_plot::MarginalData>,
     /// The sectors of a wind rose band (T113); `None` for other kinds.
     pub wind_rose: Option<crate::wind_rose::WindRoseData>,
+    /// The density grid of a 2D kernel density plot (T116); `None` for other kinds.
+    pub kde2d: Option<crate::kde2d::Kde2dData>,
     /// The lines and axes of a layer's parallel plots, held by the first of them; `None` for other plots.
     pub parallel: Option<Box<crate::parallel::ParallelData>>,
     /// What a treemap plot draws; `None` for other kinds.
@@ -683,6 +685,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             stock: None,
             marginal: None,
             wind_rose: None,
+            kde2d: None,
             parallel: None,
             treemap: None,
             sunburst: None,
@@ -828,6 +831,14 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.xerr = None;
                 pd.base = None;
                 pd.ridge = Some(ridge);
+            }
+            PlotKind::Kde2d => {
+                pd.kde2d = crate::kde2d::Kde2dData::new(&pd);
+                pd.end = pd.start;
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
             }
             PlotKind::WindRose => {
                 pd.wind_rose = plot.decor.wind_rose.map(|s| crate::wind_rose::WindRoseData::new(project, &pd, s));
@@ -1123,6 +1134,12 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
         }
     };
     for pd in pds {
+        if let Some(k) = &pd.kde2d {
+            let (a, b) = k.extent(dim == Dim::X);
+            add(a);
+            add(b);
+            continue;
+        }
         if let Some(w) = &pd.wind_rose {
             let (a, b) = w.extent(dim == Dim::X);
             add(a);

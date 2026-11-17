@@ -47,6 +47,8 @@ pub enum Template {
     WindRoseRaw,
     /// Plot > Specialized > Smith Chart (T115).
     SmithChart,
+    /// Plot > Statistics > 2D Kernel Density (T116): the density colour map with the points on top.
+    Kde2d,
     /// Line plot with a symbol on every point.
     LineSymbol,
     /// Cyclic voltammetry overlay: smooth lines without markers, no grid,
@@ -194,7 +196,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 77] = [
+    pub const ALL: [Template; 78] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -272,6 +274,7 @@ impl Template {
         Template::WindRoseBinned,
         Template::WindRoseRaw,
         Template::SmithChart,
+        Template::Kde2d,
     ];
 
     /// The name used on the command line and in menus.
@@ -296,6 +299,7 @@ impl Template {
             Template::WindRoseBinned => "wind-rose-binned",
             Template::WindRoseRaw => "wind-rose-raw",
             Template::SmithChart => "smith-chart",
+            Template::Kde2d => "kde-2d",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
@@ -378,6 +382,7 @@ impl Template {
             Template::WindRoseBinned => "Wind Rose - Binned Data",
             Template::WindRoseRaw => "Wind Rose - Raw Data",
             Template::SmithChart => "Smith Chart",
+            Template::Kde2d => "2D Kernel Density",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
@@ -506,6 +511,11 @@ impl Template {
             Template::Zoom => zoom(id, name),
             Template::WindRoseBinned | Template::WindRoseRaw => wind_rose(id, name),
             Template::SmithChart => smith(id, name),
+            Template::Kde2d => {
+                let mut g = general(id, name, PlotKind::Kde2d);
+                g.layers[0].legend.visible = false;
+                g
+            }
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
             Template::Multi3YYy | Template::Multi3YYY | Template::Multi4YYyy | Template::Multi4YyYy => {
@@ -1382,7 +1392,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 77);
+        assert_eq!(Template::ALL.len(), 78);
+        assert_eq!(Template::from_name("kde-2d"), Some(Template::Kde2d));
         assert_eq!(Template::from_name("smith-chart"), Some(Template::SmithChart));
         assert_eq!(Template::from_name("wind-rose-raw"), Some(Template::WindRoseRaw));
         assert_eq!(Template::from_name("zoom"), Some(Template::Zoom));

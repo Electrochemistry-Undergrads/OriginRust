@@ -33,6 +33,7 @@ pub mod graph_style;
 pub mod history;
 pub mod ids;
 pub mod indexed;
+pub mod kde2d;
 pub mod layer_manage;
 pub mod layer_scale;
 pub mod layers;

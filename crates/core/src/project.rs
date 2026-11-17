@@ -320,6 +320,8 @@ pub enum ProjectError {
     ZoomNeedsColumn,
     #[error("{0}")]
     WindRoseColumns(&'static str),
+    #[error("a 2D kernel density needs one Y column with an X column")]
+    Kde2dColumns,
     #[error("a lollipop plot needs two or more Y columns (got {0}); select at least two Y columns")]
     LollipopNeedsTwoColumns(usize),
     #[error("a lollipop plot cannot have a right Y axis; use one Y axis or another template")]
@@ -1011,6 +1013,9 @@ impl Project {
             return self.plot_marginal(template, ys);
         }
         // An X bar R chart of the first column in Origin's default subgroups of 3 (the app asks for the size).
+        if template == Template::Kde2d {
+            return self.plot_kde2d(ys);
+        }
         if matches!(template, Template::WindRoseBinned | Template::WindRoseRaw) {
             return self.plot_wind_rose(template, ys);
         }

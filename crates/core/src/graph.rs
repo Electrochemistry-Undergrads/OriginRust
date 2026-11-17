@@ -1595,6 +1595,8 @@ pub enum PlotKind {
     QcMeans,
     /// The subgroup ranges of an X bar R chart (T111): bars from the centre line [`PlotDecor::qc_center`].
     QcRanges,
+    /// A 2D kernel density (T116): the bivariate density of the plot's X and Y columns as a colour map.
+    Kde2d,
     /// One speed band of a wind rose (T113): wedges per direction sector, piled on the bands before it in the
     /// layer ([`PlotDecor::wind_rose`]).
     WindRose,

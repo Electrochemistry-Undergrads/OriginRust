@@ -260,3 +260,77 @@ mod tests {
         assert!(d.grid.windows(2).all(|p| p[1] > p[0]));
     }
 }
+
+/// A bivariate kernel density estimate on a grid (Plot > Statistics > 2D Kernel Density, T116).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Density2d {
+    /// The grid's X and Y positions, ascending.
+    pub x: Vec<f64>,
+    pub y: Vec<f64>,
+    /// The density at (x[i], y[j]), row by row: `z[j * x.len() + i]`.
+    pub z: Vec<f64>,
+    /// The bandwidths along X and Y.
+    pub wx: f64,
+    pub wy: f64,
+}
+
+/// The number of grid points along each axis of [`density_2d`].
+pub const GRID_2D: usize = 64;
+
+/// The Gaussian product-kernel density of the finite `(x, y)` pairs on a [`GRID_2D`] square grid reaching 3
+/// bandwidths beyond the data, with Scott's bivariate bandwidths `sd * n^(-1/6)` per axis; `None` with
+/// fewer than two pairs or no spread along an axis.
+pub fn density_2d(xs: &[f64], ys: &[f64]) -> Option<Density2d> {
+    let pts: Vec<(f64, f64)> =
+        xs.iter().zip(ys).map(|(x, y)| (*x, *y)).filter(|(x, y)| x.is_finite() && y.is_finite()).collect();
+    let n = pts.len();
+    if n < 2 {
+        return None;
+    }
+    let sd = |v: &dyn Fn(&(f64, f64)) -> f64| {
+        let m = pts.iter().map(v).sum::<f64>() / n as f64;
+        (pts.iter().map(|p| (v(p) - m).powi(2)).sum::<f64>() / (n - 1) as f64).sqrt()
+    };
+    let factor = (n as f64).powf(-1.0 / 6.0);
+    let (wx, wy) = (sd(&|p| p.0) * factor, sd(&|p| p.1) * factor);
+    if !(wx > 0.0 && wy > 0.0) {
+        return None;
+    }
+    let span = |v: &dyn Fn(&(f64, f64)) -> f64, w: f64| {
+        let (lo, hi) = pts.iter().map(v).fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(x), b.max(x)));
+        let (lo, hi) = (lo - 3.0 * w, hi + 3.0 * w);
+        (0..GRID_2D).map(|k| lo + (hi - lo) * k as f64 / (GRID_2D - 1) as f64).collect::<Vec<f64>>()
+    };
+    let (gx, gy) = (span(&|p| p.0, wx), span(&|p| p.1, wy));
+    let norm = 1.0 / (n as f64 * 2.0 * std::f64::consts::PI * wx * wy);
+    let mut z = Vec::with_capacity(GRID_2D * GRID_2D);
+    for &y in &gy {
+        for &x in &gx {
+            let s: f64 =
+                pts.iter().map(|(px, py)| (-0.5 * (((x - px) / wx).powi(2) + ((y - py) / wy).powi(2))).exp()).sum();
+            z.push(s * norm);
+        }
+    }
+    Some(Density2d { x: gx, y: gy, z, wx, wy })
+}
+
+#[cfg(test)]
+mod density_2d_tests {
+    use super::*;
+
+    #[test]
+    fn the_2d_density_integrates_to_one_and_peaks_at_the_cluster() {
+        let xs = [0.0, 0.1, -0.1, 0.05, 5.0];
+        let ys = [0.0, -0.1, 0.1, 0.0, 5.0];
+        let d = density_2d(&xs, &ys).unwrap();
+        assert_eq!((d.x.len(), d.y.len(), d.z.len()), (GRID_2D, GRID_2D, GRID_2D * GRID_2D));
+        let (dx, dy) = (d.x[1] - d.x[0], d.y[1] - d.y[0]);
+        let total: f64 = d.z.iter().sum::<f64>() * dx * dy;
+        assert!((total - 1.0).abs() < 0.02, "{total}");
+        let k = d.z.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).unwrap().0;
+        let (px, py) = (d.x[k % GRID_2D], d.y[k / GRID_2D]);
+        assert!(px.abs() < 1.0 && py.abs() < 1.0, "the peak is at the cluster: {px} {py}");
+        assert!(density_2d(&[1.0], &[1.0]).is_none());
+        assert!(density_2d(&[1.0, 1.0], &[1.0, 2.0]).is_none(), "no spread along X");
+    }
+}

@@ -1143,7 +1143,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("Marginal Histograms", Cmd::Plot(Template::MarginalHistograms)),
                     item("Marginal Box Charts", Cmd::Plot(Template::MarginalBoxCharts)),
                 ],
-                greys(&["2D Kernel Density"]),
+                vec![item("2D Kernel Density...", Cmd::Plot(Template::Kde2d))],
                 vec![item("QC (X bar R) Chart", Cmd::Plot(Template::QcXbarR))],
                 // Every letter of the label was taken; C moves Marginal Box Charts to n.
                 vec![item("S&catter Matrix", Cmd::Plot(Template::ScatterMatrix))],

@@ -31,7 +31,7 @@ membership and named depth-first traversal controls are in graphing 15.7c.
 The existing All in Project/Specified order, ticks, core merge, source removal and save paths
 are retained. Changed folder trees require reopening; empty/one-graph scopes create no history.
 Active Page/Open/embedded filters, destination placement and other merge gaps stay separate.
-Fmt, strict workspace/all-target Clippy and all 4,333 workspace tests pass (eight ignored),
+Fmt, strict workspace/all-target Clippy and all 4,345 workspace tests pass (eight ignored),
 including all seven new and five existing merge UI tests. Inventory and eight Python tests,
 frozen source/goldens, current desktop lists/merged view and independent five-panel PNG pass.
 An initial MCP socket reset passed its exact target and the full retry without MCP edits.

@@ -76,12 +76,14 @@ pub struct PeakFitSpec {
     pub baseline: FitBaseline,
     /// A function per peak, in the order found (empty: every peak is `shape`).
     pub shapes: Vec<PeakShape>,
+    /// Also add a column per fitted peak: the peak on the fitted baseline (Multiple Peak Fit).
+    pub peak_curves: bool,
 }
 
 impl PeakFitSpec {
     /// Every peak of one shape.
     pub fn of(shape: PeakShape, baseline: FitBaseline) -> PeakFitSpec {
-        PeakFitSpec { shape, baseline, shapes: Vec::new() }
+        PeakFitSpec { shape, baseline, shapes: Vec::new(), peak_curves: false }
     }
 
     /// The shape of each of `n` peaks.
@@ -1852,6 +1854,30 @@ fn run_peak_chain(
                 ),
                 data: inp.aligned(&report.fitted),
             });
+            if fs.peak_curves {
+                let (y0f, mf) =
+                    (get("y0".into()), if fs.baseline == FitBaseline::Linear { get("m".into()) } else { 0.0 });
+                for (k, shape) in shapes.iter().enumerate() {
+                    let p: Vec<f64> = shape.param_names(k + 1).into_iter().map(get).collect();
+                    let curve: Vec<f64> = xs
+                        .iter()
+                        .map(|&x| if x.is_finite() { y0f + mf * x + shape.eval(&p, x) } else { f64::NAN })
+                        .collect();
+                    beside.push(NewColumn {
+                        after: inp.id,
+                        long_name: format!("Peak {} of {}", k + 1, inp.name),
+                        units: inp.units.clone(),
+                        comments: format!(
+                            "{} peak {} of the multi-peak fit of {}{}",
+                            shape.name(),
+                            k + 1,
+                            inp.short,
+                            inp.range_note()
+                        ),
+                        data: inp.aligned(&curve),
+                    });
+                }
+            }
         }
         let xu = &inp.x_units;
         let area_unit = unit_product(&inp.units, xu);
@@ -4659,6 +4685,35 @@ mod tests {
     }
 
     #[test]
+    fn peak_curves_add_a_column_per_fitted_peak_on_the_baseline() {
+        let (mut p, book, y) = two_peaks();
+        let fit = PeakFitSpec { peak_curves: true, ..PeakFitSpec::of(PeakShape::Gauss, FitBaseline::Linear) };
+        let tool = Tool::PeakChain(PeakChainSpec {
+            chain: ChainOptions { baseline: ChainBaseline::None, ..ChainOptions::default() },
+            integrate: false,
+            fit: Some(fit),
+            centers: vec![6.0, 13.0],
+        });
+        p.analyze(&request(&[y], tool)).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names[2..], ["Peak fit of B", "Peak 1 of B", "Peak 2 of B"][..], "{names:?}");
+        // Peak 1 tops out near x = 6 at its baseline (0.1 + 0.06) plus its height 1.
+        let col = |i: usize| ws.columns[i].numeric().unwrap().to_vec();
+        let (fit, p1, p2) = (col(2), col(3), col(4));
+        let x: Vec<f64> = ws.columns[0].numeric().unwrap().to_vec();
+        // Each peak column carries the baseline once, so the two peaks less the fit is the
+        // baseline y0 + m x: a straight line.
+        let base: Vec<f64> = (0..x.len()).map(|i| p1[i] + p2[i] - fit[i]).collect();
+        let slope = (base[300] - base[0]) / (x[300] - x[0]);
+        for i in (0..x.len()).step_by(37) {
+            assert!((base[i] - (base[0] + slope * (x[i] - x[0]))).abs() < 1e-9);
+        }
+        let i6 = x.iter().position(|v| (*v - 6.0).abs() < 1e-9).unwrap();
+        assert!((p1[i6] - 1.16).abs() < 1e-3, "{}", p1[i6]);
+    }
+
+    #[test]
     fn peak_chain_voigt_fit_of_gauss_peaks_gives_their_center_width_and_area() {
         // Gaussian peaks: the Voigt's Lorentzian width goes to its bound 0 and the Voigt FWHM
         // (0.5346 wL + sqrt(0.2166 wL^2 + wG^2)) is the Gaussian one.
@@ -4681,8 +4736,12 @@ mod tests {
         // Peak 1 Gauss, peak 2 (beyond the list) the spec's Voigt: the note and the parameters
         // follow each peak's function, and both Gaussian peaks keep their centre and area.
         let (mut p, _, y) = two_peaks();
-        let fit =
-            PeakFitSpec { shape: PeakShape::Voigt, baseline: FitBaseline::Linear, shapes: vec![PeakShape::Gauss] };
+        let fit = PeakFitSpec {
+            peak_curves: false,
+            shape: PeakShape::Voigt,
+            baseline: FitBaseline::Linear,
+            shapes: vec![PeakShape::Gauss],
+        };
         assert_eq!(fit.shapes_for(3), [PeakShape::Gauss, PeakShape::Voigt, PeakShape::Voigt]);
         let r = p.analyze(&request(&[y], chain(true, Some(fit)))).unwrap();
         let t = r.table.unwrap();

@@ -702,6 +702,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                         PeakFitBaselineKind::Linear => analysis::FitBaseline::Linear,
                     },
                     shapes: fit_shapes.iter().map(peak_shape).collect(),
+                    peak_curves: false,
                 });
                 let find = analysis::FindOptions {
                     method,

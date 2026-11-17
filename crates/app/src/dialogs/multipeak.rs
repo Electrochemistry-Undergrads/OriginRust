@@ -1,8 +1,8 @@
 //! Analysis > Peaks and Baseline > Multiple Peak Fit (Origin's `nlfitpeaks`): choose the peak
 //! function for the active data plot, then pick the peak centres on the graph with the Data Reader
 //! (double-click or Enter, as Origin's Get Points dialog), then Fit: the peaks are fitted together
-//! with a constant offset `y0`, the results go to a sheet as the Peak Analyzer's do, and the fitted
-//! curve is drawn on the graph. One undo step.
+//! with a constant offset `y0`, the results go to a sheet as the Peak Analyzer's do, and each fitted
+//! peak and their sum are drawn on the graph. One undo step.
 
 use super::frame::{DialogButton, button_row};
 use crate::reader;
@@ -16,6 +16,8 @@ use sheaf_core::graph::{LineStyle, PlotKind};
 
 /// The colour of the fitted curve: the first curve colour of the fit tools (`fitting.rs`).
 const FIT_RED: Color = Color::rgb(220, 30, 30);
+/// The colours of the single peaks: the other curve colours of the fit tools.
+const PEAK_COLORS: [Color; 3] = [Color::rgb(30, 80, 220), Color::rgb(0, 150, 70), Color::rgb(235, 140, 0)];
 use sheaf_core::{ColumnId, Document, Project, WindowId};
 
 /// What the window asks of the application after a frame.
@@ -90,7 +92,7 @@ impl MultiPeakDialog {
             tool: Tool::PeakChain(PeakChainSpec {
                 chain: ChainOptions { baseline: ChainBaseline::None, ..ChainOptions::default() },
                 integrate: false,
-                fit: Some(PeakFitSpec::of(self.shape, FitBaseline::Constant)),
+                fit: Some(PeakFitSpec { peak_curves: true, ..PeakFitSpec::of(self.shape, FitBaseline::Constant) }),
                 centers: self.centers.iter().map(|c| c.0).collect(),
             }),
         }
@@ -102,20 +104,30 @@ impl MultiPeakDialog {
         let (graph, layer, x) = (self.graph, self.layer, self.x);
         doc.edit("Multiple peak fit", |p| {
             let report = p.analyze(&request)?;
-            let fit = report
-                .new_columns
-                .iter()
-                .copied()
-                .find(|c| p.column(*c).is_some_and(|c| c.long_name.starts_with("Peak fit of")));
-            if let Some(fit) = fit {
-                p.add_plot_xy(graph, layer, x, fit, None).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
-                // A line in red, as the curves of the fit tools are drawn (ADR 0006).
+            let named = |prefix: &str| -> Vec<ColumnId> {
+                report
+                    .new_columns
+                    .iter()
+                    .copied()
+                    .filter(|c| p.column(*c).is_some_and(|c| c.long_name.starts_with(prefix)))
+                    .collect()
+            };
+            // Each peak first, then the sum on top in red, as the curves of the fit tools (ADR 0006).
+            let curves: Vec<(ColumnId, Color, f64)> = named("Peak ")
+                .into_iter()
+                .filter(|c| !named("Peak fit of").contains(c))
+                .enumerate()
+                .map(|(k, c)| (c, PEAK_COLORS[k % PEAK_COLORS.len()], 1.0))
+                .chain(named("Peak fit of").into_iter().map(|c| (c, FIT_RED, 1.5)))
+                .collect();
+            for (column, color, min_width) in curves {
+                p.add_plot_xy(graph, layer, x, column, None).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
                 if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
-                    let width = l.default_line.width_pt.max(1.5);
+                    let width = l.default_line.width_pt.max(min_width);
                     if let Some(plot) = l.plots.last_mut() {
                         plot.kind = PlotKind::Line;
-                        plot.line = LineStyle::solid(FIT_RED, width);
-                        plot.symbol.color = FIT_RED;
+                        plot.line = LineStyle::solid(color, width);
+                        plot.symbol.color = color;
                         plot.auto_color = false;
                     }
                 }

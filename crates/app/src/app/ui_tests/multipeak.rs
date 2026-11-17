@@ -48,10 +48,15 @@ fn multiple_peak_fit_picks_centres_with_the_data_reader_and_fits_them() {
     assert!(h.state().multi_peak.is_none(), "Fit closes the windows");
     assert!(!h.state().graphs[&graph].reader, "and turns the Data Reader off");
     assert_eq!(h.state().doc.undo_label(), Some("Multiple peak fit"));
-    // The fitted curve is drawn on the graph as a line.
+    // Each peak and then the fitted sum are drawn on the graph as lines, the sum in red on top.
     let g = project(&h).graph(graph).unwrap();
-    assert_eq!(g.layers[0].plots.len(), 2);
-    assert_eq!(g.layers[0].plots[1].kind, sheaf_core::graph::PlotKind::Line);
+    let plots = &g.layers[0].plots;
+    assert_eq!(plots.len(), 4);
+    assert!(plots[1..].iter().all(|p| p.kind == sheaf_core::graph::PlotKind::Line));
+    let name = |i: usize| project(&h).column(plots[i].y).unwrap().long_name.clone();
+    assert_eq!((name(1), name(2), name(3)), ("Peak 1 of y".into(), "Peak 2 of y".into(), "Peak fit of y".into()));
+    assert_eq!(plots[3].line.color, sheaf_core::color::Color::rgb(220, 30, 30));
+    assert_ne!(plots[1].line.color, plots[2].line.color);
     // The results sheet has one row per peak with the fitted centres.
     let b = project(&h).workbooks().next().unwrap();
     let results = b.sheets.last().unwrap();

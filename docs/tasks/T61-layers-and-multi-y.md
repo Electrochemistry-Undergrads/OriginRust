@@ -1,6 +1,6 @@
 # T61: Layers, insets and three/four Y axes
 
-**Status:** in progress; recovered and refined 2026-11-15. Step 0 (Origin measurements, graphing 21) and slice 1 (add/delete layers, inset, icon Delete and Layer Properties) are done; slice 2 (axis offsets, Move to Layer) and slice 3 (3Ys/4Ys templates, Multiple Y Axes, CLI/MCP names, .sheaf/.opj handling) are done. Open: Open Dialog..., Show Active Layer Only and Set Active Layer By Layer Icon Only (unmeasured), Double click to open Plot Setup and whole-layer Hide Other Layers. Hide Layer is a reversible whole-layer toggle (graphing 21.13); Open Dialog... and the unsupported icon-menu items stay grey. **Size:** L, three slices.
+**Status:** in progress; recovered and refined 2026-11-15. Step 0 (Origin measurements, graphing 21) and slice 1 (add/delete layers, inset, icon Delete and Layer Properties) are done; slice 2 (axis offsets, Move to Layer) and slice 3 (3Ys/4Ys templates, Multiple Y Axes, CLI/MCP names, .sheaf/.opj handling) are done. Open: Open Dialog..., Show Active Layer Only and Set Active Layer By Layer Icon Only (unmeasured), Double click to open Plot Setup. Hide Layer is a reversible whole-layer toggle (graphing 21.13); Hide Other Layers isolates/shows all whole layers from the published contract (21.14), with live 2016 behavior still unmeasured; Open Dialog... and the unsupported icon-menu items stay grey. **Size:** L, three slices.
 Legend-anchor follow-up (`codex/multi-y-template-legends`): the four stock templates use
 measured top-left positions above the frame, Arial 22 pt (YY-YY: 20 pt), and no frame or background.
 A compatible top-left position variant keeps the left edge fixed when labels grow; existing
@@ -21,6 +21,16 @@ restore PNGs (graphing21.13). Native project saves warn that the unmeasured OPJ
 visibility bit is omitted; the companion preserves it. Seven new regressions cover
 rendering/geometry/picking, legacy records, menu history, readers and save/reopen.
 Formatting, strict workspace/all-target Clippy and all 4,336 tests pass (eight existing ignored), including all seven new regressions, on integrated T112/T113/T114 source. The 290-location inventory, eight Python tooling tests and frozen source/fixture/asset hashes pass. Current desktop baseline/hidden/restored captures and PNG/SVG exports were inspected; owned Native/app/helper actors are closed. Other T61 leftovers remain open.
+
+Hide Other Layers follow-up (`codex/t61-hide-other-layers`, 2026-11-16): the
+existing entry toggles whole-layer isolation/show-all and derives its check mark
+from visibility. Individual plot/axis/display choices and geometry remain intact;
+hidden targets become visible, invalid/single-layer requests are no-ops, and each
+change is one Undo. Origin's published guide establishes the basic reversible
+contract; active-hidden/derived-check rules are explicit Sheaf choices, not fresh
+2016 measurements. No new model/renderer/IO contracts or following-active mode.
+Three new UI regressions cover all three targets, rendering/geometry, settings,
+Undo/Redo, hidden targets and invalid/no-op history. Full validation pending.
 
 **Branch:** `layers-multi-y`. **Priority:** P0, wave 2.
 **Spec:** [graphing](../spec/graphing.md) 1.3 and 12; ADR 0009.

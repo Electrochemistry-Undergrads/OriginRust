@@ -4932,7 +4932,7 @@ Implemented in `crates/core/src/layers.rs` (`Graph::add_layer`, `Graph::delete_l
 - Delete follows 21.4: children are unlinked and keep their place on the page (the parent's rectangle for a layer that covers it; for an inset the inset's own place, **unmeasured**), later links are renumbered, no confirmation, undo text "Undelete frame". Deleting the **only** layer is refused (Origin's behaviour unmeasured). After a delete the active layer is the one before the deleted layer (or the first), a selection in a later layer moves up, a selection in the deleted layer is cleared, and Plot Details, Layer Contents, Plot Setup and the drawn-object window of that graph close.
 - Add makes the new layer active and clears the selection; one undo step each ("Create", "Undelete frame").
 - Layer Properties... (Format menu and layer icon) opens Plot Details on the layer's node with the Background tab. Sheaf's layer node keeps its Layer Contents and Legend tabs as well.
-- Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer is a reversible whole-layer toggle (21.13); Hide Other Layers still only hides plots and awaits a separate behavior check.
+- Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer is a reversible whole-layer toggle (21.13); Hide Other Layers toggles whole-layer isolation/show-all from the published contract in 21.14; its live 2016 behavior remains unmeasured.
 
 ### 21.10 How Sheaf draws a displaced Y axis (slice 2)
 
@@ -5050,7 +5050,31 @@ Each toggle uses one existing "Hide layer" Undo step (Sheaf policy; Origin's
 Undo behavior remains weakly established in 21.3). `.sheaf` and `.opj.sheaf`
 companions retain visibility; the native `.opj` hidden bit remains unmeasured,
 so saves explicitly warn that bare Origin files show the layer. Hide Other
-Layers and the two disabled icon-mode commands are separate follow-ups.
+Layers follows the published contract in 21.14; the disabled icon-mode commands remain separate follow-ups.
+
+### 21.14 Hide Other Layers (T61 follow-up, documented contract)
+
+The published [Origin guide](https://docs.originlab.com/origin-help/labels-data-layer-hide/)
+describes isolating the active layer through Hide Other Layers and displaying all layers
+by choosing the entry again. Layer visibility affects graph output as well as its window.
+This is a published-document check on 2026-11-16, not a new Origin2016 measurement:
+local COM activation is currently refused before creating a server instance.
+
+Sheaf's existing icon-menu command now uses `LayerDisplay.hidden`, preserving each
+plot's own visibility and all axis/display settings. One invocation shows the requested
+layer and hides every other whole layer; when it is already the only shown layer, the
+same entry shows all layers. Previously hidden siblings are shown by this second action,
+consistent with the documented show-all contract. Linked geometry stays fixed and the
+existing renderer, readers and native/companion save paths apply the same visibility.
+Each effective invocation is one existing "Hide other layers" Undo step.
+
+The check mark is derived from a visible target and all siblings being hidden. This
+avoids introducing a second mode state. Isolating a hidden target first shows that target;
+an all-hidden graph therefore isolates the requested layer on the first click. These
+edge choices are explicit Sheaf policies, unmeasured in Origin2016. A single-layer or
+stale/invalid request changes no document, history or revision. Selecting another icon
+does not automatically transfer isolation; the separate Show Active Layer Only and
+Set Active Layer By Layer Icon Only modes remain disabled pending verification.
 
 ## 22. Graph view modes, Show toggles and Full Screen (T66, measured 2026-11-15, Origin 2016)
 

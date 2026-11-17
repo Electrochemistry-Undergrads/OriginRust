@@ -220,6 +220,11 @@ white and mixed channel boundaries (graphing 7.4). Numeric menu layout, white dr
 and the existing legend mapping remain Sheaf choices. Captured request, selection, history,
 stale/no-op and native/companion rules are reused; all 24 Classic presets and None remain.
 No model/backend/font/worksheet picker changes. Auto, other lists and palette storage remain open.
+Fmt, strict workspace/all-target Clippy and all 4,360 workspace tests pass (eight ignored),
+including all seven new and 37 related regressions. Inventory283 and eight Python tests pass;
+source/goldens stayed frozen. Current seeded/invalid/applied desktop captures and rendered RGB
+pixels were inspected, with every own app/reference/helper actor closed. Earlier setter-only
+automation pilots are excluded from appearance evidence.
 
 ## Origin facts
 

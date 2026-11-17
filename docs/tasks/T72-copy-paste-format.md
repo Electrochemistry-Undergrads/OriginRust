@@ -8,6 +8,14 @@ snap to grid, Object Properties. Not in this slice (stay `B11`): Save Format as 
 Theme files. A Codex session edits drawn-shape selection and resize handles in `graph_view.rs`: put
 new code in new modules and keep the hooks there minimal.
 
+Axis scale-only follow-up (codex/t72-format-remainders, 2026-11-16): axis
+Copy Format > Scales and Paste Format To > Scales reuse the existing typed engine
+and its scale-property group. The 2016 measurements establish menu presence and
+the All operation; the exact per-choice field list remains explicit Sheaf policy,
+not new Native parity (graphing26.9). Styles, Dimensions and all other unmeasured
+choices remain disabled. No core/schema/clipboard/dialog or geometry changes.
+Fmt, strict workspace/all-target Clippy and all 4,372 tests pass (eight ignored), including all three new root/inset X/Y UI regressions and all 13 existing format-clipboard regressions. Inventory281 (T72=23), eight Python tests and frozen 913 source/fixture/asset files pass. Current baseline/scaled/restored desktop and PNG/SVG exports were inspected; scale-only changes retain the blue target style, and restored pixels match exactly. Complete graphs survive .sheaf and OPJ companion saves. All own builders/apps/helpers are terminal; only this slice is complete and remaining choices stay deferred.
+
 ## Goal
 
 A format clipboard for graphs. "Copy Format" copies a chosen group of properties of the page, an

@@ -2176,14 +2176,14 @@ pub fn graph_axis_menu(layer: usize, y: bool, grids: bool, page: (f64, f64)) -> 
     menu
 }
 
-/// Copy Format of an axis: Styles, Scales and Dimensions have not been measured for what they take
-/// and stay greyed; All takes styles and scale (measured).
+/// Copy Format of an axis: Scales reuses the existing scale-only group (spec 26.9).
+/// Styles and Dimensions stay greyed; All takes styles and scale (measured).
 fn axis_copy_format_menu(layer: usize, y: bool) -> Entry {
     sub(
         "Copy Format",
         vec![
             grey("Styles"),
-            grey("Scales"),
+            item("Scales", Cmd::CopyAxisFormat { layer, y, part: AxisPart::Scales }),
             grey("Dimensions"),
             sep(),
             item("All", Cmd::CopyAxisFormat { layer, y, part: AxisPart::All }),
@@ -2191,7 +2191,7 @@ fn axis_copy_format_menu(layer: usize, y: bool) -> Entry {
     )
 }
 
-/// Paste Format To of an axis, Origin's twelve choices; All is measured, the others are greyed.
+/// Paste Format To of an axis: All plus the existing scale-only group (spec 26.9).
 fn axis_paste_format_menu(layer: usize, y: bool) -> Entry {
     let mut v = greys(&[
         "Tick Direction",
@@ -2203,12 +2203,9 @@ fn axis_paste_format_menu(layer: usize, y: bool) -> Entry {
         "Thickness",
         "Styles",
         "-",
-        "Scales",
-        "-",
-        "Title Dimensions",
-        "Title Text",
-        "-",
     ]);
+    v.push(item("Scales", Cmd::PasteAxisFormat { layer, y, part: AxisPart::Scales }));
+    v.extend(greys(&["-", "Title Dimensions", "Title Text", "-"]));
     v.push(item("All", Cmd::PasteAxisFormat { layer, y, part: AxisPart::All }));
     sub("Paste Format To", v)
 }

@@ -5358,9 +5358,34 @@ Pasted into an untouched graph of the same data and read back (changed propertie
 - Core `crates/core/src/format_clip.rs`: a copy holds the formatted values of every layer (or of one axis) and the groups the choice copies; a paste applies the groups it asks for that the copy holds. Groups: Dimensions (layer left, top, width; page width, not heights), Scales (scale type, limits, steps, reverse, first tick, minor ticks, rescale margin, both axes), Colors, Fonts (family, size, bold, italic; colours stay), Background (layer colour, gradient, border), Thickness (axis line and tick width), Symbol/Line/Fill (the plots' whole line and symbol style), Text (the words of the text labels). All = all eight; All Style Formats = Colors, Fonts, Background, Thickness, Symbol/Line/Fill (no Dimensions, Scales, Text); Colors also takes the layer background colour and the plots' line and symbol colours; Fonts takes tick-label, title, legend and text fonts.
 - Sheaf's own choices where Origin was not measured: layers and plots are paired by position, surplus target layers and plots are left as they are, surplus source ones are dropped; text labels are paired by position and are never created; a paste that changes nothing makes no undo step; the y axis follows Scales; the fill under a curve is not part of Symbol/Line/Fill. The clipboard is inside the program (a second Sheaf window does not see it, and it does not survive a restart, which Origin's does).
 - Enabled (measured behaviour): Edit > Copy Format ▸ All, All Style Formats, Colors, Fonts, Background, Dimensions, Scales; Edit > Paste Format... (the Apply Formats window: Apply From Clipboard, one check box per group the clipboard holds or Scales and Styles for an axis format, Apply To for an axis, Undo Apply, Apply, Close; the grid Origin shows for a graph format is unmeasured, so this window is Sheaf's reading of it); page menu Copy Format (same items) and Paste Format; axis menu Copy Format ▸ All and Paste Format To ▸ All. One undo step "Apply Theme" each.
-- Left greyed (not measured): Symbol/Line/Fill and Text (Edit), Page Background and Legend Translation Mode (page), axis Styles, Scales, Dimensions and the eleven other Paste Format To choices, the page menu's Paste Format To submenus, all of the legend's Copy Format (Styles, Dimensions, All).
+- Left greyed (not measured): Symbol/Line/Fill and Text (Edit), Page Background and Legend Translation Mode (page), axis Styles/Dimensions and the ten other Paste Format To choices (the Scales follow-up is 26.9), the page menu's Paste Format To submenus, all of the legend's Copy Format (Styles, Dimensions, All).
 
 - Added after review: Edit > Copy Format with an axis selected copies an axis format (All, All Style Formats and Scales map to the axis parts; Colors, Fonts, Background and Dimensions copy nothing, since an axis format for them is unmeasured); the context menus and Paste Format To follow the clipboard kind. Colors and axis styles also carry the "follows plot colour" flags (Sheaf's reading; unmeasured in Origin). Dimensions pastes a layer frame only between layers of the same kind (root to root, linked to linked) because a linked frame is relative to its parent; mixed pairs are left alone (unmeasured in Origin).
+
+### 26.9 Axis scale-only context entries (T72 follow-up)
+
+The axis Copy Format and Paste Format To submenus now enable Scales through the
+existing AxisPart::Scales capture/apply path. Origin2016 menu presence and the
+All operation are measured in 26.2/26.4. The
+[official selective-copy guide](https://docs.originlab.com/origin-help/copypaste-format/)
+describes choosing object properties; it does not establish the exact Scales
+per-choice whitelist. The following property mapping is existing Sheaf policy,
+not a new Native measurement. Live COM is unavailable; no retry or repair is made.
+
+Copy holds scale values only. Paste applies scale type, min/max, automatic-range
+policy, rescale margin, major step, minor-tick count, reversal and first tick to
+the selected axis only, and only if an axis clipboard contains scales. It leaves
+fonts, colours, thickness, title/text, data, other axes/layers and page geometry
+unchanged. A scale-only clipboard pasted with All still cannot supply styles;
+Scales pasted from All ignores its styles. Existing typed-clipboard and no-op
+guards retain one Apply Theme Undo step per effective paste and none for repeats
+or invalid targets. No core, persistent schema or clipboard lifecycle changes.
+
+All other still-grey choices remain deferred, including axis Styles/Dimensions
+and the other per-property groups, legend and page crossing. Existing All and
+Apply Formats behavior remains. UI regressions check root/inset X/Y targets,
+partial capture/paste, full-graph preservation, Undo/Redo, repeated and stale
+requests; Native per-choice parity remains unmeasured.
 
 ## 27. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
 

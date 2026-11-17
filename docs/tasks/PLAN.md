@@ -139,6 +139,7 @@ Backlog packages: write the brief first (step 3 above).
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
 | [x] | [T126](T126-descriptive-statistics-data-range.md) | Statistics on Columns respects existing Begin/End ranges (T87 reader follow-up) | S | 0 |
+| [x] | [T127](T127-row-statistics-data-range.md) | Statistics on Rows respects existing Begin/End ranges (T87 reader follow-up) | S | 0 |
 | [ ] | B5 | Worksheet editing: copy variants, Paste Transpose/Link/Special, cell links, Set As Begin/End, fill with a set of numbers/dates/text, sampling interval, Copy Columns to, Swap Columns | L | 13 |
 | [ ] | B6 | Worksheet view and sheets: header and grid toggles, row label rows, sheet-tab items, Split, objects in cells (graphs, images, sparklines, variables), Merge cells | L | 23 |
 | [x] | B7 | Worksheet tools: done (Find in Project as T95, Conditional Formatting as T120-T123, Pivot Table as T124) | M | 0 |

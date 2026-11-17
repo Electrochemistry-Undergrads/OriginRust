@@ -329,6 +329,8 @@ second lowest) and the highest value (gap to the second highest); the larger is 
 **Statistics on Rows** (`rowstats`; outputs mean and SD by default, standard error, minimum, maximum, number of
 points and sum optional). One number per worksheet row across the chosen columns; NaN ignored. A row with no
 number gives missing values in every output including the count and the sum; one number has no SD and no SE.
+Saved Begin/End ranges now intersect each contributor at original row indices (T127,
+workbook-model13f.2; explicit Sheaf range policy, no new Native measurement).
 Sheaf adds the chosen columns behind the last chosen column (`Tool::RowStatistics`, long names "Mean", "Standard
 Deviation", "SE of Mean", "Minimum", "Maximum", "Number of Points", "Sum"). Origin's own dialog has more options
 (for example row ranges as input) that were not measured.

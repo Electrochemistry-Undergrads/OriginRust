@@ -1685,6 +1685,7 @@ fn statistics_table(
 fn row_statistics(
     spec: &RowStatsSpec,
     inputs: &[Input<'_>],
+    sheet: &Worksheet,
     beside: &mut Vec<NewColumn>,
     notes: &mut Vec<String>,
 ) -> Result<(), AnalysisError> {
@@ -1706,9 +1707,10 @@ fn row_statistics(
     }
     let rows = inputs.iter().map(|i| i.y.len()).max().unwrap_or(0);
     let mut cells = vec![Vec::with_capacity(inputs.len()); rows];
-    for (r, row) in cells.iter_mut().enumerate() {
-        for inp in inputs {
-            let inside = r >= inp.first && r <= inp.last;
+    for inp in inputs {
+        let range = sheet.column(inp.id).and_then(|c| c.data_range);
+        for (r, row) in cells.iter_mut().enumerate() {
+            let inside = r >= inp.first && r <= inp.last && range.is_none_or(|range| range.contains(r));
             row.push(if inside { inp.y.get(r).copied().unwrap_or(f64::NAN) } else { f64::NAN });
         }
     }
@@ -3137,7 +3139,7 @@ impl Project {
                 table = Some(statistics_table(spec, &inputs, sheet)?);
             }
             Tool::RowStatistics(spec) => {
-                row_statistics(spec, &inputs, &mut beside, &mut notes)?;
+                row_statistics(spec, &inputs, sheet, &mut beside, &mut notes)?;
             }
         }
 

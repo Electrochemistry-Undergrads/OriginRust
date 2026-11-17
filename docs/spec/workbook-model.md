@@ -748,7 +748,7 @@ Set as End. Measured in Origin 2016 with the LabTalk commands behind them (`set 
   rows 5 and 6 empty).
 - **Plots and statistics use only the rows inside**: B (10 to 60) from row 2 to 4 gave `stats` n = 3, mean
   30, and its scatter's X axis went from 1.5 to 4.5. Sheaf's plots leave the rows out;
-  Statistics on Columns now also uses the saved range (T126 below). Other analysis readers remain open.
+  Statistics on Columns and Rows now also use the saved ranges (T126/T127 below). Other analysis readers remain open.
 - **Sheaf's commands**: Set As Begin makes the top selected row the first row of every selected column's
   range, Set As End the bottom selected row the last; a begin after the end drops the end (and the other
   way round). Reset to Full Range clears the range of every column of the active sheet. One undo step each
@@ -778,9 +778,29 @@ Missing=0, sum0, undefined values NaN), an explicit Sheaf edge policy. Bounds ar
 clamped with a saturating inclusive-end conversion, including persisted ranges
 beyond the available data. Source data and range metadata remain untouched.
 
-Only Statistics on Columns is changed. Statistics on Rows, inferential tests,
-distribution/categorical tools, fitting and other analysis readers remain T87
-leftovers. No shared input-loader, Core model, IO/schema, grid or menu changes.
+This T126 slice changes only Statistics on Columns; the row reader follows in
+T127 below. Inferential tests, distribution/categorical tools, fitting and other
+analysis readers remain T87 leftovers. No shared input-loader, Core model, IO/schema, grid or menu changes.
+
+### 13f.2 Statistics on Rows (T127, 2026-11-17)
+
+The [official rowstats reference](https://docs.originlab.com/x-function/ref/rowstats/)
+describes seven row quantities within an input range. The [Statistics on Rows
+guide](https://docs.originlab.com/origin-help/statistics-on-rows/) excludes missing
+observations. With the existing T87 saved-range contract, Sheaf now admits a
+contributor at its original worksheet row only when both the resolved request span
+and that column's own Begin/End range contain the row. This per-column intersection
+is explicit Sheaf policy, not a fresh Native2016 rowstats measurement; no COM retry
+or repair was made. Each input's range is resolved once, not once per output cell.
+
+No rows are compressed or shifted. Existing mask/filter handling, numerical
+formulas, output length/order/units/comments, seven quantity switches and insertion
+behind the last selected column remain. An unselected X column's saved range does
+not remove another contributor. A row without eligible numbers retains the
+existing all-missing rowstats outputs, including Number of Points and Sum (unlike
+T126's empty column summary zeros); a single number has no SD or SEM. Stored source
+values and range metadata stay fixed. Only row_statistics and its call change;
+the shared input loader, T126 reader, other tools, model and IO/schema stay fixed.
 
 ## 13g. Copy Columns to (T89, measured 2026-11-16, Origin 2016)
 

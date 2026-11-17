@@ -609,6 +609,8 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe
   does not justify adding a new per-range field. Existing placement remains in use.
+  The documentation scope audit in GUI 3 distinguishes the later Data Info/tooltip
+  table controls from worksheet ranges; it does not supply the missing worksheet route.
 - **Conditional formats.** Conditional fill and text colour override manual ones; bold, italic,
   underline, font, size and alignment stay manual.
 - **Maintenance.** Row insert/delete shift, grow, shrink or drop spans of the affected columns

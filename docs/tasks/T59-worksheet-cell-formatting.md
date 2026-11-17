@@ -25,6 +25,17 @@ hashes pass. Six Native actors and their owned instances/guards/helpers are term
 accepted screenshots/control lists were inspected and hashed. This is a measurement
 slice; supported per-range vertical alignment remains unestablished.
 
+Vertical-alignment documentation audit (codex/t59-cell-vertical-alignment,
+2026-11-16): current worksheet Format-tab and wproperties documentation supplies
+no supported per-range route. GUI 3 separates the 2023b Data Info/tooltip table
+alignment feature from worksheet cells; those controls do not establish worksheet
+mutation behavior. The earlier accepted 2016 probes remain bounded negative
+evidence. No new Native probe, Rust/model/UI/export change or parity claim is made.
+Per-range implementation stays deferred until its worksheet route is established.
+The exact latest verified Rust source is retained: fmt, strict all-target Clippy
+and 4,369 tests passed (eight ignored), with all 912 source/fixture/asset hashes
+unchanged. Inventory283 and documentation whitespace checks pass.
+
 Worksheet Data-default slice (`codex/t59-worksheet-default-fonts`, 2026-11-16): native
 family/size application, manual 12-over-20 priority, future columns and the Font apply-mask
 are measured (GUI 3). A separate Format > Worksheet/F4 dialog applies sparse Data defaults

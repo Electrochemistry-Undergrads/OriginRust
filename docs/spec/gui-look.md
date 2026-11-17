@@ -705,6 +705,19 @@ captures, control lists, hashes and cleanup proof are local in
 command, unselected-cell dialog, incorrect tab clicks and early paint snapshots are
 excluded. Every temporary Origin instance, helper and identity guard closed.
 
+**Documentation scope audit (2026-11-16).** The current
+[worksheet Format-tab](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+and [wproperties tree](https://docs.originlab.com/x-function/ref/wproperties/)
+references establish no per-range vertical-alignment route. This adds no new
+negative Native measurement. The
+[2023b ORG-26070 release note](https://www.originlab.com/ReleaseNotes/detail.aspx?id=2023b3ORG-26070)
+concerns Data Info and point-tooltip layouts. Their
+[current column settings](https://docs.originlab.com/origin-help/data-info-tool/#columns-settings)
+apply vertical alignment to the whole report table. Those controls are a different
+target from worksheet cells and cannot establish worksheet-range mutation rules.
+Per-range vertical alignment remains deferred until a supported worksheet route
+and its behavior are established; no CellFormat field or live control is added.
+
 Model and persistence rules: workbook-model.md 13b.
 
 ## 4. Graph window

@@ -94,7 +94,7 @@ pub(crate) fn draw(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let Some(w) = &pd.wind_rose else { return };
     let stroke = line_stroke(&pd.plot.line);
     for ((&c, &v), &b) in w.angles.iter().zip(&w.values).zip(&w.base) {
-        if !(v > 0.0) {
+        if v.is_nan() || v <= 0.0 {
             continue;
         }
         let (a0, a1) = (c - w.width / 2.0, c + w.width / 2.0);

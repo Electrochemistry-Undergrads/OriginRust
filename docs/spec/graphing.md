@@ -5356,7 +5356,7 @@ Pasted into an untouched graph of the same data and read back (changed propertie
 ### 26.8 As built (T72 step 2)
 
 - Core `crates/core/src/format_clip.rs`: a copy holds the formatted values of every layer (or of one axis) and the groups the choice copies; a paste applies the groups it asks for that the copy holds. Groups: Dimensions (layer left, top, width; page width, not heights), Scales (scale type, limits, steps, reverse, first tick, minor ticks, rescale margin, both axes), Colors, Fonts (family, size, bold, italic; colours stay), Background (layer colour, gradient, border), Thickness (axis line and tick width), Symbol/Line/Fill (the plots' whole line and symbol style), Text (the words of the text labels). All = all eight; All Style Formats = Colors, Fonts, Background, Thickness, Symbol/Line/Fill (no Dimensions, Scales, Text); Colors also takes the layer background colour and the plots' line and symbol colours; Fonts takes tick-label, title, legend and text fonts.
-- Sheaf's own choices where Origin was not measured: layers and plots are paired by position, surplus target layers and plots are left as they are, surplus source ones are dropped; text labels are paired by position and are never created; a paste that changes nothing makes no undo step; the y axis follows Scales; the fill under a curve is not part of Symbol/Line/Fill. The clipboard is inside the program (a second Sheaf window does not see it, and it does not survive a restart, which Origin's does).
+- Sheaf's own choices where Origin was not measured: layers and plots are paired by position, surplus target layers and plots are left as they are, surplus source ones are dropped; text labels are paired by position and are never created; a paste that changes nothing makes no undo step; the y axis follows Scales; the fill under a curve is not part of Symbol/Line/Fill. The clipboard stays internal; the private profile snapshot now survives a restart (26.10). Another running instance does not automatically refresh its in-memory copy.
 - Enabled (measured behaviour): Edit > Copy Format ▸ All, All Style Formats, Colors, Fonts, Background, Dimensions, Scales; Edit > Paste Format... (the Apply Formats window: Apply From Clipboard, one check box per group the clipboard holds or Scales and Styles for an axis format, Apply To for an axis, Undo Apply, Apply, Close; the grid Origin shows for a graph format is unmeasured, so this window is Sheaf's reading of it); page menu Copy Format (same items) and Paste Format; axis menu Copy Format ▸ All and Paste Format To ▸ All. One undo step "Apply Theme" each.
 - Left greyed (not measured): Symbol/Line/Fill and Text (Edit), Page Background and Legend Translation Mode (page), axis Styles/Dimensions and the ten other Paste Format To choices (the Scales follow-up is 26.9), the page menu's Paste Format To submenus, all of the legend's Copy Format (Styles, Dimensions, All).
 
@@ -5386,6 +5386,39 @@ and the other per-property groups, legend and page crossing. Existing All and
 Apply Formats behavior remains. UI regressions check root/inset X/Y targets,
 partial capture/paste, full-graph preservation, Undo/Redo, repeated and stale
 requests; Native per-choice parity remains unmeasured.
+
+### 26.10 Format clipboard across restart (T72)
+
+The accepted Origin2016 observation in 26.1 establishes that a copied format can
+be pasted after restarting the reference application. Sheaf now retains that
+behavior through a private profile snapshot. The file name, JSON encoding,
+resource bounds, error handling and instance policy below are Sheaf choices,
+not measurements of Origin storage. No system clipboard format is used.
+
+Normal startup loads format-clipboard.json beside the existing profile settings.
+Startup.format_clipboard_path can instead select an isolated path; None keeps
+memory only and reads/writes nothing. Disabling recovery does not disable this
+separate clipboard. Only successful Copy Format requests save a version-1 JSON
+envelope containing the existing Core FormatClip. Graph groups and axis
+styles/scales flags survive exactly; unavailable groups cannot be pasted merely
+because a stored axis contains other captured fields. Stale/invalid copy requests
+leave the held snapshot alone. Copy still changes no document revision/history.
+
+The reader accepts at most 16 MiB. Missing/unreadable/corrupt/unknown-version or
+oversized records start empty and are not rewritten by loading. A new valid copy
+can replace a damaged record. Writes create a unique same-directory temporary
+file, synchronize it and rename it over the destination, with cleanup limited to
+the owned temporary file on failure. Oversized snapshots or I/O failures retain
+the current in-memory copy and report once until a save succeeds; the last
+successfully saved snapshot remains available at the next startup.
+
+There is no live file watcher: each app loads once, and the last successful writer
+controls the next startup. Paste, Undo/Redo, closing a project and Apply Formats
+do not save or clear the clipboard. Existing typed paste, scope, no-op and history
+rules remain; no Core/project/IO schema, menu, action or dialog behavior changes.
+Isolated tests exercise graph/partial-axis restarts after explicitly clearing
+memory, corrupt/unknown/oversized files, concurrent atomic replacement, failed
+writes with memory fallback and document/storage independence.
 
 ## 27. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
 

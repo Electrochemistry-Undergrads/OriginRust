@@ -1,6 +1,6 @@
 # T72: Copy Format and Paste Format on graphs (B2, slice 1)
 
-**Status:** partly done (step 1 2026-11-16: Origin measured, spec graphing 26; step 2: core `format_clip.rs`, `format_clip_ui.rs`, menus and Apply Formats window built with the measured items enabled, see graphing 26.8). Open: the unmeasured choices (still greyed, listed in greyed-items.md as T72), the legend, graph/axis crossing, persistence of the clipboard.
+**Status:** partly done (step 1 2026-11-16: Origin measured, spec graphing 26; step 2: core `format_clip.rs`, `format_clip_ui.rs`, menus and Apply Formats window built with the measured items enabled, see graphing 26.8). Open: the unmeasured choices (still greyed, listed in greyed-items.md as T72), the legend, graph/axis crossing and live cross-instance sharing.
 **Size:** M. **Priority:** wave 4 (B2). **Spec:** graphing 26. **Inventory:** the Edit menu's Copy
 Format (nine choices) and Paste Format... [Graph]; Graph axis, legend and page > Copy Format.
 Not in this slice (stay `B2`): object cut/copy/paste, align, same size, group, order across kinds,
@@ -15,6 +15,17 @@ the All operation; the exact per-choice field list remains explicit Sheaf policy
 not new Native parity (graphing26.9). Styles, Dimensions and all other unmeasured
 choices remain disabled. No core/schema/clipboard/dialog or geometry changes.
 Fmt, strict workspace/all-target Clippy and all 4,372 tests pass (eight ignored), including all three new root/inset X/Y UI regressions and all 13 existing format-clipboard regressions. Inventory281 (T72=23), eight Python tests and frozen 913 source/fixture/asset files pass. Current baseline/scaled/restored desktop and PNG/SVG exports were inspected; scale-only changes retain the blue target style, and restored pixels match exactly. Complete graphs survive .sheaf and OPJ companion saves. All own builders/apps/helpers are terminal; only this slice is complete and remaining choices stay deferred.
+
+Clipboard restart follow-up (codex/t72-clipboard-persistence, 2026-11-16): a
+private profile snapshot restores the existing typed graph/axis clipboard at app
+startup, following the accepted restart observation in 26.1. Graph groups and
+partial-axis flags, read-only copy and existing paste/history remain. Explicit
+Startup paths isolate tests; None stays memory-only. Versioned bounded JSON,
+atomic replacement, corrupt-file handling, last successful writer and write-error
+memory fallback are explicit Sheaf policies (26.10), with no system clipboard or
+live watcher. No Core/IO/schema/engine/menu/action/Apply Formats changes. Eight
+new storage/UI regressions and all 13 prior clipboard regressions pass focused;
+fmt, strict workspace/all-target Clippy, all 4,380 tests (eight ignored), inventory281 and eight Python tests pass with all 915 source/fixture/asset files frozen. Fresh private-profile Source Copy and restarted Graph Paste were driven through owned accessibility controls; partial-axis startup also exposes only available groups. Three apps/guards exit0; actual saved graph and Undo models match complete expected snapshots, and both restored exports match every pixel. Clipboard hashes/write timestamps remain unchanged by load/paste/Undo. Two helper menu-name pilots are excluded; product source was unchanged. Only this slice is complete; live instance refresh and other unmeasured choices stay open.
 
 ## Goal
 

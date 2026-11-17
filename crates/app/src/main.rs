@@ -75,6 +75,7 @@ fn main() -> eframe::Result {
         recovery_dir: sheaf_io::recovery::default_dir(),
         settings_path: sheaf_io::recovery::default_settings_path(),
         recent_path: sheaf_io::recent::default_path(),
+        format_clipboard_path: format_clip_ui::default_path(),
         themes_dir: sheaf_io::themes::default_dir(),
         templates_dir: sheaf_io::user_templates::default_dir(),
         graph_themes_dir: sheaf_io::graph_themes::default_dir(),

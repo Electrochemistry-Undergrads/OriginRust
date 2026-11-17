@@ -1097,6 +1097,30 @@ helper regressions cover shared-column glyph positions, Unicode/focus, commas/li
 styles/fonts/nesting, unsafe fragments, automatic text, cancellation, stale generation and
 label saves and title/legend project/companion roundtrips.
 
+### 7.11 Prime escape characters (T58, documented contract)
+
+Origin's [escape reference](https://docs.originlab.com/origin-help/escape-sequences/)
+documents the prime and double-prime forms; [FAQ159](https://docs.originlab.com/quick-help/add-prime-symbol/)
+lists Origin 2015 SR0 as its minimum version. This is a documentation check on
+2026-11-16, not a fresh Native2016 measurement: local COM activation is unavailable.
+
+Sheaf recognizes only the exact closed forms \y(') and \y("), producing Unicode
+U+2032 and U+2033 through the existing glyph path. Surrounding family, weight,
+italic, colour, underline and strikeout apply and restore normally; Greek spans
+do not remap these characters. The escape itself adds no scale or baseline shift.
+Existing superscript and paired-script wrappers still use their published layout
+rules. This Unicode mapping is Sheaf policy; Native full-height glyph geometry,
+combining-prime placement and the configurable @TAPP extra offset are unmeasured,
+and that offset is not implemented.
+
+Literal blocks retain the original notation. Other bodies, whitespace, missing
+closing parentheses, uppercase codes and the 24-level bound retain existing
+unknown/malformed handling. No font aliases, lookup, project fields, editor
+controls or backend implementations change. Modern special-default fonts remain
+deferred under 7.6; accents, conditional spaces, wrapping and line separation
+remain separate work. Regressions compare styles, placement, rotation, vector/
+raster output and actual legend/title/tick scenes with explicit Unicode controls.
+
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
 
 | Group | Plots | Priority |

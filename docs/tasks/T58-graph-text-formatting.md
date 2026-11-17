@@ -226,6 +226,16 @@ source/goldens stayed frozen. Current seeded/invalid/applied desktop captures an
 pixels were inspected, with every own app/reference/helper actor closed. Earlier setter-only
 automation pilots are excluded from appearance evidence.
 
+Prime notation follow-up (codex/t58-escape-alias-audit, 2026-11-16): exact closed
+prime/double-prime escapes now use Unicode U+2032/U+2033 with existing run styles,
+script columns and rendering. Graphing 7.11 records the official documented
+contract (FAQ159 minimum Origin2015SR0), strict syntax and explicit unmeasured
+Native glyph geometry/combining offsets. The alias audit retains 7.6's deferral
+of post-2016 special defaults; no lookup or font configuration is invented.
+Six regressions compare parser, style restoration, literal/malformed/depth rules,
+placement/rotation, exports and real graph contexts with Unicode controls.
+Fmt, strict workspace/all-target Clippy and all 4,369 tests pass (eight ignored), including all six new regressions. Inventory283 and eight Python tests pass with all 912 source/fixture/asset hashes frozen. Fresh actual/Unicode/verbatim desktop captures were inspected; actual and Unicode PNG exports match all pixels, while verbatim differs. Raw notation and graphs survive .sheaf and OPJ companion saves. All own build/app/helper actors are terminal; remaining T58 controls and other claims stay open.
+
 ## Origin facts
 
 Recorded in gui-look 1/4 and the command map: the font box says "Default: Arial", the selected

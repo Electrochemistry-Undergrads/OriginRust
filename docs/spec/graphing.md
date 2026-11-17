@@ -3700,6 +3700,28 @@ stored but dragging a line is not built (shown disabled). `sheaf plot --vline X[
 and `--hline Y` add lines to the first layer. `.sheaf` keeps them; `.opj` leaves them out with a
 warning and the companion keeps them.
 
+### 17.8 Drawn-shape clipboard audit (T125, documentation only)
+
+The [official drawing-object guide](https://docs.originlab.com/origin-help/create-draw-objects/)
+was read on 2026-11-17. It documents single-object Copy through context/Edit menus
+or Ctrl+C, and ordinary Paste at a clicked graph destination. Same-location
+Ctrl+Shift+V is explicitly a 2025 addition. The default placement behind the last
+pasted object changed to placement in front in 2018b. This version split prevents
+claiming a same-coordinate append as ordinary Origin2016 Paste. These are [DOC]
+facts; no fresh Native measurement, COM retry or installation change was made.
+
+The first implementation is scoped in [T125](../tasks/T125-drawn-shape-clipboard.md)
+to one existing line/arrow/rectangle/ellipse. It remains open. A clicked anchor,
+physical dimensions across unequal layer frames, source/target attachment, exact
+2016 insertion order, Cut/history, focus precedence and clipboard lifetime still
+need an explicit tested contract. Current Shape coordinates are frame fractions;
+test-only graph-view coordinate helpers do not supply a production paste-point
+route. That route borders the active resize/drag/geometry ownership and must be
+coordinated before implementation. No Rust, model, renderer, IO or menu behavior
+changes in this audit; Cut/Copy remain grey and no new Paste shortcut is enabled.
+Multiple selection, Ctrl-drag, worksheet XY extraction, OLE/Copy Page and format
+copying are distinct routes outside this slice.
+
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
 Measured on 2026-11-13 by opening Origin's Plot Details on a line plot (`tools/origin-ref/origin-dialog.ps1`,

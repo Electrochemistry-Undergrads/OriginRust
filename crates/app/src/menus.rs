@@ -180,6 +180,8 @@ pub enum Cmd {
     SetCategorical,
     /// Worksheet > Transpose, Stack, Unstack, Split Columns, Reduce Rows.
     Reshape(ReshapeKind),
+    /// Worksheet > Pivot Table.
+    PivotTable,
     /// Column > Filter > Add or Remove Filter, Enable/Disable Filter, Reapply Filter.
     RowFilterDialog,
     ToggleRowFilter,
@@ -190,6 +192,8 @@ pub enum Cmd {
     CondFormat(crate::dialogs::cond_format::CondKind),
     /// Worksheet > Conditional Formatting > Remove Conditional Format.
     RemoveCondFormat,
+    /// Worksheet > Conditional Formatting > Conditional Format Manager.
+    CondFormatManager,
     /// Format Cells... for the selected cells, rows, columns or label cell.
     FormatCells,
     /// Format > Worksheet (F4): worksheet-wide Data font defaults.
@@ -1299,23 +1303,20 @@ fn mask_menu() -> Entry {
     sub("Mask", entries)
 }
 
-/// Worksheet > Conditional Formatting (also in the right-click menu of selected cells). The other
-/// items of Origin's submenu are greyed.
+/// Worksheet > Conditional Formatting (also in the right-click menu of selected cells).
 fn cond_format_menu() -> Entry {
     use crate::dialogs::cond_format::CondKind;
     let mut entries = vec![
         item("Highlight Min Max...", Cmd::CondFormat(CondKind::MinMax)),
         item("Highlight Top Bottom...", Cmd::CondFormat(CondKind::TopBottom)),
+        item("Conditional Highlight...", Cmd::CondFormat(CondKind::Highlight)),
+        item("Conditional Heatmap...", Cmd::CondFormat(CondKind::Heatmap)),
+        item("Conditional Pareto...", Cmd::CondFormat(CondKind::Pareto)),
+        item("Conditional Outliers...", Cmd::CondFormat(CondKind::Outliers)),
     ];
-    entries.extend(greys(&[
-        "Conditional Highlight...",
-        "Conditional Heatmap...",
-        "Conditional Pareto...",
-        "Conditional Outliers...",
-        "-",
-    ]));
+    entries.extend(greys(&["-"]));
     entries.push(item("Remove Conditional Format", Cmd::RemoveCondFormat));
-    entries.push(grey("Conditional Format Manager..."));
+    entries.push(item("Conditional Format Manager...", Cmd::CondFormatManager));
     sub("Conditional Formatting", entries)
 }
 
@@ -1367,7 +1368,7 @@ fn worksheet_menu() -> Vec<Entry> {
         cond_format_menu(),
         item("Clear Worksheet...", Cmd::ClearWorksheet),
         item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
-        grey("Pivot Table..."),
+        item("Pivot Table...", Cmd::PivotTable),
         item("Reduce Rows...", Cmd::Reshape(ReshapeKind::Reduce)),
         item("Transpose...", Cmd::Reshape(ReshapeKind::Transpose)),
         item("Stack Columns...", Cmd::Reshape(ReshapeKind::Stack)),
@@ -2803,6 +2804,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SetCategorical(some()?)
         }
         Cmd::Reshape(kind) => Action::Reshape { book: book?, columns: c.selected.to_vec(), kind: *kind },
+        Cmd::PivotTable => Action::PivotTable { book: book?, columns: c.selected.to_vec() },
         Cmd::ReverseOrder => {
             book?;
             Action::ReverseColumns(some()?)
@@ -2852,6 +2854,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             Action::RemoveCondFormat(book?)
         }
+        Cmd::CondFormatManager => Action::CondFormatManager(book?),
         // On a graph the tools take the active data plot, as Origin's Analysis menu does; the
         // results go to its workbook (ADR 0005), and a fit draws its curve on the graph (ADR 0006).
         Cmd::Analyze(kind) => match (c.book, c.curve) {

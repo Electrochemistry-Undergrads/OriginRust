@@ -1,6 +1,6 @@
 # T120: Worksheet > Conditional Formatting > Conditional Heatmap...
 
-**Status:** claimed 2026-11-16 (Claude Windows, scheduled session "cond-heatmap", branch `cond-heatmap`).
+**Status:** done 2026-11-17 (Claude Windows, scheduled session "cond-heatmap", branch `cond-heatmap`; gui-look.md "Conditional Heatmap (T120)"), not measured (Origin 2016 has no conditional formatting). Left: Introducing Other Colors in Mixing and Load Palette (disabled in the window), editing a rule after creation (the Manager, B7).
 **Size:** M. **Source:** greyed inventory package B7 (T35 leftover).
 **Spec:** `docs/spec/gui-look.md` "Conditional formatting" (a new subsection).
 

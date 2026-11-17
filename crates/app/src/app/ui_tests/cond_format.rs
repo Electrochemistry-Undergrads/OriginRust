@@ -193,3 +193,267 @@ fn deleting_all_columns_of_a_rule_drops_it_with_the_delete() {
     h.state_mut().doc.undo();
     assert_eq!(rules(&h).len(), 1, "undo brings the rule back with the columns");
 }
+
+/// The fill painted behind the cell that shows `text`, if it is `colour`.
+fn painted_behind(h: &Harness<'static, SheafApp>, text: &str, colour: sheaf_core::color::Color) -> bool {
+    let centre = grid_text(h, text).rect().center();
+    painted(h).into_iter().any(|(r, c)| r.contains(centre) && c == rgb(colour))
+}
+
+#[test]
+fn conditional_heatmap_colours_a_column_from_its_minimum_to_its_maximum() {
+    use sheaf_core::condformat::heatmap;
+    let mut h = start_book("cf-heatmap");
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Conditional Heatmap..."]);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Conditional heatmap"));
+    let r = rules(&h);
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0].rule, Rule::heatmap(), "the defaults go into the rule unchanged");
+    click_text(&mut h, "C(Y1)");
+    // The minimum takes the From colour (white, so read from the evaluated styles).
+    let s = sheet(&h).clone();
+    let b = &s.columns[1];
+    let min_row = b.numeric().unwrap().iter().position(|v| *v == 2.5).unwrap();
+    let style = condformat::evaluate(&s, &s.cond_formats).get(b.id, min_row).unwrap();
+    assert_eq!((style.fill, style.font), (Some(heatmap::DEFAULT_FROM), Some(sheaf_core::color::Color::BLACK)));
+    assert!(painted_behind(&h, "8.5", heatmap::DEFAULT_TO), "the maximum takes the To colour");
+    assert!(!painted_behind(&h, "30.5", heatmap::DEFAULT_TO), "other columns are untouched");
+    // Undo removes the rule and its colours.
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Z);
+    settle(&mut h);
+    assert!(rules(&h).is_empty());
+    assert!(!painted_behind(&h, "8.5", heatmap::DEFAULT_TO));
+}
+
+#[test]
+fn conditional_heatmap_options_reach_the_rule() {
+    use sheaf_core::condformat::heatmap::{Mixing, Target};
+    let mut h = start_book("cf-heatmap-options");
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Conditional Heatmap..."]);
+    click(&mut h, "3-Color Limited Mixing");
+    click(&mut h, "Color Text");
+    click(&mut h, "Flip");
+    click(&mut h, "OK");
+    let r = rules(&h);
+    let Rule::Heatmap(heat) = &r[0].rule else { panic!("{:?}", r[0].rule) };
+    assert!(matches!(heat.mixing, Mixing::ThreeColor { .. }));
+    assert_eq!(heat.target, Target::Text);
+    assert!(heat.flip);
+    assert!(!heat.contrast_text, "contrast text only goes with a fill");
+    // Flipped, the maximum's text takes the From colour; no cell gets a fill.
+    let s = sheet(&h).clone();
+    let styles = condformat::evaluate(&s, &s.cond_formats);
+    let b = &s.columns[1];
+    let max_row = b.numeric().unwrap().iter().position(|v| *v == 8.5).unwrap();
+    let style = styles.get(b.id, max_row).unwrap();
+    assert_eq!((style.fill, style.font), (None, Some(sheaf_core::condformat::heatmap::DEFAULT_FROM)));
+}
+
+#[test]
+fn conditional_outliers_colour_the_value_outside_the_fences() {
+    let mut h = start_book("cf-outliers");
+    // The box-chart probe: 30 is the one outlier of column B by Origin's quartiles.
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Set values", |p| {
+        let b = p.workbook_mut(book).unwrap();
+        *b.sheet_mut().columns[1].numeric_mut().unwrap() =
+            vec![4.0, 4.0, 5.0, 5.0, 5.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 30.0];
+    });
+    settle(&mut h);
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Conditional Outliers..."]);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Conditional outliers"));
+    assert_eq!(rules(&h)[0].rule, Rule::outliers(), "IQR with Coef 1.5 by default");
+    click_text(&mut h, "C(Y1)");
+    assert_eq!(fill_behind(&h, "30"), Some(rgb(condformat::TOP_FILL)));
+    assert_eq!(fill_behind(&h, "20.5"), None);
+    // SD with a large Coef finds nothing.
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Remove Conditional Format"]);
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Conditional Outliers..."]);
+    click(&mut h, "SD");
+    click(&mut h, "OK");
+    let r = rules(&h);
+    assert!(matches!(r[0].rule, Rule::Outliers { method: condformat::OutlierMethod::Sd, coef, .. } if coef == 1.5));
+}
+
+#[test]
+fn conditional_pareto_takes_its_rule_and_the_least_frequent_colours() {
+    let mut h = start_book("cf-pareto");
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Conditional Pareto..."]);
+    h.get_by_value("Most Frequent N Items").click();
+    settle(&mut h);
+    click(&mut h, "Least Frequent N%");
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Conditional pareto"));
+    let r = rules(&h);
+    let Rule::Pareto { most, n, percent, colours } = r[0].rule else { panic!("{:?}", r[0].rule) };
+    assert!(!most && percent && n == condformat::DEFAULT_N);
+    assert_eq!(colours.fill, Some(condformat::BOTTOM_FILL), "least frequent takes the bottom colours");
+}
+
+fn open_manager(h: &mut Harness<'static, SheafApp>) {
+    menu_path(h, &["Worksheet", "Conditional Formatting", "Conditional Format Manager..."]);
+}
+
+/// Two rules on column B: Min Max (column-wise) under Top Bottom (the newer, on top).
+fn two_rules(tag: &str) -> Harness<'static, SheafApp> {
+    let mut h = start_book(tag);
+    apply_column_wise(&mut h);
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Highlight Top Bottom..."]);
+    click(&mut h, "OK");
+    h
+}
+
+#[test]
+fn the_manager_lists_moves_and_removes_formats_each_as_one_undo_step() {
+    let mut h = two_rules("cf-manager");
+    open_manager(&mut h);
+    assert!(h.state().cond_manager.is_some());
+    // The rule column says what each format does, the top rule first.
+    let _ = h.get_by_label("Top 10 Items");
+    let _ = h.get_by_label("Highlight Min Max, column-wise");
+    assert!(matches!(rules(&h)[0].rule, Rule::TopBottom { .. }));
+    // The first row is selected: move it down.
+    click(&mut h, "Move Down");
+    assert_eq!(h.state().doc.undo_label(), Some("Move conditional format down"));
+    assert!(matches!(rules(&h)[0].rule, Rule::MinMax { .. }));
+    assert!(matches!(rules(&h)[1].rule, Rule::TopBottom { .. }));
+    // The moved row stays selected: remove it.
+    click(&mut h, "Remove");
+    assert_eq!(h.state().doc.undo_label(), Some("Remove conditional format"));
+    assert_eq!(rules(&h).len(), 1);
+    assert!(matches!(rules(&h)[0].rule, Rule::MinMax { .. }));
+    // Undo brings it back, and the list follows.
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Z);
+    settle(&mut h);
+    assert_eq!(rules(&h).len(), 2);
+    let _ = h.get_by_label("Top 10 Items");
+    click(&mut h, "Close");
+    assert!(h.state().cond_manager.is_none());
+}
+
+#[test]
+fn the_manager_renames_a_format_by_double_click() {
+    let mut h = two_rules("cf-manager-rename");
+    open_manager(&mut h);
+    let name = rules(&h)[0].name.clone();
+    let at = h.query_all_by_label(&name).next().unwrap().rect().center();
+    double_click_at(&mut h, at);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text("Peaks".to_string()));
+    settle(&mut h);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert_eq!(rules(&h)[0].name, "Peaks");
+    assert_eq!(h.state().doc.undo_label(), Some("Rename conditional format"));
+    assert!(matches!(rules(&h)[0].rule, Rule::TopBottom { .. }), "only the name changed");
+}
+
+#[test]
+fn edit_rule_reopens_the_rules_window_filled_in_and_replaces_it_in_place() {
+    let mut h = two_rules("cf-manager-edit");
+    open_manager(&mut h);
+    click(&mut h, "Edit Rule");
+    assert!(h.state().cond_format.is_some(), "the Highlight Top Bottom window opens");
+    // Its settings are the rule's: switch the mode and keep everything else.
+    h.get_by_value("Top N Items").click();
+    settle(&mut h);
+    click(&mut h, "Bottom N%");
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Edit conditional format"));
+    let r = rules(&h);
+    assert_eq!(r.len(), 2, "replaced, not added");
+    assert!(matches!(r[0].rule, Rule::TopBottom { top: false, percent: true, .. }), "{:?}", r[0].rule);
+    assert!(matches!(r[1].rule, Rule::MinMax { .. }));
+    let _ = h.get_by_label("Bottom 10%");
+    // OK with nothing changed adds no undo step.
+    click(&mut h, "Edit Rule");
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Edit conditional format"));
+    h.state_mut().doc.undo();
+    assert!(matches!(rules(&h)[0].rule, Rule::TopBottom { top: true, percent: false, .. }));
+}
+
+/// Opens Conditional Highlight on column B and picks Custom with `condition`.
+fn highlight_custom(h: &mut Harness<'static, SheafApp>, condition: &str) {
+    click_text(h, "B(Y1)");
+    menu_path(h, &["Worksheet", "Conditional Formatting", "Conditional Highlight..."]);
+    h.get_by_value("Equal to").click();
+    settle(h);
+    click(h, "Custom");
+    h.query_all_by_role(egui::accesskit::Role::TextInput).last().expect("the Custom box").click();
+    settle(h);
+    h.event(egui::Event::Text(condition.to_string()));
+    settle(h);
+    click(h, "OK");
+}
+
+#[test]
+fn conditional_highlight_colours_the_cells_meeting_a_custom_condition() {
+    let mut h = start_book("cf-highlight");
+    highlight_custom(&mut h, "x > 5");
+    assert!(h.state().cond_format.is_none(), "OK closed the window");
+    assert_eq!(h.state().doc.undo_label(), Some("Conditional highlight"));
+    let r = rules(&h);
+    assert!(
+        matches!(&r[0].rule, Rule::Highlight { first: condformat::highlight::Cond::Custom(c), second: None, .. } if c == "x > 5"),
+        "{:?}",
+        r[0].rule
+    );
+    click_text(&mut h, "C(Y1)");
+    assert_eq!(fill_behind(&h, "6.5"), Some(rgb(condformat::MAX_FILL)), "Origin's default Background");
+    assert_eq!(fill_behind(&h, "8.5"), Some(rgb(condformat::MAX_FILL)));
+    assert_eq!(fill_behind(&h, "4.5"), None);
+    // The Manager describes it.
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Conditional Format Manager..."]);
+    let _ = h.get_by_label("Highlight custom: x > 5");
+}
+
+#[test]
+fn a_custom_condition_that_cannot_be_used_keeps_the_window_open() {
+    let mut h = start_book("cf-highlight-bad");
+    highlight_custom(&mut h, "y > 1");
+    assert!(h.state().cond_format.is_some(), "the window stays open");
+    assert!(rules(&h).is_empty());
+    let _ = h.get_by_label("Custom: unknown name 'y': the condition can use x, the cell's value");
+}
+
+#[test]
+fn conditional_highlight_defaults_are_origins() {
+    let mut h = start_book("cf-highlight-default");
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Conditional Highlight..."]);
+    click(&mut h, "OK");
+    assert_eq!(rules(&h)[0].rule, Rule::highlight(), "equal to 0, no join, wcolor's colours");
+}
+
+#[test]
+fn pivot_table_counts_into_a_new_sheet_as_one_undo_step() {
+    let mut h = start_book("pivot");
+    // A(X) 1..4 as rows, B as columns: every combination appears once.
+    menu_path(&mut h, &["Worksheet", "Pivot Table..."]);
+    assert!(h.state().pivot.is_some());
+    click(&mut h, "Row Totals");
+    click(&mut h, "OK");
+    assert!(h.state().pivot.is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Pivot table"));
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets.len(), 2);
+    let p = &b.sheets[1];
+    assert_eq!(p.name, "Pivot1");
+    assert_eq!(b.active_sheet, 1, "the new sheet is shown");
+    // Label column, four value columns (2.5, 4.5, 6.5, 8.5 in Comments), Row Total.
+    assert_eq!(p.columns.len(), 6);
+    assert_eq!(p.columns[1].comments, "2.5");
+    assert_eq!(p.columns[5].comments, "Row Total");
+    assert_eq!(p.columns[5].numeric().unwrap(), &[1.0, 1.0, 1.0, 1.0]);
+    h.state_mut().doc.undo();
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+}

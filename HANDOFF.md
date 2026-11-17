@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **281 listed item locations** at the planning
-  baseline (188 menu bar, 18 toolbar, 75 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **275 listed item locations** at the planning
+  baseline (182 menu bar, 18 toolbar, 75 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -70,6 +70,76 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
   earlier work. This rule applies to claims listed below and in the task briefs.
 
 ## Latest integration
+
+**Scheduled Claude session of 2026-11-17 (T120-T124), decisions and next step:** B7 is complete
+(Conditional Formatting T120-T123, Pivot Table T124; inventory 283 -> 275). It reused worktree
+`.claude/worktrees/small-diffs` with a new build folder `target/wt-small-diffs` (every older build
+folder belonged to an active session; C: had 154 GB free), which is free for reuse now. Looked at and
+left on purpose: B6 corner Column Header / Row Header (they change the grid's fixed row-header width
+and header strip across frozen panes in `grid.rs`, next to active T59 work; do them with T59's owner
+or after it), B12 Arrange Icons (Sheaf always lays minimised windows out in a bottom strip, so the
+item would do nothing), B8 Probability/Q-Q Plot entries (wait for the `stats-origin` T14 work).
+Suggested next: B8 Multiple Peak Fit (Origin's `nlfitpeaks`: Peak Function, Get Points by double-click
+or Enter, Fit / Open NLFit; docs.originlab.com/origin-help/fit-multipeakfit-tool), reusing the Data
+Reader's point picking (`crates/app/src/reader.rs`) and the Peak Analyzer's multi-peak fit; coordinate
+with `gadgets-1` before touching `graph_view.rs`. Pivot Table and the conditional rules should be
+measured against Origin 2016 when its COM registration works again (Pivot Table exists there).
+
+**T124 Pivot Table (`pivot-table`, 2026-11-17, Windows, scheduled Claude session):** Worksheet >
+Pivot Table... after Origin's `wpivot` (in Origin 2016, but COM was unavailable, so not measured):
+one or more row sources, a column source, Count/Sum/Mean/Min/Max of a data column, Row Totals and
+Column Totals, the five row and five column sorts, Normalize (fraction/percent), Show Missing as
+0, and the column-label position; a new sheet `Pivot1` as one undo step. Core `pivot.rs`, window
+`dialogs/pivot.rs` (Combine/Others, extra values and the user-parameter position shown disabled).
+Choices in workbook-model.md 13n. With it package B7 is complete. Fmt, strict all-target Clippy,
+full workspace 4,435 passed / 0 failed / 8 ignored, inventory 275. Worth measuring against Origin
+2016 when COM works again.
+
+**T123 Conditional Highlight (`cond-highlight`, 2026-11-17, Windows, scheduled Claude session):**
+the last grey item of Worksheet > Conditional Formatting. Conditions are Origin's `wcolor` codes
+0-8 (from the X-Function's TreeNode reference, which lists them in text where the help page only
+has a screenshot): equal/not equal, greater/less (or equal), between, text that contains, custom;
+Join None/And/Or; Origin's default colours. Custom is a Sheaf expression in `x` (the cell's number),
+checked before OK. Core `condformat/highlight.rs`. Not measured; left: Date/Time names and date
+entry, statistics values, whole-row extend, text values in custom conditions. B7 now holds only
+Pivot Table and Find in Project. Fmt, strict all-target Clippy, full workspace 4,428 passed / 0
+failed / 8 ignored, inventory 276.
+
+**T122 Conditional Format Manager (`cond-manager`, 2026-11-17, Windows, scheduled Claude session):**
+Worksheet > Conditional Formatting > Conditional Format Manager... lists the active sheet's formats
+(top rule first) with Name, Range and a short Rule text; double-click renames, Edit Rule reopens the
+rule's own window filled in and replaces the rule in place (no step when unchanged, nothing when the
+list changed meanwhile), Move Up/Down and Remove. Every change is one undo step at once (Sheaf's
+choice; Origin's OK/Cancel behaviour is unknown). New `dialogs/cond_manager.rs`, edit mode in
+`dialogs/cond_format.rs`. Left: editing a range, drag reorder. With T120-T122 only Conditional
+Highlight is still grey in that submenu: its condition list exists only as a screenshot in Origin's
+documentation, so it needs a newer Origin or a decision on the condition set. Fmt, strict all-target
+Clippy, full workspace 4,419 passed / 0 failed / 8 ignored, inventory 277.
+
+**T121 Conditional Pareto and Conditional Outliers (`cond-outliers`, 2026-11-17, Windows, scheduled
+Claude session):** the two remaining documented rule windows of Worksheet > Conditional Formatting.
+Pareto counts every non-empty, unmasked cell of the whole range (numbers and text) and colours the
+Most/Least Frequent N Items or N% (Origin's cumulative-frequency wording); Outliers colours values
+outside IQR (Origin's box-chart quartiles) or SD fences of each column, Coef default 1.5. Core
+`condformat/rank.rs`. Not measured; tie order, per-column outliers and colours are Sheaf's own
+(gui-look.md "Conditional Pareto and Conditional Outliers (T121)"). Only Conditional Highlight (its
+condition list is not in the documentation text) and the Manager remain greyed in that submenu.
+Fmt, strict all-target Clippy, full workspace 4,416 passed / 0 failed / 8 ignored, inventory 278.
+No new desktop capture (the T120 capture covers the shared grid colouring path).
+
+**T120 Conditional Heatmap (`cond-heatmap`, 2026-11-17, Windows, scheduled Claude session):**
+Worksheet > Conditional Formatting > Conditional Heatmap... after Origin's documented dialog (Auto
+Rescale or From/To with Find Min/Max, Linear/Log10, By Count/By Increment, First Level, Fill
+Background or Color Text, Contrast Color for Text, Limited or 3-Color Limited Mixing with Middle
+Position By Percentile/Percent/Value, Flip, Below/Above). `Rule::Heatmap` in core
+`condformat/heatmap.rs`: one set of levels over the whole range, each level a palette class (at most
+250); the palette now stops growing at its u16 limit instead of wrapping. Saved in `.sheaf` and the
+companion; `.opj` warns; XLSX writes the colours as a snapshot. Not measured (Origin 2016 has no
+conditional formatting): defaults, level bounds and colour mixing are Sheaf's own (gui-look.md
+"Conditional Heatmap (T120)"). Introducing Other Colors and Load Palette are shown disabled. Fmt,
+strict all-target Clippy, full workspace 4,406 passed / 0 failed / 8 ignored, inventory 280; a desktop
+capture of the built app on a heatmap project was inspected. Build folder `target/wt-small-diffs`
+was created new (every older build folder belonged to an active session; disk had 154 GB free).
 
 **T58 reusable Custom RGB wells (2026-11-17, Windows):** graph font/fill/line
 pickers share a private profile pool. Add to Custom stores a valid draft without
@@ -756,7 +826,6 @@ is released; other sessions' claims are preserved.
 | `function-graph` | Claude Windows, "t30-origin" | B3 slice as new brief T119: Graph > Add Function Graph... (curve of y = f(x) in the active layer) | claimed 2026-11-16; worktree swap-transpose, build target/wf-excel |
 | `hist-prob` | Claude Windows, session fe4b37eb | B4 slice as new brief T85: Plot > Statistics > Histogram + Probabilities (histogram with the cumulative probability curve on a right axis); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no other B4 plots (T83 interval/Pareto is done) or other sessions' scopes |
 | `gadgets-1` | Claude Windows, "continue all tasks" | B9 slice 1 as new brief T101: Gadgets > Statistics, Quick Fit, Differentiate, Interpolate, Vertical Cursor on the Integrate gadget's ROI framework; new app gadget modules, small graph_view.rs hooks, Gadgets menu | claimed 2026-11-16; no other gadgets, shape-resize, T58/T59, multi-Y legends |
-| `cond-heatmap` | Claude Windows, scheduled "cond-heatmap" | B7 slice as new brief T120: Worksheet > Conditional Formatting > Conditional Heatmap...; core condformat.rs Heatmap rule, cond_format dialog, menu item, gui-look spec | claimed 2026-11-16; worktree `.claude/worktrees/small-diffs`, build `target/wt-small-diffs`; no other conditional rules, Manager, T59 or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

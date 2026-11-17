@@ -467,9 +467,125 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
 - **Cost.** The styles are computed once per change of the document (not per frame or per cell) and
   read per drawn cell; a 1,000,000-row column takes about 3 ms (Min Max) to 10 ms (Top N %) in a
   release build.
-- **Left out.** Conditional Highlight, Heatmap, Pareto, Outliers and the Manager (greyed); renaming a
-  rule after creation. The `.opj` writer cannot store the rules: saving to `.opj` warns and the
+- Renaming and editing rules: the Manager (T122). Conditional Highlight: T123. The `.opj` writer cannot store the rules: saving to `.opj` warns and the
   companion keeps them.
+
+#### Conditional Heatmap (T120)
+
+Origin facts (docs.originlab.com/origin-help/conditional-format, read 2026-11-17, not measured: Origin
+2016 has no Conditional Formatting). Level: **Auto Rescale** (checked by default, the range's minimum
+and maximum), else **From** and **To**, **Find Min/Max**, scale **Type**, levels **By Increment** or
+**By Count**, **First Level** ("larger than or equal to the default value of the first level").
+Colors: **Format Type** Fill Background or Color Text, **Contrast Color for Text**, **Color
+Generation** (Limited Mixing, 3-Color Limited Mixing with **Middle Position** By Percentile, By
+Percent or By Value, Introducing Other Colors in Mixing, Load Palette), **Flip**, **Below** and
+**Above** colours for values outside From..To. A new rule goes on top; the upper rule wins.
+
+Sheaf's choices, all **unmeasured**:
+
+- **Scope.** One set of levels over the whole range (all its columns and rows together); the same
+  numbers count as for the other rules (text, empty, NaN and masked cells are left out). Each level
+  is a palette class of the rule, at most 250 levels.
+- **Levels.** In scale units (log10 of the value for Log10, where numbers at or below zero get no
+  colour). By Count n cuts First Level..To into n equal levels; By Increment d gives
+  ceil((To - First Level) / d) levels (one decade is 1 on Log10). A level holds its lower bound;
+  To belongs to the last level. First Level defaults to From and is clamped into From..To; numbers
+  between From and First Level take the first level. Auto Rescale with one distinct number gives
+  that number the first level; set limits that are equal, reversed or not finite colour nothing.
+- **Colours.** Level k of n gets t = k / (n - 1) (0 for one level), mixed in RGB from From to To;
+  3-colour mixing goes From to Middle up to the middle's place and Middle to To after it. The
+  middle's place along the levels is the percent itself (By Percent), the value's place (By Value),
+  or the place of that percentile of the range's numbers (By Percentile, linear between order
+  statistics), clamped to 0..1. Flip swaps From and To (Middle keeps its place). Below and Above
+  apply only with Auto Rescale off; switched off, numbers outside From..To stay plain.
+- **Text.** Fill Background with Contrast Color for Text puts black or white text on each fill,
+  whichever has more contrast (BT.601 luma below 128 gives white); Color Text colours the text and
+  leaves the fill.
+- **Defaults** (Origin's are not documented): Auto Rescale, Linear, By Count 10, Fill Background
+  with contrast text, Limited Mixing from white RGB(255,255,255) to RGB(248,105,107); Middle
+  RGB(255,235,132) at 50 %. Introducing Other Colors in Mixing and Load Palette are shown disabled.
+- **Files.** `.sheaf` and the `.opj.sheaf` companion keep the rule; `.opj` warns as for the other
+  rules; XLSX writes the current colours as a snapshot, with the same warning.
+- One undo step, "Conditional heatmap"; Remove Conditional Format removes it like the other rules.
+
+
+#### Conditional Pareto and Conditional Outliers (T121)
+
+Origin facts (docs.originlab.com/origin-help/conditional-format, read 2026-11-17, not measured):
+Conditional Pareto "counts all items in the range" and ranks them from most to least frequent, with
+Most Frequent N Items, Most Frequent N% (items whose cumulative frequency is <= N %), Least Frequent N
+Items and Least Frequent N% (cumulative frequency >= 1 - N %). Conditional Outliers colours outliers
+"as in a box chart": **IQR** with **Coef** (default 1.5; fences Q1 - Coef x IQR and Q3 + Coef x IQR,
+3 for the outer fences) or **SD** (the box chart's Whisker Range = SD) with Coef.
+
+Sheaf's choices, all **unmeasured**:
+
+- **Pareto items.** Every non-empty, unmasked cell of the whole range is an item: a number (equal
+  numbers, 0 and -0 included, are one item) or a text (text cells of Text & Numeric and text
+  columns count). Items rank by count, equal counts in order of first appearance (column by column,
+  top to bottom). N Items takes floor(N) items from the top (or bottom) and every item with the same
+  count as the last one taken; N% follows Origin's wording with the cumulative frequency including
+  the item, so Least Frequent N% always takes the least frequent item for N > 0. N of 0 or less takes
+  nothing. Default Most Frequent 10 Items; Least modes switch to the Min Max minimum colours.
+- **Outliers.** Each column of the range on its own (one box per column). IQR quartiles follow the
+  box chart's Origin rule (`quantile_origin`, graphing box chart); SD is the sample standard deviation
+  (n - 1) around the mean, and needs two numbers. Values strictly outside the fences are coloured.
+  The Coef box offers 1, 1.5, 2 and 3 and takes any value >= 0; the default 1.5 applies to SD too.
+  Colours default to the Min Max maximum colours.
+- One undo step each ("Conditional pareto", "Conditional outliers"); saving, Remove and XLSX snapshot
+  as for the other rules.
+
+
+#### Conditional Format Manager (T122)
+
+Origin facts (docs.originlab.com/origin-help/conditional-format, read 2026-11-17, not measured): the
+Manager lists all conditional formats of the active worksheet; **Name** is renamed by a
+double-click, **Range** is reselected or typed, **Edit Rule** reopens the rule's dialog, **Move
+Up**/**Move Down** (or dragging a row) reorder and **Remove** deletes; a new format is added at the
+top and the upper format wins where ranges overlap.
+
+Sheaf's choices, all **unmeasured**:
+
+- The window lists Name, Range (the columns' short names and rows, for example `B, C; rows 1 to
+  end`) and Rule (a few words: `Top 10 Items`, `Highlight Min Max, column-wise`, `Heatmap, 10
+  levels`, `Most Frequent 10 Items`, `Outliers, IQR x 1.5`). It reads the sheet again every frame,
+  so undo shows at once; it opens without a cell selection.
+- Every change applies at once as one undo step ("Rename conditional format", "Move conditional
+  format up/down", "Remove conditional format", "Edit conditional format"); there is no OK/Cancel,
+  only Close. A rename to an empty or unchanged name, or Escape, changes nothing.
+- Edit Rule opens the rule's own window (Highlight Min Max, Top Bottom, Heatmap, Pareto, Outliers)
+  filled with its settings and name; OK replaces the rule in its place, keeping its range. OK with
+  nothing changed adds no undo step; if the list changed meanwhile (the rule at that place is no
+  longer the same), OK does nothing.
+- **Left out:** changing a range (reselecting or typing), dragging rows to reorder.
+
+
+#### Conditional Highlight (T123)
+
+Origin facts (X-Function `wcolor` and "Details of TreeNodes in Wcolor", docs.originlab.com, read
+2026-11-17, not measured): conditions `cond1`/`cond2` 0 equal to, 1 not equal to, 2 greater than,
+3 greater than or equal to, 4 less than, 5 less than or equal to, 6 between (`val11`, default 0, and
+`val12`, default 1), 7 text that contains (`text1`), 8 custom (`custom1`, a condition in `x`, for
+example `x == "Male"`); Date/Time columns name 2 to 5 after, on or after, before, on or before.
+`join` 0 None (default), 1 And, 2 Or. Background 30067455 = RGB(255,202,202) and Text Color
+20132812 = RGB(204,51,51) by default. `extend` colours whole rows; values may come from a fly-out
+of statistics functions.
+
+Sheaf's choices, all **unmeasured**:
+
+- The window: Condition (Origin's nine names, a value, two values for Between, a text box for Text
+  that contains and Custom), Join (None, And, Or) with a second condition, and the Fill/Font pair
+  (Origin's defaults). Defaults: Equal to 0, None.
+- Numeric conditions match numbers only: text, empty, NaN and masked cells never match, not even
+  "not equal to". Equality is exact. Between includes both values, in either order.
+- Text that contains matches the cell's text as the worksheet shows it (numbers too, for example
+  `5` in `2.5`), case-sensitive; an empty text matches nothing.
+- Custom is an expression of Sheaf's expression language in `x`, the cell's number, true when not
+  zero (`x > 2 && mod(x, 2) == 0`); it may use functions and constants but no other names and no
+  columns, and OK refuses one that does not parse or uses another name, saying why. Text values in
+  custom conditions (`x == "Male"`) are not supported: text cells never match Custom.
+- **Left out:** Date/Time names and date entry (dates compare as their stored numbers), statistics
+  functions as values, extending the colour to the whole row (`extend`).
 
 ### Cell notes (T36)
 

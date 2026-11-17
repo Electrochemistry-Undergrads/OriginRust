@@ -476,6 +476,11 @@ pub enum Action {
         columns: Vec<ColumnId>,
         kind: crate::dialogs::reshape::ReshapeKind,
     },
+    /// Worksheet > Pivot Table: open the window; the table goes to a new sheet.
+    PivotTable {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     /// Column > Reverse Order: turn the values of each selected column round.
     ReverseColumns(Vec<ColumnId>),
     /// Empty every column of the active sheet of this workbook (one undo step).
@@ -508,6 +513,9 @@ pub enum Action {
         book: WindowId,
         kind: crate::dialogs::cond_format::CondKind,
     },
+    /// Worksheet > Conditional Formatting > Conditional Format Manager: the list of the active
+    /// sheet's rules.
+    CondFormatManager(WindowId),
     /// Worksheet > Conditional Formatting > Remove Conditional Format: removes the rules that
     /// touch the selection.
     RemoveCondFormat(WindowId),

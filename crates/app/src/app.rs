@@ -13,6 +13,7 @@ use crate::dialogs::cell_note::CellNoteDialog;
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::comparison_plot::{ComparisonPlotDialog, Outcome as ComparisonPlotOutcome};
 use crate::dialogs::cond_format::CondFormatDialog;
+use crate::dialogs::cond_manager::{CondManagerDialog, ManagerOutcome};
 use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::export_excel::ExcelExportDialog;
@@ -30,6 +31,7 @@ use crate::dialogs::label_panels::{LabelPanelsDialog, Outcome as LabelPanelsOutc
 use crate::dialogs::mask_condition::MaskConditionDialog;
 use crate::dialogs::merge_graphs::{MergeGraphsDialog, Outcome as MergeGraphsOutcome};
 use crate::dialogs::multi_y::{MultiYDialog, Outcome as MultiYOutcome};
+use crate::dialogs::pivot::PivotDialog;
 use crate::dialogs::power::{PowerDialog, PowerOutcome};
 use crate::dialogs::printing::{PageSetupDialog, PageSetupOutcome, PreviewOutcome, PrintPreview};
 use crate::dialogs::recovery::{RecoveryChoice, RecoveryOffer};
@@ -194,11 +196,13 @@ pub struct SheafApp {
     row_filter: Option<RowFilterDialog>,
     mask_condition: Option<MaskConditionDialog>,
     cond_format: Option<CondFormatDialog>,
+    cond_manager: Option<CondManagerDialog>,
     pub(crate) cell_note: Option<CellNoteDialog>,
     pub(crate) cell_format: Option<CellFormatDialog>,
     pub(crate) worksheet_fonts: Option<WorksheetFontsDialog>,
     pub(crate) worksheet_color: Option<WorksheetColorDialog>,
     reshape: Option<ReshapeDialog>,
+    pivot: Option<PivotDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
     export_excel: Option<ExcelExportDialog>,
@@ -350,11 +354,13 @@ impl SheafApp {
             row_filter: None,
             mask_condition: None,
             cond_format: None,
+            cond_manager: None,
             cell_note: None,
             cell_format: None,
             worksheet_fonts: None,
             worksheet_color: None,
             reshape: None,
+            pivot: None,
             export: None,
             export_sheet: None,
             export_excel: None,
@@ -896,11 +902,13 @@ impl SheafApp {
         self.row_filter = None;
         self.mask_condition = None;
         self.cond_format = None;
+        self.cond_manager = None;
         self.cell_note = None;
         self.cell_format = None;
         self.worksheet_fonts = None;
         self.worksheet_color = None;
         self.reshape = None;
+        self.pivot = None;
         self.sort = None;
         self.sheet_name = None;
         self.import = None;
@@ -2140,6 +2148,7 @@ impl SheafApp {
                 let rows = if columns.is_empty() { None } else { self.selected_sort_rows(book) };
                 self.sort = SortDialog::nested_in_rows(self.doc.project(), book, columns, rows);
             }
+            Action::PivotTable { book, columns } => self.pivot = PivotDialog::new(&self.doc, book, columns),
             Action::Reshape { book, columns, kind } => {
                 self.reshape = ReshapeDialog::new(&self.doc, book, kind, columns);
             }
@@ -2227,6 +2236,7 @@ impl SheafApp {
                 }
                 Err(why) => self.warn(why),
             },
+            Action::CondFormatManager(book) => self.cond_manager = CondManagerDialog::new(&self.doc, book),
             Action::RemoveCondFormat(book) => match self.cond_range(book) {
                 Ok(range) => {
                     let has = self
@@ -4345,11 +4355,13 @@ impl SheafApp {
             || self.row_filter.is_some()
             || self.mask_condition.is_some()
             || self.cond_format.is_some()
+            || self.cond_manager.is_some()
             || self.cell_note.is_some()
             || self.cell_format.is_some()
             || self.worksheet_fonts.is_some()
             || self.worksheet_color.is_some()
             || self.reshape.is_some()
+            || self.pivot.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
             || self.export_excel.is_some()
@@ -4880,6 +4892,17 @@ impl SheafApp {
                 }
             }
         }
+        if let Some(d) = &mut self.pivot {
+            let book = d.book;
+            match d.show(ctx, &mut self.doc) {
+                ReshapeOutcome::Open => {}
+                ReshapeOutcome::Closed => self.pivot = None,
+                ReshapeOutcome::Done(sheet) => {
+                    self.pivot = None;
+                    self.show_sheet(book, sheet);
+                }
+            }
+        }
         if let Some(d) = &mut self.reshape {
             let book = d.book;
             match d.show(ctx, &mut self.doc) {
@@ -4888,6 +4911,16 @@ impl SheafApp {
                 ReshapeOutcome::Done(sheet) => {
                     self.reshape = None;
                     self.show_sheet(book, sheet);
+                }
+            }
+        }
+        if let Some(d) = &mut self.cond_manager {
+            match d.show(ctx, &mut self.doc) {
+                ManagerOutcome::Open => {}
+                ManagerOutcome::Closed => self.cond_manager = None,
+                ManagerOutcome::EditRule { sheet, index } => {
+                    let book = d.book;
+                    self.cond_format = CondFormatDialog::edit(&self.doc, book, sheet, index);
                 }
             }
         }

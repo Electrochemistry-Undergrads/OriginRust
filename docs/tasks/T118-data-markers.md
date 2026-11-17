@@ -1,6 +1,6 @@
 # T118: Data menu display range and data markers
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `data-markers`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 40), **not measured** (Origin COM unregistered): markers in PlotDecor, the Mark Data Range tool (click moves the nearer marker), Set Display Range, Reset to Full Range, Clear Data Markers. Left: measure Origin's markers and dragging and match them.
 **Size:** M. **Source:** greyed inventory package B3 (graph Data menu: Set Display Range, Reset to Full
 Range, Mark Data Range, Clear Data Markers).
 **Spec:** `docs/spec/graphing.md` (a new section).

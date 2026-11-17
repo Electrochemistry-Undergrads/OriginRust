@@ -1342,6 +1342,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::OrderShape { layer, .. }
         | GraphOp::HideLayer { layer }
         | GraphOp::HideOtherLayers { layer }
+        | GraphOp::DataMarkers { layer, .. }
         | GraphOp::AddLayer { layer, .. }
         | GraphOp::DeleteLayer { layer } => layer,
     };
@@ -1387,6 +1388,29 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             g.freeze_linked_ranges(layer, &ranges);
         }
         let _ = g.delete_layer(layer);
+        return;
+    }
+    if let GraphOp::DataMarkers { layer, op } = op {
+        use crate::actions::MarkerOp;
+        match op {
+            MarkerOp::Mark { plot } => {
+                project.mark_data_range(graph, layer, plot);
+            }
+            MarkerOp::Move { plot, a, b } => {
+                if let Some(g) = project.graph_mut(graph) {
+                    g.set_data_markers(layer, plot, a, b);
+                }
+            }
+            MarkerOp::Clear => {
+                project.graph_mut(graph).map(|g| g.clear_data_markers());
+            }
+            MarkerOp::SetRange => {
+                project.graph_mut(graph).map(|g| g.set_display_range());
+            }
+            MarkerOp::ResetRange => {
+                project.graph_mut(graph).map(|g| g.reset_full_range());
+            }
+        }
         return;
     }
     if let GraphOp::HideOtherLayers { layer } = op {
@@ -1525,6 +1549,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         }
         GraphOp::HideLayer { .. } => l.display.hidden = !l.display.hidden,
         GraphOp::HideOtherLayers { .. }
+        | GraphOp::DataMarkers { .. }
         | GraphOp::AddLayer { .. }
         | GraphOp::DeleteLayer { .. }
         | GraphOp::MovePlotToAxis { .. }

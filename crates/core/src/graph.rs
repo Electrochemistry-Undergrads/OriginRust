@@ -1909,6 +1909,9 @@ pub struct PlotDecor {
     /// The other five columns of a Piper diagram (T117).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub piper: Option<crate::piper::PiperSpec>,
+    /// Data > Mark Data Range (T118): the two marked rows, first <= last.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub markers: Option<(usize, usize)>,
 }
 
 pub use sheaf_calc::trend::TrendKind;

@@ -15,7 +15,7 @@
 //! underlined, and Alt plus the letter of a top-level menu opens that menu. Letters inside the
 //! open menus are not handled (egui has no way to pick an item by letter).
 
-use crate::actions::{Action, CellOp, CopyKind, DataTool, GraphOp, GraphTool, ImportPick, SheetOp, ViewOp};
+use crate::actions::{Action, CellOp, CopyKind, DataTool, GraphOp, GraphTool, ImportPick, MarkerOp, SheetOp, ViewOp};
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fill_pattern::FillKind;
@@ -328,6 +328,8 @@ pub enum Cmd {
     DataReader,
     /// A tool of the Data menu (Mask, Move or Remove Bad Data Points).
     DataTool(DataTool),
+    /// The Data menu's display range and data markers (T118).
+    DataMarkers(MarkerOp),
     /// The Text tool of the Tools toolbar.
     TextTool,
     /// The Slope tool of the Tools toolbar.
@@ -1656,11 +1658,11 @@ fn graph_menu() -> Vec<Entry> {
 
 fn data_menu() -> Vec<Entry> {
     vec![
-        grey("Set Display Range"),
-        grey("Reset to Full Range"),
+        item("Set Display Range", Cmd::DataMarkers(MarkerOp::SetRange)),
+        item("Reset to Full Range", Cmd::DataMarkers(MarkerOp::ResetRange)),
         sep(),
-        grey_keyed("Mark Data Range", ctrl_alt(Key::M)),
-        grey_keyed("Clear Data Markers", ctrl_alt(Key::N)),
+        keyed("Mark Data Range", ctrl_alt(Key::M), Cmd::DataTool(DataTool::MarkRange)),
+        keyed("Clear Data Markers", ctrl_alt(Key::N), Cmd::DataMarkers(MarkerOp::Clear)),
         sep(),
         grey_sub("Analysis Markers", &["Hide", "Show Partial Ranges", "Show All", "Tiny", "Small", "Medium", "Large"]),
         grey_sub("Lock Position", &["Layer Icon", "First Point", "Last Point"]),
@@ -2947,6 +2949,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pointer },
         Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Reader },
         Cmd::DataTool(tool) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Data(*tool) },
+        Cmd::DataMarkers(op) => Action::GraphEdit {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            op: GraphOp::DataMarkers { layer: c.layer, op: *op },
+        },
         Cmd::TextTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Text },
         Cmd::ShapeTool(kind) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Draw(*kind) },
         Cmd::OrderSelectedShape { front } => {

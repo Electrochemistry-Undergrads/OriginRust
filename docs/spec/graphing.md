@@ -5700,3 +5700,23 @@ run because Origin's COM class was unregistered (see 36), so this is Sheaf's ver
 - **To measure:** Origin's column rules (it may take 8 columns with K, CO3 apart), its labels, ticks, colours
   and symbols.
 
+## 40. Data markers and display range: graph Data menu (T118, 2026-11-16, **not measured**)
+
+Origin 2016's graph Data menu has Set Display Range, Reset to Full Range, Mark Data Range (Ctrl+Alt+M) and
+Clear Data Markers (Ctrl+Alt+N). They could not be probed (Origin's COM class unregistered, see 36), so
+this follows Origin's documented behaviour.
+
+- **Mark Data Range** puts two data markers on the active layer's first plot, at its first and last plotted
+  rows (inside its display range when it has one).
+  - The markers are drawn as 24 pt black I-beams at the points.
+  - A Data tool then runs: a click on a point moves the nearer marker of that point's plot to its row.
+    Each move is one undo step. Esc or a right-click ends the tool; the markers stay.
+- **Set Display Range** gives every plot with markers the rows between them, both included
+  (`Plot::rows`), and removes the markers.
+- **Reset to Full Range** plots every row of every plot again.
+- **Clear Data Markers** removes every marker of the graph.
+- **Sheaf internals:** core `data_markers` (`Project::mark_data_range`, `Graph::set_data_markers`,
+  `clear_data_markers`, `set_display_range`, `reset_full_range`); markers in `PlotDecor::markers`.
+- **To measure:** Origin's marker look, whether markers are per plot or per layer, and how markers are
+  moved (drag or click).
+

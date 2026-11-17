@@ -139,9 +139,10 @@ Backlog packages: write the brief first (step 3 above).
 |---|---|---|---|---|
 | [ ] | B5 | Worksheet editing: copy variants, Paste Transpose/Link/Special, cell links, Set As Begin/End, fill with a set of numbers/dates/text, sampling interval, Copy Columns to, Swap Columns | L | 13 |
 | [ ] | B6 | Worksheet view and sheets: header and grid toggles, row label rows, sheet-tab items, Split, objects in cells (graphs, images, sparklines, variables), Merge cells | L | 23 |
-| [ ] | B7 | Worksheet tools: rest of Conditional Formatting (T35 leftovers), Pivot Table, Find in Project | M | 3 |
+| [ ] | B7 | Worksheet tools: rest of Conditional Formatting (T35 leftovers), Pivot Table, Find in Project | M | 2 |
 | [x] | [T120](T120-conditional-heatmap.md) | Conditional Heatmap (B7 slice; done 2026-11-17) | M | 0 |
 | [x] | [T121](T121-conditional-outliers-pareto.md) | Conditional Outliers and Conditional Pareto (B7 slice; done 2026-11-17) | S | 0 |
+| [ ] | [T122](T122-conditional-format-manager.md) | Conditional Format Manager (B7 slice; claimed 2026-11-17) | M | 1 |
 
 - **B5 worksheet text controls.** Origin 2016 Set Data Style has Rich Text, Wrap Text, Float
   and More... (GUI 3, measured 2026-11-16), with no Default item. More reuses Format Cells (T59);

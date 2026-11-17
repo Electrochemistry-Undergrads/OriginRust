@@ -191,6 +191,7 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::QcMeans => "X bar",
         PlotKind::QcRanges => "Range",
         PlotKind::WindRose => "Wind Rose",
+        PlotKind::Kde2d => "2D Kernel Density",
         PlotKind::Parallel => "Parallel Plot",
         PlotKind::ParallelIndex => "Parallel Index",
         PlotKind::Treemap => "Treemap",

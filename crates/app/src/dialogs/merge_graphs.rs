@@ -5,6 +5,9 @@ use eframe::egui;
 use sheaf_core::merge::{MERGE_PAGE_IN, MergeOptions, MergeTextScale, auto_grid};
 use sheaf_core::{Document, Project, WindowId};
 
+mod folders;
+use folders::FolderScope;
+
 pub enum Outcome {
     Open,
     Closed,
@@ -15,6 +18,23 @@ pub enum Outcome {
 enum Source {
     AllInProject,
     Specified,
+    ActiveFolder,
+    Recursive,
+}
+
+impl Source {
+    fn name(self) -> &'static str {
+        match self {
+            Self::AllInProject => "All in Project",
+            Self::Specified => "Specified",
+            Self::ActiveFolder => "All in Active Folder",
+            Self::Recursive => "All in Active Folder (Recursive)",
+        }
+    }
+
+    fn is_folder(self) -> bool {
+        matches!(self, Self::ActiveFolder | Self::Recursive)
+    }
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -60,6 +80,7 @@ impl Unit {
 
 pub struct MergeGraphsDialog {
     source: Source,
+    folder: FolderScope,
     /// The graphs in merge order, each with its tick (used by "Specified").
     graphs: Vec<(WindowId, bool)>,
     keep_sources: bool,
@@ -84,9 +105,10 @@ pub struct MergeGraphsDialog {
 }
 
 impl MergeGraphsDialog {
-    pub fn new(project: &Project) -> Self {
+    pub fn new(project: &Project, folder: &[usize]) -> Self {
         Self {
             source: Source::AllInProject,
+            folder: FolderScope::new(project, folder),
             graphs: project.graphs().map(|g| (g.id, true)).collect(),
             keep_sources: true,
             rearrange: true,
@@ -109,12 +131,16 @@ impl MergeGraphsDialog {
     }
 
     /// The graphs that will be merged, in order.
-    fn chosen(&self) -> Vec<WindowId> {
-        self.graphs.iter().filter(|(_, on)| self.source == Source::AllInProject || *on).map(|(id, _)| *id).collect()
+    fn chosen(&self, project: &Project) -> Vec<WindowId> {
+        if self.source.is_folder() {
+            self.folder.graphs(project, self.source == Source::Recursive)
+        } else {
+            self.graphs.iter().filter(|(_, on)| self.source == Source::AllInProject || *on).map(|(id, _)| *id).collect()
+        }
     }
 
-    fn options(&self) -> MergeOptions {
-        let sources = self.chosen();
+    fn options(&self, project: &Project) -> MergeOptions {
+        let sources = self.chosen(project);
         let (rows, cols) = auto_grid(sources.len(), self.rows, self.cols);
         let page = (self.page_in[0], self.page_in[1]);
         let default_page = !self.portrait && page == MERGE_PAGE_IN;
@@ -179,10 +205,14 @@ impl MergeGraphsDialog {
                 ui.separator();
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {
-                        let opts = self.options();
-                        match doc.edit("Merge Graph Windows", |p| p.merge_graphs(&opts)) {
-                            Ok(id) => result = Outcome::Created(id),
-                            Err(e) => self.problem = Some(e.to_string()),
+                        if self.source.is_folder() && !self.folder.valid(doc.project()) {
+                            self.problem = Some("Source folder tree changed. Reopen Merge Graph Windows.".into());
+                        } else {
+                            let opts = self.options(doc.project());
+                            match doc.edit("Merge Graph Windows", |p| p.merge_graphs(&opts)) {
+                                Ok(id) => result = Outcome::Created(id),
+                                Err(e) => self.problem = Some(e.to_string()),
+                            }
                         }
                     }
                     if ui.button("Cancel").clicked() {
@@ -194,11 +224,14 @@ impl MergeGraphsDialog {
     }
 
     fn body(&mut self, ui: &mut egui::Ui, project: &Project) {
+        let previous = self.source;
         egui::Grid::new("merge_top").num_columns(2).show(ui, |ui| {
             let label = ui.label("Merge");
             egui::ComboBox::from_id_salt("merge_source")
-                .selected_text(if self.source == Source::AllInProject { "All in Project" } else { "Specified" })
+                .selected_text(self.source.name())
                 .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.source, Source::ActiveFolder, "All in Active Folder");
+                    ui.selectable_value(&mut self.source, Source::Recursive, "All in Active Folder (Recursive)");
                     ui.selectable_value(&mut self.source, Source::AllInProject, "All in Project");
                     ui.selectable_value(&mut self.source, Source::Specified, "Specified");
                 })
@@ -206,14 +239,18 @@ impl MergeGraphsDialog {
                 .labelled_by(label.id);
             ui.end_row();
         });
+        if previous != self.source {
+            self.problem = None;
+        }
+        let chosen = self.chosen(project);
         ui.label("Graphs");
         let specified = self.source == Source::Specified;
         let mut swap = None;
         let count = self.graphs.len();
-        for (i, (id, on)) in self.graphs.iter_mut().enumerate() {
-            let name = project.graph(*id).map_or("?", |g| g.name.as_str()).to_string();
-            ui.horizontal(|ui| {
-                if specified {
+        if specified {
+            for (i, (id, on)) in self.graphs.iter_mut().enumerate() {
+                let name = project.graph(*id).map_or("?", |g| g.name.as_str()).to_string();
+                ui.horizontal(|ui| {
                     ui.checkbox(on, name);
                     if ui.add_enabled(i > 0, egui::Button::new("Up")).clicked() {
                         swap = Some((i - 1, i));
@@ -221,10 +258,14 @@ impl MergeGraphsDialog {
                     if ui.add_enabled(i + 1 < count, egui::Button::new("Down")).clicked() {
                         swap = Some((i, i + 1));
                     }
-                } else {
-                    ui.label(name);
+                });
+            }
+        } else {
+            for &id in &chosen {
+                if let Some(graph) = project.graph(id) {
+                    ui.label(&graph.name);
                 }
-            });
+            }
         }
         if let Some((a, b)) = swap {
             self.graphs.swap(a, b);
@@ -232,7 +273,7 @@ impl MergeGraphsDialog {
         ui.checkbox(&mut self.keep_sources, "Keep Source Graphs");
         ui.checkbox(&mut self.rearrange, "Rearrange Layout");
         ui.add_enabled_ui(self.rearrange, |ui| {
-            self.arrange(ui);
+            self.arrange(ui, chosen.len());
             self.spacing(ui);
         });
         self.page_setup(ui);
@@ -253,10 +294,10 @@ impl MergeGraphsDialog {
         });
     }
 
-    fn arrange(&mut self, ui: &mut egui::Ui) {
+    fn arrange(&mut self, ui: &mut egui::Ui, sources: usize) {
         egui::CollapsingHeader::new("Arrange Settings").default_open(true).show(ui, |ui| {
             // Until the user edits them the numbers follow the selection.
-            let (rows, cols) = auto_grid(self.chosen().len(), self.rows, self.cols);
+            let (rows, cols) = auto_grid(sources, self.rows, self.cols);
             let (mut r, mut c) = (rows, cols);
             egui::Grid::new("merge_arrange").num_columns(2).show(ui, |ui| {
                 let label = ui.label("Number of Rows");

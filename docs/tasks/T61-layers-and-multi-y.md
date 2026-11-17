@@ -20,7 +20,7 @@ Origin2016 controls confirm unchanged element flags/ranges/frames and identical
 restore PNGs (graphing21.13). Native project saves warn that the unmeasured OPJ
 visibility bit is omitted; the companion preserves it. Seven new regressions cover
 rendering/geometry/picking, legacy records, menu history, readers and save/reopen.
-Validation pending; other T61 leftovers remain open.
+Formatting, strict workspace/all-target Clippy and all 4,336 tests pass (eight existing ignored), including all seven new regressions, on integrated T112/T113/T114 source. The 290-location inventory, eight Python tooling tests and frozen source/fixture/asset hashes pass. Current desktop baseline/hidden/restored captures and PNG/SVG exports were inspected; owned Native/app/helper actors are closed. Other T61 leftovers remain open.
 
 **Branch:** `layers-multi-y`. **Priority:** P0, wave 2.
 **Spec:** [graphing](../spec/graphing.md) 1.3 and 12; ADR 0009.

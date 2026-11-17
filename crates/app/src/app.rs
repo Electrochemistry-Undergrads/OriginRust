@@ -2059,7 +2059,7 @@ impl SheafApp {
                 if self.doc.project().graphs().count() < 2 {
                     self.warn("Merge Graph Windows needs at least two graphs");
                 } else {
-                    self.merge_graphs = Some(MergeGraphsDialog::new(self.doc.project()));
+                    self.merge_graphs = Some(MergeGraphsDialog::new(self.doc.project(), &self.panels.explorer.folder));
                 }
             }
             Action::LabelPanels { book, columns } => {
@@ -5434,7 +5434,7 @@ impl SheafApp {
                     }
                 }
                 "merge-graphs" if self.doc.project().graphs().count() >= 2 => {
-                    self.merge_graphs = Some(MergeGraphsDialog::new(self.doc.project()));
+                    self.merge_graphs = Some(MergeGraphsDialog::new(self.doc.project(), &self.panels.explorer.folder));
                 }
                 "layer-management" => {
                     if let Some(graph) = first_graph {

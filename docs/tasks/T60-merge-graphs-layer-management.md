@@ -4,7 +4,7 @@
 15.7c, 15.7d; probes `tools/origin-ref/merge-graph-*.lines.txt`, `fit-page-to-layers.lines.txt`):
 Merge Graph Windows (core `merge.rs`, dialog, `sheaf merge-graphs`), Layer Management (Arrange,
 Size/Position, Link; core `layer_manage.rs`), Fit Page to Layers (dialog and Format item). Fit Layer to
-Graph did nothing measurable in Origin and is tagged `N`. Left: Merge's folder choices, extra layers
+Graph did nothing measurable in Origin and is tagged `N`. Left: Merge's Active Page/Open/embedded filters, extra layers
 for empty cells and Common Scale options, panel labels, the merge preview; Layer Management's Add
 (T61), Axes and remaining Display controls; MCP tool for merging. **Size:** L, merge then management.
 Background-colour follow-up (`codex/t60-layer-display`, 2026-11-16): Display > Color >
@@ -25,6 +25,18 @@ fields cannot represent this geometry or independent fill, so both controls rema
 A separate rectangle/fill/outline model, renderer and persistence are prerequisites; no Rust
 or enabled inventory changes are made by this measurement slice.
 
+Folder-source follow-up (`codex/t60-merge-folder-choices`, 2026-11-16): All in Active Folder
+and All in Active Folder (Recursive) use the captured Explorer folder. Fresh Native folder
+membership and named depth-first traversal controls are in graphing 15.7c.
+The existing All in Project/Specified order, ticks, core merge, source removal and save paths
+are retained. Changed folder trees require reopening; empty/one-graph scopes create no history.
+Active Page/Open/embedded filters, destination placement and other merge gaps stay separate.
+Fmt, strict workspace/all-target Clippy and all 4,333 workspace tests pass (eight ignored),
+including all seven new and five existing merge UI tests. Inventory and eight Python tests,
+frozen source/goldens, current desktop lists/merged view and independent five-panel PNG pass.
+An initial MCP socket reset passed its exact target and the full retry without MCP edits.
+All owned actors are terminal; remaining T60 gaps are not marked complete.
+
 **Branch:** `merge-graphs`. **Priority:** P0, wave 2, owner's stacked-figure priority.
 **Spec:** [graphing](../spec/graphing.md) 15 (add Merge Graph Windows and Layer Management
 subsections); ADR 0009. **Inventory:** 0 locations tagged `T60`.
@@ -40,11 +52,12 @@ Graph fills the page inside margins; Fit Page to Layers fits the page to its lay
 
 ## Origin facts
 
-The X-Function index names `merge_graph`; GUI section 4 records Layer Management menu locations.
-**Not measured:** both windows, defaults/units, source graph selection, source multi-layer
-placement, text/symbol scaling, legends, retained links, page sizing, Apply and fit margins.
-Measure 2×1 and 3×1 merges of stock Line graphs and capture PNG fixtures. Until measured, row-first
-placement, fixed point sizes, optional text scaling and shared-X are labelled Sheaf choices.
+Origin 2016 merge/window controls, defaults, layout/scaling, linked source layers, source
+retention and fit margins are recorded in graphing 15.7c/15.7d. Folder membership and named
+recursive traversal have fresh controls; reverse-arrival ordering remains unmeasured.
+The spec distinguishes measured fixtures from Sheaf policies, including shared-X and the
+existing project/manual-list order. Remaining filters/preview/labels and unimplemented
+management controls need separate measurements before being enabled.
 
 ## Where
 

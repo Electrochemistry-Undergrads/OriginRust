@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **274 greyed items: 181 in the menu bar, 18 on the toolbars, 75 in context menus.**
+original inventory baseline. This is not a new runtime audit. **272 greyed items: 181 in the menu bar, 18 on the toolbars, 73 in context menus.**
 
 ## How to read and keep this file
 
@@ -47,7 +47,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T69` | 0 |
 | `T70` | 0 |
 | `T71` | 0 |
-| `T72` | 23 |
+| `T72` | 21 |
 | `T73` | 0 |
 | `T75` | 0 |
 | `T76` | 0 |
@@ -82,7 +82,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 60 items, backlog packages (`B`) 194, not planned (`N`) 20.
+Briefs (`T`) hold 58 items, backlog packages (`B`) 194, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -213,8 +213,8 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B6` Worksheet row number: Insert Graph...
 - `B6` Worksheet sheet tab: Add Graph as Sheet... · Add Notes as Sheet
 - `B6` Worksheet corner: Parameters · Sampling Interval · Sparklines · Filter · Categories · Column Header · Row Header · Page Break Preview Lines
-- `T72` Graph axis > Copy Format: Styles · Dimensions
-- `T72` Graph axis > Paste Format To: Tick Direction · Ticks · Line · Tick Labels · Title Styles · Colors · Thickness · Styles · Title Dimensions · Title Text
+- `T72` Graph axis > Copy Format: Dimensions
+- `T72` Graph axis > Paste Format To: Tick Direction · Ticks · Line · Tick Labels · Title Styles · Colors · Thickness · Title Dimensions · Title Text
 - `B2` Graph axis title: Cut · Copy · Bring to the front · Push to the back
 - `B2` Graph text label: Cut · Copy · Bring to the front · Push to the back
 - `B2` Graph drawn shape: Cut · Copy

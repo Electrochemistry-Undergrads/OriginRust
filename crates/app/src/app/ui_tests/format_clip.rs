@@ -189,7 +189,8 @@ fn axis_menu_copy_format_all_then_paste_format_to_all_changes_only_that_axis() {
     let y_before = graph(&h).layers[0].y_axis.clone();
     right_click_on(&mut h, ObjectKind::XAxis);
     pick(&mut h, "Copy Format");
-    assert!(disabled(&h, "Styles") && disabled(&h, "Dimensions"));
+    assert!(!disabled(&h, "Styles"));
+    assert!(disabled(&h, "Dimensions"));
     assert!(!disabled(&h, "Scales"));
     pick(&mut h, "All");
     plain(&mut h);

@@ -27,6 +27,28 @@ live watcher. No Core/IO/schema/engine/menu/action/Apply Formats changes. Eight
 new storage/UI regressions and all 13 prior clipboard regressions pass focused;
 fmt, strict workspace/all-target Clippy, all 4,380 tests (eight ignored), inventory281 and eight Python tests pass with all 915 source/fixture/asset files frozen. Fresh private-profile Source Copy and restarted Graph Paste were driven through owned accessibility controls; partial-axis startup also exposes only available groups. Three apps/guards exit0; actual saved graph and Undo models match complete expected snapshots, and both restored exports match every pixel. Clipboard hashes/write timestamps remain unchanged by load/paste/Undo. Two helper menu-name pilots are excluded; product source was unchanged. Only this slice is complete; live instance refresh and other unmeasured choices stay open.
 
+Axis Styles follow-up (codex/t72-selective-format-audit, 2026-11-17): the two
+axis context Styles entries call the existing AxisPart::Styles engine. Only
+their menu functions change; graphing26.11 documents the existing field group
+as Sheaf policy under the official selective-copy contract, without new
+Native2016 per-choice parity. Scales/raw title/data/geometry/other axes/layers
+remain outside a Styles paste. Typed availability, no-op, stale and history
+rules are reused. Axis Dimensions has no typed group, and legend copying also
+needs translation/custom-format properties; both remain deferred rather than
+being mapped to a graph font/dimension group. Clipboard storage/lifecycle,
+Core/IO/schema and Apply Formats behavior remain unchanged.
+Fmt, strict workspace/all-target Clippy, all4,451 tests (eight ignored),
+inventory272 and eight Python tests pass with all927 source/fixture/asset hashes
+frozen. Three new root/inset X/Y regressions cover partial availability, exact
+existing style fields with preserved scales/title/whole graph, Undo/Redo,
+idempotence, unavailable groups and stale targets. The partial-group negative
+control deliberately changes target styles before paste. Existing clipboard
+regressions remain intact apart from Styles availability. Fresh private-profile
+desktop context Copy Styles and restarted context Paste Styles/Undo match saved
+whole graphs, with unchanged clipboard hash/timestamp and exact restored exports.
+Owned client-only mouse messages and accessibility actions target verified app
+identities; both apps and guards close0. Initial test-constant pilots are excluded.
+
 ## Goal
 
 A format clipboard for graphs. "Copy Format" copies a chosen group of properties of the page, an

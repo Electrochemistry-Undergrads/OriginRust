@@ -12,6 +12,7 @@ use sheaf_plot::scene::ObjectKind;
 mod autosave;
 mod axis_center;
 mod axis_scale_format;
+mod axis_style_format;
 mod cell_format;
 mod cell_notes;
 mod color_scale;

@@ -2187,7 +2187,7 @@ fn axis_copy_format_menu(layer: usize, y: bool) -> Entry {
     sub(
         "Copy Format",
         vec![
-            grey("Styles"),
+            item("Styles", Cmd::CopyAxisFormat { layer, y, part: AxisPart::Styles }),
             item("Scales", Cmd::CopyAxisFormat { layer, y, part: AxisPart::Scales }),
             grey("Dimensions"),
             sep(),
@@ -2196,19 +2196,11 @@ fn axis_copy_format_menu(layer: usize, y: bool) -> Entry {
     )
 }
 
-/// Paste Format To of an axis: All plus the existing scale-only group (spec 26.9).
+/// Paste Format To of an axis: existing All, Scales and Styles groups (spec 26.9/26.11).
 fn axis_paste_format_menu(layer: usize, y: bool) -> Entry {
-    let mut v = greys(&[
-        "Tick Direction",
-        "Ticks",
-        "Line",
-        "Tick Labels",
-        "Title Styles",
-        "Colors",
-        "Thickness",
-        "Styles",
-        "-",
-    ]);
+    let mut v = greys(&["Tick Direction", "Ticks", "Line", "Tick Labels", "Title Styles", "Colors", "Thickness"]);
+    v.push(item("Styles", Cmd::PasteAxisFormat { layer, y, part: AxisPart::Styles }));
+    v.push(sep());
     v.push(item("Scales", Cmd::PasteAxisFormat { layer, y, part: AxisPart::Scales }));
     v.extend(greys(&["-", "Title Dimensions", "Title Text", "-"]));
     v.push(item("All", Cmd::PasteAxisFormat { layer, y, part: AxisPart::All }));

@@ -318,6 +318,8 @@ pub enum ProjectError {
     QcSubgroup(usize),
     #[error("a zoom graph needs a Y column; select one or more")]
     ZoomNeedsColumn,
+    #[error("{0}")]
+    WindRoseColumns(&'static str),
     #[error("a lollipop plot needs two or more Y columns (got {0}); select at least two Y columns")]
     LollipopNeedsTwoColumns(usize),
     #[error("a lollipop plot cannot have a right Y axis; use one Y axis or another template")]
@@ -1009,6 +1011,9 @@ impl Project {
             return self.plot_marginal(template, ys);
         }
         // An X bar R chart of the first column in Origin's default subgroups of 3 (the app asks for the size).
+        if matches!(template, Template::WindRoseBinned | Template::WindRoseRaw) {
+            return self.plot_wind_rose(template, ys);
+        }
         if template == Template::Zoom {
             return self.plot_zoom(ys);
         }

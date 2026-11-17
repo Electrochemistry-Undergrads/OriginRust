@@ -442,6 +442,9 @@ impl Layer {
 /// frame, grid under the data).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LayerDisplay {
+    /// Hide Layer: suppress the entire layer without changing its element or plot settings.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
     /// Show Elements: Data.
     pub show_data: bool,
     /// Clip Data to Frame.
@@ -467,6 +470,7 @@ fn is_true(v: &bool) -> bool {
 impl Default for LayerDisplay {
     fn default() -> Self {
         LayerDisplay {
+            hidden: false,
             show_data: true,
             clip_data: true,
             grid_on_top: false,
@@ -496,6 +500,22 @@ pub enum Coords {
     /// An equilateral triangle: three fractions that sum to 1 give the position of a point
     /// (graphing spec section 14.20). Plots take their X, Y and Z columns as the three parts.
     Ternary(TernaryCoords),
+    /// A Smith chart (T115): the plots read X as resistance and Y as reactance, normalised by `z0`, and are
+    /// drawn as the reflection coefficient inside the unit circle over the Smith grid.
+    Smith(SmithCoords),
+}
+
+/// The settings of a Smith chart layer.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SmithCoords {
+    /// The characteristic impedance the data are divided by (1: the data are normalised already).
+    pub z0: f64,
+}
+
+impl Default for SmithCoords {
+    fn default() -> Self {
+        SmithCoords { z0: 1.0 }
+    }
 }
 
 impl Coords {
@@ -515,6 +535,14 @@ impl Coords {
     pub fn ternary(&self) -> Option<&TernaryCoords> {
         match self {
             Coords::Ternary(t) => Some(t),
+            _ => None,
+        }
+    }
+
+    /// The Smith chart settings, `None` for any other layer.
+    pub fn smith(&self) -> Option<&SmithCoords> {
+        match self {
+            Coords::Smith(s) => Some(s),
             _ => None,
         }
     }
@@ -1567,6 +1595,9 @@ pub enum PlotKind {
     QcMeans,
     /// The subgroup ranges of an X bar R chart (T111): bars from the centre line [`PlotDecor::qc_center`].
     QcRanges,
+    /// One speed band of a wind rose (T113): wedges per direction sector, piled on the bands before it in the
+    /// layer ([`PlotDecor::wind_rose`]).
+    WindRose,
     /// Origin's Parallel Plot (2019, Parallel.otpu): the plot's Y column is one vertical axis; every row is a
     /// line through the axes of all the layer's parallel plots, coloured by a numeric column (graphing spec 14.25).
     Parallel,
@@ -1867,6 +1898,9 @@ pub struct PlotDecor {
     /// The centre line of an X bar R chart's means or ranges (T111).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub qc_center: Option<f64>,
+    /// The speed band of a wind rose plot (T113).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wind_rose: Option<crate::windrose::WindRoseSpec>,
 }
 
 pub use sheaf_calc::trend::TrendKind;
@@ -3414,5 +3448,32 @@ mod trendline_tests {
         // A minimal record reads with the defaults.
         let old: Trendline = serde_json::from_str(r#"{"kind":"linear"}"#).unwrap();
         assert_eq!(old, Trendline::new(TrendKind::Linear));
+    }
+}
+
+#[cfg(test)]
+mod layer_visibility_tests {
+    use super::*;
+
+    #[test]
+    fn visibility_is_compatible_with_older_display_records_and_saved_projects() {
+        let legacy: LayerDisplay = serde_json::from_str(r#"{"show_data":true,"clip_data":true}"#).unwrap();
+        assert_eq!(legacy, LayerDisplay::default());
+        assert!(!serde_json::to_string(&legacy).unwrap().contains("hidden"));
+        let mut g = crate::template::Template::Line.new_graph(WindowId(1), "fixture");
+        g.layers[0].display.hidden = true;
+        let back: Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!(back, g);
+    }
+
+    #[test]
+    fn a_new_layer_starts_visible_even_when_its_parent_is_hidden() {
+        for kind in crate::layers::NewLayerKind::ALL {
+            let mut g = crate::template::Template::Line.new_graph(WindowId(1), "fixture");
+            g.layers[0].display.hidden = true;
+            let added = g.add_layer(kind, 0).unwrap();
+            assert!(!g.layers[added].display.hidden, "{kind:?}");
+            assert!(g.layers[0].display.hidden);
+        }
     }
 }

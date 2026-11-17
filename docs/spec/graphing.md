@@ -4971,7 +4971,7 @@ Implemented in `crates/core/src/layers.rs` (`Graph::add_layer`, `Graph::delete_l
 - Delete follows 21.4: children are unlinked and keep their place on the page (the parent's rectangle for a layer that covers it; for an inset the inset's own place, **unmeasured**), later links are renumbered, no confirmation, undo text "Undelete frame". Deleting the **only** layer is refused (Origin's behaviour unmeasured). After a delete the active layer is the one before the deleted layer (or the first), a selection in a later layer moves up, a selection in the deleted layer is cleared, and Plot Details, Layer Contents, Plot Setup and the drawn-object window of that graph close.
 - Add makes the new layer active and clears the selection; one undo step each ("Create", "Undelete frame").
 - Layer Properties... (Format menu and layer icon) opens Plot Details on the layer's node with the Background tab. Sheaf's layer node keeps its Layer Contents and Legend tabs as well.
-- Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer still hides only the plots, not the axes (Origin hides both; a later slice).
+- Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer is a reversible whole-layer toggle (21.13); Hide Other Layers still only hides plots and awaits a separate behavior check.
 
 ### 21.10 How Sheaf draws a displaced Y axis (slice 2)
 
@@ -5048,6 +5048,48 @@ but the five-column export showed additional labels not explained by the raw tex
 extra-column legend membership and empty-layer row translation remain follow-ups. The
 existing automatic graph-wide legend contents are unchanged. No layer assignment, axes,
 links, dialog-plan defaults or worksheet behavior is changed here.
+
+### 21.13 Reversible layer visibility (T61 follow-up, 2026-11-16)
+
+Fresh Origin 2016 controls use our own X = 0, 0.5, ..., 10 and three Y columns
+(X squared, 0.05 sin(X), 10+X), plotted with the stock 3Ys Y-YY template. The
+private COM runner held the reference mutex, verified a newly created process,
+and closed its own instance and watchdog; pre-existing process identities were
+preserved. Five accepted 800 x 612 PNG exports and per-layer readbacks are local
+in `re-workspace/scratch/t61-hide-layer-axes/native-1/`.
+
+Origin's [layer command reference](https://docs.originlab.com/labtalk/ref/layer_options_for_layer/)
+provides `layer -h 1` and `layer -h 0`; its
+[layer properties reference](https://docs.originlab.com/labtalk/ref/layer-obj/)
+also exposes `layer.show`. The installed 2016 controls confirm:
+
+- Hiding layer 2 changes only its `layer.show` from 1 to 0. Its curve and right
+  axis disappear; the other two curves and axes retain their positions. The
+  graph legend, owned by layer 1, keeps the hidden curve's entry.
+- Hiding layer 1 through `layer.show=0` removes its curve, X/left-Y axes, titles
+  and graph legend. Layers 2 and 3 still draw their curves and right axes.
+- `layer.showData`, `layer.showx`, `layer.showy`, frames, links and both axis
+  ranges remain unchanged in all three layers. Hiding layers 2 and 1 changes
+  3,985 and 8,347 pixels respectively; each corresponding restore export has
+  zero different pixels from the original.
+
+Sheaf stores a compatible `LayerDisplay.hidden` flag (false when absent),
+independent of individual plot visibility and Display-tab switches. Newly added
+layers start visible even when their parent is hidden (Sheaf creation policy;
+the follow-up native creation probe failed before COM activation and is excluded). The icon
+menu checks Hide Layer while hidden and uses the same entry to show it again.
+Hidden layers contribute no drawing or pickable frame; reader/edit tools ignore
+their points. Geometry, scale resolution and layer indices remain intact so
+linked visible layers do not move. A graph-scoped legend follows its owner's
+visibility and retains sibling entries, matching the controls above. Other
+layer-owned annotations are suppressed too; specific annotation types beyond
+the native legend/title controls have not been measured separately.
+
+Each toggle uses one existing "Hide layer" Undo step (Sheaf policy; Origin's
+Undo behavior remains weakly established in 21.3). `.sheaf` and `.opj.sheaf`
+companions retain visibility; the native `.opj` hidden bit remains unmeasured,
+so saves explicitly warn that bare Origin files show the layer. Hide Other
+Layers and the two disabled icon-mode commands are separate follow-ups.
 
 ## 22. Graph view modes, Show toggles and Full Screen (T66, measured 2026-11-15, Origin 2016)
 
@@ -5559,3 +5601,58 @@ the older, simpler `plotmatrix`.
   - MCP: the `plot` tool's `matrix_*` options.
   - The graph is ordinary scatter, histogram and empty layers with text labels, so `.sheaf` and `.opj` save it
     with no new fields.
+
+## 36. Wind rose: Plot > Specialized > Wind Rose - Binned Data, Wind Rose - Raw Data (T113, 2026-11-16, **not measured**)
+
+Origin 2016 lists both items under Plot > Specialized (seen in the menu on 2026-11-16). The probes could
+not run: Origin's COM class was unregistered on the test machine (REGDB_E_CLASSNOTREG). This section
+therefore describes Sheaf's version, built from Origin's documented behaviour. Measure it when
+automation works again.
+
+- **Layer:** a wind rose is a polar layer on the polar page (graphing 14.18). North (0 degrees) points up,
+  the angles run clockwise in degrees, and the radius is the frequency.
+- **Plots:** one plot per speed band, so the legend lists the bands with filled swatches. In each direction
+  sector a band is a wedge, piled on the bands plotted before it in the same layer.
+- **Colours:** bands are blue, cyan, green, yellow, orange and red, with black 0.5 pt edges.
+- **Binned Data:**
+  - The X column holds the sector directions in degrees. A text X column, such as N, NNE, ..., spreads
+    its rows evenly round the circle.
+  - Each selected Y column is one band's frequencies, piled in selection order.
+  - Sectors are 360 / rows wide.
+- **Raw Data:**
+  - The X column holds directions in degrees; the one selected Y column holds the speeds.
+  - There are 16 sectors of 22.5 degrees, centred on 0, 22.5, ... (a direction goes to the nearest
+    centre).
+  - The bands are 0 to s, s to 2s, ..., up to 6 of them. s is the smallest 1-2-5 step of which 6 cover the
+    top speed, and only as many bands as the top speed needs are made. The top band includes its upper
+    edge.
+  - A wedge is the percentage of all rows (with a direction and a speed) that fall in its sector and band.
+- **Sheaf internals:** plot kind `wind_rose` with `PlotDecor::wind_rose` (sectors, the band's speed range);
+  templates `wind-rose-binned` and `wind-rose-raw`. The .opj writer saves the columns as scatter plots,
+  with a warning.
+- **To measure:**
+  - Origin's dialogs, if any.
+  - Its default sector count and speed bins.
+  - Its colours, and whether it shows percent or counts.
+  - Its angle labels: degrees or compass names.
+
+## 37. Smith chart: Plot > Specialized > Smith Chart (T115, 2026-11-16, **not measured**)
+
+Origin 2016 lists the item under Plot > Specialized (seen in the menu on 2026-11-16). The probes could not
+run because Origin's COM class was unregistered (see 36), so this is Sheaf's version, built from the
+standard Smith chart and Origin's documented behaviour. Measure it when automation works again.
+
+- **Layer:** a Smith chart is a square layer on the polar page (graphing 14.18) with `Coords::Smith`. It
+  holds ordinary line + symbol plots.
+- **Data mapping:** each plot's X column is the resistance and its Y column the reactance of an impedance,
+  divided by the layer's characteristic impedance `z0` (1 by default: the data are already normalised).
+  The point drawn is the reflection coefficient gamma = (z - 1) / (z + 1):
+  - a matched load (1 + 0j) is the centre;
+  - a short circuit is the left end and an open circuit the right end;
+  - pure +j is the top.
+- **Axes:** they run from -1 to 1 and are not drawn.
+- **Grid:** light grey (204, 204, 204) 0.5 pt circles of constant resistance and arcs of constant
+  reactance (+-) at 0.2, 0.5, 1, 2 and 5, and the real axis. The unit circle is a black 1 pt edge.
+- **Templates:** `smith-chart`.
+- **To measure:** Origin's grid values and labels, its Z0 setting, its page, its plot type, and whether
+  it takes impedance or reflection data.

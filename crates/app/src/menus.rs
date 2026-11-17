@@ -1189,15 +1189,15 @@ fn plot_menu() -> Vec<Entry> {
         sub(
             "Specialize&d",
             [
-                with(
-                    vec![
-                        item("Polar theta(X) r(Y)", Cmd::Plot(Template::Polar)),
-                        item("Polar r(X) theta(Y)", Cmd::Plot(Template::PolarRTheta)),
-                    ],
-                    &["Wind Rose"],
-                ),
+                vec![
+                    item("Polar theta(X) r(Y)", Cmd::Plot(Template::Polar)),
+                    item("Polar r(X) theta(Y)", Cmd::Plot(Template::PolarRTheta)),
+                    item("Wind Rose - Binned Data", Cmd::Plot(Template::WindRoseBinned)),
+                    item("Wind Rose - Raw Data", Cmd::Plot(Template::WindRoseRaw)),
+                ],
                 vec![item("Ternary", Cmd::Plot(Template::Ternary))],
-                greys(&["Piper", "Smith Chart"]),
+                greys(&["Piper"]),
+                vec![item("Smith Chart", Cmd::Plot(Template::SmithChart))],
                 vec![item("Radar", Cmd::Plot(Template::Radar))],
                 vec![
                     item("High-Low-Close", Cmd::Plot(Template::HighLowClose)),

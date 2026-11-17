@@ -190,6 +190,7 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::MarginalBox => "Marginal Box",
         PlotKind::QcMeans => "X bar",
         PlotKind::QcRanges => "Range",
+        PlotKind::WindRose => "Wind Rose",
         PlotKind::Parallel => "Parallel Plot",
         PlotKind::ParallelIndex => "Parallel Index",
         PlotKind::Treemap => "Treemap",

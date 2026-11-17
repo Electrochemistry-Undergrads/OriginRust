@@ -299,7 +299,7 @@ pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
     }
     // The topmost frame that holds the point.
     for (i, layer) in scene.layers.iter().enumerate().rev() {
-        if contains(layer.clip, p, 0.0) {
+        if layer.clip.w > 0.0 && layer.clip.h > 0.0 && contains(layer.clip, p, 0.0) {
             return Hit::Layer(i);
         }
     }

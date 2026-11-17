@@ -63,7 +63,8 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
     // A legend that lists the plots of every layer drawn in its frame (a layer and its right Y
     // layer) is drawn after all layers, so that no layer's curves cover it.
     for (i, layer) in g.layers.iter().enumerate() {
-        if layer.legend.scope == LegendScope::Graph
+        if !layer.display.hidden
+            && layer.legend.scope == LegendScope::Graph
             && let Some(last) = layers.last_mut()
         {
             let entries: Vec<&PlotData> = g.same_frame(i).into_iter().flat_map(|j| pds[j].plots.iter()).collect();
@@ -767,6 +768,12 @@ fn layer_scene(
         underlay_len: 0,
         objects: Vec::new(),
     };
+    if layer.display.hidden {
+        // Keep scene indices and the resolved geometry of linked layers stable, but expose no
+        // drawing or pickable frame. A zero-sized clip is valid in each export backend.
+        scene.clip = Rect { x: geom.clip.x, y: geom.clip.y, w: 0.0, h: 0.0 };
+        return scene;
+    }
     // The layer's Background colour fills the frame behind the grid and the data.
     fill::draw_background(&mut scene.grid, layer.background, &layer.background_style, geom.frame);
     let background_items = scene.grid.len();
@@ -786,6 +793,8 @@ fn layer_scene(
             polar::draw_grid(&mut scene.grid, layer, geom);
         } else if geom.ternary.is_some() {
             ternary::draw_grid(&mut scene.grid, layer, geom);
+        } else if layer.coords.smith().is_some() {
+            crate::smith::draw_grid(&mut scene.grid, geom);
         } else {
             draw_grid(&mut scene.grid, layer, geom);
         }
@@ -1837,7 +1846,7 @@ fn draw_legend(
                             },
                             Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
                         );
-                    } else if plot.kind.is_bar() || plot.kind.is_area() {
+                    } else if plot.kind.is_bar() || plot.kind.is_area() || plot.kind == PlotKind::WindRose {
                         // A small bar: as long as a line sample, one font size high, filled and
                         // outlined like the bars (an area plot is shown the same way).
                         fill::fill_rect(

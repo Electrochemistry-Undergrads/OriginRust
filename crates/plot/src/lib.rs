@@ -46,6 +46,7 @@ mod straight_line;
 pub use slope::{NOT_USABLE as SLOPE_NOT_USABLE, check_point as slope_check_point};
 mod marginal_plot;
 mod qc_plot;
+pub mod smith;
 mod stack;
 mod stock_plot;
 mod sunburst;
@@ -60,6 +61,7 @@ pub(crate) mod trend;
 mod vector;
 mod vector_plot;
 mod violin;
+mod wind_rose;
 
 #[cfg(test)]
 mod column_scatter_tests;
@@ -85,6 +87,8 @@ mod label_frame_tests;
 mod label_whiteout_tests;
 #[cfg(test)]
 mod layer_scale_tests;
+#[cfg(test)]
+mod layer_visibility_tests;
 #[cfg(test)]
 mod layers_tests;
 #[cfg(test)]
@@ -151,6 +155,8 @@ mod user_template_tests;
 mod vector_plot_tests;
 #[cfg(test)]
 mod violin_tests;
+#[cfg(test)]
+mod wind_rose_tests;
 #[cfg(test)]
 mod zoom_tests;
 

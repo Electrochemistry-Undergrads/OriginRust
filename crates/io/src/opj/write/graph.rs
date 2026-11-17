@@ -341,6 +341,9 @@ impl Writer {
         if !layer.display.is_default() {
             notes.push("the Display tab of a layer (data hidden, not clipped, grid on top) was not written".into());
         }
+        if layer.display.hidden {
+            notes.push("hidden layer visibility was not written; Origin shows the layer (the .opj.sheaf companion keeps it hidden)".into());
+        }
         if layer.xy_ratio.is_some() {
             notes.push(
                 "a layer's axis lengths linked to the scale with an X:Y ratio (Size/Speed) were not written".into(),
@@ -784,6 +787,9 @@ impl Writer {
         if has(&|k| k.is_horizontal()) {
             notes.push("horizontal bars were written as vertical columns".into());
         }
+        if has(&|k| k == PlotKind::WindRose) {
+            notes.push("wind roses were written as scatter plots of their columns".into());
+        }
         if has(&|k| k.is_marginal()) {
             notes.push("marginal histograms and box charts were written as scatter plots of their values".into());
         }
@@ -810,6 +816,7 @@ impl Writer {
                 PlotKind::MarginalHistogram | PlotKind::MarginalBox => CurveKind::Scatter,
                 PlotKind::QcMeans => CurveKind::Scatter,
                 PlotKind::QcRanges => CurveKind::Column,
+                PlotKind::WindRose => CurveKind::Scatter,
                 PlotKind::LineSymbol => CurveKind::LineSymbol,
                 PlotKind::Column
                 | PlotKind::StackedColumn

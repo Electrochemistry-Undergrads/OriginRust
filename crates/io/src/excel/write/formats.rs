@@ -102,8 +102,16 @@ impl<'a> Formats<'a> {
         }
         for rule in &self.sheet.cond_formats {
             let colours = match &rule.rule {
-                condformat::Rule::MinMax { max, min, .. } => [*max, *min],
-                condformat::Rule::TopBottom { colours, .. } => [*colours, *colours],
+                condformat::Rule::MinMax { max, min, .. } => vec![*max, *min],
+                condformat::Rule::TopBottom { colours, .. } => vec![*colours],
+                condformat::Rule::Heatmap(heat) => {
+                    let (from, middle, to) = match heat.mixing {
+                        condformat::heatmap::Mixing::Limited { from, to } => (from, None, to),
+                        condformat::heatmap::Mixing::ThreeColor { from, middle, to, .. } => (from, Some(middle), to),
+                    };
+                    let c = |fill: Option<Color>, font: Option<Color>| condformat::Colours { fill, font };
+                    vec![c(Some(from), Some(to)), c(middle, heat.below), c(heat.above, None)]
+                }
             };
             alpha |= colours.iter().flat_map(|c| [c.fill, c.font]).flatten().any(|c| c.a != 0 && c.a != 255);
         }

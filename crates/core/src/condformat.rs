@@ -14,6 +14,9 @@ use crate::worksheet::Worksheet;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+pub mod heatmap;
+pub use heatmap::Heatmap;
+
 /// Origin's Highlight Min Max defaults (`wcolorbycr`, RGB ints 30067455, 20132812, 33085116,
 /// 26692113).
 pub const MAX_FILL: Color = Color::rgb(255, 202, 202);
@@ -59,6 +62,8 @@ pub enum Rule {
     MinMax { dir: Direction, max: Colours, min: Colours },
     /// The top or bottom `n` items (or `n` percent of the numbers) of every column of the range.
     TopBottom { top: bool, n: f64, percent: bool, colours: Colours },
+    /// Conditional Heatmap: every number of the range coloured by its level (see [`heatmap`]).
+    Heatmap(Heatmap),
 }
 
 impl Rule {
@@ -69,6 +74,11 @@ impl Rule {
             max: Colours { fill: Some(MAX_FILL), font: Some(MAX_FONT) },
             min: Colours { fill: Some(MIN_FILL), font: Some(MIN_FONT) },
         }
+    }
+
+    /// Conditional Heatmap with Sheaf's defaults (see [`heatmap::Heatmap::default`]).
+    pub fn heatmap() -> Rule {
+        Rule::Heatmap(Heatmap::default())
     }
 
     /// Highlight Top Bottom with Sheaf's defaults: Top 10 Items.
@@ -179,10 +189,17 @@ impl Painter<'_> {
         if colours.is_none() {
             return;
         }
-        let slot = *self.palette_of.entry((rule, class)).or_insert_with(|| {
-            self.styles.palette.push(colours.into());
-            (self.styles.palette.len() - 1) as u16
-        });
+        let slot = match self.palette_of.get(&(rule, class)) {
+            Some(slot) => *slot,
+            // A full palette (only reached by thousands of heatmap rules) leaves later cells plain.
+            None if self.styles.palette.len() > usize::from(u16::MAX) => return,
+            None => {
+                self.styles.palette.push(colours.into());
+                let slot = (self.styles.palette.len() - 1) as u16;
+                self.palette_of.insert((rule, class), slot);
+                slot
+            }
+        };
         let rows = self.rows;
         let cells = self.styles.columns.entry(column).or_insert_with(|| vec![0; rows]);
         if let Some(cell) = cells.get_mut(row)
@@ -272,6 +289,24 @@ pub fn evaluate(sheet: &Worksheet, rules: &[CondFormat]) -> CellStyles {
                             Some(v) if v == hi => painter.paint(col.0, r, index, 0, *max),
                             Some(v) if v == lo => painter.paint(col.0, r, index, 1, *min),
                             _ => {}
+                        }
+                    }
+                }
+            }
+            Rule::Heatmap(heat) => {
+                let values: Vec<f64> =
+                    columns.iter().flat_map(|col| rows.clone().filter_map(|r| value(col, r))).collect();
+                let Some(levels) = heat.levels(&values) else { continue };
+                for col in &columns {
+                    for r in rows.clone() {
+                        let Some(place) = value(col, r).and_then(|v| heat.place(&levels, v)) else { continue };
+                        let (class, colour) = match place {
+                            heatmap::Place::Level(k) => (k as u8, Some(heat.level_color(&levels, k))),
+                            heatmap::Place::Below => (254, heat.below),
+                            heatmap::Place::Above => (255, heat.above),
+                        };
+                        if let Some(c) = colour {
+                            painter.paint(col.0, r, index, class, heat.style(c));
                         }
                     }
                 }
@@ -693,5 +728,78 @@ mod tests {
         ranged(&mut s, 3, Some(6));
         s.cond_formats_delete_rows(&[1], 0..2);
         assert_eq!(rows_of(&s), [(3, Some(6))]);
+    }
+
+    #[test]
+    fn heatmap_colours_every_number_of_the_whole_range_by_level() {
+        let s = sheet(&[&[0.0, 1.0, 2.0], &[3.0, f64::NAN, 4.0]]);
+        let rule_ = rule(&s, Rule::Heatmap(Heatmap { step: heatmap::LevelStep::Count(5), ..Heatmap::default() }));
+        let st = evaluate(&s, &[rule_]);
+        // The range runs 0..4 over both columns: five levels of 0.8.
+        assert_eq!(fill_of(&st, 1, 0), Some(heatmap::DEFAULT_FROM));
+        assert_eq!(fill_of(&st, 2, 2), Some(heatmap::DEFAULT_TO));
+        let mid = fill_of(&st, 1, 2).unwrap();
+        assert_ne!(mid, heatmap::DEFAULT_FROM);
+        assert_ne!(mid, heatmap::DEFAULT_TO);
+        assert_eq!(fill_of(&st, 2, 1), None);
+        // Contrast text is on by default.
+        assert_eq!(st.get(ColumnId(1), 0).unwrap().font, Some(Color::BLACK));
+    }
+
+    #[test]
+    fn heatmap_below_above_and_an_earlier_rule_wins() {
+        let s = sheet(&[&[0.0, 5.0, 10.0]]);
+        let red = Color::rgb(255, 0, 0);
+        let heat = Heatmap {
+            limits: Some((2.0, 8.0)),
+            below: Some(red),
+            above: None,
+            step: heatmap::LevelStep::Count(1),
+            ..Heatmap::default()
+        };
+        let st = evaluate(&s, &[rule(&s, Rule::Heatmap(heat.clone()))]);
+        assert_eq!(fill_of(&st, 1, 0), Some(red));
+        assert_eq!(fill_of(&st, 1, 1), Some(heatmap::DEFAULT_FROM));
+        assert_eq!(fill_of(&st, 1, 2), None);
+        // A Min Max rule above the heatmap keeps its cells.
+        let st = evaluate(&s, &[rule(&s, column_wise()), rule(&s, Rule::Heatmap(heat))]);
+        assert_eq!(fill_of(&st, 1, 2), Some(MAX_FILL));
+        assert_eq!(fill_of(&st, 1, 1), Some(heatmap::DEFAULT_FROM));
+    }
+
+    #[test]
+    fn heatmap_rule_round_trips_through_serde() {
+        let heat = Heatmap {
+            limits: Some((1.0, 9.0)),
+            scale: heatmap::LevelScale::Log10,
+            step: heatmap::LevelStep::Increment(0.5),
+            first_level: Some(2.0),
+            target: heatmap::Target::Text,
+            contrast_text: false,
+            mixing: heatmap::Mixing::ThreeColor {
+                from: Color::BLACK,
+                middle: heatmap::DEFAULT_MIDDLE,
+                to: Color::WHITE,
+                position: heatmap::MiddlePosition::Percentile(40.0),
+            },
+            flip: true,
+            below: Some(Color::rgb(1, 2, 3)),
+            above: None,
+        };
+        let s = sheet(&[&[1.0]]);
+        let r = rule(&s, Rule::Heatmap(heat));
+        let json = serde_json::to_string(&r).unwrap();
+        assert_eq!(serde_json::from_str::<CondFormat>(&json).unwrap(), r);
+    }
+
+    #[test]
+    fn many_heatmap_rules_never_overflow_the_palette() {
+        let s = sheet(&[&(0..300).map(f64::from).collect::<Vec<_>>()]);
+        let heat = Rule::Heatmap(Heatmap { step: heatmap::LevelStep::Count(250), ..Heatmap::default() });
+        let rules: Vec<CondFormat> = (0..300).map(|_| rule(&s, heat.clone())).collect();
+        let st = evaluate(&s, &rules);
+        // The first rule wins every cell; the palette stops growing at its limit.
+        assert_eq!(fill_of(&st, 1, 0), Some(heatmap::DEFAULT_FROM));
+        assert!(st.palette.len() <= usize::from(u16::MAX) + 1);
     }
 }

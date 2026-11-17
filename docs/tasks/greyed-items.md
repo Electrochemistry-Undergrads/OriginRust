@@ -61,12 +61,13 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T96` | 0 |
 | `T114` | 0 |
 | `T120` | 0 |
+| `T121` | 2 |
 | `B2` | 33 |
 | `B3` | 15 |
 | `B4` | 1 |
 | `B5` | 13 |
 | `B6` | 23 |
-| `B7` | 5 |
+| `B7` | 3 |
 | `B8` | 4 |
 | `B9` | 13 |
 | `B11` | 3 |
@@ -78,7 +79,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 61 items, backlog packages (`B`) 199, not planned (`N`) 20.
+Briefs (`T`) hold 63 items, backlog packages (`B`) 197, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -129,7 +130,8 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T63` Fill Column With: Row Numbers · Uniform Random Numbers · Normal Random Numbers
 
 ### Worksheet
-- `B7` Conditional Formatting: Conditional Highlight... · Conditional Pareto... · Conditional Outliers... · Conditional Format Manager...
+- `T121` Conditional Formatting: Conditional Pareto... · Conditional Outliers...
+- `B7` Conditional Formatting: Conditional Highlight... · Conditional Format Manager...
 - `B7` Pivot Table...
 - `B14` Convert to Matrix: Direct · XYZ Gridding · Extract
 - `B16` Worksheet Script...

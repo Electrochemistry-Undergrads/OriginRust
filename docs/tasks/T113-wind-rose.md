@@ -1,6 +1,6 @@
 # T113: Wind Rose (Binned Data and Raw Data)
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `wind-rose`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 36), **not measured**: Origin COM was unregistered on the test machine, so both items are built from Origin's documented behaviour (polar layer, north up clockwise, piled speed-band wedges; Raw Data bins into 16 sectors and up to 6 bands in percent). Left: measure Origin's dialogs, defaults, colours and labels and match them.
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Specialized > Wind Rose - Binned Data,
 Wind Rose - Raw Data; the Sheaf menu lists one "Wind Rose" entry).
 **Spec:** `docs/spec/graphing.md` (a new section).

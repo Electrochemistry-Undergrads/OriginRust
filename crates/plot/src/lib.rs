@@ -60,6 +60,7 @@ pub(crate) mod trend;
 mod vector;
 mod vector_plot;
 mod violin;
+mod wind_rose;
 
 #[cfg(test)]
 mod column_scatter_tests;
@@ -153,6 +154,8 @@ mod user_template_tests;
 mod vector_plot_tests;
 #[cfg(test)]
 mod violin_tests;
+#[cfg(test)]
+mod wind_rose_tests;
 #[cfg(test)]
 mod zoom_tests;
 

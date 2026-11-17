@@ -1844,7 +1844,7 @@ fn draw_legend(
                             },
                             Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
                         );
-                    } else if plot.kind.is_bar() || plot.kind.is_area() {
+                    } else if plot.kind.is_bar() || plot.kind.is_area() || plot.kind == PlotKind::WindRose {
                         // A small bar: as long as a line sample, one font size high, filled and
                         // outlined like the bars (an area plot is shown the same way).
                         fill::fill_rect(

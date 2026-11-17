@@ -1145,7 +1145,9 @@ fn plot_menu() -> Vec<Entry> {
                 ],
                 greys(&["2D Kernel Density"]),
                 vec![item("QC (X bar R) Chart", Cmd::Plot(Template::QcXbarR))],
-                greys(&["Scatter Matrix", "Probability Plot", "Q-Q Plot"]),
+                // Every letter of the label was taken; C moves Marginal Box Charts to n.
+                vec![item("S&catter Matrix", Cmd::Plot(Template::ScatterMatrix))],
+                greys(&["Probability Plot", "Q-Q Plot"]),
             ]
             .concat(),
         ),
@@ -1187,13 +1189,12 @@ fn plot_menu() -> Vec<Entry> {
         sub(
             "Specialize&d",
             [
-                with(
-                    vec![
-                        item("Polar theta(X) r(Y)", Cmd::Plot(Template::Polar)),
-                        item("Polar r(X) theta(Y)", Cmd::Plot(Template::PolarRTheta)),
-                    ],
-                    &["Wind Rose"],
-                ),
+                vec![
+                    item("Polar theta(X) r(Y)", Cmd::Plot(Template::Polar)),
+                    item("Polar r(X) theta(Y)", Cmd::Plot(Template::PolarRTheta)),
+                    item("Wind Rose - Binned Data", Cmd::Plot(Template::WindRoseBinned)),
+                    item("Wind Rose - Raw Data", Cmd::Plot(Template::WindRoseRaw)),
+                ],
                 vec![item("Ternary", Cmd::Plot(Template::Ternary))],
                 greys(&["Piper", "Smith Chart"]),
                 vec![item("Radar", Cmd::Plot(Template::Radar))],

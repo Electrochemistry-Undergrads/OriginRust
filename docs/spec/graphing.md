@@ -5555,3 +5555,24 @@ automation works again.
   - Its colours, and whether it shows percent or counts.
   - Its angle labels: degrees or compass names.
 
+## 37. Smith chart: Plot > Specialized > Smith Chart (T115, 2026-11-16, **not measured**)
+
+Origin 2016 lists the item under Plot > Specialized (seen in the menu on 2026-11-16). The probes could not
+run because Origin's COM class was unregistered (see 36), so this is Sheaf's version, built from the
+standard Smith chart and Origin's documented behaviour. Measure it when automation works again.
+
+- **Layer:** a Smith chart is a square layer on the polar page (graphing 14.18) with `Coords::Smith`. It
+  holds ordinary line + symbol plots.
+- **Data mapping:** each plot's X column is the resistance and its Y column the reactance of an impedance,
+  divided by the layer's characteristic impedance `z0` (1 by default: the data are already normalised).
+  The point drawn is the reflection coefficient gamma = (z - 1) / (z + 1):
+  - a matched load (1 + 0j) is the centre;
+  - a short circuit is the left end and an open circuit the right end;
+  - pure +j is the top.
+- **Axes:** they run from -1 to 1 and are not drawn.
+- **Grid:** light grey (204, 204, 204) 0.5 pt circles of constant resistance and arcs of constant
+  reactance (+-) at 0.2, 0.5, 1, 2 and 5, and the real axis. The unit circle is a black 1 pt edge.
+- **Templates:** `smith-chart`.
+- **To measure:** Origin's grid values and labels, its Z0 setting, its page, its plot type, and whether
+  it takes impedance or reflection data.
+

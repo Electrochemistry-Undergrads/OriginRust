@@ -786,6 +786,8 @@ fn layer_scene(
             polar::draw_grid(&mut scene.grid, layer, geom);
         } else if geom.ternary.is_some() {
             ternary::draw_grid(&mut scene.grid, layer, geom);
+        } else if layer.coords.smith().is_some() {
+            crate::smith::draw_grid(&mut scene.grid, geom);
         } else {
             draw_grid(&mut scene.grid, layer, geom);
         }

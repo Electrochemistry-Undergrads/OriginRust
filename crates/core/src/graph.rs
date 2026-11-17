@@ -496,6 +496,22 @@ pub enum Coords {
     /// An equilateral triangle: three fractions that sum to 1 give the position of a point
     /// (graphing spec section 14.20). Plots take their X, Y and Z columns as the three parts.
     Ternary(TernaryCoords),
+    /// A Smith chart (T115): the plots read X as resistance and Y as reactance, normalised by `z0`, and are
+    /// drawn as the reflection coefficient inside the unit circle over the Smith grid.
+    Smith(SmithCoords),
+}
+
+/// The settings of a Smith chart layer.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SmithCoords {
+    /// The characteristic impedance the data are divided by (1: the data are normalised already).
+    pub z0: f64,
+}
+
+impl Default for SmithCoords {
+    fn default() -> Self {
+        SmithCoords { z0: 1.0 }
+    }
 }
 
 impl Coords {
@@ -515,6 +531,14 @@ impl Coords {
     pub fn ternary(&self) -> Option<&TernaryCoords> {
         match self {
             Coords::Ternary(t) => Some(t),
+            _ => None,
+        }
+    }
+
+    /// The Smith chart settings, `None` for any other layer.
+    pub fn smith(&self) -> Option<&SmithCoords> {
+        match self {
+            Coords::Smith(s) => Some(s),
             _ => None,
         }
     }

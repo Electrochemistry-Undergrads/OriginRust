@@ -869,6 +869,9 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         if let Some(polar) = layer.coords.polar() {
             polar_columns(&mut pd, polar.radius);
         }
+        if let Some(s) = layer.coords.smith() {
+            crate::smith::columns(&mut pd, s.z0);
+        }
         if layer.coords.ternary().is_some() {
             crate::ternary::columns(&mut pd, plot.size_from.and_then(|id| project.numeric(id)));
         }

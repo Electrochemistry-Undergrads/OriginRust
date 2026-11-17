@@ -1196,7 +1196,8 @@ fn plot_menu() -> Vec<Entry> {
                     item("Wind Rose - Raw Data", Cmd::Plot(Template::WindRoseRaw)),
                 ],
                 vec![item("Ternary", Cmd::Plot(Template::Ternary))],
-                greys(&["Piper", "Smith Chart"]),
+                greys(&["Piper"]),
+                vec![item("Smith Chart", Cmd::Plot(Template::SmithChart))],
                 vec![item("Radar", Cmd::Plot(Template::Radar))],
                 vec![
                     item("High-Low-Close", Cmd::Plot(Template::HighLowClose)),

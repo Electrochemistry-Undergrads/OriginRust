@@ -1,6 +1,6 @@
 # T115: Plot > Specialized > Smith Chart
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `smith-chart`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 37), **not measured** (Origin COM unregistered): `Coords::Smith` layers map resistance/reactance to the reflection coefficient over the Smith grid; template smith-chart. Left: measure Origin's grid, labels, Z0 and page and match them.
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Specialized > Smith Chart).
 **Spec:** `docs/spec/graphing.md` (a new section).
 

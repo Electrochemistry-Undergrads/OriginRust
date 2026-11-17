@@ -45,6 +45,8 @@ pub enum Template {
     /// Plot > Specialized > Wind Rose - Binned Data and Wind Rose - Raw Data (T113).
     WindRoseBinned,
     WindRoseRaw,
+    /// Plot > Specialized > Smith Chart (T115).
+    SmithChart,
     /// Line plot with a symbol on every point.
     LineSymbol,
     /// Cyclic voltammetry overlay: smooth lines without markers, no grid,
@@ -192,7 +194,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 76] = [
+    pub const ALL: [Template; 77] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -269,6 +271,7 @@ impl Template {
         Template::Zoom,
         Template::WindRoseBinned,
         Template::WindRoseRaw,
+        Template::SmithChart,
     ];
 
     /// The name used on the command line and in menus.
@@ -292,6 +295,7 @@ impl Template {
             Template::Zoom => "zoom",
             Template::WindRoseBinned => "wind-rose-binned",
             Template::WindRoseRaw => "wind-rose-raw",
+            Template::SmithChart => "smith-chart",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
@@ -373,6 +377,7 @@ impl Template {
             Template::Zoom => "Zoom",
             Template::WindRoseBinned => "Wind Rose - Binned Data",
             Template::WindRoseRaw => "Wind Rose - Raw Data",
+            Template::SmithChart => "Smith Chart",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
@@ -500,6 +505,7 @@ impl Template {
             }
             Template::Zoom => zoom(id, name),
             Template::WindRoseBinned | Template::WindRoseRaw => wind_rose(id, name),
+            Template::SmithChart => smith(id, name),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
             Template::Multi3YYy | Template::Multi3YYY | Template::Multi4YYyy | Template::Multi4YyYy => {
@@ -1153,6 +1159,23 @@ fn wind_rose(id: WindowId, name: &str) -> Graph {
     g
 }
 
+/// A Smith chart (T115, from Origin's documentation, not measured): line + symbol plots in a square layer
+/// of the polar page whose axes run from -1 to 1 and are not drawn; the layer draws the Smith grid.
+fn smith(id: WindowId, name: &str) -> Graph {
+    let mut g = polar_of(id, name, RadiusColumn::Y, PlotKind::LineSymbol);
+    let l = &mut g.layers[0];
+    l.coords = Coords::Smith(SmithCoords::default());
+    for a in [&mut l.x_axis, &mut l.y_axis] {
+        a.min = Some(-1.0);
+        a.max = Some(1.0);
+        a.side = AxisSide::Hidden;
+        a.show_opposite = false;
+        a.major_grid = None;
+        a.minor_grid = None;
+    }
+    g
+}
+
 fn double_y(id: WindowId, name: &str) -> Graph {
     let mut g = general(id, name, PlotKind::Line);
     let layer = &mut g.layers[0];
@@ -1358,7 +1381,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 76);
+        assert_eq!(Template::ALL.len(), 77);
+        assert_eq!(Template::from_name("smith-chart"), Some(Template::SmithChart));
         assert_eq!(Template::from_name("wind-rose-raw"), Some(Template::WindRoseRaw));
         assert_eq!(Template::from_name("zoom"), Some(Template::Zoom));
         assert_eq!(Template::from_name("qc-xbar-r"), Some(Template::QcXbarR));

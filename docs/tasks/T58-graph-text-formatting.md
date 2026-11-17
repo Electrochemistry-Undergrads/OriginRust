@@ -213,6 +213,19 @@ five new object regressions and all 23 related palette/object tests; inventory29
 Python tests pass. Source/goldens stayed frozen; current submenu and colour-effect desktop
 captures were inspected and all own app/reference/helper actors closed.
 
+Custom object RGB follow-up (`codex/t58-object-rgb`): the existing supported Fill/Line targets
+offer Custom RGB... with validated channels, preview, Apply/Cancel and Enter. Fresh Origin 2016
+rectangle fill/outline and straight-line controls establish five RGB values including black,
+white and mixed channel boundaries (graphing 7.4). Numeric menu layout, white draft seed for None
+and the existing legend mapping remain Sheaf choices. Captured request, selection, history,
+stale/no-op and native/companion rules are reused; all 24 Classic presets and None remain.
+No model/backend/font/worksheet picker changes. Auto, other lists and palette storage remain open.
+Fmt, strict workspace/all-target Clippy and all 4,360 workspace tests pass (eight ignored),
+including all seven new and 37 related regressions. Inventory283 and eight Python tests pass;
+source/goldens stayed frozen. Current seeded/invalid/applied desktop captures and rendered RGB
+pixels were inspected, with every own app/reference/helper actor closed. Earlier setter-only
+automation pilots are excluded from appearance evidence.
+
 ## Origin facts
 
 Recorded in gui-look 1/4 and the command map: the font box says "Default: Arial", the selected

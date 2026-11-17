@@ -785,7 +785,28 @@ target restrictions remain Sheaf UI choices; no native toolbar geometry or legen
 measurement is claimed. Extra choices use the original captured target/revision/generation,
 close both menus, preserve the selection, and have the same one-step Undo and unchanged/stale
 no-op rules. The public eight-colour palette constant and font/worksheet controls are unchanged.
-Custom object RGB, Auto, other lists and palette storage remain open.
+Auto, other lists and palette storage remain open.
+
+Custom object RGB follow-up (2026-11-16): five fresh private Origin 2016 controls set a named
+rectangle's fill/outline and a named straight line's colour with `color(r,g,b)`: 17/131/213,
+0/0/0, 255/255/255, 0/255/128 and 1/2/3. All commands and exports succeeded; all three getters
+retained the assigned internal RGB code. Every EMF has at least two exact matching pens and
+solid brushes. The asymmetric RGB export was inspected. The private `Origin.Application`
+instance and watchdog closed, with pre-existing process identities unchanged. Evidence:
+ignored `scratch/t58-object-rgb` (checked script/log, five EMFs, native-proof.json, native-rgb.png).
+These are property/value/rendering measurements, not a native picker-layout or legend-background
+measurement. The [Color function](https://docs.originlab.com/labtalk/ref/color-func/) documents
+RGB assignment; the existing target mapping above remains Sheaf policy.
+
+Fill Color and Line Color > Custom RGB... provide three integer fields (0 to 255), a preview
+and Apply/Cancel; valid unmodified Enter accepts from a channel field. Invalid, dismissed,
+unchanged and stale choices add no history. Reopening seeds the captured object's current
+property, independently for fill/line and each new target. An absent fill seeds white as a
+draft; opening or cancelling preserves None, while accepting white explicitly adds a fill.
+That seed and the compact numeric submenu are Sheaf choices. Presets retain all 24 Classic
+colours and Fill retains None; presets replace an unapplied RGB draft. Accepted colours use
+the same selection, history and native/companion save paths. Font/worksheet pickers, models,
+renderer/backends and the public basic-palette contract are unchanged.
 
 
 ---
@@ -3273,6 +3294,11 @@ multilayer grouping, layout, Undo and native/companion saves reuse the existing 
 New-graph destination placement and visibility/open-only handling retain their existing scope;
 these filters add no folder mutations, model fields, IO format or CLI/MCP options.
 
+The Merge dialog's vertical scroll viewport fills the available dialog width. Short source
+choices no longer shrink its clipping rectangle around the narrow top controls, so longer
+option labels remain readable. The existing height limit, source choices and footer remain.
+This is a Sheaf layout correction, checked against desktop captures, not a new Origin measurement.
+
 **Command line:** `sheaf merge-graphs PROJECT (--graph NAME ... | --all-graphs) [--rows N]
 [--cols N] [--gap H,V] [--margins L,R,T,B] [--portrait] [--page-size W,H] [--keep-aspect]
 [--link] [--share-x] [--hide-inner] [--text-scale auto|keep|FACTOR] [--remove-sources] [-o FIGURE]
@@ -5723,4 +5749,24 @@ run because Origin's COM class was unregistered (see 36), so this is Sheaf's ver
   `piper`.
 - **To measure:** Origin's column rules (it may take 8 columns with K, CO3 apart), its labels, ticks, colours
   and symbols.
+
+## 40. Data markers and display range: graph Data menu (T118, 2026-11-16, **not measured**)
+
+Origin 2016's graph Data menu has Set Display Range, Reset to Full Range, Mark Data Range (Ctrl+Alt+M) and
+Clear Data Markers (Ctrl+Alt+N). They could not be probed (Origin's COM class unregistered, see 36), so
+this follows Origin's documented behaviour.
+
+- **Mark Data Range** puts two data markers on the active layer's first plot, at its first and last plotted
+  rows (inside its display range when it has one).
+  - The markers are drawn as 24 pt black I-beams at the points.
+  - A Data tool then runs: a click on a point moves the nearer marker of that point's plot to its row.
+    Each move is one undo step. Esc or a right-click ends the tool; the markers stay.
+- **Set Display Range** gives every plot with markers the rows between them, both included
+  (`Plot::rows`), and removes the markers.
+- **Reset to Full Range** plots every row of every plot again.
+- **Clear Data Markers** removes every marker of the graph.
+- **Sheaf internals:** core `data_markers` (`Project::mark_data_range`, `Graph::set_data_markers`,
+  `clear_data_markers`, `set_display_range`, `reset_full_range`); markers in `PlotDecor::markers`.
+- **To measure:** Origin's marker look, whether markers are per plot or per layer, and how markers are
+  moved (drag or click).
 

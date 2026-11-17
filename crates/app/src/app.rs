@@ -1423,6 +1423,13 @@ impl SheafApp {
             GraphOp::OrderShape { front: false, .. } => "Push drawn object to back",
             GraphOp::HideLayer { .. } => "Hide layer",
             GraphOp::HideOtherLayers { .. } => "Hide other layers",
+            GraphOp::DataMarkers { op, .. } => match op {
+                crate::actions::MarkerOp::Mark { .. } => "Mark data range",
+                crate::actions::MarkerOp::Move { .. } => "Move data marker",
+                crate::actions::MarkerOp::Clear => "Clear data markers",
+                crate::actions::MarkerOp::SetRange => "Set display range",
+                crate::actions::MarkerOp::ResetRange => "Reset to full range",
+            },
             GraphOp::AddLayer { .. } => sheaf_core::layers::ADD_LAYER_UNDO,
             GraphOp::DeleteLayer { .. } => sheaf_core::layers::DELETE_LAYER_UNDO,
             GraphOp::MovePlotToAxis { right: true, .. } => "Move plot to right Y axis",
@@ -2312,6 +2319,12 @@ impl SheafApp {
                 self.graphs.entry(graph).or_default().active_layer = layer;
             }
             Action::GraphTool { graph, tool } => {
+                // Mark Data Range puts the markers on the active layer's first plot before its tool starts.
+                if tool == GraphTool::Data(DataTool::MarkRange) {
+                    let layer = self.graphs.get(&graph).map_or(0, |s| s.active_layer);
+                    let op = crate::actions::MarkerOp::Mark { plot: 0 };
+                    self.edit_graph(graph, GraphOp::DataMarkers { layer, op });
+                }
                 let state = self.graphs.entry(graph).or_default();
                 state.reader = tool == GraphTool::Reader;
                 state.text_tool = tool == GraphTool::Text;

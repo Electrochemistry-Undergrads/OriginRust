@@ -1,6 +1,7 @@
 //! The Format bar uses the same change contract for every supported target.
 
 mod object_classic;
+mod object_rgb;
 mod rgb;
 
 use super::*;
@@ -415,6 +416,7 @@ fn object_button(ui: &mut Ui, button: &Button, object: Option<&ObjectSnapshot>, 
 fn colour_menu(ui: &mut Ui, button: &Button, state: &ObjectSnapshot, label: &str, actions: &mut Vec<Action>) {
     let fill = button.icon == Icon::FillColor;
     let capture_id = ui.id().with(if fill { "format_fill_capture" } else { "format_line_capture" });
+    let rgb_id = ui.id().with(if fill { "graph_object_fill_rgb" } else { "graph_object_line_rgb" });
     let captured = ui.data_mut(|d| d.get_temp::<ObjectSnapshot>(capture_id)).unwrap_or_else(|| state.clone());
     let current = if fill { state.fill.flatten() } else { state.line };
     let mut text = egui::RichText::new(if fill { "F" } else { "L" }).strong();
@@ -425,8 +427,9 @@ fn colour_menu(ui: &mut Ui, button: &Button, state: &ObjectSnapshot, label: &str
             text.color(Color32::from_rgb(c.r, c.g, c.b))
         };
     }
-    let response = ui
-        .menu_button(text, |ui| {
+    let response = egui::containers::menu::MenuButton::new(text)
+        .config(egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside))
+        .ui(ui, |ui| {
             if fill && ui.button("Fill Color: None").clicked() {
                 actions.push(Action::FormatObject(captured.request(object_format::Change::Fill(None))));
                 ui.close();
@@ -443,10 +446,12 @@ fn colour_menu(ui: &mut Ui, button: &Button, state: &ObjectSnapshot, label: &str
                 }
             }
             object_classic::show(ui, &captured, fill, actions);
+            object_rgb::show(ui, &captured, fill, rgb_id, actions);
         })
-        .response;
+        .0;
     if response.clicked() {
         ui.data_mut(|d| d.insert_temp(capture_id, state.clone()));
+        ui.data_mut(|d| d.remove::<object_rgb::Picker>(rgb_id));
     }
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label.to_string()));
     response.on_hover_text(button.tip);

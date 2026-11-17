@@ -71,6 +71,17 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 ## Latest integration
 
+**T122 Conditional Format Manager (`cond-manager`, 2026-11-17, Windows, scheduled Claude session):**
+Worksheet > Conditional Formatting > Conditional Format Manager... lists the active sheet's formats
+(top rule first) with Name, Range and a short Rule text; double-click renames, Edit Rule reopens the
+rule's own window filled in and replaces the rule in place (no step when unchanged, nothing when the
+list changed meanwhile), Move Up/Down and Remove. Every change is one undo step at once (Sheaf's
+choice; Origin's OK/Cancel behaviour is unknown). New `dialogs/cond_manager.rs`, edit mode in
+`dialogs/cond_format.rs`. Left: editing a range, drag reorder. With T120-T122 only Conditional
+Highlight is still grey in that submenu: its condition list exists only as a screenshot in Origin's
+documentation, so it needs a newer Origin or a decision on the condition set. Fmt, strict all-target
+Clippy, full workspace 4,419 passed / 0 failed / 8 ignored, inventory 277.
+
 **T121 Conditional Pareto and Conditional Outliers (`cond-outliers`, 2026-11-17, Windows, scheduled
 Claude session):** the two remaining documented rule windows of Worksheet > Conditional Formatting.
 Pareto counts every non-empty, unmasked cell of the whole range (numbers and text) and colours the
@@ -781,7 +792,6 @@ is released; other sessions' claims are preserved.
 | `function-graph` | Claude Windows, "t30-origin" | B3 slice as new brief T119: Graph > Add Function Graph... (curve of y = f(x) in the active layer) | claimed 2026-11-16; worktree swap-transpose, build target/wf-excel |
 | `hist-prob` | Claude Windows, session fe4b37eb | B4 slice as new brief T85: Plot > Statistics > Histogram + Probabilities (histogram with the cumulative probability curve on a right axis); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no other B4 plots (T83 interval/Pareto is done) or other sessions' scopes |
 | `gadgets-1` | Claude Windows, "continue all tasks" | B9 slice 1 as new brief T101: Gadgets > Statistics, Quick Fit, Differentiate, Interpolate, Vertical Cursor on the Integrate gadget's ROI framework; new app gadget modules, small graph_view.rs hooks, Gadgets menu | claimed 2026-11-16; no other gadgets, shape-resize, T58/T59, multi-Y legends |
-| `cond-manager` | Claude Windows, scheduled "cond-heatmap" | B7 slice as new brief T122: Conditional Format Manager; new dialogs/cond_manager.rs, edit mode of dialogs/cond_format.rs, menu item, gui-look spec | claimed 2026-11-17; worktree `.claude/worktrees/small-diffs`, build `target/wt-small-diffs`; no Conditional Highlight, T59 or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

@@ -322,6 +322,8 @@ pub enum ProjectError {
     WindRoseColumns(&'static str),
     #[error("a 2D kernel density needs one Y column with an X column")]
     Kde2dColumns,
+    #[error("the function graph cannot be made: {0}")]
+    FunctionGraph(String),
     #[error("a Piper diagram needs six Y columns: Ca, Mg, Na+K, Cl, SO4, HCO3+CO3 (got {0})")]
     PiperColumns(usize),
     #[error("a lollipop plot needs two or more Y columns (got {0}); select at least two Y columns")]

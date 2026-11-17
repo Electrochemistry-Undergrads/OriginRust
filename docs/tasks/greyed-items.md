@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **283 greyed items: 188 in the menu bar, 18 on the toolbars, 77 in context menus.**
+original inventory baseline. This is not a new runtime audit. **282 greyed items: 187 in the menu bar, 18 on the toolbars, 77 in context menus.**
 
 ## How to read and keep this file
 
@@ -61,7 +61,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T96` | 0 |
 | `T114` | 0 |
 | `B2` | 33 |
-| `B3` | 15 |
+| `B3` | 14 |
 | `B4` | 1 |
 | `B5` | 13 |
 | `B6` | 23 |
@@ -77,7 +77,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 63 items, backlog packages (`B`) 200, not planned (`N`) 20.
+Briefs (`T`) hold 63 items, backlog packages (`B`) 199, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -148,7 +148,7 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Graph
 - `N` Fit Layer to Graph
-- `B3` Add Function Graph... · New Table · Convert to Standard Font Size
+- `B3` New Table · Convert to Standard Font Size
 - `T61` New Layer(Axes): Open Dialog...
 - `B3` Legend: Add Legend Title
 

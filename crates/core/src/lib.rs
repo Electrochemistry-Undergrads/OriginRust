@@ -28,6 +28,7 @@ pub mod fitting;
 pub mod format;
 pub mod format_clip;
 pub mod formula;
+pub mod function_graph;
 pub mod graph;
 pub mod graph_data;
 pub mod graph_style;

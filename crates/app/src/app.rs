@@ -220,6 +220,7 @@ pub struct SheafApp {
     /// Window > Duplicate (Batch Plotting).
     batch_plot: Option<crate::dialogs::batch_plot::BatchPlotDialog>,
     qc_chart: Option<crate::dialogs::qc_chart::QcDialog>,
+    function_graph: Option<crate::dialogs::function_graph::FunctionGraphDialog>,
     /// Plot > Statistics > Scatter Matrix's options (T114).
     scatter_matrix: Option<crate::dialogs::scatter_matrix::ScatterMatrixDialog>,
     /// The explorer folder's Properties....
@@ -366,6 +367,7 @@ impl SheafApp {
             find_spec: Default::default(),
             batch_plot: None,
             qc_chart: None,
+            function_graph: None,
             scatter_matrix: None,
             folder_props: None,
             save_theme: None,
@@ -1894,6 +1896,9 @@ impl SheafApp {
                 if let Some(f) = explorer::folder_at(&self.doc.project().root, &path) {
                     self.folder_props = Some(crate::dialogs::folder_props::FolderPropsDialog::new(path, f));
                 }
+            }
+            Action::AddFunctionGraph { graph, layer } => {
+                self.function_graph = Some(crate::dialogs::function_graph::FunctionGraphDialog::new(graph, layer));
             }
             Action::BatchPlot { graph, columns } => {
                 match crate::dialogs::batch_plot::BatchPlotDialog::new(self.doc.project(), graph, columns) {
@@ -3425,6 +3430,29 @@ impl SheafApp {
     }
 
     /// Duplicate (Batch Plotting): OK makes the copies, one undo step, and brings the last forward.
+    /// Graph > Add Function Graph... (T119): OK adds the curve; an expression error keeps the window open.
+    fn show_function_graph(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::function_graph::FunctionOutcome;
+        let Some(d) = &mut self.function_graph else { return };
+        let FunctionOutcome::Add { graph, layer, expr, from, to, points } = (match d.show(ctx) {
+            FunctionOutcome::Open => return,
+            FunctionOutcome::Closed => {
+                self.function_graph = None;
+                return;
+            }
+            add => add,
+        }) else {
+            return;
+        };
+        match self.doc.edit("Add function graph", |p| p.add_function_graph(graph, layer, &expr, (from, to), points)) {
+            Ok(_) => {
+                self.function_graph = None;
+                self.say(format!("Added y = {expr}"));
+            }
+            Err(e) => self.warn(e.to_string()),
+        }
+    }
+
     /// Plot > Statistics > QC (X bar R) Chart's subgroup prompt (T111).
     fn show_qc_chart(&mut self, ctx: &egui::Context) {
         use crate::dialogs::qc_chart::QcOutcome;
@@ -5062,6 +5090,7 @@ impl SheafApp {
         self.show_find_project(ctx);
         self.show_batch_plot(ctx);
         self.show_qc_chart(ctx);
+        self.show_function_graph(ctx);
         self.show_scatter_matrix(ctx);
         self.show_folder_props(ctx);
         self.show_graph_themes(ctx);

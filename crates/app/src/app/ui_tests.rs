@@ -9000,6 +9000,7 @@ mod fill_pattern;
 mod filter_manager;
 mod find_project;
 mod fit_organizer;
+mod function_graph;
 mod graph_themes;
 mod new_from_template;
 mod qc_chart;

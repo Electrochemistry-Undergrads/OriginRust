@@ -116,6 +116,8 @@ pub enum Cmd {
     Reimport(bool),
     /// Window > Duplicate (Batch Plotting) > with New Sheets/Books (false) or New Columns (true) (T99).
     BatchPlot(bool),
+    /// Graph > Add Function Graph... (T119).
+    AddFunctionGraph,
     /// View > View Windows (T100).
     ViewWindows(sheaf_core::project::ViewWindows),
     /// An axis's Save Format as Theme... (T102).
@@ -1618,7 +1620,7 @@ fn graph_menu() -> Vec<Entry> {
         sep(),
         item("Layer Management...", Cmd::LayerManagement(None)),
         item("Add Error Bars...", Cmd::AddErrorBars),
-        grey("Add Function Graph..."),
+        item("Add Function Graph...", Cmd::AddFunctionGraph),
         item("Add Straight Line...", Cmd::AddStraightLine),
         item("Add Text...", Cmd::AddText),
         new_layer_menu(),
@@ -2670,6 +2672,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::FilterManager => Action::FilterManager,
         Cmd::SystemTemplates => Action::SystemTemplates { book: book?, columns: c.selected.to_vec() },
         Cmd::BatchPlot(columns) => Action::BatchPlot { graph: c.graph.ok_or(NEED_GRAPH)?, columns: *columns },
+        Cmd::AddFunctionGraph => Action::AddFunctionGraph { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::Reimport(choose) => {
             let book = book?;
             c.imported.then_some(()).ok_or(NOT_IMPORTED)?;

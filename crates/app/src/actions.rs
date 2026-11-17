@@ -349,6 +349,11 @@ pub enum Action {
     GoToFolder(Vec<usize>),
     /// The explorer folder's Properties...: its name, comments and information.
     FolderProperties(Vec<usize>),
+    /// Graph > Add Function Graph...: open its window for the active layer (T119).
+    AddFunctionGraph {
+        graph: WindowId,
+        layer: usize,
+    },
     /// Window > Duplicate (Batch Plotting): open the window that picks sheets or columns.
     BatchPlot {
         graph: WindowId,

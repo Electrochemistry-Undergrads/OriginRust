@@ -3,8 +3,8 @@
 **Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `cond-format`: Worksheet >
 Conditional Formatting > Highlight Min Max (row/column-wise, Origin's default colours), Highlight Top
 Bottom (N items / N %), Remove; live, cached per document revision, saved in `.sheaf` (and the
-`.opj.sheaf` companion), kept through duplicate/append/row and column edits. Left: Conditional
-Highlight (Heatmap is done as T120, Pareto and Outliers as T121, the Format Manager and renaming rules as T122); Origin details unmeasured
+`.opj.sheaf` companion), kept through duplicate/append/row and column edits. Left: nothing in
+the submenu (Heatmap is done as T120, Pareto and Outliers as T121, the Format Manager and renaming rules as T122, Conditional Highlight as T123); Origin details unmeasured
 (gui-look.md "Conditional formatting").
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Worksheets: Conditional highlight of extrema,
 Origin 2025b), with Origin's older Highlight Top Bottom in the same frame.

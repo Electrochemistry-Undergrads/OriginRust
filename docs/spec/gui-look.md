@@ -467,7 +467,7 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
 - **Cost.** The styles are computed once per change of the document (not per frame or per cell) and
   read per drawn cell; a 1,000,000-row column takes about 3 ms (Min Max) to 10 ms (Top N %) in a
   release build.
-- **Left out.** Conditional Highlight (greyed). Renaming and editing rules: the Manager (T122). The `.opj` writer cannot store the rules: saving to `.opj` warns and the
+- Renaming and editing rules: the Manager (T122). Conditional Highlight: T123. The `.opj` writer cannot store the rules: saving to `.opj` warns and the
   companion keeps them.
 
 #### Conditional Heatmap (T120)
@@ -558,6 +558,34 @@ Sheaf's choices, all **unmeasured**:
   nothing changed adds no undo step; if the list changed meanwhile (the rule at that place is no
   longer the same), OK does nothing.
 - **Left out:** changing a range (reselecting or typing), dragging rows to reorder.
+
+
+#### Conditional Highlight (T123)
+
+Origin facts (X-Function `wcolor` and "Details of TreeNodes in Wcolor", docs.originlab.com, read
+2026-11-17, not measured): conditions `cond1`/`cond2` 0 equal to, 1 not equal to, 2 greater than,
+3 greater than or equal to, 4 less than, 5 less than or equal to, 6 between (`val11`, default 0, and
+`val12`, default 1), 7 text that contains (`text1`), 8 custom (`custom1`, a condition in `x`, for
+example `x == "Male"`); Date/Time columns name 2 to 5 after, on or after, before, on or before.
+`join` 0 None (default), 1 And, 2 Or. Background 30067455 = RGB(255,202,202) and Text Color
+20132812 = RGB(204,51,51) by default. `extend` colours whole rows; values may come from a fly-out
+of statistics functions.
+
+Sheaf's choices, all **unmeasured**:
+
+- The window: Condition (Origin's nine names, a value, two values for Between, a text box for Text
+  that contains and Custom), Join (None, And, Or) with a second condition, and the Fill/Font pair
+  (Origin's defaults). Defaults: Equal to 0, None.
+- Numeric conditions match numbers only: text, empty, NaN and masked cells never match, not even
+  "not equal to". Equality is exact. Between includes both values, in either order.
+- Text that contains matches the cell's text as the worksheet shows it (numbers too, for example
+  `5` in `2.5`), case-sensitive; an empty text matches nothing.
+- Custom is an expression of Sheaf's expression language in `x`, the cell's number, true when not
+  zero (`x > 2 && mod(x, 2) == 0`); it may use functions and constants but no other names and no
+  columns, and OK refuses one that does not parse or uses another name, saying why. Text values in
+  custom conditions (`x == "Male"`) are not supported: text cells never match Custom.
+- **Left out:** Date/Time names and date entry (dates compare as their stored numbers), statistics
+  functions as values, extending the colour to the whole row (`extend`).
 
 ### Cell notes (T36)
 

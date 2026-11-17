@@ -1,6 +1,6 @@
 # T123: Conditional Formatting > Conditional Highlight...
 
-**Status:** claimed 2026-11-17 (Claude Windows, scheduled session "cond-heatmap", branch `cond-highlight`).
+**Status:** done 2026-11-17 (Claude Windows, scheduled session "cond-heatmap", branch `cond-highlight`; gui-look.md "Conditional Highlight (T123)"), not measured. Left: Date/Time names and date entry, statistics functions as values, extend to whole row, text values in custom conditions.
 **Size:** M. **Source:** greyed inventory package B7 (the last T35 leftover in that submenu).
 **Spec:** `docs/spec/gui-look.md` "Conditional formatting" (a new subsection).
 

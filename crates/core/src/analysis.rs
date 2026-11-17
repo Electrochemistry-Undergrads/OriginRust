@@ -1605,7 +1605,11 @@ pub(crate) fn free_sheet_name(sheets: &[Worksheet], prefix: &str) -> String {
 }
 
 /// The table of Statistics on Columns: one row per input column, the columns chosen in `spec`.
-fn statistics_table(spec: &StatisticsSpec, inputs: &[Input<'_>]) -> Result<ResultTable, AnalysisError> {
+fn statistics_table(
+    spec: &StatisticsSpec,
+    inputs: &[Input<'_>],
+    sheet: &Worksheet,
+) -> Result<ResultTable, AnalysisError> {
     if spec.confidence_limits && !(spec.level > 0.0 && spec.level < 1.0) {
         return Err(AnalysisError::BadOption(format!(
             "the confidence level must be between 0 and 1, not {}",
@@ -1649,7 +1653,15 @@ fn statistics_table(spec: &StatisticsSpec, inputs: &[Input<'_>]) -> Result<Resul
         .collect();
     let mut t = ResultTable { headers, ..Default::default() };
     for inp in inputs {
-        let s = calc::stats(inp.ys());
+        let values = match sheet.column(inp.id).and_then(|c| c.data_range) {
+            Some(range) => {
+                let end = range.end.map_or(inp.last + 1, |r| r.saturating_add(1).min(inp.last + 1)).max(inp.first);
+                let start = inp.first.max(range.begin).min(end);
+                &inp.y[start..end]
+            }
+            None => inp.ys(),
+        };
+        let s = calc::stats(values);
         let mut values: Vec<f64> = picks.iter().map(|p| (p.2)(&s)).collect();
         // The unit goes with the numbers that carry the data's unit: not the counts, skewness, kurtosis
         // and the coefficient of variation, which have none, and not the variance (unit squared).
@@ -3089,7 +3101,7 @@ impl Project {
                 table = Some(t);
             }
             Tool::Statistics(spec) => {
-                table = Some(statistics_table(spec, &inputs)?);
+                table = Some(statistics_table(spec, &inputs, sheet)?);
             }
             Tool::RowStatistics(spec) => {
                 row_statistics(spec, &inputs, &mut beside, &mut notes)?;

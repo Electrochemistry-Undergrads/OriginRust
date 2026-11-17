@@ -19,6 +19,7 @@ mod color_scale;
 mod comparison_plot;
 mod cond_format;
 mod custom_color_wells;
+mod data_range_statistics;
 mod duplicate_entries;
 mod excel;
 mod export_themes;

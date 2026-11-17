@@ -25,9 +25,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 165 | 39 | 253 |
+| All rows | 50 | 169 | 38 | 257 |
 | P0 | 32 | 71 | 0 | 103 |
-| P1 and P2 together | 17 | 94 | 39 | 150 |
+| P1 and P2 together | 18 | 98 | 38 | 154 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
 
@@ -264,7 +264,7 @@ Cross-cutting findings:
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
-| Descriptive statistics on columns | Statistics on Columns | N, missing, mean, SD, SEM, sum, min, Q1, median, Q3, max | ◐ | variance, skewness, kurtosis, CV, IQR and confidence limits of the mean are options (window and `analyze stats --all`); no mode, geometric mean or the other quantities; Origin's default selection not measured | P0 |
+| Descriptive statistics on columns | Statistics on Columns | N, missing, mean, SD, SEM, sum, min, Q1, median, Q3, max | ◐ | variance, skewness, kurtosis, CV, IQR and confidence limits of the mean are options (window and `analyze stats --all`); saved Begin/End ranges respected (T126, workbook13f.1); no mode, geometric mean or the other quantities; Origin's default selection not measured | P0 |
 | Aggregate functions in formulas | Set Column Values | sum, mean, median, sd, var, count | ✓ | | P0 |
 | Row statistics | Statistics on Rows | mean, SD, SEM, minimum, maximum, N, sum per row as new columns (Statistics menu, `analyze rowstats`); checked against `rowstats` | ◐ | Origin's other dialog options not measured | P1 |
 | Moments, quantiles | quantiles, moments | quartiles only | ◐ | no arbitrary percentile | P1 |

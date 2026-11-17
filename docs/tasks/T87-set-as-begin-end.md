@@ -1,6 +1,6 @@
 # T87: Set As Begin, Set As End and Reset to Full Range
 
-**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13f): measured with `set -b/-e` (cells outside shown blank, plots and statistics use only the rows inside), the five items enabled, the range saved in `.sheaf` and named in the `.opj` save warning, plots leave the rows out. Left: analysis tools using the range, which columns Origin's menu commands change.
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13f): measured with `set -b/-e` (cells outside shown blank, plots and statistics use only the rows inside), the five items enabled, the range saved in `.sheaf` and named in the `.opj` save warning, plots leave the rows out. T126 adds saved-range support to descriptive Statistics on Columns; other analysis readers and which columns Origin's menu commands change remain open.
 **Size:** M. **Source:** greyed inventory package B5 (Edit > Set As Begin, Set As End, Reset to Full
 Range on a workbook, and the data cell's Set as Begin and Set as End).
 **Spec:** `docs/spec/workbook-model.md` (a new section, "Column data range").

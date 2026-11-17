@@ -747,8 +747,8 @@ Set as End. Measured in Origin 2016 with the LabTalk commands behind them (`set 
 - The **worksheet shows the cells outside blank** (B begun at row 3: rows 1 and 2 empty; C ended at row 4:
   rows 5 and 6 empty).
 - **Plots and statistics use only the rows inside**: B (10 to 60) from row 2 to 4 gave `stats` n = 3, mean
-  30, and its scatter's X axis went from 1.5 to 4.5. Sheaf's plots leave the rows out; Sheaf's analysis
-  tools still read all rows (left for later).
+  30, and its scatter's X axis went from 1.5 to 4.5. Sheaf's plots leave the rows out;
+  Statistics on Columns now also uses the saved range (T126 below). Other analysis readers remain open.
 - **Sheaf's commands**: Set As Begin makes the top selected row the first row of every selected column's
   range, Set As End the bottom selected row the last; a begin after the end drops the end (and the other
   way round). Reset to Full Range clears the range of every column of the active sheet. One undo step each
@@ -757,6 +757,30 @@ Set as End. Measured in Origin 2016 with the LabTalk commands behind them (`set 
 - **Files**: saved with the column in `.sheaf` (`"data_range": {"begin", "end"}`, rows from 0). The `.opj`
   written here does not hold it: the save warning names it, and the companion keeps it. The graph's own
   Data > Reset to Full Range (display range of a plot) is a different command and stays grey.
+
+### 13f.1 Descriptive Statistics on Columns (T126, 2026-11-17)
+
+The descriptive column reader intersects the existing resolved request rows with
+that Y column's saved Begin/End range, before calling the unchanged statistics
+calculator. The T87 accepted 2016 fixture above is the numeric reference: values
+10..60 with rows 2..4 yield N=3, mean30, SD10 and sum90. No new Native run or COM
+retry was made. The [current FAQ-1101](https://docs.originlab.com/quick-help/set-as-begin/)
+describes clearing/deleting and 2021/2022 menu changes; those are not substituted
+for the accepted non-destructive 2016 column-range fixture.
+
+Explicit row/XBetween requests intersect the saved Y range using original row
+indices. Each selected column has its own range; a different X column's saved
+range does not restrict univariate Y statistics. Outside rows are excluded and
+do not increase Missing. Existing mask/filter/missing handling within the
+intersection, units, report layout, all optional statistics and output history
+stay unchanged. Empty intersections use existing empty statistics (N=0,
+Missing=0, sum0, undefined values NaN), an explicit Sheaf edge policy. Bounds are
+clamped with a saturating inclusive-end conversion, including persisted ranges
+beyond the available data. Source data and range metadata remain untouched.
+
+Only Statistics on Columns is changed. Statistics on Rows, inferential tests,
+distribution/categorical tools, fitting and other analysis readers remain T87
+leftovers. No shared input-loader, Core model, IO/schema, grid or menu changes.
 
 ## 13g. Copy Columns to (T89, measured 2026-11-16, Origin 2016)
 

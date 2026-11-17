@@ -1,6 +1,6 @@
 # T128: Analysis > Peaks and Baseline > Multiple Peak Fit
 
-**Status:** done 2026-11-17 (Claude Windows, scheduled session "cond-heatmap", branch `multi-peak-fit`; analysis-tools.md 11.3), not measured (Origin COM unavailable). Left: Open NLFit, Use Peak Marker, the results table on the graph, individual peak curves.
+**Status:** done 2026-11-17 (Claude Windows, scheduled session "cond-heatmap", branch `multi-peak-fit`; analysis-tools.md 11.3), not measured (Origin COM unavailable). Individual peak curves added the same day. Left: Open NLFit, Use Peak Marker, the results table on the graph.
 **Size:** M. **Source:** greyed inventory package B8 (Multiple Peak Fit; Batch Peak Analysis stays B8).
 **Spec:** `docs/spec/analysis-tools.md` (a new subsection next to the Peak Analyzer, 11).
 

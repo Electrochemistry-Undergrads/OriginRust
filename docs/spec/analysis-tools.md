@@ -661,10 +661,13 @@ Sheaf (`crates/app/src/dialogs/multipeak.rs`, the chain of 11 with given centres
   peak, heights and FWHM are measured above the lowest point of the data), then the multi-peak fit
   of 11 with a constant `y0` (start: the lowest Y) and per-peak starts from those heights and widths.
   Results go where the Peak Analyzer's go (the result sheet, one row per peak in X order, the fit
-  curve column beside the data), and the fitted curve is drawn on the graph as a line in the fit
-  tools' red (220, 30, 30), width at least 1.5. One undo step ("Multiple peak fit").
+  curve column beside the data, then a column "Peak k of ..." per peak: that peak on the fitted
+  baseline `y0`), and the curves are drawn on the graph as lines: each peak in blue, green, orange
+  (repeating), then the fitted sum on top in the fit tools' red (220, 30, 30), width at least 1.5.
+  One undo step ("Multiple peak fit"). The Peak Analyzer does not add the per-peak columns
+  (`PeakFitSpec.peak_curves`, off there).
 - **Left out:** Open NLFit and Use Peak Marker (shown disabled), the results table on the graph,
-  the individual peak curves, arrow-key stepping specific to Get Points (the Data Reader's Left/Right
+  arrow-key stepping specific to Get Points (the Data Reader's Left/Right
   keys step the pinned point).
 
 ## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1 to 12.3)

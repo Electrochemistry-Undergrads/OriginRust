@@ -182,10 +182,12 @@ Analysis > Peaks and Baseline > Multiple Peak Fit after Origin's `nlfitpeaks` (n
 unavailable): Peak Function window (Gauss, Lorentz, Voigt), then Get Points on the graph's Data
 Reader (click to pin, double-click or Enter to pick; Remove Last), Fit runs the Peak Analyzer chain
 with the picked centres (new `calc::analyze_peaks_at`, `PeakChainSpec.centers`) and a constant y0,
-writes the usual result sheet and draws the fitted curve in the fit tools' red; one undo step. From
+writes the usual result sheet and draws each fitted peak (blue/green/orange, new optional
+per-peak columns `PeakFitSpec.peak_curves`, off for the Peak Analyzer) under the fitted sum in the fit
+tools' red; one undo step. From
 a worksheet a line graph is made first. No `graph_view.rs` edits: the app turns `GraphUi.reader` on
-and reads `reader_point`. Left: Open NLFit, Use Peak Marker, the results table on the graph,
-individual peak curves (analysis-tools.md 11.3). A desktop capture of a fitted project was inspected.
+and reads `reader_point`. Left: Open NLFit, Use Peak Marker, the results table on the graph
+(analysis-tools.md 11.3). A desktop capture of a fitted project was inspected.
 Fmt, strict all-target Clippy, full workspace 4,462 passed / 0 failed / 8 ignored, inventory 271.
 Next for B8: Batch Peak Analysis Using Theme (needs analysis themes, B11).
 

@@ -30,7 +30,7 @@ change is one Undo. Origin's published guide establishes the basic reversible
 contract; active-hidden/derived-check rules are explicit Sheaf choices, not fresh
 2016 measurements. No new model/renderer/IO contracts or following-active mode.
 Three new UI regressions cover all three targets, rendering/geometry, settings,
-Undo/Redo, hidden targets and invalid/no-op history. Full validation pending.
+Undo/Redo, hidden targets and invalid/no-op history. Formatting, strict workspace/all-target Clippy and all 4,363 tests pass (eight existing ignored), including all six layer-visibility UI regressions, on integrated T118/T58 RGB/T60 viewport source. Inventory283, eight Python tooling tests and frozen 911 source/fixture/asset files pass. Fresh baseline/isolated/restored desktop captures and PNG/SVG exports were inspected; restored export pixels match exactly, and all own builders/apps/helpers are terminal. Remaining T61 claims and controls stay open.
 
 **Branch:** `layers-multi-y`. **Priority:** P0, wave 2.
 **Spec:** [graphing](../spec/graphing.md) 1.3 and 12; ADR 0009.

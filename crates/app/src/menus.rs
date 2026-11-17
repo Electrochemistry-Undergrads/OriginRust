@@ -1299,8 +1299,8 @@ fn mask_menu() -> Entry {
     sub("Mask", entries)
 }
 
-/// Worksheet > Conditional Formatting (also in the right-click menu of selected cells). The other
-/// items of Origin's submenu are greyed.
+/// Worksheet > Conditional Formatting (also in the right-click menu of selected cells). Conditional
+/// Highlight and the Manager are greyed.
 fn cond_format_menu() -> Entry {
     use crate::dialogs::cond_format::CondKind;
     let mut entries = vec![
@@ -1308,8 +1308,10 @@ fn cond_format_menu() -> Entry {
         item("Highlight Top Bottom...", Cmd::CondFormat(CondKind::TopBottom)),
         grey("Conditional Highlight..."),
         item("Conditional Heatmap...", Cmd::CondFormat(CondKind::Heatmap)),
+        item("Conditional Pareto...", Cmd::CondFormat(CondKind::Pareto)),
+        item("Conditional Outliers...", Cmd::CondFormat(CondKind::Outliers)),
     ];
-    entries.extend(greys(&["Conditional Pareto...", "Conditional Outliers...", "-"]));
+    entries.extend(greys(&["-"]));
     entries.push(item("Remove Conditional Format", Cmd::RemoveCondFormat));
     entries.push(grey("Conditional Format Manager..."));
     sub("Conditional Formatting", entries)

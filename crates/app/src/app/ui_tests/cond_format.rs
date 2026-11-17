@@ -251,3 +251,48 @@ fn conditional_heatmap_options_reach_the_rule() {
     let style = styles.get(b.id, max_row).unwrap();
     assert_eq!((style.fill, style.font), (None, Some(sheaf_core::condformat::heatmap::DEFAULT_FROM)));
 }
+
+#[test]
+fn conditional_outliers_colour_the_value_outside_the_fences() {
+    let mut h = start_book("cf-outliers");
+    // The box-chart probe: 30 is the one outlier of column B by Origin's quartiles.
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Set values", |p| {
+        let b = p.workbook_mut(book).unwrap();
+        *b.sheet_mut().columns[1].numeric_mut().unwrap() =
+            vec![4.0, 4.0, 5.0, 5.0, 5.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 30.0];
+    });
+    settle(&mut h);
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Conditional Outliers..."]);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Conditional outliers"));
+    assert_eq!(rules(&h)[0].rule, Rule::outliers(), "IQR with Coef 1.5 by default");
+    click_text(&mut h, "C(Y1)");
+    assert_eq!(fill_behind(&h, "30"), Some(rgb(condformat::TOP_FILL)));
+    assert_eq!(fill_behind(&h, "20.5"), None);
+    // SD with a large Coef finds nothing.
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Remove Conditional Format"]);
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Conditional Outliers..."]);
+    click(&mut h, "SD");
+    click(&mut h, "OK");
+    let r = rules(&h);
+    assert!(matches!(r[0].rule, Rule::Outliers { method: condformat::OutlierMethod::Sd, coef, .. } if coef == 1.5));
+}
+
+#[test]
+fn conditional_pareto_takes_its_rule_and_the_least_frequent_colours() {
+    let mut h = start_book("cf-pareto");
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Conditional Pareto..."]);
+    h.get_by_value("Most Frequent N Items").click();
+    settle(&mut h);
+    click(&mut h, "Least Frequent N%");
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Conditional pareto"));
+    let r = rules(&h);
+    let Rule::Pareto { most, n, percent, colours } = r[0].rule else { panic!("{:?}", r[0].rule) };
+    assert!(!most && percent && n == condformat::DEFAULT_N);
+    assert_eq!(colours.fill, Some(condformat::BOTTOM_FILL), "least frequent takes the bottom colours");
+}

@@ -1,5 +1,5 @@
-//! Worksheet > Conditional Formatting > Highlight Min Max, Highlight Top Bottom and Conditional
-//! Heatmap: the windows that add a rule to the active sheet for the selected cells (Origin's
+//! Worksheet > Conditional Formatting > Highlight Min Max, Highlight Top Bottom, Conditional
+//! Heatmap, Conditional Pareto and Conditional Outliers: the windows that add a rule to the active sheet for the selected cells (Origin's
 //! `wcolorbycr` and `wcolortb`, and its Heatmap dialog). The rule is evaluated live by the grid
 //! (see `sheaf_core::condformat`).
 
@@ -8,7 +8,7 @@ use super::graph_props::color_button;
 use eframe::egui;
 use sheaf_core::color::Color;
 use sheaf_core::condformat::heatmap::{self, Heatmap, LevelScale, LevelStep, MiddlePosition, Mixing, Target};
-use sheaf_core::condformat::{self, Colours, CondFormat, CondRange, Direction, Rule};
+use sheaf_core::condformat::{self, Colours, CondFormat, CondRange, Direction, OutlierMethod, Rule};
 use sheaf_core::{Document, WindowId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -16,6 +16,8 @@ pub enum CondKind {
     MinMax,
     TopBottom,
     Heatmap,
+    Pareto,
+    Outliers,
 }
 
 /// The four modes of Highlight Top Bottom.
@@ -36,6 +38,16 @@ impl Mode {
             Mode::TopPercent => "Top N%",
             Mode::BottomItems => "Bottom N Items",
             Mode::BottomPercent => "Bottom N%",
+        }
+    }
+
+    /// The same four modes as Conditional Pareto names them.
+    fn pareto_label(self) -> &'static str {
+        match self {
+            Mode::TopItems => "Most Frequent N Items",
+            Mode::TopPercent => "Most Frequent N%",
+            Mode::BottomItems => "Least Frequent N Items",
+            Mode::BottomPercent => "Least Frequent N%",
         }
     }
 
@@ -294,6 +306,8 @@ pub struct CondFormatDialog {
     hit: ClassEdit,
     heat: HeatEdit,
     extent: Option<(f64, f64)>,
+    method: OutlierMethod,
+    coef: f64,
 }
 
 impl CondFormatDialog {
@@ -316,6 +330,8 @@ impl CondFormatDialog {
             hit: ClassEdit::new(condformat::TOP_FILL, condformat::TOP_FONT),
             heat: HeatEdit::new(extent),
             extent,
+            method: OutlierMethod::Iqr,
+            coef: condformat::rank::DEFAULT_COEF,
         })
     }
 
@@ -327,6 +343,31 @@ impl CondFormatDialog {
                 Rule::TopBottom { top, n: self.n, percent, colours: self.hit.colours() }
             }
             CondKind::Heatmap => Rule::Heatmap(self.heat.rule()),
+            CondKind::Pareto => {
+                let (most, percent) = self.mode.parts();
+                Rule::Pareto { most, n: self.n, percent, colours: self.hit.colours() }
+            }
+            CondKind::Outliers => Rule::Outliers { method: self.method, coef: self.coef, colours: self.hit.colours() },
+        }
+    }
+
+    /// Switches the default top colours to the bottom ones (and back) when the mode changes
+    /// between top and bottom, unless the colours were changed.
+    fn follow_default_colours(&mut self, before: Mode) {
+        if self.mode == before || self.mode.parts().0 == before.parts().0 {
+            return;
+        }
+        let pair = |top: bool| {
+            if top {
+                (condformat::TOP_FILL, condformat::TOP_FONT)
+            } else {
+                (condformat::BOTTOM_FILL, condformat::BOTTOM_FONT)
+            }
+        };
+        let was = pair(before.parts().0);
+        if self.hit.fill == was.0 && self.hit.font == was.1 {
+            let now = pair(self.mode.parts().0);
+            self.hit = ClassEdit::new(now.0, now.1);
         }
     }
 
@@ -339,6 +380,8 @@ impl CondFormatDialog {
             CondKind::MinMax => "Highlight Min Max",
             CondKind::TopBottom => "Highlight Top Bottom",
             CondKind::Heatmap => "Conditional Heatmap",
+            CondKind::Pareto => "Conditional Pareto",
+            CondKind::Outliers => "Conditional Outliers",
         };
         let mut open = true;
         let mut pressed = None;
@@ -377,25 +420,7 @@ impl CondFormatDialog {
                                 },
                             );
                             // The default colours follow top or bottom until they are changed.
-                            if self.mode != before && self.mode.parts().0 != before.parts().0 {
-                                let top = self.mode.parts().0;
-                                let default = if top {
-                                    ClassEdit::new(condformat::TOP_FILL, condformat::TOP_FONT)
-                                } else {
-                                    ClassEdit::new(condformat::BOTTOM_FILL, condformat::BOTTOM_FONT)
-                                };
-                                let was_default = {
-                                    let c = if before.parts().0 {
-                                        (condformat::TOP_FILL, condformat::TOP_FONT)
-                                    } else {
-                                        (condformat::BOTTOM_FILL, condformat::BOTTOM_FONT)
-                                    };
-                                    self.hit.fill == c.0 && self.hit.font == c.1
-                                };
-                                if was_default {
-                                    self.hit = default;
-                                }
-                            }
+                            self.follow_default_colours(before);
                         });
                         ui.horizontal(|ui| {
                             ui.label("N");
@@ -407,6 +432,49 @@ impl CondFormatDialog {
                         ui.weak("Each column of the selection is ranked on its own.");
                     }
                     CondKind::Heatmap => self.heat.show(ui, self.extent),
+                    CondKind::Pareto => {
+                        ui.horizontal(|ui| {
+                            ui.label("Rule");
+                            let before = self.mode;
+                            egui::ComboBox::from_id_salt("cond_pareto")
+                                .selected_text(self.mode.pareto_label())
+                                .show_ui(ui, |ui| {
+                                    for m in Mode::ALL {
+                                        ui.selectable_value(&mut self.mode, m, m.pareto_label());
+                                    }
+                                });
+                            self.follow_default_colours(before);
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("N");
+                            ui.add(egui::DragValue::new(&mut self.n).range(0.0..=1.0e9).speed(0.1));
+                            ui.weak(if self.mode.parts().1 { "percent of the cells" } else { "items" });
+                        });
+                        ui.add_space(4.0);
+                        self.hit.show(ui, "Highlighted cells");
+                        ui.weak("Items are counted over the whole selection, text included.");
+                    }
+                    CondKind::Outliers => {
+                        ui.horizontal(|ui| {
+                            ui.radio_value(&mut self.method, OutlierMethod::Iqr, "IQR");
+                            ui.radio_value(&mut self.method, OutlierMethod::Sd, "SD");
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Coef");
+                            egui::ComboBox::from_id_salt("cond_coef").selected_text(format!("{}", self.coef)).show_ui(
+                                ui,
+                                |ui| {
+                                    for c in [1.0, 1.5, 2.0, 3.0] {
+                                        ui.selectable_value(&mut self.coef, c, format!("{c}"));
+                                    }
+                                },
+                            );
+                            ui.add(egui::DragValue::new(&mut self.coef).range(0.0..=1.0e6).speed(0.05));
+                        });
+                        ui.add_space(4.0);
+                        self.hit.show(ui, "Outliers");
+                        ui.weak("Each column of the selection is checked on its own, as one box of a box chart.");
+                    }
                 }
                 ui.add_space(6.0);
                 pressed = button_row(ui, false);
@@ -421,6 +489,8 @@ impl CondFormatDialog {
                     CondKind::MinMax => "Highlight min max",
                     CondKind::TopBottom => "Highlight top bottom",
                     CondKind::Heatmap => "Conditional heatmap",
+                    CondKind::Pareto => "Conditional pareto",
+                    CondKind::Outliers => "Conditional outliers",
                 };
                 doc.apply(label, |p| {
                     if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet)) {

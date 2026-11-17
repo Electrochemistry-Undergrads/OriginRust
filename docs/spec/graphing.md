@@ -3226,13 +3226,52 @@ adds **Share X** (`share_x`, `--share-x`): the linked layers also follow the fir
 to one, the vertical shared-X figure of the brief. Linking needs Rearrange Layout (the dialog greys
 it with Arrange Settings). A typed page size is used as given. The text factor also scales the
 plots' data labels (unmeasured) and a Fixed Factor applies without rearranging (unmeasured; Auto then
-gives 1 as measured). The app's Merge choice is "All in Project" (default) or "Specified" (a
-checklist with Up and Down): Sheaf has no active folder, so Origin's folder choices and its default
-are not offered.
+gives 1 as measured). The app's Merge choice offers "All in Project" (the retained Sheaf default),
+"Specified" (a checklist with Up and Down), "All in Active Folder" and
+"All in Active Folder (Recursive)". The folder modes are measured below; the existing project
+and manual-list order is retained.
 Duplicate, missing or non-graph sources, fewer than two graphs, too few cells, a factor outside 0.05
 to 20 and a page side outside 0.5 to 200 in are refused without changing the project. Not built:
-Add Extra Layer(s) for Grid, Set Layer Width/Height by Common Scale, panel labels, the folder
-choices of Merge (Sheaf has no active folder), "Treat Each Source Graph as a Unit" off.
+Add Extra Layer(s) for Grid, Set Layer Width/Height by Common Scale, panel labels, Active Page,
+Open/embedded-only source filters, the merge preview and "Treat Each Source Graph as a Unit" off.
+
+**Folder source choices** (Origin 2016, T60 follow-up measured 2026-11-16): fresh
+standard Line graphs were placed using public Project Explorer commands. RootZ/RootA remain
+at the root, LocalZ/LocalA are direct members of Scope, ChildZ is in Scope/Zulu, OtherZ is in
+Outside, ChildA is in Scope/Alpha and DeepA is in Scope/Alpha/Deep. Graphs were created in that
+order; Zulu was created before Alpha, and LocalA was active for the Scope controls.
+`merge_graph option:=folder keep:=1` selected LocalZ then LocalA; `recursive` selected LocalZ,
+LocalA, ChildA, DeepA, ChildZ; root `folder` selected RootZ then RootA. Every source was
+validated as a one-layer graph and its folder path read back independently. Layer-by-layer
+plot dataset names establish membership/order; checked 800-pixel PNG exports establish two,
+five and two panels. The earlier three-member recursive control agrees. These direct-graph controls agree with creation order, and recursive traversal visits named
+child folders depth first;
+the measured ASCII folder names sort Alpha before Zulu despite folder creation order.
+
+The project-wide Native control selected root graphs, Outside, then Scope and its descendants.
+Sheaf keeps its existing All in Project/manual-list order; changing that separate contract is
+outside this source-filter slice. Current documentation describes the folder/recursive modes:
+[merge_graph](https://docs.originlab.com/x-function/ref/merge_graph/).
+Accepted command/readback/image hashes and owned-instance cleanup are in ignored scratch
+`t60-merge-folder-choices/native-proof.json`. Two initial shared-workbook probes used an
+unusable short-name reference and are excluded before any merge result. The accepted runs
+used independently validated active-workbook plots; all owned instances/guards closed,
+with foreign process identities preserved. Additional reverse-arrival controls could not start
+because COM reported Class Not Registered in both client architectures; no registration was
+changed. Native order after reversing folder arrival remains unestablished.
+
+Sheaf captures the Explorer folder when the dialog opens through either the menu or `--show`.
+Folder lists exclude workbook windows, respect implicit root membership, and show graphs in
+the order that will be merged. Direct graphs use existing Project creation order, matching the
+accepted fixture. Recursive child-folder sorting uses case-folded names (Unicode
+and equal-name tie behavior are Sheaf policy; Native controls covered distinct ASCII names).
+Changing only the Explorer selection keeps the captured source folder. Any folder-tree edit
+requires reopening before a folder-mode merge, preventing index paths from silently targeting
+another folder. All in Project/Specified keep their existing live graph-list behavior, ticks
+and manual ordering. Empty/one-graph choices are refused without history; source removal,
+multilayer grouping, layout, Undo and native/companion saves reuse the existing core merge.
+New-graph destination placement and visibility/open-only handling retain their existing scope;
+these filters add no folder mutations, model fields, IO format or CLI/MCP options.
 
 **Command line:** `sheaf merge-graphs PROJECT (--graph NAME ... | --all-graphs) [--rows N]
 [--cols N] [--gap H,V] [--margins L,R,T,B] [--portrait] [--page-size W,H] [--keep-aspect]

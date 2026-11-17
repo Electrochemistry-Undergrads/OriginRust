@@ -4932,7 +4932,7 @@ Implemented in `crates/core/src/layers.rs` (`Graph::add_layer`, `Graph::delete_l
 - Delete follows 21.4: children are unlinked and keep their place on the page (the parent's rectangle for a layer that covers it; for an inset the inset's own place, **unmeasured**), later links are renumbered, no confirmation, undo text "Undelete frame". Deleting the **only** layer is refused (Origin's behaviour unmeasured). After a delete the active layer is the one before the deleted layer (or the first), a selection in a later layer moves up, a selection in the deleted layer is cleared, and Plot Details, Layer Contents, Plot Setup and the drawn-object window of that graph close.
 - Add makes the new layer active and clears the selection; one undo step each ("Create", "Undelete frame").
 - Layer Properties... (Format menu and layer icon) opens Plot Details on the layer's node with the Background tab. Sheaf's layer node keeps its Layer Contents and Legend tabs as well.
-- Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer still hides only the plots, not the axes (Origin hides both; a later slice).
+- Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer is a reversible whole-layer toggle (21.13); Hide Other Layers still only hides plots and awaits a separate behavior check.
 
 ### 21.10 How Sheaf draws a displaced Y axis (slice 2)
 
@@ -5009,6 +5009,48 @@ but the five-column export showed additional labels not explained by the raw tex
 extra-column legend membership and empty-layer row translation remain follow-ups. The
 existing automatic graph-wide legend contents are unchanged. No layer assignment, axes,
 links, dialog-plan defaults or worksheet behavior is changed here.
+
+### 21.13 Reversible layer visibility (T61 follow-up, 2026-11-16)
+
+Fresh Origin 2016 controls use our own X = 0, 0.5, ..., 10 and three Y columns
+(X squared, 0.05 sin(X), 10+X), plotted with the stock 3Ys Y-YY template. The
+private COM runner held the reference mutex, verified a newly created process,
+and closed its own instance and watchdog; pre-existing process identities were
+preserved. Five accepted 800 x 612 PNG exports and per-layer readbacks are local
+in `re-workspace/scratch/t61-hide-layer-axes/native-1/`.
+
+Origin's [layer command reference](https://docs.originlab.com/labtalk/ref/layer_options_for_layer/)
+provides `layer -h 1` and `layer -h 0`; its
+[layer properties reference](https://docs.originlab.com/labtalk/ref/layer-obj/)
+also exposes `layer.show`. The installed 2016 controls confirm:
+
+- Hiding layer 2 changes only its `layer.show` from 1 to 0. Its curve and right
+  axis disappear; the other two curves and axes retain their positions. The
+  graph legend, owned by layer 1, keeps the hidden curve's entry.
+- Hiding layer 1 through `layer.show=0` removes its curve, X/left-Y axes, titles
+  and graph legend. Layers 2 and 3 still draw their curves and right axes.
+- `layer.showData`, `layer.showx`, `layer.showy`, frames, links and both axis
+  ranges remain unchanged in all three layers. Hiding layers 2 and 1 changes
+  3,985 and 8,347 pixels respectively; each corresponding restore export has
+  zero different pixels from the original.
+
+Sheaf stores a compatible `LayerDisplay.hidden` flag (false when absent),
+independent of individual plot visibility and Display-tab switches. Newly added
+layers start visible even when their parent is hidden (Sheaf creation policy;
+the follow-up native creation probe failed before COM activation and is excluded). The icon
+menu checks Hide Layer while hidden and uses the same entry to show it again.
+Hidden layers contribute no drawing or pickable frame; reader/edit tools ignore
+their points. Geometry, scale resolution and layer indices remain intact so
+linked visible layers do not move. A graph-scoped legend follows its owner's
+visibility and retains sibling entries, matching the controls above. Other
+layer-owned annotations are suppressed too; specific annotation types beyond
+the native legend/title controls have not been measured separately.
+
+Each toggle uses one existing "Hide layer" Undo step (Sheaf policy; Origin's
+Undo behavior remains weakly established in 21.3). `.sheaf` and `.opj.sheaf`
+companions retain visibility; the native `.opj` hidden bit remains unmeasured,
+so saves explicitly warn that bare Origin files show the layer. Hide Other
+Layers and the two disabled icon-mode commands are separate follow-ups.
 
 ## 22. Graph view modes, Show toggles and Full Screen (T66, measured 2026-11-15, Origin 2016)
 

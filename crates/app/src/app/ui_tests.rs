@@ -35,6 +35,7 @@ mod hexbin;
 mod import_themes;
 mod label_frames;
 mod label_whiteout;
+mod layer_visibility;
 mod layers;
 mod legend_position;
 mod live;

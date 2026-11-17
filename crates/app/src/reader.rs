@@ -45,7 +45,11 @@ pub fn place(
     to_screen: &dyn Fn((f64, f64)) -> Pos2,
     p: Point,
 ) -> Option<(Pos2, f64, f64)> {
-    let plot = project.graph(graph)?.layers.get(p.layer)?.plots.get(p.plot)?;
+    let layer = project.graph(graph)?.layers.get(p.layer)?;
+    if layer.display.hidden {
+        return None;
+    }
+    let plot = layer.plots.get(p.plot)?;
     let filters = project.plot_row_filters(plot);
     if !plot.visible || !filters.iter().all(|f| f.passes(p.row)) {
         return None;
@@ -115,6 +119,9 @@ fn each_point(
 ) {
     let Some(g) = project.graph(graph) else { return };
     for (li, layer) in g.layers.iter().enumerate() {
+        if layer.display.hidden {
+            continue;
+        }
         let Some(geom) = geometry.get(li) else { continue };
         if pick == Pick::Edit && (geom.polar.is_some() || geom.ternary.is_some() || !layer.display.show_data) {
             continue;

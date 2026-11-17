@@ -341,6 +341,9 @@ impl Writer {
         if !layer.display.is_default() {
             notes.push("the Display tab of a layer (data hidden, not clipped, grid on top) was not written".into());
         }
+        if layer.display.hidden {
+            notes.push("hidden layer visibility was not written; Origin shows the layer (the .opj.sheaf companion keeps it hidden)".into());
+        }
         if layer.xy_ratio.is_some() {
             notes.push(
                 "a layer's axis lengths linked to the scale with an X:Y ratio (Size/Speed) were not written".into(),

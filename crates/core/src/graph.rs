@@ -442,6 +442,9 @@ impl Layer {
 /// frame, grid under the data).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LayerDisplay {
+    /// Hide Layer: suppress the entire layer without changing its element or plot settings.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
     /// Show Elements: Data.
     pub show_data: bool,
     /// Clip Data to Frame.
@@ -467,6 +470,7 @@ fn is_true(v: &bool) -> bool {
 impl Default for LayerDisplay {
     fn default() -> Self {
         LayerDisplay {
+            hidden: false,
             show_data: true,
             clip_data: true,
             grid_on_top: false,
@@ -3444,5 +3448,32 @@ mod trendline_tests {
         // A minimal record reads with the defaults.
         let old: Trendline = serde_json::from_str(r#"{"kind":"linear"}"#).unwrap();
         assert_eq!(old, Trendline::new(TrendKind::Linear));
+    }
+}
+
+#[cfg(test)]
+mod layer_visibility_tests {
+    use super::*;
+
+    #[test]
+    fn visibility_is_compatible_with_older_display_records_and_saved_projects() {
+        let legacy: LayerDisplay = serde_json::from_str(r#"{"show_data":true,"clip_data":true}"#).unwrap();
+        assert_eq!(legacy, LayerDisplay::default());
+        assert!(!serde_json::to_string(&legacy).unwrap().contains("hidden"));
+        let mut g = crate::template::Template::Line.new_graph(WindowId(1), "fixture");
+        g.layers[0].display.hidden = true;
+        let back: Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!(back, g);
+    }
+
+    #[test]
+    fn a_new_layer_starts_visible_even_when_its_parent_is_hidden() {
+        for kind in crate::layers::NewLayerKind::ALL {
+            let mut g = crate::template::Template::Line.new_graph(WindowId(1), "fixture");
+            g.layers[0].display.hidden = true;
+            let added = g.add_layer(kind, 0).unwrap();
+            assert!(!g.layers[added].display.hidden, "{kind:?}");
+            assert!(g.layers[0].display.hidden);
+        }
     }
 }

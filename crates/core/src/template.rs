@@ -1278,6 +1278,7 @@ fn column(id: WindowId, name: &str, kind: PlotKind) -> Graph {
 /// first right curve differs from the first left one.
 pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
     let mut l = parent.clone();
+    l.display.hidden = false;
     l.plots.clear();
     l.labels.clear();
     l.shapes.clear();

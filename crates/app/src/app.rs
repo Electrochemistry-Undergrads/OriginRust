@@ -2160,7 +2160,7 @@ impl SheafApp {
                     None => self
                         .doc
                         .edit("Plot", |p| p.plot_columns(sheaf_core::template::Template::Line, &[y]))
-                        .map_err(|e| self.warn(&e.to_string()))
+                        .map_err(|e| self.warn(e.to_string()))
                         .ok(),
                 };
                 if let Some(graph) = graph {

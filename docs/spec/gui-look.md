@@ -467,8 +467,7 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
 - **Cost.** The styles are computed once per change of the document (not per frame or per cell) and
   read per drawn cell; a 1,000,000-row column takes about 3 ms (Min Max) to 10 ms (Top N %) in a
   release build.
-- **Left out.** Conditional Highlight and the Manager (greyed); renaming a
-  rule after creation. The `.opj` writer cannot store the rules: saving to `.opj` warns and the
+- **Left out.** Conditional Highlight (greyed). Renaming and editing rules: the Manager (T122). The `.opj` writer cannot store the rules: saving to `.opj` warns and the
   companion keeps them.
 
 #### Conditional Heatmap (T120)
@@ -535,6 +534,30 @@ Sheaf's choices, all **unmeasured**:
   Colours default to the Min Max maximum colours.
 - One undo step each ("Conditional pareto", "Conditional outliers"); saving, Remove and XLSX snapshot
   as for the other rules.
+
+
+#### Conditional Format Manager (T122)
+
+Origin facts (docs.originlab.com/origin-help/conditional-format, read 2026-11-17, not measured): the
+Manager lists all conditional formats of the active worksheet; **Name** is renamed by a
+double-click, **Range** is reselected or typed, **Edit Rule** reopens the rule's dialog, **Move
+Up**/**Move Down** (or dragging a row) reorder and **Remove** deletes; a new format is added at the
+top and the upper format wins where ranges overlap.
+
+Sheaf's choices, all **unmeasured**:
+
+- The window lists Name, Range (the columns' short names and rows, for example `B, C; rows 1 to
+  end`) and Rule (a few words: `Top 10 Items`, `Highlight Min Max, column-wise`, `Heatmap, 10
+  levels`, `Most Frequent 10 Items`, `Outliers, IQR x 1.5`). It reads the sheet again every frame,
+  so undo shows at once; it opens without a cell selection.
+- Every change applies at once as one undo step ("Rename conditional format", "Move conditional
+  format up/down", "Remove conditional format", "Edit conditional format"); there is no OK/Cancel,
+  only Close. A rename to an empty or unchanged name, or Escape, changes nothing.
+- Edit Rule opens the rule's own window (Highlight Min Max, Top Bottom, Heatmap, Pareto, Outliers)
+  filled with its settings and name; OK replaces the rule in its place, keeping its range. OK with
+  nothing changed adds no undo step; if the list changed meanwhile (the rule at that place is no
+  longer the same), OK does nothing.
+- **Left out:** changing a range (reselecting or typing), dragging rows to reorder.
 
 ### Cell notes (T36)
 

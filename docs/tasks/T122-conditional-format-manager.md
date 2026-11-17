@@ -1,6 +1,6 @@
 # T122: Conditional Formatting > Conditional Format Manager...
 
-**Status:** claimed 2026-11-17 (Claude Windows, scheduled session "cond-heatmap", branch `cond-manager`).
+**Status:** done 2026-11-17 (Claude Windows, scheduled session "cond-heatmap", branch `cond-manager`; gui-look.md "Conditional Format Manager (T122)"), not measured. Left: changing a format's range (reselect or type), dragging rows to reorder.
 **Size:** M. **Source:** greyed inventory package B7 (T35 leftover, after T120 and T121).
 **Spec:** `docs/spec/gui-look.md` "Conditional formatting" (a new subsection).
 

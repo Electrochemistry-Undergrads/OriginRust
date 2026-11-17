@@ -1010,7 +1010,8 @@ Text color > Custom RGB... in the shared label/title/legend editor has Red, Gree
 fields, a swatch and Apply color. Each field accepts a whole number from 0 through 255;
 invalid or empty values disable the choice and show the permitted range. The fields start
 from the object's base font colour. A named palette choice also seeds them; subsequent typed
-values stay in the current editor's picker. No alpha or persistent picker preference is added.
+values stay in the current editor's picker. Alpha is unsupported; the numeric draft
+is transient. Explicit reusable Custom wells use the separate preference pool in7.12.
 
 Editing the fields or dismissing the menus does not change the text draft, automatic-text
 state or project. Apply color closes both menus, formats the original selection (or inserts
@@ -1139,7 +1140,19 @@ offers the pool in all three graph pickers; choosing a well uses their existing
 captured target/revision/generation checks, no-op handling and one-step Undo.
 An entry's context menu removes it from the pool without changing any applied
 object colour. The 24 Classic presets, None and numeric Apply/Cancel remain.
-Worksheet controls and the selected-text editor retain their separate pickers.
+Worksheet controls retain their separate pickers. The shared graph text editor
+also offers Add to Custom in its numeric picker and the same Custom colors pool.
+Adding stores only the preference and leaves the selected raw-text draft, caret,
+automatic-text state and document unchanged. Choosing a well maps its channels to
+the existing opaque inline RGB colour command: it colours the selection or inserts
+a group at the caret, restores typing focus and seeds the numeric RGB fields.
+The text remains a draft until the Text window's existing Apply/OK. Cancel discards
+unapplied text changes while retaining added wells; removing a well does not rewrite
+the draft. Legend samples/name references, base fonts, script groups, no-op history,
+project-generation guards and native/companion saves keep the existing7.8/7.9 rules.
+This compact inline integration is Sheaf policy under the documented reusable
+chooser and [Text-tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/)
+selection/caret contract, not a newly measured Native2016 editor workflow.
 
 The following are explicit Sheaf policies: up to 64 unique opaque RGB entries in
 insertion order; no names; preference-only removal; a private version1 JSON file
@@ -1153,7 +1166,7 @@ next startup. An explicit absent startup path keeps tests memory-only.
 
 Applied colours use existing project fields and export paths; unused wells are
 profile-only and are not embedded as a project palette. Named lists, OTH/PAL
-import/export, incremental plot lists, Color Manager and broader picker reuse
+import/export, incremental plot lists, Color Manager and worksheet picker reuse
 remain deferred. No Core, renderer, font resolution or project/IO schema changes
 are part of this slice.
 

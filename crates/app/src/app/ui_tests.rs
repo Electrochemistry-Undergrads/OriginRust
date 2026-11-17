@@ -71,6 +71,7 @@ mod text_editor_colors;
 mod text_editor_family;
 mod text_editor_pairs;
 mod text_editor_rgb;
+mod text_editor_wells;
 mod text_format_toolbar;
 mod title_editors;
 mod toolbar_print;

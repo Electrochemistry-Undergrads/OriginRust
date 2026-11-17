@@ -254,6 +254,27 @@ independent expectations, restored export pixels match exactly and choosing/Undo
 do not rewrite preferences. All three owned apps and guards close successfully;
 initial removal-menu pilots are excluded and the passed source remains fixed.
 
+Shared text-editor Custom wells (codex/t58-editor-custom-wells, 2026-11-17):
+the existing private inline-colour picker reuses the published profile pool.
+Add to Custom leaves the text draft/document unchanged; a saved choice uses the
+existing selection/caret RGB command and numeric-field seed. Existing Apply/OK,
+Cancel, automatic-text, legend-reference, base-font and generation rules remain.
+Only Picker::show and new UI regressions change; pool storage, rewrite/apply
+engines, toolbar and worksheet controls are unchanged. Graphing7.12 identifies
+the compact inline integration as Sheaf policy under the documentation contract,
+without a new Native2016 measurement. Worksheet reuse, named/project palettes,
+OTH/PAL, Auto and other remaining measurements stay open.
+Fmt, strict workspace/all-target Clippy, all4,440 tests (eight ignored),
+inventory275 and eight Python tests pass on the integratedT120-T124 tree, with
+all924 source/fixture/asset hashes frozen. Five new UI regressions exercise
+preferences/drafts/history, selection/caret/focus, titles/legend rendering,
+automatic-text removal, generation rejection and native/companion round trips.
+Fresh owned accessibility controls Add in the editor, restart and select actual
+text, choose the saved well, Apply and Undo. Saved whole graphs match independent
+expectations, restored export pixels match exactly, and preferences are not
+rewritten by choose/Apply/Undo. Both apps and guards close0. Initial test setup
+and menu-name pilots are excluded; six production lines stay fixed through validation.
+
 ## Origin facts
 
 Recorded in gui-look 1/4 and the command map: the font box says "Default: Arial", the selected

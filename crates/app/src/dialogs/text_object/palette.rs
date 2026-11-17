@@ -184,6 +184,11 @@ impl Picker {
             }
         });
         ui.separator();
+        if let Some(color) = crate::custom_colors::menu(ui, "Text color") {
+            let rgb = [color.r, color.g, color.b];
+            self.channels = rgb.map(|c| c.to_string());
+            selected = Some(TextColor::Rgb(rgb));
+        }
         egui::containers::menu::SubMenuButton::new("Custom RGB...")
             .config(
                 egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
@@ -210,6 +215,7 @@ impl Picker {
                 } else {
                     ui.label("Use whole numbers from 0 to 255.");
                 }
+                crate::custom_colors::add_button(ui, rgb.map(|[r, g, b]| Color::rgb(r, g, b)), "Text color");
                 if ui.add_enabled(rgb.is_some(), egui::Button::new("Apply color")).clicked() {
                     selected = rgb.map(TextColor::Rgb);
                     ui.close();

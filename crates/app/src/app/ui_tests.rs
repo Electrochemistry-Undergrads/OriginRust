@@ -17,6 +17,7 @@ mod cell_notes;
 mod color_scale;
 mod comparison_plot;
 mod cond_format;
+mod custom_color_wells;
 mod duplicate_entries;
 mod excel;
 mod export_themes;

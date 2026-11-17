@@ -100,6 +100,8 @@ pub struct Startup {
     pub recent_path: Option<PathBuf>,
     /// Private format clipboard snapshot; None keeps it in memory only (including tests).
     pub format_clipboard_path: Option<PathBuf>,
+    /// Reusable graph custom-color wells; None keeps only an in-memory collection.
+    pub custom_colors_path: Option<PathBuf>,
     /// The folder of saved dialog settings (`import-themes`: importer files and separate graph-export
     /// files); `None` hides the theme rows and writes nothing (tests pass a temporary folder).
     pub themes_dir: Option<PathBuf>,
@@ -304,6 +306,7 @@ type ShapeLayerSnapshot = (WindowId, usize, Option<Vec<sheaf_core::shape::Shape>
 impl SheafApp {
     pub fn new(cc: &eframe::CreationContext<'_>, startup: Startup) -> Self {
         crate::format_clip_ui::initialize(startup.format_clipboard_path.clone());
+        crate::custom_colors::initialize(startup.custom_colors_path.clone());
         theme::apply(&cc.egui_ctx);
         let startup_dirs = startup.mcp_dirs.clone().unwrap_or_default();
         let recent_path = startup.recent_path.clone();

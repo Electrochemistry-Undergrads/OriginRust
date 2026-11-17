@@ -236,6 +236,24 @@ Six regressions compare parser, style restoration, literal/malformed/depth rules
 placement/rotation, exports and real graph contexts with Unicode controls.
 Fmt, strict workspace/all-target Clippy and all 4,369 tests pass (eight ignored), including all six new regressions. Inventory283 and eight Python tests pass with all 912 source/fixture/asset hashes frozen. Fresh actual/Unicode/verbatim desktop captures were inspected; actual and Unicode PNG exports match all pixels, while verbatim differs. Raw notation and graphs survive .sheaf and OPJ companion saves. All own build/app/helper actors are terminal; remaining T58 controls and other claims stay open.
 
+Reusable Custom RGB wells (codex/t58-color-list-storage, 2026-11-17): graph font,
+fill and line pickers share a profile pool. Add to Custom saves a valid draft
+without editing the graph; Cancel leaves the preference available. Choosing a
+well reuses captured requests and existing history; context removal changes only
+the pool. Graphing7.12 separates FAQ130's documented 2016+ custom wells from later
+Color Manager/system-list features and records all storage/UI policies as Sheaf
+choices. Applied colours keep existing saves/exports; unused wells are not a
+project palette. Worksheet/editor reuse, named lists, OTH/PAL, Auto and broader
+native measurements remain open. No fresh Native measurement is claimed.
+Fmt, strict workspace/all-target Clippy, all 4,391 tests (eight ignored),
+inventory281 and eight Python tests pass with all917 source/fixture/asset files
+frozen. Eleven new regressions cover pool/storage and actual picker wiring.
+Fresh private-profile desktop controls exercise Add without Apply, Cancel,
+restart, shared font/fill/line reuse and Undo. Saved complete graphs match
+independent expectations, restored export pixels match exactly and choosing/Undo
+do not rewrite preferences. All three owned apps and guards close successfully;
+initial removal-menu pilots are excluded and the passed source remains fixed.
+
 ## Origin facts
 
 Recorded in gui-look 1/4 and the command map: the font box says "Default: Arial", the selected

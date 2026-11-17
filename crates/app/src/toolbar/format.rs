@@ -244,6 +244,10 @@ fn colors(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
             }
         } else {
             ui.separator();
+            if let Some(color) = crate::custom_colors::menu(ui, "Font Color") {
+                actions.push(Action::FormatText(captured.request(Change::Color(color))));
+                ui.close();
+            }
             let mut picker = ui
                 .data_mut(|d| d.get_temp::<rgb::Picker>(rgb_id))
                 .unwrap_or_else(|| rgb::Picker::new(captured.font.color));
@@ -446,6 +450,12 @@ fn colour_menu(ui: &mut Ui, button: &Button, state: &ObjectSnapshot, label: &str
                 }
             }
             object_classic::show(ui, &captured, fill, actions);
+            if let Some(color) = crate::custom_colors::menu(ui, button.tip) {
+                let change =
+                    if fill { object_format::Change::Fill(Some(color)) } else { object_format::Change::Line(color) };
+                actions.push(Action::FormatObject(captured.request(change)));
+                ui.close();
+            }
             object_rgb::show(ui, &captured, fill, rgb_id, actions);
         })
         .0;

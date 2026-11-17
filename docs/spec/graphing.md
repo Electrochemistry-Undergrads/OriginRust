@@ -1121,6 +1121,42 @@ deferred under 7.6; accents, conditional spaces, wrapping and line separation
 remain separate work. Regressions compare styles, placement, rotation, vector/
 raster output and actual legend/title/tick scenes with explicit Unicode controls.
 
+### 7.12 Reusable Custom RGB wells (T58, documented contract)
+
+Origin's [FAQ130](https://docs.originlab.com/quick-help/define-custom-colors/)
+documents custom wells in the font-colour chooser and, for 2016 onward, adding
+multiple RGB choices without applying them until accepted. It describes local
+reuse and preservation of applied colours in a saved project/window. This is a
+documentation contract, not a fresh Native2016 measurement. Color Manager starts
+in 2021; [FAQ1076](https://docs.originlab.com/quick-help/5-rows-of-colors/) labels
+automatic System Color List storage as 2017 onward. Neither establishes a 2016
+named-list manager, file format or automatic system-list workflow.
+
+The graph Format toolbar's font/fill/line Custom RGB pickers offer Add to Custom.
+A valid opaque RGB draft is added to one shared pool without applying it to the
+graph. Cancel discards the document draft but retains an added well. Custom colors
+offers the pool in all three graph pickers; choosing a well uses their existing
+captured target/revision/generation checks, no-op handling and one-step Undo.
+An entry's context menu removes it from the pool without changing any applied
+object colour. The 24 Classic presets, None and numeric Apply/Cancel remain.
+Worksheet controls and the selected-text editor retain their separate pickers.
+
+The following are explicit Sheaf policies: up to 64 unique opaque RGB entries in
+insertion order; no names; preference-only removal; a private version1 JSON file
+named custom-colors.json beside profile settings; a 64KiB read bound and complete
+same-directory atomic replacement. Missing, corrupt, unsupported-version,
+over-capacity or nonopaque records load an empty pool without rewriting the file;
+duplicate entries retain their first position. Startup loads once. Add/remove
+writes the pool, and failure keeps the session's values with a visible message.
+Other running instances do not refresh; the last successful writer supplies the
+next startup. An explicit absent startup path keeps tests memory-only.
+
+Applied colours use existing project fields and export paths; unused wells are
+profile-only and are not embedded as a project palette. Named lists, OTH/PAL
+import/export, incremental plot lists, Color Manager and broader picker reuse
+remain deferred. No Core, renderer, font resolution or project/IO schema changes
+are part of this slice.
+
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
 
 | Group | Plots | Priority |

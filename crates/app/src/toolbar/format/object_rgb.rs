@@ -51,6 +51,7 @@ impl Picker {
         } else {
             ui.label("Enter whole numbers from 0 to 255.");
         }
+        crate::custom_colors::add_button(ui, color, prefix);
         let accept = ui.add_enabled(color.is_some(), egui::Button::new(format!("Apply {prefix}"))).clicked();
         if ui.button(format!("Cancel {prefix}")).clicked() {
             return Some(Choice::Cancel);

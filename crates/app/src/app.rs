@@ -31,6 +31,7 @@ use crate::dialogs::label_panels::{LabelPanelsDialog, Outcome as LabelPanelsOutc
 use crate::dialogs::mask_condition::MaskConditionDialog;
 use crate::dialogs::merge_graphs::{MergeGraphsDialog, Outcome as MergeGraphsOutcome};
 use crate::dialogs::multi_y::{MultiYDialog, Outcome as MultiYOutcome};
+use crate::dialogs::multipeak::{MultiPeakDialog, MultiPeakOutcome};
 use crate::dialogs::pivot::PivotDialog;
 use crate::dialogs::power::{PowerDialog, PowerOutcome};
 use crate::dialogs::printing::{PageSetupDialog, PageSetupOutcome, PreviewOutcome, PrintPreview};
@@ -203,6 +204,7 @@ pub struct SheafApp {
     pub(crate) worksheet_color: Option<WorksheetColorDialog>,
     reshape: Option<ReshapeDialog>,
     pivot: Option<PivotDialog>,
+    multi_peak: Option<MultiPeakDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
     export_excel: Option<ExcelExportDialog>,
@@ -361,6 +363,7 @@ impl SheafApp {
             worksheet_color: None,
             reshape: None,
             pivot: None,
+            multi_peak: None,
             export: None,
             export_sheet: None,
             export_excel: None,
@@ -909,6 +912,7 @@ impl SheafApp {
         self.worksheet_color = None;
         self.reshape = None;
         self.pivot = None;
+        self.multi_peak = None;
         self.sort = None;
         self.sheet_name = None;
         self.import = None;
@@ -2149,6 +2153,23 @@ impl SheafApp {
                 self.sort = SortDialog::nested_in_rows(self.doc.project(), book, columns, rows);
             }
             Action::PivotTable { book, columns } => self.pivot = PivotDialog::new(&self.doc, book, columns),
+            Action::MultiPeakFit { graph, y, layer } => {
+                let graph = match graph {
+                    Some(g) => Some(g),
+                    // From a worksheet: a line graph of the column first, as Origin makes one.
+                    None => self
+                        .doc
+                        .edit("Plot", |p| p.plot_columns(sheaf_core::template::Template::Line, &[y]))
+                        .map_err(|e| self.warn(&e.to_string()))
+                        .ok(),
+                };
+                if let Some(graph) = graph {
+                    self.multi_peak = MultiPeakDialog::new(self.doc.project(), graph, y, layer);
+                    if self.multi_peak.is_none() {
+                        self.warn("The graph has no plot of that column");
+                    }
+                }
+            }
             Action::Reshape { book, columns, kind } => {
                 self.reshape = ReshapeDialog::new(&self.doc, book, kind, columns);
             }
@@ -3945,6 +3966,55 @@ impl SheafApp {
         grid::note_cell(state, sheet)
     }
 
+    /// Multiple Peak Fit: while picking, the graph's Data Reader is on and its pinned point becomes a
+    /// peak centre on a double-click (outside the Get Points window) or Enter.
+    fn multi_peak_frame(&mut self, ctx: &egui::Context) {
+        let Some(d) = &mut self.multi_peak else { return };
+        if d.picking {
+            let (enter, double) = ctx.input(|i| {
+                let double = i.pointer.button_double_clicked(egui::PointerButton::Primary)
+                    && i.pointer.interact_pos().is_some_and(|p| !d.window_rect.is_some_and(|r| r.contains(p)));
+                (i.key_pressed(egui::Key::Enter), double)
+            });
+            let state = self.graphs.entry(d.graph).or_default();
+            state.reader = true;
+            if (enter || double)
+                && let Some(point) = state.reader_point
+            {
+                d.pick(self.doc.project(), point);
+            }
+        }
+        let graph = d.graph;
+        match d.show(ctx, &mut self.doc) {
+            MultiPeakOutcome::Open => {}
+            MultiPeakOutcome::StartPicking => {
+                self.graphs.entry(graph).or_default().reader = true;
+                self.focus(graph);
+            }
+            MultiPeakOutcome::Closed => {
+                self.multi_peak = None;
+                if let Some(s) = self.graphs.get_mut(&graph) {
+                    s.reader = false;
+                    s.reader_point = None;
+                }
+            }
+            MultiPeakOutcome::Done(report) => {
+                self.multi_peak = None;
+                if let Some(s) = self.graphs.get_mut(&graph) {
+                    s.reader = false;
+                    s.reader_point = None;
+                }
+                if let Some(sheet) = report.new_sheet {
+                    self.show_sheet(report.book, sheet);
+                }
+                self.focus(graph);
+                self.logs.result(report.message.clone(), report.notes.clone());
+                self.panels.reveal(PanelId::Results);
+                self.say(report.message);
+            }
+        }
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -4370,6 +4440,7 @@ impl SheafApp {
             || self.worksheet_color.is_some()
             || self.reshape.is_some()
             || self.pivot.is_some()
+            || self.multi_peak.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
             || self.export_excel.is_some()
@@ -4900,6 +4971,7 @@ impl SheafApp {
                 }
             }
         }
+        self.multi_peak_frame(ctx);
         if let Some(d) = &mut self.pivot {
             let book = d.book;
             match d.show(ctx, &mut self.doc) {

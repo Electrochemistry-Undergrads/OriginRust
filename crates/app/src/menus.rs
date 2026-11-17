@@ -182,6 +182,8 @@ pub enum Cmd {
     Reshape(ReshapeKind),
     /// Worksheet > Pivot Table.
     PivotTable,
+    /// Analysis > Peaks and Baseline > Multiple Peak Fit.
+    MultiPeakFit,
     /// Column > Filter > Add or Remove Filter, Enable/Disable Filter, Reapply Filter.
     RowFilterDialog,
     ToggleRowFilter,
@@ -1496,7 +1498,7 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Peak Analyzer...", Cmd::Analyze(AnalysisKind::PeakChain)),
                 item("Find Peaks...", Cmd::Analyze(AnalysisKind::Peaks)),
                 item("Subtract Baseline...", Cmd::Analyze(AnalysisKind::Baseline)),
-                grey("Multiple Peak Fit"),
+                item("Multiple Peak Fit", Cmd::MultiPeakFit),
                 grey("Batch Peak Analysis Using Theme..."),
             ],
         ),
@@ -2801,6 +2803,17 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::Reshape(kind) => Action::Reshape { book: book?, columns: c.selected.to_vec(), kind: *kind },
         Cmd::PivotTable => Action::PivotTable { book: book?, columns: c.selected.to_vec() },
+        Cmd::MultiPeakFit => match (c.book, c.curve) {
+            (Some(_), _) => match c.selected {
+                [y] => Action::MultiPeakFit { graph: None, y: *y, layer: 0 },
+                _ => return Err("Select one Y column"),
+            },
+            (None, Some((_, y))) if c.kind == WindowKind::Graph => {
+                Action::MultiPeakFit { graph: c.graph, y, layer: c.layer }
+            }
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
+        },
         Cmd::ReverseOrder => {
             book?;
             Action::ReverseColumns(some()?)

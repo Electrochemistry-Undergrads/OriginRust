@@ -46,6 +46,7 @@ mod legend_position;
 mod live;
 mod lollipop;
 mod multi_y;
+mod multipeak;
 mod new_graph;
 mod object_classic_colors;
 mod object_rgb;

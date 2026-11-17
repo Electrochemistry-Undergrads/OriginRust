@@ -476,6 +476,13 @@ pub enum Action {
         columns: Vec<ColumnId>,
         kind: crate::dialogs::reshape::ReshapeKind,
     },
+    /// Analysis > Peaks and Baseline > Multiple Peak Fit on the active data plot of `graph`, or on
+    /// the Y column `y` of a workbook (a graph of it is made first, as Origin does).
+    MultiPeakFit {
+        graph: Option<WindowId>,
+        y: ColumnId,
+        layer: usize,
+    },
     /// Worksheet > Pivot Table: open the window; the table goes to a new sheet.
     PivotTable {
         book: WindowId,

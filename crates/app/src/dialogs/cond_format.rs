@@ -1,5 +1,5 @@
 //! Worksheet > Conditional Formatting > Highlight Min Max, Highlight Top Bottom, Conditional
-//! Heatmap, Conditional Pareto and Conditional Outliers: the windows that add a rule to the active sheet for the selected cells (Origin's
+//! Highlight, Conditional Heatmap, Conditional Pareto and Conditional Outliers: the windows that add a rule to the active sheet for the selected cells (Origin's
 //! `wcolorbycr` and `wcolortb`, and its Heatmap dialog). The rule is evaluated live by the grid
 //! (see `sheaf_core::condformat`).
 
@@ -8,6 +8,7 @@ use super::graph_props::color_button;
 use eframe::egui;
 use sheaf_core::color::Color;
 use sheaf_core::condformat::heatmap::{self, Heatmap, LevelScale, LevelStep, MiddlePosition, Mixing, Target};
+use sheaf_core::condformat::highlight::{self, Cond, Join};
 use sheaf_core::condformat::{self, Colours, CondFormat, CondRange, Direction, OutlierMethod, Rule};
 use sheaf_core::{Document, WindowId};
 
@@ -18,6 +19,7 @@ pub enum CondKind {
     Heatmap,
     Pareto,
     Outliers,
+    Highlight,
 }
 
 /// The four modes of Highlight Top Bottom.
@@ -344,6 +346,14 @@ pub fn rule_text(rule: &Rule) -> String {
             LevelStep::Increment(d) => format!("Heatmap, increment {}", num(d)),
         },
         Rule::Outliers { method: OutlierMethod::Iqr, coef, .. } => format!("Outliers, IQR x {}", num(*coef)),
+        Rule::Highlight { first, second, .. } => {
+            let mut text = format!("Highlight {}", cond_text(first));
+            if let Some((join, c)) = second {
+                text += if *join == Join::And { " and " } else { " or " };
+                text += &cond_text(c);
+            }
+            text
+        }
         Rule::Outliers { method: OutlierMethod::Sd, coef, .. } => format!("Outliers, SD x {}", num(*coef)),
     }
 }
@@ -355,6 +365,122 @@ pub fn range_text(sheet: &sheaf_core::Worksheet, range: &CondRange) -> String {
         sheet.columns.iter().filter(|c| range.columns.contains(&c.id)).map(|c| c.short_name.as_str()).collect();
     let last = range.last_row.map_or_else(|| "end".to_string(), |l| (l + 1).to_string());
     format!("{}; rows {} to {}", names.join(", "), range.first_row + 1, last)
+}
+
+/// Origin's condition names (`wcolor`'s `cond1` codes 0 to 8), in its order.
+const COND_NAMES: [&str; 9] = [
+    "Equal to",
+    "Not equal to",
+    "Greater than",
+    "Greater than or equal to",
+    "Less than",
+    "Less than or equal to",
+    "Between",
+    "Text that contains",
+    "Custom",
+];
+
+/// One condition of Conditional Highlight being edited.
+struct CondEdit {
+    /// Index into [`COND_NAMES`].
+    kind: usize,
+    /// The value, and Between's upper value (Origin's defaults 0 and 1).
+    a: f64,
+    b: f64,
+    text: String,
+    custom: String,
+}
+
+impl CondEdit {
+    fn new() -> Self {
+        CondEdit { kind: 0, a: 0.0, b: 1.0, text: String::new(), custom: String::new() }
+    }
+
+    fn of(c: &Cond) -> Self {
+        let mut e = CondEdit::new();
+        (e.kind, e.a) = match c {
+            Cond::Equal(v) => (0, *v),
+            Cond::NotEqual(v) => (1, *v),
+            Cond::Greater(v) => (2, *v),
+            Cond::GreaterOrEqual(v) => (3, *v),
+            Cond::Less(v) => (4, *v),
+            Cond::LessOrEqual(v) => (5, *v),
+            Cond::Between(a, b) => {
+                e.b = *b;
+                (6, *a)
+            }
+            Cond::Contains(t) => {
+                e.text = t.clone();
+                (7, 0.0)
+            }
+            Cond::Custom(t) => {
+                e.custom = t.clone();
+                (8, 0.0)
+            }
+        };
+        e
+    }
+
+    fn cond(&self) -> Cond {
+        match self.kind {
+            0 => Cond::Equal(self.a),
+            1 => Cond::NotEqual(self.a),
+            2 => Cond::Greater(self.a),
+            3 => Cond::GreaterOrEqual(self.a),
+            4 => Cond::Less(self.a),
+            5 => Cond::LessOrEqual(self.a),
+            6 => Cond::Between(self.a, self.b),
+            7 => Cond::Contains(self.text.clone()),
+            _ => Cond::Custom(self.custom.trim().to_string()),
+        }
+    }
+
+    fn show(&mut self, ui: &mut egui::Ui, id: &str) {
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt(id).selected_text(COND_NAMES[self.kind]).width(170.0).show_ui(ui, |ui| {
+                for (i, name) in COND_NAMES.iter().enumerate() {
+                    ui.selectable_value(&mut self.kind, i, *name);
+                }
+            });
+            match self.kind {
+                0..=5 => {
+                    ui.add(egui::DragValue::new(&mut self.a).speed(0.1));
+                }
+                6 => {
+                    ui.add(egui::DragValue::new(&mut self.a).speed(0.1));
+                    ui.label("and");
+                    ui.add(egui::DragValue::new(&mut self.b).speed(0.1));
+                }
+                7 => {
+                    ui.add(egui::TextEdit::singleline(&mut self.text).desired_width(140.0));
+                }
+                _ => {
+                    ui.add(egui::TextEdit::singleline(&mut self.custom).desired_width(140.0).hint_text("x > 0"));
+                }
+            }
+        });
+    }
+
+    /// Why the condition cannot be used, if it cannot.
+    fn problem(&self) -> Option<String> {
+        match self.kind {
+            7 if self.text.is_empty() => Some("Type the text the cells contain".into()),
+            8 => highlight::check_custom(self.custom.trim()).err().map(|e| format!("Custom: {e}")),
+            _ => None,
+        }
+    }
+}
+
+/// A condition in a few words (`greater than 1`, `between 0 and 1`).
+fn cond_text(c: &Cond) -> String {
+    let e = CondEdit::of(c);
+    let name = COND_NAMES[e.kind].to_lowercase();
+    match c {
+        Cond::Between(a, b) => format!("{name} {} and {}", num(*a), num(*b)),
+        Cond::Contains(t) => format!("{name} \"{t}\""),
+        Cond::Custom(t) => format!("custom: {t}"),
+        _ => format!("{name} {}", num(e.a)),
+    }
 }
 
 /// The smallest and largest number in the range's cells (masked and text cells left out).
@@ -397,6 +523,12 @@ pub struct CondFormatDialog {
     /// Conditional Format Manager > Edit Rule: the rule's place in the list and the rule as it was,
     /// so OK replaces it in place, and does nothing when the list has changed meanwhile.
     editing: Option<(usize, CondFormat)>,
+    first: CondEdit,
+    /// Origin's Join: `None`, or And/Or with a second condition.
+    join: Option<Join>,
+    second: CondEdit,
+    /// Why OK did not close the window.
+    problem: Option<String>,
 }
 
 impl CondFormatDialog {
@@ -422,6 +554,10 @@ impl CondFormatDialog {
             method: OutlierMethod::Iqr,
             coef: condformat::rank::DEFAULT_COEF,
             editing: None,
+            first: CondEdit::new(),
+            join: None,
+            second: CondEdit::new(),
+            problem: None,
         })
     }
 
@@ -434,6 +570,7 @@ impl CondFormatDialog {
             Rule::Heatmap(_) => CondKind::Heatmap,
             Rule::Pareto { .. } => CondKind::Pareto,
             Rule::Outliers { .. } => CondKind::Outliers,
+            Rule::Highlight { .. } => CondKind::Highlight,
         };
         let mut d = CondFormatDialog::new(doc, book, kind, original.range.clone())?;
         d.sheet = sheet;
@@ -453,6 +590,14 @@ impl CondFormatDialog {
                 d.hit = ClassEdit::of(*colours, if *t { top } else { bottom });
             }
             Rule::Heatmap(heat) => d.heat = HeatEdit::of(heat, d.extent),
+            Rule::Highlight { first, second, colours } => {
+                d.first = CondEdit::of(first);
+                if let Some((join, c)) = second {
+                    d.join = Some(*join);
+                    d.second = CondEdit::of(c);
+                }
+                d.hit = ClassEdit::of(*colours, top);
+            }
             Rule::Outliers { method, coef, colours } => {
                 d.method = *method;
                 d.coef = *coef;
@@ -476,6 +621,11 @@ impl CondFormatDialog {
                 Rule::Pareto { most, n: self.n, percent, colours: self.hit.colours() }
             }
             CondKind::Outliers => Rule::Outliers { method: self.method, coef: self.coef, colours: self.hit.colours() },
+            CondKind::Highlight => Rule::Highlight {
+                first: self.first.cond(),
+                second: self.join.map(|j| (j, self.second.cond())),
+                colours: self.hit.colours(),
+            },
         }
     }
 
@@ -499,6 +649,11 @@ impl CondFormatDialog {
         }
     }
 
+    /// Why the conditions of Conditional Highlight cannot be used, if they cannot.
+    fn highlight_problem(&self) -> Option<String> {
+        self.first.problem().or_else(|| self.join.and_then(|_| self.second.problem()))
+    }
+
     /// Draws the window; false when it closed.
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut Document) -> bool {
         if doc.project().workbook(self.book).and_then(|b| b.sheets.get(self.sheet)).is_none() {
@@ -510,6 +665,7 @@ impl CondFormatDialog {
             CondKind::Heatmap => "Conditional Heatmap",
             CondKind::Pareto => "Conditional Pareto",
             CondKind::Outliers => "Conditional Outliers",
+            CondKind::Highlight => "Conditional Highlight",
         };
         let mut open = true;
         let mut pressed = None;
@@ -582,6 +738,35 @@ impl CondFormatDialog {
                         self.hit.show(ui, "Highlighted cells");
                         ui.weak("Items are counted over the whole selection, text included.");
                     }
+                    CondKind::Highlight => {
+                        ui.label("Condition");
+                        self.first.show(ui, "cond_first");
+                        ui.horizontal(|ui| {
+                            ui.label("Join");
+                            let name = |j: Option<Join>| match j {
+                                None => "None",
+                                Some(Join::And) => "And",
+                                Some(Join::Or) => "Or",
+                            };
+                            egui::ComboBox::from_id_salt("cond_join").selected_text(name(self.join)).show_ui(
+                                ui,
+                                |ui| {
+                                    for j in [None, Some(Join::And), Some(Join::Or)] {
+                                        ui.selectable_value(&mut self.join, j, name(j));
+                                    }
+                                },
+                            );
+                        });
+                        if self.join.is_some() {
+                            self.second.show(ui, "cond_second");
+                        }
+                        ui.add_space(4.0);
+                        self.hit.show(ui, "Highlighted cells");
+                        ui.weak("Custom: an expression in x, the cell's value, e.g. x > 0 && x < 1.");
+                        if let Some(p) = &self.problem {
+                            ui.colored_label(egui::Color32::from_rgb(200, 40, 40), p);
+                        }
+                    }
                     CondKind::Outliers => {
                         ui.horizontal(|ui| {
                             ui.radio_value(&mut self.method, OutlierMethod::Iqr, "IQR");
@@ -608,6 +793,9 @@ impl CondFormatDialog {
                 pressed = button_row(ui, false);
             });
         match pressed {
+            Some(DialogButton::Ok) if self.kind == CondKind::Highlight && self.highlight_problem().is_some() => {
+                self.problem = self.highlight_problem();
+            }
             Some(DialogButton::Ok) => {
                 let (book, sheet) = (self.book, self.sheet);
                 let range = self.range.clone();
@@ -619,6 +807,7 @@ impl CondFormatDialog {
                     CondKind::Heatmap => "Conditional heatmap",
                     CondKind::Pareto => "Conditional pareto",
                     CondKind::Outliers => "Conditional outliers",
+                    CondKind::Highlight => "Conditional highlight",
                 };
                 if let Some((index, original)) = self.editing.take() {
                     let current = doc.project().workbook(book).and_then(|b| b.sheets.get(sheet));

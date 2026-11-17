@@ -380,3 +380,56 @@ fn edit_rule_reopens_the_rules_window_filled_in_and_replaces_it_in_place() {
     h.state_mut().doc.undo();
     assert!(matches!(rules(&h)[0].rule, Rule::TopBottom { top: true, percent: false, .. }));
 }
+
+/// Opens Conditional Highlight on column B and picks Custom with `condition`.
+fn highlight_custom(h: &mut Harness<'static, SheafApp>, condition: &str) {
+    click_text(h, "B(Y1)");
+    menu_path(h, &["Worksheet", "Conditional Formatting", "Conditional Highlight..."]);
+    h.get_by_value("Equal to").click();
+    settle(h);
+    click(h, "Custom");
+    h.query_all_by_role(egui::accesskit::Role::TextInput).last().expect("the Custom box").click();
+    settle(h);
+    h.event(egui::Event::Text(condition.to_string()));
+    settle(h);
+    click(h, "OK");
+}
+
+#[test]
+fn conditional_highlight_colours_the_cells_meeting_a_custom_condition() {
+    let mut h = start_book("cf-highlight");
+    highlight_custom(&mut h, "x > 5");
+    assert!(h.state().cond_format.is_none(), "OK closed the window");
+    assert_eq!(h.state().doc.undo_label(), Some("Conditional highlight"));
+    let r = rules(&h);
+    assert!(
+        matches!(&r[0].rule, Rule::Highlight { first: condformat::highlight::Cond::Custom(c), second: None, .. } if c == "x > 5"),
+        "{:?}",
+        r[0].rule
+    );
+    click_text(&mut h, "C(Y1)");
+    assert_eq!(fill_behind(&h, "6.5"), Some(rgb(condformat::MAX_FILL)), "Origin's default Background");
+    assert_eq!(fill_behind(&h, "8.5"), Some(rgb(condformat::MAX_FILL)));
+    assert_eq!(fill_behind(&h, "4.5"), None);
+    // The Manager describes it.
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Conditional Format Manager..."]);
+    let _ = h.get_by_label("Highlight custom: x > 5");
+}
+
+#[test]
+fn a_custom_condition_that_cannot_be_used_keeps_the_window_open() {
+    let mut h = start_book("cf-highlight-bad");
+    highlight_custom(&mut h, "y > 1");
+    assert!(h.state().cond_format.is_some(), "the window stays open");
+    assert!(rules(&h).is_empty());
+    let _ = h.get_by_label("Custom: unknown name 'y': the condition can use x, the cell's value");
+}
+
+#[test]
+fn conditional_highlight_defaults_are_origins() {
+    let mut h = start_book("cf-highlight-default");
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Conditional Highlight..."]);
+    click(&mut h, "OK");
+    assert_eq!(rules(&h)[0].rule, Rule::highlight(), "equal to 0, no join, wcolor's colours");
+}

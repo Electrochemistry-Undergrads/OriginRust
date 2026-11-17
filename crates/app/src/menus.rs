@@ -1301,14 +1301,13 @@ fn mask_menu() -> Entry {
     sub("Mask", entries)
 }
 
-/// Worksheet > Conditional Formatting (also in the right-click menu of selected cells). Conditional
-/// Highlight is greyed.
+/// Worksheet > Conditional Formatting (also in the right-click menu of selected cells).
 fn cond_format_menu() -> Entry {
     use crate::dialogs::cond_format::CondKind;
     let mut entries = vec![
         item("Highlight Min Max...", Cmd::CondFormat(CondKind::MinMax)),
         item("Highlight Top Bottom...", Cmd::CondFormat(CondKind::TopBottom)),
-        grey("Conditional Highlight..."),
+        item("Conditional Highlight...", Cmd::CondFormat(CondKind::Highlight)),
         item("Conditional Heatmap...", Cmd::CondFormat(CondKind::Heatmap)),
         item("Conditional Pareto...", Cmd::CondFormat(CondKind::Pareto)),
         item("Conditional Outliers...", Cmd::CondFormat(CondKind::Outliers)),

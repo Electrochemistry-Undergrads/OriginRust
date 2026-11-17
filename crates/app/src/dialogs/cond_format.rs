@@ -1,11 +1,13 @@
-//! Worksheet > Conditional Formatting > Highlight Min Max and Highlight Top Bottom: the windows
-//! that add a rule to the active sheet for the selected cells (Origin's `wcolorbycr` and
-//! `wcolortb`). The rule is evaluated live by the grid (see `sheaf_core::condformat`).
+//! Worksheet > Conditional Formatting > Highlight Min Max, Highlight Top Bottom and Conditional
+//! Heatmap: the windows that add a rule to the active sheet for the selected cells (Origin's
+//! `wcolorbycr` and `wcolortb`, and its Heatmap dialog). The rule is evaluated live by the grid
+//! (see `sheaf_core::condformat`).
 
 use super::frame::{DialogButton, button_row};
 use super::graph_props::color_button;
 use eframe::egui;
 use sheaf_core::color::Color;
+use sheaf_core::condformat::heatmap::{self, Heatmap, LevelScale, LevelStep, MiddlePosition, Mixing, Target};
 use sheaf_core::condformat::{self, Colours, CondFormat, CondRange, Direction, Rule};
 use sheaf_core::{Document, WindowId};
 
@@ -13,6 +15,7 @@ use sheaf_core::{Document, WindowId};
 pub enum CondKind {
     MinMax,
     TopBottom,
+    Heatmap,
 }
 
 /// The four modes of Highlight Top Bottom.
@@ -71,6 +74,212 @@ impl ClassEdit {
     }
 }
 
+/// Origin's Middle Position modes of 3-Color Limited Mixing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MiddleMode {
+    Percentile,
+    Percent,
+    Value,
+}
+
+/// The Conditional Heatmap window's settings.
+struct HeatEdit {
+    auto_rescale: bool,
+    from: f64,
+    to: f64,
+    scale: LevelScale,
+    by_count: bool,
+    count: u32,
+    increment: f64,
+    use_first: bool,
+    first: f64,
+    target: Target,
+    contrast_text: bool,
+    three: bool,
+    from_c: Color,
+    middle_c: Color,
+    to_c: Color,
+    middle_mode: MiddleMode,
+    middle: f64,
+    flip: bool,
+    use_below: bool,
+    below: Color,
+    use_above: bool,
+    above: Color,
+}
+
+impl HeatEdit {
+    fn new(extent: Option<(f64, f64)>) -> Self {
+        let (from, to) = extent.unwrap_or((0.0, 1.0));
+        let increment = (to - from) / f64::from(heatmap::DEFAULT_LEVELS);
+        HeatEdit {
+            auto_rescale: true,
+            from,
+            to,
+            scale: LevelScale::Linear,
+            by_count: true,
+            count: heatmap::DEFAULT_LEVELS,
+            increment: if increment > 0.0 { increment } else { 1.0 },
+            use_first: false,
+            first: from,
+            target: Target::Fill,
+            contrast_text: true,
+            three: false,
+            from_c: heatmap::DEFAULT_FROM,
+            middle_c: heatmap::DEFAULT_MIDDLE,
+            to_c: heatmap::DEFAULT_TO,
+            middle_mode: MiddleMode::Percent,
+            middle: 50.0,
+            flip: false,
+            use_below: false,
+            below: condformat::MIN_FILL,
+            use_above: false,
+            above: condformat::MAX_FILL,
+        }
+    }
+
+    fn rule(&self) -> Heatmap {
+        let position = match self.middle_mode {
+            MiddleMode::Percentile => MiddlePosition::Percentile(self.middle),
+            MiddleMode::Percent => MiddlePosition::Percent(self.middle),
+            MiddleMode::Value => MiddlePosition::Value(self.middle),
+        };
+        Heatmap {
+            limits: (!self.auto_rescale).then_some((self.from, self.to)),
+            scale: self.scale,
+            step: if self.by_count { LevelStep::Count(self.count) } else { LevelStep::Increment(self.increment) },
+            first_level: self.use_first.then_some(self.first),
+            target: self.target,
+            contrast_text: self.contrast_text && self.target == Target::Fill,
+            mixing: if self.three {
+                Mixing::ThreeColor { from: self.from_c, middle: self.middle_c, to: self.to_c, position }
+            } else {
+                Mixing::Limited { from: self.from_c, to: self.to_c }
+            },
+            flip: self.flip,
+            below: (!self.auto_rescale && self.use_below).then_some(self.below),
+            above: (!self.auto_rescale && self.use_above).then_some(self.above),
+        }
+    }
+
+    fn show(&mut self, ui: &mut egui::Ui, extent: Option<(f64, f64)>) {
+        ui.strong("Level");
+        ui.checkbox(&mut self.auto_rescale, "Auto Rescale");
+        ui.add_enabled_ui(!self.auto_rescale, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("From");
+                ui.add(egui::DragValue::new(&mut self.from).speed(0.1));
+                ui.label("To");
+                ui.add(egui::DragValue::new(&mut self.to).speed(0.1));
+                if ui.add_enabled(extent.is_some(), egui::Button::new("Find Min/Max")).clicked()
+                    && let Some((lo, hi)) = extent
+                {
+                    (self.from, self.to) = (lo, hi);
+                }
+            });
+        });
+        ui.horizontal(|ui| {
+            ui.label("Type");
+            let name = |s: LevelScale| match s {
+                LevelScale::Linear => "Linear",
+                LevelScale::Log10 => "Log10",
+            };
+            egui::ComboBox::from_id_salt("heat_scale").selected_text(name(self.scale)).show_ui(ui, |ui| {
+                for s in [LevelScale::Linear, LevelScale::Log10] {
+                    ui.selectable_value(&mut self.scale, s, name(s));
+                }
+            });
+        });
+        ui.horizontal(|ui| {
+            ui.radio_value(&mut self.by_count, false, "By Increment");
+            ui.radio_value(&mut self.by_count, true, "By Count");
+            if self.by_count {
+                ui.add(egui::DragValue::new(&mut self.count).range(1..=heatmap::MAX_LEVELS as u32));
+            } else {
+                ui.add(egui::DragValue::new(&mut self.increment).range(f64::MIN_POSITIVE..=f64::MAX).speed(0.01));
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut self.use_first, "First Level");
+            ui.add_enabled(self.use_first, egui::DragValue::new(&mut self.first).speed(0.1));
+        });
+        ui.add_space(6.0);
+        ui.strong("Colors");
+        ui.horizontal(|ui| {
+            ui.label("Format Type");
+            ui.radio_value(&mut self.target, Target::Fill, "Fill Background");
+            ui.radio_value(&mut self.target, Target::Text, "Color Text");
+        });
+        ui.add_enabled(
+            self.target == Target::Fill,
+            egui::Checkbox::new(&mut self.contrast_text, "Contrast Color for Text"),
+        );
+        ui.label("Color Generation");
+        ui.radio_value(&mut self.three, false, "Limited Mixing");
+        ui.radio_value(&mut self.three, true, "3-Color Limited Mixing");
+        // Not built yet: Origin's complementary-colour mixing and palettes.
+        ui.add_enabled(false, egui::RadioButton::new(false, "Introducing Other Colors in Mixing"));
+        ui.add_enabled(false, egui::RadioButton::new(false, "Load Palette"));
+        ui.horizontal(|ui| {
+            ui.label("From");
+            color_button(ui, &mut self.from_c);
+            ui.add_enabled_ui(self.three, |ui| {
+                ui.label("Middle");
+                color_button(ui, &mut self.middle_c);
+            });
+            ui.label("To");
+            color_button(ui, &mut self.to_c);
+        });
+        ui.add_enabled_ui(self.three, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Middle Position");
+                let name = |m: MiddleMode| match m {
+                    MiddleMode::Percentile => "By Percentile",
+                    MiddleMode::Percent => "By Percent",
+                    MiddleMode::Value => "By Value",
+                };
+                egui::ComboBox::from_id_salt("heat_middle").selected_text(name(self.middle_mode)).show_ui(ui, |ui| {
+                    for m in [MiddleMode::Percentile, MiddleMode::Percent, MiddleMode::Value] {
+                        ui.selectable_value(&mut self.middle_mode, m, name(m));
+                    }
+                });
+                ui.add(egui::DragValue::new(&mut self.middle).speed(0.5));
+            });
+        });
+        ui.checkbox(&mut self.flip, "Flip");
+        ui.add_enabled_ui(!self.auto_rescale, |ui| {
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut self.use_below, "Below");
+                ui.add_enabled_ui(self.use_below, |ui| color_button(ui, &mut self.below));
+                ui.add_space(12.0);
+                ui.checkbox(&mut self.use_above, "Above");
+                ui.add_enabled_ui(self.use_above, |ui| color_button(ui, &mut self.above));
+            });
+        });
+    }
+}
+
+/// The smallest and largest number in the range's cells (masked and text cells left out).
+fn range_extent(doc: &Document, book: WindowId, sheet: usize, range: &CondRange) -> Option<(f64, f64)> {
+    let s = doc.project().workbook(book)?.sheets.get(sheet)?;
+    let rows = s.row_count();
+    let last = range.last_row.map_or(rows, |l| l.saturating_add(1)).min(rows);
+    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for c in s.columns.iter().filter(|c| range.columns.contains(&c.id)) {
+        let Some(v) = c.numeric() else { continue };
+        let mask = c.active_mask();
+        for r in range.first_row.min(last)..last {
+            if let Some(x) = v.get(r).copied().filter(|x| x.is_finite())
+                && !mask.is_some_and(|m| m.contains(&r))
+            {
+                lo = lo.min(x);
+                hi = hi.max(x);
+            }
+        }
+    }
+    (lo <= hi).then_some((lo, hi))
+}
+
 pub struct CondFormatDialog {
     pub book: WindowId,
     sheet: usize,
@@ -83,6 +292,8 @@ pub struct CondFormatDialog {
     mode: Mode,
     n: f64,
     hit: ClassEdit,
+    heat: HeatEdit,
+    extent: Option<(f64, f64)>,
 }
 
 impl CondFormatDialog {
@@ -90,6 +301,7 @@ impl CondFormatDialog {
         let b = doc.project().workbook(book)?;
         let sheet = b.active_sheet.min(b.sheets.len().checked_sub(1)?);
         let name = condformat::default_name(&b.sheets[sheet], &range);
+        let extent = range_extent(doc, book, sheet, &range);
         Some(CondFormatDialog {
             book,
             sheet,
@@ -102,6 +314,8 @@ impl CondFormatDialog {
             mode: Mode::TopItems,
             n: condformat::DEFAULT_N,
             hit: ClassEdit::new(condformat::TOP_FILL, condformat::TOP_FONT),
+            heat: HeatEdit::new(extent),
+            extent,
         })
     }
 
@@ -112,6 +326,7 @@ impl CondFormatDialog {
                 let (top, percent) = self.mode.parts();
                 Rule::TopBottom { top, n: self.n, percent, colours: self.hit.colours() }
             }
+            CondKind::Heatmap => Rule::Heatmap(self.heat.rule()),
         }
     }
 
@@ -123,6 +338,7 @@ impl CondFormatDialog {
         let title = match self.kind {
             CondKind::MinMax => "Highlight Min Max",
             CondKind::TopBottom => "Highlight Top Bottom",
+            CondKind::Heatmap => "Conditional Heatmap",
         };
         let mut open = true;
         let mut pressed = None;
@@ -190,6 +406,7 @@ impl CondFormatDialog {
                         self.hit.show(ui, "Highlighted cells");
                         ui.weak("Each column of the selection is ranked on its own.");
                     }
+                    CondKind::Heatmap => self.heat.show(ui, self.extent),
                 }
                 ui.add_space(6.0);
                 pressed = button_row(ui, false);
@@ -203,6 +420,7 @@ impl CondFormatDialog {
                 let label = match self.kind {
                     CondKind::MinMax => "Highlight min max",
                     CondKind::TopBottom => "Highlight top bottom",
+                    CondKind::Heatmap => "Conditional heatmap",
                 };
                 doc.apply(label, |p| {
                     if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet)) {

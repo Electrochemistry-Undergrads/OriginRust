@@ -1306,14 +1306,10 @@ fn cond_format_menu() -> Entry {
     let mut entries = vec![
         item("Highlight Min Max...", Cmd::CondFormat(CondKind::MinMax)),
         item("Highlight Top Bottom...", Cmd::CondFormat(CondKind::TopBottom)),
+        grey("Conditional Highlight..."),
+        item("Conditional Heatmap...", Cmd::CondFormat(CondKind::Heatmap)),
     ];
-    entries.extend(greys(&[
-        "Conditional Highlight...",
-        "Conditional Heatmap...",
-        "Conditional Pareto...",
-        "Conditional Outliers...",
-        "-",
-    ]));
+    entries.extend(greys(&["Conditional Pareto...", "Conditional Outliers...", "-"]));
     entries.push(item("Remove Conditional Format", Cmd::RemoveCondFormat));
     entries.push(grey("Conditional Format Manager..."));
     sub("Conditional Formatting", entries)

@@ -193,3 +193,61 @@ fn deleting_all_columns_of_a_rule_drops_it_with_the_delete() {
     h.state_mut().doc.undo();
     assert_eq!(rules(&h).len(), 1, "undo brings the rule back with the columns");
 }
+
+/// The fill painted behind the cell that shows `text`, if it is `colour`.
+fn painted_behind(h: &Harness<'static, SheafApp>, text: &str, colour: sheaf_core::color::Color) -> bool {
+    let centre = grid_text(h, text).rect().center();
+    painted(h).into_iter().any(|(r, c)| r.contains(centre) && c == rgb(colour))
+}
+
+#[test]
+fn conditional_heatmap_colours_a_column_from_its_minimum_to_its_maximum() {
+    use sheaf_core::condformat::heatmap;
+    let mut h = start_book("cf-heatmap");
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Conditional Heatmap..."]);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Conditional heatmap"));
+    let r = rules(&h);
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0].rule, Rule::heatmap(), "the defaults go into the rule unchanged");
+    click_text(&mut h, "C(Y1)");
+    // The minimum takes the From colour (white, so read from the evaluated styles).
+    let s = sheet(&h).clone();
+    let b = &s.columns[1];
+    let min_row = b.numeric().unwrap().iter().position(|v| *v == 2.5).unwrap();
+    let style = condformat::evaluate(&s, &s.cond_formats).get(b.id, min_row).unwrap();
+    assert_eq!((style.fill, style.font), (Some(heatmap::DEFAULT_FROM), Some(sheaf_core::color::Color::BLACK)));
+    assert!(painted_behind(&h, "8.5", heatmap::DEFAULT_TO), "the maximum takes the To colour");
+    assert!(!painted_behind(&h, "30.5", heatmap::DEFAULT_TO), "other columns are untouched");
+    // Undo removes the rule and its colours.
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Z);
+    settle(&mut h);
+    assert!(rules(&h).is_empty());
+    assert!(!painted_behind(&h, "8.5", heatmap::DEFAULT_TO));
+}
+
+#[test]
+fn conditional_heatmap_options_reach_the_rule() {
+    use sheaf_core::condformat::heatmap::{Mixing, Target};
+    let mut h = start_book("cf-heatmap-options");
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Worksheet", "Conditional Formatting", "Conditional Heatmap..."]);
+    click(&mut h, "3-Color Limited Mixing");
+    click(&mut h, "Color Text");
+    click(&mut h, "Flip");
+    click(&mut h, "OK");
+    let r = rules(&h);
+    let Rule::Heatmap(heat) = &r[0].rule else { panic!("{:?}", r[0].rule) };
+    assert!(matches!(heat.mixing, Mixing::ThreeColor { .. }));
+    assert_eq!(heat.target, Target::Text);
+    assert!(heat.flip);
+    assert!(!heat.contrast_text, "contrast text only goes with a fill");
+    // Flipped, the maximum's text takes the From colour; no cell gets a fill.
+    let s = sheet(&h).clone();
+    let styles = condformat::evaluate(&s, &s.cond_formats);
+    let b = &s.columns[1];
+    let max_row = b.numeric().unwrap().iter().position(|v| *v == 8.5).unwrap();
+    let style = styles.get(b.id, max_row).unwrap();
+    assert_eq!((style.fill, style.font), (None, Some(sheaf_core::condformat::heatmap::DEFAULT_FROM)));
+}

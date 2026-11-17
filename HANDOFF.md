@@ -177,6 +177,18 @@ Initial test setup and menu-name pilots are excluded; six production lines remai
 Only this claim is released; all other claims and newer handoff decisions remain.
 
 
+**T128 Multiple Peak Fit (`multi-peak-fit`, 2026-11-17, Windows, scheduled Claude session):**
+Analysis > Peaks and Baseline > Multiple Peak Fit after Origin's `nlfitpeaks` (not measured, COM
+unavailable): Peak Function window (Gauss, Lorentz, Voigt), then Get Points on the graph's Data
+Reader (click to pin, double-click or Enter to pick; Remove Last), Fit runs the Peak Analyzer chain
+with the picked centres (new `calc::analyze_peaks_at`, `PeakChainSpec.centers`) and a constant y0,
+writes the usual result sheet and draws the fitted curve in the fit tools' red; one undo step. From
+a worksheet a line graph is made first. No `graph_view.rs` edits: the app turns `GraphUi.reader` on
+and reads `reader_point`. Left: Open NLFit, Use Peak Marker, the results table on the graph,
+individual peak curves (analysis-tools.md 11.3). A desktop capture of a fitted project was inspected.
+Fmt, strict all-target Clippy, full workspace 4,462 passed / 0 failed / 8 ignored, inventory 271.
+Next for B8: Batch Peak Analysis Using Theme (needs analysis themes, B11).
+
 **Scheduled Claude session of 2026-11-17 (T120-T124), decisions and next step:** B7 is complete
 (Conditional Formatting T120-T123, Pivot Table T124; inventory 283 -> 275). It reused worktree
 `.claude/worktrees/small-diffs` with a new build folder `target/wt-small-diffs` (every older build
@@ -185,10 +197,7 @@ left on purpose: B6 corner Column Header / Row Header (they change the grid's fi
 and header strip across frozen panes in `grid.rs`, next to active T59 work; do them with T59's owner
 or after it), B12 Arrange Icons (Sheaf always lays minimised windows out in a bottom strip, so the
 item would do nothing), B8 Probability/Q-Q Plot entries (wait for the `stats-origin` T14 work).
-Suggested next: B8 Multiple Peak Fit (Origin's `nlfitpeaks`: Peak Function, Get Points by double-click
-or Enter, Fit / Open NLFit; docs.originlab.com/origin-help/fit-multipeakfit-tool), reusing the Data
-Reader's point picking (`crates/app/src/reader.rs`) and the Peak Analyzer's multi-peak fit; coordinate
-with `gadgets-1` before touching `graph_view.rs`. Pivot Table and the conditional rules should be
+Suggested next was B8 Multiple Peak Fit: done as T128 below. Pivot Table and the conditional rules should be
 measured against Origin 2016 when its COM registration works again (Pivot Table exists there).
 
 **T124 Pivot Table (`pivot-table`, 2026-11-17, Windows, scheduled Claude session):** Worksheet >
@@ -932,7 +941,6 @@ is released; other sessions' claims are preserved.
 | `function-graph` | Claude Windows, "t30-origin" | B3 slice as new brief T119: Graph > Add Function Graph... (curve of y = f(x) in the active layer) | claimed 2026-11-16; worktree swap-transpose, build target/wf-excel |
 | `hist-prob` | Claude Windows, session fe4b37eb | B4 slice as new brief T85: Plot > Statistics > Histogram + Probabilities (histogram with the cumulative probability curve on a right axis); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no other B4 plots (T83 interval/Pareto is done) or other sessions' scopes |
 | `gadgets-1` | Claude Windows, "continue all tasks" | B9 slice 1 as new brief T101: Gadgets > Statistics, Quick Fit, Differentiate, Interpolate, Vertical Cursor on the Integrate gadget's ROI framework; new app gadget modules, small graph_view.rs hooks, Gadgets menu | claimed 2026-11-16; no other gadgets, shape-resize, T58/T59, multi-Y legends |
-| `multi-peak-fit` | Claude Windows, scheduled "cond-heatmap" | B8 slice as new brief T128: Multiple Peak Fit; calc peakchain given centres, core PeakChainSpec, new app windows using the Data Reader state (no graph_view.rs edits), menu item, analysis-tools spec | claimed 2026-11-17; worktree `.claude/worktrees/small-diffs`, build `target/wt-small-diffs`; no Peak Analyzer behaviour change, no gadgets, no stats-origin scope |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

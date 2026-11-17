@@ -1595,6 +1595,9 @@ pub enum PlotKind {
     QcMeans,
     /// The subgroup ranges of an X bar R chart (T111): bars from the centre line [`PlotDecor::qc_center`].
     QcRanges,
+    /// A Piper diagram (T117): each row's cation and anion triangles' points and its diamond point, from the
+    /// plot's Y column (Ca) and the columns of [`PlotDecor::piper`].
+    Piper,
     /// A 2D kernel density (T116): the bivariate density of the plot's X and Y columns as a colour map.
     Kde2d,
     /// One speed band of a wind rose (T113): wedges per direction sector, piled on the bands before it in the
@@ -1903,6 +1906,9 @@ pub struct PlotDecor {
     /// The speed band of a wind rose plot (T113).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wind_rose: Option<crate::windrose::WindRoseSpec>,
+    /// The other five columns of a Piper diagram (T117).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub piper: Option<crate::piper::PiperSpec>,
 }
 
 pub use sheaf_calc::trend::TrendKind;

@@ -818,6 +818,7 @@ impl Writer {
                 PlotKind::QcRanges => CurveKind::Column,
                 PlotKind::WindRose => CurveKind::Scatter,
                 PlotKind::Kde2d => CurveKind::Scatter,
+                PlotKind::Piper => CurveKind::Scatter,
                 PlotKind::LineSymbol => CurveKind::LineSymbol,
                 PlotKind::Column
                 | PlotKind::StackedColumn

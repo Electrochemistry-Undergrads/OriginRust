@@ -188,8 +188,8 @@ tools' red; one undo step. From
 a worksheet a line graph is made first. No `graph_view.rs` edits: the app turns `GraphUi.reader` on
 and reads `reader_point`. Left: Open NLFit, Use Peak Marker, the results table on the graph
 (analysis-tools.md 11.3). A desktop capture of a fitted project was inspected.
-Fmt, strict all-target Clippy, full workspace 4,462 passed / 0 failed / 8 ignored, inventory 271.
-Next for B8: Batch Peak Analysis Using Theme (needs analysis themes, B11).
+Fmt, strict all-target Clippy, full workspace 4,463 passed / 0 failed / 8 ignored (after the
+per-peak curves follow-up), inventory 271. Next for B8: Batch Peak Analysis Using Theme (needs analysis themes, B11).
 
 **Scheduled Claude session of 2026-11-17 (T120-T124), decisions and next step:** B7 is complete
 (Conditional Formatting T120-T123, Pivot Table T124; inventory 283 -> 275). It reused worktree
@@ -943,7 +943,6 @@ is released; other sessions' claims are preserved.
 | `function-graph` | Claude Windows, "t30-origin" | B3 slice as new brief T119: Graph > Add Function Graph... (curve of y = f(x) in the active layer) | claimed 2026-11-16; worktree swap-transpose, build target/wf-excel |
 | `hist-prob` | Claude Windows, session fe4b37eb | B4 slice as new brief T85: Plot > Statistics > Histogram + Probabilities (histogram with the cumulative probability curve on a right axis); Origin 2016 measurements, core template/plot, menu, CLI, tests | claimed 2026-11-16; reuses own `.claude/worktrees/merge-graphs` + `target/wt-merge-graphs`; no other B4 plots (T83 interval/Pareto is done) or other sessions' scopes |
 | `gadgets-1` | Claude Windows, "continue all tasks" | B9 slice 1 as new brief T101: Gadgets > Statistics, Quick Fit, Differentiate, Interpolate, Vertical Cursor on the Integrate gadget's ROI framework; new app gadget modules, small graph_view.rs hooks, Gadgets menu | claimed 2026-11-16; no other gadgets, shape-resize, T58/T59, multi-Y legends |
-| `mpf-peaks` | Claude Windows, scheduled "cond-heatmap" | T128 follow-up: Multiple Peak Fit draws each fitted peak (new optional peak curve columns of the Peak Analyzer fit, off by default) | claimed 2026-11-17; worktree `.claude/worktrees/small-diffs`, build `target/wt-small-diffs`; Peak Analyzer output unchanged by default; no graph_view.rs, gadgets or stats-origin scope |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

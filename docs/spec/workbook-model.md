@@ -910,6 +910,43 @@ Window > Folders lists the folders as Origin. A folder's Properties... edits its
 Comments (`Folder::comments`) and shows Type, Contains and Location, one undo step. Not done: the main
 title's folder path, Size/Created/Modified, Previous/Next, User Tree, Restricted in Viewer.
 
+## 13n. Pivot Table (T124, 2026-11-17, not measured)
+
+Origin facts (X-Function `wpivot`, docs.originlab.com/x-function/ref/wpivot, Origin 2015 SR0 and
+later; Origin COM was unavailable on the Windows machine on 2026-11-17, so nothing was measured):
+`row` (one or more columns), `col`, `data`; `method` 0 count (default), 1 sum, 2 mean, 3 min, 4 max;
+`total` adds a Row Total column (sum across each row), `sum` a Column Total row; `sort_total` 0 row
+labels ascending, 1 descending by row totals (default), 2 ascending by row totals, 3 row labels
+descending, 4 none; `sort_col` 0 column labels ascending (default), 1 descending, 2 ascending by
+column totals, 3 descending by column totals, 4 none; `normalize` 0 none, 1 fraction, 2 percent of
+each column's total; `zero` (default 1) shows missing combinations as zeros; `pos` (default 1)
+puts each column's value in 0 Long Name, 1 Comments, 2 appended to the Long Name, 3 a user
+parameter row; `dir`/`vmode`/`threshold`/`label` merge small values into "Others"; `exrow`/`excol`
+add extra values; the output defaults to a new sheet of the input book.
+
+Sheaf (`crates/core/src/pivot.rs`, `crates/app/src/dialogs/pivot.rs`), choices **unmeasured**:
+
+- Worksheet > Pivot Table... opens the window with the selected columns (or the sheet's first
+  columns) as row source, column source and data, then `wpivot`'s defaults. OK writes a new sheet
+  `Pivot1`, `Pivot2`, ... of the same workbook, shows it, and is one undo step ("Pivot table").
+- Keys: a cell's number or text; numbers sort before texts, numbers by value, texts by characters
+  (`0` and `-0` are one key). Several row sources give one row per combination, one label column
+  each, compared column by column.
+- Source rows: rows hidden by the filter are left out, and so are rows with an empty or masked cell
+  in any row source or the column source. A masked, text or empty data cell is missing: Count still
+  counts the row; the other methods skip it. A combination with no value is missing (0 with "Show
+  Missing as 0", else empty).
+- Totals sum the cells shown (after normalizing). Sorting by totals uses the totals before
+  normalizing; equal totals keep the labels' ascending order; "None" keeps the order of first
+  appearance. Normalize divides each column by its total (a zero total gives empty cells).
+- Output columns: the label columns (Long Name the source column's name; the first is X), then one
+  Y column per column key with its label in the chosen position (Long Name, Comments, or after the
+  data column's Long Name, or the method's name for Count), then Row Total (its name in the same
+  position). The Column Total row has "Column Total" in the first label column; its Row Total cell
+  is the grand total.
+- **Left out** (shown disabled): Combine Direction/Others, extra row and column values, the user
+  parameter position.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

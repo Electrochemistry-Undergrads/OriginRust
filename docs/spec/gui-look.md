@@ -467,7 +467,7 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
 - **Cost.** The styles are computed once per change of the document (not per frame or per cell) and
   read per drawn cell; a 1,000,000-row column takes about 3 ms (Min Max) to 10 ms (Top N %) in a
   release build.
-- **Left out.** Conditional Highlight, Pareto, Outliers and the Manager (greyed); renaming a
+- **Left out.** Conditional Highlight and the Manager (greyed); renaming a
   rule after creation. The `.opj` writer cannot store the rules: saving to `.opj` warns and the
   companion keeps them.
 
@@ -508,6 +508,33 @@ Sheaf's choices, all **unmeasured**:
 - **Files.** `.sheaf` and the `.opj.sheaf` companion keep the rule; `.opj` warns as for the other
   rules; XLSX writes the current colours as a snapshot, with the same warning.
 - One undo step, "Conditional heatmap"; Remove Conditional Format removes it like the other rules.
+
+
+#### Conditional Pareto and Conditional Outliers (T121)
+
+Origin facts (docs.originlab.com/origin-help/conditional-format, read 2026-11-17, not measured):
+Conditional Pareto "counts all items in the range" and ranks them from most to least frequent, with
+Most Frequent N Items, Most Frequent N% (items whose cumulative frequency is <= N %), Least Frequent N
+Items and Least Frequent N% (cumulative frequency >= 1 - N %). Conditional Outliers colours outliers
+"as in a box chart": **IQR** with **Coef** (default 1.5; fences Q1 - Coef x IQR and Q3 + Coef x IQR,
+3 for the outer fences) or **SD** (the box chart's Whisker Range = SD) with Coef.
+
+Sheaf's choices, all **unmeasured**:
+
+- **Pareto items.** Every non-empty, unmasked cell of the whole range is an item: a number (equal
+  numbers, 0 and -0 included, are one item) or a text (text cells of Text & Numeric and text
+  columns count). Items rank by count, equal counts in order of first appearance (column by column,
+  top to bottom). N Items takes floor(N) items from the top (or bottom) and every item with the same
+  count as the last one taken; N% follows Origin's wording with the cumulative frequency including
+  the item, so Least Frequent N% always takes the least frequent item for N > 0. N of 0 or less takes
+  nothing. Default Most Frequent 10 Items; Least modes switch to the Min Max minimum colours.
+- **Outliers.** Each column of the range on its own (one box per column). IQR quartiles follow the
+  box chart's Origin rule (`quantile_origin`, graphing box chart); SD is the sample standard deviation
+  (n - 1) around the mean, and needs two numbers. Values strictly outside the fences are coloured.
+  The Coef box offers 1, 1.5, 2 and 3 and takes any value >= 0; the default 1.5 applies to SD too.
+  Colours default to the Min Max maximum colours.
+- One undo step each ("Conditional pareto", "Conditional outliers"); saving, Remove and XLSX snapshot
+  as for the other rules.
 
 ### Cell notes (T36)
 

@@ -1,6 +1,6 @@
 # T121: Conditional Formatting > Conditional Outliers... and Conditional Pareto...
 
-**Status:** claimed 2026-11-17 (Claude Windows, scheduled session "cond-heatmap", branch `cond-outliers`).
+**Status:** done 2026-11-17 (Claude Windows, scheduled session "cond-heatmap", branch `cond-outliers`; gui-look.md "Conditional Pareto and Conditional Outliers (T121)"), not measured (Origin 2016 has no conditional formatting). Left: measure against a newer Origin (tie order, per-column outliers, colours).
 **Size:** S. **Source:** greyed inventory package B7 (T35 leftovers, after T120).
 **Spec:** `docs/spec/gui-look.md` "Conditional formatting" (new subsections).
 

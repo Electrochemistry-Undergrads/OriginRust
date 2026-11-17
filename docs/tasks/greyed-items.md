@@ -67,13 +67,14 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T124` | 0 |
 | `T125` | 2 |
 | `T126` | 0 |
+| `T128` | 1 |
 | `B2` | 31 |
 | `B3` | 15 |
 | `B4` | 1 |
 | `B5` | 13 |
 | `B6` | 23 |
 | `B7` | 0 |
-| `B8` | 4 |
+| `B8` | 3 |
 | `B9` | 13 |
 | `B11` | 3 |
 | `B12` | 4 |
@@ -84,7 +85,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 60 items, backlog packages (`B`) 192, not planned (`N`) 20.
+Briefs (`T`) hold 61 items, backlog packages (`B`) 191, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -142,7 +143,8 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B14` Mathematics: Special Filter... · Inverse...
 - `B14` Signal Processing > FFT: 2D FFT... · 2D IFFT...
 - `T57` Signal Processing: Deconvolution... · STFT...
-- `B8` Peaks and Baseline: Multiple Peak Fit · Batch Peak Analysis Using Theme...
+- `T128` Peaks and Baseline: Multiple Peak Fit
+- `B8` Peaks and Baseline: Batch Peak Analysis Using Theme...
 
 ### Image
 - `B14` Adjustments: Brightness... · Contrast... · Gamma... · Levels...

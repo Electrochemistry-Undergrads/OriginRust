@@ -167,7 +167,8 @@ Backlog packages: write the brief first (step 3 above).
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
 | [ ] | [T57](T57-deconvolution-stft.md) | Deconvolution and STFT (claimed 2026-11-15) | M | 2 |
-| [ ] | B8 | Analysis and statistics: Multiple Peak Fit, batch peak analysis (wavelets moved to T96; implicit fit, Simulate Surface, Compare Datasets and XYZ Surface Area moved to T91; partial correlation, three-way and repeated-measures ANOVA moved to T81) | L | 4 |
+| [ ] | B8 | Analysis and statistics: Multiple Peak Fit, batch peak analysis (wavelets moved to T96; implicit fit, Simulate Surface, Compare Datasets and XYZ Surface Area moved to T91; partial correlation, three-way and repeated-measures ANOVA moved to T81) | L | 3 |
+| [ ] | [T128](T128-multiple-peak-fit.md) | Multiple Peak Fit (B8 slice; claimed 2026-11-17) | M | 1 |
 | [x] | [T96](T96-wavelets.md) | Wavelets: Decompose, Reconstruction, Denoise, Smooth, Continuous Wavelet (B8 slice; done 2026-11-16; open corners in the brief) | L | 0 |
 | [x] | [T91](T91-simulate-surface-compare-implicit-area.md) | Simulate Surface, Compare Datasets, Nonlinear Implicit Curve Fit, XYZ Surface Area (B8 slice; done 2026-11-16) | L | 0 |
 | [x] | [T81](T81-partial-correlation-anova3-rmanova.md) | Partial Correlation Coefficient, Three-Way ANOVA, One-Way and Two-Way Repeated Measures ANOVA (B8 slice; claimed 2026-11-16) | L | 0 |

@@ -88,6 +88,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T86](T86-swap-columns-paste-transpose.md) | Swap Columns and Paste Transpose (Origin colswap, Paste Transpose) | S | done 2026-11-16 (workbook-model 13e); left: Paste Transpose measured in Origin |
 | [T87](T87-set-as-begin-end.md) | Set As Begin, Set As End, Reset to Full Range (column data range) | M | done 2026-11-16 (workbook-model 13f); descriptive Statistics on Columns range reader added as T126; other analysis readers remain |
 | [T126](T126-descriptive-statistics-data-range.md) | Descriptive Statistics on Columns respects saved Begin/End ranges (T87 follow-up) | S | done 2026-11-17 (workbook-model13f.1); five Core/two menu-history UI regressions, full4,458 tests and fresh saved desktop result/Undo pass; other analysis readers remain open |
+| [T128](T128-multiple-peak-fit.md) | Analysis > Peaks and Baseline > Multiple Peak Fit (B8 slice) | M | claimed 2026-11-17 (`multi-peak-fit`, Claude Windows) |
 | [T88](T88-copy-variants.md) | Edit > Copy: Copy formula, Copy label rows, Copy formula and label rows, Copy All | S | done 2026-11-16 (workbook-model 13.4c); left: user parameter rows in Origin's text |
 | [T89](T89-copy-columns-to.md) | Copy Columns to... (Origin colcopy) | S | done 2026-11-16 (workbook-model 13g); left: Ignore Hidden Rows, system parameter rows |
 | [T90](T90-sheet-tab-names.md) | Sheet tab: Duplicate Without Data, Sheet Name to Show, sheet long name | M | done 2026-11-16 (workbook-model 13h); left: sheet comments |

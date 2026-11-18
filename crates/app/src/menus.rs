@@ -344,6 +344,8 @@ pub enum Cmd {
     AuditLog,
     /// Tools > Fitting Function Builder... (T132).
     FitBuilder,
+    /// File > Open Sample Projects, Help > Open Sample Projects > Sample Projects (T133).
+    SampleProjects,
     /// The Data menu's display range and data markers (T118).
     DataMarkers(MarkerOp),
     /// The Text tool of the Tools toolbar.
@@ -770,7 +772,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         ),
         keyed("&Open...", ctrl(Key::O), Cmd::OpenProject),
         grey_keyed("Open &Excel...", ctrl(Key::E)),
-        grey("Open Sample Projects"),
+        item("Open Sample Projects", Cmd::SampleProjects),
         item("Appen&d...", Cmd::AppendProject),
         item("&Close", Cmd::CloseWindow),
         sep(),
@@ -1841,7 +1843,7 @@ fn help_menu() -> Vec<Entry> {
         grey("Use Online Help"),
         grey_sub("Origin", &["Help", "X-Functions", "Programming"]),
         grey_sub("Programming", &["LabTalk", "Origin C", "Python", "Automation Server"]),
-        grey_sub("Open Sample Projects", &["Sample Projects"]),
+        sub("Open Sample Projects", vec![item("Sample Projects", Cmd::SampleProjects)]),
         grey_sub("Online Resources", &["Web Links"]),
         sep(),
         grey("Check for Updates..."),
@@ -2984,6 +2986,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::AddFavorite => Action::AddFavorite(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::AuditLog => Action::AuditLog,
         Cmd::FitBuilder => Action::FitBuilder,
+        Cmd::SampleProjects => Action::SampleProjects,
         Cmd::DataMarkers(op) => Action::GraphEdit {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             op: GraphOp::DataMarkers { layer: c.layer, op: *op },

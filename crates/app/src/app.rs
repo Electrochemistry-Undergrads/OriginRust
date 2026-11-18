@@ -2412,6 +2412,7 @@ impl SheafApp {
                 let state = self.graphs.entry(graph).or_default();
                 match op {
                     ViewOp::ZoomOut => state.zoom_out(),
+                    ViewOp::SetZoom(percent) => state.set_zoom_percent(percent),
                     ViewOp::WholePage => state.whole_page(),
                     ViewOp::ZoomAll => state.zoom_all(),
                 }
@@ -6127,9 +6128,10 @@ impl eframe::App for SheafApp {
             let tb = &self.toolbars;
             let bar_frame = || egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(3, 1));
             if tb.shown(Bar::Standard) {
+                let zoom = c.graph.map(|id| self.graphs.get(&id).map_or(1.0, |state| state.zoom.factor));
                 egui::TopBottomPanel::top("toolbar_standard")
                     .frame(bar_frame())
-                    .show(ctx, |ui| toolbar::show_row(ui, &[Bar::Standard], tb, &c, &mut actions));
+                    .show(ctx, |ui| toolbar::show_standard(ui, &c, zoom, &mut actions));
             }
             let second = [Bar::Edit, Bar::Format, Bar::Graph];
             if tb.any(&second) {

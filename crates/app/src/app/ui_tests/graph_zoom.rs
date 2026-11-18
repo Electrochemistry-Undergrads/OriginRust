@@ -33,6 +33,65 @@ fn a_new_graph_window_shows_the_whole_page() {
     assert_eq!(graph_ui(&h).zoom.scroll, egui::Vec2::ZERO);
 }
 
+fn zoom_percent(h: &Harness<'static, SheafApp>) -> String {
+    h.get_by_label("Standard toolbar: Zoom percentage").accesskit_node().value().unwrap().to_string()
+}
+
+#[test]
+fn standard_zoom_presets_and_other_view_commands_share_the_live_percentage() {
+    let mut h = start(vec![data_file("zoom-combo-presets")]);
+    let before = graph(&h).clone();
+    let revision = h.state().doc.revision();
+    assert_eq!(zoom_percent(&h), "100%");
+    h.get_by_label("Standard toolbar: Zoom presets").click();
+    settle(&mut h);
+    assert_in_order(&h, &["25%", "50%", "75%", "100%", "200%"]);
+    h.get_by_label("200%").click();
+    settle(&mut h);
+    assert_eq!(factor(&h), 2.0);
+    assert_eq!(zoom_percent(&h), "200%");
+
+    let p = at_page(&h, 0.5, 0.5);
+    zoom_in_at(&mut h, p);
+    assert_eq!(zoom_percent(&h), "400%");
+    menu_path(&mut h, &["View", "Zoom Out"]);
+    assert_eq!(zoom_percent(&h), "200%");
+    menu_path(&mut h, &["View", "Whole Page"]);
+    assert_eq!(zoom_percent(&h), "100%");
+    assert_eq!(graph(&h), &before);
+    assert_eq!(h.state().doc.revision(), revision);
+
+    show_window(&mut h, "Book1 - sample.csv");
+    assert!(h.query_by_label("Standard toolbar: Zoom percentage").is_none());
+    assert!(h.query_by_label("Standard toolbar: Zoom").is_some());
+}
+
+#[test]
+fn standard_zoom_text_accepts_percentages_and_discards_invalid_or_cancelled_edits() {
+    let mut h = start(vec![data_file("zoom-combo-text")]);
+    let write = |h: &mut Harness<'static, SheafApp>, text: &str, finish| {
+        h.get_by_label("Standard toolbar: Zoom percentage").focus();
+        settle(h);
+        ctrl(h, egui::Key::A);
+        h.event(egui::Event::Text(text.to_string()));
+        settle(h);
+        key(h, finish);
+    };
+    let centre = graph_ui(&h).view_centre().unwrap();
+    write(&mut h, "300%", egui::Key::Enter);
+    assert_eq!(factor(&h), 3.0);
+    assert_eq!(zoom_percent(&h), "300%");
+    assert!(at_page(&h, 0.5, 0.5).distance(centre) < 2.0);
+    write(&mut h, "not a number", egui::Key::Enter);
+    assert_eq!(zoom_percent(&h), "300%");
+    write(&mut h, "75", egui::Key::Escape);
+    assert_eq!(zoom_percent(&h), "300%");
+    write(&mut h, "4000", egui::Key::Enter);
+    assert_eq!(zoom_percent(&h), "3200%");
+    write(&mut h, "1", egui::Key::Enter);
+    assert_eq!(zoom_percent(&h), "25%");
+}
+
 #[test]
 fn zoom_in_is_a_mode_and_the_click_zooms_by_two_centring_the_clicked_point() {
     let mut h = start(vec![data_file("zoom-in")]);

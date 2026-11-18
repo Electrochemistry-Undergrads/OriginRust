@@ -985,8 +985,16 @@ factor and anchor are Sheaf's choice) on the Tools bar, manual scroll bars, and,
 the wheel scrolling a zoomed page (Shift+wheel sideways) and Ctrl+wheel zooming about the pointer
 (Sheaf's choices: Origin's wheel without the tool was not measured). Zoom is per window, screen-only
 and not saved; every click, drag and hit-test goes through the zoomed transform. The page raster is
-capped at 4096 px a side (the texture is stretched beyond that). Not built: the zoom combo and the margin Origin lets the view scroll past the page. Zoom All and the Tools-bar
+capped at 4096 px a side (the texture is stretched beyond that). Origin's additional scroll
+margin remains open. Zoom All and the Tools-bar
 Scale In/Scale Out are T69 (graphing 23, built).
+
+The Standard toolbar shows the active graph's actual zoom rounded to a whole percent and
+offers the five measured presets. Type a whole number with an optional `%` and press Enter.
+Escape or moving focus away discards the draft. Sheaf clamps values to 25–3200 percent and
+keeps the current view centre where the scroll range allows. The field and presets apply only
+to graph windows. The validation and centre anchoring are Sheaf choices.
+[Origin graph page zoom](https://docs.originlab.com/origin-help/zoom-graphpage/)
 
 ## 5. Dialogs, as seen
 

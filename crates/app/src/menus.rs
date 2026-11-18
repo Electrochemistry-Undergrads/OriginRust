@@ -2024,15 +2024,15 @@ pub fn row_menu() -> Vec<Entry> {
 
 /// The menu of a sheet tab (it acts on the sheet whose tab was clicked, which becomes the
 /// active one first).
-pub fn sheet_tab_menu(shown: sheaf_core::sheet_tab::SheetLabel) -> Vec<Entry> {
+pub fn sheet_tab_menu(sheet: &sheaf_core::Worksheet) -> Vec<Entry> {
     let names = sheaf_core::sheet_tab::SheetLabel::ALL
         .iter()
         .map(|l| {
-            let tick = if *l == shown { "\u{2713} " } else { "" };
+            let tick = if *l == sheet.tab_label { "\u{2713} " } else { "" };
             item(&format!("{tick}{}", l.name()), Cmd::Sheet(SheetOp::ShowName(*l)))
         })
         .collect();
-    vec![
+    let mut menu = vec![
         item("Insert", Cmd::Sheet(SheetOp::Insert)),
         item("Delete", Cmd::Sheet(SheetOp::Delete)),
         item("Add", Cmd::Sheet(SheetOp::Add)),
@@ -2046,7 +2046,12 @@ pub fn sheet_tab_menu(shown: sheaf_core::sheet_tab::SheetLabel) -> Vec<Entry> {
         item("Name and Comments...", Cmd::Sheet(SheetOp::RenameDialog)),
         sep(),
         item("Navigate...", Cmd::Sheet(SheetOp::Navigate)),
-    ]
+    ];
+    if !sheet.view.column_header || !sheet.view.row_header {
+        use sheaf_core::sheet_view::ViewSwitch as V;
+        menu.push(sub("View", vec![sheet_view_entry(sheet, V::ColumnHeader), sheet_view_entry(sheet, V::RowHeader)]));
+    }
+    menu
 }
 
 // ----- graph window menus (gui-look.md section 4) ----------------------------------------------
@@ -2431,10 +2436,7 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
 /// (T92), ticked when on.
 pub fn corner_menu(sheet: &sheaf_core::Worksheet) -> Vec<Entry> {
     use sheaf_core::sheet_view::ViewSwitch as V;
-    let switch = |s: V| {
-        let tick = if sheet.shows_view_switch(s) { "\u{2713} " } else { "" };
-        item(&format!("{tick}{}", s.name()), Cmd::Sheet(SheetOp::ToggleView(s)))
-    };
+    let switch = |s| sheet_view_entry(sheet, s);
     vec![
         switch(V::LongName),
         switch(V::Units),
@@ -2448,13 +2450,18 @@ pub fn corner_menu(sheet: &sheaf_core::Worksheet) -> Vec<Entry> {
         sep(),
         switch(V::RowLabels),
         sep(),
-        grey("Column Header"),
-        grey("Row Header"),
+        switch(V::ColumnHeader),
+        switch(V::RowHeader),
         sep(),
         switch(V::ColumnGrid),
         switch(V::RowGrid),
         grey("Page Break Preview Lines"),
     ]
+}
+
+fn sheet_view_entry(sheet: &sheaf_core::Worksheet, switch: sheaf_core::sheet_view::ViewSwitch) -> Entry {
+    let tick = if sheet.shows_view_switch(switch) { "\u{2713} " } else { "" };
+    item(&format!("{tick}{}", switch.name()), Cmd::Sheet(SheetOp::ToggleView(switch)))
 }
 
 /// Draws a list of entries into a context menu.

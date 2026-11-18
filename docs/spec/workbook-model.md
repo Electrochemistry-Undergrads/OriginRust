@@ -879,9 +879,17 @@ Sheaf's corner menu is that list (`sheaf_core::sheet_view`, saved per sheet in `
 the per-book or per-sheet scope was not checked): Long Name, Units, Comments and F(x)= hide or show their
 label row; Row Labels hides the row titles; Column Grid and Row Grid the vertical and horizontal lines
 between data cells. One undo step each ("Worksheet view"). Grey: Parameters (Origin's system rows),
-Sparklines, Filter, Categories, Column Header,
-Row Header and Page Break Preview Lines. User parameter rows show whenever a column has one. The `.opj`
+Sparklines, Filter, Categories and Page Break Preview Lines. User parameter rows show whenever a column has one. The `.opj`
 written here does not hold the switches (the save warning names the sheets).
+
+**Column Header and Row Header (T92).** Origin's View-tab illustration distinguishes the
+top short-name band from the left gutter containing the label titles and data row numbers.
+Sheaf's Column Header switch collapses the top band, and Row Header collapses the gutter.
+The label cells and data cells remain in the grid. Row Labels controls the label titles
+when the gutter is visible. These switches default to on in older projects, are saved per
+sheet, and each creates one undo step. When the corner is hidden, the sheet tab's View
+submenu offers both switches. The recovery menu and exact geometry are Sheaf choices.
+[Origin Worksheet Properties View tab](https://docs.originlab.com/origin-help/wksproperties-dialog-view-tab/)
 
 **Sampling Interval row (T94, measured 2026-11-16):** after `colint` gave B x0 = 0, inc =
 0.5, units s, Origin 2016 showed a "Sampling Interval" label row on its own (the switch turned on), below

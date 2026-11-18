@@ -18,6 +18,8 @@ pub enum ViewSwitch {
     SamplingInterval,
     /// The titles ("Long Name", "Units", ...) to the left of the label rows.
     RowLabels,
+    ColumnHeader,
+    RowHeader,
     /// The vertical lines between the cells.
     ColumnGrid,
     /// The horizontal lines between the cells.
@@ -37,6 +39,8 @@ impl ViewSwitch {
             ViewSwitch::Formula => "F(x)=",
             ViewSwitch::SamplingInterval => "Sampling Interval",
             ViewSwitch::RowLabels => "Row Labels for Column Label Rows",
+            ViewSwitch::ColumnHeader => "Column Header",
+            ViewSwitch::RowHeader => "Row Header",
             ViewSwitch::ColumnGrid => "Column Grid",
             ViewSwitch::RowGrid => "Row Grid",
         }
@@ -63,6 +67,10 @@ pub struct SheetView {
     pub sampling_interval: Option<bool>,
     #[serde(default = "yes")]
     pub row_labels: bool,
+    #[serde(default = "yes", skip_serializing_if = "is_yes")]
+    pub column_header: bool,
+    #[serde(default = "yes", skip_serializing_if = "is_yes")]
+    pub row_header: bool,
     #[serde(default = "yes")]
     pub column_grid: bool,
     #[serde(default = "yes")]
@@ -78,6 +86,8 @@ impl Default for SheetView {
             formula: true,
             sampling_interval: None,
             row_labels: true,
+            column_header: true,
+            row_header: true,
             column_grid: true,
             row_grid: true,
         }
@@ -97,10 +107,16 @@ impl SheetView {
             ViewSwitch::Formula => &mut self.formula,
             ViewSwitch::SamplingInterval => return None,
             ViewSwitch::RowLabels => &mut self.row_labels,
+            ViewSwitch::ColumnHeader => &mut self.column_header,
+            ViewSwitch::RowHeader => &mut self.row_header,
             ViewSwitch::ColumnGrid => &mut self.column_grid,
             ViewSwitch::RowGrid => &mut self.row_grid,
         })
     }
+}
+
+fn is_yes(value: &bool) -> bool {
+    *value
 }
 
 impl Worksheet {
@@ -145,6 +161,22 @@ mod tests {
         assert!(old.is_default());
         sheet.toggle_view_switch(ViewSwitch::Units);
         assert!(sheet.view.is_default());
+    }
+
+    #[test]
+    fn header_switches_default_to_visible_and_persist_independently() {
+        let mut sheet = Worksheet::new("Sheet1");
+        sheet.view = serde_json::from_str("{}").unwrap();
+        let (column, row) = (ViewSwitch::ColumnHeader, ViewSwitch::RowHeader);
+        assert!(sheet.shows_view_switch(column) && sheet.shows_view_switch(row));
+        sheet.toggle_view_switch(column);
+        let json = serde_json::to_string(&sheet).unwrap();
+        let mut opened: Worksheet = serde_json::from_str(&json).unwrap();
+        assert!(!opened.shows_view_switch(column) && opened.shows_view_switch(row));
+        assert!(opened.view.row_labels && !opened.view.is_default());
+        opened.toggle_view_switch(row);
+        opened.toggle_view_switch(column);
+        assert!(opened.shows_view_switch(column) && !opened.shows_view_switch(row));
     }
 
     #[test]

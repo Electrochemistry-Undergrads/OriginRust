@@ -443,6 +443,8 @@ pub enum Cmd {
     PasteFormatDialog,
     /// Gadgets > Integrate: starts the Integrate gadget on the active plot.
     IntegrateGadget,
+    /// Gadgets > Rise Time... (T138).
+    RiseTimeGadget,
     /// A command of the open gadget's right-click menu.
     Gadget(GadgetOp),
     /// View > Toolbars: the window that shows and hides the bars.
@@ -1716,22 +1718,18 @@ fn data_menu() -> Vec<Entry> {
 fn gadgets_menu() -> Vec<Entry> {
     let mut v = greys(&["Statistics...", "Quick Fit...", "Quick Sigmoidal Fit...", "Quick Peaks..."]);
     v.push(item("Integrate...", Cmd::IntegrateGadget));
-    v.extend(greys(&[
-        "Differentiate...",
-        "Interpolate...",
-        "Intersect...",
-        "Rise Time...",
-        "Cluster...",
-        "FFT...",
-        "2D Integrate...",
-        "-",
-        "Vertical Cursor...",
-        "Go To...",
-    ]));
+    v.extend(greys(&["Differentiate...", "Interpolate...", "Intersect..."]));
+    v.push(item("Rise Time...", Cmd::RiseTimeGadget));
+    v.extend(greys(&["Cluster...", "FFT...", "2D Integrate...", "-", "Vertical Cursor...", "Go To..."]));
     v
 }
 
 /// The right-click menu of the Integrate gadget.
+/// The right-click menu of the Rise Time gadget (T138).
+pub fn rise_time_gadget_menu() -> Vec<Entry> {
+    vec![keyed("Delete", plain_key(Key::Escape), Cmd::Gadget(GadgetOp::Close))]
+}
+
 pub fn integrate_gadget_menu(end_point_baseline: bool) -> Vec<Entry> {
     let baseline = if end_point_baseline { "Baseline: Zero" } else { "Baseline: Line Through End Points" };
     vec![
@@ -3082,6 +3080,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::PasteFormatDialog => Action::PasteFormatDialog { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::RiseTimeGadget => Action::StartRiseTime { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,
         Cmd::Autosave => Action::Autosave,

@@ -9079,6 +9079,7 @@ mod new_from_template;
 mod options;
 mod qc_chart;
 mod reimport;
+mod rise_time;
 mod sample_projects;
 mod sampling;
 mod scatter_matrix;

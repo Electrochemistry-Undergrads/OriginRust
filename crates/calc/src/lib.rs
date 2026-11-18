@@ -50,6 +50,7 @@ pub mod peakchain;
 pub mod peaks;
 pub mod power;
 pub mod qc;
+pub mod risetime;
 pub mod rmanova;
 pub mod roc;
 pub mod signal;

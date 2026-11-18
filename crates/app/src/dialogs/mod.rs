@@ -50,6 +50,7 @@ pub mod merge_graphs;
 pub mod multi_y;
 pub mod multipeak;
 pub mod multivariate_options;
+pub mod options;
 pub mod pivot;
 pub mod plot_setup;
 pub mod power;

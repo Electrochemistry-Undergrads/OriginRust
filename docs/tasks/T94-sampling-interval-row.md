@@ -2,7 +2,8 @@
 
 **Status:** implemented 2026-11-18 in `codex/t94-sampling-interval-row` after T59's label-row layout landed.
 The corner switch and read-only worksheet row follow the recorded Origin 2016 fixture in workbook-model 13i.
-Workspace verification pending.
+Formatting, strict workspace Clippy, Nextest (4,492 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
 **Size:** S. **Source:** greyed inventory package B6 (the worksheet corner menu's Sampling Interval), with
 T84's sampling interval.
 **Spec:** `docs/spec/workbook-model.md` 13d and 13i.

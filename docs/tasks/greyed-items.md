@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **269 greyed items: 179 in the menu bar, 18 on the toolbars, 72 in context menus.**
+original inventory baseline. This is not a new runtime audit. **268 greyed items: 179 in the menu bar, 18 on the toolbars, 71 in context menus.**
 
 ## How to read and keep this file
 
@@ -78,7 +78,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B8` | 3 |
 | `B9` | 13 |
 | `B11` | 3 |
-| `B12` | 4 |
+| `B12` | 3 |
 | `B13` | 5 |
 | `B14` | 44 |
 | `B15` | 21 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 60 items, backlog packages (`B`) 189, not planned (`N`) 20.
+Briefs (`T`) hold 60 items, backlog packages (`B`) 188, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -227,7 +227,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B11` Graph legend: Save Format as Theme...
 - `B3` Graph legend > Legend: Add Legend Title
 - `T72` Graph legend > Copy Format: Styles · Dimensions · All
-- `B12` Graph page: Add Shortcut to Favorites
 - `T61` Graph page > New Layer(Axes): Open Dialog...
 - `T72` Graph page > Copy Format: Page Background · Legend Translation Mode
 - `T72` Graph page > Paste Format To: Bottom Axes · All X Axes · All Axes · All

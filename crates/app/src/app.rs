@@ -2456,6 +2456,16 @@ impl SheafApp {
                 }
             }
             Action::SlideShow(_) => {}
+            Action::AddFavorite(id) => {
+                if self.doc.project().favorites.contains(&id) {
+                    self.say("The window is in Favorites already".to_string());
+                } else {
+                    let _ = self.doc.edit("Add shortcut to Favorites", |p| Ok::<_, String>(p.add_favorite(id)));
+                }
+            }
+            Action::RemoveFavorite(id) => {
+                let _ = self.doc.edit("Remove from Favorites", |p| Ok::<_, String>(p.remove_favorite(id)));
+            }
             Action::DataEdit(edit) => self.data_edit(edit),
             Action::AddText { graph, layer, at } => {
                 let state = self.graphs.entry(graph).or_default();

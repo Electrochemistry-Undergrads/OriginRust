@@ -9007,6 +9007,7 @@ mod copy_variants;
 mod corner_menu;
 mod data_markers;
 mod data_range;
+mod favorites;
 mod fill_pattern;
 mod filter_manager;
 mod find_project;

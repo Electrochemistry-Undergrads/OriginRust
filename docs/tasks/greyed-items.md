@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **263 greyed items: 177 in the menu bar, 18 on the toolbars, 68 in context menus.**
+original inventory baseline. This is not a new runtime audit. **261 greyed items: 175 in the menu bar, 18 on the toolbars, 68 in context menus.**
 
 ## How to read and keep this file
 
@@ -78,7 +78,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B8` | 3 |
 | `B9` | 13 |
 | `B11` | 3 |
-| `B12` | 3 |
+| `B12` | 1 |
 | `B13` | 3 |
 | `B14` | 44 |
 | `B15` | 21 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 60 items, backlog packages (`B`) 183, not planned (`N`) 20.
+Briefs (`T`) hold 60 items, backlog packages (`B`) 181, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -97,7 +97,6 @@ changes. The baseline labels remain open until implementation or a documented re
 ### File
 - `B14` New: Matrix... · Image · Excel · Layout · Notes · Function Plot
 - `T63` Open Excel...
-- `B12` Open Sample Projects
 - `T56` Save Template As... [Workbook, Graph]
 - `B11` Save Workbook As Analysis Template... [Workbook]
 - `N` Add Word Bookmarks to Analysis Template... [Workbook]
@@ -194,7 +193,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Use Online Help · Check for Updates...
 - `N` Origin: Help · X-Functions · Programming
 - `N` Programming: LabTalk · Origin C · Python · Automation Server
-- `B12` Open Sample Projects: Sample Projects
 - `N` Online Resources: Web Links
 
 ## Toolbars

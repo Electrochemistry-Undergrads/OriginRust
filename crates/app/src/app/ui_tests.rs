@@ -9024,6 +9024,7 @@ mod graph_themes;
 mod new_from_template;
 mod qc_chart;
 mod reimport;
+mod sample_projects;
 mod sampling;
 mod scatter_matrix;
 mod sheet_navigate;

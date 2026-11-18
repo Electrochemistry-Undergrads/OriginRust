@@ -72,6 +72,29 @@ fn an_explicit_sheaf_path_stays_a_sheaf_project_without_companion() {
 }
 
 #[test]
+fn worksheet_comments_round_trip_in_native_and_opj_companion_saves() {
+    let dir = scratch("sheet-comments");
+    let mut p = workbook_project();
+    let book = p.workbooks().next().unwrap().id;
+    let text = "Thermal scan\nKeep baseline at 25 °C.\n";
+    p.workbook_mut(book).unwrap().sheets[0].comments = text.into();
+
+    let native = dir.join("lab.sheaf");
+    let saved = save_project(&p, &native).unwrap();
+    assert!(saved.main_written && saved.companion.is_none());
+    let opened = open_project(&native).unwrap();
+    assert_eq!(opened.project.workbook(book).unwrap().sheets[0].comments, text);
+
+    let opj = dir.join("lab.opj");
+    let saved = save_project(&p, &opj).unwrap();
+    assert!(saved.main_written && saved.companion.is_some());
+    assert!(saved.warnings.iter().any(|warning| warning.contains("1 sheet(s) have worksheet comments")));
+    let opened = open_project(&opj).unwrap();
+    assert!(opened.companion_used);
+    assert_eq!(opened.project.workbook(book).unwrap().sheets[0].comments, text);
+}
+
+#[test]
 fn formulas_and_folders_are_written_into_the_opj_and_need_no_companion() {
     use sheaf_core::column::RecalcMode;
     let dir = scratch("formula-folder");

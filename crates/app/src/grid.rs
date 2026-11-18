@@ -1441,6 +1441,18 @@ fn sheet_tabs(
             response.context_menu(|ui| {
                 menus::show_context(ui, &menus::sheet_tab_menu(sheet), &book_ctx(book_id, state), actions)
             });
+            if !sheet.long_name.is_empty() || !sheet.comments.is_empty() {
+                response.on_hover_ui(|ui| {
+                    for (label, value) in
+                        [("Short Name", &sheet.name), ("Long Name", &sheet.long_name), ("Comments", &sheet.comments)]
+                    {
+                        if !value.is_empty() {
+                            ui.strong(label);
+                            ui.label(value);
+                        }
+                    }
+                });
+            }
         }
         ui.add_space(6.0);
         h_scroll_bar(ui, state);

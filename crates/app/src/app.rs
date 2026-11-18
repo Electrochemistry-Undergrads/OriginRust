@@ -151,12 +151,13 @@ struct RenameDialog {
     folder: Option<Vec<usize>>,
 }
 
-/// The window that asks for a new name of a sheet.
+/// The draft of a sheet's names and comments.
 struct SheetNameDialog {
     book: WindowId,
     sheet: usize,
     name: String,
     long_name: String,
+    comments: String,
 }
 
 pub struct SheafApp {
@@ -3245,9 +3246,14 @@ impl SheafApp {
                 }
             }
             SheetOp::RenameDialog => {
-                let name = b.sheets[active].name.clone();
-                let long_name = b.sheets[active].long_name.clone();
-                self.sheet_name = Some(SheetNameDialog { book, sheet: active, name, long_name });
+                let sheet = &b.sheets[active];
+                self.sheet_name = Some(SheetNameDialog {
+                    book,
+                    sheet: active,
+                    name: sheet.name.clone(),
+                    long_name: sheet.long_name.clone(),
+                    comments: sheet.comments.clone(),
+                });
             }
         }
     }
@@ -5566,43 +5572,62 @@ impl SheafApp {
         if let Some(d) = &mut self.sheet_name {
             let mut open = true;
             let mut done = false;
-            egui::Window::new("Sheet name").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
-                egui::Grid::new("sheet_name_grid").num_columns(2).show(ui, |ui| {
-                    ui.label("Name");
-                    ui.add(egui::TextEdit::singleline(&mut d.name).desired_width(200.0));
-                    ui.end_row();
-                    ui.label("Long Name");
-                    ui.add(egui::TextEdit::singleline(&mut d.long_name).desired_width(200.0));
-                    ui.end_row();
-                });
-                ui.horizontal(|ui| {
-                    if ui.button("OK").clicked() {
-                        let (book, sheet, name, long) =
-                            (d.book, d.sheet, d.name.clone(), d.long_name.trim().to_string());
-                        let name = name.trim().to_string();
-                        let taken = self.doc.project().workbook(book).is_none_or(|b| {
-                            b.sheets.iter().enumerate().any(|(i, s)| i != sheet && s.name.eq_ignore_ascii_case(&name))
-                        });
-                        if name.is_empty() || taken {
-                            // Not `self.warn`: the window's own state is borrowed here.
-                            let text = "A sheet needs a name that no other sheet of the workbook has";
-                            self.logs.warn(text);
-                            self.status = text.to_string();
-                        } else {
-                            self.doc.apply("Rename sheet", |p| {
-                                if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet)) {
-                                    s.name = name;
-                                    s.long_name = long;
-                                }
+            egui::Window::new("Name and Comments").open(&mut open).collapsible(false).resizable(false).show(
+                ctx,
+                |ui| {
+                    egui::Grid::new("sheet_name_grid").num_columns(2).show(ui, |ui| {
+                        ui.label("Name");
+                        ui.add(egui::TextEdit::singleline(&mut d.name).desired_width(200.0));
+                        ui.end_row();
+                        ui.label("Long Name");
+                        ui.add(egui::TextEdit::singleline(&mut d.long_name).desired_width(200.0));
+                        ui.end_row();
+                        let label = ui.label("Comments");
+                        ui.add(egui::TextEdit::multiline(&mut d.comments).desired_width(200.0).desired_rows(4))
+                            .labelled_by(label.id);
+                        ui.end_row();
+                    });
+                    ui.horizontal(|ui| {
+                        if ui.button("OK").clicked() {
+                            let (book, sheet, name, long) =
+                                (d.book, d.sheet, d.name.clone(), d.long_name.trim().to_string());
+                            let name = name.trim().to_string();
+                            let taken = self.doc.project().workbook(book).is_none_or(|b| {
+                                b.sheets
+                                    .iter()
+                                    .enumerate()
+                                    .any(|(i, s)| i != sheet && s.name.eq_ignore_ascii_case(&name))
                             });
+                            if name.is_empty() || taken {
+                                // Not `self.warn`: the window's own state is borrowed here.
+                                let text = "A sheet needs a name that no other sheet of the workbook has";
+                                self.logs.warn(text);
+                                self.status = text.to_string();
+                            } else {
+                                let label = self
+                                    .doc
+                                    .project()
+                                    .workbook(book)
+                                    .and_then(|b| b.sheets.get(sheet))
+                                    .filter(|s| s.name == name && s.long_name == long)
+                                    .map_or("Rename sheet", |_| "Edit sheet comments");
+                                let comments = d.comments.clone();
+                                self.doc.apply(label, |p| {
+                                    if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet)) {
+                                        s.name = name;
+                                        s.long_name = long;
+                                        s.comments = comments;
+                                    }
+                                });
+                            }
+                            done = true;
                         }
-                        done = true;
-                    }
-                    if ui.button("Cancel").clicked() {
-                        done = true;
-                    }
-                });
-            });
+                        if ui.button("Cancel").clicked() {
+                            done = true;
+                        }
+                    });
+                },
+            );
             if done || !open {
                 self.sheet_name = None;
             }

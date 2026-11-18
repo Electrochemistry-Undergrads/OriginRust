@@ -150,6 +150,7 @@ pub fn place_workbook_with(
                 dest.sheets[t.sheet] = Worksheet {
                     name,
                     long_name: dest.sheets[t.sheet].long_name.clone(),
+                    comments: dest.sheets[t.sheet].comments.clone(),
                     tab_label: dest.sheets[t.sheet].tab_label,
                     view: dest.sheets[t.sheet].view,
                     columns,
@@ -675,11 +676,13 @@ mod tests {
     #[test]
     fn replace_keeps_the_book_and_swaps_the_data() {
         let (mut p, t) = project_with(book("old", vec![num("A", "x", &[1.0, 2.0]), num("B", "y", &[3.0, 4.0])]));
+        p.workbook_mut(t.book).unwrap().sheets[t.sheet].comments = "Run notes".into();
         let placed =
             place_workbook(&mut p, book("new", vec![num("A", "z", &[9.0])]), ImportMode::ReplaceSheet, Some(t));
         assert_eq!(placed.book, t.book);
         let s = &p.workbook(t.book).unwrap().sheets[0];
         assert_eq!(s.name, "new");
+        assert_eq!(s.comments, "Run notes");
         assert_eq!(s.columns.len(), 1);
         assert_eq!(s.columns[0].long_name, "z");
         assert_eq!(p.workbooks().count(), 1);
